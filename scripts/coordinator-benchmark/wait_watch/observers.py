@@ -228,6 +228,18 @@ def parse_rfc3339_ns(val: Any) -> int | None:
         return None
 
 
+def _session_id_matches(observed: str, expected: str) -> bool:
+    if not expected:
+        return True
+    if observed == expected:
+        return True
+    if observed.endswith("…") and len(observed) >= 9:
+        return expected.startswith(observed[:-1])
+    if observed.endswith("...") and len(observed) >= 11:
+        return expected.startswith(observed[:-3])
+    return False
+
+
 def parse_sidecar_phase_records(
     sidecar_log: pathlib.Path | str,
     *,
@@ -266,7 +278,7 @@ def parse_sidecar_phase_records(
             continue
         rec_sid = str(fields.get("session_id") or "")
         rec_handle = str(fields.get("handle") or "")
-        if session_id and rec_sid != session_id:
+        if session_id and not _session_id_matches(rec_sid, session_id):
             continue
         if handle and rec_handle != handle:
             continue

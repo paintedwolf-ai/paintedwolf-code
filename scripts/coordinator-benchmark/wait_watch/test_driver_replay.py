@@ -341,6 +341,28 @@ class TestBarriersAndReplay(unittest.TestCase):
             # Wrong handle must still return None.
             self.assertIsNone(_observe_report_publication(log_path, session_id="s1", handle="command-2"))
 
+            # Real sidecar.log format with 8-hex-char redacted session_id prefix + Unicode ellipsis `…`.
+            full_sid = "07552c9d-1111-2222-3333-444444444444"
+            full_handle = "101c5d58-22a3-4de0-8b5f-3a52fa275f9d"
+            with log_path.open("a", encoding="utf-8") as fh:
+                fh.write(
+                    f'time=2026-11-27T09:35:57.082-08:00 level=DEBUG msg="wait delivery phase" '
+                    f'session_id=07552c9d… tool_call_id=76be2312-88b5-42e2-9cb4-b533ad2c7bdc '
+                    f'lease_id="" handle={full_handle} tool=command phase=process_report_published '
+                    f'outcome=exited status="" duration_ms=0 recorded_at=2026-11-27T17:35:57.082783778Z failed=false\n'
+                )
+            pub_redacted = _observe_report_publication(log_path, session_id=full_sid, handle=full_handle)
+            self.assertIsNotNone(pub_redacted)
+            self.assertEqual(pub_redacted["handle"], full_handle)
+            self.assertEqual(pub_redacted["phase"], "process_report_published")
+            self.assertIsNone(
+                _observe_report_publication(
+                    log_path,
+                    session_id="99999999-1111-2222-3333-444444444444",
+                    handle=full_handle,
+                )
+            )
+
     def test_engine_bin_honored_for_wait_watch_application_subclass(self) -> None:
         import smoke
 
