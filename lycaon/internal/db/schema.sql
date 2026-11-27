@@ -630,6 +630,8 @@ CREATE TABLE IF NOT EXISTS source_file_requests (
     updated_at TEXT NOT NULL,
     -- When the request reached its terminal state; set exactly when it has one.
     completed_at TEXT,
+    -- Which transport response kind was first written ('result', 'accepted', or '' while pending).
+    first_answer_kind TEXT NOT NULL DEFAULT '' CHECK (first_answer_kind IN ('', 'result', 'accepted')),
     CHECK ((completed_at IS NOT NULL) = (state IN ('completed','failed','canceled','interrupted')))
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_source_file_requests_project ON source_file_requests(project_id, person_id, CASE WHEN state IN ('queued','running') THEN 0 ELSE 1 END, COALESCE(completed_at, created_at) DESC, id);

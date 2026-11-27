@@ -40,7 +40,7 @@ func stockSkillCorpus(t *testing.T) []skills.Skill {
 // delivers them.
 func renderSkillParts(t *testing.T, sk skills.Skill, vars map[string]any) []promptrender.Text {
 	t.Helper()
-	parts, err := promptrender.RenderSkill(sk, vars)
+	parts, err := promptrender.RenderSkill(t.Context(), sk, vars)
 	contractcheck.FailErr(t, "render "+sk.Name, err)
 	return parts
 }

@@ -1,4 +1,4 @@
-Challenge stamped claims and run-bound dependency advisories. Preserve user limits in `brief.constraints`. If required review conflicts, `ask_user` before dispatch; available reviewers grant no exception.
+Challenge stamped claims and run-bound dependency advisories. Preserve user limits in {% if profile_has_task %}`brief.constraints`{% else %}every worker brief{% endif %}. If required review conflicts, {% if profile_has_ask_user %}`ask_user` before dispatch{% else %}stop before dispatch{% endif %}; available reviewers grant no exception.
 
 Read `read_review(view: "summary")` for exact review work IDs and current context. Dispatch each review with its supplied `workflow_work_id`.
 

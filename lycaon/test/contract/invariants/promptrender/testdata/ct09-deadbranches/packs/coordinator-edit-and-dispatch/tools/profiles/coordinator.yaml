@@ -1,0 +1,31 @@
+id: coordinator
+description: Coordinator that restores files and dispatches workers without verify or mutating command
+command_effects: [read_only]
+tools:
+  survey_repo: sticky
+  summarize: sticky
+  inspect_source: sticky
+  recall: sticky
+  pack_board: sticky
+  read_findings: sticky
+  read_review: sticky
+  update_progress: sticky
+  task: true
+  worker_cancel: sticky
+  answer_decision: sticky
+  instruct_worker: sticky
+  worker_history: sticky
+  ask_user: sticky
+  source_history: sticky
+  restore_version: true
+  wait: sticky
+  web_search: sticky
+  fetch_url: sticky
+  command: sticky
+  command_output: true
+  command_stop: true
+  skills_read: sticky
+deny_tools:
+read_scope: coordinator_product_read
+write_scope: coordinator_orchestration
+wait_conditions: [next_worker_done, all_workers_idle, overlay_promote_pending, scan_done, process_done, http_ready, port_ready]

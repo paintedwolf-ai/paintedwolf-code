@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/session/promptassembly"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -18,9 +19,28 @@ type RequestBudgets interface {
 	RequestBudget(context.Context, string, modelcall.CompletionRequest) modelcall.RequestBudget
 }
 
+func requestReachFromCompletionRequest(req modelcall.CompletionRequest) toolreach.Request {
+	if req.ToolUse == modelcall.ToolUseForbidden || len(req.Tools) == 0 {
+		return toolreach.Offered(nil)
+	}
+	offered := make([]string, 0, len(req.Tools))
+	schemas := make(map[string]map[string]any, len(req.Tools))
+	for _, meta := range req.Tools {
+		if meta.Name == "" {
+			continue
+		}
+		offered = append(offered, meta.Name)
+		if meta.ArgsSchema != nil {
+			schemas[meta.Name] = meta.ArgsSchema
+		}
+	}
+	return toolreach.Offered(offered).WithSchemas(schemas)
+}
+
 // FitRequest reserves the live frame before allocating history and output, and
 // reports where fitted history starts so prefix reuse can be attributed.
 func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []api.Message, req modelcall.CompletionRequest, budgets RequestBudgets, policies RequestPolicies) (modelcall.CompletionRequest, error) {
+	ctx = toolreach.WithRequest(ctx, requestReachFromCompletionRequest(req))
 	history, req, err := prepareRequestHistory(ctx, m, sess, history, req)
 	if err != nil {
 		return req, err
@@ -56,7 +76,8 @@ func (m *Service) fitRequest(ctx context.Context, sess *api.Session, history []a
 			m.cutoffs.noteFit(key, sess.ID, projection.history, rows)
 		}
 	}
-	projected, omission, err := m.applyFitCut(ctx, sess, key, view, projected, cfg)
+	recall := toolreach.FromContext(ctx).Status("recall") == toolreach.Callable
+	projected, omission, err := m.applyFitCut(ctx, sess, recall, key, view, projected, cfg)
 	if err != nil {
 		return req, err
 	}
@@ -133,7 +154,7 @@ func (m *Service) fitRequest(ctx context.Context, sess *api.Session, history []a
 			capacity = 1
 		}
 		shrinkTools := capacity <= 1 || hasOversizedToolBody(projection.history)
-		rows, err := m.fitRequestHistory(ctx, sess, projection.history, omission, record, cfg, capacity, shrinkTools)
+		rows, err := m.fitRequestHistory(ctx, sess, recall, projection.history, omission, record, cfg, capacity, shrinkTools)
 		if err != nil {
 			return req, err
 		}
@@ -162,7 +183,7 @@ func (m *Service) fitRequest(ctx context.Context, sess *api.Session, history []a
 		capacity = max(1, min(capacity-1, capacity*3/4))
 	}
 	if policies != nil {
-		if fitted, deferred, err := m.fitPolicyFrame(ctx, sess, req, projection.history, omission, record, cfg, budgets, policies, policyGroups, measure, reserve); deferred || err != nil {
+		if fitted, deferred, err := m.fitPolicyFrame(ctx, sess, recall, req, projection.history, omission, record, cfg, budgets, policies, policyGroups, measure, reserve); deferred || err != nil {
 			return fitted, err
 		}
 	}
@@ -206,14 +227,14 @@ type requestOmission struct {
 
 // applyFitCut replays a held fit cutoff, so requests after the one that chose it
 // render the same rows and notice without refitting.
-func (m *Service) applyFitCut(ctx context.Context, sess *api.Session, key cutoffKey, view *store.CompactionView, rows []api.Message, cfg compaction.CompactionConfig) ([]api.Message, requestOmission, error) {
+func (m *Service) applyFitCut(ctx context.Context, sess *api.Session, recall bool, key cutoffKey, view *store.CompactionView, rows []api.Message, cfg compaction.CompactionConfig) ([]api.Message, requestOmission, error) {
 	omission := requestOmission{view: view}
 	if m == nil || sess == nil || len(rows) == 0 {
 		return rows, omission, nil
 	}
 	held, bodies := m.cutoffs.heldFit(key, sess.ID, rows)
 	if bodies > 0 {
-		rows = projectToolBodiesThrough(ctx, rows, bodies)
+		rows = projectToolBodiesThrough(ctx, recall, rows, bodies)
 	}
 	if held == 0 {
 		return rows, omission, nil
@@ -222,7 +243,7 @@ func (m *Service) applyFitCut(ctx context.Context, sess *api.Session, key cutoff
 	_, throughDropped := omittedOrdinals(rows, compaction.ContextMessagesFromAPI(kept))
 	omission.firstDropped = firstDropped
 	omission.throughDropped = throughDropped
-	out, err := m.withOmissionNotice(ctx, sess, kept, omission, firstDropped, throughDropped, true)
+	out, err := withOmissionNotice(ctx, recall, kept, omission, firstDropped, throughDropped, true)
 	return out, omission, err
 }
 
@@ -280,7 +301,7 @@ func (o requestOmission) interval(kept []api.Message, firstDropped, throughDropp
 	return at, from, through
 }
 
-func (m *Service) withOmissionNotice(ctx context.Context, sess *api.Session, kept []api.Message, omission requestOmission, firstDropped, throughDropped int64, prior bool) ([]api.Message, error) {
+func withOmissionNotice(ctx context.Context, recall bool, kept []api.Message, omission requestOmission, firstDropped, throughDropped int64, prior bool) ([]api.Message, error) {
 	if firstDropped == 0 && omission.firstDropped == 0 && !prior {
 		return kept, nil
 	}
@@ -288,14 +309,14 @@ func (m *Service) withOmissionNotice(ctx context.Context, sess *api.Session, kep
 	if from > through {
 		return kept, nil
 	}
-	notice, err := omissionNotice(ctx, m.recallAvailable, sess, historyCoverageNoticeID, from, through)
+	notice, err := omissionNoticeForRecall(ctx, recall, historyCoverageNoticeID, from, through)
 	if err != nil {
 		return nil, err
 	}
 	return slices.Insert(slices.Clone(kept), at, *notice), nil
 }
 
-func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, history []api.Message, omission requestOmission, record *messageview.Continuation, cfg compaction.CompactionConfig, tokens int, shrinkTools bool) ([]api.Message, error) {
+func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, recall bool, history []api.Message, omission requestOmission, record *messageview.Continuation, cfg compaction.CompactionConfig, tokens int, shrinkTools bool) ([]api.Message, error) {
 	rows := make([]api.Message, 0, len(history))
 	prior := false
 	for i, row := range history {
@@ -311,7 +332,6 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 		}
 		rows = append(rows, row)
 	}
-	recall := m != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess)
 	if record != nil && record.ThroughOrd > 0 {
 		record = messageview.CloneContinuation(record)
 		record.Window = cfg.ModelContextWindow
@@ -349,7 +369,7 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 	}
 	noticeTokens := 0
 	if lastOrd > 0 {
-		sized, err := omissionNotice(ctx, m.recallAvailable, sess, historyCoverageNoticeID, lastOrd, lastOrd)
+		sized, err := omissionNoticeForRecall(ctx, recall, historyCoverageNoticeID, lastOrd, lastOrd)
 		if err != nil {
 			return nil, err
 		}
@@ -361,7 +381,7 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 	if canShrinkTools {
 		// Sized below the whole allocation so the projection and tail hold across appends.
 		toolTokens := max(1, tokens-noticeTokens-reserve)
-		rows = extendBodyProjection(ctx, rows, projectRecordedToolBodies(ctx, rows, toolTokens))
+		rows = extendBodyProjection(ctx, recall, rows, projectRecordedToolBodies(ctx, recall, rows, toolTokens))
 		if retained := retainedToolTailMessages(rows, toolTokens); retained > 0 {
 			cfg.KeepRecentMessages = retained
 		}
@@ -369,7 +389,7 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 	contexts := compaction.ContextMessagesFromAPI(rows)
 	fitted := compaction.DeterministicFitWithReserve(cfg, contexts, tokens, reserve)
 	if canShrinkTools && compaction.EstimateMessagesTokens(fitted) > tokens {
-		rows = projectRecordedToolBodies(ctx, rows)
+		rows = projectRecordedToolBodies(ctx, recall, rows)
 		cfg.KeepRecentMessages = max(1, retainedToolTailMessages(rows, 0))
 		contexts = compaction.ContextMessagesFromAPI(rows)
 		fitted = compaction.DeterministicFitWithReserve(cfg, contexts, tokens, reserve)
@@ -377,7 +397,7 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 	firstDropped, through := omittedOrdinals(rows, fitted)
 	if through > 0 {
 		var err error
-		if fitted, err = m.fitWithOmissionNotice(ctx, sess, cfg, contexts, rows, tokens, reserve, firstDropped, through); err != nil {
+		if fitted, err = m.fitWithOmissionNotice(ctx, recall, cfg, contexts, rows, tokens, reserve, firstDropped, through); err != nil {
 			return nil, err
 		}
 		kept := fitted[:0:0]
@@ -389,15 +409,15 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 		fitted = kept
 		firstDropped, through = omittedOrdinals(rows, fitted)
 	}
-	return m.withOmissionNotice(ctx, sess, compaction.ContextMessagesToAPI(fitted, rows), omission, firstDropped, through, prior)
+	return withOmissionNotice(ctx, recall, compaction.ContextMessagesToAPI(fitted, rows), omission, firstDropped, through, prior)
 }
 
 // fitWithOmissionNotice refits with the notice pinned; its cost can widen the
 // omission once, and the final text names the interval actually left out.
-func (m *Service) fitWithOmissionNotice(ctx context.Context, sess *api.Session, cfg compaction.CompactionConfig, contexts []compaction.ContextMessage, rows []api.Message, tokens, reserve int, from, through int64) ([]compaction.ContextMessage, error) {
+func (m *Service) fitWithOmissionNotice(ctx context.Context, recall bool, cfg compaction.CompactionConfig, contexts []compaction.ContextMessage, rows []api.Message, tokens, reserve int, from, through int64) ([]compaction.ContextMessage, error) {
 	var fitted []compaction.ContextMessage
 	for range 2 {
-		notice, err := omissionNotice(ctx, m.recallAvailable, sess, historyCoverageNoticeID, from, through)
+		notice, err := omissionNoticeForRecall(ctx, recall, historyCoverageNoticeID, from, through)
 		if err != nil {
 			return nil, err
 		}

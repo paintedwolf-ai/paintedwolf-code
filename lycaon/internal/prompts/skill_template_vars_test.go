@@ -8,39 +8,31 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func skillTestReader(t *testing.T, in ReaderInput) Reader {
+// skillTestReader offers a surface's addressable tools, or a worker
+// profile's offered names, with web search on.
+func skillTestReader(t *testing.T, host HostFacts, turn TurnProjection) Reader {
 	t.Helper()
-	if len(in.Profiles) == 0 {
+	if len(host.Profiles) == 0 {
 		profiles, err := sandbox.LoadToolProfiles()
 		testutil.FailErr(t, "load tool profiles", err)
-		in.Profiles = profiles
+		host.Profiles = profiles
 	}
-	if in.SurfaceID != "" {
-		if !in.Plan.Compiled() {
-			plan, err := CompileSurfacePlan(in.SurfaceID, max(in.RootCount, 1))
-			testutil.FailErr(t, "compile surface plan", err)
-			in.Plan = plan
-		}
-		if in.Loaded == nil {
-			in.Loaded = map[string]bool{}
-		}
-		for _, name := range in.Plan.AddressableNames() {
-			in.Loaded[name] = true
-		}
+	if turn.SurfaceID != "" {
+		plan, err := CompileSurfacePlan(turn.SurfaceID, max(host.RootCount, 1))
+		testutil.FailErr(t, "compile surface plan", err)
+		turn.Plan = plan.Promote(plan.AddressableNames()...)
+		turn.Offered = turn.Plan.ImmediateNames()
+	} else {
+		turn.Declared = true
 	}
-	in.WebSearch = true
-	reader, err := NewReader(in)
+	host.WebSearch = true
+	reader, err := NewReader(host, turn)
 	testutil.FailErr(t, "new reader", err)
 	return reader
 }
 
 func TestSkillVarsCoordinatorSurface(t *testing.T) {
-	reader := skillTestReader(t, ReaderInput{
-		ProfileID: CoordinatorProfileID,
-		SurfaceID: "implement_routing",
-		Loaded:    toolNameSet([]string{"command", "task", "ask_user"}),
-		RootCount: 2,
-	})
+	reader := skillTestReader(t, HostFacts{RootCount: 2}, TurnProjection{ProfileID: CoordinatorProfileID, SurfaceID: "implement_routing"})
 	vars, err := SkillVars(reader)
 	testutil.FailErr(t, "skill vars", err)
 	if vars["is_coordinator"] != true {
@@ -69,14 +61,7 @@ func TestSkillVarsCoordinatorSurface(t *testing.T) {
 
 func TestSkillVarsWorkerProfile(t *testing.T) {
 	offered := []string{"command", "summarize", "recall"}
-	reader := skillTestReader(t, ReaderInput{
-		ProfileID:      "worker_readonly",
-		Visible:        offered,
-		Loaded:         toolNameSet(offered),
-		OnWorkerBranch: true,
-		HasGit:         true,
-		RootCount:      1,
-	})
+	reader := skillTestReader(t, HostFacts{OnWorkerBranch: true, HasGit: true, RootCount: 1}, TurnProjection{ProfileID: "worker_readonly", Offered: offered})
 	vars, err := SkillVars(reader)
 	testutil.FailErr(t, "skill vars", err)
 	if vars["is_coordinator"] != false {
@@ -105,22 +90,25 @@ func TestSkillVarsWorkerProfile(t *testing.T) {
 func TestSkillVarsCallerShapeSurvivesMerges(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
-		input ReaderInput
+		host  HostFacts
+		turn  TurnProjection
 		shape map[string]any
 	}{
 		{
 			name:  "coordinator",
-			input: ReaderInput{ProfileID: CoordinatorProfileID, SurfaceID: "implement_routing", OnWorkerBranch: false, HasGit: true, RootCount: 3},
+			host:  HostFacts{OnWorkerBranch: false, HasGit: true, RootCount: 3},
+			turn:  TurnProjection{ProfileID: CoordinatorProfileID, SurfaceID: "implement_routing"},
 			shape: map[string]any{"is_coordinator": true, "on_worker_branch": false, "has_git": true, "root_count": 3},
 		},
 		{
 			name:  "worker",
-			input: ReaderInput{ProfileID: "worker_readonly", OnWorkerBranch: true, HasGit: false, RootCount: 1},
+			host:  HostFacts{OnWorkerBranch: true, HasGit: false, RootCount: 1},
+			turn:  TurnProjection{ProfileID: "worker_readonly"},
 			shape: map[string]any{"is_coordinator": false, "on_worker_branch": true, "has_git": false, "root_count": 1},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			vars, err := SkillVars(skillTestReader(t, tc.input))
+			vars, err := SkillVars(skillTestReader(t, tc.host, tc.turn))
 			testutil.FailErr(t, "skill vars", err)
 			for k, want := range tc.shape {
 				if vars[k] != want {
@@ -133,13 +121,7 @@ func TestSkillVarsCallerShapeSurvivesMerges(t *testing.T) {
 
 func TestSkillVarsWorkerOfferedMarksDeferredLoaded(t *testing.T) {
 	offered := []string{"command", "held_result"}
-	reader := skillTestReader(t, ReaderInput{
-		ProfileID: "worker_readonly",
-		Visible:   offered,
-		Loaded:    toolNameSet(offered),
-		HasGit:    true,
-		RootCount: 1,
-	})
+	reader := skillTestReader(t, HostFacts{HasGit: true, RootCount: 1}, TurnProjection{ProfileID: "worker_readonly", Offered: offered})
 	vars, err := SkillVars(reader)
 	testutil.FailErr(t, "skill vars", err)
 	if vars["profile_has_held_result"] != true {
@@ -154,12 +136,7 @@ func TestSkillVarsWorkerOfferedMarksDeferredLoaded(t *testing.T) {
 }
 
 func TestSkillVarsCoordinatorAddressableTools(t *testing.T) {
-	reader := skillTestReader(t, ReaderInput{
-		ProfileID: CoordinatorProfileID,
-		SurfaceID: "implement_routing",
-		Loaded:    toolNameSet([]string{"command", "task", "ask_user"}),
-		RootCount: 1,
-	})
+	reader := skillTestReader(t, HostFacts{RootCount: 1}, TurnProjection{ProfileID: CoordinatorProfileID, SurfaceID: "implement_routing"})
 	vars, err := SkillVars(reader)
 	testutil.FailErr(t, "skill vars", err)
 	if vars["profile_has_scan_query"] != true {

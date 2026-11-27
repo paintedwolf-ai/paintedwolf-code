@@ -2,4 +2,4 @@ steps:
   - tool: "preview_overlay"
     args:
       overlay_id: "{{ paintedwolf.overlay_id }}"
-    say: "Use {{ call }} for current path_status, conflict_digest and ready_resolutions."
+    say: "Use {% if load %}{{ load }}, then {% endif %}{{ call }} for current path_status, conflict_digest and ready_resolutions."

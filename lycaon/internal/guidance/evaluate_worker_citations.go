@@ -571,7 +571,6 @@ func citedURLHandleOffenders(urls []string, ev evidence.Ledger) []string {
 func GroundingHintData(offenders []string, ev evidence.Ledger) map[string]any {
 	data := OffenderHintData(offenders)
 	handleReport := FormatOffenderReport(groundingHintHandles(offenders, ev))
-	data["observed_handles_count"] = handleReport.Count
 	data["observed_handles_sample"] = handleReport.Sample
 	data["observed_handles_omitted"] = handleReport.Omitted
 	pathReport := FormatOffenderReport(evidence.ObservedPathsSorted(ev))

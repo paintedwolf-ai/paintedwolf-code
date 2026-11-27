@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerrecords"
@@ -20,8 +22,16 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
+// workerRequests projects a worker child's first request.
+type workerRequests interface {
+	WorkerRequestReader(ctx context.Context, parentID, childSessionID, agentType string) (prompts.Reader, error)
+}
+
 func (b *serveBuilder) composeWorkerAssignment(ctx context.Context, tctx tools.ToolContext, agentType string, brief wire.WorkerTaskCharter, task *wire.WorkerTask) (string, error) {
-	return composeWorkerTaskAssignment(ctx, b.storage, b.workflows, b.scanning, b.boards, b.workerRuntime, tctx, agentType, brief, task)
+	if b.sessions == nil || b.sessions.Manager == nil {
+		return "", fmt.Errorf("worker assignment: session host not configured")
+	}
+	return composeWorkerTaskAssignment(ctx, b.storage, b.workflows, b.scanning, b.boards, b.workerRuntime, b.sessions.Manager.Workers, tctx, agentType, brief, task)
 }
 
 func composeWorkerTaskAssignment(
@@ -31,6 +41,7 @@ func composeWorkerTaskAssignment(
 	scanningRT *scanning.Runtime,
 	boardsRT *boards.Runtime,
 	workersRt *workerruntime.Runtime,
+	requests workerRequests,
 	tctx tools.ToolContext,
 	agentType string,
 	brief wire.WorkerTaskCharter,
@@ -84,6 +95,11 @@ func composeWorkerTaskAssignment(
 			in.ScanInventory = inventory
 		}
 	}
+	workerReader, err := requests.WorkerRequestReader(ctx, tctx.Identity.SessionID, task.ChildSessionID, agentType)
+	if err != nil {
+		return "", err
+	}
+	in.Reader = workerReader
 	return inject.RenderWorkerTaskAssignment(ctx, workersRt.InjectRenderer, in)
 }
 

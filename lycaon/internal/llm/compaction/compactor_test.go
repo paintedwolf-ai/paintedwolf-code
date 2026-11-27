@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/tokenest"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -360,7 +361,8 @@ func TestSummaryFailurePublishesRecoverableReferences(t *testing.T) {
 	for i := range msgs {
 		msgs[i].Ord = int64(i + 1)
 	}
-	out, report, err := c.Compact(context.Background(), SessionInfo{ID: "s1", RecallAvailable: true}, msgs, cfg.TargetTokens)
+	recallCtx := toolreach.WithRequest(context.Background(), promptstest.StockToolReach(t, "recall"))
+	out, report, err := c.Compact(recallCtx, SessionInfo{ID: "s1", RecallAvailable: true}, msgs, cfg.TargetTokens)
 	testutil.FailErr(t, "compact with failed summarizer", err)
 	if !report.SessionCompacted || report.Continuation == nil || report.Continuation.Reason != "references_only" {
 		t.Fatalf("failed summary did not preserve recoverable coverage: %+v", report)

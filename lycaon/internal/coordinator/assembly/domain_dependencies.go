@@ -25,7 +25,7 @@ type promptSurfaceDeps struct {
 	ExecutionModes          *surface.ExecutionModeStateStore
 	Selection               SelectionSource
 	ProjectOverlayRootPaths ProjectOverlayRootPaths
-	PromptToolLister        PromptToolLister
+	TurnReader              TurnReaderSource
 	Prompts                 prompts.PromptTemplateEngine
 	RepoKnownEmpty          func(ctx context.Context, workspacePath string) bool
 	SessionView             SessionView
@@ -59,14 +59,16 @@ type turnContextDeps struct {
 }
 
 type promptProjection interface {
+	commandJobsReader(context.Context, *api.Session, bool, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) (prompts.Reader, map[string]any, error)
 	loadExecutionModeState(string) surface.ExecutionModeState
 	loadedTools(*api.Session) map[string]bool
 	resolveCoordinatorProfile(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) (surface.TurnProfile, surface.ImplementSessionState)
 	resolveTurnRoster(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) *inject.AgentRoster
 	sessionCatalogView(context.Context, *api.Session) *catalogview.View
-	toolAddressable(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch, string) bool
 	taskOffered(*api.Session, string, int) bool
-	turnReader(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch, int) (prompts.Reader, error)
+	toolAddressable(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch, string) bool
+	turnReader(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) (prompts.Reader, error)
+	workerTurnReader(context.Context, *api.Session, inject.CoordinatorTurnFrame, *TurnAssemblyScratch) (prompts.Reader, error)
 	workspaceRootsForTurn(context.Context, *api.Session, *TurnAssemblyScratch) ([]map[string]any, int, string, int, bool)
 }
 
@@ -80,7 +82,7 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 		ExecutionModes:          snapshot.ExecutionModes,
 		Selection:               snapshot.Selection,
 		ProjectOverlayRootPaths: snapshot.ProjectOverlayRootPaths,
-		PromptToolLister:        snapshot.PromptToolLister,
+		TurnReader:              snapshot.TurnReader,
 		Prompts:                 snapshot.Prompts,
 		RepoKnownEmpty:          snapshot.RepoKnownEmpty,
 		SessionView:             snapshot.SessionView,

@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -72,6 +73,6 @@ func (r *Runtime) workerReportInput(ctx context.Context, task *wire.WorkerTask, 
 		ChildSessionID: child.ID, ChildMessages: messages, ProjectDir: projectDir,
 		ProjectRoots: manager.Workspace.ProjectRoots(ctx, task.ProjectID), ActiveRootID: child.WorkspaceRootID,
 		WorkspaceCheck: bounds.WorkspaceCheck, Ledger: workercloseout.LedgerForMessages(bounds.Ledger, messages),
-		Hints: bounds.WorkflowHints, Pipeline: bounds.Pipeline, Reach: tools.CallReach(ctx),
+		Hints: bounds.WorkflowHints, Pipeline: bounds.Pipeline, Reach: toolreach.FromContext(ctx),
 	}, nil
 }

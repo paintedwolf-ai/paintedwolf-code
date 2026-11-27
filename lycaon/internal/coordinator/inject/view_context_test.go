@@ -15,9 +15,9 @@ func view() api.ViewContext {
 	return api.ViewContext{Editors: []api.ViewEditor{}, Diffs: []api.ViewPath{}, Findings: []api.ViewFinding{}}
 }
 
-func render(t *testing.T, v api.ViewContext, readOffered bool) string {
+func render(t *testing.T, v api.ViewContext) string {
 	t.Helper()
-	return inject.RenderViewContextBlock(context.Background(), promptstest.InjectRenderer(t), "sess", v, readOffered)
+	return inject.RenderViewContextBlock(context.Background(), promptstest.InjectRenderer(t), "sess", v)
 }
 
 func lineWith(block, value string) string {
@@ -62,7 +62,7 @@ func TestRenderViewContextBlockStatesEverySuppliedFact(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			v := view()
 			tc.set(&v)
-			got := render(t, v, true)
+			got := render(t, v)
 			row := lineWith(got, tc.key)
 			for _, want := range append([]string{tc.key}, tc.want...) {
 				if !strings.Contains(row, want) {
@@ -77,7 +77,7 @@ func TestRenderViewContextBlockMarksUnsavedEditors(t *testing.T) {
 	saved, unsaved := view(), view()
 	saved.Editors = []api.ViewEditor{{DisplayPath: "a.go"}}
 	unsaved.Editors = []api.ViewEditor{{DisplayPath: "a.go", Unsaved: true}}
-	if lineWith(render(t, saved, true), "a.go") == lineWith(render(t, unsaved, true), "a.go") {
+	if lineWith(render(t, saved), "a.go") == lineWith(render(t, unsaved), "a.go") {
 		t.Fatal("unsaved state did not change the editor row")
 	}
 }
@@ -85,17 +85,20 @@ func TestRenderViewContextBlockMarksUnsavedEditors(t *testing.T) {
 func TestRenderViewContextBlockStatesAnEmptyView(t *testing.T) {
 	shown := view()
 	shown.Folder = &api.ViewPath{DisplayPath: "src"}
-	empty, withFolder := render(t, view(), true), render(t, shown, true)
+	empty, withFolder := render(t, view()), render(t, shown)
 	if empty == "" || empty == withFolder || strings.Contains(empty, "src") {
 		t.Fatalf("empty view block = %q", empty)
 	}
 }
 
-func TestRenderViewContextBlockOffersReadOnlyForAnOfferedEditor(t *testing.T) {
-	editor, folder := view(), view()
-	editor.Editors = []api.ViewEditor{{DisplayPath: "a.go"}}
-	folder.Folder = &api.ViewPath{DisplayPath: "src"}
-	if !strings.Contains(render(t, editor, true), "`read`") || strings.Contains(render(t, editor, false), "`read`") || strings.Contains(render(t, folder, true), "`read`") {
-		t.Fatal("read is offered only beside an editor on a surface that has it")
+func TestRenderViewContextBlockNeverNamesRetiredReadTool(t *testing.T) {
+	editor := view()
+	editor.Editors = []api.ViewEditor{{DisplayPath: "a.go", Unsaved: true}}
+	got := render(t, editor)
+	if strings.Contains(got, "`read`") {
+		t.Fatalf("view-context leaked retired `read` tool: %q", got)
+	}
+	if !strings.Contains(got, "- Editor: a.go (unsaved)") {
+		t.Fatalf("view-context lost editor fact: %q", got)
 	}
 }

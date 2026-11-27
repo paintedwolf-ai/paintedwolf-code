@@ -320,7 +320,7 @@ func liveFailedLeaves(failed []string, gates []WorkflowGateState) []string {
 }
 
 // AttachGateObligations projects details for unsatisfied gates.
-func AttachGateObligations(ctx context.Context, data ActiveWorkflowInjectData, catalog *feedback.GateFeedbackCatalog, advanceWhenGateMet, planContent string) ActiveWorkflowInjectData {
+func AttachGateObligations(ctx context.Context, data ActiveWorkflowInjectData, catalog *feedback.GateFeedbackCatalog, advanceWhenGateMet, planContent string, readerFacts map[string]any) ActiveWorkflowInjectData {
 	if catalog == nil {
 		return data
 	}
@@ -332,6 +332,7 @@ func AttachGateObligations(ctx context.Context, data ActiveWorkflowInjectData, c
 	if data.PhaseExit != nil {
 		extras = feedback.WithReviewAgents(extras, data.PhaseExit.ReviewAgents)
 	}
+	extras = feedback.WithReaderFacts(extras, readerFacts)
 	rows := catalog.ProjectObligations(ctx, leaves, advanceWhenGateMet, extras)
 	if len(rows) == 0 {
 		return data

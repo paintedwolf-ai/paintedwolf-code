@@ -1,12 +1,9 @@
 package promptunit
 
 import (
-	"io"
-	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/flosch/pongo2/v6"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/pongoplain"
 )
@@ -225,13 +222,6 @@ func TestRevisionTracksDescriptions(t *testing.T) {
 	}
 }
 
-type stubTemplateLoader struct{}
-
-func (stubTemplateLoader) Abs(_, name string) string { return name }
-func (stubTemplateLoader) Get(_ string) (io.Reader, error) {
-	return strings.NewReader(""), nil
-}
-
 func TestShippedUnitsHaveValidAttachesAndNoWholeBodyReaderFactGuard(t *testing.T) {
 	eff, err := extpacks.CatalogForConsumers()
 	if err != nil {
@@ -274,43 +264,21 @@ func TestShippedUnitsHaveValidAttachesAndNoWholeBodyReaderFactGuard(t *testing.T
 
 func wholeBodyReaderFactGuard(t *testing.T, body string) (bool, []string) {
 	t.Helper()
-	set, err := pongoplain.NewSet("unit-check", stubTemplateLoader{}, pongoplain.Composed)
+	tree, err := pongoplain.ParseTemplateTree(body)
 	if err != nil {
-		t.Fatalf("NewSet: %v", err)
+		t.Fatalf("ParseTemplateTree: %v", err)
 	}
-	tpl, err := set.FromString(body)
-	if err != nil {
-		t.Fatalf("FromString: %v", err)
-	}
-	root := reflect.ValueOf(tpl).Elem().FieldByName("root").Elem()
-	nodes := root.FieldByName("Nodes")
-	var meaningful []reflect.Value
-	for i := 0; i < nodes.Len(); i++ {
-		node := derefValue(nodes.Index(i))
-		if !node.IsValid() {
+	var meaningful []*pongoplain.TemplateNode
+	for _, n := range tree.Nodes {
+		if n.Kind == pongoplain.NodeText && strings.TrimSpace(n.Text) == "" {
 			continue
 		}
-		switch node.Type().Name() {
-		case "nodeComment":
-			continue
-		case "nodeHTML":
-			val := node.FieldByName("token").Elem().FieldByName("Val").String()
-			if strings.TrimSpace(val) == "" {
-				continue
-			}
-		}
-		meaningful = append(meaningful, node)
+		meaningful = append(meaningful, n)
 	}
-	if len(meaningful) != 1 || meaningful[0].Type().Name() != "tagIfNode" {
+	if len(meaningful) != 1 || meaningful[0].Kind != pongoplain.NodeIf || len(meaningful[0].Branches) != 1 {
 		return false, nil
 	}
-	conditions := meaningful[0].FieldByName("conditions")
-	wrappers := meaningful[0].FieldByName("wrappers")
-	if conditions.Len() != 1 || wrappers.Len() != 1 {
-		return false, nil
-	}
-	var vars []string
-	collectVariableResolvers(conditions.Index(0), &vars)
+	vars := meaningful[0].Branches[0].Expr.Identifiers()
 	if len(vars) == 0 {
 		return false, nil
 	}
@@ -320,44 +288,6 @@ func wholeBodyReaderFactGuard(t *testing.T, body string) (bool, []string) {
 		}
 	}
 	return true, vars
-}
-
-func derefValue(v reflect.Value) reflect.Value {
-	for v.IsValid() && (v.Kind() == reflect.Interface || v.Kind() == reflect.Pointer) {
-		if v.IsNil() {
-			return reflect.Value{}
-		}
-		v = v.Elem()
-	}
-	return v
-}
-
-func collectVariableResolvers(v reflect.Value, out *[]string) {
-	v = derefValue(v)
-	if !v.IsValid() {
-		return
-	}
-	if v.Kind() == reflect.Struct && v.Type().Name() == "variableResolver" {
-		parts := v.FieldByName("parts")
-		if parts.Len() > 0 {
-			part := derefValue(parts.Index(0))
-			if part.IsValid() {
-				if s := part.FieldByName("s"); s.IsValid() && s.Kind() == reflect.String && s.String() != "" {
-					*out = append(*out, s.String())
-				}
-			}
-		}
-		return
-	}
-	if v.Kind() == reflect.Struct {
-		for i := 0; i < v.NumField(); i++ {
-			collectVariableResolvers(v.Field(i), out)
-		}
-	} else if v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
-		for i := 0; i < v.Len(); i++ {
-			collectVariableResolvers(v.Index(i), out)
-		}
-	}
 }
 
 func isReaderFactIdentifier(name string) bool {
@@ -372,6 +302,8 @@ func isReaderFactIdentifier(name string) bool {
 		"caps",
 		"surface_",
 		"coordinator_",
+		"can_",
+		"has_",
 	} {
 		if strings.HasPrefix(name, prefix) {
 			return true
@@ -383,5 +315,3 @@ func isReaderFactIdentifier(name string) bool {
 	}
 	return false
 }
-
-var _ = (*pongo2.Template)(nil)

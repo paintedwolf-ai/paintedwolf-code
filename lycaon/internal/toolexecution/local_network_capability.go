@@ -4,6 +4,7 @@ import (
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 
 	"context"
+
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 
@@ -60,13 +61,8 @@ func (e *Capabilities) preflightLocalNetworkCapability(
 			return nil, nil, e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, waitErr)
 		}
 		if result.Denied {
-			data := map[string]any{}
-			if result.UserGuidance != "" {
-				data[toolrejection.UserGuidanceKey] = result.UserGuidance
-			}
-			return nil, nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
-				Code: isolation.CodeLocalNetworkDenied, Data: data,
-			})
+			return nil, nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args,
+				approvalRefusalReject(isolation.CodeLocalNetworkDenied, result.DenialCause, result.ApprovalResolvedBy, result.UserGuidance))
 		}
 		if !result.Authorized {
 			return nil, nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
