@@ -327,6 +327,34 @@ class TestCF09Presentation(unittest.TestCase):
         )
         self.assertEqual(verify_presentation_observation(with_refresh_ui).verdict, "PASS")
 
+        # Decision 082: actual rendered copy from search-status.ts for incomplete+refreshing root.
+        live_copy_cls = classify_files_tree_notice(
+            "Files are still being indexed. Results refresh automatically while this view is open.",
+            testid="files-root-summary-coverage",
+        )
+        self.assertTrue(live_copy_cls.visible)
+        self.assertIn("catalog_incomplete", live_copy_cls.categories)
+        self.assertIn("catalog_refreshing", live_copy_cls.categories)
+        self.assertIn("catalog_warming", live_copy_cls.categories)
+        live_obs = PresentationObservation(
+            surface="files_tree",
+            state="refreshing",
+            platform="linux",
+            native_window=True,
+            selected_root_id="r1",
+            api_response={
+                "refreshing": True,
+                "coverage": [
+                    {"root_id": "r1", "state": "ready", "discovery_complete": False, "refreshing": True}
+                ],
+            },
+            coverage_note_visible=live_copy_cls.visible,
+            coverage_note_testid=live_copy_cls.testid,
+            coverage_notice_categories=live_copy_cls.categories,
+            notes=live_copy_cls.raw_text,
+        )
+        self.assertEqual(verify_presentation_observation(live_obs).verdict, "PASS")
+
     def test_write_presentation_evidence_writes_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "CF09"

@@ -109,11 +109,16 @@ def classify_files_tree_notice(
         categories.append("catalog_failed")
     if "indexing budget" in low or "exceeded" in low or "bounded" in low:
         categories.append("catalog_bounded")
-    if "still indexing" in low or "warming" in low or "indexing files" in low:
+    if "still indexing" in low or "still being indexed" in low or "warming" in low or "indexing files" in low:
         categories.append("catalog_warming")
-    if "refreshing" in low or "being updated" in low:
+    if "refreshing" in low or "being updated" in low or "results refresh automatically" in low:
         categories.append("catalog_refreshing")
-    if "matches may be missing" in low or "incomplete" in low or "unavailable" in low:
+    if (
+        "matches may be missing" in low
+        or "incomplete" in low
+        or "unavailable" in low
+        or "still being indexed" in low
+    ):
         categories.append("catalog_incomplete")
 
     retry_offered = retry_button_visible or ("retry file index" in low)

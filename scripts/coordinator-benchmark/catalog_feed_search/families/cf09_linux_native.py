@@ -325,10 +325,39 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
     ).catch(() => null);
     await page.getByTestId("crossbar-input").fill("target.txt");
     const quickRes = await quickRespPromise;
-    await page.waitForTimeout(400);
+    // Wait briefly for matched rows to render and transient request-loading glyph to clear
+    // WITHOUT substituting any later complete response (quickApi stays bound to quickRes).
+    const loadingGlyph = page
+      .locator('[data-testid="crossbar"] [aria-busy="true"], [data-testid="crossbar"] [role="progressbar"], [data-testid="crossbar"] .animate-spin, [data-testid="crossbar-loading"]')
+      .first();
+    const loadingBefore = await loadingGlyph.isVisible({ timeout: 250 }).catch(() => false);
+    if (loadingBefore) {
+      await loadingGlyph.waitFor({ state: "hidden", timeout: 1_500 }).catch(() => {});
+    }
+    await page.waitForTimeout(300);
+    const loadingAfter = await loadingGlyph.isVisible({ timeout: 200 }).catch(() => false);
+    const loadingAria = loadingAfter
+      ? {
+          role: await loadingGlyph.getAttribute("role").catch(() => null),
+          ariaLabel: await loadingGlyph.getAttribute("aria-label").catch(() => null),
+          ariaBusy: await loadingGlyph.getAttribute("aria-busy").catch(() => null),
+          testid: await loadingGlyph.getAttribute("data-testid").catch(() => null),
+        }
+      : null;
     const quickApi = quickRes ? await quickRes.json().catch(() => ({})) : {};
-    const crossbarCovVisible = await page.getByTestId("crossbar-coverage").isVisible().catch(() => false);
+    const covLoc = page.getByTestId("crossbar-coverage").first();
+    const hitStatusLoc = page.getByTestId("crossbar-hit-status").first();
+    const covVisible = await covLoc.isVisible({ timeout: 500 }).catch(() => false);
+    const hitStatusVisible = !covVisible && (await hitStatusLoc.isVisible({ timeout: 300 }).catch(() => false));
+    const crossbarCovVisible = covVisible || hitStatusVisible;
+    const crossbarCovTestId = covVisible ? "crossbar-coverage" : hitStatusVisible ? "crossbar-hit-status" : "";
+    const crossbarCovText = covVisible
+      ? ((await covLoc.textContent({ timeout: 500 }).catch(() => "")) ?? "").trim()
+      : hitStatusVisible
+        ? ((await hitStatusLoc.textContent({ timeout: 500 }).catch(() => "")) ?? "").trim()
+        : "";
     const crossbarEmptyVisible = await page.getByTestId("crossbar-empty").isVisible().catch(() => false);
+    const renderedRows = await page.locator('[role="option"], [data-testid^="crossbar-row"]').count().catch(() => 0);
     const quickShot = path.join(outDir, `linux_quick_open_${state}.png`);
     await page.screenshot({ path: quickShot });
     observations.push({
@@ -344,10 +373,17 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
       workspace_ready: true,
       api_response: quickApi,
       coverage_note_visible: crossbarCovVisible,
-      coverage_note_testid: crossbarCovVisible ? "crossbar-coverage" : "",
+      coverage_note_testid: crossbarCovTestId,
       results_visible_count: Array.isArray(quickApi?.matches) ? quickApi.matches.length : 0,
       empty_final_shown: crossbarEmptyVisible,
       screenshot_path: path.basename(quickShot),
+      notes: JSON.stringify({
+        coverage_text: crossbarCovText,
+        rendered_rows: renderedRows,
+        loading_before: loadingBefore,
+        loading_after: loadingAfter,
+        loading_aria: loadingAria,
+      }),
     });
     await page.keyboard.press("Escape");
 
@@ -372,6 +408,14 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
         selectedRootId = newRootId;
         selectedRootDir = warmingRoots.files_tree;
       }
+      // Select the newly attached warming root in the Files tree so its summary card is displayed.
+      const newRootLabel = path.basename(warmingRoots.files_tree);
+      await page
+        .getByTestId("files-tree-pane")
+        .getByText(newRootLabel, { exact: false })
+        .first()
+        .click({ timeout: 2_000 })
+        .catch(() => {});
       await page.waitForTimeout(300);
     } else if (state === "refreshing") {
       mutateRefreshingTree(proj.root_dir, 4);
