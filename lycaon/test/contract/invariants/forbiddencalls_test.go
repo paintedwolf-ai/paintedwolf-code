@@ -305,6 +305,15 @@ func TestPortablePythonPlatformAdapterBoundaryNegativeControl(t *testing.T) {
 		"platform filename suffix in portablepython": {
 			"lycaon/internal/portablepython/bad_linux.go": "package portablepython\n",
 		},
+		"hardcoded target OS comparison in pythonruntime": {
+			"lycaon/internal/pythonruntime/bad_target.go": "package pythonruntime\n\nfunc requiresSigning(goos string) bool { return goos == \"darwin\" }\n",
+		},
+		"hardcoded target OS switch in pythonruntime": {
+			"lycaon/internal/pythonruntime/bad_switch.go": "package pythonruntime\n\nfunc libExt(goos string) string {\n\tswitch goos {\n\tcase \"darwin\":\n\t\treturn \".dylib\"\n\tdefault:\n\t\treturn \".so\"\n\t}\n}\n",
+		},
+		"hardcoded target OS comparison in portablepython": {
+			"lycaon/internal/portablepython/bad_target.go": "package portablepython\n\nfunc isLinux(osName string) bool { return osName == \"linux\" }\n",
+		},
 	}
 	for name, override := range cases {
 		t.Run(name, func(t *testing.T) {
