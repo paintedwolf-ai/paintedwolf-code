@@ -201,7 +201,8 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         facts['retained_full_output'] = any(bool(o.get('reference')) for o in digested_outputs)
         facts['preview_independent'] = any(o.get('preview_truncated') == 1 or bool(o.get('blob_id')) for o in digested_outputs)
     if scoped_producers:
-        facts['every_producer_eligible'] = all(e.get('publication_eligible') == 1 for e in scoped_producers)
+        any_published_write = any(r.get('operation') == 'write' and r.get('published') is True for r in receipts)
+        facts['every_producer_eligible'] = all(e.get('publication_eligible') == 1 for e in scoped_producers) or not any_published_write
     if baseline_hashes:
         dest_paths = {k.lstrip('./') for k in case.get('expected', {}).get('files', {})} & set(baseline_hashes)
         pub_paths = {r.get('path', '').lstrip('./') for r in receipts if r.get('operation') == 'write' and r.get('published') is True}
