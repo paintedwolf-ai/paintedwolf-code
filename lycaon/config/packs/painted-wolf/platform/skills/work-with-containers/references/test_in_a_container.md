@@ -2,13 +2,13 @@
 
 Use this when the **host box** is the problem, not the code or the sandbox. A sandbox refusal is answered first by the capability it names; the container engine runs outside the sandbox, so it is never a way around one. The container engine is a local service on this device; on a process start that uses it, declare the resolved engine id (`docker` or `podman`) in `capability_request.host_resources`. Podman accepts the same command surface as Docker below.
 
-This is an **escape hatch**, not the default verify path. Prefer fixing a one-shot host invocation first (`socks_proxy`, `capability_request.write_root`, the project's own verify wrapper). Reach for a container when those still leave the project's test command unusable.
+This is an **escape hatch**, not the default verify path. Prefer fixing a one-shot host invocation first ({% if runner_socks_proxy_tools %}`socks_proxy`, {% endif %}{% if runner_write_root_tools %}`capability_request.write_root`, {% endif %}the project's own verify wrapper). Reach for a container when those still leave the project's test command unusable.
 
 ## When this is the right move
 
 | Signal | Reading |
 |--------|---------|
-| A sandbox refusal after its named capability (`write_root`, `socks_proxy`, `direct_ip`) was requested and approved, and the suite still cannot run | The host box, not the boundary, is the obstacle |
+| A sandbox refusal after its named capability ({% if runner_write_root_tools %}`write_root`, {% endif %}{% if runner_socks_proxy_tools %}`socks_proxy`, {% endif %}{% if runner_direct_ip_tools %}`direct_ip`, {% endif %}or host resource) was requested and approved, and the suite still cannot run | The host box, not the boundary, is the obstacle |
 | Missing host toolchain the project documents, with no `.devcontainer` to honor | Install into a throwaway image rather than onto the user's host |
 | Two or more identical host retries of the same verify command failing the same way | Stop thrashing; change the execution environment |
 

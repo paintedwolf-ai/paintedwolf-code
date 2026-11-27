@@ -228,6 +228,18 @@
     "paintedwolf.http_request_response_path_denied": {
       "version": 1,
       "summary": "response_path could not land the response body in the project; curl writes bodies with -o through the write door."
+    },
+    "paintedwolf.workflow_run_context": {
+      "version": 1,
+      "summary": "Active workflow run state the host injects into coordinator context, including the current phase and any pending feedback or decision."
+    },
+    "paintedwolf.workflow_run_exit": {
+      "version": 1,
+      "summary": "Exit of an active workflow run is a person's control in the app; the coordinator sees the closed run in its run context."
+    },
+    "paintedwolf.command_json_programs": {
+      "version": 1,
+      "summary": "JSON extraction and validation run as jq or yq programs through command."
     }
   },
   "vocabularies": {
@@ -555,7 +567,10 @@
       "paintedwolf.git_conflict_paths": {
         "content_contract": "paintedwolf.git_conflict_paths",
         "version": 1
-      }
+      },
+      "paintedwolf.profile_fetches_urls": [
+        "paintedwolf.can_fetch_url"
+      ]
     },
     "rejection_codes": {
       "COMMAND_PROGRAMS_DISABLED": [
@@ -895,7 +910,44 @@
       "parse_delegation_plan": [
         "plan_from_blueprint",
         "fanout_plan"
-      ]
+      ],
+      "handoff_init": [
+        "handoff_reserve"
+      ],
+      "handoff_health": [
+        "pack_board"
+      ],
+      "parse_extract_json": {
+        "content_contract": "paintedwolf.command_json_programs",
+        "version": 1
+      },
+      "parse_validate": {
+        "content_contract": "paintedwolf.command_json_programs",
+        "version": 1
+      },
+      "parse_evaluation": {
+        "content_contract": "paintedwolf.command_json_programs",
+        "version": 1
+      },
+      "plan_append_review_evidence": [
+        "submit_verdict"
+      ],
+      "state_query": {
+        "content_contract": "paintedwolf.workflow_run_context",
+        "version": 1
+      },
+      "state_close": {
+        "content_contract": "paintedwolf.workflow_run_exit",
+        "version": 1
+      },
+      "state_update": [
+        "workflow_advance",
+        "workflow_transition"
+      ],
+      "workflow_user_feedback": {
+        "content_contract": "paintedwolf.workflow_run_context",
+        "version": 1
+      }
     },
     "workflow_terms": {
       "delegation_active": [

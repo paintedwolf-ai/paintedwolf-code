@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/prompts"
 )
 
 const maxSessionTitleRunes = 40
@@ -23,7 +24,7 @@ func NameSession(ctx context.Context, namer llm.UtilityNamer, firstUserMessage s
 	if namer == nil {
 		return ""
 	}
-	system, err := guidance.RenderCatalog(ctx, guidance.UtilitySessionTitleSystemRef, nil)
+	system, err := prompts.RenderUtilityPrompt(ctx, guidance.UtilitySessionTitleSystemRef, nil)
 	if err != nil {
 		return ""
 	}

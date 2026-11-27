@@ -3,6 +3,8 @@ package toolexecution
 import (
 	"reflect"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 func TestPruneWaitConditionSchemaPublishesOnlyRoleConditions(t *testing.T) {
@@ -14,7 +16,7 @@ func TestPruneWaitConditionSchemaPublishesOnlyRoleConditions(t *testing.T) {
 			},
 		}},
 	}}
-	got := pruneWaitConditionSchema(original, []string{"http_ready", "port_ready"})
+	got := toolschema.PruneWaitConditionSchema(original, []string{"http_ready", "port_ready"})
 	properties := got["properties"].(map[string]any)
 	conditions := properties["conditions"].(map[string]any)
 	items := conditions["items"].(map[string]any)
@@ -38,7 +40,7 @@ func TestPruneWaitConditionSchemaRemovesConditionsForTimerOnlyRole(t *testing.T)
 		"timeout_ms": map[string]any{"type": "integer"},
 		"conditions": map[string]any{"type": "array"},
 	}}
-	got := pruneWaitConditionSchema(schema, nil)
+	got := toolschema.PruneWaitConditionSchema(schema, nil)
 	properties := got["properties"].(map[string]any)
 	if _, exists := properties["conditions"]; exists {
 		t.Fatal("timer-only role published conditions")

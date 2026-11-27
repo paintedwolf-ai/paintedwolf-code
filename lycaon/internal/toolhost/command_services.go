@@ -3,6 +3,7 @@ package toolhost
 import (
 	"context"
 	"fmt"
+
 	"github.com/lycaon/lycaon/internal/commandprogram"
 
 	"github.com/lycaon/lycaon/internal/blobstore"
@@ -60,7 +61,7 @@ func (r *CommandServices) SetSandboxWriteRootGate(writeRoot command.SandboxWrite
 	}
 	if r.paths != nil {
 		r.paths.SetSessionWriteRootOverlay(writeRoot.SessionWriteRoots)
-		r.paths.SetWriteRootPreflight(func(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, root string) (bool, bool, string, error) {
+		r.paths.SetWriteRootPreflight(func(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, root string) (toolexecution.PathPreflightResult, error) {
 			result, err := writeRoot.Authorize(ctx, command.SandboxWriteRootAsk{
 				SessionID: tc.Identity.SessionID, ParentSessionID: tc.Identity.ParentSessionID,
 				ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(),
@@ -68,10 +69,16 @@ func (r *CommandServices) SetSandboxWriteRootGate(writeRoot command.SandboxWrite
 				SessionScratchRoot: tc.Host.SessionScratchDir,
 				SessionOutputRoot:  tc.Host.SessionOutputDir,
 			})
-			return result.Authorized, result.Denied, result.UserGuidance, err
+			return toolexecution.PathPreflightResult{
+				Authorized:         result.Authorized,
+				DenialCause:        result.DenialCause,
+				ApprovalResolvedBy: result.ApprovalResolvedBy,
+				DeniedRules:        result.DeniedRules,
+				UserGuidance:       result.UserGuidance,
+			}, err
 		})
 		r.paths.SetSessionReadPathOverlay(writeRoot.SessionReadPaths)
-		r.paths.SetReadPathPreflight(func(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
+		r.paths.SetReadPathPreflight(func(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, path string) (toolexecution.PathPreflightResult, error) {
 			result, err := writeRoot.AuthorizeRead(ctx, command.SandboxReadPathAsk{
 				SessionID: tc.Identity.SessionID, ParentSessionID: tc.Identity.ParentSessionID,
 				ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(),
@@ -80,7 +87,13 @@ func (r *CommandServices) SetSandboxWriteRootGate(writeRoot command.SandboxWrite
 				SessionScratchRoot: tc.Host.SessionScratchDir,
 				SessionOutputRoot:  tc.Host.SessionOutputDir,
 			})
-			return result.Authorized, result.Denied, result.UserGuidance, err
+			return toolexecution.PathPreflightResult{
+				Authorized:         result.Authorized,
+				DenialCause:        result.DenialCause,
+				ApprovalResolvedBy: result.ApprovalResolvedBy,
+				DeniedRules:        result.DeniedRules,
+				UserGuidance:       result.UserGuidance,
+			}, err
 		})
 	}
 }

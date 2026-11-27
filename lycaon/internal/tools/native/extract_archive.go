@@ -17,7 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
-// ExtractArchiveTool unpacks .zip or .tar.gz archives into a write-scoped directory.
+// ExtractArchiveTool unpacks supported archives into a write-scoped directory.
 type ExtractArchiveTool struct {
 	Boundary *sandbox.Boundary
 }
@@ -62,12 +62,15 @@ type ExtractInput struct {
 // traversal, links and governed destinations before they are written.
 func (t *ExtractArchiveTool) Extract(ctx context.Context, in ExtractInput, tctx tools.ToolContext) (ExtractResult, error) {
 	prof := tctx.ProfileID()
-	format := in.Format
-	if format == "" {
-		var err error
-		if format, err = archiveFormat(in.Archive); err != nil {
-			return ExtractResult{}, err
+	displayArchive := in.Archive
+	if filepath.IsAbs(in.Archive) && t.Boundary != nil {
+		if resolved, err := projectpaths.ResolveRead(ctx, t.Boundary, tctx, in.Archive); err == nil {
+			displayArchive = resolved.DisplayPath
 		}
+	}
+	spec, err := resolveArchiveFormat(displayArchive, in.Format)
+	if err != nil {
+		return ExtractResult{}, err
 	}
 	archive, relArchive, size, err := t.loadArchive(ctx, tctx, in.Archive)
 	if err != nil {
@@ -82,15 +85,7 @@ func (t *ExtractArchiveTool) Extract(ctx context.Context, in ExtractInput, tctx 
 		return ExtractResult{}, err
 	}
 	sink := extractSink{ctx: ctx, tctx: tctx, dest: resolvedMutationTarget(dest), strip: in.StripComponents, overwrite: in.Overwrite, selected: in.Select, flatten: in.Flatten}
-	switch format {
-	case "zip":
-		err = extractZipFile(sink, archive.EffectLocation(), budget, protectedEntryGuard)
-	case "tar", "tar.gz", "tar.bz2", "tar.xz", "tar.zst":
-		err = extractTarFile(sink, archive.EffectLocation(), format, budget, protectedEntryGuard)
-	default:
-		err = &toolrejection.ToolReject{Code: "EXTRACT_FORMAT_UNSUPPORTED", Data: map[string]any{"path": relArchive}}
-	}
-	if err != nil {
+	if err := spec.extract(sink, archive.EffectLocation(), budget, protectedEntryGuard); err != nil {
 		afterSuccessfulMutationResolved(ctx, tctx, dest)
 		return ExtractResult{}, extractionFailure(err, relArchive, relDest, budget)
 	}

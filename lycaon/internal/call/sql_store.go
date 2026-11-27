@@ -84,12 +84,6 @@ func (s *SQLStore) DeleteAllReservationsForAgent(ctx context.Context, sessionID,
 	})
 }
 
-// CountReservations returns reservation rows for a session.
-func (s *SQLStore) CountReservations(ctx context.Context, sessionID string) (int, error) {
-	n, err := s.queries.CountCallReservations(ctx, db.NullString(sessionID))
-	return int(n), err
-}
-
 // ListActiveReservations returns path holds for a session ordered by path.
 func (s *SQLStore) ListActiveReservations(ctx context.Context, sessionID string) ([]ActiveReservation, error) {
 	sessionID = strings.TrimSpace(sessionID)

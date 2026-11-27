@@ -1,4 +1,4 @@
 steps:
   - tool: "pack_board"
-    say: "Find the worker's current result on the roster with {{ call }} and review that one."
+    say: "Find the worker's current result on the roster with {% if load %}{{ load }}, then {% endif %}{{ call }} and review that one."
     otherwise: "Review the worker's current result instead."

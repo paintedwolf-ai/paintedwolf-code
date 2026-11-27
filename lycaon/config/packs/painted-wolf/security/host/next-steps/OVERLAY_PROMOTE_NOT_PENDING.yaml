@@ -1,3 +1,3 @@
 steps:
   - tool: "task"
-    say: "If aborted, re-dispatch a fresh {{ call }} if needed."
+    say: "If aborted, {% if load %}call {{ load }}, then {% endif %}re-dispatch a fresh {{ call }} if needed."

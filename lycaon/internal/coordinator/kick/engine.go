@@ -211,7 +211,7 @@ func (k *KickEngine) RenderPendingNudge(ctx context.Context, sessionID string, l
 		var text string
 		var err error
 		if item.eager {
-			text, err = k.renderEagerKick(ctx, item.kickID, item.eagerData)
+			text, err = k.renderEagerKick(ctx, item.kickID, item.eagerData, live.Reader)
 		} else {
 			text, err = k.renderCoordinatorKick(ctx, item.kickID, item.meta, live)
 		}
@@ -297,16 +297,19 @@ func (k *KickEngine) QueueEager(sessionID, templateID string, data map[string]st
 	k.sessionKickQueue(sessionID).stageEager(item, &k.nextLease)
 }
 
-func (k *KickEngine) renderEagerKick(ctx context.Context, templateID string, data map[string]string) (string, error) {
+func (k *KickEngine) renderEagerKick(ctx context.Context, templateID string, data map[string]string, reader prompts.Reader) (string, error) {
 	cfg := k.config()
 	if cfg.engine == nil {
 		return "", fmt.Errorf("kick %q: prompt engine not configured", templateID)
+	}
+	if !reader.Valid() {
+		return unreadKick(ctx, templateID), nil
 	}
 	vars := make(map[string]any, len(data))
 	for key, value := range data {
 		vars[key] = value
 	}
-	text, err := cfg.engine.RenderKick(ctx, templateID, vars)
+	text, err := cfg.engine.RenderKick(ctx, reader, templateID, vars)
 	if err != nil {
 		return "", fmt.Errorf("render kick %q: %w", templateID, err)
 	}

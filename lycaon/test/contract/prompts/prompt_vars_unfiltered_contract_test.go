@@ -31,6 +31,8 @@ func TestPromptRendererPassesVarsUnfiltered(t *testing.T) {
 	data := func() map[string]any {
 		return map[string]any{"unfiltered_probe": "probe-value-7f3a", "unfiltered_flag": true}
 	}
+	reader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
+	contractcheck.FailErr(t, "DeclaredReader coordinator", err)
 	const want = "probe-value-7f3a+flag"
 	renders := map[string]func() (string, error){
 		"agents":   func() (string, error) { return engine.Render(ctx, "agents/unfiltered-probe.md", data()) },
@@ -38,7 +40,7 @@ func TestPromptRendererPassesVarsUnfiltered(t *testing.T) {
 		"units":    func() (string, error) { return engine.RenderUnit(ctx, "units/unfiltered-probe.md", data()) },
 		"inject":   func() (string, error) { return engine.RenderInject(ctx, "unfiltered-probe", data()) },
 		"guidance": func() (string, error) { return engine.RenderGuidance(ctx, "unfiltered-probe", data()) },
-		"kicks":    func() (string, error) { return engine.RenderKick(ctx, "unfiltered-probe", data()) },
+		"kicks":    func() (string, error) { return engine.RenderKick(ctx, reader, "unfiltered-probe", data()) },
 	}
 	for name, render := range renders {
 		got, err := render()

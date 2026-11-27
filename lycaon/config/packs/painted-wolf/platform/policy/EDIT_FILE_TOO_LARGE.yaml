@@ -3,7 +3,7 @@ id: EDIT_FILE_TOO_LARGE
 kind: schema
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.can_command, paintedwolf.max_file_bytes, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.resource_limit, paintedwolf.size]
+requires_facts: [paintedwolf.admitted_stream_edit_forms, paintedwolf.can_command, paintedwolf.command_loader_call, paintedwolf.max_file_bytes, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.resource_limit, paintedwolf.size, paintedwolf.stream_edit_forms_loadable_without_schema]
 when: paintedwolf.operation in ["edit", "replace_lines", "code_rewrite", "jq_edit", "write", "restore_version"] && paintedwolf.rejection_code == "EDIT_FILE_TOO_LARGE"
 effect: block
 x-paintedwolf-category: recoverable
@@ -13,12 +13,13 @@ what: '{{ tool }} did not change {{ paintedwolf.path }}: the file or its new con
 cause: Whole-file mutations replace complete file states, and every replaced state must fit this limit.
 why: Version history and pre-turn checkpoints retain complete file states up to this limit, so a whole-file mutation above it could not be reviewed, restored, or rewound.
 fix: >-
-  {% if paintedwolf.can_command %}Use command with a streaming tool such as sed, awk, or jq to inspect or change bounded parts of the file.{% else %}Split the file into smaller files, or reduce its size, before retrying the whole-file mutation.{% endif %} Preserve the original file and any completed work; repeating the mutation does not change the limit.
+  {% if paintedwolf.admitted_stream_edit_forms %}Use command{% if paintedwolf.command_loader_call %} after loading it with {{ paintedwolf.command_loader_call }}{% endif %} ({{ paintedwolf.admitted_stream_edit_forms }}) to inspect or change bounded parts of the file.{% else %}{% if paintedwolf.stream_edit_forms_loadable_without_schema %}Call {{ paintedwolf.command_loader_call }} to inspect its projected schema for bounded stream edits, or split the file into smaller files before retrying.{% else %}Split the file into smaller files, or reduce its size, before retrying the whole-file mutation.{% endif %}{% endif %} Preserve the original file and any completed work; repeating the mutation does not change the limit.
 instead: >-
-  {% if paintedwolf.can_command %}Change the file with command, or split it into smaller files{% else %}Report the size dependency, or split the file into smaller files{% endif %}
+  {% if paintedwolf.admitted_stream_edit_forms %}Change bounded parts with command, or split the file into smaller files{% else %}Report the size dependency, or split the file into smaller files{% endif %}
 x-paintedwolf-scenarios:
   - id: with_command
     vars:
+      admitted_stream_edit_forms: [sed, awk, jq]
       can_command: true
       max_file_bytes: 4194304
       path: internal/huge.go
@@ -27,6 +28,7 @@ x-paintedwolf-scenarios:
       tool: edit
   - id: without_command
     vars:
+      admitted_stream_edit_forms: []
       can_command: false
       max_file_bytes: 4194304
       path: internal/huge.go

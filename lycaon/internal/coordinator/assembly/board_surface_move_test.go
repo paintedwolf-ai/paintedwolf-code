@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -18,7 +19,7 @@ type orientOnceBoard struct {
 	renders  int
 }
 
-func (b *orientOnceBoard) PrependBoardIfChanged(context.Context, *api.Session, api.CoordinatorRunContext) (string, bool) {
+func (b *orientOnceBoard) PrependBoardIfChanged(context.Context, *api.Session, prompts.Reader, api.CoordinatorRunContext) (string, bool) {
 	if b.oriented {
 		return "", false
 	}
@@ -26,9 +27,11 @@ func (b *orientOnceBoard) PrependBoardIfChanged(context.Context, *api.Session, a
 	b.renders++
 	return fmt.Sprintf("board render %d", b.renders), true
 }
-func (b *orientOnceBoard) WorkerBoard(context.Context, *api.Session) (string, bool) { return "", false }
-func (b *orientOnceBoard) BoardInjectHash(string) string                            { return "board-hash" }
-func (b *orientOnceBoard) InvalidateOrientation(string)                             { b.oriented = false }
+func (b *orientOnceBoard) WorkerBoard(context.Context, *api.Session, prompts.Reader) (string, bool) {
+	return "", false
+}
+func (b *orientOnceBoard) BoardInjectHash(string) string { return "board-hash" }
+func (b *orientOnceBoard) InvalidateOrientation(string)  { b.oriented = false }
 
 type countingOrientRecorder struct{ records int }
 
@@ -47,7 +50,7 @@ func TestPrepareCoordinatorBoardRendersAgainForAMovedTurn(t *testing.T) {
 	turn := &TurnAssemblyScratch{SurfaceID: "implement_investigate"}
 	prepare := func() string {
 		t.Helper()
-		_, block, err := e.prepareCoordinatorBoard(context.Background(), sess, inject.CoordinatorTurnFrame{}, turn)
+		_, block, err := e.prepareCoordinatorBoard(context.Background(), sess, inject.CoordinatorTurnFrame{}, nil, turn)
 		testutil.FailErr(t, "prepareCoordinatorBoard", err)
 		return block
 	}

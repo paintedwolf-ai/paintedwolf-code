@@ -2,7 +2,7 @@
 
 Workflow YAML authoring — plan paths only.
 
-- **Read paths:** {% for g in read_globs %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
-- **Write paths:** {% for g in write_globs %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
+- **Read paths:** `{{ read_globs|join:"`, `" }}`
+- **Write paths:** `{{ write_globs|join:"`, `" }}`
 
 Use compose tools only — do not dispatch implementers during compose draft.

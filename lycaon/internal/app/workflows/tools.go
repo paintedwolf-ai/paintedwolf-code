@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -17,23 +16,15 @@ import (
 	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 )
 
-// RegisterTools registers state, plan, compose, feedback, ask_user, advance, transition, fanout, and verdict tools.
+// RegisterTools registers state_start, compose, ask_user, advance, transition, fanout, and verdict tools.
 func (r *Runtime) RegisterTools(reg *tools.DefaultRegistry, boundary *sandbox.Boundary, sessions sessionstore.SessionRepository, surfaceGate *settings.ProjectSurfaceGate) error {
 	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{
-		Runs:     r.Store.Runs,
-		Vars:     r.Manager.Phases.Vars,
-		Journal:  r.Manager.Phases.Journal,
 		Resolver: &r.Manager.Resolver,
 		Starts:   r.Manager.Starts,
-		Controls: r.Manager.Controls,
 		Scaffold: r.Manager.Blueprints.Scaffold,
 		Sessions: sessions,
 	}); err != nil {
-		return fmt.Errorf("state tools: %w", err)
-	}
-
-	if err := blueprint.RegisterPlanTools(reg, r.Blueprints); err != nil {
-		return fmt.Errorf("plan tools: %w", err)
+		return fmt.Errorf("state_start tool: %w", err)
 	}
 
 	if err := workflow.RegisterComposeTool(reg, r.Composer); err != nil {
@@ -56,9 +47,6 @@ func (r *Runtime) RegisterTools(reg *tools.DefaultRegistry, boundary *sandbox.Bo
 	}
 	if err := workflow.RegisterPersistTool(reg, r.Persister); err != nil {
 		return fmt.Errorf("workflow_persist tool: %w", err)
-	}
-	if err := workflowinputs.RegisterFeedbackTool(reg, r.Manager.Feedback); err != nil {
-		return fmt.Errorf("workflow_user_feedback tool: %w", err)
 	}
 	if err := workflowinputs.RegisterAskUserTool(reg, r.Manager.Asks, boundary); err != nil {
 		return fmt.Errorf("ask_user tool: %w", err)

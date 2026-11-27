@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
 
@@ -63,7 +64,7 @@ func (b *WriteRootCheckpointBroker) ReviewSharedTemp(ctx context.Context, in com
 		prior := len(reviews)
 		verdict, err := b.authorizeWriteRoot(ctx, in, func(ctx context.Context, req sandboxAskRequest) (sandboxAskResolution, error) {
 			if history.Declined[root] {
-				return sandboxAskResolution{Answered: true, Denied: true}, nil
+				return sandboxAskResolution{Answered: true, Denied: true, DenialCause: isolation.PathDenialPriorUserDeclined}, nil
 			}
 			return reviews.prepare(ctx, req)
 		})
@@ -107,7 +108,7 @@ func (reviews *sharedTempReviews) prepare(ctx context.Context, req sandboxAskReq
 		return sandboxAskResolution{}, err
 	}
 	if declined {
-		return sandboxAskResolution{Answered: true, Denied: true}, nil
+		return sandboxAskResolution{Answered: true, Denied: true, DenialCause: isolation.PathDenialPriorUserDeclined}, nil
 	}
 	card, err := req.BuildCard()
 	if err == nil {
