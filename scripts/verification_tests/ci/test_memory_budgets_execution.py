@@ -441,6 +441,125 @@ class MemoryBudgetTests(unittest.TestCase):
             self.assertFalse(emitted_failed)
             self.assertTrue(any(f.area == "memory" and f.level == "warning" for f in emitted_findings))
 
+    def test_end_to_end_receipt_preserves_lane_ceiling_source_and_missing_status(self):
+        ordinary_limit = 3584 * mb.MIB
+        race_limit = int(ordinary_limit * 2.5)
+        sha, tree, base = "1" * 40, "2" * 40, "3" * 40
+        run = {
+            "id": 77, "run_attempt": 1, "head_sha": sha, "head_branch": "main",
+            "path": ".github/workflows/nightly.yml", "event": "schedule",
+            "status": "completed", "conclusion": "success", "repository": {"full_name": "org/repo"},
+        }
+        cases = [
+            ("ordinary", "test:contract", ordinary_limit, "proc_vmhwm", True, "package_memory_ordinary"),
+            ("ordinary", "test:short", ordinary_limit, "proc_vmrss", True, "package_memory_ordinary"),
+            ("ordinary", "test:digest", ordinary_limit, "wait4_ru_maxrss", False, "package_memory_ordinary"),
+            ("race", "test:race", race_limit, "proc_vmhwm", True, "package_memory_race"),
+            ("race", "test:race", race_limit, "proc_vmrss", True, "package_memory_race"),
+        ]
+        for lane, stage, limit, source, lower_bound, category in cases:
+            with self.subTest(lane=lane, stage=stage, source=source), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                repo = root / "repo"
+                reviews = root / "reviews"
+                repo.mkdir()
+                reviews.mkdir()
+                hot_pkg = f"github.com/lycaon/lycaon/test/contract/hot_{lane}_{source}"
+                miss_pkg = f"github.com/lycaon/lycaon/test/contract/miss_{lane}_{source}"
+                peak = int(limit * 0.85)
+
+                shard = root / "shard"
+                _write_receipt(shard, "b1", "1.json", tree, stage, {
+                    hot_pkg: _obs(peak, limit, source=source, lower_bound=lower_bound),
+                    miss_pkg: _obs(None, limit, source="unavailable", lower_bound=False),
+                }, source_manifest_tree=tree)
+                summary = root / "summary.md"
+                with patch.object(vreport, "artifact_root", return_value=shard), \
+                        patch.object(vreport, "source", return_value={"sha": sha, "tree": tree}), \
+                        patch.dict("os.environ", {"GITHUB_STEP_SUMMARY": str(summary)}):
+                    vreport.report("success")
+
+                compact = json.loads((shard / "ci" / "memory.json").read_text())
+                self.assertEqual(compact["lanes"], [lane])
+                self.assertEqual(len(compact["observations"]), 1)
+                obs = compact["observations"][0]
+                self.assertEqual(obs["lane"], lane)
+                self.assertEqual(obs["limit_bytes"], limit)
+                self.assertEqual(obs["peak_bytes"], peak)
+                self.assertEqual(obs["source"], source)
+                self.assertEqual(obs["lower_bound"], lower_bound)
+                self.assertEqual(compact["unavailable"], {lane: [miss_pkg]})
+
+                maint = {"suite": "maintainability", "tracking": {"schema_version": 1, "complete": True, "artifacts": []}}
+                snapshot.seal(maint, sha, tree, base)
+                build_zip = _zip_bytes({"budgets/reports/maintainability.json": maint})
+                shard_zip = _zip_bytes({"ci/memory.json": compact})
+
+                def reconcile_with(mem_zip, open_issues):
+                    with patch.dict("os.environ", {"GITHUB_REPOSITORY": "org/repo"}), \
+                            patch.object(evidence, "pages", return_value=[
+                                {"id": 1, "name": "receipt-verification-nightly-build-1", "expired": False, "size_in_bytes": len(build_zip)},
+                                {"id": 2, "name": "receipt-verification-nightly-shard-1", "expired": False, "size_in_bytes": len(mem_zip)},
+                            ]), \
+                            patch.object(evidence.subprocess, "check_output", side_effect=lambda cmd: {
+                                "repos/org/repo/actions/artifacts/1/zip": build_zip,
+                                "repos/org/repo/actions/artifacts/2/zip": mem_zip,
+                            }[cmd[-1]]), \
+                            patch.object(mb, "ROOT", repo), \
+                            patch.object(mb, "REVIEWS_DIR", reviews), \
+                            patch.object(tracker, "merged_pulls", return_value=[{"number": 2821}]), \
+                            patch.object(tracker, "api", return_value={"tree": {"sha": tree}}), \
+                            patch.object(tracker, "checkpoint", return_value=None), \
+                            patch.object(tracker, "intake", side_effect=lambda _r, arts, _p: set(arts)), \
+                            patch.object(tracker, "pages", return_value=open_issues), \
+                            patch.object(tracker, "MainChanges", return_value=type("MC", (), {
+                                "main": sha, "changed": lambda self, row: False})()):
+                        return tracker.reconcile(run, dry_run=True)
+
+                created = reconcile_with(shard_zip, [])
+                self.assertEqual(created["above_threshold"], {category: 1})
+                self.assertEqual(len(created["operations"]), 1)
+                op = created["operations"][0]
+                self.assertEqual(op["action"], "create")
+                open_issue = {
+                    "number": 9100, "state": "open", "state_reason": None,
+                    "user": {"login": "github-actions[bot]"},
+                    "title": op["body"]["title"], "body": op["body"]["body"],
+                }
+
+                # Neither a raw receipt with missing/zero peak nor a compact payload with
+                # zero/None peak may coerce to a zero peak or clear the open warning.
+                for bad_peak in (None, 0):
+                    raw_bad = root / f"shard-bad-{bad_peak}"
+                    _write_receipt(raw_bad, "b1", "1.json", tree, stage, {
+                        hot_pkg: _obs(bad_peak, limit, source="unavailable", lower_bound=False),
+                    }, source_manifest_tree=tree)
+                    with patch.object(vreport, "artifact_root", return_value=raw_bad), \
+                            patch.object(vreport, "source", return_value={"sha": sha, "tree": tree}), \
+                            patch.dict("os.environ", {"GITHUB_STEP_SUMMARY": str(root / f"sum-{bad_peak}.md")}):
+                        vreport.report("success")
+                    bad_compact = json.loads((raw_bad / "ci" / "memory.json").read_text())
+                    self.assertEqual(bad_compact["observations"], [])
+                    self.assertEqual(bad_compact["unavailable"], {lane: [hot_pkg]})
+
+                    held_from_raw = reconcile_with(_zip_bytes({"ci/memory.json": bad_compact}), [open_issue])
+                    self.assertEqual(held_from_raw["operations"], [])
+                    self.assertTrue(any(h.get("reason") == "memory_observation_unavailable" for h in held_from_raw["held"]))
+
+                    injected_compact = {
+                        "schema_version": 1, "source_sha": sha, "source_tree": tree, "status": "success",
+                        "lanes": [lane],
+                        "observations": [{
+                            "lane": lane, "stage": stage, "package": hot_pkg,
+                            "peak_bytes": bad_peak, "limit_bytes": limit,
+                            "source": "unavailable", "lower_bound": False,
+                        }],
+                        "unavailable": {},
+                    }
+                    held_from_injected = reconcile_with(_zip_bytes({"ci/memory.json": injected_compact}), [open_issue])
+                    self.assertEqual(held_from_injected["operations"], [])
+                    self.assertTrue(any(h.get("reason") == "memory_observation_unavailable" for h in held_from_injected["held"]))
+
 
 if __name__ == "__main__":
     unittest.main()
