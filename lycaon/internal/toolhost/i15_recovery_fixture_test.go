@@ -17,8 +17,10 @@ import (
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/httpaction"
@@ -94,6 +96,12 @@ func newI15Env(t *testing.T, sessionID string, ownedPorts ...uint16) *i15Env {
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "0")
 	t.Setenv("LYCAON_SANDBOX", "on")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
+	if len(ownedPorts) > 0 {
+		confine.SetEgressResolver(func(_ context.Context, _ confine.EgressCommand, ep egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
+			return ep.Host == "127.0.0.1" || ep.Host == "::1" || ep.Host == "localhost"
+		})
+		t.Cleanup(func() { confine.SetEgressResolver(nil) })
+	}
 
 	root := t.TempDir()
 	projectDir, err := filepath.EvalSymlinks(t.TempDir())
