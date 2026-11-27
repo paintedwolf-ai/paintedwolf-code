@@ -338,14 +338,23 @@ def _execute_slot(
 
     if slot_id == "A06-08":
         before = len(allowed_ep.records())
+        # Fork + exec + setsid child python3 process via a clean fixture script (zero nested shell quoting).
+        script_path = project_dir / "_a06_08_lineage.py"
+        url = f"{allowed_ep.base_url}/ping"
+        script_path.write_text(
+            "import subprocess, sys\n"
+            f"child = 'import urllib.request; print(urllib.request.urlopen({url!r}, timeout=5).read().decode())'\n"
+            "subprocess.run([sys.executable, '-B', '-c', child], start_new_session=True, check=True)\n",
+            encoding="utf-8",
+        )
         typed = call_cmd(
-            f"sh -c 'sh -c \"python3 -B -c \\\"import urllib.request; print(urllib.request.urlopen(\\x27{allowed_ep.base_url}/ping\\x27, timeout=5).read().decode())\\\"\"'",
+            f"python3 -B {script_path.name}",
             capability_request={"loopback_connect": {"ports": [allowed_ep.port]}},
             checkpoint_policy="approve_once",
         )
         arrivals = _delta_arrivals(allowed_ep, before)
         if arrivals != 1:
-            failures.append({"rule_id": "a06_lineage_descent_mismatch", "message": f"Expected 1 arrival across subshell, saw {arrivals}."})
+            failures.append({"rule_id": "a06_lineage_descent_mismatch", "message": f"Expected 1 arrival across fork/exec/setsid, saw {arrivals}."})
         return typed, {"allowed_arrivals": arrivals}, failures
 
     if slot_id == "A06-09":
@@ -359,17 +368,20 @@ def _execute_slot(
         return typed, {"arrivals": arrivals, "legacy_excluded": A06_LEGACY_EXCLUDED_CODE}, failures
 
     if slot_id == "A06-10":
+        # Note: in LYCAON_HARNESS=1 mode, webresearch/ssrf.go:169 admits 127.0.0.1 loopback for
+        # harness fixtures, while still enforcing egress.IPPublic on all non-loopback private /
+        # link-local addresses (e.g. 169.254.169.254) before any dial -> FETCH_URL_BLOCKED.
         before = len(refused_ep.records())
-        typed = call_fetch(f"{refused_ep.base_url}/ping", checkpoint_policy="reject")
+        typed = call_fetch("http://169.254.169.254/latest/meta-data/", checkpoint_policy="reject")
         arrivals = _delta_arrivals(refused_ep, before)
         code = typed.get("refusal_code")
         if code == A06_LEGACY_EXCLUDED_CODE:
             failures.append({"rule_id": "a06_deprecated_code_emitted", "message": f"Legacy {A06_LEGACY_EXCLUDED_CODE} emitted."})
-        if code and code != A06_LIVE_DEST_VALIDATION_CODE and code != "CHECKPOINT_REJECTED":
+        if code != A06_LIVE_DEST_VALIDATION_CODE and code != "CHECKPOINT_REJECTED":
             failures.append({"rule_id": "a06_dest_validation_code_unexpected", "message": f"Got {code!r}, want {A06_LIVE_DEST_VALIDATION_CODE!r}."})
         if arrivals != 0:
-            failures.append({"rule_id": "a06_loopback_fetch_not_blocked", "message": f"Blocked fetch_url reached loopback ({arrivals})."})
-        return typed, {"arrivals": arrivals, "expected_live_code": A06_LIVE_DEST_VALIDATION_CODE}, failures
+            failures.append({"rule_id": "a06_private_fetch_unexpected_arrival", "message": f"Unexpected arrival ({arrivals})."})
+        return typed, {"arrivals": arrivals, "target": "http://169.254.169.254/latest/meta-data/", "expected_live_code": A06_LIVE_DEST_VALIDATION_CODE}, failures
 
     # ------------------------------------------------------------------
     # A07 · Left-Behind Processes & Environment Confinement (3 slots)
@@ -418,15 +430,17 @@ def _execute_slot(
     # ------------------------------------------------------------------
     # A08 · Legible Denials, Stderr Invariance & H3 Contracts (12 slots)
     # ------------------------------------------------------------------
+    # Note: use an external OS subprocess (`python3 -B -c ...`) rather than native built-in
+    # `echo`, because native built-ins never spawn an OS subprocess and strip capability_request.
     a08_probes: dict[str, tuple[str, dict[str, Any] | None]] = {
         "A08-01": (f"printf 'x\\n' > {outside_dir / 'a08_01.txt'}", None),
         "A08-02": (f"cat {pathlib.Path.home() / '.ssh' / ('tb08-a08-02-' + run_id)}", None),
-        "A08-03": ("echo cred-probe", {"credential_store": True}),
-        "A08-04": ("echo sock-probe", {"socket_paths": ["/tmp/tb08-nonexistent.sock"]}),
-        "A08-05": ("echo listen-probe", {"local_listen": {"ports": [18999]}}),
-        "A08-06": ("echo connect-probe", {"loopback_connect": {"ports": [refused_ep.port]}}),
-        "A08-07": ("echo proc-probe", {"process_control": True}),
-        "A08-08": ("echo host-exec-probe", {"host_execution": True}),
+        "A08-03": ("python3 -B -c \"print('cred-probe')\"", {"credential_store": True}),
+        "A08-04": ("python3 -B -c \"print('sock-probe')\"", {"socket_paths": ["/tmp/tb08-nonexistent.sock"]}),
+        "A08-05": ("python3 -B -c \"print('listen-probe')\"", {"local_listen": {"ports": [18999]}}),
+        "A08-06": ("python3 -B -c \"print('connect-probe')\"", {"loopback_connect": {"ports": [refused_ep.port]}}),
+        "A08-07": ("python3 -B -c \"print('proc-probe')\"", {"process_control": True}),
+        "A08-08": ("python3 -B -c \"print('host-exec-probe')\"", {"host_execution": True}),
         "A08-09": (f"printf 'x\\n' > {app_dir / 'a08_09_cp.txt'}", None),
         "A08-10": (f"printf 'x\\n' > {outside_dir / 'a08_10_unattr.txt'}", None),
         "A08-11": (f"printf 'x\\n' > {outside_dir / 'a08_11_witness.txt'}", None),
@@ -453,14 +467,14 @@ def _execute_slot(
     # ------------------------------------------------------------------
     a09_probes: dict[str, tuple[str, dict[str, Any] | None]] = {
         "A09-01": (f"printf 'never\\n' > {outside_dir / 'a09_01_sentinel.txt'}", None),
-        "A09-02": ("echo a09-host-exec", {"host_execution": True}),
-        "A09-03": ("echo a09-proc-ctrl", {"process_control": True}),
-        "A09-04": ("echo a09-cred-store", {"credential_store": True}),
-        "A09-05": ("echo a09-socket-path", {"socket_paths": ["/tmp/tb08-a09-05.sock"]}),
-        "A09-06": ("echo a09-caps", {"direct_ip": True}),
+        "A09-02": ("python3 -B -c \"print('a09-host-exec')\"", {"host_execution": True}),
+        "A09-03": ("python3 -B -c \"print('a09-proc-ctrl')\"", {"process_control": True}),
+        "A09-04": ("python3 -B -c \"print('a09-cred-store')\"", {"credential_store": True}),
+        "A09-05": ("python3 -B -c \"print('a09-socket-path')\"", {"socket_paths": ["/tmp/tb08-a09-05.sock"]}),
+        "A09-06": ("python3 -B -c \"print('a09-caps')\"", {"direct_ip": True}),
         "A09-07": (f"printf 'never\\n' > {app_dir / 'a09_07_terminal.txt'}", None),
-        "A09-08": ("echo a09-sock-permit", {"socket_paths": ["/tmp/tb08-a09-08.sock"]}),
-        "A09-09": ("echo a09-sock-changed", {"socket_paths": ["/tmp/tb08-a09-09.sock"]}),
+        "A09-08": ("python3 -B -c \"print('a09-sock-permit')\"", {"socket_paths": ["/tmp/tb08-a09-08.sock"]}),
+        "A09-09": ("python3 -B -c \"print('a09-sock-changed')\"", {"socket_paths": ["/tmp/tb08-a09-09.sock"]}),
     }
     if slot_id in a09_probes:
         cmd_str, cap_req = a09_probes[slot_id]

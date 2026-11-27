@@ -352,7 +352,7 @@ class TestTB08SidecarRunner(unittest.TestCase):
             call_id = f"call-{name}"
             if name == "fetch_url":
                 url = str(args.get("url") or "")
-                if "127.0.0.1" in url:
+                if "169.254.169.254" in url or "127.0.0.1" in url:
                     return call_id, {"outcome": "rejected", "codes": ["FETCH_URL_BLOCKED"]}, {}
                 return call_id, {"outcome": "rejected", "codes": ["WEB_SEARCH_HOST_DENIED"]}, {}
 
@@ -366,9 +366,15 @@ class TestTB08SidecarRunner(unittest.TestCase):
                 return call_id, {"outcome": "completed", "left_running": 0}, {}
 
             if checkpoint_policy == "approve_once":
+                port = None
                 m = re.search(r"http://127\.0\.0\.1:(\d+)/ping", cmd)
                 if m:
                     port = int(m.group(1))
+                elif "_a06_08_lineage.py" in cmd:
+                    ports = ((args.get("capability_request") or {}).get("loopback_connect") or {}).get("ports") or []
+                    if ports:
+                        port = int(ports[0])
+                if port is not None:
                     with urllib.request.urlopen(f"http://127.0.0.1:{port}/ping", timeout=3) as resp:
                         resp.read()
                     return call_id, {
