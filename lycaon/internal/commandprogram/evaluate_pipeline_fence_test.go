@@ -57,7 +57,7 @@ func TestPipelinePublicationFenceCoreCases(t *testing.T) {
 				if child.Result.PublicationEligible {
 					t.Fatalf("pipeline marked publication eligible: %+v", child)
 				}
-			case "fail":
+			case "external":
 				sawFail = true
 				if child.Result.Status != 1 || child.Result.PublicationEligible {
 					t.Fatalf("upstream fail = %+v, want status 1 ineligible", child)
@@ -87,12 +87,12 @@ func TestPipelinePublicationFenceCoreCases(t *testing.T) {
 
 	t.Run("native_early_consumer_closure_publishes", func(t *testing.T) {
 		f := newEvalFixture(t)
-		out, err := f.run(t, t.Context(), "yes | head -n 1 > out")
+		out, err := f.run(t, t.Context(), "cat <<EOF | head -n 1 > out\none\ntwo\nthree\nEOF\n")
 		if err != nil || out.Stop != nil || out.Status != 0 {
 			t.Fatalf("outcome = %+v, err = %v", out, err)
 		}
-		if f.publication.published["out"] != "y\n" {
-			t.Fatalf("out = %q, want y\\n", f.publication.published["out"])
+		if f.publication.published["out"] != "one\n" {
+			t.Fatalf("out = %q, want one\\n", f.publication.published["out"])
 		}
 		if len(f.publication.abandoned) != 0 {
 			t.Fatalf("unexpected abandoned destinations: %v", f.publication.abandoned)
