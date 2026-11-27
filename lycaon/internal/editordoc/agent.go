@@ -94,7 +94,8 @@ func (a *AgentService) ApplyAgentEdit(ctx context.Context, in AgentEdit) (*Agent
 
 // prepareRetainedAgentEdit publishes accepted bytes before document commit.
 func (b agentBatchPlanner) prepareRetainedAgentEdit(ctx context.Context, d *Document, in AgentEdit) (sourceledger.PreparedHeldEdit, error) {
-	encoded, err := textfile.EncodeBounded(textfile.SerializeEOL(d.Draft, d.EOL), d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
+	content, _ := b.s.serializeDocumentContent(ctx, d, d.Draft, nil)
+	encoded, err := textfile.EncodeBounded(content, d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
 	if err != nil {
 		return nil, err
 	}

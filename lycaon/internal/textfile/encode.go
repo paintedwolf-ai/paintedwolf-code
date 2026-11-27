@@ -131,6 +131,112 @@ func SerializeEOL(content, eol string) string {
 	return content
 }
 
+// HasMixedEOL reports whether content contains both CRLF and bare LF line endings.
+func HasMixedEOL(content string) bool {
+	crlf := strings.Count(content, "\r\n")
+	lf := strings.Count(content, "\n") - crlf
+	return crlf > 0 && lf > 0
+}
+
+type rawLine struct {
+	body string
+	eol  string
+}
+
+func splitRawLines(s string) []rawLine {
+	if s == "" {
+		return nil
+	}
+	var out []rawLine
+	for len(s) > 0 {
+		idx := strings.IndexByte(s, '\n')
+		if idx < 0 {
+			out = append(out, rawLine{body: s, eol: ""})
+			break
+		}
+		if idx > 0 && s[idx-1] == '\r' {
+			out = append(out, rawLine{body: s[:idx-1], eol: "\r\n"})
+		} else {
+			out = append(out, rawLine{body: s[:idx], eol: "\n"})
+		}
+		s = s[idx+1:]
+	}
+	return out
+}
+
+// SerializePreservingMixedEOL serializes LF-normalized draft text while keeping
+// the exact original per-line terminators ("\r\n" vs "\n") of untouched lines
+// from beforeRawText. Modified or newly inserted lines take fallbackEOL.
+func SerializePreservingMixedEOL(beforeRawText, draft, fallbackEOL string) (string, bool) {
+	if beforeRawText == "" || !HasMixedEOL(beforeRawText) {
+		serialized := SerializeEOL(draft, fallbackEOL)
+		return serialized, false
+	}
+	beforeLines := splitRawLines(beforeRawText)
+	draftLines := splitRawLines(strings.ReplaceAll(draft, "\r\n", "\n"))
+	if len(draftLines) == 0 {
+		return "", false
+	}
+	fallbackTerm := "\n"
+	if fallbackEOL == "crlf" {
+		fallbackTerm = "\r\n"
+	}
+
+	// Match common unchanged prefix and suffix lines by exact body.
+	prefix := 0
+	for prefix < len(beforeLines) && prefix < len(draftLines) && beforeLines[prefix].body == draftLines[prefix].body {
+		prefix++
+	}
+	beforeEnd := len(beforeLines)
+	draftEnd := len(draftLines)
+	for beforeEnd > prefix && draftEnd > prefix && beforeLines[beforeEnd-1].body == draftLines[draftEnd-1].body {
+		beforeEnd--
+		draftEnd--
+	}
+
+	// Map each draft line index in [prefix, draftEnd) to an original before line
+	// when unchanged interior lines survive between multiple edit hunks.
+	midMatch := make([]int, draftEnd-prefix)
+	for i := range midMatch {
+		midMatch[i] = -1
+	}
+	cursor := prefix
+	for j := prefix; j < draftEnd; j++ {
+		for k := cursor; k < beforeEnd; k++ {
+			if beforeLines[k].body == draftLines[j].body {
+				midMatch[j-prefix] = k
+				cursor = k + 1
+				break
+			}
+		}
+	}
+
+	var b strings.Builder
+	b.Grow(len(draft) + len(draftLines))
+	for j, dl := range draftLines {
+		b.WriteString(dl.body)
+		if dl.eol == "" {
+			continue
+		}
+		origIdx := -1
+		switch {
+		case j < prefix:
+			origIdx = j
+		case j >= draftEnd:
+			origIdx = beforeEnd + (j - draftEnd)
+		default:
+			origIdx = midMatch[j-prefix]
+		}
+		if origIdx >= 0 && origIdx < len(beforeLines) && beforeLines[origIdx].eol != "" {
+			b.WriteString(beforeLines[origIdx].eol)
+		} else {
+			b.WriteString(fallbackTerm)
+		}
+	}
+	serialized := b.String()
+	return serialized, HasMixedEOL(serialized)
+}
+
 // EncodeDocument returns the bytes a save of LF-normalized text writes in its
 // recorded line ending and encoding.
 func EncodeDocument(content, eol, encoding string, limits Limits) ([]byte, error) {
