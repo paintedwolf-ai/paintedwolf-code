@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -322,6 +323,77 @@ func TestDenyProcessEnvironmentStripsEveryProxyRoute(t *testing.T) {
 	}
 	if !strings.Contains(got, "PATH=/bin") {
 		t.Fatalf("deny process environment lost unrelated state:\n%s", got)
+	}
+}
+
+func TestProcessEnvironmentSetsDarwinXcrunDB(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Darwin-only xcrun_db environment placement")
+	}
+	envValue := func(entries []string, key string) (string, bool) {
+		for _, entry := range entries {
+			if k, v, ok := strings.Cut(entry, "="); ok && k == key {
+				return v, true
+			}
+		}
+		return "", false
+	}
+
+	scratch := t.TempDir()
+	gotScratch := confine.ProcessEnvironment([]string{"PATH=/bin"}, confine.Confinement{
+		Network:    confine.NetworkDeny,
+		Workspaces: confine.WorkspaceRoots{SessionScratch: scratch},
+	})
+	wantScratch := filepath.Join(fspath.CanonicalPath(scratch), "xcrun_db")
+	if got, ok := envValue(gotScratch, "xcrun_db"); !ok || got != wantScratch {
+		t.Fatalf("with SessionScratch: xcrun_db=%q (ok=%v), want %q", got, ok, wantScratch)
+	}
+
+	gotDefault := confine.ProcessEnvironment([]string{"PATH=/bin"}, confine.Confinement{Network: confine.NetworkDeny})
+	gotDB, ok := envValue(gotDefault, "xcrun_db")
+	if !ok || !filepath.IsAbs(gotDB) {
+		t.Fatalf("default confined xcrun_db=%q (ok=%v), want absolute path", gotDB, ok)
+	}
+	writeRoots, err := confine.WriteRootsForBoundary("", nil, nil, "")
+	testutil.FailErr(t, "resolve default write roots", err)
+	if !confine.PathWithinRoots(gotDB, writeRoots) {
+		t.Fatalf("default confined xcrun_db %q is not within default write roots %v", gotDB, writeRoots)
+	}
+	if tempOut, err := exec.Command("/usr/bin/getconf", "DARWIN_USER_TEMP_DIR").Output(); err == nil {
+		if userTemp := fspath.CanonicalPath(strings.TrimSpace(string(tempOut))); userTemp != "" && confine.PathAtOrUnder(gotDB, userTemp) {
+			t.Fatalf("default confined xcrun_db %q must not live under DARWIN_USER_TEMP_DIR %q", gotDB, userTemp)
+		}
+	}
+
+	gotRelative := confine.ProcessEnvironment([]string{"PATH=/bin"}, confine.Confinement{
+		Network:    confine.NetworkDeny,
+		Workspaces: confine.WorkspaceRoots{SessionScratch: "relative/scratch"},
+	})
+	if got, ok := envValue(gotRelative, "xcrun_db"); !ok || got != gotDB {
+		t.Fatalf("relative SessionScratch: xcrun_db=%q (ok=%v), want fallback %q", got, ok, gotDB)
+	}
+
+	loopDir := t.TempDir()
+	loopA := filepath.Join(loopDir, "a")
+	loopB := filepath.Join(loopDir, "b")
+	testutil.FailErr(t, "create symlink loop a->b", os.Symlink(loopB, loopA))
+	testutil.FailErr(t, "create symlink loop b->a", os.Symlink(loopA, loopB))
+	gotLoop := confine.ProcessEnvironment([]string{"PATH=/bin"}, confine.Confinement{
+		Network:    confine.NetworkDeny,
+		Workspaces: confine.WorkspaceRoots{SessionScratch: loopA},
+	})
+	if got, ok := envValue(gotLoop, "xcrun_db"); !ok || got != gotDB {
+		t.Fatalf("canonicalization-failing SessionScratch: xcrun_db=%q (ok=%v), want fallback %q", got, ok, gotDB)
+	}
+
+	gotExplicit := confine.ProcessEnvironment([]string{"PATH=/bin", "xcrun_db=/custom/xcrun_db"}, confine.Confinement{Network: confine.NetworkDeny})
+	if got, ok := envValue(gotExplicit, "xcrun_db"); !ok || got != "/custom/xcrun_db" {
+		t.Fatalf("explicit xcrun_db=%q (ok=%v), want /custom/xcrun_db", got, ok)
+	}
+
+	gotHost := confine.ProcessEnvironment([]string{"PATH=/bin"}, confine.Confinement{HostExecution: true})
+	if got, ok := envValue(gotHost, "xcrun_db"); ok {
+		t.Fatalf("host execution should not inject xcrun_db, got %q", got)
 	}
 }
 

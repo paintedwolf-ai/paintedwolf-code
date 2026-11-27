@@ -109,6 +109,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		queryProgram.Revisions.Memory = memory
 		mutationProgram.Revisions.Memory = memory
 		mutationProgram.Admission = admission
+		mutationProgram.ManagedTemps = mutation.NewManagedTempTracker()
 		textProgram.Revisions.Memory = memory
 		literalOwners, searchOwners, queryOwners, mutationOwners, textOwners := literalProgram, &searchProgram, &queryProgram, &mutationProgram, &textProgram
 		program := mutation.Program{Paths: paths}
@@ -123,6 +124,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		}
 		owners := command.ProgramOwners{
 			PublishDocument: mutationOwners.Operations.Write.PublishAccepted,
+			DeclareLaunch:   mutationOwners.DeclareLaunchInputs,
 			Natives:         map[string]command.NativeOperation{},
 			Publication: func(admit tools.CommandOutputAdmission) commandprogram.OutputPublication {
 				return &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc, Admission: admit, ReviewRoot: t.reviewRoot}
@@ -270,7 +272,7 @@ func (t programOwnerTools) gitOperation() (func(*mutation.Owners) command.Native
 		}
 	}
 	return func(filesystem *mutation.Owners) command.NativeOperation {
-		return command.NativeOperation{Tools: identities, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+		return command.NativeOperation{Tools: identities, DisallowGap: func(argv commandprogram.Fields) bool { return gitcmd.ValidateGlobalConfig(argv) != nil }, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 			nested, _ := dispatch.(commandprogram.NestedCommand)
 			prepared, err := owners.PrepareGit(frame, filesystem, nested, request)
 			if err != nil {

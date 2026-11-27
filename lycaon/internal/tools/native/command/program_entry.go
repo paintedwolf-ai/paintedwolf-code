@@ -396,7 +396,7 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 		"pkill": pkillOperation(jobs, run.commands["pkill"]),
 		"sleep": sleepOperation(run.commands["sleep"]),
 	}
-	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, redirections: owners.Redirections}
+	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, redirections: owners.Redirections, declareLaunch: owners.DeclareLaunch}
 	builtins["timeout"] = timeoutBuiltin(run.commands["timeout"], dispatcher, r.clock())
 	natives["nohup"] = nohupOperation(run.commands["nohup"], dispatcher)
 	maps.Copy(natives, owners.Natives)

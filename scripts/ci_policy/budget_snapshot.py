@@ -6,7 +6,8 @@ import re
 from .budget_review import has_review_shape, validate_review
 
 CATEGORIES = frozenset({'source_files', 'test_files', 'source_directories', 'test_directories',
-                        'go_struct_fields', 'go_receiver_methods', 'go_receiver_lines', 'ts_local_dependencies'})
+                        'go_struct_fields', 'go_receiver_methods', 'go_receiver_lines', 'ts_local_dependencies',
+                        'package_memory_ordinary', 'package_memory_race'})
 SHA = re.compile(r'[0-9a-f]{40}')
 
 

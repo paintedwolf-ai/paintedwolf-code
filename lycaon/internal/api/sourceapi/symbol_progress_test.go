@@ -75,6 +75,20 @@ func TestSymbolExecutorExcludedExactNameDoesNotStopAbbreviations(t *testing.T) {
 	}
 }
 
+var unboundedSymbolAllocation = search.SymbolAllocation{
+	Discovery:    time.Hour,
+	Abbreviation: time.Hour,
+	Outline:      time.Hour,
+}
+
+// unboundedSymbolLegBudget removes real wall-clock deadlines from symbol
+// executor tests so assertions depend on catalog and filter semantics rather
+// than host speed.
+func unboundedSymbolLegBudget(ctx context.Context, _ search.SearchBudget) (context.Context, context.CancelFunc, search.SymbolAllocation) {
+	legCtx, cancel := context.WithCancel(ctx)
+	return legCtx, cancel, unboundedSymbolAllocation
+}
+
 func symbolProgressFixture(t *testing.T, count int) (*SymbolExecutor, *project.Project, *search.SymbolPlanLeg) {
 	t.Helper()
 	root := t.TempDir()
@@ -86,7 +100,9 @@ func symbolProgressFixture(t *testing.T, count int) (*SymbolExecutor, *project.P
 	testutil.FailErr(t, "create project", err)
 	testutil.FailErr(t, "prepare index", catalogtest.AwaitIndex(t.Context(), sourcecatalog.Process(), p.ID, sourcecatalog.Root{ID: p.Roots[0].ID, Path: p.Roots[0].Path}))
 	leg := &search.SymbolPlanLeg{Name: "Target", Query: search.TextExpr{Text: "Target"}, Roots: []search.CodeRoot{{ProjectID: p.ID, RootID: p.Roots[0].ID, Path: p.Roots[0].Path}}, Cap: 200, Flags: search.MatchFlags{WholeWord: true}}
-	return NewSymbolExecutor(registry), p, leg
+	exec := NewSymbolExecutor(registry)
+	exec.legBudget = unboundedSymbolLegBudget
+	return exec, p, leg
 }
 
 func TestSymbolExecutorAdvancesThenInvalidatesContent(t *testing.T) {

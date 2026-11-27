@@ -44,7 +44,9 @@ func TestAPIScanServePathSASTE2E(t *testing.T) {
 	token, err := api.GenerateAPIToken()
 	testutil.FailErr(t, "generate scanner host bearer", err)
 	t.Setenv("LYCAON_API_TOKEN", token)
-	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
+	configDir := t.TempDir()
+	wiring.CleanupBundledRuntime(t, configDir)
+	t.Setenv("LYCAON_CONFIG_DIR", configDir)
 	t.Setenv("LYCAON_TEST", "")
 
 	startup := wiring.NewServeStartup()
