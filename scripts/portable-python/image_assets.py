@@ -176,11 +176,15 @@ def apply_wasi_package_patches(
             )
 
     # Patch 3: fpdf2 2.9.0 fpdf/image_parsing.py unconditionally imports
-    # urllib.request.HTTPSHandler and http.client.HTTPSConnection, which CPython
-    # omits on wasm32-wasi (no _ssl).
+    # urllib.request.HTTPSHandler and subclasses http.client.HTTPSConnection,
+    # which CPython omits on wasm32-wasi (no _ssl). Instead of falling back to
+    # plain HTTP classes, replace missing HTTPS classes with fail-closed
+    # refusing stubs and explicitly refuse all remote URL image fetches so
+    # local file/BytesIO/PIL image loading works with zero unmediated network
+    # activity or HTTP downgrade.
     img_parsing_py = packages_root / "fpdf" / "image_parsing.py"
     if img_parsing_py.is_file():
-        old_block = (
+        old_import_block = (
             "from urllib.request import (\n"
             "    HTTPHandler,\n"
             "    HTTPRedirectHandler,\n"
@@ -190,31 +194,79 @@ def apply_wasi_package_patches(
             "    build_opener,\n"
             ")"
         )
-        new_block = (
+        new_import_block = (
             "from urllib.request import (\n"
+            "    BaseHandler as _PWBaseHandler,\n"
             "    HTTPHandler,\n"
             "    HTTPRedirectHandler,\n"
             "    ProxyHandler,\n"
             "    Request,\n"
             "    build_opener,\n"
             ")\n"
+            "_PW_FPDF_URL_DISABLED_MSG = (\n"
+            '    "fpdf2 URL image loading is disabled in Portable Python; "\n'
+            '    "pass a local file path, BytesIO, or PIL Image"\n'
+            ")\n"
             "try:\n"
             "    from urllib.request import HTTPSHandler\n"
             "except ImportError:\n"
-            "    HTTPSHandler = HTTPHandler"
+            "    class HTTPSHandler(_PWBaseHandler):\n"
+            "        def https_open(self, req):\n"
+            "            raise FPDFResourceAccessError(_PW_FPDF_URL_DISABLED_MSG)\n"
+            "_PW_HTTPS_CONNECTION_BASE = getattr(http.client, \"HTTPSConnection\", None)\n"
+            "if _PW_HTTPS_CONNECTION_BASE is None:\n"
+            "    class _PW_HTTPS_CONNECTION_BASE:\n"
+            "        def __init__(self, *args, **kwargs):\n"
+            "            raise FPDFResourceAccessError(_PW_FPDF_URL_DISABLED_MSG)"
+        )
+        old_validate = (
+            "def _validate_remote_url_access(\n"
+            "    url: str,\n"
+            "    resource_access_policy: ResourceAccessPolicy,\n"
+            ") -> tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...]:\n"
+            "    parsed_url = urlsplit(url)"
+        )
+        new_validate = (
+            "def _validate_remote_url_access(\n"
+            "    url: str,\n"
+            "    resource_access_policy: ResourceAccessPolicy,\n"
+            ") -> tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...]:\n"
+            "    raise FPDFResourceAccessError(f\"{_PW_FPDF_URL_DISABLED_MSG}: {url!r}\")\n"
+            "    parsed_url = urlsplit(url)"
+        )
+        old_opener = (
+            "def _build_remote_resource_opener(\n"
+            "    resource_access_policy: ResourceAccessPolicy,\n"
+            "    pinned_addresses_by_url: dict[\n"
+            "        str, tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...]\n"
+            "    ],\n"
+            ") -> Any:\n"
+            "    return build_opener("
+        )
+        new_opener = (
+            "def _build_remote_resource_opener(\n"
+            "    resource_access_policy: ResourceAccessPolicy,\n"
+            "    pinned_addresses_by_url: dict[\n"
+            "        str, tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...]\n"
+            "    ],\n"
+            ") -> Any:\n"
+            "    raise FPDFResourceAccessError(_PW_FPDF_URL_DISABLED_MSG)\n"
+            "    return build_opener("
         )
         text = img_parsing_py.read_text(encoding="utf-8")
-        if old_block in text:
-            patched_text = text.replace(old_block, new_block, 1).replace(
-                "http.client.HTTPSConnection",
-                'getattr(http.client, "HTTPSConnection", http.client.HTTPConnection)',
+        if old_import_block in text and old_validate in text and old_opener in text:
+            patched_text = (
+                text.replace(old_import_block, new_import_block, 1)
+                .replace("http.client.HTTPSConnection", "_PW_HTTPS_CONNECTION_BASE")
+                .replace(old_validate, new_validate, 1)
+                .replace(old_opener, new_opener, 1)
             )
             img_parsing_py.write_text(patched_text, encoding="utf-8")
             _refresh_record_entry(packages_root, "fpdf2-*.dist-info", "fpdf/image_parsing.py", img_parsing_py, record_hash)
             patches.append(
                 {
                     "target": "packages/fpdf/image_parsing.py",
-                    "reason": "Guard urllib.request.HTTPSHandler and http.client.HTTPSConnection when _ssl is absent on wasm32-wasi so fpdf2 imports cleanly",
+                    "reason": "Replace absent WASI HTTPS classes with fail-closed refusing stubs and explicitly refuse all remote URL image fetches without falling back to plain HTTP",
                 }
             )
     return patches
