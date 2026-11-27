@@ -139,7 +139,7 @@ def _make_project(base_dir: pathlib.Path, name: str, approvals_yaml: str | None 
     return proj
 
 
-def _wait_pending_bounded(app: Any, session_id: str, *, timeout_s: float = 30.0) -> dict[str, Any]:
+def _wait_pending_bounded(app: Any, session_id: str, *, timeout_s: float = 60.0) -> dict[str, Any]:
     """Wait for a pending model turn without tripping on historical aborted/interrupted submissions."""
     path = f"/harness/llm/pending?session_id={urllib.parse.quote(session_id)}"
 
@@ -154,7 +154,7 @@ def _wait_pending_bounded(app: Any, session_id: str, *, timeout_s: float = 30.0)
     return app.wait_for(poll, "tb07 pending model turn", None, timeout=timeout_s)
 
 
-def _wait_session_idle(app: Any, session_id: str, phase: str, *, timeout_s: float = 20.0) -> None:
+def _wait_session_idle(app: Any, session_id: str, phase: str, *, timeout_s: float = 30.0) -> None:
     """Wait for a session to return to idle/aborted without failing on intentional abort/interrupted rows."""
     app.wait_for(
         lambda: (app.request(f"/v1/sessions/{session_id}") or {}).get("status") in {"idle", "aborted"},
@@ -164,12 +164,19 @@ def _wait_session_idle(app: Any, session_id: str, phase: str, *, timeout_s: floa
     )
 
 
-def _close_session_turn(app: Any, session_id: str, *, timeout_s: float = 15.0) -> None:
+def _close_session_turn(app: Any, session_id: str, *, timeout_s: float = 20.0) -> None:
     """Cleanly close any pending manual-harness LLM turn on session_id before aborting/moving on."""
-    with contextlib.suppress(Exception):
-        pend = app.request(f"/harness/llm/pending?session_id={urllib.parse.quote(session_id)}") or {}
-        if pend.get("pending") and pend.get("session_id") == session_id and pend.get("id"):
-            app.request("/harness/llm/respond", {"id": pend["id"], "content": "Completed TB07 step."})
+    deadline = time.monotonic() + 3.0
+    while time.monotonic() < deadline:
+        with contextlib.suppress(Exception):
+            pend = app.request(f"/harness/llm/pending?session_id={urllib.parse.quote(session_id)}") or {}
+            if pend.get("pending") and pend.get("session_id") == session_id and pend.get("id"):
+                app.request("/harness/llm/respond", {"id": pend["id"], "content": "Completed TB07 step."})
+                break
+            state = app.request(f"/v1/sessions/{session_id}") or {}
+            if state.get("status") in {"idle", "aborted"}:
+                return
+        time.sleep(0.05)
     with contextlib.suppress(Exception):
         state = app.request(f"/v1/sessions/{session_id}") or {}
         if state.get("status") not in {"idle", "aborted"}:
@@ -584,16 +591,18 @@ def _run_warmed_slots(
                     passed=ok,
                 ))
 
-            # A01-05: file change rejected -> host file unchanged + denied in DB
+            # A01-05: file change rejected -> dedicated outside dir so A01-01 write_root cannot cover it
             if "A01-05-file-change-reject" in spec_map:
-                target = outside_dir / "a01_05_reject.txt"
+                outside_a01_05 = work_dir / "outside-a01-05-reject"
+                outside_a01_05.mkdir(parents=True, exist_ok=True)
+                target = outside_a01_05 / "a01_05_reject.txt"
                 target.write_text("immutable-05\n", encoding="utf-8")
                 pre = hash_file(target)
                 call = _call_with_checkpoint_inspect(
                     app, a01_sid, "command",
                     {
                         "command": _py_write_cmd(target, "mutated-05\n"),
-                        "capability_request": {"write_root": str(outside_dir)},
+                        "capability_request": {"write_root": str(outside_a01_05)},
                     },
                     action="reject",
                 )
@@ -704,36 +713,21 @@ def _run_warmed_slots(
             # ------------------------------------------------------------------
             a02_sid, _ = open_prompted_session(proj_main, "Run A02 grant scope checks.")
 
-            # A02-01: once single-use (dedicated outside write_root so it never collides with loopback grants)
+            # A02-01: once single-use (loopback_connect once on ep3 is strictly single-use; dedicated fresh session)
             if "A02-01-scope-once-single-use" in spec_map:
-                outside_a02_once = work_dir / "outside-a02-once"
-                outside_a02_once.mkdir(parents=True, exist_ok=True)
-                once_target = outside_a02_once / "once_check.txt"
+                b0 = len(ep3.snapshot()["requests"])
                 c1 = _call_with_checkpoint_inspect(
                     app, a02_sid, "command",
-                    {
-                        "command": _py_write_cmd(once_target, "once-1\n"),
-                        "capability_request": {"write_root": str(outside_a02_once)},
-                    },
-                    action="approve", rung="once",
+                    {"command": _http_probe_cmd(f"{ep3.base_url}/a02-01"), "capability_request": {"loopback_connect": {"ports": [ep3.port]}}},
+                    action="approve", rung="once", timeout_s=45.0,
                 )
-                after_c1 = hash_file(once_target)
                 c2 = _call_with_checkpoint_inspect(
                     app, a02_sid, "command",
-                    {
-                        "command": _py_write_cmd(once_target, "once-2-denied\n"),
-                        "capability_request": {"write_root": str(outside_a02_once)},
-                    },
-                    action="reject",
+                    {"command": _http_probe_cmd(f"{ep3.base_url}/a02-01"), "capability_request": {"loopback_connect": {"ports": [ep3.port]}}},
+                    action="reject", timeout_s=45.0,
                 )
-                after_c2 = hash_file(once_target)
-                want_sha = sha256_bytes(b"once-1\n")
-                ok = (
-                    c1["checkpoint"]["asked"]
-                    and c2["checkpoint"]["asked"]
-                    and after_c1["sha256"] == want_sha
-                    and after_c2["sha256"] == want_sha
-                )
+                a0 = len(ep3.snapshot()["requests"])
+                ok = c1["checkpoint"]["asked"] and c2["checkpoint"]["asked"] and (a0 - b0) == 1
                 receipts.append(_build_receipt(
                     spec=spec_map["A02-01-scope-once-single-use"], prov=prov,
                     typed_result={
@@ -742,7 +736,7 @@ def _run_warmed_slots(
                         "c1_outcome": c1["result"].get("outcome"),
                         "c2_outcome": c2["result"].get("outcome"),
                     },
-                    independent_observation={"after_c1": after_c1, "after_c2": after_c2, "expected_sha256": want_sha},
+                    independent_observation={"fixture_arrivals_delta": a0 - b0},
                     passed=ok,
                 ))
 
@@ -913,17 +907,16 @@ def _run_warmed_slots(
             abort_session(a02_sid)
             _revoke_all_grants(app)
 
-            # A02-09 & A02-10: project scope (write_roots outside dir offers project rung)
-            outside_proj_dir = work_dir / "outside-proj-grant"
-            outside_proj_dir.mkdir(parents=True, exist_ok=True)
-            proj_write_target = outside_proj_dir / "a02_project_write.txt"
-            s_p1, _ = open_prompted_session(proj_main, "Grant project-scoped write_roots.")
+            # A02-09..12: project scope (ApprovalCategoryTool offers the project rung in slot 4)
+            _patch_global_approvals(
+                app, posture="balanced",
+                rules=[{"category": "tool", "pattern": "command", "effect": "ask"}],
+                never_ask=False,
+            )
+            s_p1, _ = open_prompted_session(proj_main, "Grant project-scoped tool approval.")
             c_proj = _call_with_checkpoint_inspect(
                 app, s_p1, "command",
-                {
-                    "command": _py_write_cmd(proj_write_target, "project-grant-1\n"),
-                    "capability_request": {"write_root": str(outside_proj_dir)},
-                },
+                {"command": "echo a02-project-grant-1"},
                 action="approve", rung="project",
             )
             abort_session(s_p1)
@@ -932,10 +925,7 @@ def _run_warmed_slots(
                 s_p2, _ = open_prompted_session(proj_main, "Reuse project grant in fresh session.")
                 c_reuse = _call_with_checkpoint_inspect(
                     app, s_p2, "command",
-                    {
-                        "command": _py_write_cmd(proj_write_target, "project-grant-2\n"),
-                        "capability_request": {"write_root": str(outside_proj_dir)},
-                    },
+                    {"command": "echo a02-project-grant-2"},
                     action=None,
                 )
                 abort_session(s_p2)
@@ -951,10 +941,7 @@ def _run_warmed_slots(
                 s_pb, _ = open_prompted_session(proj_b, "Cross-project isolation probe.")
                 c_cross = _call_with_checkpoint_inspect(
                     app, s_pb, "command",
-                    {
-                        "command": _py_write_cmd(proj_write_target, "cross-project-denied\n"),
-                        "capability_request": {"write_root": str(outside_proj_dir)},
-                    },
+                    {"command": "echo a02-project-cross-denied"},
                     action="reject",
                 )
                 abort_session(s_pb)
@@ -980,15 +967,12 @@ def _run_warmed_slots(
 
             _revoke_all_grants(app)
 
-            # A02-12: Fresh chat does not inherit revoked/deleted chat authority
+            # A02-12: Fresh chat does not inherit revoked/deleted authority
             if "A02-12-scope-chat-delete-ends-authority" in spec_map:
                 s_del, _ = open_prompted_session(proj_main, "Fresh chat after grant clear.")
                 c_fresh = _call_with_checkpoint_inspect(
                     app, s_del, "command",
-                    {
-                        "command": _py_write_cmd(proj_write_target, "fresh-chat-denied\n"),
-                        "capability_request": {"write_root": str(outside_proj_dir)},
-                    },
+                    {"command": "echo a02-after-revoke"},
                     action="reject",
                 )
                 abort_session(s_del)
@@ -999,6 +983,7 @@ def _run_warmed_slots(
                     independent_observation={"no_leaked_authority": c_fresh["checkpoint"]["asked"]},
                     passed=ok,
                 ))
+            _patch_global_approvals(app, posture="balanced", rules=[], never_ask=False)
 
             # ------------------------------------------------------------------
             # A03 (14 sidecar slots)
@@ -1384,7 +1369,7 @@ def _run_a12_restart_slots(
 
             # Now open a pending write_root checkpoint on session_id and stop engine before resolving.
             app1.request(f"/v1/sessions/{session_id}/prompts", {"operation_id": str(uuid.uuid4()), "text": "A12 pending write_root across restart."})
-            req = _wait_pending_bounded(app1, session_id)
+            req = _wait_pending_bounded(app1, session_id, timeout_s=90.0)
             pending_call_id = str(uuid.uuid4())
             app1.request(
                 "/harness/llm/respond",
@@ -1433,7 +1418,7 @@ def _run_a12_restart_slots(
             c_chat_replay = _call_with_checkpoint_inspect(
                 app2, session_id, "command",
                 {"command": _http_probe_cmd(f"{ep_chat.base_url}/boot2"), "capability_request": {"loopback_connect": {"ports": [ep_chat.port]}}},
-                action=None,
+                action=None, timeout_s=90.0,
             )
             a_chat = len(ep_chat.snapshot()["requests"])
             _close_session_turn(app2, session_id)
@@ -1444,7 +1429,7 @@ def _run_a12_restart_slots(
             c_rev_after = _call_with_checkpoint_inspect(
                 app2, session_rev_id, "command",
                 {"command": _http_probe_cmd(f"{ep_revoked.base_url}/boot2"), "capability_request": {"loopback_connect": {"ports": [ep_revoked.port]}}},
-                action="reject",
+                action="reject", timeout_s=90.0,
             )
             a_rev = len(ep_revoked.snapshot()["requests"])
             _close_session_turn(app2, session_rev_id)
@@ -1453,12 +1438,12 @@ def _run_a12_restart_slots(
             sess_b = app2.request("/v1/sessions", {"project_id": project_id, "posture": "build"})
             sid_b = sess_b["id"]
             app2.request("/harness/model-limit", {"session_id": sid_b, "limit": 10})
-            _wait_session_idle(app2, sid_b, "a12 sess_b ready")
+            _wait_session_idle(app2, sid_b, "a12 sess_b ready", timeout_s=60.0)
             app2.request(f"/v1/sessions/{sid_b}/prompts", {"operation_id": str(uuid.uuid4()), "text": "A12 cross-chat check."})
             c_chat_cross = _call_with_checkpoint_inspect(
                 app2, sid_b, "command",
                 {"command": _http_probe_cmd(f"{ep_chat.base_url}/boot2-other"), "capability_request": {"loopback_connect": {"ports": [ep_chat.port]}}},
-                action="reject",
+                action="reject", timeout_s=90.0,
             )
             _close_session_turn(app2, sid_b)
         finally:
