@@ -1,0 +1,9 @@
+[project]
+name = "portable-demo"
+version = "1.4.2"
+enabled = true
+ports = [8080, 8443]
+
+[project.owner]
+team = "runtime"
+oncall = "ops@example.invalid"

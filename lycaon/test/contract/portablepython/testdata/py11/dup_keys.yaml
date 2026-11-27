@@ -1,0 +1,7 @@
+service:
+  name: payments
+  retries: 3
+  limits:
+    timeout_ms: 500
+    max_connections: 10
+    timeout_ms: 1000

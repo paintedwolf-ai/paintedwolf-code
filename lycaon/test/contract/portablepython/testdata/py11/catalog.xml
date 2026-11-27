@@ -1,0 +1,11 @@
+<catalog version="2.1" region="us-west">
+  <book id="b1" lang="en">
+    <title>WASI Internals</title>
+    <tag>systems</tag>
+    <tag>sandbox</tag>
+  </book>
+  <book id="b2" lang="fr">
+    <title>Guide Pratique</title>
+    <tag>runtime</tag>
+  </book>
+</catalog>

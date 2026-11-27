@@ -1,0 +1,10 @@
+type Query {
+  project(id: ID!): Project
+}
+
+type Project {
+  id: ID!
+  name: String!
+  owner: String!
+  stars: Int!
+}
