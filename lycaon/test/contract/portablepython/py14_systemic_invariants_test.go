@@ -218,6 +218,7 @@ print("OPENPYXL_OFFLINE_OK")
 
 		ws := t.TempDir()
 		roots := []pythondocuments.HostRootConfig{{ID: "ws", Dir: ws}}
+		tlsHost := strings.TrimPrefix(tlsSrv.URL, "https://")
 		resp, err := svc.ExecuteTool(context.Background(), portablepython.ToolRequest{
 			ExecutionID:  "py14-https-requests",
 			CallID:       "py14-https-requests-call",
@@ -228,6 +229,12 @@ print("OPENPYXL_OFFLINE_OK")
 			RawArgs:      map[string]any{"code": fmt.Sprintf("import requests\nr = requests.Session().get(%q, timeout=5)\nassert r.status_code == 200 and r.json()['status'] == 'admitted'\nprint('HTTPS_OK')\n", tlsSrv.URL+"/api")},
 			Roots:        roots,
 			MutationDoor: native.NewPythonMutationDoor(tools.ToolContext{}, roots),
+			Policy: func(_ context.Context, op pythonruntime.ReachedOperation) pythonadmission.PolicyDecision {
+				if op.Family == pythonruntime.EffectHTTP && op.Target.RootID == tlsHost {
+					return pythonadmission.PolicyDecision{Kind: pythonruntime.DecisionAllow}
+				}
+				return pythonadmission.PolicyDecision{Kind: pythonruntime.DecisionAllow}
+			},
 			HTTP: portablepython.HTTPRequestOptions{
 				Client:             tlsSrv.Client(),
 				CredentialScreener: pythonadmission.StrictCredentialScreener(),
@@ -323,24 +330,24 @@ func admissionsToPY09Effects(store *pythonadmission.MemoryEvidenceStore) []py09E
 // ---------------------------------------------------------------------------
 
 func TestPY14_ImportSurfaceSymbolChangeControl(t *testing.T) {
+	svc := newPY10Service(t, t.TempDir())
+	manifest, err := pythonruntime.LoadImageManifest(filepath.Join(svc.ImageDir(), "image-manifest.json"))
+	contractcheck.FailErr(t, "load staged image-manifest.json", err)
+	wasmBytes, err := os.ReadFile(filepath.Join(svc.ImageDir(), filepath.FromSlash(manifest.Interpreter.WasmPath)))
+	contractcheck.FailErr(t, "read staged python.wasm", err)
+
 	policy := pythonruntime.DefaultWASIImportPolicy()
-
-	// Construct the exact 43 allowed/mediated wasi_snapshot_preview1 import surface.
-	var observed []pythonruntime.WasmImportSpec
-	for _, spec := range policy {
-		if spec.Disposition == pythonruntime.ImportAllowed || spec.Disposition == pythonruntime.ImportMediated {
-			observed = append(observed, pythonruntime.WasmImportSpec{
-				Module: spec.Module,
-				Name:   spec.Name,
-				Kind:   "func",
-			})
-		}
+	liveReport, err := pythonruntime.AuditModuleImports(context.Background(), wasmBytes, policy)
+	contractcheck.FailErr(t, "audit staged python.wasm imports", err)
+	if !liveReport.Passed || len(liveReport.Undeclared) != 0 || len(liveReport.Denied) != 0 {
+		t.Fatalf("staged python.wasm import audit failed: %+v", liveReport)
 	}
+	observed := liveReport.Observed
 	if len(observed) != 43 {
-		t.Fatalf("baseline observed WASI import count = %d, want 43", len(observed))
+		t.Fatalf("staged python.wasm observed WASI import count = %d, want 43", len(observed))
 	}
 
-	// Positive control: exact 43 declared symbols pass.
+	// Positive control: exact 43 observed symbols pass.
 	good := pythonruntime.AuditObservedImports(observed, policy)
 	if !good.Passed || len(good.Undeclared) != 0 || len(good.Denied) != 0 {
 		t.Fatalf("baseline 43-symbol import audit failed: %+v", good)
@@ -459,7 +466,10 @@ func TestPY14_StagedPackageGraderAndNegativeControls(t *testing.T) {
 		pubImports[dist.NormalizedName] = append([]string(nil), dist.Imports...)
 		allImports = append(allImports, dist.Imports...)
 		if dist.DistInfoPath != "" {
-			rel := filepath.ToSlash(filepath.Join(manifest.PackagesRoot, dist.DistInfoPath))
+			rel := filepath.ToSlash(dist.DistInfoPath)
+			if !strings.HasPrefix(rel, filepath.ToSlash(manifest.PackagesRoot)+"/") {
+				rel = filepath.ToSlash(filepath.Join(manifest.PackagesRoot, rel))
+			}
 			requiredResources = append(requiredResources, rel)
 			if _, statErr := os.Stat(filepath.Join(imageDir, filepath.FromSlash(rel))); statErr == nil {
 				presentFiles[rel] = true
