@@ -164,7 +164,8 @@ func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, re
 	recordLandedDocument(tctx, applied.Document)
 	reportLandedEditorConfig(ctx, tctx, resolved, st, newContent)
 	return landing{change: mutationContext(preview.Before.Text, applied.Document.Text), editor: true, saved: applied.Saved, recreated: st.Editor.Absent && applied.Saved,
-		heldVersionID: applied.HeldVersionID, publicationError: applied.PublicationError}, nil
+		heldVersionID: applied.HeldVersionID, publicationError: applied.PublicationError,
+		documentID: applied.Document.ID, acceptedRevision: applied.Document.Revision}, nil
 }
 
 // Retrying can refresh a prepared review while retaining the same agent read.

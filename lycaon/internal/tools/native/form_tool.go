@@ -27,6 +27,7 @@ func (t *FormTool) Run(ctx context.Context, args map[string]any, tc tools.ToolCo
 	if tc.Effects.RequestedArgs == nil {
 		tc.Effects.RequestedArgs = command.CanonicalToolArgs(tc, args)
 	}
+	tc.Source.StructuredFormTool = true
 	name := t.Name
 	if name == "" {
 		name = tc.Invocation.ToolName
