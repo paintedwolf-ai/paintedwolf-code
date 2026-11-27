@@ -253,6 +253,7 @@ def run_small_fixture_strace_controls(
             env=env,
             stdout=stderr_fh,
             stderr=stderr_fh,
+            start_new_session=True,
         )
         stderr_fh.close()
         settled_file_count = -1
@@ -280,12 +281,18 @@ def run_small_fixture_strace_controls(
             settled_file_count = int(summary.get("file_count", -1))
         finally:
             with contextlib.suppress(OSError):
-                proc.send_signal(signal.SIGINT)
+                os.killpg(proc.pid, signal.SIGINT)
             try:
-                proc.wait(timeout=10.0)
+                proc.wait(timeout=8.0)
             except subprocess.TimeoutExpired:
-                proc.terminate()
-                proc.wait(timeout=3.0)
+                with contextlib.suppress(OSError):
+                    os.killpg(proc.pid, signal.SIGTERM)
+                try:
+                    proc.wait(timeout=3.0)
+                except subprocess.TimeoutExpired:
+                    with contextlib.suppress(OSError):
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    proc.wait(timeout=3.0)
 
         obs_d1 = parse_strace_fixture_ops(
             trace_d1.read_text(encoding="utf-8", errors="replace") if trace_d1.is_file() else "",
