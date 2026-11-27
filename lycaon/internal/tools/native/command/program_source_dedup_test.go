@@ -160,4 +160,66 @@ func TestProgramSourceRecordsSingleExecutionOnRefusalAndSuccess(t *testing.T) {
 			t.Fatalf("registered source rows for ./good.sh = %d, want 1", sourceRows)
 		}
 	})
+
+	t.Run("nested_source_and_eval", func(t *testing.T) {
+		f := newSourceDedupFixture(t, map[string]string{
+			"./outer.sh": "source -- ./inner.sh\neval 'printf \"eval-ok\\n\"'\n",
+			"./inner.sh": "printf 'inner-ok\\n'\n",
+		})
+		raw, err := f.Call(t, t.Context(), "source -- ./outer.sh")
+		testutil.FailErr(t, "run nested source and eval", err)
+
+		var outcome command.ProgramOutcome
+		testutil.FailErr(t, "decode nested outcome", json.Unmarshal([]byte(raw), &outcome))
+		if outcome.State != "completed" || outcome.Status != 0 || outcome.Stdout != "inner-ok\neval-ok\n" {
+			t.Fatalf("outcome = %+v", outcome)
+		}
+
+		page, err := f.Recorder.ReadProgramPage(t.Context(), f.Session, outcome.ProgramID, "", 50)
+		testutil.FailErr(t, "read nested program receipts", err)
+		var sources, evals, printfs []string
+		parentByID := map[string]string{}
+		for _, exec := range page.Executions {
+			if exec.State != "completed" || exec.StatusCode == nil || *exec.StatusCode != 0 {
+				t.Fatalf("unsettled or nonzero nested execution: %+v", exec)
+			}
+			parentByID[exec.ID] = exec.ParentExecutionID
+			switch exec.NativeCommand {
+			case "source":
+				sources = append(sources, exec.ID)
+			case "eval":
+				evals = append(evals, exec.ID)
+			case "printf":
+				printfs = append(printfs, exec.ID)
+			}
+		}
+		if len(sources) != 2 || len(evals) != 1 || len(printfs) != 2 {
+			t.Fatalf("counts source=%d eval=%d printf=%d, want 2/1/2; all=%+v", len(sources), len(evals), len(printfs), page.Executions)
+		}
+		outerID, innerID, evalID := sources[0], sources[1], evals[0]
+		if parentByID[innerID] != outerID {
+			t.Fatalf("inner source parent = %q, want outer source %q", parentByID[innerID], outerID)
+		}
+		if parentByID[evalID] != outerID {
+			t.Fatalf("eval parent = %q, want outer source %q", parentByID[evalID], outerID)
+		}
+		if parentByID[printfs[0]] != innerID {
+			t.Fatalf("inner printf parent = %q, want inner source %q", parentByID[printfs[0]], innerID)
+		}
+		if parentByID[printfs[1]] != evalID {
+			t.Fatalf("eval printf parent = %q, want eval %q", parentByID[printfs[1]], evalID)
+		}
+		for _, unit := range []string{"./outer.sh", "./inner.sh"} {
+			var count int
+			testutil.FailErr(t, "count source unit "+unit, f.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_program_sources WHERE program_id=? AND source_unit_id=?`, outcome.ProgramID, unit).Scan(&count))
+			if count != 1 {
+				t.Fatalf("registered source rows for %s = %d, want 1", unit, count)
+			}
+		}
+		var evalUnits int
+		testutil.FailErr(t, "count eval source unit", f.Database.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_program_sources WHERE program_id=? AND source_unit_id LIKE 'eval:%'`, outcome.ProgramID).Scan(&evalUnits))
+		if evalUnits != 1 {
+			t.Fatalf("registered eval source rows = %d, want 1", evalUnits)
+		}
+	})
 }
