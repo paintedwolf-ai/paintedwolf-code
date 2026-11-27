@@ -37,7 +37,77 @@ def respond(application, session, calls):
     return [terminal(application, session, i) for i in ids]
 
 
+def _checklist_labels(content):
+    labels = []
+    for line in (content or '').splitlines():
+        match = re.match(r'^\s*-\s*\[[^\]]\]\s*(.+?)\s*$', line)
+        if match:
+            labels.append(match.group(1))
+    return labels
+
+
+def _latest_progress_snapshot(application, session):
+    directory = getattr(application, 'directory', None)
+    if not isinstance(directory, (str, pathlib.Path)):
+        return None
+    store = pathlib.Path(directory) / 'store.db'
+    if not store.is_file():
+        return None
+    with contextlib.closing(sqlite3.connect(store)) as db:
+        rows = db.execute(
+            'SELECT tool_result_json FROM messages WHERE session_id=? AND tool_result_json IS NOT NULL ORDER BY ord DESC',
+            (session,),
+        ).fetchall()
+    for (raw,) in rows:
+        try:
+            result = json.loads(raw)
+        except Exception:
+            continue
+        if result.get('outcome') != 'completed':
+            continue
+        if ((result.get('invocation') or {}).get('tool') or '') != 'update_progress':
+            continue
+        try:
+            payload = json.loads(result.get('content') or '{}')
+        except Exception:
+            continue
+        snapshot = payload.get('snapshot') if isinstance(payload, dict) else None
+        if isinstance(snapshot, dict) and snapshot.get('revision'):
+            return snapshot
+    return None
+
+
+def progress_args(application, session, args):
+    if 'expected_revision' in args:
+        return args
+    snapshot = _latest_progress_snapshot(application, session)
+    if not snapshot:
+        return args
+    updated = dict(args)
+    updated['expected_revision'] = snapshot['revision']
+    if 'item_ids' not in updated:
+        prev_labels = _checklist_labels(snapshot.get('content', ''))
+        prev_ids = list(snapshot.get('item_ids') or ())
+        by_label = {}
+        for label, item_id in zip(prev_labels, prev_ids):
+            by_label.setdefault(label, []).append(item_id)
+        new_labels = _checklist_labels(updated.get('content', ''))
+        aligned = []
+        for idx, label in enumerate(new_labels):
+            bucket = by_label.get(label)
+            if bucket:
+                aligned.append(bucket.pop(0))
+            elif idx < len(prev_ids) and len(new_labels) == len(prev_labels):
+                aligned.append(prev_ids[idx])
+            else:
+                aligned.append('')
+        updated['item_ids'] = aligned
+    return updated
+
+
 def invoke(application, session, tool, args):
+    if tool == 'update_progress':
+        args = progress_args(application, session, args)
     return respond(application, session, [{'name': tool, 'args': args}])[0]
 
 
