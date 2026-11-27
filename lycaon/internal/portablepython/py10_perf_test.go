@@ -244,7 +244,7 @@ func writeJPEGWithEXIFOrientation6(t *testing.T, dst string) {
 	}
 }
 
-func medianFloat64(vals []float64) float64 {
+func py10MedianFloat64(vals []float64) float64 {
 	if len(vals) == 0 {
 		return 0
 	}
@@ -257,7 +257,7 @@ func medianFloat64(vals []float64) float64 {
 	return (cp[mid-1] + cp[mid]) / 2
 }
 
-func medianUint64(vals []uint64) uint64 {
+func py10MedianUint64(vals []uint64) uint64 {
 	if len(vals) == 0 {
 		return 0
 	}
@@ -266,7 +266,7 @@ func medianUint64(vals []uint64) uint64 {
 	return cp[len(cp)/2]
 }
 
-func medianUint32(vals []uint32) uint32 {
+func py10MedianUint32(vals []uint32) uint32 {
 	if len(vals) == 0 {
 		return 0
 	}
@@ -498,12 +498,12 @@ func TestPY10_PerfAndSizeMatrix(t *testing.T) {
 		}
 		_ = warmSvc.Close(ctx)
 
-		res.ColdServiceInitMedianMs = medianFloat64(coldInitVals)
-		res.ColdLaunchToFirstResultMedianMs = medianFloat64(coldLaunchVals)
-		res.WarmToolLatencyMedianMs = medianFloat64(warmMsVals)
-		res.WarmGuestWorkMedian = medianUint64(warmFuelVals)
-		res.WarmHostWorkMedian = medianUint64(warmHostVals)
-		res.WarmPeakMemoryPagesMedian = medianUint32(warmPageVals)
+		res.ColdServiceInitMedianMs = py10MedianFloat64(coldInitVals)
+		res.ColdLaunchToFirstResultMedianMs = py10MedianFloat64(coldLaunchVals)
+		res.WarmToolLatencyMedianMs = py10MedianFloat64(warmMsVals)
+		res.WarmGuestWorkMedian = py10MedianUint64(warmFuelVals)
+		res.WarmHostWorkMedian = py10MedianUint64(warmHostVals)
+		res.WarmPeakMemoryPagesMedian = py10MedianUint32(warmPageVals)
 		res.WarmPeakMemoryBytesMedian = uint64(res.WarmPeakMemoryPagesMedian) * wasmPageSizeBytes
 		if lastArtPath != "" {
 			res.ArtifactSHA256, res.ArtifactBytes = fileDigestAndSize(lastArtPath)
