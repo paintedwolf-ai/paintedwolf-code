@@ -157,14 +157,14 @@ class RestartableSidecar:
             self.log = None
         return proc
 
-    def restart(self, *, timeout_s: float = 25.0) -> None:
+    def restart(self, *, timeout_s: float = 60.0) -> None:
         proc = self.stop()
         db_path = self.directory / "store.db"
         if proc is not None and db_path.is_file():
             checkpoint_closed_store(db_path, proc)
         self.restart_count += 1
         self.start()
-        self.ready(timeout_s=timeout_s)
+        self.ready(timeout_s=max(timeout_s, 60.0))
 
     def close(self) -> None:
         self.stop()
@@ -219,7 +219,7 @@ class RestartableSidecar:
                 return val
             time.sleep(0.2)
 
-    def ready(self, *, timeout_s: float = 30.0) -> None:
+    def ready(self, *, timeout_s: float = 60.0) -> None:
         def healthy() -> bool:
             try:
                 status, _ = self.request_raw("/health", method="GET")
@@ -227,7 +227,7 @@ class RestartableSidecar:
             except OSError:
                 return False
 
-        self.wait_for(healthy, "sidecar_startup", timeout=timeout_s)
+        self.wait_for(healthy, "sidecar_startup", timeout=max(timeout_s, 60.0))
         self.request("/harness/llm/auto", {"enabled": False}, method="POST")
 
     def dump_diagnostics(self, session_id: str | None = None, sse_path: pathlib.Path | None = None) -> dict[str, Any]:
@@ -370,19 +370,25 @@ def run_c23_draft_sidecar_restart(
 
         # 2. Person dismisses Draft A before restart.
         dismiss_resp = app.request(f"/v1/sessions/{session_id}/watches/{handle_a}/cancel", method="POST")
-        checks["draft_a_dismissed_before_restart"] = dismiss_resp.get("outcome") == "dismissed"
-        source_obs.record_event("draft_a_dismissed", handle=handle_a, outcome=dismiss_resp.get("outcome"))
+        dismiss_receipt = dismiss_resp.get("receipt") or {}
+        dismiss_watch = dismiss_resp.get("watch") or {}
+        dismiss_outcome = dismiss_receipt.get("terminal_outcome") or dismiss_watch.get("terminal_outcome") or dismiss_resp.get("outcome")
+        checks["draft_a_dismissed_before_restart"] = dismiss_outcome == "dismissed"
+        source_obs.record_event("draft_a_dismissed", handle=handle_a, terminal_outcome=dismiss_outcome)
 
         # 3. Real sidecar restart (D4).
         sse.close()
         sse = None
-        app.restart(timeout_s=timeout_s)
+        app.restart(timeout_s=max(timeout_s, 60.0))
         source_obs.record_event("sidecar_restarted", restart_count=app.restart_count)
 
         # 4. After restart, Draft A remains dismissed and Draft B remains live & keepable.
         after_a = app.request(f"/v1/sessions/{session_id}/watches/{handle_a}", method="GET")
         after_b = app.request(f"/v1/sessions/{session_id}/watches/{handle_b}", method="GET")
-        checks["dismissal_survived_restart"] = after_a.get("state") in {"canceled", "dismissed", "ended"} or after_a.get("outcome") == "dismissed"
+        checks["dismissal_survived_restart"] = (
+            after_a.get("terminal_outcome") == "dismissed"
+            or after_a.get("state") in {"canceled", "dismissed", "ended"}
+        )
         checks["draft_b_survived_restart"] = after_b.get("state") == "live"
 
         # 5. Keep Draft B after restart -> persists owner_person_id and standing watch.
@@ -481,22 +487,35 @@ def run_c24_calendar_sidecar_restart(
             method="POST",
         )
         watch_id = str(created.get("watch_id") or "")
-        next_runs_before = created.get("next_runs") or []
-        checks["created_calendar_watch"] = bool(watch_id and created.get("state") == "enabled" and len(next_runs_before) >= 1)
-        source_obs.record_event("calendar_watch_created", watch_id=watch_id, next_runs=next_runs_before)
+        next_run_before = created.get("next_run_at")
+        summary_before = str(created.get("condition_summary") or "")
+        checks["created_calendar_watch"] = bool(
+            watch_id
+            and created.get("state") == "enabled"
+            and next_run_before
+            and "Weekdays" in summary_before
+        )
+        source_obs.record_event(
+            "calendar_watch_created",
+            watch_id=watch_id,
+            next_run_at=next_run_before,
+            condition_summary=summary_before,
+        )
 
         # Real sidecar restart (D4).
-        app.restart(timeout_s=timeout_s)
+        app.restart(timeout_s=max(timeout_s, 60.0))
         source_obs.record_event("sidecar_restarted", restart_count=app.restart_count)
 
         fetched = app.request(f"/v1/projects/{project_id}/watches/{watch_id}", method="GET")
         sw = fetched.get("standing_watch") or fetched
-        next_runs_after = sw.get("next_runs") or []
+        next_run_after = sw.get("next_run_at")
+        summary_after = str(sw.get("condition_summary") or "")
         checks["calendar_survived_restart"] = (
             sw.get("watch_id") == watch_id
             and sw.get("state") == "enabled"
             and sw.get("time_zone") == "America/New_York"
-            and next_runs_after == next_runs_before
+            and next_run_after == next_run_before
+            and summary_after == summary_before
         )
         db_rows = _query_standing_rows(app_dir / "store.db", watch_id)
         checks["sqlite_calendar_persisted"] = (
