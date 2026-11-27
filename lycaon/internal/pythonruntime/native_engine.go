@@ -132,13 +132,15 @@ func NewNativeEngineRuntime(_ context.Context, cfg RuntimeConfig) (Runtime, erro
 	reported := nativeIdentityToGo(rawID)
 
 	verifiedID, err := VerifyNativeEngineHandshake(HandshakeVerificationInput{
-		BundledManifest:  bundled,
-		EngineDir:        engineDir,
-		ImageDir:         cfg.ImageDir,
-		ImageManifest:    cfg.Manifest,
-		ReportedIdentity: reported,
-		GOOS:             goos,
-		GOARCH:           goarch,
+		BundledManifest:       bundled,
+		EngineDir:             engineDir,
+		ImageDir:              cfg.ImageDir,
+		ImageManifest:         cfg.Manifest,
+		VerifiedImage:         cfg.VerifiedImage,
+		ReportedIdentity:      reported,
+		GOOS:                  goos,
+		GOARCH:                goarch,
+		verifiedEngineLibPath: libPath,
 	})
 	if err != nil {
 		lib.Close()
