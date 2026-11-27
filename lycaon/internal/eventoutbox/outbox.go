@@ -37,15 +37,17 @@ type DeliveredEvent struct {
 
 // Outbox persists and delivers events.
 type Outbox struct {
-	db   db.Handle
-	hub  events.EventHub
-	wake chan struct{}
+	db     db.Handle
+	hub    events.EventHub
+	wake   chan struct{}
+	syncCh chan chan error
 	// idle bounds how long delivery waits for a wake before sweeping anyway, so a
 	// lost Notify is a delay rather than a stall.
 	idle time.Duration
-	// lifecycleMu guards cancel between concurrent Start and Close calls.
+	// lifecycleMu guards cancel and stopped between concurrent Start, Wait, and Close calls.
 	lifecycleMu sync.Mutex
 	cancel      context.CancelFunc
+	stopped     chan struct{}
 	wg          sync.WaitGroup
 	// OnDelivered runs after a row reaches the hub.
 	OnDelivered func(context.Context, DeliveredEvent)
@@ -55,7 +57,7 @@ type Outbox struct {
 const idleSweep = time.Second
 
 func New(database db.Handle, hub events.EventHub) *Outbox {
-	return &Outbox{db: database, hub: hub, wake: make(chan struct{}, 1)}
+	return &Outbox{db: database, hub: hub, wake: make(chan struct{}, 1), syncCh: make(chan chan error)}
 }
 
 // ErrNotWired reports an enqueue against an outbox that was never constructed.
@@ -150,14 +152,48 @@ func (o *Outbox) Start(parent context.Context) {
 		return
 	}
 	ctx, cancel := context.WithCancel(parent)
+	stopped := make(chan struct{})
 	o.cancel = cancel
+	o.stopped = stopped
 	o.wg.Add(1)
 	o.lifecycleMu.Unlock()
-	go o.run(ctx)
+	go o.run(ctx, stopped)
 	o.Notify()
 }
 
-func (o *Outbox) run(ctx context.Context) {
+// Wait blocks until the dispatcher has drained every currently committed outbox
+// row, including hub publication, OnDelivered callbacks, and row deletion.
+func (o *Outbox) Wait(ctx context.Context) error {
+	if o == nil || o.db == nil || o.hub == nil {
+		return nil
+	}
+	o.lifecycleMu.Lock()
+	started := o.cancel != nil
+	stopped := o.stopped
+	o.lifecycleMu.Unlock()
+	if !started {
+		return o.drain(ctx)
+	}
+	reply := make(chan error, 1)
+	select {
+	case o.syncCh <- reply:
+	case <-stopped:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	select {
+	case err := <-reply:
+		return err
+	case <-stopped:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (o *Outbox) run(ctx context.Context, stopped chan struct{}) {
+	defer close(stopped)
 	defer o.wg.Done()
 	idle := o.idle
 	if idle <= 0 {
@@ -172,6 +208,8 @@ func (o *Outbox) run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
+		case reply := <-o.syncCh:
+			reply <- o.drain(ctx)
 		case <-o.wake:
 		case <-ticker.C:
 		}

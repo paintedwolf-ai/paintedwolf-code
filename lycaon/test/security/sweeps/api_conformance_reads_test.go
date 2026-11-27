@@ -1,6 +1,7 @@
 package sweeps
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -10,18 +11,22 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/test/security"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/fileops"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -618,6 +623,90 @@ func TestConformanceEffectsSettleLandedWritesBeforeMark(t *testing.T) {
 	}
 	if !sourceChangeNamed(published, landed) {
 		t.Fatal("the watcher never reported the landed file, so the settle was not exercised")
+	}
+}
+
+// TestConformanceEffectsWaitForHeldBackgroundCommitBeforeRead proves that a
+// detached source-mutation commit still running after a 202 Accepted response
+// is drained before mark returns, so a subsequent read such as getChatVault is
+// never blamed for the background store commit.
+func TestConformanceEffectsWaitForHeldBackgroundCommitBeforeRead(t *testing.T) {
+	held, release := make(chan struct{}), make(chan struct{})
+	var heldOnce, releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(unblock)
+
+	h := wiring.BuildForTest(t,
+		wiring.WithChangeDebounce(conformanceDebounce),
+		wiring.WithFileOperationHold(func(ctx context.Context, _ fileops.Request) {
+			heldOnce.Do(func() { close(held) })
+			select {
+			case <-release:
+			case <-ctx.Done():
+			}
+		}),
+	)
+	hub := h.MemoryHub()
+	if hub == nil {
+		t.Fatal("the effects observer needs the in-memory event hub")
+	}
+	projectDir := h.ProjectDir(t, "held-commit")
+	testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(projectDir, "README.md"), []byte("held\n"), 0o644))
+	project := security.CreateTestProjectHTTP(t, h.Server, projectDir)
+	t.Cleanup(h.ProjectLiveness.ClaimWorkspace(project.ID))
+	sess := security.CreateSessionForProjectHTTP(t, h.Server, project.ID, wire.SessionPostureBuild)
+	settleSourceWatcher(t, h.Server.WaitForBackground, hub, projectDir)
+	effects := openConformanceEffects(t, h, hub, projectDir, conformanceDebounce)
+
+	body, err := json.Marshal(wire.CreateProjectSourceEntryRequest{
+		OperationID: uuid.NewString(),
+		RootID:      project.Roots[0].ID,
+		Path:        "deferred-commit.txt",
+		Kind:        "file",
+	})
+	testutil.FailErr(t, "encode create request", err)
+	reqCtx, cancelReq := context.WithCancel(t.Context())
+	defer cancelReq()
+	req := security.AuthedRequest(t, http.MethodPost, "/v1/projects/"+project.ID+"/source", bytes.NewReader(body)).WithContext(reqCtx)
+	returned := make(chan struct{})
+	go func() {
+		defer close(returned)
+		h.Server.ServeHTTP(httptest.NewRecorder(), req)
+	}()
+	<-held
+	cancelReq()
+	<-returned
+
+	ctx := t.Context()
+	type markResult struct {
+		version int64
+		err     error
+	}
+	marked := make(chan markResult, 1)
+	go func() {
+		v, err := effects.mark(ctx)
+		marked <- markResult{version: v, err: err}
+	}()
+
+	select {
+	case res := <-marked:
+		t.Fatalf("mark returned (%+v) while background file operation commit was still held", res)
+	default:
+	}
+
+	unblock()
+	res := <-marked
+	testutil.FailErr(t, "mark host state", res.err)
+
+	readRec := httptest.NewRecorder()
+	h.Server.ServeHTTP(readRec, security.AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/vault", nil))
+	if readRec.Code != http.StatusOK {
+		t.Fatalf("getChatVault status = %d, want 200 (body=%s)", readRec.Code, readRec.Body.String())
+	}
+	changes, err := effects.since(ctx, res.version)
+	testutil.FailErr(t, "observe host state after getChatVault", err)
+	if len(changes) > 0 {
+		t.Fatalf("getChatVault blamed for background commit: %v", changes)
 	}
 }
 

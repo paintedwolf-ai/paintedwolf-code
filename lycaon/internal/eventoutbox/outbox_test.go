@@ -293,3 +293,39 @@ func TestStartIsSafeUnderConcurrentCalls(t *testing.T) {
 		}
 	})
 }
+
+func TestOutboxWaitBlocksUntilCommitCompletes(t *testing.T) {
+	sqlDB := testDB(t)
+	hub := &recordingHub{}
+	outbox := New(sqlDB, hub)
+	outbox.idle = time.Hour
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	outbox.OnDelivered = func(context.Context, DeliveredEvent) {
+		close(entered)
+		<-release
+	}
+	outbox.Start(t.Context())
+	t.Cleanup(func() { testutil.FailErr(t, "close", outbox.Close()) })
+
+	testutil.FailErr(t, "enqueue",
+		outbox.Enqueue(t.Context(), testTopic, events.PublishKey{Project: "018eca20-5608-7a55-824f-920998f472b2", EventID: "ev-wait"}, map[string]string{}))
+	outbox.Notify()
+	<-entered
+
+	waited := make(chan error, 1)
+	go func() { waited <- outbox.Wait(t.Context()) }()
+
+	select {
+	case err := <-waited:
+		t.Fatalf("Wait returned (%v) while OnDelivered and row deletion were still held", err)
+	default:
+	}
+
+	close(release)
+	testutil.FailErr(t, "wait for outbox drain", <-waited)
+	if n := outboxRows(t, sqlDB); n != 0 {
+		t.Fatalf("outbox rows after Wait = %d, want 0", n)
+	}
+}

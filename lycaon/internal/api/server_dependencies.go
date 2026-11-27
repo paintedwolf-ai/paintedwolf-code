@@ -104,6 +104,7 @@ type HostDependencies struct {
 	Events                 events.ReplayHub
 	EventHeartbeatInterval time.Duration
 	EventPublisher         *events.Publisher
+	EventOutbox            interface{ Wait(context.Context) error }
 	Presence               *events.Presence
 	HostIdentity           hostidentity.Identity
 	HostResources          *hostresources.Service
