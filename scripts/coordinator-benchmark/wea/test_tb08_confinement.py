@@ -408,6 +408,32 @@ class TestTB08SidecarRunner(unittest.TestCase):
                     }, {}
                 return call_id, {"outcome": "completed"}, {}
 
+            cap = args.get("capability_request") or {}
+            if "a08-02" in cmd:
+                return call_id, {"outcome": "rejected", "codes": ["SANDBOX_TRY_READ_PATH"]}, {}
+            if "a08_09_cp.txt" in cmd or "a09_07_terminal.txt" in cmd:
+                return call_id, {"outcome": "rejected", "codes": ["SANDBOX_TERMINAL_PATH_REFUSED"]}, {}
+            if "a08-10" in cmd:
+                return call_id, {"outcome": "rejected", "codes": ["SANDBOX_BOUNDARY_REFUSED"]}, {}
+            if "a08-11" in cmd:
+                return call_id, {
+                    "outcome": "completed",
+                    "codes": [],
+                    "command_program": {"state": "completed", "status_code": 1},
+                    "content": json.dumps({"exit_code": 1, "sandbox_refusal_witness": "incomplete"}),
+                }, {}
+            if "a09-02" in cmd or (cap.get("host_execution") and "never_created" in cmd):
+                return call_id, {"outcome": "rejected", "codes": ["SANDBOX_TRY_HOST_EXECUTION"]}, {}
+            if "a09-03" in cmd or (cap.get("process_control") and "never_created" in cmd):
+                return call_id, {"outcome": "rejected", "codes": ["SANDBOX_TRY_PROCESS_CONTROL"]}, {}
+            if "a09-04" in cmd or (cap.get("credential_store") and "never_created" in cmd):
+                return call_id, {"outcome": "rejected", "codes": ["SANDBOX_TRY_CREDENTIAL_STORE"]}, {}
+            if "a09-05" in cmd or (cap.get("socket_paths") and "never_created" in cmd):
+                return call_id, {"outcome": "rejected", "codes": ["SANDBOX_TRY_SOCKET_PATH"]}, {}
+            if "a09-06" in cmd or (cap.get("direct_ip") and "never_created" in cmd):
+                return call_id, {"outcome": "rejected", "codes": ["SANDBOX_TRY_CAPABILITIES"]}, {}
+            if "AF_UNIX" in cmd:
+                return call_id, {"outcome": "rejected", "codes": ["SANDBOX_SOCKET_PERMIT_REQUIRED"]}, {}
             return call_id, {"outcome": "rejected", "codes": ["SANDBOX_TRY_WRITE_ROOT"]}, {}
 
         def fake_send_hooked(_app, _sid, _name, _args, *, on_pending_checkpoint):
@@ -461,10 +487,11 @@ class TestTB08SidecarRunner(unittest.TestCase):
             self.assertEqual(a09_01["verdict"], "blocked")
             self.assertIn("blocked_reason", a09_01)
 
-            # Verify A09-09 asserts SANDBOX_SOCKET_PATH_CHANGED.
+            # Verify A09-09 asserts SANDBOX_SOCKET_PATH_CHANGED and independent no-recipient witness.
             a09_09 = json.loads((out_dir / "receipts" / "A09-09.json").read_text(encoding="utf-8"))
             self.assertEqual(a09_09["verdict"], "pass")
             self.assertEqual(a09_09["typed_result"]["refusal_code"], "SANDBOX_SOCKET_PATH_CHANGED")
+            self.assertTrue(a09_09["independent_observation"]["independent_no_recipient_witness"])
 
     def test_earlier_gate_refusal_never_passes_returns_unknown(self) -> None:
         from wea.tb08_sidecar_runner import run_tb08_sidecar_slots
@@ -522,14 +549,24 @@ class TestTB08SidecarRunner(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             manifest = run_tb08_sidecar_slots(
                 pathlib.Path(tmp) / "tb08-lin",
-                slot_ids=["A05-01", "A08-01", "A09-07", "A09-09"],
+                slot_ids=["A05-01", "A08-01", "A08-11", "A08-12", "A09-07", "A09-09"],
                 platform_key="linux",
                 app_factory=fake_app_factory,
                 session_opener=fake_open_session,
                 tool_caller=fake_linux_landlock_exit,
                 tool_caller_hooked=fake_hooked_400,
             )
-            self.assertEqual(manifest["counts_by_verdict"], {"pass": 4}, f"manifest={manifest}")
+            # A05-01 (enforcement), A08-11 (Linux incomplete witness), A09-09 (400 socket changed + no recipient) pass;
+            # A08-01, A08-12 (never pass on "" == ""), and A09-07 (empty code) honestly report unknown.
+            by_id = {r["slot_id"]: r["verdict"] for r in manifest["receipts"]}
+            self.assertEqual(by_id, {
+                "A05-01": "pass",
+                "A08-01": "unknown",
+                "A08-11": "pass",
+                "A08-12": "unknown",
+                "A09-07": "unknown",
+                "A09-09": "pass",
+            })
 
 
 if __name__ == "__main__":
