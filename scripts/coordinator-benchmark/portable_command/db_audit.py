@@ -5,7 +5,7 @@ import sqlite3
 
 # Eligible structural orchestration wrappers emitted by the program runtime
 # (pipeline/list/loop containers with no direct native command or file effect).
-ELIGIBLE_WRAPPER_OPS = {'program |', 'program ;', 'program &&', 'program ||', 'program for', 'program while', 'program if'}
+ELIGIBLE_WRAPPER_OPS = {'program |', 'program ;', 'program &&', 'program ||', 'program for', 'program while', 'program if', 'program $()'}
 
 
 def _rows(db, sql, params):
@@ -68,6 +68,10 @@ def _canonical_op(ex):
             return 'tar_create'
         if '-xjf' in canonical or ' -x' in f' {canonical}':
             return 'tar_extract'
+    if owner == 'git' and (op_id == 'git add' or native_cmd == 'git add'):
+        return 'git_add'
+    if owner == 'git' and (op_id in {'git commit', 'git_commit'} or native_cmd == 'git commit'):
+        return 'git_commit'
     return native_cmd or op_id
 
 
@@ -87,7 +91,7 @@ def receipt_rows(audit, progress_receipts, draft_bindings=None):
             })
             continue
         op = _canonical_op(ex)
-        outcome = 'rejected' if op == 'source' and ex.get('state') == 'refused' else ex['state']
+        outcome = 'rejected' if op in {'source', 'unzip'} and ex.get('state') == 'refused' else ex['state']
         row = {'execution_id': ex['id'], 'operation': op, 'outcome': outcome}
         effect = {'operation': op, 'outcome': outcome}
         if isinstance(ex.get('status_code'), int):
@@ -96,6 +100,18 @@ def receipt_rows(audit, progress_receipts, draft_bindings=None):
             row['publication_eligible'] = bool(ex['publication_eligible'])
         if ex.get('consumer_closed') == 1:
             row['closure'] = 'expected-consumer'
+        dest_pin = next((p for p in audit['invocation_program_revision_pins']
+                         if p['execution_id'] == ex['id'] and p.get('role') == 'destination'), None)
+        if dest_pin and dest_pin.get('path'):
+            pin_path = str(dest_pin['path'])
+            if '/scratch/' in pin_path and op in {'mktemp', 'write'}:
+                row['namespace'] = effect['namespace'] = 'session-temp'
+            elif op in {'tar_create', 'tar_extract', 'mkdir'}:
+                row['path'] = effect['path'] = pin_path.lstrip('./')
+        if op == 'mkdir' and 'path' not in effect:
+            toks = [t for t in (ex.get('canonical') or '').split() if not t.startswith('-') and t != 'mkdir']
+            if toks:
+                row['path'] = effect['path'] = toks[-1].lstrip('./')
         if op == 'read' and draft_bindings:
             src_pin = next((p for p in audit['invocation_program_revision_pins']
                             if p['execution_id'] == ex['id'] and p.get('role') == 'source' and p.get('mode') == 'accepted_document'), None)

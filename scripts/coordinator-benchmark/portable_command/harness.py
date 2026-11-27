@@ -13,6 +13,7 @@ import smoke_workers
 from bootstrap_policy import open_request
 from capture_storage import checkpoint_closed_store
 from portable_command.artifacts import project_hashes
+from portable_command.case_oracles import materialize_git_setup, materialize_host_facts
 from portable_command.contracts import DIRECTORY, ROOT, load_suite, materialize
 from portable_command.grading import grade_case
 from portable_command.handle_await import await_running_handle
@@ -106,7 +107,8 @@ def create_isolated_session(application, project_dir, case):
     posture = session_posture(case.get('profile'))
     session = application.request('/v1/sessions', {'project_id': attached['id'], 'posture': posture})
     sid = session['id']
-    application.request('/harness/model-limit', {'session_id': sid, 'limit': 20})
+    turn_budget = max(20, 4 + len(case.get('turns') or ()) * 16)
+    application.request('/harness/model-limit', {'session_id': sid, 'limit': turn_budget})
     observed_state = {}
     def ready():
         state = application.request('/v1/sessions/' + sid)
@@ -119,7 +121,7 @@ def create_isolated_session(application, project_dir, case):
     application.wait_for(ready, 'portable-command session ready', sid)
     surface = {
         'requested_profile': case.get('profile', 'implement'), 'requested_posture': posture,
-        'effective_posture': observed_state.get('posture') or session.get('posture') or '', 'offered_tools': [],
+        'effective_posture': observed_state.get('posture') or session.get('posture') or '', 'offered_tools': [], 'session_turn_budget': turn_budget,
     }
     return sid, attached['id'], root_id, surface
 
@@ -209,18 +211,18 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
     app_dir, project_dir, raw_dir = out_dir / 'app', out_dir / 'project', out_dir / 'raw'
     raw_dir.mkdir(parents=True, exist_ok=True)
     baseline_hashes = materialize(case, project_dir)
+    host_facts_ok, _ = materialize_host_facts(case['setup'].get('host_facts'), project_dir)
+    git_setup = materialize_git_setup(case['setup'].get('git'), project_dir, case['setup'].get('files'))
     expected_baseline = case.get('_expected_baseline_hashes')
     if expected_baseline is not None and expected_baseline != baseline_hashes:
         raise ValueError('replay bundle baseline_hashes do not match materialized fixture')
     revision_aliases = {alias: baseline_hashes.get(path) for path, alias in case['setup'].get('revisions', {}).items()}
     identity = source_identity(ROOT, profile=case['profile'], engine_bin=engine_bin, engine_manifest=engine_manifest)
     save(out_dir / 'attempt.json', {'status': 'running', 'case_id': case['id'], 'identity': identity, 'revision_aliases': revision_aliases})
-
     helpers_dir = materialize_helpers(case['setup'].get('helpers'), out_dir / 'helpers')
     config_root = out_dir / 'config-root'
     host_binding = materialize_denied_progress_scope(case, config_root) if app_factory is smoke.Application else None
-    application = make_app_factory(engine_bin, app_factory, helpers_dir=helpers_dir,
-                                   config_root=config_root if host_binding else None)(app_dir)
+    application = make_app_factory(engine_bin, app_factory, helpers_dir=helpers_dir, config_root=config_root if host_binding else None)(app_dir)
     sidecar_path = app_dir / 'sidecar.log'
     sse, prelude_records, turn_records, draft_bindings = None, [], [], {}
     drafts_ok, session_id, pre_prompt_lines, post_tool_lines = True, None, None, None
@@ -253,8 +255,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
                 'handle_await': await_meta, 'batch_plan': [c['name'] for c in batch], 'envelope_mode': envelope_mode,
                 'batch_outcomes': [{'call_id': cid, 'tool': c['name'], 'outcome': res.get('outcome')} for c, (cid, res) in zip(batch, results)],
             })
-        save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases, 'draft_bindings': draft_bindings, 'session_surface': session_surface,
-                                       'host_scope_binding': host_binding})
+        save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases, 'draft_bindings': draft_bindings, 'session_surface': session_surface, 'host_scope_binding': host_binding, 'git_setup': git_setup})
         application.request(f'/v1/sessions/{session_id}/abort', {})
         with contextlib.closing(sqlite3.connect(app_dir / 'store.db')) as db:
             pids = [r[0] for r in db.execute('SELECT p.id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE r.session_id=?', (session_id,)).fetchall()]
@@ -274,16 +275,15 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
         ('profile_binding_approximate', case.get('profile', 'implement') != 'implement'),
         ('profile_binding_mismatch', bool(eff_posture) and eff_posture != session_surface['requested_posture']),
         ('uninjected_drafts', bool(case['setup'].get('drafts')) and not drafts_ok),
-        ('uninjected_host_facts', bool(case['setup'].get('host_facts')) and not host_binding),
+        ('uninjected_host_facts', bool(case['setup'].get('host_facts')) and not (host_binding or host_facts_ok)),
     ) if cond] + [g for rec in turn_records for g in ((rec.get('handle_await') or {}).get('gaps') or ())]
-
     try:
         checkpoint_closed_store(app_dir / 'store.db', application.process)
         observation, audit_bundle = build_observation(
             case, session_id=session_id, identity=identity, project_dir=project_dir, db_path=app_dir / 'store.db',
-            sidecar_log=sidecar_path, turn_records=turn_records, prelude_records=prelude_records,
-            sidecar_window=window, extra_gaps=extra_gaps, baseline_hashes=baseline_hashes,
-            session_surface=session_surface, draft_bindings=draft_bindings, host_scope_binding=host_binding, program_receipt_pages=program_receipt_pages,
+            sidecar_log=sidecar_path, turn_records=turn_records, prelude_records=prelude_records, sidecar_window=window,
+            extra_gaps=extra_gaps, baseline_hashes=baseline_hashes, session_surface=session_surface,
+            draft_bindings=draft_bindings, host_scope_binding=host_binding, program_receipt_pages=program_receipt_pages, git_setup=git_setup,
         )
         grade = grade_case(case, observation, project_dir, identity)
     except Exception as exc:
