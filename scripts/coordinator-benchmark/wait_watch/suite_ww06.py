@@ -169,22 +169,23 @@ def _wait_session_idle(
     timeout_s: float,
     dump_state: Any,
 ) -> None:
-    """Wait until the session is idle and every prompt_submission has settled before cold-restarting."""
+    """Wait until every prompt_submission row for session_id in SQLite has settled before cold-restarting."""
     guard = TimerGuard(timeout_s, phase=phase, verdict="incomplete", dump_state=dump_state)
+    terminal_statuses = {"complete", "completed", "failed", "interrupted", "canceled"}
 
     def _settled() -> bool:
-        try:
-            state = app.request(f"/v1/sessions/{session_id}")
-        except Exception:
-            return False
-        if not isinstance(state, dict) or state.get("status") != "idle":
-            return False
         snap = StorageObserver(app.directory / "store.db", clock_domain="system").snapshot(session_id)
         subs = snap.get("tables", {}).get("prompt_submissions") or []
-        active = [s for s in subs if s.get("status") not in {"completed", "failed", "interrupted", "canceled"}]
+        if not subs:
+            return True
+        active = [
+            s
+            for s in subs
+            if not s.get("completed_at") and str(s.get("status") or "").lower() not in terminal_statuses
+        ]
         return len(active) == 0
 
-    guard.poll(_settled, detail=f"session {session_id} did not settle to idle before cold restart")
+    guard.poll(_settled, detail=f"prompt_submissions for session {session_id} did not settle before cold restart")
 
 
 def _pid_alive(pid: int | None) -> bool | None:
