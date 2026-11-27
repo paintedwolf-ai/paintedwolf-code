@@ -339,8 +339,8 @@ def main():
     if args.expected_image_id and image_id != args.expected_image_id:
         raise SystemExit(f"error: image_id={image_id} want {args.expected_image_id}")
 
-    # Prepare clean workspace with frozen workbook fixture.
-    scratch = Path(tempfile.mkdtemp(prefix=f"pp-b2t-{label}-"))
+    # Prepare clean canonical workspace (resolved to avoid /var -> /private/var symlink on macOS).
+    scratch = Path(tempfile.mkdtemp(prefix=f"pp-b2t-{label}-")).resolve()
     try:
         ws = scratch / "workspace"
         (ws / "config").mkdir(parents=True, exist_ok=True)
@@ -511,10 +511,19 @@ def main():
         # Verify tool result + persisted receipts confirm clean execution on native-aot + pinned image.
         tool_result_text = tool_result_file.read_text(encoding="utf-8") if tool_result_file.exists() else ""
         tool_result_json = None
-        try:
-            tool_result_json = json.loads(tool_result_text)
-        except Exception:
-            pass
+        for line in tool_result_text.splitlines():
+            s = line.strip()
+            if s.startswith("{") and '"execution_id"' in s:
+                try:
+                    tool_result_json = json.loads(s)
+                    break
+                except Exception:
+                    pass
+        if tool_result_json is None:
+            try:
+                tool_result_json = json.loads(tool_result_text)
+            except Exception:
+                pass
 
         completed_recs = [r for r in exec_records if r.get("clean_completion") is True and r.get("exit_code") == 0]
         if not completed_recs:
@@ -523,11 +532,16 @@ def main():
         if last_rec.get("runtime_image_id") != image_id:
             raise AssertionError(f"receipt runtime_image_id={last_rec.get('runtime_image_id')} != staged image_id={image_id}")
 
-        observed_backend = ""
-        if isinstance(tool_result_json, dict):
-            observed_backend = str(tool_result_json.get("backend") or "")
-        if observed_backend and observed_backend != "native-aot":
+        if not isinstance(tool_result_json, dict):
+            raise AssertionError(f"could not parse JSON ToolResponse from tool_result_text: {tool_result_text[:300]!r}")
+        observed_backend = str(tool_result_json.get("backend") or "")
+        observed_engine_tag = str(tool_result_json.get("engine_tag") or "")
+        if observed_backend != "native-aot":
             raise AssertionError(f"tool response backend={observed_backend!r} want 'native-aot'")
+        if observed_engine_tag != EXPECTED_ENGINE_TAG:
+            raise AssertionError(f"tool response engine_tag={observed_engine_tag!r} want {EXPECTED_ENGINE_TAG!r}")
+        if tool_result_json.get("clean_completion") is not True or tool_result_json.get("exit_code") != 0:
+            raise AssertionError(f"tool response did not complete cleanly: {tool_result_json}")
 
         verdict = {
             "status": "PASS",
