@@ -10,7 +10,11 @@ import (
 
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 func TestGitDisallowedConfigOverridesRefuseWithoutExternalFallback(t *testing.T) {
@@ -21,9 +25,17 @@ func TestGitDisallowedConfigOverridesRefuseWithoutExternalFallback(t *testing.T)
 	f := newComposedProgramFixture(t)
 	// Match production toolhost registration where git subcommand tools are
 	// registered so invokeNative's native-gap fallback path is active for git.
-	gitOp := f.Runtime.Owners.Natives["git"]
-	gitOp.Tools = []string{"git_status"}
-	f.Runtime.Owners.Natives["git"] = gitOp
+	origOwners := f.Runtime.Owners
+	f.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, mem *toolcontract.ProgramMemory, admit tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		owners, err := origOwners(tc, paths, mem, admit)
+		if err != nil {
+			return owners, err
+		}
+		gitOp := owners.Natives["git"]
+		gitOp.Tools = []string{"git_status"}
+		owners.Natives["git"] = gitOp
+		return owners, nil
+	}
 	var launches atomic.Int64
 	configure := f.Configure
 	f.Configure = func(tc *tools.ToolContext) {
