@@ -70,11 +70,13 @@ class StubTransport:
 
 
 class StubSSESubscription:
-    """Deterministic SSESubscription verifying project scope and readiness barrier before writes."""
+    """Deterministic SSESubscription supporting staged frame arrival across waits."""
 
-    def __init__(self, project_id: str, frames_after_write: list[dict[str, object]]) -> None:
+    def __init__(self, project_id: str, stages: list[list[dict[str, object]]]) -> None:
         self.project_id = project_id
-        self._frames = frames_after_write
+        self._stages = list(stages)
+        self._frames: list[dict[str, object]] = []
+        self._stage_idx = 0
         self.started = False
         self.ready_checked = False
         self.closed = False
@@ -87,6 +89,9 @@ class StubSSESubscription:
         return True
 
     def wait_for_frames(self, predicate, max_wait_s: float = 10.0) -> tuple[list[dict[str, object]], bool]:
+        if self._stage_idx < len(self._stages):
+            self._frames.extend(self._stages[self._stage_idx])
+            self._stage_idx += 1
         return list(self._frames), bool(predicate(self._frames))
 
     def frames(self) -> list[dict[str, object]]:
@@ -326,6 +331,7 @@ class SidecarLiveSSESubscriberAndControlsTests(unittest.TestCase):
                     "root-1",
                     sub,
                     ready_wait_s=2.0,
+                    init_wait_s=0.0,
                     observe_wait_s=0.1,
                     drain_wait_s=0.1,
                     clock_fn=lambda: next(ticks),
@@ -347,36 +353,41 @@ class SidecarLiveSSESubscriberAndControlsTests(unittest.TestCase):
             sub = StubSSESubscription(
                 "proj-1",
                 [
-                    {
-                        "id": "batch-1",
-                        "topic": "source_changed",
-                        "data": {
-                            "project_id": "proj-1",
-                            "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                            "resync": False,
-                            "changes": [{"root_id": "root-1", "path": "src/control_write.txt", "op": "write"}],
+                    [],  # no baseline frame
+                    [
+                        {
+                            "id": "batch-1",
+                            "topic": "source_changed",
+                            "data": {
+                                "project_id": "proj-1",
+                                "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                "resync": False,
+                                "changes": [{"root_id": "root-1", "path": "src/control_write.txt", "op": "write"}],
+                            },
                         },
-                    },
-                    {
-                        "id": "batch-2",
-                        "topic": "source_changed",
-                        "data": {
-                            "project_id": "proj-1",
-                            "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                            "resync": False,
-                            "changes": [{"root_id": "root-1", "path": "src/control_write.txt", "op": "write"}],
+                        {
+                            "id": "batch-2",
+                            "topic": "source_changed",
+                            "data": {
+                                "project_id": "proj-1",
+                                "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                "resync": False,
+                                "changes": [{"root_id": "root-1", "path": "src/control_write.txt", "op": "write"}],
+                            },
                         },
-                    },
-                    {
-                        "id": "batch-3",
-                        "topic": "source_changed",
-                        "data": {
-                            "project_id": "proj-1",
-                            "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                            "resync": False,
-                            "changes": [{"root_id": "root-1", "path": DRAIN_SENTINEL_REL_PATH, "op": "create"}],
+                    ],
+                    [
+                        {
+                            "id": "batch-3",
+                            "topic": "source_changed",
+                            "data": {
+                                "project_id": "proj-1",
+                                "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                "resync": False,
+                                "changes": [{"root_id": "root-1", "path": DRAIN_SENTINEL_REL_PATH, "op": "create"}],
+                            },
                         },
-                    },
+                    ],
                 ],
             )
             ticks = iter([10, 20, 30])
@@ -517,44 +528,61 @@ class SidecarLiveSSESubscriberAndControlsTests(unittest.TestCase):
                 sub = StubSSESubscription(
                     pid,
                     [
-                        {
-                            "id": "env-1",
-                            "topic": "source_changed",
-                            "data": {
-                                "project_id": pid,
-                                "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                                "workspace_kind": "primary",
-                                "resync": False,
-                                "changes": [
-                                    {
-                                        "root_id": "root-1",
-                                        "path": "src/control_write.txt",
-                                        "op": "write",
-                                        "origin": "external",
-                                        "changed_at": "2026-11-27T19:00:00Z",
-                                    }
-                                ],
-                            },
-                        },
-                        {
-                            "id": "env-2",
-                            "topic": "source_changed",
-                            "data": {
-                                "project_id": pid,
-                                "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                                "workspace_kind": "primary",
-                                "resync": False,
-                                "changes": [
-                                    {
-                                        "root_id": "root-1",
-                                        "path": DRAIN_SENTINEL_REL_PATH,
-                                        "op": "create",
-                                        "origin": "external",
-                                        "changed_at": "2026-11-27T19:00:01Z",
-                                    }
-                                ],
-                            },
-                        },
+                        [
+                            {
+                                "id": "env-init",
+                                "topic": "source_changed",
+                                "data": {
+                                    "project_id": pid,
+                                    "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                    "workspace_kind": "primary",
+                                    "resync": False,
+                                    "changes": [],
+                                },
+                            }
+                        ],
+                        [
+                            {
+                                "id": "env-1",
+                                "topic": "source_changed",
+                                "data": {
+                                    "project_id": pid,
+                                    "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                    "workspace_kind": "primary",
+                                    "resync": False,
+                                    "changes": [
+                                        {
+                                            "root_id": "root-1",
+                                            "path": "src/control_write.txt",
+                                            "op": "write",
+                                            "origin": "external",
+                                            "changed_at": "2026-11-27T19:00:00Z",
+                                        }
+                                    ],
+                                },
+                            }
+                        ],
+                        [
+                            {
+                                "id": "env-2",
+                                "topic": "source_changed",
+                                "data": {
+                                    "project_id": pid,
+                                    "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                    "workspace_kind": "primary",
+                                    "resync": False,
+                                    "changes": [
+                                        {
+                                            "root_id": "root-1",
+                                            "path": DRAIN_SENTINEL_REL_PATH,
+                                            "op": "create",
+                                            "origin": "external",
+                                            "changed_at": "2026-11-27T19:00:01Z",
+                                        }
+                                    ],
+                                },
+                            }
+                        ],
                     ],
                 )
                 created_subs.append(sub)
@@ -670,6 +698,90 @@ class SidecarLiveSSESubscriberAndControlsTests(unittest.TestCase):
         )
         self.assertEqual(parse_proc_mounts_fs(Path("/home/user/work/repo"), sample), "ext4")
         self.assertEqual(parse_proc_mounts_fs(Path("/tmp/cfs_pilot"), sample), "tmpfs")
+
+    def test_baseline_slicing_post_sentinel_slicing_and_resync_reconciliation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "src").mkdir()
+            (root / "src/control_write.txt").write_bytes(b"init\n")
+
+            # Stage 0: initial baseline frame; Stage 1: resync=True; Stage 2: sentinel arrives AFTER resync.
+            sub = StubSSESubscription(
+                "proj-1",
+                [
+                    [
+                        {
+                            "id": "env-init",
+                            "topic": "source_changed",
+                            "data": {"project_id": "proj-1", "resync": False, "changes": []},
+                        }
+                    ],
+                    [
+                        {
+                            "id": "env-resync",
+                            "topic": "source_changed",
+                            "data": {"project_id": "proj-1", "resync": True, "changes": []},
+                        }
+                    ],
+                    [
+                        {
+                            "id": "env-sentinel",
+                            "topic": "source_changed",
+                            "data": {
+                                "project_id": "proj-1",
+                                "resync": False,
+                                "changes": [{"root_id": "root-1", "path": DRAIN_SENTINEL_REL_PATH, "op": "create"}],
+                            },
+                        }
+                    ],
+                ],
+            )
+
+            def reconcile_handler(method: str, path: str, body):
+                if path == "/v1/projects/proj-1/source/index":
+                    return {
+                        "state": "ready",
+                        "revision": 9,
+                        "refreshing": False,
+                        "coverage": [
+                            {
+                                "root_id": "root-1",
+                                "state": "ready",
+                                "discovery_complete": True,
+                                "refreshing": False,
+                                "bounded_directories": 0,
+                                "failed_directories": 0,
+                            }
+                        ],
+                    }
+                if path.startswith("/v1/projects/proj-1/source/search"):
+                    return {
+                        "state": "ready",
+                        "revision": 9,
+                        "refreshing": False,
+                        "coverage": [],
+                        "matches": [
+                            {"root_id": "root-1", "path": DRAIN_SENTINEL_REL_PATH, "highlights": []},
+                            {"root_id": "root-1", "path": "src/control_write.txt", "highlights": []},
+                        ],
+                    }
+                raise AssertionError(f"unexpected call: {method} {path}")
+
+            driver = SidecarDriver(StubTransport(reconcile_handler))
+            ticks = iter([10, 20, 30])
+            res = run_live_control_change_feed(
+                root,
+                "proj-1",
+                "root-1",
+                sub,
+                driver=driver,
+                clock_fn=lambda: next(ticks),
+                clock_domain="manual",
+            )
+            self.assertTrue(res.passed, res.to_dict())
+            self.assertEqual(res.check.verdict, Verdict.PASS_DECLARED_GAP)
+            self.assertTrue(res.evidence["init_baseline_seen"])
+            self.assertEqual(res.evidence["baseline_frame_count"], 1)
 
 
 class InProcessAndCLITests(unittest.TestCase):

@@ -167,6 +167,15 @@ def run_live_control_catalog(
     )
 
 
+def _is_initial_inventory_frame(frame: dict[str, object], project_id: str) -> bool:
+    if frame.get("topic") != "source_changed":
+        return False
+    data = frame.get("data")
+    if not isinstance(data, dict) or str(data.get("project_id") or "") != project_id:
+        return False
+    return data.get("resync") is False and data.get("changes") == []
+
+
 def _has_matching_change(
     frames: list[dict[str, object]],
     project_id: str,
@@ -216,15 +225,18 @@ def run_live_control_change_feed(
     root_id: str,
     sse_subscription: SSESubscription,
     *,
+    driver: SidecarDriver | None = None,
+    boundary_config: BoundaryConfig | None = None,
     rel_path: str = "src/control_write.txt",
     sentinel_path: str = DRAIN_SENTINEL_REL_PATH,
     ready_wait_s: float = 10.0,
+    init_wait_s: float = 5.0,
     observe_wait_s: float = 10.0,
     drain_wait_s: float = 10.0,
     clock_fn: Callable[[], int] | None = None,
     clock_domain: str = "monotonic_ns",
 ) -> LiveControlResult:
-    """Control 2: project-scoped /v1/events stream, readiness barrier, primary write, sentinel drain."""
+    """Control 2: project-scoped /v1/events stream, baseline inventory wait, primary write, sentinel drain."""
     sse_subscription.start()
     try:
         if not sse_subscription.wait_ready(max_wait_s=ready_wait_s):
@@ -235,6 +247,18 @@ def run_live_control_change_feed(
                 evidence={"sse_ready": False},
             )
 
+        # Wait briefly for the initial background inventory baseline frame (`changes: [], resync: false`)
+        # so the primary write happens after initial inventory settles.
+        baseline_frame_count = 0
+        init_baseline_seen = False
+        if init_wait_s > 0:
+            init_frames, init_baseline_seen = sse_subscription.wait_for_frames(
+                lambda fs: any(_is_initial_inventory_frame(f, project_id) for f in fs),
+                max_wait_s=init_wait_s,
+            )
+            if init_baseline_seen:
+                baseline_frame_count = len(init_frames)
+
         runner = ChangeRunner(clock_fn=clock_fn, clock_domain=clock_domain)
         primary_script = ChangeScript(
             selector=ReplaySelector(BASE_SEED_PRIMARY, "CONTROL_FEED", 0),
@@ -244,7 +268,7 @@ def run_live_control_change_feed(
         logged_entries = _retag_write_log(primary_log, root_id, seq_offset=0)
 
         frames, arrived = sse_subscription.wait_for_frames(
-            lambda fs: _has_matching_change(fs, project_id, root_id, rel_path),
+            lambda fs: _has_matching_change(fs[baseline_frame_count:], project_id, root_id, rel_path),
             max_wait_s=observe_wait_s,
         )
         if not arrived:
@@ -258,13 +282,15 @@ def run_live_control_change_feed(
                 ),
                 evidence={
                     "sse_ready": True,
+                    "init_baseline_seen": init_baseline_seen,
+                    "baseline_frame_count": baseline_frame_count,
                     "primary_arrived": False,
-                    "observed_frame_count": len(frames),
+                    "observed_frame_count": len(frames) - baseline_frame_count,
                 },
             )
 
-        # Explicit causal drain boundary: execute a second sentinel write so any duplicate
-        # emission of the primary write in a subsequent batch is captured and flagged.
+        # Record frame watermark BEFORE sentinel write so an earlier resync frame cannot short-circuit it.
+        before_sentinel_idx = len(frames)
         sentinel_script = ChangeScript(
             selector=ReplaySelector(BASE_SEED_PRIMARY, "CONTROL_FEED_SENTINEL", 0),
             ops=(ChangeOp("create", sentinel_path, content=b"drain sentinel\n"),),
@@ -273,15 +299,16 @@ def run_live_control_change_feed(
         logged_entries.extend(_retag_write_log(sentinel_log, root_id, seq_offset=len(logged_entries)))
 
         frames, drained = sse_subscription.wait_for_frames(
-            lambda fs: _has_matching_change(fs, project_id, root_id, sentinel_path),
+            lambda fs: _has_matching_change(fs[before_sentinel_idx:], project_id, root_id, sentinel_path),
             max_wait_s=drain_wait_s,
         )
     finally:
         sse_subscription.close()
 
+    post_write_frames = frames[baseline_frame_count:]
     write_log = WriteLog(clock_domain=clock_domain, entries=tuple(logged_entries))
     answer = map_sse_source_changed_to_answer(
-        frames,
+        post_write_frames,
         project_id=project_id,
         default_root_id=root_id,
     )
@@ -296,19 +323,42 @@ def run_live_control_change_feed(
             ),
             evidence={
                 "sse_ready": True,
+                "init_baseline_seen": init_baseline_seen,
+                "baseline_frame_count": baseline_frame_count,
                 "primary_arrived": True,
                 "drain_boundary": "sentinel_deadline_expired",
                 "observed_event_count": len(answer.events),
             },
         )
 
+    # If any post-write frame declared resync=true and we have a driver, automatically
+    # wait for settlement and attach reconciled + reference walks for D4 resync verification.
+    if driver is not None and any(g.reason == "resync" for g in answer.declared_gaps):
+        wait_catalog_settled(driver, project_id, root_id)
+        reconciled = driver.walk_catalog_index(project_id, root_id)
+        ref_post_entries = [
+            e
+            for e in reference_walk(root_dir, boundary_config=boundary_config, include_hidden=True)
+            if e.kind == "file"
+        ]
+        ref_post_walk = walk_entries_to_catalog_items(ref_post_entries, root_id=root_id)
+        answer = map_sse_source_changed_to_answer(
+            post_write_frames,
+            project_id=project_id,
+            default_root_id=root_id,
+            reconciled_walk=reconciled.items,
+            reference_post_walk=ref_post_walk,
+        )
+
     res = check_change_feed(write_log, answer)
     return LiveControlResult(
         name="single_logged_write_once_in_change_stream",
-        passed=(res.verdict == Verdict.PASS),
+        passed=(res.verdict in (Verdict.PASS, Verdict.PASS_DECLARED_GAP)),
         check=res,
         evidence={
             "sse_ready": True,
+            "init_baseline_seen": init_baseline_seen,
+            "baseline_frame_count": baseline_frame_count,
             "primary_arrived": True,
             "drain_boundary": "sentinel_write",
             "write_log": write_log.to_dict(),
@@ -391,6 +441,8 @@ def run_three_live_controls(
         project_id,
         root_id,
         sse_factory(project_id),
+        driver=driver,
+        boundary_config=boundary_config,
         clock_fn=clock_fn,
         clock_domain=clock_domain,
     )
