@@ -616,6 +616,53 @@ def apply_wasi_package_patches(packages_root: Path) -> list[dict[str, str]]:
                     "reason": "Compute LONG_MAX via stdlib struct.calcsize('l') instead of ctypes.sizeof(c_long) so SymPy imports cleanly on wasm32-wasi without _ctypes",
                 }
             )
+
+    # Patch 3: fpdf2 2.9.0 fpdf/image_parsing.py unconditionally imports
+    # urllib.request.HTTPSHandler, which CPython omits on wasm32-wasi (no _ssl).
+    img_parsing_py = packages_root / "fpdf" / "image_parsing.py"
+    if img_parsing_py.is_file():
+        old_block = (
+            "from urllib.request import (\n"
+            "    HTTPHandler,\n"
+            "    HTTPRedirectHandler,\n"
+            "    HTTPSHandler,\n"
+            "    ProxyHandler,\n"
+            "    Request,\n"
+            "    build_opener,\n"
+            ")"
+        )
+        new_block = (
+            "from urllib.request import (\n"
+            "    HTTPHandler,\n"
+            "    HTTPRedirectHandler,\n"
+            "    ProxyHandler,\n"
+            "    Request,\n"
+            "    build_opener,\n"
+            ")\n"
+            "try:\n"
+            "    from urllib.request import HTTPSHandler\n"
+            "except ImportError:\n"
+            "    HTTPSHandler = HTTPHandler"
+        )
+        text = img_parsing_py.read_text(encoding="utf-8")
+        if old_block in text:
+            img_parsing_py.write_text(text.replace(old_block, new_block, 1), encoding="utf-8")
+            for dist_info in packages_root.glob("fpdf2-*.dist-info"):
+                rec = dist_info / "RECORD"
+                if rec.is_file():
+                    h, sz = record_hash(img_parsing_py)
+                    lines = rec.read_text(encoding="utf-8").splitlines()
+                    updated = [
+                        f"fpdf/image_parsing.py,{h},{sz}" if l.startswith("fpdf/image_parsing.py,") else l
+                        for l in lines
+                    ]
+                    rec.write_text("\n".join(updated) + "\n", encoding="utf-8")
+            patches.append(
+                {
+                    "target": "packages/fpdf/image_parsing.py",
+                    "reason": "Guard urllib.request.HTTPSHandler import when _ssl is absent on wasm32-wasi so fpdf2 imports cleanly",
+                }
+            )
     return patches
 
 
@@ -912,8 +959,10 @@ def main() -> None:
         print(f"[patch] {p['target']}: {p['reason']}")
         # Recompute tree_sha256 for any patched distribution using its RECORD file
         for md in manifest_dists:
-            if (md["normalized_name"] == "pytest" and p["target"].startswith("packages/_pytest/")) or (
-                md["normalized_name"] == "sympy" and p["target"].startswith("packages/sympy/")
+            if (
+                (md["normalized_name"] == "pytest" and p["target"].startswith("packages/_pytest/"))
+                or (md["normalized_name"] == "sympy" and p["target"].startswith("packages/sympy/"))
+                or (md["normalized_name"] == "fpdf2" and p["target"].startswith("packages/fpdf/"))
             ):
                 rec_path = packages_dir / md["dist_info_path"].removeprefix("packages/") / "RECORD"
                 rel_files = [
