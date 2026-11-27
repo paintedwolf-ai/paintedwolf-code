@@ -77,11 +77,15 @@ func TestPrepareOpengrepRuntimeColdWarmAndConcurrent(t *testing.T) {
 	close(start)
 	wg.Wait()
 
+	t.Cleanup(func() {
+		for _, release := range releases {
+			if release != nil {
+				release()
+			}
+		}
+	})
 	for i := range workers {
 		testutil.FailErr(t, fmt.Sprintf("concurrent prepare %d", i), errs[i])
-		if releases[i] != nil {
-			defer releases[i]()
-		}
 		if results[i] == "" || results[i] != results[0] {
 			t.Fatalf("worker %d got %q, want %q", i, results[i], results[0])
 		}

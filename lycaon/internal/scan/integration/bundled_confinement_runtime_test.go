@@ -35,14 +35,13 @@ func TestBundledScannerConfinementProtectsEngineRuntimeAndAppCaches(t *testing.T
 
 	runtimeStore := enginepaths.OpengrepRuntimeRootUnder(cfgDir)
 	testutil.FailErr(t, "create runtime store", os.MkdirAll(runtimeStore, 0o700))
-	runtimeRoot, err := os.MkdirTemp(runtimeStore, "v1-test-runtime-")
-	testutil.FailErr(t, "create runtime fixture root", err)
+	runtimeRoot := filepath.Join(runtimeStore, "v1-test-runtime-"+filepath.Base(t.TempDir()))
 	runtimeCache := filepath.Join(runtimeRoot, "xdg-cache")
 	testutil.FailErr(t, "create runtime xdg-cache", os.MkdirAll(runtimeCache, 0o700))
 	engineHelper := filepath.Join(runtimeCache, "helper.sh")
-	testutil.FailErr(t, "write engine helper", os.WriteFile(engineHelper, []byte("#!/bin/sh\nprintf 'engine-ok'\n"), 0o555))
-	testutil.FailErr(t, "seal runtime xdg-cache", os.Chmod(runtimeCache, 0o555))
-	testutil.FailErr(t, "seal runtime root", os.Chmod(runtimeRoot, 0o555))
+	testutil.FailErr(t, "write engine helper", os.WriteFile(engineHelper, []byte("#!/bin/sh\nprintf 'engine-ok'\n"), 0o500))
+	testutil.FailErr(t, "seal runtime xdg-cache", os.Chmod(runtimeCache, 0o500))
+	testutil.FailErr(t, "seal runtime root", os.Chmod(runtimeRoot, 0o500))
 	t.Cleanup(func() {
 		_ = os.Chmod(runtimeRoot, 0o700)
 		_ = os.Chmod(runtimeCache, 0o700)

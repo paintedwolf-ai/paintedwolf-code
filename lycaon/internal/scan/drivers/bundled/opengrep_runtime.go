@@ -221,12 +221,12 @@ func buildAndPublishRuntime(ctx context.Context, bin, binarySHA256, storeRoot, t
 	if _, err := fseffect.Replace(fseffect.ReplaceRequest{
 		Location: fseffect.Location{Root: stagingDir, Rel: opengrepRuntimeManifestName},
 		Source:   bytes.NewReader(rawManifest),
-		Mode:     0o444,
+		Mode:     0o400,
 	}); err != nil {
 		releaseTargetLease()
 		return "", nil, fmt.Errorf("write runtime manifest: %w", err)
 	}
-	if err := os.Chmod(manifestPath, 0o444); err != nil {
+	if err := os.Chmod(manifestPath, 0o400); err != nil {
 		releaseTargetLease()
 		return "", nil, fmt.Errorf("seal runtime manifest: %w", err)
 	}
@@ -235,7 +235,7 @@ func buildAndPublishRuntime(ctx context.Context, bin, binarySHA256, storeRoot, t
 		return "", nil, fmt.Errorf("publish prepared runtime: %w", err)
 	}
 	published = true
-	if err := os.Chmod(targetDir, 0o555); err != nil {
+	if err := os.Chmod(targetDir, 0o500); err != nil { //nolint:gosec // G302: sealed directory requires owner r-x (0500) for traversal
 		releaseTargetLease()
 		return "", nil, fmt.Errorf("seal published runtime root: %w", err)
 	}
@@ -375,47 +375,48 @@ func moveOrCopyDir(src, dst string) error {
 	if err := os.MkdirAll(dst, 0o700); err != nil {
 		return err
 	}
-	return filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
+	srcRoot, err := os.OpenRoot(src)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = srcRoot.Close() }()
+	return fs.WalkDir(srcRoot.FS(), ".", func(rel string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if d.Type()&os.ModeSymlink != 0 {
-			return fmt.Errorf("unexpected symlink in prepared runtime: %s", path)
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
+			return fmt.Errorf("unexpected symlink in prepared runtime: %s", rel)
 		}
 		if d.IsDir() {
 			if rel == "." {
 				return nil
 			}
-			return os.MkdirAll(filepath.Join(dst, rel), 0o700)
+			return os.MkdirAll(filepath.Join(dst, filepath.FromSlash(rel)), 0o700)
 		}
 		if !d.Type().IsRegular() {
-			return fmt.Errorf("unexpected non-regular entry in prepared runtime: %s", path)
+			return fmt.Errorf("unexpected non-regular entry in prepared runtime: %s", rel)
 		}
-		info, err := os.Lstat(path)
+		info, err := srcRoot.Lstat(rel)
 		if err != nil {
 			return err
 		}
 		if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("unexpected non-regular entry in prepared runtime: %s", path)
+			return fmt.Errorf("unexpected non-regular entry in prepared runtime: %s", rel)
 		}
-		if err := checkSingleLink(path, info); err != nil {
+		if err := checkSingleLink(rel, info); err != nil {
 			return err
 		}
 		mode := os.FileMode(0o600)
 		if info.Mode().Perm()&0o111 != 0 {
 			mode = 0o700
 		}
-		in, err := os.Open(path) // #nosec G304 -- validated staging file
+		in, err := srcRoot.Open(rel)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = in.Close() }()
 		_, err = fseffect.Replace(fseffect.ReplaceRequest{
-			Location: fseffect.Location{Root: dst, Rel: rel},
+			Location: fseffect.Location{Root: dst, Rel: filepath.FromSlash(rel)},
 			Source:   in,
 			Mode:     mode,
 		})
@@ -641,47 +642,57 @@ func sealTreeReadOnly(root string) error {
 	if !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("cannot seal non-directory runtime root: %s", root)
 	}
+	dirRoot, err := os.OpenRoot(root)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = dirRoot.Close() }()
 	var dirs []string
-	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+	err = fs.WalkDir(dirRoot.FS(), ".", func(rel string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if d.Type()&os.ModeSymlink != 0 {
-			return fmt.Errorf("cannot seal symlink in runtime tree: %s", path)
+			return fmt.Errorf("cannot seal symlink in runtime tree: %s", rel)
 		}
 		if d.IsDir() {
-			dirs = append(dirs, path)
+			if rel != "." {
+				dirs = append(dirs, rel)
+			}
 			return nil
 		}
 		if !d.Type().IsRegular() {
-			return fmt.Errorf("cannot seal non-regular entry in runtime tree: %s", path)
+			return fmt.Errorf("cannot seal non-regular entry in runtime tree: %s", rel)
 		}
-		info, err := os.Lstat(path)
+		info, err := dirRoot.Lstat(rel)
 		if err != nil {
 			return err
 		}
 		if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("cannot seal non-regular entry in runtime tree: %s", path)
+			return fmt.Errorf("cannot seal non-regular entry in runtime tree: %s", rel)
 		}
-		if err := checkSingleLink(path, info); err != nil {
+		if err := checkSingleLink(rel, info); err != nil {
 			return err
 		}
-		mode := os.FileMode(0o444)
+		mode := os.FileMode(0o400)
 		if info.Mode().Perm()&0o111 != 0 {
-			mode = 0o555
+			mode = 0o500
 		}
-		return os.Chmod(path, mode)
+		return dirRoot.Chmod(rel, mode)
 	})
 	if err != nil {
 		return err
 	}
 	// Seal directories deepest-first so chmod succeeds on all filesystems.
 	for i := len(dirs) - 1; i >= 0; i-- {
-		if err := os.Chmod(dirs[i], 0o555); err != nil {
+		if err := dirRoot.Chmod(dirs[i], 0o500); err != nil {
 			return err
 		}
 	}
-	return nil
+	if err := dirRoot.Close(); err != nil {
+		return err
+	}
+	return os.Chmod(root, 0o500) //nolint:gosec // G302: sealed directory requires owner r-x (0500) for traversal
 }
 
 func removeReadOnlyTree(root string) error {
@@ -699,18 +710,22 @@ func removeReadOnlyTree(root string) error {
 	// Unlinking regular files and symlinks only requires write+exec on their
 	// parent directories. Never chmod non-directories or symlinks so cleanup
 	// cannot alter permissions on symlink targets or hard-linked external files.
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
+	_ = os.Chmod(root, 0o700) //nolint:gosec // G302: directory requires owner rwx (0700) to unlink read-only entries during cleanup
+	if dirRoot, openErr := os.OpenRoot(root); openErr == nil {
+		_ = fs.WalkDir(dirRoot.FS(), ".", func(rel string, d fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return fs.SkipDir
+			}
+			if d.Type()&os.ModeSymlink != 0 {
+				return nil
+			}
+			if d.IsDir() && rel != "." {
+				_ = dirRoot.Chmod(rel, 0o700)
+			}
 			return nil
-		}
-		if d.Type()&os.ModeSymlink != 0 {
-			return nil
-		}
-		if d.IsDir() {
-			_ = os.Chmod(path, 0o700)
-		}
-		return nil
-	})
+		})
+		_ = dirRoot.Close()
+	}
 	return os.RemoveAll(root)
 }
 
