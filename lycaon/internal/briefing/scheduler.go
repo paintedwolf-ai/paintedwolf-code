@@ -77,6 +77,8 @@ type Scheduler struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	stopped  bool
+	epoch    uint64
+	active   int
 	running  map[string]*run
 	projects map[string]*projectLane
 	groups   map[string]*run
@@ -126,6 +128,7 @@ func (s *Scheduler) Submit(ctx context.Context, job Job) (joined bool, err error
 			cancel()
 			return false, ErrBusy
 		}
+		s.epoch++
 		s.running[job.Key] = r
 		lane.queue = append(lane.queue, r)
 		s.promote(r)
@@ -137,9 +140,11 @@ func (s *Scheduler) Submit(ctx context.Context, job Job) (joined bool, err error
 			}
 			s.groups[job.Group] = r
 		}
+		s.epoch++
 		s.running[job.Key] = r
 		s.start(r) //nolint:contextcheck // Admitted work outlives the admitting request.
 	default:
+		s.epoch++
 		s.running[job.Key] = r
 		s.start(r) //nolint:contextcheck // Admitted work outlives the admitting request.
 	}
@@ -247,9 +252,15 @@ func (s *Scheduler) expire(r *run) {
 		r.cancel()
 		return
 	}
+	s.active++
 	s.workers.Add(1)
 	go func() {
 		defer s.workers.Done()
+		defer func() {
+			s.mu.Lock()
+			s.active--
+			s.mu.Unlock()
+		}()
 		defer r.cancel()
 		defer observability.GuardPanic("briefing.expire")
 		r.job.Expired(context.WithoutCancel(r.ctx))
@@ -257,6 +268,7 @@ func (s *Scheduler) expire(r *run) {
 }
 
 func (s *Scheduler) start(r *run) {
+	s.active++
 	s.workers.Add(1)
 	go func() {
 		defer s.workers.Done()
@@ -270,6 +282,7 @@ func (s *Scheduler) finish(r *run) {
 	r.cancel()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.active--
 	s.forget(r)
 	if r.job.Policy.Admission == Queued {
 		s.lane(r.job.Project).active--
@@ -312,4 +325,18 @@ func (s *Scheduler) Wait(ctx context.Context) {
 	case <-done:
 	case <-ctx.Done():
 	}
+}
+
+// Epoch increases each time a job is admitted to the scheduler.
+func (s *Scheduler) Epoch() uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.epoch
+}
+
+// Busy reports whether any job is queued or running.
+func (s *Scheduler) Busy() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.active > 0 || len(s.running) > 0
 }

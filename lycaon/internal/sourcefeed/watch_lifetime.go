@@ -10,10 +10,11 @@ import (
 
 // WatchLifetime releases its current routing and drains admitted callbacks.
 type WatchLifetime struct {
-	stopped   atomic.Bool
-	work      workscope.Group
-	mu        sync.Mutex
-	callbacks map[watchKey]*registeredObserver
+	stopped    atomic.Bool
+	batchEpoch atomic.Uint64
+	work       workscope.Group
+	mu         sync.Mutex
+	callbacks  map[watchKey]*registeredObserver
 }
 type registeredObserver struct {
 	mu       sync.Mutex
@@ -107,4 +108,36 @@ func (o *WatchLifetime) Wait(ctx context.Context) error {
 	}
 	o.callbacks = nil
 	return nil
+}
+
+// Epoch increases whenever a watch callback or change batch is admitted.
+func (o *WatchLifetime) Epoch() uint64 {
+	if o == nil {
+		return 0
+	}
+	return o.work.Epoch() + o.batchEpoch.Load()
+}
+
+// Busy reports whether any watch callback or change batch is pending or running.
+func (o *WatchLifetime) Busy() bool {
+	if o == nil {
+		return false
+	}
+	if o.work.Busy() {
+		return true
+	}
+	watchRegMu.Lock()
+	var pending []*changeConverger
+	for _, watch := range watchers {
+		if watch.lifetime == o {
+			pending = append(pending, watch.changes)
+		}
+	}
+	watchRegMu.Unlock()
+	for _, changes := range pending {
+		if changes.busy() {
+			return true
+		}
+	}
+	return false
 }
