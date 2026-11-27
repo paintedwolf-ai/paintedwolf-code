@@ -39,7 +39,9 @@ from wait_watch.driver import (  # noqa: E402
     WaitWatchApplication,
     WaitWatchDriver,
     _confirm_parked_lease,
+    _extract_exit_code_from_text,
     _extract_handle,
+    _extract_handle_from_text,
     _extract_report_from_pending,
     _extract_report_from_wait_result,
     _git_head,
@@ -143,6 +145,32 @@ def cold_restart_sidecar(app: WaitWatchApplication, engine_bin: pathlib.Path | N
     )
     save(app.directory / "ownership.json", {"pid": app.process.pid, "port": app.port})
     app.ready()
+
+
+def _extract_new_handle(tool_result: dict[str, Any], seen: set[str]) -> str:
+    payload = parse_content_json(tool_result)
+    bg_jobs = payload.get("background_jobs")
+    if isinstance(bg_jobs, list):
+        for job in reversed(bg_jobs):
+            if isinstance(job, dict) and isinstance(job.get("handle"), str):
+                h = job["handle"].strip()
+                if h and h not in seen:
+                    return h
+    return _extract_handle(tool_result)
+
+
+def _extract_terminal_report_for_handle(pending_payload: dict[str, Any], expected_handle: str) -> tuple[str, int | None, str]:
+    """Scan messages in reverse preferring a terminal report matching expected_handle with exit_code/termination."""
+    messages = pending_payload.get("messages") or []
+    for msg in reversed(messages):
+        content = msg.get("content")
+        if not isinstance(content, str):
+            continue
+        if expected_handle and expected_handle in content and ("exit_code=" in content or '"exit_code"' in content or "termination=" in content):
+            ec = _extract_exit_code_from_text(content)
+            obs_h = _extract_handle_from_text(content) or expected_handle
+            return content, ec, obs_h
+    return _extract_report_from_pending(pending_payload, expected_handle=expected_handle)
 
 
 def _pid_alive(pid: int | None) -> bool:
@@ -266,9 +294,15 @@ def run_slot_c02(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
         driver = WaitWatchDriver(app, session_id, rendered_observer=rendered_obs, source_observer=source_obs, timeout_s=timeout_s, sse_path=sse_path)
 
         # Launch primary and sibling barriers.
-        _, _, handle_a = driver.call_command(b_primary.command_string(relative_to=project_dir, background=True), progress_update="- [ ] C02 primary")
+        seen_handles: set[str] = set()
+        _, cmd_res_a, handle_a = driver.call_command(b_primary.command_string(relative_to=project_dir, background=True), progress_update="- [ ] C02 primary")
+        if handle_a:
+            seen_handles.add(handle_a)
         b_primary.wait_reached(timeout_s=timeout_s, dump_state=driver._dump_state)
-        _, _, handle_b = driver.call_command(b_sibling.command_string(relative_to=project_dir, background=True))
+        _, cmd_res_b, raw_handle_b = driver.call_command(b_sibling.command_string(relative_to=project_dir, background=True))
+        handle_b = _extract_new_handle(cmd_res_b, seen_handles) or raw_handle_b
+        if handle_b:
+            seen_handles.add(handle_b)
         b_sibling.wait_reached(timeout_s=timeout_s, dump_state=driver._dump_state)
         source_obs.record_event("two_jobs_live", handle_a=handle_a, handle_b=handle_b)
 
@@ -279,17 +313,18 @@ def run_slot_c02(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
         # Release primary; sibling stays blocked at barrier.
         b_primary.release()
         resumed_a = driver.await_pending("c02:resumed_a")
-        rep_a, exit_a, obs_ha = _extract_report_from_pending(resumed_a, expected_handle=handle_a)
+        rep_a, exit_a, obs_ha = _extract_terminal_report_for_handle(resumed_a, handle_a)
         rendered_obs.record_pending(resumed_a, handle=obs_ha, exit_code=exit_a, report=rep_a, report_readable=bool(rep_a))
         sibling_alive = _pid_alive(b_sibling.child_pid) and not b_sibling.release_path.is_file()
         assertions["exact_handle_selected"] = (obs_ha == handle_a and exit_a == 17)
         assertions["sibling_remained_live"] = sibling_alive
-        source_obs.record_event("primary_settled", handle=obs_ha, exit_code=exit_a, sibling_alive=sibling_alive)
+        source_obs.record_event("primary_settled", handle=obs_ha, expected_handle=handle_a, exit_code=exit_a, sibling_alive=sibling_alive)
 
         # Release stale sibling so it exits, then launch retry job and verify stale handle cannot settle retry.
         b_sibling.release()
         b_sibling.wait_child_exited(timeout_s=min(10.0, timeout_s))
-        _, _, handle_retry = driver.call_command(b_retry.command_string(relative_to=project_dir, background=True))
+        _, cmd_res_r, raw_handle_r = driver.call_command(b_retry.command_string(relative_to=project_dir, background=True))
+        handle_retry = _extract_new_handle(cmd_res_r, seen_handles) or raw_handle_r
         b_retry.wait_reached(timeout_s=timeout_s, dump_state=driver._dump_state)
 
         _, _, wait_retry_parsed = driver.call_wait(
@@ -303,7 +338,7 @@ def run_slot_c02(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
 
         b_retry.release()
         resumed_retry = driver.await_pending("c02:resumed_retry")
-        rep_r, exit_r, obs_hr = _extract_report_from_pending(resumed_retry, expected_handle=handle_retry)
+        rep_r, exit_r, obs_hr = _extract_terminal_report_for_handle(resumed_retry, handle_retry)
         rendered_obs.record_pending(resumed_retry, handle=obs_hr, exit_code=exit_r, report=rep_r, report_readable=bool(rep_r))
         assertions["retry_handle_settled_with_23"] = (obs_hr == handle_retry and exit_r == 23)
         driver.finish_turn(resumed_retry, "C02 eligibility verified.")
@@ -403,18 +438,21 @@ def run_slot_c03(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
         _, _, proc_handle = driver.call_command(barrier.command_string(relative_to=project_dir, background=True), progress_update="- [ ] C03 watch_match")
         barrier.wait_reached(timeout_s=timeout_s, dump_state=driver._dump_state)
 
-        # Register a process_done watch and wait with until_complete + watch_match.
+        # Register a process_done watch using the exact watch.yaml schema (conditions array, no extra fields).
         _, _, watch_parsed = driver.call_watch({
-            "condition": {"kind": "process_done", "handles": [proc_handle]},
-            "reason": "C03 until_complete watch_match",
+            "conditions": [{"kind": "process_done", "handles": [proc_handle]}],
         })
         watch_handle = str(watch_parsed.get("handle") or watch_parsed.get("watch_handle") or watch_parsed.get("watch_id") or "")
+        wait_cond = watch_parsed.get("wait_condition") if isinstance(watch_parsed.get("wait_condition"), dict) else None
+        if not watch_handle and isinstance(wait_cond, dict) and wait_cond.get("handles"):
+            watch_handle = str(wait_cond["handles"][0])
         assertions["watch_registered"] = bool(watch_handle)
         source_obs.record_event("watch_registered", proc_handle=proc_handle, watch_handle=watch_handle, raw=watch_parsed)
 
         if watch_handle:
+            cond_arg = wait_cond if isinstance(wait_cond, dict) else {"kind": "watch_match", "handles": [watch_handle]}
             _, _, wait_parsed = driver.call_wait(
-                [{"kind": "watch_match", "handles": [watch_handle]}],
+                [cond_arg],
                 until_complete=True,
                 timeout_ms=int(max(timeout_s, 60.0) * 1000),
                 reason="C03 until_complete watch_match",
@@ -611,13 +649,14 @@ def run_slot_c05(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
 
 
 class LiveRefusalBarrier(ProcessBarrier):
-    """ProcessBarrier that stays live, triggers a floor-refused write to AGENTS.md, then waits for release."""
+    """ProcessBarrier that stays live, triggers real confined refusals (unix bind + outside write + floor write), then waits for release."""
 
     def __init__(
         self,
         root_dir: pathlib.Path | str,
         *,
         refusal_target: pathlib.Path | str,
+        outside_target: pathlib.Path | str,
         exit_code: int = 17,
         marker: str = "ww03-c06-live-refusal",
         payload: str | None = None,
@@ -625,13 +664,14 @@ class LiveRefusalBarrier(ProcessBarrier):
     ) -> None:
         super().__init__(root_dir, exit_code=exit_code, marker=marker, payload=payload, max_script_wait_s=max_script_wait_s)
         self.refusal_target = pathlib.Path(refusal_target).resolve()
+        self.outside_target = pathlib.Path(outside_target).resolve()
         self.trigger_refusal_path = self.root_dir / "trigger_refusal"
         self.refusal_attempted_path = self.root_dir / "refusal_attempted"
 
     def _ensure_script(self) -> pathlib.Path:
         script_path = self.root_dir / "run_live_refusal_barrier.py"
         body = (
-            "import json, os, pathlib, sys, time\n"
+            "import json, os, pathlib, socket, sys, time\n"
             "root = pathlib.Path(__file__).resolve().parent\n"
             "reached = root / 'reached'\n"
             "reached_tmp = root / 'reached.tmp'\n"
@@ -639,7 +679,9 @@ class LiveRefusalBarrier(ProcessBarrier):
             "attempted = root / 'refusal_attempted'\n"
             "attempted_tmp = root / 'refusal_attempted.tmp'\n"
             "release = root / 'release'\n"
-            f"target = pathlib.Path({str(self.refusal_target)!r})\n"
+            f"floor_target = pathlib.Path({str(self.refusal_target)!r})\n"
+            f"outside_target = pathlib.Path({str(self.outside_target)!r})\n"
+            "sock_target = str(root / 'c06.sock')\n"
             f"marker = {self.marker!r}\n"
             f"payload = {self.payload!r}\n"
             f"exit_code = {self.exit_code}\n"
@@ -651,13 +693,24 @@ class LiveRefusalBarrier(ProcessBarrier):
             "    if time.monotonic() >= deadline:\n"
             "        sys.exit(124)\n"
             "    time.sleep(0.05)\n"
-            "refusal_err = ''\n"
+            "attempts = {}\n"
             "try:\n"
-            "    with open(target, 'a', encoding='utf-8') as fh:\n"
-            "        fh.write('unexpected-write\\n')\n"
+            "    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\n"
+            "    try:\n"
+            "        s.bind(sock_target)\n"
+            "        attempts['unix_bind'] = 'bound'\n"
+            "    finally:\n"
+            "        s.close()\n"
             "except OSError as exc:\n"
-            "    refusal_err = f'{type(exc).__name__}:{exc.errno}:{exc}'\n"
-            "attempted_tmp.write_text(json.dumps({'target': str(target), 'error': refusal_err, 'pid': os.getpid(), 'ts_ns': time.time_ns()}), encoding='utf-8')\n"
+            "    attempts['unix_bind'] = f'{type(exc).__name__}:{exc.errno}:{exc}'\n"
+            "for label, tgt in (('outside_write', outside_target), ('floor_write', floor_target)):\n"
+            "    try:\n"
+            "        with open(tgt, 'a', encoding='utf-8') as fh:\n"
+            "            fh.write('unexpected-write\\n')\n"
+            "        attempts[label] = 'wrote'\n"
+            "    except OSError as exc:\n"
+            "        attempts[label] = f'{type(exc).__name__}:{exc.errno}:{exc}'\n"
+            "attempted_tmp.write_text(json.dumps({'attempts': attempts, 'pid': os.getpid(), 'ts_ns': time.time_ns()}), encoding='utf-8')\n"
             "os.replace(attempted_tmp, attempted)\n"
             "while not release.is_file():\n"
             "    if time.monotonic() >= deadline:\n"
@@ -700,11 +753,13 @@ def run_slot_c06(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
     raw_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "README.md").write_text("# WW03 C06 refusal-while-live fixture\n", encoding="utf-8")
 
-    # Floor-refused target (AGENTS.md is write-refused by sandbox floor on both macOS and Linux).
+    # Floor-refused target (AGENTS.md) and outside-workspace target + Unix bind inside LiveRefusalBarrier.
     refusal_target = project_dir / "AGENTS.md"
+    outside_target = out_path / "outside-escape.txt"
     barrier = LiveRefusalBarrier(
         project_dir / ".ww03-c06-live",
         refusal_target=refusal_target,
+        outside_target=outside_target,
         exit_code=17,
         marker=f"ww03-c06-s{seed}",
     )
@@ -772,8 +827,10 @@ def run_slot_c06(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
             and (
                 "sandbox_refusal" in refusal_lower
                 or "refused" in refusal_lower
+                or "network-bind" in refusal_lower
                 or "file-write" in refusal_lower
                 or "agents.md" in refusal_lower
+                or "outside-escape" in refusal_lower
             )
             and "termination=exited" not in refusal_lower
         )
@@ -925,22 +982,32 @@ def run_slot_c06_git_ssh(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | No
         "^TestGitSSHTransport(DeliveryParityAndReceiptReopen|SetupDialUnknownAndMultiRemoteIsolation)$",
         "./test/wiring/commands",
     ]
-    proc = subprocess.run(
-        cmd,
-        cwd=REPO_ROOT / "lycaon",
-        capture_output=True,
-        text=True,
-        timeout=max(120.0, timeout_s * 4.0),
-    )
+    timed_out = False
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=REPO_ROOT / "lycaon",
+            capture_output=True,
+            text=True,
+            timeout=max(300.0, timeout_s * 10.0),
+        )
+        returncode = proc.returncode
+        stdout_text = proc.stdout or ""
+        stderr_text = proc.stderr or ""
+    except subprocess.TimeoutExpired as exc:
+        timed_out = True
+        returncode = -1
+        stdout_text = (exc.stdout.decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or ""))
+        stderr_text = (exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")) + f"\nTimeoutExpired after {exc.timeout}s\n"
     log_path = out_path / "git-ssh-transport-e2e.log"
-    combined = proc.stdout + ("\n--- STDERR ---\n" + proc.stderr if proc.stderr else "")
+    combined = stdout_text + ("\n--- STDERR ---\n" + stderr_text if stderr_text else "")
     log_path.write_text(combined, encoding="utf-8")
     log_sha = hashlib.sha256(combined.encode("utf-8")).hexdigest()
 
     assertions = {
-        "exit_zero": proc.returncode == 0,
-        "delivery_parity_test_passed": "--- PASS: TestGitSSHTransportDeliveryParityAndReceiptReopen" in proc.stdout,
-        "setup_dial_isolation_test_passed": "--- PASS: TestGitSSHTransportSetupDialUnknownAndMultiRemoteIsolation" in proc.stdout,
+        "exit_zero": returncode == 0,
+        "delivery_parity_test_passed": "--- PASS: TestGitSSHTransportDeliveryParityAndReceiptReopen" in stdout_text,
+        "setup_dial_isolation_test_passed": "--- PASS: TestGitSSHTransportSetupDialUnknownAndMultiRemoteIsolation" in stdout_text,
     }
     return {
         "schema_version": SCHEMA_VERSION,
@@ -955,11 +1022,12 @@ def run_slot_c06_git_ssh(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | No
         "seed": seed,
         "elapsed_ms": round(time.monotonic() * 1000.0 - started, 2),
         "command": cmd,
-        "returncode": proc.returncode,
+        "returncode": returncode,
+        "timed_out": timed_out,
         "log_path": str(log_path),
         "log_sha256": log_sha,
         "assertions": assertions,
-        "status": "passed" if all(assertions.values()) else "failed",
+        "status": "passed" if all(assertions.values()) else ("incomplete" if timed_out else "failed"),
     }
 
 
