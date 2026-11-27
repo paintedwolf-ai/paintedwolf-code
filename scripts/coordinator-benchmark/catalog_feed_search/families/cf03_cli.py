@@ -58,51 +58,62 @@ def run_cf03_cli(args: argparse.Namespace) -> int:
     reports: dict[str, FamilyReport] = {}
     incidents: list[dict[str, object]] = []
     artifact_files: dict[str, Path] = {}
+    launch_receipts: dict[str, dict[str, object]] = {}
+    first_launch_receipt: dict[str, object] = {}
 
     with tempfile.TemporaryDirectory(prefix="cf03-cfg-") as cfg_tmp:
-        cfg_dir = Path(cfg_tmp)
+        cfg_root = Path(cfg_tmp)
         provenance = collect_run_provenance(
             harness_repo=repo_root,
-            work_dir=cfg_dir,
+            work_dir=cfg_root,
             binary_path=Path(args.engine_bin),
             d1_commit=args.d1_commit,
             d1_tree=args.d1_tree,
             rg_bin=args.rg_bin,
         )
 
-        with ManagedSidecar(Path(args.engine_bin), cfg_dir, repo_root=repo_root) as sidecar:
-            launch_receipt = {
-                "utc_started": sidecar.started_utc,
-                "pid": sidecar.proc.pid if sidecar.proc else 0,
-                "url": sidecar.url,
-                "binary_path": str(sidecar.binary_path),
-                "binary_sha256": provenance.product.binary_sha256,
-                "d1_commit": args.d1_commit,
-                "d1_tree": args.d1_tree,
-                "harness_commit": provenance.harness_commit,
-                "harness_tree": provenance.harness_tree,
-            }
-            lr_path = out_dir / "launch_receipt.json"
-            lr_path.write_text(json.dumps(launch_receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-            artifact_files["launch_receipt"] = lr_path
+        for fam in selected:
+            fam_cfg = cfg_root / fam.lower()
+            with ManagedSidecar(Path(args.engine_bin), fam_cfg, repo_root=repo_root, startup_timeout_s=90.0) as sidecar:
+                lr = {
+                    "family": fam,
+                    "utc_started": sidecar.started_utc,
+                    "pid": sidecar.proc.pid if sidecar.proc else 0,
+                    "url": sidecar.url,
+                    "binary_path": str(sidecar.binary_path),
+                    "binary_sha256": provenance.product.binary_sha256,
+                    "d1_commit": args.d1_commit,
+                    "d1_tree": args.d1_tree,
+                    "harness_commit": provenance.harness_commit,
+                    "harness_tree": provenance.harness_tree,
+                }
+                launch_receipts[fam] = lr
+                if not first_launch_receipt:
+                    first_launch_receipt = lr
 
-            if "K01" in selected:
-                reports["K01"] = run_k01_sidecar(sidecar.driver(), boundary_cfg, out_dir, base_seed=args.seed, count=args.k01_count)
-            if "K02" in selected:
-                r_k02, inc_k02 = run_k02_sidecar(sidecar.driver(), boundary_cfg, out_dir, base_seed=args.seed, count=args.k02_count)
-                reports["K02"] = r_k02
-                incidents.extend(inc_k02)
-            if "K03" in selected:
-                reports["K03"] = run_k03_sidecar(sidecar, boundary_cfg, base_seed=args.seed, count=args.k03_count)
-            if "K04" in selected:
-                reports["K04"] = run_k04_sidecar(sidecar.driver(), boundary_cfg, base_seed=args.seed, count=args.k04_count)
-            if "K07" in selected:
-                reports["K07"] = run_k07_sidecar(sidecar.driver(), cfg_dir, base_seed=args.seed, count=args.k07_count)
+                if fam == "K01":
+                    reports["K01"] = run_k01_sidecar(sidecar.driver(), boundary_cfg, out_dir, base_seed=args.seed, count=args.k01_count)
+                elif fam == "K02":
+                    r_k02, inc_k02 = run_k02_sidecar(sidecar.driver(), boundary_cfg, out_dir, base_seed=args.seed, count=args.k02_count)
+                    reports["K02"] = r_k02
+                    incidents.extend(inc_k02)
+                elif fam == "K03":
+                    reports["K03"] = run_k03_sidecar(sidecar, boundary_cfg, base_seed=args.seed, count=args.k03_count)
+                elif fam == "K04":
+                    reports["K04"] = run_k04_sidecar(sidecar.driver(), boundary_cfg, base_seed=args.seed, count=args.k04_count)
+                elif fam == "K07":
+                    reports["K07"] = run_k07_sidecar(sidecar.driver(), fam_cfg, base_seed=args.seed, count=args.k07_count)
 
-    for fam, rep in sorted(reports.items()):
-        fpath = out_dir / f"{fam.lower()}_sidecar.json"
-        fpath.write_text(json.dumps(rep.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        artifact_files[f"{fam.lower()}_sidecar"] = fpath
+                if fam in reports:
+                    fpath = out_dir / f"{fam.lower()}_sidecar.json"
+                    fpath.write_text(json.dumps(reports[fam].to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+                    artifact_files[f"{fam.lower()}_sidecar"] = fpath
+
+        launch_receipt = dict(first_launch_receipt)
+        launch_receipt["per_family_receipts"] = launch_receipts
+        lr_path = out_dir / "launch_receipt.json"
+        lr_path.write_text(json.dumps(launch_receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        artifact_files["launch_receipt"] = lr_path
 
     if incidents:
         inc_path = out_dir / "k02_incidents.json"
