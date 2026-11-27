@@ -101,58 +101,6 @@ def inject_drafts(application, project_id, root_id, drafts):
     return all_ok, bindings
 
 
-def _parse_content_json(tool_result):
-    body = (tool_result or {}).get('content') if (tool_result or {}).get('content') is not None else (tool_result or {}).get('result')
-    if isinstance(body, dict):
-        return body
-    if isinstance(body, str):
-        text = body.strip()
-        while text.startswith('[') and '\n' in text:
-            text = text.split('\n', 1)[1].strip()
-        if text.startswith('{'):
-            try:
-                val = json.loads(text)
-                return val if isinstance(val, dict) else {}
-            except ValueError:
-                return {}
-    return {}
-
-
-def await_running_handle(application, session_id, cmd_result, *, send_calls, max_polls=3, timeout_ms=120000):
-    """Await a state=='running' command handle via supported wait + command_output consumer tools."""
-    payload = _parse_content_json(cmd_result)
-    state = payload.get('state') or (cmd_result or {}).get('outcome')
-    if state != 'running':
-        return None
-    handle = payload.get('handle') or payload.get('job_handle') or ((cmd_result or {}).get('data') or {}).get('handle') or (cmd_result or {}).get('handle') or ''
-    if not handle:
-        return {'awaited': False, 'handle': '', 'terminal': False, 'gap': 'running_command_without_handle', 'wait_call_ids': [], 'output_call_ids': [], 'final_output': {}}
-    wait_ids, out_ids, final_out, terminal, gap = [], [], {}, False, None
-    for _ in range(max_polls):
-        w_cid, w_res = send_calls(application, session_id, [{
-            'name': 'wait',
-            'args': {'until_complete': True, 'timeout_ms': timeout_ms, 'conditions': [{'kind': 'process_done', 'handles': [handle]}], 'reason': 'Await running command handle completion'},
-        }])[0]
-        wait_ids.append(w_cid)
-        w_pay = _parse_content_json(w_res)
-        if (w_res or {}).get('outcome') == 'rejected':
-            gap = 'command_wait_rejected'
-            break
-        timed_out = bool(w_pay.get('timed_out') is True or w_pay.get('outcome') in {'timeout', 'timed_out'})
-        o_cid, o_res = send_calls(application, session_id, [{'name': 'command_output', 'args': {'handle': handle, 'cursor': 0}}])[0]
-        out_ids.append(o_cid)
-        final_out = _parse_content_json(o_res)
-        out_state = final_out.get('state')
-        if out_state in {'completed', 'failed', 'rejected', 'interrupted', 'cancelled'} or final_out.get('running') is False or isinstance(final_out.get('status'), int) or isinstance(final_out.get('exit_code'), int):
-            terminal = True
-            break
-        if timed_out:
-            gap = 'command_wait_timeout'
-    if not terminal and gap is None:
-        gap = 'unresolved_command_handle'
-    return {'awaited': True, 'handle': handle, 'terminal': terminal, 'gap': gap, 'wait_call_ids': wait_ids, 'output_call_ids': out_ids, 'final_output': final_out}
-
-
 def inspect_engine_provenance(root=ROOT, engine_bin=None, evaluator_git_head='', evaluator_git_tree='', engine_manifest=None):
     """Bind the engine executable and build/source identity independently from the evaluator checkout."""
     binary, build_source = resolve_engine_binary(root, engine_bin)

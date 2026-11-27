@@ -15,8 +15,9 @@ from capture_storage import checkpoint_closed_store
 from portable_command.artifacts import project_hashes
 from portable_command.contracts import DIRECTORY, ROOT, load_suite, materialize
 from portable_command.grading import grade_case
+from portable_command.handle_await import await_running_handle
 from portable_command.observe import build_observation, file_sha256, source_identity
-from portable_command.provenance import await_running_handle, materialize_helpers
+from portable_command.provenance import materialize_helpers
 from portable_command.reporting import inject_drafts, make_app_factory
 from progress import save
 
@@ -269,7 +270,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
         ('profile_binding_mismatch', bool(eff_posture) and eff_posture != session_surface['requested_posture']),
         ('uninjected_drafts', bool(case['setup'].get('drafts')) and not drafts_ok),
         ('uninjected_host_facts', bool(case['setup'].get('host_facts'))),
-    ) if cond] + [rec['handle_await']['gap'] for rec in turn_records if (rec.get('handle_await') or {}).get('gap')]
+    ) if cond] + [g for rec in turn_records for g in ((rec.get('handle_await') or {}).get('gaps') or ())]
 
     try:
         checkpoint_closed_store(app_dir / 'store.db', application.process)
