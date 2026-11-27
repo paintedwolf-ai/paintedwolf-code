@@ -2,6 +2,7 @@ package enumclosure
 
 import (
 	"go/ast"
+	"go/types"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/sourcefeed"
@@ -54,7 +55,7 @@ func emitDoorAnchors() []invariants.Anchor {
 
 func checkEmitDoors(r *invariants.Run) {
 	declared := stringEnumValues(r, sourcefeedDir, "EmitDoor")
-	sourcefeedPkg := r.Go().Pkg(sourcefeedDir)
+	feed := r.TypedPackage(sourcefeedDir).Types
 	seen := map[emitSite]bool{}
 	var registered []string
 	for _, door := range sortedKeys(emitterSites) {
@@ -66,8 +67,12 @@ func checkEmitDoors(r *invariants.Run) {
 			fn := decl.Node.(*ast.FuncDecl)
 			found, checked := seen[site]
 			if !checked {
-				decl.File.Calls(fn.Body, func(_ *ast.CallExpr, pkg, name string) {
-					found = found || pkg == sourcefeedPkg && name == site.call
+				info := r.TypedPackage(site.dir).Info
+				target := feed.Scope().Lookup(site.call)
+				decl.File.Calls(fn.Body, func(call *ast.CallExpr, _, _ string) {
+					if target != nil && calledObject(info, call) == target {
+						found = true
+					}
 				})
 				seen[site] = found
 			}
@@ -83,4 +88,15 @@ func checkEmitDoors(r *invariants.Run) {
 		}
 	}
 	r.Diff("declared source-feed doors vs registered emit sites", sortedKeys(declared), registered)
+}
+
+func calledObject(info *types.Info, call *ast.CallExpr) types.Object {
+	switch callee := ast.Unparen(call.Fun).(type) {
+	case *ast.Ident:
+		return info.Uses[callee]
+	case *ast.SelectorExpr:
+		return info.Uses[callee.Sel]
+	default:
+		return nil
+	}
 }

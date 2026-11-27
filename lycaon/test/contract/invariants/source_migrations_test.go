@@ -105,6 +105,9 @@ func commitAgentMutationWithoutStore() { feed.Emit() }
 		editor: strings.Replace(files[editor], "feed.EmitTx()", "_ = feed.EmitTx", 1),
 	})), check), violates, 1)
 	expect(t, invariants.Evaluate(fixture(t, with(files, map[string]string{
+		editor: strings.Replace(files[editor], "feed.EmitTx()", "_ = feed.EmitTx; feed := struct{ EmitTx func() }{}; feed.EmitTx()", 1),
+	})), check), violates, 1)
+	expect(t, invariants.Evaluate(fixture(t, with(files, map[string]string{
 		sourcefeed: files[sourcefeed] + "\nconst Unregistered = EmitDoor(\"unnamed\")\n",
 	})), check), violates, 2)
 }

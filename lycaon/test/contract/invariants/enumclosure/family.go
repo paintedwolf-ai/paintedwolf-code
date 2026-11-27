@@ -38,9 +38,9 @@ func consts(r *invariants.Run, dir string, keep func(*types.Const) bool) map[str
 // stringEnumValues returns named string constants of the declared type, keyed
 // by value. A second name for an existing value must be an explicit policy choice.
 func stringEnumValues(r *invariants.Run, dir, typeName string) map[string]string {
-	named := r.TypedPackage(dir).Types.Scope().Lookup(typeName)
-	if named == nil {
-		r.Fatalf("%s.%s is absent from the typed package", dir, typeName)
+	named, ok := r.TypedPackage(dir).Types.Scope().Lookup(typeName).(*types.TypeName)
+	if !ok {
+		r.Fatalf("%s.%s is not a type in the typed package", dir, typeName)
 	}
 	selected := consts(r, dir, func(c *types.Const) bool {
 		return types.Identical(c.Type(), named.Type())
