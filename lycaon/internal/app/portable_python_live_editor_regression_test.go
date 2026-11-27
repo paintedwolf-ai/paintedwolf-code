@@ -130,6 +130,11 @@ func TestPortablePythonLiveEditorSubdirectoryAndExistingFileEdit(t *testing.T) {
 		return resp
 	}
 
+	// Sanity-check direct OpenDocument call for before/uv.lock to surface any editor error clearly.
+	if doc, ok, docErr := (editorDocumentsAdapter{service: appInst.Server.Sources.Workspace.Watch.EditorDocuments}).OpenDocument(ctx, proj.ID, sourcebranch.Trunk, rootID, "before/uv.lock"); docErr != nil {
+		t.Fatalf("direct OpenDocument(before/uv.lock) failed: ok=%v doc=%+v err=%v", ok, doc, docErr)
+	}
+
 	// 1. Subdirectory stat, glob, and nested file reads must succeed without EISDIR.
 	resp1 := runPy("call-subdirs", `
 import glob, os
