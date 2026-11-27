@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -158,7 +159,7 @@ func verifyManagedTempEntry(entry managedTempEntry) error {
 	if err != nil || !lstatInfo.Mode().IsRegular() || !os.SameFile(entry.info, lstatInfo) {
 		return conflict("managed temporary input physical identity changed before launch")
 	}
-	f, err := os.Open(entry.abs)
+	f, err := fseffect.OpenRead(fseffect.Location{Root: filepath.Dir(entry.abs), Rel: filepath.Base(entry.abs)})
 	if err != nil {
 		return conflict("managed temporary input unavailable at launch")
 	}
