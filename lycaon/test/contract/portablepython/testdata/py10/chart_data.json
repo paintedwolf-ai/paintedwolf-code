@@ -1,0 +1,29 @@
+{
+  "title": "Quarterly Throughput",
+  "categories": [
+    "Q1",
+    "Q2",
+    "Q3",
+    "Q4"
+  ],
+  "series": [
+    {
+      "name": "Native AOT",
+      "values": [
+        120,
+        145,
+        160,
+        190
+      ]
+    },
+    {
+      "name": "Baseline",
+      "values": [
+        30,
+        32,
+        35,
+        38
+      ]
+    }
+  ]
+}

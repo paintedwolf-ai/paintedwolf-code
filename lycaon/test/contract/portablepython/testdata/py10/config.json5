@@ -1,0 +1,13 @@
+// PY10 JSON5 configuration fixture
+{
+  /* block comment */
+  service_url: "https://api.example.org/v1//items",
+  literal_comment: "// not a comment",
+  block_literal: "/* also not a comment */",
+  retries: 3,
+  enabled: true,
+  tags: [
+    "alpha",
+    "beta", // trailing comma below
+  ],
+}
