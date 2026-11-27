@@ -491,6 +491,18 @@ func newIndexWriter(ctx context.Context, tx *sql.Tx) (*indexWriter, error) {
 	}
 	return &indexWriter{put: put}, nil
 }
+func newObservedIndexWriter(ctx context.Context, tx *sql.Tx) (*indexWriter, error) {
+	put, err := tx.PrepareContext(ctx, `INSERT INTO nodes
+ (path,search_path,search_name,parent,name,depth,is_dir,symlink,regular,hidden,size,mode,modified,refused,indexed,agent_metadata,first_listed)
+ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(path) DO UPDATE SET
+ is_dir=excluded.is_dir,symlink=excluded.symlink,regular=excluded.regular,hidden=excluded.hidden,
+ size=excluded.size,mode=excluded.mode,modified=excluded.modified,refused=excluded.refused,indexed=excluded.indexed,
+ first_listed=excluded.first_listed`)
+	if err != nil {
+		return nil, err
+	}
+	return &indexWriter{put: put}, nil
+}
 func (w *indexWriter) close() {
 	if w != nil {
 		_ = w.put.Close()
@@ -499,6 +511,11 @@ func (w *indexWriter) close() {
 func (w *indexWriter) write(ctx context.Context, n indexNode) error {
 	_, err := w.put.ExecContext(ctx, n.path, strings.ToLower(n.path), strings.ToLower(n.name), n.parent, n.name,
 		n.depth, n.isDir, n.isSymlink, n.regular, n.hidden, n.size, n.mode, n.modified.UnixNano(), string(n.refused), !skippedIndexPath(n.path), agentMetadataPath(n.path))
+	return err
+}
+func (w *indexWriter) writeObserved(ctx context.Context, n indexNode, firstListed int64) error {
+	_, err := w.put.ExecContext(ctx, n.path, strings.ToLower(n.path), strings.ToLower(n.name), n.parent, n.name,
+		n.depth, n.isDir, n.isSymlink, n.regular, n.hidden, n.size, n.mode, n.modified.UnixNano(), string(n.refused), !skippedIndexPath(n.path), agentMetadataPath(n.path), firstListed)
 	return err
 }
 

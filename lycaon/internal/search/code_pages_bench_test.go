@@ -63,11 +63,24 @@ func BenchmarkPagedCodeSearch(b *testing.B) {
 				if runErr != nil {
 					b.Fatalf("search: %v", runErr)
 				}
+				if mode.warm {
+					if report.Code.IndexWarmingRoots != 0 || report.Code.WarmingRoots != 0 {
+						b.Fatalf("warm search still warming: index_warming=%d warming=%d", report.Code.IndexWarmingRoots, report.Code.WarmingRoots)
+					}
+					if report.TimedOut {
+						b.Fatalf("warm search timed out: hits=%d opened=%d", len(report.Hits), report.Code.FilesOpened)
+					}
+				}
 				b.ReportMetric(float64(len(report.Hits)), "hits/op")
 				b.ReportMetric(float64(report.Code.FilesOpened), "opened/op")
 				if report.TimedOut {
 					b.ReportMetric(1, "timed_out/op")
 				}
+			}
+			if mode.warm {
+				stats := catalog.Literals.PreparationStats()
+				b.ReportMetric(float64(stats.Builds), "content_builds")
+				b.ReportMetric(float64(stats.FilesRead), "content_files_read")
 			}
 			b.ReportMetric(discovery.Seconds()*1000, "cold_discovery_ms")
 			b.ReportMetric(float64(files), "catalog_files")
@@ -80,16 +93,27 @@ func waitBenchmarkCodeIndex(b *testing.B, executor *CodeExecutor, root CodeRoot,
 	b.Helper()
 	ctx, cancel := context.WithTimeout(b.Context(), 5*time.Minute)
 	defer cancel()
+	started := time.Now()
+	polls := 0
 	for {
+		polls++
 		report, err := executor.Run(ctx, PlanLeg{Code: &CodePlanLeg{Query: TextExpr{Text: "sql"}, PathRoots: []CodeRoot{root}, Lines: true, Cap: 17, Budget: BudgetInteractive, LineExcludeDirs: excludes}})
 		if err != nil {
 			b.Fatalf("prepare content observations: %v", err)
 		}
 		if report.Code.IndexWarmingRoots == 0 && report.Code.WarmingRoots == 0 {
+			stats := executor.catalog.Literals.PreparationStats()
+			b.Logf("warm preparation: elapsed=%s polls=%d content_builds=%d content_files_read=%d",
+				time.Since(started), polls, stats.Builds, stats.FilesRead)
+			if stats.Builds != 1 {
+				b.Fatalf("content preparation repeated: builds=%d files_read=%d", stats.Builds, stats.FilesRead)
+			}
 			return
 		}
 		if ctx.Err() != nil {
-			b.Fatalf("content preparation: %v", ctx.Err())
+			stats := executor.catalog.Literals.PreparationStats()
+			b.Fatalf("content preparation: %v (polls=%d index_warming=%d warming=%d builds=%d files_read=%d)",
+				ctx.Err(), polls, report.Code.IndexWarmingRoots, report.Code.WarmingRoots, stats.Builds, stats.FilesRead)
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
