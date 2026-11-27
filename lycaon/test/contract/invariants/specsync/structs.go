@@ -48,8 +48,10 @@ func structCatalog(r *invariants.Run) wirespec.StructCatalogResult {
 func wireStructsMatch(r *invariants.Run) {
 	catalog := structCatalog(r)
 	r.Expect(len(catalog.Specs), "wire structs in pkg/api")
+	denTypesText := r.Text(denTypesPath)
+	sDoc := spec(r)
 	for _, s := range catalog.Specs {
-		if err := wirespec.SyncWireStructFields(spec(r), r.Text(denTypesPath), s); err != nil {
+		if err := wirespec.SyncWireStructFields(sDoc, denTypesText, s); err != nil {
 			r.Report("%v", err)
 		}
 	}
