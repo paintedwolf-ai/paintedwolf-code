@@ -432,22 +432,28 @@ def seed_worker_branch_in_db(
         branch_root.mkdir(parents=True, exist_ok=True)
         meta_dir = Path(str(branch_root) + ".meta")
         meta_dir.mkdir(parents=True, exist_ok=True)
+        effective_roots = roots_meta or [
+            {
+                "id": primary_root_id,
+                "path": str(primary_root_path.resolve()),
+                "label": primary_root_path.name,
+                "is_primary": True,
+            }
+        ]
         meta_payload = {
             "format_version": 1,
-            "roots": roots_meta
-            or [
-                {
-                    "id": primary_root_id,
-                    "path": str(primary_root_path.resolve()),
-                    "label": primary_root_path.name,
-                    "is_primary": True,
-                }
-            ],
+            "roots": effective_roots,
             "snapshot_complete": True,
         }
         (meta_dir / "state.json").write_text(json.dumps(meta_payload, indent=2) + "\n", encoding="utf-8")
+        single_root = len(effective_roots) == 1
+        # Ensure every recorded root directory exists for multi-root layouts (matching workspace.branchRootPaths).
+        if not single_root:
+            for rmeta in effective_roots:
+                rid_str = str(rmeta["id"])
+                (branch_root / branch_dir_for_root_id(rid_str)).mkdir(parents=True, exist_ok=True)
         for rid, files in (branch_files_by_root or {}).items():
-            root_sub = branch_root / branch_dir_for_root_id(rid)
+            root_sub = branch_root if single_root else (branch_root / branch_dir_for_root_id(rid))
             root_sub.mkdir(parents=True, exist_ok=True)
             for rel_file, data in files.items():
                 dest = root_sub / rel_file

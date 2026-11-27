@@ -201,43 +201,84 @@ def _verify_k06_scenario(
         )
 
     # 2. Verify root IDs in search hits & export
-    search_resp = client.driver.search_raw(search_token, origin_project_id=project_id, case_sensitive=True, limit=200)
-    hit_root_ids = {
-        str(h.get("root_id") or "")
-        for h in (search_resp.get("hits") or [])
-        if isinstance(h, dict) and h.get("root_id")
-    }
-    if not hit_root_ids.issubset(set(initial_ids)):
+    search_http = client.raw_call(
+        "POST",
+        "/v1/search",
+        {
+            "query": search_token,
+            "origin_project_id": project_id,
+            "case_sensitive": True,
+            "regex": False,
+            "whole_word": False,
+            "limit": 200,
+        },
+    )
+    hit_root_ids: set[str] = set()
+    if search_http.status != 200 or not isinstance(search_http.json_body, dict):
         defects.append(
             {
-                "code": "search_hit_unknown_root_id",
-                "expected_subset_of": sorted(initial_ids),
-                "actual": sorted(hit_root_ids),
+                "code": "search_http_error",
+                "status": search_http.status,
+                "body": search_http.body_text[:400],
             }
         )
-    if not hit_root_ids:
-        defects.append({"code": "search_hits_empty", "token": search_token})
+    else:
+        hit_root_ids = {
+            str(h.get("root_id") or "")
+            for h in (search_http.json_body.get("hits") or [])
+            if isinstance(h, dict) and h.get("root_id")
+        }
+        if not hit_root_ids.issubset(set(initial_ids)):
+            defects.append(
+                {
+                    "code": "search_hit_unknown_root_id",
+                    "expected_subset_of": sorted(initial_ids),
+                    "actual": sorted(hit_root_ids),
+                }
+            )
+        if not hit_root_ids:
+            defects.append({"code": "search_hits_empty", "token": search_token})
 
-    export_text, _ = client.driver.export_search(search_token, fmt="jsonl", origin_project_id=project_id, case_sensitive=True)
+    export_http = client.raw_call(
+        "POST",
+        "/v1/search/export",
+        {
+            "query": search_token,
+            "format": "jsonl",
+            "origin_project_id": project_id,
+            "case_sensitive": True,
+            "regex": False,
+            "whole_word": False,
+        },
+    )
     export_root_ids: set[str] = set()
-    for line in export_text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(row, dict) and row.get("root_id"):
-            export_root_ids.add(str(row["root_id"]))
-    if export_root_ids and not export_root_ids.issubset(set(initial_ids)):
+    if export_http.status != 200:
         defects.append(
             {
-                "code": "export_unknown_root_id",
-                "expected_subset_of": sorted(initial_ids),
-                "actual": sorted(export_root_ids),
+                "code": "export_http_error",
+                "status": export_http.status,
+                "body": export_http.body_text[:400],
             }
         )
+    else:
+        for line in export_http.body_text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(row, dict) and row.get("root_id"):
+                export_root_ids.add(str(row["root_id"]))
+        if export_root_ids and not export_root_ids.issubset(set(initial_ids)):
+            defects.append(
+                {
+                    "code": "export_unknown_root_id",
+                    "expected_subset_of": sorted(initial_ids),
+                    "actual": sorted(export_root_ids),
+                }
+            )
 
     # 3. File activation (GET /v1/projects/{id}/source) per root — verify root_id and content SHA-256
     for idx, (_, rpath, expected_bytes) in enumerate(root_dirs):
