@@ -17,10 +17,18 @@ import (
 
 type i18CountingDispatch struct {
 	commandprogram.Dispatch
-	dispatches atomic.Int64
-	afterLimit atomic.Int64
+	dispatches *atomic.Int64
+	afterLimit *atomic.Int64
 	blockArg   string
 	started    chan struct{}
+}
+
+func newI18CountingDispatch(base commandprogram.Dispatch) *i18CountingDispatch {
+	return &i18CountingDispatch{
+		Dispatch:   base,
+		dispatches: &atomic.Int64{},
+		afterLimit: &atomic.Int64{},
+	}
 }
 
 func (d *i18CountingDispatch) Invoke(ctx context.Context, req commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
@@ -41,7 +49,13 @@ func (d *i18CountingDispatch) Fork(ctx context.Context) (commandprogram.Dispatch
 	if err != nil {
 		return nil, nil, err
 	}
-	return &i18CountingDispatch{Dispatch: child}, release, nil
+	return &i18CountingDispatch{
+		Dispatch:   child,
+		dispatches: d.dispatches,
+		afterLimit: d.afterLimit,
+		blockArg:   d.blockArg,
+		started:    d.started,
+	}, release, nil
 }
 
 type i18FilteredGlobFiles struct {
@@ -100,7 +114,7 @@ func TestBB10I18BoundedWorkChargeAndRelease(t *testing.T) {
 			}
 			activeMemory = mem
 			ports.Memory = mem
-			spy = &i18CountingDispatch{Dispatch: ports.Dispatch}
+			spy = newI18CountingDispatch(ports.Dispatch)
 			ports.Dispatch = spy
 			return commandprogram.Evaluate(ctx, plan, ports)
 		}
@@ -172,7 +186,7 @@ func TestBB10I18BoundedWorkChargeAndRelease(t *testing.T) {
 			if globFiles != nil {
 				ports.Files = globFiles
 			}
-			spy = &i18CountingDispatch{Dispatch: ports.Dispatch}
+			spy = newI18CountingDispatch(ports.Dispatch)
 			ports.Dispatch = spy
 			return commandprogram.Evaluate(ctx, plan, ports)
 		}
@@ -237,7 +251,10 @@ func TestBB10I18BoundedWorkChargeAndRelease(t *testing.T) {
 			activeMemory = mem
 			ports.Memory = mem
 			if blocking {
-				ports.Dispatch = &i18CountingDispatch{Dispatch: ports.Dispatch, blockArg: "hold", started: started}
+				d := newI18CountingDispatch(ports.Dispatch)
+				d.blockArg = "hold"
+				d.started = started
+				ports.Dispatch = d
 			}
 			return commandprogram.Evaluate(ctx, plan, ports)
 		}
