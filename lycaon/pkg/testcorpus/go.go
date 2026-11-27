@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -113,4 +114,40 @@ func (c *GoCorpus) Select(keep func(GoFile) bool) []GoFile {
 		}
 	}
 	return out
+}
+
+// Sub returns a lightweight view of c rooted at subRoot, reusing c's FileSet,
+// parsed ASTs, and file bytes without re-parsing.
+func (c *GoCorpus) Sub(subRoot string) (*GoCorpus, error) {
+	abs, err := filepath.Abs(subRoot)
+	if err != nil {
+		return nil, fmt.Errorf("resolve corpus sub-root: %w", err)
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return nil, fmt.Errorf("stat corpus sub-root: %w", err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("corpus sub-root is not a directory: %s", abs)
+	}
+	rel, err := filepath.Rel(c.Root, abs)
+	if err != nil {
+		return nil, fmt.Errorf("relativize corpus sub-root %s: %w", abs, err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil, fmt.Errorf("corpus sub-root %s is outside %s", abs, c.Root)
+	}
+	if rel == "." {
+		return c, nil
+	}
+	prefix := filepath.ToSlash(rel) + "/"
+	sub := &GoCorpus{Root: abs, Fset: c.Fset}
+	for _, file := range c.files {
+		if trimmed, ok := strings.CutPrefix(file.Rel, prefix); ok {
+			f := file
+			f.Rel = trimmed
+			sub.files = append(sub.files, f)
+		}
+	}
+	return sub, nil
 }
