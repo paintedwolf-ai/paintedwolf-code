@@ -149,6 +149,26 @@ def worker_name(result):
     return match.group(1) if match else ''
 
 
+def worker_name_for_job(application, job, fallback=''):
+    if fallback:
+        return fallback
+    with contextlib.closing(sqlite3.connect(application.directory / 'store.db')) as db:
+        row = db.execute(
+            'SELECT w.name FROM workers w JOIN worker_jobs j ON w.child_session_id = j.child_session_id WHERE j.id = ? LIMIT 1',
+            (job,),
+        ).fetchone()
+    return row[0] if row and row[0] else job
+
+
+def result_handle_for_job(application, job):
+    with contextlib.closing(sqlite3.connect(application.directory / 'store.db')) as db:
+        row = db.execute(
+            'SELECT id FROM worker_results WHERE worker_job_id = ? ORDER BY rowid DESC LIMIT 1',
+            (job,),
+        ).fetchone()
+    return row[0] if row and row[0] else job
+
+
 def job_id(result, application=None, seen=None):
     job = (result.get('dispatch') or {}).get('job_id')
     if not job and application is not None:
@@ -224,7 +244,7 @@ def intended_dispatches(application, session, project, dispatches, existing=None
             if stage['kind'] == 'needs_decision':
                 settled(application, session, job, {'held'})
                 option = operation['decisions'][script['label']]['option']
-                wname = workers.get(script['label']) or job
+                wname = worker_name_for_job(application, job, workers.get(script['label'], ''))
                 invoke(application, session, 'answer_decision', {'worker': wname, 'answer': option})
                 invoke(application, session, 'wait', {'timeout_ms': 30000, 'conditions': [{'kind': 'next_worker_done'}]})
                 row = settled(application, session, job, {'complete'})
@@ -235,7 +255,7 @@ def intended_dispatches(application, session, project, dispatches, existing=None
             if script['mode'] == 'write':
                 if row['merge_status'] != 'pending':
                     raise RuntimeError('write leg did not leave a pending overlay: ' + json.dumps(row))
-                invoke(application, session, 'promote_overlay', {'overlay_id': job})
+                invoke(application, session, 'promote_overlay', {'overlay_id': result_handle_for_job(application, job)})
                 for path, body in expected.items():
                     if (project / path).read_text() != body:
                         raise RuntimeError('promoted dispatch differs: ' + path)
@@ -324,17 +344,18 @@ def swapped_decisions(application, spec, operation):
     application.request(f'/v1/sessions/{session}/prompts', {'operation_id':str(uuid.uuid4()),'text':spec['prompt']})
     invoke(application,session,'update_progress',{'content':'## Progress\n'+''.join('- [ ] '+d['label']+'\n' for d in dispatches)})
     results = respond(application,session,[dispatch_call(d) for d in dispatches])
-    for index, result in enumerate(results):
-        job = job_id(result)
+    seen_jobs = set()
+    jobs = [job_id(r, application, seen_jobs) for r in results]
+    for index, (result, job) in enumerate(zip(results, jobs)):
         settled(application,session,job,{'held'})
         choice = choices[(index+1) % len(choices)]
-        invoke(application,session,'answer_decision',{'job_id':job,'option':choice})
+        wname = worker_name_for_job(application, job, worker_name(result))
+        invoke(application,session,'answer_decision',{'worker':wname,'answer':choice})
     invoke(application,session,'wait',{'timeout_ms':30000,'conditions':[{'kind':'all_workers_idle'}]})
-    for result in results:
-        job = job_id(result)
+    for job in jobs:
         row = settled(application,session,job,{'complete','failed'})
         if row['merge_status'] == 'pending':
-            invoke(application,session,'reject_overlay',{'overlay_id':job})
+            invoke(application,session,'reject_overlay',{'overlay_id':result_handle_for_job(application, job)})
     invoke(application,session,'update_progress',{'content':'## Progress\n'+''.join('- [~] '+d['label']+'\n' for d in dispatches)})
     finish(application,session,'The requested reports are unfinished.')
     application.flows.append({'id':spec['id'],'kind':'shortcut','control':'swapped-worker-decisions',
