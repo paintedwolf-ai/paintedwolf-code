@@ -109,21 +109,21 @@ func TestPY13NumericQualification(t *testing.T) {
 		GOOS                 string  `json:"goos"`
 		GOARCH               string  `json:"goarch"`
 		EngineTag            string  `json:"engine_tag"`
-		ImageID              string  `json:"image_id"`
+		CPythonWasmSHA256    string  `json:"cpython_wasm_sha256"`
 		NumPyImportMS        float64 `json:"numpy_import_ms"`
-		NumPyPeakMemBytes    uint64  `json:"numpy_peak_memory_bytes"`
+		NumPyPeakMemPages    uint32  `json:"numpy_peak_memory_pages"`
 		PandasImportMS       float64 `json:"pandas_import_ms"`
-		PandasPeakMemBytes   uint64  `json:"pandas_peak_memory_bytes"`
+		PandasPeakMemPages   uint32  `json:"pandas_peak_memory_pages"`
 		KernelCancelMS       float64 `json:"kernel_cancel_ms"`
 		KernelFuelExhausted  bool    `json:"kernel_fuel_exhausted"`
 		FreshRecoveryOK      bool    `json:"fresh_recovery_ok"`
 		StalePairRefusedBoth bool    `json:"stale_pair_refused_both"`
 	}
 	summary := qualSummary{
-		GOOS:      runtime.GOOS,
-		GOARCH:    runtime.GOARCH,
-		EngineTag: info.NativeEngine.EngineTag,
-		ImageID:   info.ImageID,
+		GOOS:              runtime.GOOS,
+		GOARCH:            runtime.GOARCH,
+		EngineTag:         info.NativeEngine.EngineTag,
+		CPythonWasmSHA256: info.NativeEngine.CPythonWasmSHA256,
 	}
 
 	t.Run("01_numpy_broadcast_slice_matmul", func(t *testing.T) {
@@ -175,9 +175,9 @@ print(json.dumps({"numpy_version": np.__version__, "import_ms": round(imp_ms, 2)
 			t.Fatalf("numpy_version=%q want 1.26.4", out.NumPyVersion)
 		}
 		summary.NumPyImportMS = out.ImportMS
-		summary.NumPyPeakMemBytes = resp.Usage.PeakMemoryBytes
-		t.Logf("numpy 1.26.4 import=%.2fms wall=%dms peak_mem=%d work=%d",
-			out.ImportMS, resp.Usage.WallTimeMs, resp.Usage.PeakMemoryBytes, resp.Usage.GuestWorkUsed)
+		summary.NumPyPeakMemPages = resp.Usage.PeakMemoryPages
+		t.Logf("numpy 1.26.4 import=%.2fms wall=%dms peak_pages=%d work=%d",
+			out.ImportMS, resp.Usage.Duration.Milliseconds(), resp.Usage.PeakMemoryPages, resp.Usage.GuestWork)
 	})
 
 	t.Run("02_pandas_csv_join_groupby_sqlite_workspace_receipts", func(t *testing.T) {
@@ -315,9 +315,9 @@ print(json.dumps({"pandas_version": pd.__version__, "import_ms": round(imp_ms, 2
 			t.Fatalf("expected file audit receipts in %s, got 0", receiptDir)
 		}
 		summary.PandasImportMS = out.ImportMS
-		summary.PandasPeakMemBytes = resp.Usage.PeakMemoryBytes
-		t.Logf("pandas 2.2.3 import=%.2fms wall=%dms peak_mem=%d work=%d receipts=%d",
-			out.ImportMS, resp.Usage.WallTimeMs, resp.Usage.PeakMemoryBytes, resp.Usage.GuestWorkUsed, len(receiptFiles))
+		summary.PandasPeakMemPages = resp.Usage.PeakMemoryPages
+		t.Logf("pandas 2.2.3 import=%.2fms wall=%dms peak_pages=%d work=%d receipts=%d",
+			out.ImportMS, resp.Usage.Duration.Milliseconds(), resp.Usage.PeakMemoryPages, resp.Usage.GuestWork, len(receiptFiles))
 	})
 
 	t.Run("03_kernel_cancel_fuel_and_fresh_recovery", func(t *testing.T) {
@@ -369,7 +369,7 @@ while True:
 			RawArgs:      map[string]any{"code": kernelCode},
 			Roots:        roots,
 			MutationDoor: native.NewPythonMutationDoor(tools.ToolContext{}, roots),
-			ResourceLimits: &pythonruntime.ResourceLimits{
+			Limits: pythonruntime.ResourceLimits{
 				MaxGuestWork: 50_000_000,
 			},
 		})
@@ -389,7 +389,7 @@ while True:
 		}
 		summary.FreshRecoveryOK = true
 		t.Logf("kernel cancel=%dms (reason=%s), fuel_exhausted work=%d, fresh recovery OK",
-			elapsedCancel.Milliseconds(), respCancel.Stop.Reason, respFuel.Usage.GuestWorkUsed)
+			elapsedCancel.Milliseconds(), respCancel.Stop.Reason, respFuel.Usage.GuestWork)
 	})
 
 	t.Run("04_stale_pair_refusal", func(t *testing.T) {
