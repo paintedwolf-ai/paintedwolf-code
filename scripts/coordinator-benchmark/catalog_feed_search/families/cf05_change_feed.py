@@ -738,8 +738,8 @@ def run_f05_instance(
                     _git(root_dir, "checkout", target)
                     executed_moves += 1
                 elif move == "commit":
-                    (root_dir / "app.txt").write_bytes(f"commit step {step_idx}\n".encode("utf-8"))
-                    _git(root_dir, "add", "app.txt")
+                    (root_dir / "commit_log.txt").write_bytes(f"commit step {step_idx}\n".encode("utf-8"))
+                    _git(root_dir, "add", "commit_log.txt")
                     _git(root_dir, "commit", "-m", f"commit step {step_idx}")
                     executed_moves += 1
                 elif move == "empty_commit":
