@@ -109,6 +109,10 @@ func (p progressFacts) ProgramProgressState(ctx context.Context, id string) (pro
 	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: p.store.Get(ctx, id)}, nil
 }
 
+func (p progressFacts) ProgramProgressStore() progress.Store { return p.store }
+
+func (p progressFacts) ProgramProgressReconciler() progress.Reconciler { return nil }
+
 // New composes the entry. Structured tools exist only as owner identities.
 func New(t testing.TB, options Options) *Fixture {
 	t.Helper()
@@ -205,6 +209,12 @@ func (f *Fixture) AttachLedger(t testing.TB, timing sourceledger.Timing) *source
 
 // SetProgress changes the session checklist observed by reached command writes.
 func (f *Fixture) SetProgress(content string) error { return f.progress.Set(f.Session, content) }
+
+// Progress returns the session's current checklist content.
+func (f *Fixture) Progress(ctx context.Context) string { return f.progress.Get(ctx, f.Session) }
+
+// ProgressStore returns the fixture's backing progress store.
+func (f *Fixture) ProgressStore() progress.Store { return f.progress }
 
 // Call opens a real model receipt for one command call and runs the entry.
 func (f *Fixture) Call(t testing.TB, ctx context.Context, source string) (string, error) {

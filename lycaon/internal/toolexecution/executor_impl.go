@@ -210,14 +210,14 @@ func hasCommandCaptureFlag(args map[string]any, key string) bool {
 
 func validateCommandCaptureArgs(args map[string]any) *toolrejection.ToolReject {
 	if hasCommandCaptureFlag(args, "terminal_capture") {
-		for _, key := range []string{"snapshot_capture", "pipeline", "stdin", "stdin_from", "stdout_to", "stderr_to", "background"} {
+		for _, key := range []string{"snapshot_capture", "progress_update", "pipeline", "stdin", "stdin_from", "stdout_to", "stderr_to", "background"} {
 			if hasCommandCaptureFlag(args, key) {
 				return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "terminal_capture_incompatible", "field": key})
 			}
 		}
 	}
 	if hasCommandCaptureFlag(args, "snapshot_capture") {
-		for _, key := range []string{"terminal_capture", "pipeline", "stdin", "stdin_from", "stdout_to", "stderr_to", "background"} {
+		for _, key := range []string{"terminal_capture", "progress_update", "pipeline", "stdin", "stdin_from", "stdout_to", "stderr_to", "background"} {
 			if hasCommandCaptureFlag(args, key) {
 				return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "snapshot_capture_incompatible", "field": key})
 			}

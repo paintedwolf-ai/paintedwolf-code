@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/briefinghost"
 	"github.com/lycaon/lycaon/internal/briefingstore"
 	"github.com/lycaon/lycaon/internal/filebriefing"
+	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -152,6 +153,8 @@ func (s *EngineRoutes) writeBriefingError(w http.ResponseWriter, r *http.Request
 		s.responses.Fail(w, wire.ApiErrorCodeBriefingTargetUnavailable, "This target cannot be explained now")
 	case errors.Is(err, store.ErrSessionNotFound):
 		s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "Session not found")
+	case errors.Is(err, invocation.ErrProgramNotFound):
+		s.responses.Fail(w, wire.ApiErrorCodeCommandProgramNotFound, "Command program not found")
 	case errors.Is(err, briefing.ErrBusy):
 		w.Header().Set("Retry-After", strconv.Itoa(busyRetrySeconds))
 		s.responses.Fail(w, wire.ApiErrorCodeBriefingBusy, "Too many briefings are waiting")

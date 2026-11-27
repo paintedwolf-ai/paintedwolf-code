@@ -1,6 +1,7 @@
 """Frozen portable-command inputs. Loading or preparing them never runs a program."""
 import base64
 import hashlib
+import os
 import pathlib
 from focused_outcomes import read_json
 
@@ -124,6 +125,10 @@ def validate_case(case):
         if (generator['kind'] != 'numbered-files' or type(generator['count']) is not int
                 or not 0 < generator['count'] <= 10001):
             raise ValueError('unbounded fixture generator')
+    for name, ts in setup.get('file_mtimes', {}).items():
+        fixture_path(name)
+        if name not in setup['files'] or type(ts) not in (int, float) or ts < 0:
+            raise ValueError('invalid fixture file_mtimes entry: ' + str(name))
 
 
 def validate_resources(profiles):
@@ -151,4 +156,7 @@ def materialize(case, directory):
         path = directory.joinpath(*fixture_path(name).parts)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(bytes_value(value))
+    for name, ts in case['setup'].get('file_mtimes', {}).items():
+        path = directory.joinpath(*fixture_path(name).parts)
+        os.utime(path, (ts, ts))
     return {name: digest(bytes_value(value)) for name, value in files.items()}
