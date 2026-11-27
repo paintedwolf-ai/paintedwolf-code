@@ -214,6 +214,60 @@ def _latest_version_id(db_path: pathlib.Path, rel_path: str, *, offset: int = 0)
     return ""
 
 
+def _extract_dispatcher_operation(
+    db_path: pathlib.Path,
+    *,
+    call_id: str,
+    dispatched_tool: str,
+    expected_operation: str,
+) -> dict[str, Any]:
+    """Query SQLite (`?mode=ro`) to record the actual compiled dispatcher operation(s) for `call_id`."""
+    dispatched_ops: list[str] = []
+    source_op_tool_name = ""
+    if db_path.is_file() and call_id:
+        with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+            tables = {
+                r[0]
+                for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+                ).fetchall()
+            }
+            if "invocation_program_executions" in tables and "invocation_programs" in tables:
+                rows = conn.execute(
+                    "SELECT DISTINCT e.operation_id "
+                    "FROM invocation_program_executions e "
+                    "JOIN invocation_programs p ON p.id = e.program_id "
+                    "WHERE p.tool_call_id = ? ORDER BY e.ordinal ASC",
+                    (call_id,),
+                ).fetchall()
+                dispatched_ops = [str(r[0]) for r in rows if r and r[0]]
+            if not dispatched_ops and "invocation_receipts" in tables:
+                r_row = conn.execute(
+                    "SELECT tool_name FROM invocation_receipts WHERE tool_call_id = ? LIMIT 1",
+                    (call_id,),
+                ).fetchone()
+                if r_row and r_row[0]:
+                    dispatched_ops = [str(r_row[0])]
+            if "source_operations" in tables:
+                s_row = conn.execute(
+                    "SELECT tool_name FROM source_operations WHERE tool_call_id = ? ORDER BY rowid DESC LIMIT 1",
+                    (call_id,),
+                ).fetchone()
+                if s_row and s_row[0]:
+                    source_op_tool_name = str(s_row[0])
+                    if not dispatched_ops:
+                        dispatched_ops = [source_op_tool_name]
+    if not dispatched_ops and dispatched_tool in {"code_rewrite", "restore_version"}:
+        dispatched_ops = [dispatched_tool]
+    return {
+        "call_id": call_id,
+        "dispatched_tool": dispatched_tool,
+        "expected_operation": expected_operation,
+        "dispatched_operations": dispatched_ops,
+        "source_operation_tool_name": source_op_tool_name,
+    }
+
+
 def _build_receipt(
     *,
     slot: dict[str, Any],
@@ -259,13 +313,21 @@ def _run_e01_slot(
     obs.capture_pre([rel_path])
     read_res: dict[str, Any] = {}
     write_res: dict[str, Any] = {}
+    write_call_id = ""
+    write_tool_name = route.tool_name
+    read_call_issued = False
+    inline_input_verified = False
+    same_response_batch_count = 0
+    same_response_ordering_verified = False
     restore_ver_id = ""
     disk_sha_before_write = sha256_bytes(target.read_bytes())
 
     try:
         prompt_text = f"Execute TB05 slot {slot['slot_id']} on {rel_path}."
         if read_form == "inline_input":
-            prompt_text += f"\nInline contents:\n{initial_bytes.decode('utf-8', errors='replace')}"
+            inline_text = initial_bytes.decode("utf-8", errors="replace")
+            prompt_text += f"\nInline contents:\n{inline_text}"
+            inline_input_verified = inline_text in prompt_text
         app.request(f"/v1/sessions/{session_id}/prompts", {"operation_id": str(uuid.uuid4()), "text": prompt_text})
         _send_tool_call(app, session_id, "update_progress", {"content": f"## Progress\n- [ ] {slot['slot_id']}\n"})
 
@@ -288,13 +350,18 @@ def _run_e01_slot(
         if read_form == "combined_same_response_unseen":
             # Read + write in ONE model response -> write cannot use text first seen in that response.
             w_tool, w_args = build_route_write_call(route)
+            write_tool_name = w_tool
             disk_sha_before_write = str(hash_file(target).get("sha256") or "")
             batch = _send_batch_tool_calls(app, session_id, [("command", {"command": f"cat {rel_path}"}), (w_tool, w_args)])
+            read_call_issued = True
+            same_response_batch_count = len(batch)
+            same_response_ordering_verified = len(batch) == 2 and batch[0][0] != batch[1][0]
             read_res = batch[0][1]
-            write_res = batch[1][1]
+            write_call_id, write_res = batch[1][0], batch[1][1]
         elif read_form == "combined_same_response_own_write":
             # First read in turn 1, then in turn 2 send two edits in ONE model response.
             _, read_res, _ = _send_tool_call(app, session_id, "command", {"command": f"cat {rel_path}"})
+            read_call_issued = True
             disk_sha_before_write = str(hash_file(target).get("sha256") or "")
             batch = _send_batch_tool_calls(
                 app,
@@ -304,17 +371,21 @@ def _run_e01_slot(
                     ("command", {"command": f'edit --path {rel_path} --old-string "STEP1" --new-string "BETA"'}),
                 ],
             )
-            write_res = batch[1][1]
+            same_response_batch_count = len(batch)
+            same_response_ordering_verified = len(batch) == 2 and batch[0][0] != batch[1][0]
+            write_call_id, write_res = batch[1][0], batch[1][1]
         else:
             read_call = build_read_call(read_form, rel_path)
             if read_call is not None:
+                read_call_issued = True
                 _, read_res, _ = _send_tool_call(app, session_id, read_call[0], read_call[1], checkpoint_policy="approve_chat")
             if read_form == "stale_disk":
                 # Mutate disk externally after the read so the read basis is stale.
                 target.write_bytes(initial_bytes.replace(b"beta", b"STALE_EXT"))
             disk_sha_before_write = str(hash_file(target).get("sha256") or "")
             w_tool, w_args = build_route_write_call(route, restore_version_id=restore_ver_id)
-            _, write_res, _ = _send_tool_call(app, session_id, w_tool, w_args, checkpoint_policy="approve_chat")
+            write_tool_name = w_tool
+            write_call_id, write_res, _ = _send_tool_call(app, session_id, w_tool, w_args, checkpoint_policy="approve_chat")
     finally:
         with contextlib.suppress(Exception):
             app.request(f"/v1/sessions/{session_id}/abort", {})
@@ -330,19 +401,42 @@ def _run_e01_slot(
         disk_sha_before_write=disk_sha_before_write,
         expected_after_sha=sha256_bytes(expected_after),
     )
+    dispatcher_op = _extract_dispatcher_operation(
+        app_dir / "store.db",
+        call_id=write_call_id,
+        dispatched_tool=write_tool_name,
+        expected_operation=route.operation,
+    )
 
     outside_pre_sha = sha256_bytes(outside_seg)
     outside_post_sha = outside_pre_sha if outside_seg in post_bytes else sha256_bytes(post_bytes[: len(outside_seg)])
     refusal_code = _extract_refusal_code(write_res)
-    eval_rec = {
+
+    expected_json_val: Any = None
+    post_json_val: Any = None
+    if route.route_id == "jq_edit":
+        expected_json_val = json.loads(expected_after.decode("utf-8"))
+        with contextlib.suppress(ValueError):
+            post_json_val = json.loads(post_bytes.decode("utf-8", errors="replace"))
+
+    eval_rec: dict[str, Any] = {
         "route_id": route.route_id,
         "read_form": read_form,
         "expected_authorized": bool(slot["expected_authorized"]),
+        "expected_operation": route.operation,
+        "dispatched_operations": dispatcher_op["dispatched_operations"],
         "pre_disk_sha256": disk_sha_before_write,
         "post_disk_sha256": post_sha,
-        "expected_post_sha256": sha256_bytes(expected_after) if route.route_id != "jq_edit" else "",
+        "expected_post_sha256": "" if route.route_id == "jq_edit" else sha256_bytes(expected_after),
+        "expected_json_value": expected_json_val,
+        "post_json_value": post_json_val,
         "outside_segment_pre_sha256": outside_pre_sha,
         "outside_segment_post_sha256": outside_post_sha,
+        "read_outcome": str((read_res or {}).get("outcome") or ""),
+        "read_call_issued": read_call_issued,
+        "inline_input_verified": inline_input_verified,
+        "same_response_batch_count": same_response_batch_count,
+        "same_response_ordering_verified": same_response_ordering_verified,
         "write_outcome": str((write_res or {}).get("outcome") or "unknown"),
         "refusal_code": refusal_code,
     }
@@ -354,6 +448,7 @@ def _run_e01_slot(
             "route_id": route.route_id,
             "route_kind": route.kind,
             "read_form": read_form,
+            "dispatcher_operation": dispatcher_op,
             "read_result": read_res,
             "write_result": write_res,
             "refusal_code": refusal_code,
@@ -364,8 +459,13 @@ def _run_e01_slot(
             "rel_path": rel_path,
             "disk_sha256_before_write": disk_sha_before_write,
             "post_disk_sha256": post_sha,
+            "post_json_value": post_json_val,
             "outside_segment_pre_sha256": outside_pre_sha,
             "outside_segment_post_sha256": outside_post_sha,
+            "read_call_issued": read_call_issued,
+            "inline_input_verified": inline_input_verified,
+            "same_response_batch_count": same_response_batch_count,
+            "same_response_ordering_verified": same_response_ordering_verified,
         },
         verdict=verdict,
         duration_ms=int((time.monotonic() - t0) * 1000),

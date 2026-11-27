@@ -100,6 +100,9 @@ class TestTB05FailClosedEvaluators(unittest.TestCase):
             "route_id": "edit",
             "read_form": "full_read",
             "expected_authorized": True,
+            "expected_operation": "edit",
+            "dispatched_operations": ["edit"],
+            "read_outcome": "completed",
             "pre_disk_sha256": pre,
             "post_disk_sha256": post,
             "expected_post_sha256": post,
@@ -114,6 +117,9 @@ class TestTB05FailClosedEvaluators(unittest.TestCase):
             "route_id": "edit",
             "read_form": "full_read",
             "expected_authorized": True,
+            "expected_operation": "edit",
+            "dispatched_operations": ["edit"],
+            "read_outcome": "completed",
             "pre_disk_sha256": pre,
             "post_disk_sha256": post,
             "expected_post_sha256": post,
@@ -124,11 +130,14 @@ class TestTB05FailClosedEvaluators(unittest.TestCase):
         self.assertEqual(res_mut["verdict"], "fail")
         self.assertIn("E01_OUTSIDE_BYTES_MUTATED", res_mut["failed_rule_ids"])
 
-        # Healthy non-qualifying read refused with untouched disk -> pass
+        # Healthy non-qualifying read refused with typed read-basis refusal + untouched disk -> pass
         res_ref = evaluate_e01_slot({
             "route_id": "edit",
             "read_form": "outline",
             "expected_authorized": False,
+            "expected_operation": "edit",
+            "dispatched_operations": ["edit"],
+            "read_outcome": "completed",
             "pre_disk_sha256": pre,
             "post_disk_sha256": pre,
             "write_outcome": "rejected",
@@ -136,11 +145,126 @@ class TestTB05FailClosedEvaluators(unittest.TestCase):
         })
         self.assertEqual(res_ref["verdict"], "pass")
 
+        # Defect: schema/posture/unsupported refusal code on negative variant MUST fail (not pass!)
+        res_wrong_refusal = evaluate_e01_slot({
+            "route_id": "edit",
+            "read_form": "outline",
+            "expected_authorized": False,
+            "expected_operation": "edit",
+            "dispatched_operations": ["edit"],
+            "read_outcome": "completed",
+            "pre_disk_sha256": pre,
+            "post_disk_sha256": pre,
+            "write_outcome": "rejected",
+            "refusal_code": "COMMAND_OPERAND_INVALID",
+        })
+        self.assertEqual(res_wrong_refusal["verdict"], "fail")
+        self.assertIn("E01_WRONG_REFUSAL_CLASS", res_wrong_refusal["failed_rule_ids"])
+
+        # Defect: missing refusal code on negative variant MUST fail closed
+        res_no_code = evaluate_e01_slot({
+            "route_id": "edit",
+            "read_form": "outline",
+            "expected_authorized": False,
+            "expected_operation": "edit",
+            "dispatched_operations": ["edit"],
+            "read_outcome": "completed",
+            "pre_disk_sha256": pre,
+            "post_disk_sha256": pre,
+            "write_outcome": "rejected",
+            "refusal_code": "",
+        })
+        self.assertEqual(res_no_code["verdict"], "fail")
+        self.assertIn("E01_MISSING_READ_BASIS_REFUSAL_CODE", res_no_code["failed_rule_ids"])
+
+        # Defect: read form did not complete -> fail
+        res_bad_read = evaluate_e01_slot({
+            "route_id": "edit",
+            "read_form": "outline",
+            "expected_authorized": False,
+            "expected_operation": "edit",
+            "dispatched_operations": ["edit"],
+            "read_outcome": "rejected",
+            "pre_disk_sha256": pre,
+            "post_disk_sha256": pre,
+            "write_outcome": "rejected",
+            "refusal_code": "EDITOR_DOCUMENT_READ_REQUIRED",
+        })
+        self.assertEqual(res_bad_read["verdict"], "fail")
+        self.assertIn("E01_READ_FORM_NOT_COMPLETED", res_bad_read["failed_rule_ids"])
+
+        # Defect: wrong compiled dispatcher operation -> fail
+        res_wrong_op = evaluate_e01_slot({
+            "route_id": "write",
+            "read_form": "full_read",
+            "expected_authorized": True,
+            "expected_operation": "write",
+            "dispatched_operations": ["printf"],
+            "read_outcome": "completed",
+            "pre_disk_sha256": pre,
+            "post_disk_sha256": post,
+            "expected_post_sha256": post,
+            "write_outcome": "completed",
+        })
+        self.assertEqual(res_wrong_op["verdict"], "fail")
+        self.assertIn("E01_DISPATCH_OPERATION_MISMATCH", res_wrong_op["failed_rule_ids"])
+
+        # Positive jq_edit uses independent parsed JSON expectation
+        res_jq_ok = evaluate_e01_slot({
+            "route_id": "jq_edit",
+            "read_form": "full_read",
+            "expected_authorized": True,
+            "expected_operation": "jq_edit",
+            "dispatched_operations": ["jq_edit"],
+            "read_outcome": "completed",
+            "pre_disk_sha256": pre,
+            "post_disk_sha256": post,
+            "expected_json_value": {"keep": "unchanged", "value": "BETA"},
+            "post_json_value": {"keep": "unchanged", "value": "BETA"},
+            "write_outcome": "completed",
+        })
+        self.assertEqual(res_jq_ok["verdict"], "pass")
+
+        res_jq_bad = evaluate_e01_slot({
+            "route_id": "jq_edit",
+            "read_form": "full_read",
+            "expected_authorized": True,
+            "expected_operation": "jq_edit",
+            "dispatched_operations": ["jq_edit"],
+            "read_outcome": "completed",
+            "pre_disk_sha256": pre,
+            "post_disk_sha256": post,
+            "expected_json_value": {"keep": "unchanged", "value": "BETA"},
+            "post_json_value": {"keep": "unchanged", "value": "beta"},
+            "write_outcome": "completed",
+        })
+        self.assertEqual(res_jq_bad["verdict"], "fail")
+        self.assertIn("E01_POST_JSON_MISMATCH", res_jq_bad["failed_rule_ids"])
+
+        # Inline input & combined response independent verification
+        res_inline_ok = evaluate_e01_slot({
+            "route_id": "edit",
+            "read_form": "inline_input",
+            "expected_authorized": False,
+            "expected_operation": "edit",
+            "dispatched_operations": ["edit"],
+            "inline_input_verified": True,
+            "read_call_issued": False,
+            "pre_disk_sha256": pre,
+            "post_disk_sha256": pre,
+            "write_outcome": "rejected",
+            "refusal_code": "EDITOR_DOCUMENT_READ_REQUIRED",
+        })
+        self.assertEqual(res_inline_ok["verdict"], "pass")
+
         # Defect: non-qualifying read authorized write and mutated disk -> fail
         res_bad = evaluate_e01_slot({
             "route_id": "edit",
             "read_form": "outline",
             "expected_authorized": False,
+            "expected_operation": "edit",
+            "dispatched_operations": ["edit"],
+            "read_outcome": "completed",
             "pre_disk_sha256": pre,
             "post_disk_sha256": post,
             "write_outcome": "completed",
@@ -149,8 +273,22 @@ class TestTB05FailClosedEvaluators(unittest.TestCase):
         self.assertIn("E01_NON_QUALIFYING_READ_AUTHORIZED", res_bad["failed_rule_ids"])
         self.assertIn("E01_REFUSED_WRITE_MUTATED_DISK", res_bad["failed_rule_ids"])
 
-        # Missing fields -> unknown (never pass)
+        # Missing/unobserved fields -> unknown (never pass)
         self.assertEqual(evaluate_e01_slot({"expected_authorized": True})["verdict"], "unknown")
+        self.assertEqual(
+            evaluate_e01_slot({
+                "route_id": "jq_edit",
+                "read_form": "full_read",
+                "expected_authorized": True,
+                "expected_operation": "jq_edit",
+                "dispatched_operations": ["jq_edit"],
+                "read_outcome": "completed",
+                "pre_disk_sha256": pre,
+                "post_disk_sha256": post,
+                "write_outcome": "completed",
+            })["verdict"],
+            "unknown",
+        )
 
     def test_e02_rebase_and_overlap_evaluators(self) -> None:
         pre = sha256_bytes(b"L1\nL2\nL3\n")

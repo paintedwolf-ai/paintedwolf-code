@@ -90,6 +90,26 @@ E01_READ_FORMS: tuple[dict[str, Any], ...] = (
     {"id": "full_summarize", "qualifies": True, "description": "Exact full-document `summarize` source window"},
 )
 
+# Typed read-basis refusal codes accepted for negative E01 variants.
+# Any schema failure, unsupported operation, posture gate, or untyped error MUST fail closed.
+E01_READ_BASIS_REFUSAL_CODES: frozenset[str] = frozenset({
+    "EDITOR_DOCUMENT_READ_REQUIRED",
+    "EDITOR_DOCUMENT_CHANGING",
+    "WRITE_READ_REQUIRED",
+    "READ_REQUIRED",
+    "STALE_READ_BASIS",
+})
+
+# Compiled native / callable operations whose dispatcher operation identity must match D14.
+D14_COMPILED_OPERATIONS: frozenset[str] = frozenset({
+    "write",
+    "edit",
+    "replace_lines",
+    "jq_edit",
+    "code_rewrite",
+    "restore_version",
+})
+
 D17_READ_BOUND_BYTES = 8 * 1024 * 1024  # 8 MiB (readcaps.MaxFileBytes)
 D17_MUTATION_BOUND_BYTES = 4 * 1024 * 1024  # 4 MiB (readcaps.MaxMutationBytes)
 D17_REFUSAL_SIZE_BYTES = 64 * 1024 * 1024  # 64 MiB
@@ -182,29 +202,117 @@ def build_tb05_slot_catalog() -> dict[str, list[dict[str, Any]]]:
 # ============================================================================
 
 def evaluate_e01_slot(record: dict[str, Any]) -> dict[str, Any]:
-    """Fail-closed evaluator for an E01 read-basis matrix slot."""
+    """Fail-closed evaluator for an E01 read-basis matrix slot.
+
+    Enforces:
+      - Unobserved cases (missing hashes, outcomes, read verification, or positive expected
+        outcome) yield `verdict="unknown"`, never `"pass"`.
+      - Read form completion is verified for host-read forms, inline-input absence of host
+        reads is verified for `inline_input`, and single-response batch ordering is verified
+        for combined read+write variants.
+      - Compiled D14 routes (`write`, `edit`, `replace_lines`, `jq_edit`, `code_rewrite`,
+        `restore_version`) must record and match their actual dispatcher operation.
+      - Positive variants verify exact disk SHA-256 (or parsed JSON value for `jq_edit`)
+        and exact outside-segment SHA-256 preservation.
+      - Negative variants require a specific typed read-basis refusal code in
+        `E01_READ_BASIS_REFUSAL_CODES` (rejecting schema failures, unsupported operations,
+        posture gates, or untyped errors) AND unchanged disk bytes.
+    """
     failures: list[dict[str, Any]] = []
+    missing: list[str] = []
     expected_auth = bool(record.get("expected_authorized"))
+    read_form = str(record.get("read_form") or "")
+    route_id = str(record.get("route_id") or "")
     pre_sha = str(record.get("pre_disk_sha256") or "")
     post_sha = str(record.get("post_disk_sha256") or "")
     expected_post_sha = str(record.get("expected_post_sha256") or "")
+    expected_json = record.get("expected_json_value")
+    post_json = record.get("post_json_value")
     outcome = str(record.get("write_outcome") or "")
     refusal_code = str(record.get("refusal_code") or "")
 
-    if not pre_sha or not post_sha or not outcome:
-        return {"verdict": "unknown", "passed": False, "failures": [], "missing": ["pre_disk_sha256/post_disk_sha256/write_outcome"]}
+    if not pre_sha:
+        missing.append("pre_disk_sha256")
+    if not post_sha:
+        missing.append("post_disk_sha256")
+    if not outcome or outcome == "unknown":
+        missing.append("write_outcome")
+    if expected_auth and not expected_post_sha and expected_json is None:
+        missing.append("expected_post_sha256_or_expected_json_value")
 
+    # Verify read-form instrumentation completeness before evaluating rules.
+    if read_form in {"full_read", "partial_window", "outline", "stale_disk", "full_summarize"}:
+        if not record.get("read_outcome"):
+            missing.append("read_outcome")
+    elif read_form == "inline_input":
+        if "inline_input_verified" not in record or "read_call_issued" not in record:
+            missing.append("inline_input_verified/read_call_issued")
+    elif read_form in {"combined_same_response_unseen", "combined_same_response_own_write"}:
+        if "same_response_ordering_verified" not in record or "same_response_batch_count" not in record:
+            missing.append("same_response_ordering_verified/same_response_batch_count")
+
+    # Verify dispatcher operation observation when configured on a compiled D14 route.
+    expected_op = str(record.get("expected_operation") or "")
+    dispatched_ops = record.get("dispatched_operations")
+    if expected_op in D14_COMPILED_OPERATIONS and dispatched_ops is None:
+        missing.append("dispatched_operations")
+
+    if missing:
+        return {
+            "verdict": "unknown",
+            "passed": False,
+            "failures": [],
+            "failed_rule_ids": [],
+            "missing": missing,
+        }
+
+    # 1. Read-form completion / inline-input / combined-response ordering checks.
+    if read_form in {"full_read", "partial_window", "outline", "stale_disk", "full_summarize"}:
+        if str(record.get("read_outcome")) != "completed":
+            failures.append({
+                "rule_id": "E01_READ_FORM_NOT_COMPLETED",
+                "message": f"Read form '{read_form}' did not complete (outcome={record.get('read_outcome')!r}).",
+            })
+    elif read_form == "inline_input":
+        if record.get("inline_input_verified") is not True or record.get("read_call_issued") is not False:
+            failures.append({
+                "rule_id": "E01_INLINE_INPUT_NOT_VERIFIED",
+                "message": "Inline-input variant failed independent verification (must carry inline prompt text and zero host read calls).",
+            })
+    elif read_form in {"combined_same_response_unseen", "combined_same_response_own_write"}:
+        if record.get("same_response_ordering_verified") is not True or int(record.get("same_response_batch_count") or 0) < 2:
+            failures.append({
+                "rule_id": "E01_COMBINED_RESPONSE_ORDERING_INVALID",
+                "message": "Combined read+write response did not independently verify >=2 ordered tool calls in one response.",
+            })
+
+    # 2. Actual dispatcher operation check for compiled D14 routes.
+    if expected_op in D14_COMPILED_OPERATIONS and isinstance(dispatched_ops, list):
+        if expected_op not in dispatched_ops:
+            failures.append({
+                "rule_id": "E01_DISPATCH_OPERATION_MISMATCH",
+                "message": f"Route '{route_id}' expected compiled operation '{expected_op}', observed {dispatched_ops}.",
+                "details": {"expected_operation": expected_op, "dispatched_operations": dispatched_ops},
+            })
+
+    # 3. Positive vs. negative authorization outcome checks.
     if expected_auth:
         if outcome != "completed":
             failures.append({
                 "rule_id": "E01_QUALIFYING_READ_REFUSED",
-                "message": f"Qualifying read '{record.get('read_form')}' on route '{record.get('route_id')}' was refused ({outcome}, code={refusal_code}).",
+                "message": f"Qualifying read '{read_form}' on route '{route_id}' was refused ({outcome}, code={refusal_code}).",
             })
         if expected_post_sha and post_sha != expected_post_sha:
             failures.append({
                 "rule_id": "E01_POST_BYTES_MISMATCH",
                 "message": "Authorized write produced unexpected disk SHA-256.",
                 "details": {"expected": expected_post_sha, "actual": post_sha},
+            })
+        if expected_json is not None and post_json != expected_json:
+            failures.append({
+                "rule_id": "E01_POST_JSON_MISMATCH",
+                "message": "Authorized structured edit produced unexpected parsed JSON value.",
+                "details": {"expected": expected_json, "actual": post_json},
             })
         outside_pre = record.get("outside_segment_pre_sha256")
         outside_post = record.get("outside_segment_post_sha256")
@@ -218,13 +326,24 @@ def evaluate_e01_slot(record: dict[str, Any]) -> dict[str, Any]:
         if outcome == "completed":
             failures.append({
                 "rule_id": "E01_NON_QUALIFYING_READ_AUTHORIZED",
-                "message": f"Non-qualifying read '{record.get('read_form')}' on route '{record.get('route_id')}' authorized a write.",
+                "message": f"Non-qualifying read '{read_form}' on route '{route_id}' authorized a write.",
             })
         if post_sha != pre_sha:
             failures.append({
                 "rule_id": "E01_REFUSED_WRITE_MUTATED_DISK",
                 "message": "Refused write mutated disk bytes.",
                 "details": {"pre_sha256": pre_sha, "post_sha256": post_sha},
+            })
+        if not refusal_code:
+            failures.append({
+                "rule_id": "E01_MISSING_READ_BASIS_REFUSAL_CODE",
+                "message": f"Negative variant '{read_form}' on '{route_id}' produced no typed read-basis refusal code.",
+            })
+        elif refusal_code not in E01_READ_BASIS_REFUSAL_CODES:
+            failures.append({
+                "rule_id": "E01_WRONG_REFUSAL_CLASS",
+                "message": f"Negative variant '{read_form}' on '{route_id}' failed with '{refusal_code}', not a read-basis refusal code.",
+                "details": {"refusal_code": refusal_code, "expected_codes": sorted(E01_READ_BASIS_REFUSAL_CODES)},
             })
 
     return {
@@ -468,7 +587,9 @@ def build_route_write_call(
 ) -> tuple[str, dict[str, Any]]:
     """Build the `(tool_name, args)` call for each of the ten D14 edit routes."""
     if route.route_id == "write":
-        return ("command", {"command": f'printf "alpha\\nBETA\\ngamma\\n" | tee {route.target_file}'})
+        # Compiled native `write` operation via `tee` heredoc (dispositions.json: tool="write",
+        # command_forms=["tee", "ln"], no printf pipeline stage).
+        return ("command", {"command": f"tee {route.target_file} <<'EOF'\nalpha\nBETA\ngamma\nEOF"})
     if route.route_id == "edit":
         return ("command", {"command": f'edit --path {route.target_file} --old-string "beta" --new-string "BETA"'})
     if route.route_id == "replace_lines":
