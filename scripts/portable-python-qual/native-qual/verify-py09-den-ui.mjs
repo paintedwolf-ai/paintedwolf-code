@@ -77,18 +77,17 @@ try {
     break;
   }
 
-  // Open the reopened project "py09-den-reopen" from Recents / sidebar.
+  // Wait for the reopened project "py09-den-reopen" to load in Recents / sidebar, then click it.
   const projText = page.getByText("py09-den-reopen", { exact: true }).first();
-  if (await projText.count()) {
-    await projText.click({ timeout: 10_000 }).catch(() => {});
-    await page.waitForTimeout(3000);
-  }
+  await projText.waitFor({ state: "visible", timeout: 25_000 });
+  await projText.click({ timeout: 10_000 });
+  await page.waitForTimeout(3000);
 
   // If the session isn't already open in Den, click it in the project session list.
   const bodyAfterProj = await page.locator("body").innerText();
   if (!bodyAfterProj.includes("PY09 witness completed") && !bodyAfterProj.includes("py09_witness.py")) {
     const sessItem = page.locator("button, a, [role='button'], [role='treeitem'], li").filter({
-      hasText: /Run py09_witness|PY09 witness|py09_witness|New chat|Session/i,
+      hasText: /Run py09_witness|PY09 witness|py09_witness/i,
     }).first();
     if (await sessItem.count()) {
       await sessItem.click({ timeout: 10_000 }).catch(() => {});
@@ -119,23 +118,28 @@ try {
     denText.includes("PY09_RETAINED_STDOUT_BEGIN") ||
     denText.includes(executionId);
 
-  // Switch to Files surface and open py09-den-witness.txt.
-  const filesNav = page.locator("button, a, [role='tab'], [role='button']").filter({
-    hasText: /^Files$/i,
-  }).first();
-  if (await filesNav.count()) {
-    await filesNav.click({ timeout: 10_000 }).catch(() => {});
+  // Switch to Files surface using the exact data-testid="project-files-entry" (or fallback).
+  const filesEntry = page.getByTestId("project-files-entry").first();
+  if (await filesEntry.count()) {
+    await filesEntry.click({ timeout: 10_000 }).catch(() => {});
     await page.waitForTimeout(2500);
+  } else {
+    const filesNav = page.locator("button, a, [role='tab'], [role='button']").filter({
+      hasText: /^Files$/i,
+    }).first();
+    if (await filesNav.count()) {
+      await filesNav.click({ timeout: 10_000 }).catch(() => {});
+      await page.waitForTimeout(2500);
+    }
   }
 
   const fileRow = page.locator('[data-testid="files-tree-file"][data-path="py09-den-witness.txt"]').first();
+  await fileRow.waitFor({ state: "visible", timeout: 15_000 }).catch(() => {});
   if (await fileRow.count()) {
     await fileRow.click({ timeout: 10_000 }).catch(() => {});
     await page.waitForTimeout(2500);
   } else {
-    const fallbackRow = page.locator("button, [role='treeitem'], span, div").filter({
-      hasText: /^py09-den-witness\.txt$/,
-    }).first();
+    const fallbackRow = page.getByText("py09-den-witness.txt", { exact: true }).first();
     if (await fallbackRow.count()) {
       await fallbackRow.click({ timeout: 10_000 }).catch(() => {});
       await page.waitForTimeout(2500);
