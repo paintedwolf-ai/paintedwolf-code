@@ -300,6 +300,24 @@ class TestBarriersAndReplay(unittest.TestCase):
             self.assertNotEqual(first, rec["oid"])
             self.assertEqual(git_fix.source_facts()["commit_count"], 2)
 
+    def test_storage_observer_sanitizes_sqlite_blob_columns_for_json(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            db_path = pathlib.Path(td) / "blob.db"
+            with sqlite3.connect(db_path) as db:
+                db.execute("CREATE TABLE messages (id TEXT PRIMARY KEY, session_id TEXT, raw_utf8 BLOB, raw_bin BLOB)")
+                db.execute(
+                    "INSERT INTO messages VALUES ('m1', 's1', ?, ?)",
+                    (b"hello-utf8", b"\xff\xfe\x00\x01"),
+                )
+            snap = StorageObserver(db_path).snapshot("s1")
+            # Must serialize cleanly with json.dumps (no TypeError on bytes).
+            serialized = json.dumps(snap)
+            self.assertIn("hello-utf8", serialized)
+            row = snap["tables"]["messages"][0]
+            self.assertEqual(row["raw_utf8"], "hello-utf8")
+            self.assertEqual(row["raw_bin"]["encoding"], "base64")
+            self.assertEqual(row["raw_bin"]["bytes"], 4)
+
     def test_observe_report_publication_requires_authoritative_phase_record(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             log_path = pathlib.Path(td) / "sidecar.log"

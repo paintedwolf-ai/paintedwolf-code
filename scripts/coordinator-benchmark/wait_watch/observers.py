@@ -1,6 +1,7 @@
 """Five independent observers for wait/watch bug-bash evidence correlation."""
 from __future__ import annotations
 
+import base64
 import contextlib
 import hashlib
 import json
@@ -58,6 +59,26 @@ def _table_columns(db: sqlite3.Connection, name: str) -> set[str]:
     return {row[1] for row in db.execute(f"PRAGMA table_info({name})").fetchall()}
 
 
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, memoryview):
+        value = value.tobytes()
+    if isinstance(value, (bytes, bytearray)):
+        raw = bytes(value)
+        try:
+            return raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return {
+                "encoding": "base64",
+                "bytes": len(raw),
+                "data": base64.b64encode(raw).decode("ascii"),
+            }
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    return value
+
+
 def _query_table(db: sqlite3.Connection, table: str, session_id: str | None) -> list[dict[str, Any]]:
     cols = _table_columns(db, table)
     order = "ORDER BY rowid"
@@ -72,7 +93,7 @@ def _query_table(db: sqlite3.Connection, table: str, session_id: str | None) -> 
             rows = db.execute(f"SELECT * FROM {table} WHERE session_id=?", (session_id,)).fetchall()
         else:
             rows = db.execute(f"SELECT * FROM {table}").fetchall()
-    return [dict(r) for r in rows]
+    return [_json_safe(dict(r)) for r in rows]
 
 
 class SourceObserver:
