@@ -10,7 +10,7 @@ from typing import Sequence
 
 from .friction_probe import friction_observability_report
 from .generators import generate_r06, generate_r07
-from .inprocess_driver import InProcessPlan, run_inprocess_plan
+from .inprocess_driver import D1_EXPECTED_COMMIT, D1_EXPECTED_TREE, InProcessPlan, run_inprocess_plan
 from .reference_resolver import Citation, resolve_citation
 from .selectors import validate_manifest
 from .shrinker import ShrunkArtifact
@@ -199,12 +199,14 @@ def _cmd_controls(args: argparse.Namespace) -> int:
 
 
 def _cmd_inprocess(args: argparse.Namespace) -> int:
-    repo_root = pathlib.Path(args.repo_root).resolve()
+    product_root = pathlib.Path(args.product_root).resolve()
     plan = InProcessPlan(
-        repo_root=repo_root,
-        packages=tuple(args.packages) if args.packages else InProcessPlan(repo_root).packages,
+        product_root=product_root,
+        packages=tuple(args.packages) if args.packages else InProcessPlan(product_root).packages,
         run_pattern=args.run_pattern or "",
         overlay_path=pathlib.Path(args.overlay).resolve() if args.overlay else None,
+        expected_commit=args.expected_commit,
+        expected_tree=args.expected_tree,
     )
     result = run_inprocess_plan(plan, dry_run=args.dry_run)
     print(json.dumps(result, indent=2, sort_keys=True))
@@ -240,12 +242,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_ctrl.add_argument("--dry-run", action="store_true", help="Inspect binary provenance and run manifest without launching sidecar")
     p_ctrl.set_defaults(func=_cmd_controls)
 
-    p_inp = sub.add_parser("inprocess", help="Invoke D7-compliant in-process Go tests (no shipped binary edits)")
-    p_inp.add_argument("--repo-root", default=str(pathlib.Path(__file__).resolve().parents[3]), help="Repository root")
+    p_inp = sub.add_parser("inprocess", help="Invoke D7-compliant in-process Go tests against verified D1 --product-root")
+    p_inp.add_argument("--product-root", required=True, help="Explicit verified D1 product checkout root (Decision 010)")
+    p_inp.add_argument("--expected-commit", default=D1_EXPECTED_COMMIT, help="Expected D1 commit OID")
+    p_inp.add_argument("--expected-tree", default=D1_EXPECTED_TREE, help="Expected D1 tree OID")
     p_inp.add_argument("--run-pattern", default="", help="Optional go test -run regex")
-    p_inp.add_argument("--overlay", default="", help="Optional Go -overlay JSON path")
+    p_inp.add_argument("--overlay", default="", help="Optional test-only (*_test.go) Go -overlay JSON path")
     p_inp.add_argument("--packages", nargs="*", default=[], help="Go package patterns to test")
-    p_inp.add_argument("--dry-run", action="store_true", help="Print command without executing")
+    p_inp.add_argument("--dry-run", action="store_true", help="Verify D1 identity and print command without executing")
     p_inp.set_defaults(func=_cmd_inprocess)
 
     p_fric = sub.add_parser("friction-report", help="Print D10 friction observability report and D7 proposal")

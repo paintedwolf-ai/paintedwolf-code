@@ -799,10 +799,14 @@ def extract_tool_messages_from_pending(
         seen_call_ids.add(call_id)
         meta = call_meta.get(call_id, {})
 
-        # Retain actual delivered body verbatim from the model-facing message
-        content = msg.get("content")
+        # Retain actual delivered body verbatim from D1's nested `tool_result.content`
+        # (verified in coordinator-gb02-linux-manual-preflight.md), falling back to
+        # `tool_result.output` or top-level `msg.content` only when absent.
+        content = tr_map.get("content") if tr_map else None
         if not content and tr_map:
-            content = tr_map.get("output") or tr_map.get("content") or ""
+            content = tr_map.get("output")
+        if not content:
+            content = msg.get("content") or ""
         delivered_text = str(content or "")
 
         raw_handles = msg.get("evidence_handles")
@@ -817,10 +821,12 @@ def extract_tool_messages_from_pending(
 
         new_msgs.append(
             {
+                "message_id": str(msg.get("id") or ""),
                 "call_id": call_id,
                 "tool": str(meta.get("name") or tr_map.get("tool_name") or msg.get("name") or ""),
                 "arguments": dict(meta.get("args") or {}),
                 "delivered_body": delivered_text,
+                "delivered_body_sha256": hashlib.sha256(delivered_text.encode("utf-8")).hexdigest(),
                 "evidence_handles": list(evidence_handles),
                 "delivery_tags": list(delivery_tags),
                 "request_id": str(pending.get("id") or ""),

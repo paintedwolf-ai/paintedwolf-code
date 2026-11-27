@@ -29,6 +29,11 @@ from grounding.friction_probe import (
     friction_observability_report,
     probe_store_db,
 )
+from grounding.inprocess_driver import (
+    InProcessPlan,
+    validate_test_only_overlay,
+    write_test_overlay,
+)
 from grounding.generators import (
     BASE_SEEDS,
     R06_VARIATIONS,
@@ -1504,18 +1509,22 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
                         if turn_num == 0:
                             payload = {"id": f"req-{sid}-1", "messages": [{"role": "user", "content": "Read sample.go"}]}
                         else:
-                            # Exact D1 nested Message.tool_result.tool_call_id & Message.evidence_handles shape
+                            # Exact D1 nested Message.id, Message.tool_result.tool_call_id,
+                            # Message.tool_result.content, and Message.evidence_handles shape
+                            # (verified in coordinator-gb02-linux-manual-preflight.md)
                             payload = {
                                 "id": f"req-{sid}-2",
                                 "messages": [
                                     {"role": "user", "content": "Read sample.go"},
                                     {
+                                        "id": f"msg-tool-{sid}-1",
                                         "role": "tool",
-                                        "content": delivered_body,
+                                        "content": "",
                                         "evidence_handles": ["read#1"],
                                         "tool_result": {
                                             "tool_call_id": f"call-{sid}-1",
                                             "tool_name": "read_file",
+                                            "content": delivered_body,
                                         },
                                     },
                                 ],
@@ -1659,11 +1668,70 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("d7_compliant_proposal", json.loads(buf.getvalue()))
 
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            rc = cli_main(["inprocess", "--dry-run"])
-        self.assertEqual(rc, 0)
-        self.assertTrue(json.loads(buf.getvalue())["dry_run"])
+        # Decision 010 para 11: inprocess requires explicit verified --product-root
+        # and constrains overlays strictly to non-shipped *_test.go files.
+        with self.assertRaises(ValueError):
+            validate_test_only_overlay({"lycaon/internal/evidence/resolve.go": "/tmp/fake.go"})
+        with self.assertRaises(ValueError):
+            validate_test_only_overlay({"lycaon/internal/evidence/gb02_test.go": "/tmp/not_a_test_file.go"})
+        valid_overlay = validate_test_only_overlay(
+            {"lycaon/internal/evidence/gb02_inprocess_test.go": "/tmp/gb02_inprocess_test.go"}
+        )
+        self.assertEqual(len(valid_overlay), 1)
+
+        with tempfile.TemporaryDirectory() as tmp_inp:
+            inp_root = pathlib.Path(tmp_inp) / "d1-checkout"
+            (inp_root / "lycaon" / "internal" / "evidence").mkdir(parents=True)
+            shipped_file = inp_root / "lycaon" / "internal" / "evidence" / "existing_test.go"
+            shipped_file.write_text("package evidence\n", encoding="utf-8")
+
+            # Reject replacing an existing file even if it ends with _test.go
+            with self.assertRaises(ValueError):
+                validate_test_only_overlay(
+                    {"lycaon/internal/evidence/existing_test.go": "/tmp/override_test.go"},
+                    product_root=inp_root,
+                )
+
+            # Reject harness checkout as inprocess --product-root
+            with self.assertRaises(ValueError):
+                InProcessPlan(product_root=HARNESS_ROOT).verify()
+
+            # Initialize a temp git repo to verify `cli inprocess --product-root ... --dry-run`
+            import subprocess as _sp
+            _sp.run(["git", "init", "-q", str(inp_root)], check=True)
+            _sp.run(["git", "-C", str(inp_root), "config", "user.email", "gb02@example.test"], check=True)
+            _sp.run(["git", "-C", str(inp_root), "config", "user.name", "GB02"], check=True)
+            _sp.run(["git", "-C", str(inp_root), "add", "."], check=True)
+            _sp.run(["git", "-C", str(inp_root), "commit", "-q", "-m", "init"], check=True)
+            commit = _sp.check_output(["git", "-C", str(inp_root), "rev-parse", "HEAD"], text=True).strip()
+            tree = _sp.check_output(["git", "-C", str(inp_root), "rev-parse", "HEAD^{tree}"], text=True).strip()
+
+            overlay_file = write_test_overlay(
+                pathlib.Path(tmp_inp) / "overlay.json",
+                {"lycaon/internal/evidence/gb02_added_test.go": "/tmp/gb02_added_test.go"},
+                product_root=inp_root,
+            )
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = cli_main(
+                    [
+                        "inprocess",
+                        "--product-root",
+                        str(inp_root),
+                        "--expected-commit",
+                        commit,
+                        "--expected-tree",
+                        tree,
+                        "--overlay",
+                        str(overlay_file),
+                        "--dry-run",
+                    ]
+                )
+            self.assertEqual(rc, 0)
+            inp_json = json.loads(buf.getvalue())
+            self.assertTrue(inp_json["dry_run"])
+            self.assertEqual(inp_json["verified"]["commit"], commit)
+            self.assertEqual(inp_json["verified"]["tree"], tree)
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = pathlib.Path(tmp)
