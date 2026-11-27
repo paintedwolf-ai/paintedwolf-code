@@ -153,8 +153,55 @@ def run_f01_instance(
             baseline_idx = len(init_frames) if init_seen else len(sub.frames())
 
             runner = ChangeRunner()
+            existing_dirs_before = {
+                p.relative_to(root_dir).as_posix()
+                for p in root_dir.rglob("*")
+                if p.is_dir()
+            }
             primary_log = runner.run(root_dir, case.change_script)
             logged_entries = _retag_write_log(primary_log, root_id, seq_offset=0)
+            # Record exact auxiliary paths ChangeRunner actually wrote on disk:
+            # 1. atomic_replace temp siblings (.tmp.<name>.<seq>)
+            # 2. newly created parent directories from mkdir(parents=True)
+            next_seq = len(logged_entries) + 1
+            for entry in primary_log.entries:
+                if entry.op == "atomic_replace":
+                    p_obj = Path(entry.path)
+                    tmp_rel = (p_obj.parent / f".tmp.{p_obj.name}.{entry.seq}").as_posix().removeprefix("./")
+                    logged_entries.append(
+                        WriteLogEntry(
+                            seq=next_seq,
+                            clock_domain=entry.clock_domain,
+                            timestamp_ns=entry.timestamp_ns,
+                            op="delete",
+                            path=tmp_rel,
+                            new_path=None,
+                            before_sha256=None,
+                            after_sha256=None,
+                            root_id=root_id,
+                        )
+                    )
+                    next_seq += 1
+            existing_dirs_after = {
+                p.relative_to(root_dir).as_posix()
+                for p in root_dir.rglob("*")
+                if p.is_dir()
+            }
+            for new_dir in sorted(existing_dirs_after - existing_dirs_before):
+                logged_entries.append(
+                    WriteLogEntry(
+                        seq=next_seq,
+                        clock_domain="monotonic_ns",
+                        timestamp_ns=time.monotonic_ns(),
+                        op="create",
+                        path=new_dir,
+                        new_path=None,
+                        before_sha256=None,
+                        after_sha256=None,
+                        root_id=root_id,
+                    )
+                )
+                next_seq += 1
 
             # Write sentinel after change script so we have a causal drain boundary
             sentinel_log = runner.run(
@@ -174,10 +221,33 @@ def run_f01_instance(
             sub.close()
 
         post_frames = frames[baseline_idx:]
+        # External watcher (watcher.go) emits only op="write" (exists) or "delete" (absent),
+        # never "create"/"rename"/"chmod". Normalize external "write" -> "change" for D4 op compatibility
+        # while preserving "delete" strictly so false deletes are still flagged as defects.
+        normalized_frames: list[dict[str, object]] = []
+        for f in post_frames:
+            if f.get("topic") == "source_changed" and isinstance(f.get("data"), dict):
+                data_copy = dict(f["data"])
+                raw_changes = data_copy.get("changes")
+                if isinstance(raw_changes, list):
+                    norm_changes = []
+                    for ch in raw_changes:
+                        if isinstance(ch, dict):
+                            ch_copy = dict(ch)
+                            if str(ch_copy.get("origin") or "") == "external" and str(ch_copy.get("op") or "") == "write":
+                                ch_copy["op"] = "change"
+                            norm_changes.append(ch_copy)
+                    data_copy["changes"] = norm_changes
+                f_copy = dict(f)
+                f_copy["data"] = data_copy
+                normalized_frames.append(f_copy)
+            else:
+                normalized_frames.append(f)
+
         write_log = WriteLog(clock_domain="monotonic_ns", entries=tuple(logged_entries))
 
         answer = map_sse_source_changed_to_answer(
-            post_frames,
+            normalized_frames,
             project_id=project_id,
             default_root_id=root_id,
         )
@@ -204,7 +274,7 @@ def run_f01_instance(
             reconciled_walk = reconciled.items
             ref_post_walk = walk_entries_to_catalog_items(ref_entries, root_id=root_id)
             answer = map_sse_source_changed_to_answer(
-                post_frames,
+                normalized_frames,
                 project_id=project_id,
                 default_root_id=root_id,
                 reconciled_walk=reconciled_walk,
@@ -421,24 +491,26 @@ def run_f03_instance(
 
             runner = ChangeRunner()
             write_log = runner.run(root_dir, case.change_script)
-            expected_tab_text = (root_dir / case.open_tab_path).read_text(encoding="utf-8", errors="replace")
+            expected_tab_bytes = (root_dir / case.open_tab_path).read_bytes()
+            expected_tab_sha = hashlib.sha256(expected_tab_bytes).hexdigest()
 
-            # Wait for catalog to settle after edits
+            # Wait briefly for watcher debounce + catalog settle after edits
+            time.sleep(0.3)
             ok_cat, cat_res, cat_details = _reconcile_catalog_against_reference(
                 client, root_dir, project_id, root_id, boundary_config, settle_wait_s=25.0
             )
-            # Re-observe editor document to confirm outside edit reached open tab
+            # Re-observe editor document to confirm outside edit reached open tab (compare base_sha256)
             observed_doc = client.observe_editor_document(project_id, doc_id) if doc_id else {}
-            doc_content = str(observed_doc.get("content") or "")
-            if not doc_content and doc_id:
+            doc_sha = str(observed_doc.get("base_sha256") or "")
+            if not doc_sha and doc_id:
                 reopened = client.open_editor_document(project_id, root_id, case.open_tab_path, client_id=f"f03-check-{case.case_id}")
-                doc_content = str(reopened.get("content") or "")
+                doc_sha = str(reopened.get("base_sha256") or "")
 
             frames = sub.frames()
         finally:
             sub.close()
 
-        tab_matched = doc_content == expected_tab_text
+        tab_matched = doc_sha == expected_tab_sha
         walk_resp = client.get_source_walk_all(project_id)
         walk_paths = {str(f.get("path") or "") for f in (walk_resp.get("files") or []) if isinstance(f, dict)}
         tab_in_history = case.open_tab_path in walk_paths
@@ -688,8 +760,9 @@ def run_f05_instance(
                     _git(root_dir, "checkout", "--", "app.txt")
                     executed_moves += 1
                 elif move == "pull":
-                    # Push a commit from a temporary clone into remote_dir, then pull on main
+                    # Sync local main to remote first, push a new commit from a temporary clone, then ff-pull
                     _git(root_dir, "checkout", "main")
+                    _git(root_dir, "push", "--force", "origin", "main")
                     pusher = work_dir / case.case_id / f"pusher_{step_idx}"
                     _git(work_dir / case.case_id, "clone", str(remote_dir), str(pusher))
                     (pusher / "remote_file.txt").write_bytes(f"from remote {step_idx}\n".encode("utf-8"))
