@@ -47,17 +47,51 @@ try {
   }, { pid: projectId, sid: sessionId });
 
   await page.goto(uiUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
-  await page.waitForTimeout(4000);
+  await page.waitForTimeout(3000);
 
-  // If the session isn't already open, click it in the sidebar.
+  // Dismiss 2-step welcome wizard if shown, choosing "Files and chat" so both Files & Den are open.
+  for (let step = 0; step < 4; step += 1) {
+    const txt = await page.locator("body").innerText();
+    if (txt.includes("How do you want to work?")) {
+      const filesAndChat = page.locator("button, [role='radio'], label").filter({ hasText: /Files and chat/i }).first();
+      if (await filesAndChat.count()) {
+        await filesAndChat.click({ timeout: 5_000 }).catch(() => {});
+        await page.waitForTimeout(400);
+      }
+      const cont = page.locator("button").filter({ hasText: /^Continue$/i }).first();
+      if (await cont.count()) {
+        await cont.click({ timeout: 5_000 }).catch(() => {});
+        await page.waitForTimeout(1500);
+        continue;
+      }
+    }
+    const skipOrDone = page.locator("button").filter({
+      hasText: /^(Skip|Skip for now|Not now|Continue|Done|Finish|Get started|Start working|Open workspace)$/i,
+    }).first();
+    if (await skipOrDone.count() && (txt.includes("2 / 2") || txt.includes("1 / 2") || txt.includes("Local model") || txt.includes("Welcome"))) {
+      await skipOrDone.click({ timeout: 5_000 }).catch(() => {});
+      await page.waitForTimeout(1500);
+      continue;
+    }
+    break;
+  }
+
+  // Click the reopened project/session in the sidebar if not already active.
   const bodyInitial = await page.locator("body").innerText();
   if (!bodyInitial.includes("PY09 witness completed") && !bodyInitial.includes("py09_witness.py")) {
+    const projBtn = page.locator("button, a, [role='button'], [role='treeitem']").filter({
+      hasText: /py09-den-reopen/i,
+    }).first();
+    if (await projBtn.count()) {
+      await projBtn.click({ timeout: 10_000 }).catch(() => {});
+      await page.waitForTimeout(1500);
+    }
     const sessBtn = page.locator("button, a, [role='button'], [role='treeitem']").filter({
-      hasText: /py09|Run py09_witness|PY09 witness/i,
+      hasText: /Run py09_witness|PY09 witness|py09_witness/i,
     }).first();
     if (await sessBtn.count()) {
       await sessBtn.click({ timeout: 10_000 }).catch(() => {});
-      await page.waitForTimeout(3000);
+      await page.waitForTimeout(2500);
     }
   }
 
