@@ -33,6 +33,34 @@ from .delivery_log import DeliveryLog, DeliveryRecord, LineRange, ProductRecord
 from .friction_probe import FrictionSnapshot, probe_store_db
 
 
+HARNESS_ROOT: pathlib.Path = pathlib.Path(__file__).resolve().parents[3]
+
+
+def _git_head(repo_dir: pathlib.Path) -> str:
+    """Return `git rev-parse HEAD` for `repo_dir`, or 'unavailable'."""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo_dir), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return proc.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return "unavailable"
+
+
+def _is_within(child: pathlib.Path, parent: pathlib.Path) -> bool:
+    try:
+        child.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
 @dataclass(frozen=True)
 class EngineBinaryProvenance:
     """Exact provenance of the D1 engine binary executed by the sidecar lane."""
@@ -50,6 +78,38 @@ class EngineBinaryProvenance:
             "go_buildid": self.go_buildid,
             "platform": self.platform,
             "arch": self.arch,
+        }
+
+
+@dataclass(frozen=True)
+class SidecarRunManifest:
+    """Decision 009 run manifest binding D1 executable, roots, commits, and harness head."""
+
+    product_root: str
+    product_commit: str
+    harness_head: str
+    resolved_config_root: str
+    resolved_engine_root: str
+    engine_bin: str
+    engine_sha256: str
+    engine_buildid: str
+    platform: str
+    arch: str
+    process_cwd: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "product_root": self.product_root,
+            "product_commit": self.product_commit,
+            "harness_head": self.harness_head,
+            "resolved_config_root": self.resolved_config_root,
+            "resolved_engine_root": self.resolved_engine_root,
+            "engine_bin": self.engine_bin,
+            "engine_sha256": self.engine_sha256,
+            "engine_buildid": self.engine_buildid,
+            "platform": self.platform,
+            "arch": self.arch,
+            "process_cwd": self.process_cwd,
         }
 
 
@@ -242,19 +302,33 @@ class SidecarSessionClient:
 
 
 class IsolatedSidecarProcess:
-    """Launch an explicit D1 `--engine-bin` in an isolated scratch dir + free port."""
+    """Launch an explicit D1 `--engine-bin` bound strictly to `--product-root` (Decision 009).
+
+    Prevents mixing a D1 binary with D2 harness configuration or engine resources by:
+    - Requiring an explicit `product_root` outside `HARNESS_ROOT`
+    - Explicitly setting `LYCAON_CONFIG_ROOT` and `LYCAON_ENGINE_ROOT` under `product_root`
+      (or the companion D1 artifact directory)
+    - Launching the sidecar with `cwd=product_root`
+    - Recording full provenance in `SidecarRunManifest`
+    """
 
     def __init__(
         self,
         engine_bin: str | pathlib.Path,
         *,
+        product_root: str | pathlib.Path,
         config_dir: str | pathlib.Path,
         workspace_dir: str | pathlib.Path,
         expected_sha256: str = "",
+        config_root: str | pathlib.Path | None = None,
+        engine_root: str | pathlib.Path | None = None,
         token: str | None = None,
         extra_env: Mapping[str, str] | None = None,
+        harness_root: str | pathlib.Path = HARNESS_ROOT,
     ) -> None:
         self.engine_bin = pathlib.Path(engine_bin).resolve()
+        self.product_root = pathlib.Path(product_root).resolve()
+        self.harness_root = pathlib.Path(harness_root).resolve()
         self.config_dir = pathlib.Path(config_dir).resolve()
         self.workspace_dir = pathlib.Path(workspace_dir).resolve()
         self.token = token or f"gb02-{uuid.uuid4().hex}"
@@ -262,6 +336,48 @@ class IsolatedSidecarProcess:
         self.port: int = 0
         self.pid: int | None = None
         self.process: subprocess.Popen[bytes] | None = None
+
+        if not self.product_root.is_dir():
+            raise FileNotFoundError(f"D1 product_root directory not found: {self.product_root}")
+
+        # Resolve LYCAON_CONFIG_ROOT (checkout containing `config/`) and LYCAON_ENGINE_ROOT
+        self.resolved_config_root = (
+            pathlib.Path(config_root).resolve()
+            if config_root is not None
+            else (self.product_root / "lycaon").resolve()
+        )
+        self.resolved_engine_root = (
+            pathlib.Path(engine_root).resolve()
+            if engine_root is not None
+            else (self.product_root / "lycaon-den" / "src-tauri" / "engine-root").resolve()
+        )
+
+        # Decision 009 leak guard: reject any D2 harness root leak
+        for label, candidate in (
+            ("product_root", self.product_root),
+            ("resolved_config_root", self.resolved_config_root),
+            ("resolved_engine_root", self.resolved_engine_root),
+        ):
+            if _is_within(candidate, self.harness_root):
+                raise ValueError(
+                    f"D2 harness root leak detected: {label}={candidate} lies inside "
+                    f"harness_root={self.harness_root}"
+                )
+
+        if not _is_within(self.resolved_config_root, self.product_root):
+            raise ValueError(
+                f"resolved_config_root={self.resolved_config_root} must reside inside "
+                f"product_root={self.product_root}"
+            )
+        if not (
+            _is_within(self.resolved_engine_root, self.product_root)
+            or _is_within(self.resolved_engine_root, self.engine_bin.parent)
+        ):
+            raise ValueError(
+                f"resolved_engine_root={self.resolved_engine_root} must reside inside "
+                f"product_root={self.product_root} or engine_bin directory={self.engine_bin.parent}"
+            )
+
         self.provenance: EngineBinaryProvenance = inspect_engine_binary(
             self.engine_bin, expected_sha256=expected_sha256
         )
@@ -274,23 +390,46 @@ class IsolatedSidecarProcess:
     def store_db_path(self) -> pathlib.Path:
         return self.config_dir / "store.db"
 
+    def build_process_env(self, port: int | None = None) -> dict[str, str]:
+        """Build the isolated sidecar environment bound strictly to D1 roots."""
+        listen_port = port if port is not None else self.port
+        return {
+            **os.environ,
+            "LYCAON_CONFIG_DIR": str(self.config_dir),
+            "LYCAON_CONFIG_ROOT": str(self.resolved_config_root),
+            "LYCAON_ENGINE_ROOT": str(self.resolved_engine_root),
+            "LYCAON_AUTH_TOKEN": self.token,
+            "LYCAON_LLM_PROVIDER": "manual",
+            "LYCAON_LISTEN_ADDR": f"127.0.0.1:{listen_port}",
+            **self.extra_env,
+        }
+
+    def build_run_manifest(self) -> SidecarRunManifest:
+        """Build the Decision 009 run manifest with resolved roots, commits, and binary provenance."""
+        return SidecarRunManifest(
+            product_root=str(self.product_root),
+            product_commit=_git_head(self.product_root),
+            harness_head=_git_head(self.harness_root),
+            resolved_config_root=str(self.resolved_config_root),
+            resolved_engine_root=str(self.resolved_engine_root),
+            engine_bin=self.provenance.path,
+            engine_sha256=self.provenance.sha256,
+            engine_buildid=self.provenance.go_buildid,
+            platform=self.provenance.platform,
+            arch=self.provenance.arch,
+            process_cwd=str(self.product_root),
+        )
+
     def start(self, *, ready_timeout: float = 20.0) -> SidecarSessionClient:
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
         self.port = probe_free_port()
         log_path = self.config_dir / "sidecar.log"
-        env = {
-            **os.environ,
-            "LYCAON_CONFIG_DIR": str(self.config_dir),
-            "LYCAON_AUTH_TOKEN": self.token,
-            "LYCAON_LLM_PROVIDER": "manual",
-            "LYCAON_LISTEN_ADDR": f"127.0.0.1:{self.port}",
-            **self.extra_env,
-        }
+        env = self.build_process_env(self.port)
         with log_path.open("wb") as log_fh:
             self.process = subprocess.Popen(
                 [str(self.engine_bin), "serve", "--addr", f"127.0.0.1:{self.port}"],
-                cwd=str(self.workspace_dir),
+                cwd=str(self.product_root),
                 env=env,
                 stdout=log_fh,
                 stderr=subprocess.STDOUT,

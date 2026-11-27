@@ -56,6 +56,8 @@ from grounding.selectors import (
 )
 from grounding.shrinker import ShrinkableCase, ShrunkArtifact, shrink_case
 from grounding.sidecar_driver import (
+    HARNESS_ROOT,
+    IsolatedSidecarProcess,
     ScriptedTurn,
     SidecarSessionClient,
     inspect_engine_binary,
@@ -1573,15 +1575,102 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertEqual(json.loads(buf.getvalue())["verdict_class"], "grounded")
 
-            # Controls dry-run with expected SHA-256 verification
+            # Controls dry-run with explicit --product-root and expected SHA-256 verification
+            product_root = tmp_path / "baseline-d1"
+            (product_root / "lycaon" / "config").mkdir(parents=True)
+            (product_root / "lycaon-den" / "src-tauri" / "engine-root").mkdir(parents=True)
             fake_bin = tmp_path / "lycaon-dev"
             fake_bin.write_bytes(b"cli-test-bin")
             sha = hashlib.sha256(b"cli-test-bin").hexdigest()
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
-                rc = cli_main(["controls", "--engine-bin", str(fake_bin), "--expected-engine-sha256", sha, "--dry-run"])
+                rc = cli_main(
+                    [
+                        "controls",
+                        "--engine-bin",
+                        str(fake_bin),
+                        "--product-root",
+                        str(product_root),
+                        "--expected-engine-sha256",
+                        sha,
+                        "--dry-run",
+                    ]
+                )
             self.assertEqual(rc, 0)
-            self.assertEqual(json.loads(buf.getvalue())["engine_provenance"]["sha256"], sha)
+            out_json = json.loads(buf.getvalue())
+            self.assertEqual(out_json["engine_provenance"]["sha256"], sha)
+            self.assertEqual(out_json["run_manifest"]["product_root"], str(product_root.resolve()))
+            self.assertEqual(
+                out_json["run_manifest"]["resolved_config_root"],
+                str((product_root / "lycaon").resolve()),
+            )
+            self.assertEqual(
+                out_json["run_manifest"]["resolved_engine_root"],
+                str((product_root / "lycaon-den" / "src-tauri" / "engine-root").resolve()),
+            )
+
+    def test_d009_product_root_binding_and_d2_harness_leak_rejection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = pathlib.Path(tmp)
+            product_root = tmp_path / "baseline-d1"
+            (product_root / "lycaon" / "config").mkdir(parents=True)
+            (product_root / "lycaon-den" / "src-tauri" / "engine-root").mkdir(parents=True)
+            fake_bin = tmp_path / "lycaon-dev"
+            fake_bin.write_bytes(b"d1-binary-payload")
+            sha = hashlib.sha256(b"d1-binary-payload").hexdigest()
+
+            proc = IsolatedSidecarProcess(
+                fake_bin,
+                product_root=product_root,
+                config_dir=tmp_path / "cfg",
+                workspace_dir=tmp_path / "ws",
+                expected_sha256=sha,
+            )
+            env = proc.build_process_env(port=49999)
+            self.assertEqual(env["LYCAON_CONFIG_ROOT"], str((product_root / "lycaon").resolve()))
+            self.assertEqual(
+                env["LYCAON_ENGINE_ROOT"],
+                str((product_root / "lycaon-den" / "src-tauri" / "engine-root").resolve()),
+            )
+            self.assertNotIn(str(HARNESS_ROOT), env["LYCAON_CONFIG_ROOT"])
+            self.assertNotIn(str(HARNESS_ROOT), env["LYCAON_ENGINE_ROOT"])
+
+            manifest = proc.build_run_manifest().to_dict()
+            self.assertEqual(manifest["product_root"], str(product_root.resolve()))
+            self.assertEqual(manifest["resolved_config_root"], env["LYCAON_CONFIG_ROOT"])
+            self.assertEqual(manifest["resolved_engine_root"], env["LYCAON_ENGINE_ROOT"])
+            self.assertEqual(manifest["engine_bin"], str(fake_bin.resolve()))
+            self.assertEqual(manifest["engine_sha256"], sha)
+            self.assertIn("engine_buildid", manifest)
+            self.assertIn("product_commit", manifest)
+            self.assertNotEqual(manifest["harness_head"], "unavailable")
+
+            # Reject D2 harness worktree as product_root
+            with self.assertRaises(ValueError):
+                IsolatedSidecarProcess(
+                    fake_bin,
+                    product_root=HARNESS_ROOT,
+                    config_dir=tmp_path / "cfg",
+                    workspace_dir=tmp_path / "ws",
+                )
+
+            # Reject D2 harness root leaked via config_root or engine_root override
+            with self.assertRaises(ValueError):
+                IsolatedSidecarProcess(
+                    fake_bin,
+                    product_root=product_root,
+                    config_root=HARNESS_ROOT / "lycaon",
+                    config_dir=tmp_path / "cfg",
+                    workspace_dir=tmp_path / "ws",
+                )
+            with self.assertRaises(ValueError):
+                IsolatedSidecarProcess(
+                    fake_bin,
+                    product_root=product_root,
+                    engine_root=HARNESS_ROOT / "lycaon-den" / "src-tauri" / "engine-root",
+                    config_dir=tmp_path / "cfg",
+                    workspace_dir=tmp_path / "ws",
+                )
 
 
 if __name__ == "__main__":

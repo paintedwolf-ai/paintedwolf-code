@@ -62,13 +62,26 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
 
 def _cmd_controls(args: argparse.Namespace) -> int:
-    prov = inspect_engine_binary(args.engine_bin, expected_sha256=args.expected_engine_sha256)
+    out_dir = pathlib.Path(args.out_dir) if args.out_dir else pathlib.Path(tempfile.mkdtemp(prefix="gb02-controls-"))
+    workspace = out_dir / "workspace"
+    config_dir = out_dir / "config"
+    sidecar = IsolatedSidecarProcess(
+        args.engine_bin,
+        product_root=args.product_root,
+        config_dir=config_dir,
+        workspace_dir=workspace,
+        expected_sha256=args.expected_engine_sha256,
+        config_root=args.config_root or None,
+        engine_root=args.engine_root or None,
+    )
+    manifest = sidecar.build_run_manifest()
     if args.dry_run:
         print(
             json.dumps(
                 {
                     "dry_run": True,
-                    "engine_provenance": prov.to_dict(),
+                    "run_manifest": manifest.to_dict(),
+                    "engine_provenance": sidecar.provenance.to_dict(),
                     "controls": [
                         "control_1_supported_citation",
                         "control_2_unsupported_citation",
@@ -81,18 +94,10 @@ def _cmd_controls(args: argparse.Namespace) -> int:
         )
         return 0
 
-    out_dir = pathlib.Path(args.out_dir) if args.out_dir else pathlib.Path(tempfile.mkdtemp(prefix="gb02-controls-"))
-    workspace = out_dir / "workspace"
-    config_dir = out_dir / "config"
     workspace.mkdir(parents=True, exist_ok=True)
     (workspace / "sample.go").write_text("package sample\n\nfunc Hello() string { return \"ok\" }\n", encoding="utf-8")
 
-    with IsolatedSidecarProcess(
-        args.engine_bin,
-        config_dir=config_dir,
-        workspace_dir=workspace,
-        expected_sha256=args.expected_engine_sha256,
-    ) as client:
+    with sidecar as client:
         project = client.create_project(workspace)
         session = client.create_session(project["id"])
         sid = session["id"]
@@ -107,11 +112,24 @@ def _cmd_controls(args: argparse.Namespace) -> int:
                 ScriptedTurn(content="Verified Hello() at [read#1:3]."),
             ),
             db_path=config_dir / "store.db",
-            engine_provenance=prov,
+            engine_provenance=sidecar.provenance,
         )
     out_file = out_dir / "controls-artifact.json"
+    manifest_file = out_dir / "run-manifest.json"
     out_file.write_text(json.dumps(artifact.to_dict(), indent=2, sort_keys=True), encoding="utf-8")
-    print(json.dumps({"artifact_path": str(out_file), "session_id": sid, "engine_provenance": prov.to_dict()}, indent=2, sort_keys=True))
+    manifest_file.write_text(json.dumps(manifest.to_dict(), indent=2, sort_keys=True), encoding="utf-8")
+    print(
+        json.dumps(
+            {
+                "artifact_path": str(out_file),
+                "run_manifest_path": str(manifest_file),
+                "session_id": sid,
+                "run_manifest": manifest.to_dict(),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
     return 0
 
 
@@ -147,11 +165,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_rep.add_argument("artifact", help="Path to ShrunkArtifact JSON file")
     p_rep.set_defaults(func=_cmd_replay)
 
-    p_ctrl = sub.add_parser("controls", help="Run sidecar controls against an explicit D1 --engine-bin")
+    p_ctrl = sub.add_parser("controls", help="Run sidecar controls against an explicit D1 --engine-bin and --product-root")
     p_ctrl.add_argument("--engine-bin", required=True, help="Path to exact D1 lycaon-dev binary")
+    p_ctrl.add_argument("--product-root", required=True, help="Path to exact D1 product checkout root (Decision 009)")
+    p_ctrl.add_argument("--config-root", default="", help="Optional override for LYCAON_CONFIG_ROOT inside --product-root")
+    p_ctrl.add_argument("--engine-root", default="", help="Optional override for LYCAON_ENGINE_ROOT inside --product-root or D1 artifact dir")
     p_ctrl.add_argument("--expected-engine-sha256", default="", help="Expected SHA-256 digest of the D1 binary (Decision 009)")
     p_ctrl.add_argument("--out-dir", default="", help="Optional output directory for captured artifacts")
-    p_ctrl.add_argument("--dry-run", action="store_true", help="Inspect binary provenance without launching sidecar")
+    p_ctrl.add_argument("--dry-run", action="store_true", help="Inspect binary provenance and run manifest without launching sidecar")
     p_ctrl.set_defaults(func=_cmd_controls)
 
     p_inp = sub.add_parser("inprocess", help="Invoke D7-compliant in-process Go tests (no shipped binary edits)")
