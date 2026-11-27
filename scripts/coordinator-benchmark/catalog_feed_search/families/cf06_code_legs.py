@@ -305,15 +305,12 @@ def run_s02_sidecar(
             },
             method="PUT",
         )
-        reread_resp: dict[str, object] = {}
-        try:
-            reread_resp = driver._transport.request(  # noqa: SLF001
-                f"/v1/projects/{pid}/editor-documents/{doc_id}",
-                None,
-                method="GET",
-            )
-        except Exception as reread_exc:
-            reread_resp = {"reread_error": str(reread_exc)}
+        # Documented idempotent open/read route (`POST /v1/projects/{id}/editor-documents`, Decision 063).
+        reread_resp = driver._transport.request(  # noqa: SLF001
+            f"/v1/projects/{pid}/editor-documents",
+            {"path": "draft_target.txt", "root_id": roots[0], "client_id": "cfs-driver-reader"},
+            method="POST",
+        )
         disk_after_bytes = draft_file.read_bytes()
         saved_pos = _filter_code_hits(
             driver.search("project:current kind:code saved_s02_positive_control", default_root_id=roots[0], origin_project_id=pid, budget="complete")
