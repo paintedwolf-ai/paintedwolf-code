@@ -38,6 +38,7 @@ import sqlite3
 import sys
 import tempfile
 import time
+import urllib.error
 import uuid
 from collections import Counter
 from typing import Any, Callable, Sequence
@@ -97,17 +98,40 @@ def _host_identity(platform_key: str | None = None) -> dict[str, Any]:
     }
 
 
+def _parse_content_meta(content: Any) -> dict[str, Any]:
+    if not isinstance(content, str) or not content.strip().startswith("{"):
+        return {}
+    try:
+        parsed = json.loads(content)
+    except ValueError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def _typed_result_summary(tool_name: str, call_id: str, result: dict[str, Any]) -> dict[str, Any]:
     res = result if isinstance(result, dict) else {}
+    cmd_prog = res.get("command_program") if isinstance(res.get("command_program"), dict) else {}
+    content_meta = _parse_content_meta(res.get("content"))
+    exit_code = cmd_prog.get("status_code")
+    if exit_code is None and "exit_code" in content_meta:
+        exit_code = content_meta.get("exit_code")
+    witness = content_meta.get("sandbox_refusal_witness")
+    confined = content_meta.get("confined")
+    sandbox_refusals = content_meta.get("sandbox_refusals")
     return {
         "tool_name": tool_name,
         "tool_call_id": call_id,
         "outcome": res.get("outcome"),
         "refusal_code": _extract_refusal_code(res),
         "codes": list(res.get("codes") or []),
+        "exit_code": exit_code,
+        "confined": confined,
+        "sandbox_refusal_witness": witness,
+        "sandbox_refusals": sandbox_refusals,
         "invocation": res.get("invocation"),
+        "command_program": cmd_prog or None,
         "external_access": res.get("external_access"),
-        "left_running": res.get("left_running"),
+        "left_running": res.get("left_running") if res.get("left_running") is not None else content_meta.get("left_running"),
         "source_verdict": res.get("source_verdict"),
     }
 
@@ -119,12 +143,17 @@ def _is_earlier_gate(typed: dict[str, Any]) -> bool:
 
 
 def _command_failed_or_refused(typed: dict[str, Any]) -> bool:
-    """True when an OS-confined command was refused by the boundary (non-zero/failed/refused)."""
+    """True when an OS-confined command was refused by the boundary (refusal code, error, or non-zero exit)."""
     if typed.get("refusal_code"):
         return True
     if typed.get("outcome") in {"rejected", "error"}:
         return True
     if typed.get("source_verdict") == "failed":
+        return True
+    exit_code = typed.get("exit_code")
+    if exit_code is not None and int(exit_code) != 0:
+        return True
+    if typed.get("sandbox_refusals"):
         return True
     return False
 
@@ -160,6 +189,7 @@ def _send_tool_call_with_checkpoint_hook(
     )
     db_path = app.directory / "store.db"
     hook_fired = False
+    approve_http_error: dict[str, Any] = {}
 
     def poll() -> dict[str, Any] | None:
         nonlocal hook_fired
@@ -182,10 +212,27 @@ def _send_tool_call_with_checkpoint_hook(
                     if o.get("decision_action") == "approve" and not o.get("disabled")
                 ]
                 if choices:
-                    app.request(
-                        f"/v1/sessions/{session_id}/checkpoints/{cp['id']}",
-                        {"kind": "tool_approval", "action": "approve", "option_id": choices[0]["id"]},
-                    )
+                    try:
+                        app.request(
+                            f"/v1/sessions/{session_id}/checkpoints/{cp['id']}",
+                            {"kind": "tool_approval", "action": "approve", "option_id": choices[0]["id"]},
+                        )
+                    except urllib.error.HTTPError as exc:
+                        raw_err = ""
+                        with contextlib.suppress(Exception):
+                            raw_err = exc.read().decode("utf-8", errors="replace")
+                        parsed_err = _parse_content_meta(raw_err)
+                        approve_http_error.update({
+                            "status": exc.code,
+                            "code": str(parsed_err.get("code") or parsed_err.get("error_code") or ""),
+                            "error": str(parsed_err.get("error") or parsed_err.get("message") or raw_err[:256]),
+                        })
+                        # Reject the checkpoint so the tool call settles cleanly instead of hanging.
+                        with contextlib.suppress(Exception):
+                            app.request(
+                                f"/v1/sessions/{session_id}/checkpoints/{cp['id']}",
+                                {"kind": "tool_approval", "action": "reject", "guidance": "Settling after approve rejection."},
+                            )
         with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
             row = db.execute(
                 "SELECT tool_result_json FROM messages WHERE session_id=? AND tool_result_call_id=?",
@@ -194,6 +241,8 @@ def _send_tool_call_with_checkpoint_hook(
         return json.loads(row[0]) if row else None
 
     res = app.wait_for(poll, "wea tool result (with hook)", session_id)
+    if approve_http_error and isinstance(res, dict):
+        res = {**res, "_checkpoint_approve_http_error": approve_http_error}
     return call_id, res, req
 
 
@@ -779,6 +828,7 @@ def _execute_slot(
                 on_pending_checkpoint=_replace_socket_before_approve,
             )
             typed = _typed_result_summary("command", cid, raw_res)
+            approve_err = raw_res.get("_checkpoint_approve_http_error") if isinstance(raw_res, dict) else None
         finally:
             with contextlib.suppress(OSError):
                 sk_srv.close()
@@ -788,13 +838,24 @@ def _execute_slot(
             shutil.rmtree(sk_dir, ignore_errors=True)
 
         flag_if_earlier_gate(typed, "socket recipient changed-binding revalidation")
-        code = typed.get("refusal_code")
-        if code != A09_SOCKET_PATH_CHANGED_CODE:
+        code = str(typed.get("refusal_code") or "").upper()
+        approve_err_code = str((approve_err or {}).get("code") or "").upper()
+        approve_err_text = str((approve_err or {}).get("error") or "").lower()
+        matched_changed = (
+            code == A09_SOCKET_PATH_CHANGED_CODE
+            or approve_err_code == A09_SOCKET_PATH_CHANGED_CODE
+            or ("socket" in approve_err_text and "changed" in approve_err_text)
+        )
+        if not matched_changed:
             failures.append({
                 "rule_id": "a09_socket_changed_code_mismatch",
-                "message": f"Expected {A09_SOCKET_PATH_CHANGED_CODE!r}, got {code!r}.",
+                "message": f"Expected {A09_SOCKET_PATH_CHANGED_CODE!r}, got tool_code={code!r} approve_http_err={approve_err!r}.",
             })
-        return typed, {"socket_replaced_during_review": bool(replacement_srv), "expected_code": A09_SOCKET_PATH_CHANGED_CODE}, failures, None, None
+        return typed, {
+            "socket_replaced_during_review": bool(replacement_srv),
+            "expected_code": A09_SOCKET_PATH_CHANGED_CODE,
+            "checkpoint_approve_http_error": approve_err,
+        }, failures, None, None
 
     failures.append({"rule_id": "tb08_unknown_slot", "message": f"Unknown slot_id {slot_id!r}."})
     return {}, {}, failures, None, None

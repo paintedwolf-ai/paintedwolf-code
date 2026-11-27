@@ -489,6 +489,48 @@ class TestTB08SidecarRunner(unittest.TestCase):
             )
             self.assertEqual(manifest["counts_by_verdict"], {"unknown": 3})
 
+    def test_linux_landlock_nonzero_exit_and_a09_09_http_400_socket_changed(self) -> None:
+        import json
+        from wea.tb08_sidecar_runner import run_tb08_sidecar_slots
+
+        def fake_app_factory(app_dir: pathlib.Path, **_kwargs):
+            return _FakeSidecarApp(app_dir)
+
+        def fake_open_session(_app, _project_dir, **_kwargs):
+            return ("sess-lin", "proj-1", "root-1")
+
+        def fake_linux_landlock_exit(_app, _sid, _name, _args, checkpoint_policy=None):
+            return "call-lin", {
+                "outcome": "completed",
+                "codes": [],
+                "command_program": {"state": "completed", "status_code": 1},
+                "content": json.dumps({"exit_code": 1, "confined": True, "sandbox_refusal_witness": "incomplete"}),
+            }, {}
+
+        def fake_hooked_400(_app, _sid, _name, _args, *, on_pending_checkpoint):
+            on_pending_checkpoint({"id": "cp-400"})
+            return "call-a09-09", {
+                "outcome": "rejected",
+                "codes": ["SANDBOX_SOCKET_PATH_DENIED"],
+                "_checkpoint_approve_http_error": {
+                    "status": 400,
+                    "code": "sandbox_socket_path_changed",
+                    "error": "socket path changed during approval",
+                },
+            }, {}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = run_tb08_sidecar_slots(
+                pathlib.Path(tmp) / "tb08-lin",
+                slot_ids=["A05-01", "A08-01", "A09-07", "A09-09"],
+                platform_key="linux",
+                app_factory=fake_app_factory,
+                session_opener=fake_open_session,
+                tool_caller=fake_linux_landlock_exit,
+                tool_caller_hooked=fake_hooked_400,
+            )
+            self.assertEqual(manifest["counts_by_verdict"], {"pass": 4}, f"manifest={manifest}")
+
 
 if __name__ == "__main__":
     unittest.main()
