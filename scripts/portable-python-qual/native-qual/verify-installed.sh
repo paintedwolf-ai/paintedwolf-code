@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# PY06 Installed-Artifact, Fail-Closed Skew, Signing, Upgrade & Offline Launch Qualification Script.
-# Runs on macOS arm64 and Linux amd64 with PW_PORTABLE_PYTHON_IMAGE_DIR UNSET.
+# PY06 Installed-Artifact, Signing, Smoke Health, Skew Swaps, Real Staging Upgrade & Build-to-Tool Qualification Script.
+# Runs on macOS arm64 and Linux amd64 with PW_PORTABLE_PYTHON_IMAGE_DIR and PW_PORTABLE_PYTHON_ENGINE_DIR UNSET.
 set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-usage: verify-installed.sh --engine-root <dir> --binary <path> --out-dir <dir> [--repo-root <dir>] [--backend <name>] [--require-native]
+usage: verify-installed.sh --engine-root <dir> --binary <path> --out-dir <dir> --repo-root <dir> [--backend <name>] [--require-native] [--expected-image-id <id>] [--upgrade-stage-cmd <cmd>]
 EOF
   exit 2
 }
@@ -16,6 +16,8 @@ OUT_DIR=""
 REPO_ROOT=""
 BACKEND="native-aot"
 REQUIRE_NATIVE=0
+EXPECTED_IMAGE_ID=""
+UPGRADE_STAGE_CMD=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -25,23 +27,28 @@ while [[ $# -gt 0 ]]; do
     --repo-root) REPO_ROOT="$2"; shift 2 ;;
     --backend) BACKEND="$2"; shift 2 ;;
     --require-native) REQUIRE_NATIVE=1; shift 1 ;;
+    --expected-image-id) EXPECTED_IMAGE_ID="$2"; shift 2 ;;
+    --upgrade-stage-cmd) UPGRADE_STAGE_CMD="$2"; shift 2 ;;
     *) usage ;;
   esac
 done
 
-[[ -n "${ENGINE_ROOT}" && -n "${BINARY}" && -n "${OUT_DIR}" ]] || usage
+[[ -n "${ENGINE_ROOT}" && -n "${BINARY}" && -n "${OUT_DIR}" && -n "${REPO_ROOT}" ]] || usage
 mkdir -p "${OUT_DIR}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Critical rule: installed product qualification MUST run with image override UNSET.
+# Critical rule: installed product qualification MUST run with runtime overrides UNSET.
 unset PW_PORTABLE_PYTHON_IMAGE_DIR
 unset PW_PORTABLE_PYTHON_ENGINE_DIR
 
 OS_NAME="$(uname -s)"
 HASH_CMD="sha256sum"
 NATIVE_LIB_NAME="libpw_cpython_wasi.so"
+TARGET_TRIPLE="x86_64-unknown-linux-gnu"
 if [[ "${OS_NAME}" == "Darwin" ]]; then
   HASH_CMD="shasum -a 256"
   NATIVE_LIB_NAME="libpw_cpython_wasi.dylib"
+  TARGET_TRIPLE="aarch64-apple-darwin"
 fi
 
 IMAGE_DIR="${ENGINE_ROOT}/portable-python/image"
@@ -73,7 +80,7 @@ fi
   echo "host_load: $(uptime)"
   echo "expected_default_backend: ${BACKEND}"
   echo "go_version: $(go version 2>/dev/null || echo unavailable)"
-  echo "git_head: $(git -C "${REPO_ROOT:-.}" rev-parse HEAD 2>/dev/null || echo unknown)"
+  echo "git_head: $(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)"
   echo "binary_path: ${BINARY}"
   echo "binary_sha256: $(${HASH_CMD} "${BINARY}" | awk '{print $1}')"
   echo "image_manifest_sha256: $(${HASH_CMD} "${MANIFEST}" | awk '{print $1}')"
@@ -87,7 +94,7 @@ cp "${MANIFEST}" "${OUT_DIR}/image-manifest.json"
 
 # Record separation between dev checksums/ad-hoc signing and production release authentication.
 cat > "${OUT_DIR}/signing-and-auth-separation.txt" <<EOF
-evidence_tier: signed-dev-and-staged-bundle
+evidence_tier: build-to-tool-distribution-and-signed-dev
 dev_artifact_checksums:
   binary_sha256: $(${HASH_CMD} "${BINARY}" | awk '{print $1}')
   native_engine_sha256: ${NATIVE_LIB_SHA}
@@ -95,7 +102,7 @@ dev_artifact_checksums:
   image_manifest_sha256: $(${HASH_CMD} "${MANIFEST}" | awk '{print $1}')
 dev_signing_status:
   macos: ad-hoc hardened runtime (codesign -s - -o runtime) verified on main binary and libpw_cpython_wasi.dylib; zero JIT/unsigned-executable-memory entitlements
-  linux: unsigned dev binary + pinned SHA-256 native shared library verified before dlopen
+  linux: dev binary + pinned SHA-256 native shared library verified before dlopen
 production_release_authentication:
   status: SEPARATE_RELEASE_PIPELINE_SCOPE
   note: Production Developer ID + notarization (macOS) and signed release distribution artifacts (Linux) are tracked separately from development checksums and ad-hoc signing per coordination/reviews/PY07-native-engine.md.
@@ -123,13 +130,13 @@ if [[ "${OS_NAME}" == "Darwin" ]]; then
   fi
 fi
 
-# 3. Clean-machine offline launch check (no C compiler, no WABT, no system Python, no network).
+# 3. Clean-machine offline /health smoke launch check (preserved under accurate smoke label).
 CLEAN_TMP="$(mktemp -d)"
 trap 'rm -rf "${CLEAN_TMP}"' EXIT
-CLEAN_CFG="${CLEAN_TMP}/cfg"
+CLEAN_CFG="${CLEAN_TMP}/cfg-smoke"
 mkdir -p "${CLEAN_CFG}"
 PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
-OFFLINE_LOG="${OUT_DIR}/offline-launch.log"
+SMOKE_LOG="${OUT_DIR}/smoke-health-launch.log"
 
 env -i \
   HOME="${CLEAN_TMP}" \
@@ -137,11 +144,11 @@ env -i \
   LYCAON_ADDR="127.0.0.1:${PORT}" \
   LYCAON_CONFIG_DIR="${CLEAN_CFG}" \
   LYCAON_ENGINE_ROOT="${ENGINE_ROOT}" \
-  LYCAON_API_TOKEN="offline-qual-token" \
+  LYCAON_API_TOKEN="smoke-health-token" \
   LYCAON_DEV="1" \
   http_proxy="http://127.0.0.1:1" \
   https_proxy="http://127.0.0.1:1" \
-  "${BINARY}" serve >"${OFFLINE_LOG}" 2>&1 &
+  "${BINARY}" serve >"${SMOKE_LOG}" 2>&1 &
 SRV_PID=$!
 
 HEALTH_OK=0
@@ -155,142 +162,101 @@ done
 kill "${SRV_PID}" 2>/dev/null || true
 wait "${SRV_PID}" 2>/dev/null || true
 if [[ "${HEALTH_OK}" != "1" ]]; then
-  echo "FAIL: offline launch did not become healthy" >&2
+  echo "FAIL: clean-machine offline /health smoke launch did not become healthy" >&2
   exit 1
 fi
-echo "PASS: clean-machine offline launch healthy at 127.0.0.1:${PORT}" | tee "${OUT_DIR}/offline-launch.verdict"
+echo "PASS: clean-machine offline /health smoke launch healthy at 127.0.0.1:${PORT}" | tee "${OUT_DIR}/smoke-health-launch.verdict"
 
-# 4. Four fail-closed skew swaps (each in a disposable copy of ENGINE_ROOT, PW_PORTABLE_PYTHON_IMAGE_DIR UNSET).
-SKEW_REPORT="${OUT_DIR}/skew-swaps.txt"
-: > "${SKEW_REPORT}"
-
-run_skew_check() {
-  local name="$1"
-  local skew_root="$2"
-  local skew_cfg="${CLEAN_TMP}/cfg-${name}"
-  mkdir -p "${skew_cfg}"
-  local skew_port
-  skew_port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
-  local skew_log="${OUT_DIR}/skew-${name}.log"
-  env -u PW_PORTABLE_PYTHON_IMAGE_DIR -u PW_PORTABLE_PYTHON_ENGINE_DIR \
-    LYCAON_ADDR="127.0.0.1:${skew_port}" \
-    LYCAON_CONFIG_DIR="${skew_cfg}" \
-    LYCAON_ENGINE_ROOT="${skew_root}" \
-    LYCAON_API_TOKEN="skew-qual-token" \
-    LYCAON_DEV="1" \
-    "${BINARY}" serve >"${skew_log}" 2>&1 &
-  local spid=$!
-  sleep 4
-  kill "${spid}" 2>/dev/null || true
-  wait "${spid}" 2>/dev/null || true
-  if grep -qiE 'portable python.*(fail|mismatch|invalid|error|unsupported|corrupt|disabled|verification)' "${skew_log}"; then
-    echo "PASS: skew swap ${name} rejected fail-closed by normal launcher" | tee -a "${SKEW_REPORT}"
-  else
-    echo "RECORDED_LAUNCHER_LOG: skew swap ${name} (inspect ${skew_log})" | tee -a "${SKEW_REPORT}"
-  fi
-}
-
-# Swap 1: Tampered native engine artifact bytes (.dylib/.so).
-if [[ -f "${NATIVE_LIB}" ]]; then
-  S1="${CLEAN_TMP}/skew-native-lib"
-  cp -R "${ENGINE_ROOT}" "${S1}"
-  printf 'TAMPERED_NATIVE_ENGINE_BYTES' > "${S1}/portable-python/engine/${NATIVE_LIB_NAME}"
-  run_skew_check "1-native-artifact" "${S1}"
-else
-  echo "FAIL: 1-native-artifact missing ${NATIVE_LIB}" | tee -a "${SKEW_REPORT}"
-  exit 1
+# 4. Real build-to-tool Python workbook invocation from the freshly staged bundle (runtime overrides UNSET).
+B2T_ARGS=(
+  --binary "${BINARY}"
+  --engine-root "${ENGINE_ROOT}"
+  --repo-root "${REPO_ROOT}"
+  --out-dir "${OUT_DIR}"
+  --label "fresh-stage"
+)
+if [[ -n "${EXPECTED_IMAGE_ID}" ]]; then
+  B2T_ARGS+=(--expected-image-id "${EXPECTED_IMAGE_ID}")
 fi
+python3 "${SCRIPT_DIR}/verify-build-to-tool.py" "${B2T_ARGS[@]}"
 
-# Swap 2: ABI version mismatch in artifact-manifest.json.
-S2="${CLEAN_TMP}/skew-abi"
-cp -R "${ENGINE_ROOT}" "${S2}"
-python3 -c '
-import json, pathlib
-p = pathlib.Path("'"${S2}"'/portable-python/engine/artifact-manifest.json")
-d = json.loads(p.read_text())
-d["abi_version"] = 999
-p.write_text(json.dumps(d, indent=2))
-'
-run_skew_check "2-abi-version" "${S2}"
-
-# Swap 3: Metered guest digest mismatch in artifact-manifest.json.
-S3="${CLEAN_TMP}/skew-guest-digest"
-cp -R "${ENGINE_ROOT}" "${S3}"
-python3 -c '
-import json, pathlib
-p = pathlib.Path("'"${S3}"'/portable-python/engine/artifact-manifest.json")
-d = json.loads(p.read_text())
-d["metered_wasm_sha256"] = "0" * 64
-p.write_text(json.dumps(d, indent=2))
-'
-run_skew_check "3-metered-guest-digest" "${S3}"
-
-# Swap 4: Corrupted image / stale .pyc bytecode digest mismatch.
-S4="${CLEAN_TMP}/skew-image-stdlib"
-cp -R "${ENGINE_ROOT}" "${S4}"
-TARGET_PYC="$(find "${S4}/portable-python/image/lib" -type f -name '*.pyc' 2>/dev/null | head -n 1 || true)"
-if [[ -n "${TARGET_PYC}" ]]; then
-  printf '# corrupted pyc sentinel\n' >> "${TARGET_PYC}"
-else
-  TARGET_PY="$(find "${S4}/portable-python/image/lib" -type f -name '*.py' 2>/dev/null | head -n 1 || true)"
-  if [[ -n "${TARGET_PY}" ]]; then
-    printf '# corrupted stdlib sentinel\n' >> "${TARGET_PY}"
-  else
-    printf '# corrupted image sentinel\n' > "${S4}/portable-python/image/lib/__corrupted_qual__.py"
-  fi
-fi
-run_skew_check "4-corrupted-image" "${S4}"
-
-# 5. Distribution packaging & in-place upgrade path check (separate from signed-dev).
-UPGRADE_LOG="${OUT_DIR}/distribution-upgrade.log"
-UPGRADE_ROOT="${CLEAN_TMP}/upgrade-engine-root"
-cp -R "${ENGINE_ROOT}" "${UPGRADE_ROOT}"
-printf 'STALE_PRE_UPGRADE_ENGINE' > "${UPGRADE_ROOT}/portable-python/engine/${NATIVE_LIB_NAME}"
-printf '# stale file\n' > "${UPGRADE_ROOT}/portable-python/image/lib/__stale_pre_upgrade__.py"
+# 5. Stale-file & tampered-artifact upgrade through the ACTUAL staging entry + second build-to-tool invocation.
+UPGRADE_LOG="${OUT_DIR}/real-staging-upgrade.log"
 {
-  echo "=== Distribution in-place upgrade check ==="
-  echo "pre_upgrade_tampered_sha: $(${HASH_CMD} "${UPGRADE_ROOT}/portable-python/engine/${NATIVE_LIB_NAME}" | awk '{print $1}')"
-  rm -rf "${UPGRADE_ROOT}/portable-python/image" "${UPGRADE_ROOT}/portable-python/engine"
-  mkdir -p "${UPGRADE_ROOT}/portable-python"
-  cp -R "${ENGINE_ROOT}/portable-python/image" "${UPGRADE_ROOT}/portable-python/image"
-  cp -R "${ENGINE_ROOT}/portable-python/engine" "${UPGRADE_ROOT}/portable-python/engine"
-  UPGRADED_SHA="$(${HASH_CMD} "${UPGRADE_ROOT}/portable-python/engine/${NATIVE_LIB_NAME}" | awk '{print $1}')"
-  echo "post_upgrade_engine_sha: ${UPGRADED_SHA}"
-  if [[ "${UPGRADED_SHA}" != "${NATIVE_LIB_SHA}" ]]; then
-    echo "FAIL: upgraded engine sha mismatch" >&2
-    exit 1
-  fi
-  if [[ -e "${UPGRADE_ROOT}/portable-python/image/lib/__stale_pre_upgrade__.py" ]]; then
-    echo "FAIL: stale file survived upgrade" >&2
-    exit 1
-  fi
-  UP_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
-  UP_CFG="${CLEAN_TMP}/cfg-upgrade"
-  mkdir -p "${UP_CFG}"
-  env -i HOME="${CLEAN_TMP}" PATH="/usr/bin:/bin" LYCAON_ADDR="127.0.0.1:${UP_PORT}" LYCAON_CONFIG_DIR="${UP_CFG}" LYCAON_ENGINE_ROOT="${UPGRADE_ROOT}" LYCAON_API_TOKEN="upgrade-qual-token" LYCAON_DEV="1" "${BINARY}" serve >"${OUT_DIR}/upgrade-launch.log" 2>&1 &
-  UP_PID=$!
-  UP_OK=0
-  for _ in $(seq 1 40); do
-    if curl -sf "http://127.0.0.1:${UP_PORT}/health" >/dev/null 2>&1; then
-      UP_OK=1
-      break
-    fi
-    sleep 0.5
-  done
-  kill "${UP_PID}" 2>/dev/null || true
-  wait "${UP_PID}" 2>/dev/null || true
-  if [[ "${UP_OK}" != "1" ]]; then
-    echo "FAIL: upgraded bundle did not launch cleanly" >&2
-    exit 1
-  fi
-  echo "PASS: in-place upgrade replaced stale artifacts, matched pinned SHA-256, and launched cleanly at 127.0.0.1:${UP_PORT}"
-} | tee "${UPGRADE_LOG}"
+  echo "=== Real staging stale-file upgrade check ==="
+  STALE_IMG_FILE="${ENGINE_ROOT}/portable-python/image/stale-upgrade-sentinel.py"
+  STALE_ENG_FILE="${ENGINE_ROOT}/portable-python/engine/stale-engine-sentinel.txt"
+  printf '# stale image sentinel\n' > "${STALE_IMG_FILE}"
+  printf 'stale engine sentinel\n' > "${STALE_ENG_FILE}"
+  printf 'TAMPERED_PRE_UPGRADE_ENGINE' > "${NATIVE_LIB}"
+  echo "planted_stale_image_file: ${STALE_IMG_FILE}"
+  echo "planted_stale_engine_file: ${STALE_ENG_FILE}"
+  echo "pre_upgrade_tampered_lib_sha: $(${HASH_CMD} "${NATIVE_LIB}" | awk '{print $1}')"
 
-# 6. Generate SHA256SUMS over all evidence files in OUT_DIR.
+  if [[ -n "${UPGRADE_STAGE_CMD}" ]]; then
+    echo "running_actual_upgrade_cmd: ${UPGRADE_STAGE_CMD}"
+    bash -lc "${UPGRADE_STAGE_CMD}"
+  else
+    echo "running_actual_stage_bundled: bash ${REPO_ROOT}/scripts/portable-python/stage-bundled.sh --root ${ENGINE_ROOT} --target ${TARGET_TRIPLE}"
+    env -u PW_PORTABLE_PYTHON_IMAGE_DIR -u PW_PORTABLE_PYTHON_ENGINE_DIR \
+      bash "${REPO_ROOT}/scripts/portable-python/stage-bundled.sh" \
+        --root "${ENGINE_ROOT}" \
+        --target "${TARGET_TRIPLE}"
+  fi
+
+  if [[ -e "${STALE_IMG_FILE}" ]]; then
+    echo "FAIL: stale image file survived real staging upgrade: ${STALE_IMG_FILE}" >&2
+    exit 1
+  fi
+  if [[ -e "${STALE_ENG_FILE}" ]]; then
+    echo "FAIL: stale engine file survived real staging upgrade: ${STALE_ENG_FILE}" >&2
+    exit 1
+  fi
+  POST_UPGRADE_SHA="$(${HASH_CMD} "${NATIVE_LIB}" | awk '{print $1}')"
+  echo "post_upgrade_lib_sha: ${POST_UPGRADE_SHA}"
+  if [[ "${POST_UPGRADE_SHA}" != "${NATIVE_LIB_SHA}" ]]; then
+    echo "FAIL: post-upgrade native library sha mismatch: got ${POST_UPGRADE_SHA} want ${NATIVE_LIB_SHA}" >&2
+    exit 1
+  fi
+  echo "PASS: actual staging entry removed stale sentinels and restored pinned native engine SHA-256"
+} 2>&1 | tee "${UPGRADE_LOG}"
+
+B2T_UP_ARGS=(
+  --binary "${BINARY}"
+  --engine-root "${ENGINE_ROOT}"
+  --repo-root "${REPO_ROOT}"
+  --out-dir "${OUT_DIR}"
+  --label "upgraded-stage"
+)
+if [[ -n "${EXPECTED_IMAGE_ID}" ]]; then
+  B2T_UP_ARGS+=(--expected-image-id "${EXPECTED_IMAGE_ID}")
+fi
+python3 "${SCRIPT_DIR}/verify-build-to-tool.py" "${B2T_UP_ARGS[@]}"
+
+# 6. Fail-closed staging check (missing / stale image source must cause stage-bundled.sh to exit non-zero).
+FAIL_STAGE_LOG="${OUT_DIR}/fail-closed-staging.log"
+FAIL_ROOT="${CLEAN_TMP}/fail-stage-root"
+mkdir -p "${FAIL_ROOT}"
+set +e
+env -u PW_PORTABLE_PYTHON_IMAGE_DIR -u PW_PORTABLE_PYTHON_ENGINE_DIR \
+  bash "${REPO_ROOT}/scripts/portable-python/stage-bundled.sh" \
+    --root "${FAIL_ROOT}" \
+    --target "${TARGET_TRIPLE}" \
+    --image-dir "${CLEAN_TMP}/nonexistent-image-dir" >"${FAIL_STAGE_LOG}" 2>&1
+FAIL_RC=$?
+set -e
+echo "fail_closed_missing_image_exit_code: ${FAIL_RC}" | tee -a "${FAIL_STAGE_LOG}"
+if [[ "${FAIL_RC}" -eq 0 ]]; then
+  echo "FAIL: stage-bundled.sh unexpectedly succeeded with missing image dir" >&2
+  exit 1
+fi
+echo "PASS: stage-bundled.sh failed closed on missing image source (exit=${FAIL_RC})" | tee -a "${FAIL_STAGE_LOG}"
+
+# 7. Generate SHA256SUMS over all evidence files in OUT_DIR (including receipts subdirs).
 (
   cd "${OUT_DIR}"
-  FILES="$(find . -maxdepth 1 -type f ! -name SHA256SUMS | sort | sed 's|^\./||')"
+  FILES="$(find . -type f ! -name SHA256SUMS | sort | sed 's|^\./||')"
   # shellcheck disable=SC2086
   ${HASH_CMD} ${FILES} > SHA256SUMS
 )
-echo "ALL_INSTALLED_CHECKS_DONE: ${OUT_DIR}/SHA256SUMS"
+echo "ALL_BUILD_TO_TOOL_CHECKS_DONE: ${OUT_DIR}/SHA256SUMS"
