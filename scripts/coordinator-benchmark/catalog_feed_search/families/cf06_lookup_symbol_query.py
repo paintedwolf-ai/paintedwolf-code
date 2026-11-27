@@ -471,11 +471,19 @@ def run_s08_sidecar(
         return str(resp["id"])
 
     def _post_authoritative_message(sid: str, text: str) -> None:
-        transport.request(
-            f"/v1/sessions/{sid}/prompts",
-            {"operation_id": str(uuid.uuid4()), "text": text},
-            method="POST",
-        )
+        deadline = time.monotonic() + 5.0
+        while True:
+            try:
+                transport.request(
+                    f"/v1/sessions/{sid}/prompts",
+                    {"operation_id": str(uuid.uuid4()), "text": text},
+                    method="POST",
+                )
+                return
+            except urllib.error.HTTPError as exc:
+                if exc.code != 409 or time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.1)
 
     def _wait_store_hit(pid: str, token: str, timeout_s: float = 3.0) -> list[dict[str, object]]:
         deadline = time.monotonic() + timeout_s
@@ -541,7 +549,15 @@ def run_s08_sidecar(
     tok_e3 = f"s08edge3del_{uuid.uuid4().hex[:8]}"
     _post_authoritative_message(sid_del, f"edge3 delete target {tok_e3}")
     before_del = _wait_store_hit(pid_a, tok_e3)
-    transport.request(f"/v1/sessions/{sid_del}", None, method="DELETE")
+    del_deadline = time.monotonic() + 5.0
+    while True:
+        try:
+            transport.request(f"/v1/sessions/{sid_del}", None, method="DELETE")
+            break
+        except urllib.error.HTTPError as exc:
+            if exc.code != 409 or time.monotonic() >= del_deadline:
+                raise
+            time.sleep(0.1)
     after_del = driver.search_raw(f"project:current kind:message {tok_e3}", origin_project_id=pid_a, limit=20, budget="complete")
     summary.record_edge(
         bool(before_del) and len(after_del.get("hits") or []) == 0,
