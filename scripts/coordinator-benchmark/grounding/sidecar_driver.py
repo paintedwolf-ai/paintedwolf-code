@@ -545,7 +545,9 @@ class IsolatedSidecarProcess:
             manual_boundary_verified=self.manual_boundary_verified,
         )
 
-    def start(self, *, ready_timeout: float = 30.0) -> SidecarSessionClient:
+    def start(self, *, ready_timeout: float | None = None) -> SidecarSessionClient:
+        if ready_timeout is None:
+            ready_timeout = 90.0 if self.trace_friction else 60.0
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
         self.port = probe_free_port()
