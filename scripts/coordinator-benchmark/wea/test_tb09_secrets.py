@@ -8,6 +8,7 @@ import sqlite3
 import tempfile
 import unittest
 import urllib.request
+from unittest import mock
 
 from wea.canary import CanaryGenerator
 from wea.fixtures_net import RecordingHTTPFixture
@@ -21,6 +22,7 @@ from wea.tb09_secrets import (
 from wea.tb09_sidecar_runner import (
     TB09_SIDECAR_SLOTS,
     TB09SlotSpec,
+    _restart_application,
     build_parser,
     build_slot_receipt,
 )
@@ -249,6 +251,32 @@ class TestTB09Secrets(unittest.TestCase):
         self.assertEqual(args.engine_manifest, pathlib.Path("/tmp/manifest.json"))
         self.assertEqual(args.families, ["A10", "A13"])
         self.assertEqual(args.slot, ["A10-sc-01"])
+
+    def test_restart_application_reuses_existing_profile_dir_without_file_exists_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app_dir = pathlib.Path(tmp) / "app"
+            cfg_dir = app_dir / "config"
+            cfg_dir.mkdir(parents=True, exist_ok=False)
+            (app_dir / "store.db").write_bytes(b"sqlite-placeholder")
+            (app_dir / "sidecar.log").write_text("pre-restart log\n", encoding="utf-8")
+
+            fake_proc = mock.MagicMock()
+            fake_proc.pid = 424242
+            with mock.patch("wea.tb09_sidecar_runner.subprocess.Popen", return_value=fake_proc) as popen_mock:
+                restarted = _restart_application(app_dir, engine_bin=pathlib.Path("/tmp/fake-lycaon-dev"))
+                try:
+                    self.assertEqual(restarted.directory, app_dir.resolve())
+                    self.assertEqual(restarted.config, cfg_dir.resolve())
+                    self.assertEqual(restarted.process.pid, 424242)
+                    self.assertTrue(restarted.url.startswith("http://127.0.0.1:"))
+                    self.assertTrue((app_dir / "ownership.json").is_file())
+                    popen_args = popen_mock.call_args[0][0]
+                    self.assertIn("serve", popen_args)
+                    self.assertIn(str(app_dir.resolve() / "store.db"), popen_args)
+                finally:
+                    restarted.log.close()
+            # Existing pre-restart log must be preserved (opened in append mode).
+            self.assertIn("pre-restart log", (app_dir / "sidecar.log").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

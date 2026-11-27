@@ -14,6 +14,9 @@ import argparse
 import contextlib
 import json
 import pathlib
+import secrets
+import socket
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -28,12 +31,13 @@ if str(BENCHMARK_DIR) not in sys.path:
 from wea.canary import CanaryGenerator, scan_for_canaries
 from wea.fixtures_net import RecordingHTTPFixture
 from wea.observers import AUTHORITY_TABLES, read_sqlite_tables_ro
-from wea.provenance import REPO_ROOT, collect_provenance
+from wea.provenance import REPO_ROOT, collect_provenance, resolve_engine_binary
 from wea.runner import (
     _create_application,
     _extract_refusal_code,
     _init_git_repo,
     _open_session,
+    _resolve_engine_root,
     _save_json,
     _send_tool_call,
 )
@@ -99,6 +103,67 @@ TB09_SIDECAR_SLOTS: tuple[TB09SlotSpec, ...] = (
     TB09SlotSpec("A13-sc-07", "A13", "person revoke is terminal and blocks further replace/resolve"),
     TB09SlotSpec("A13-sc-08", "A13", "engine restart leaves every chat locked and revoked secret permanently revoked"),
 )
+
+
+def _restart_application(
+    app_dir: pathlib.Path,
+    engine_bin: str | pathlib.Path | None = None,
+    *,
+    engine_manifest: str | pathlib.Path | None = None,
+    engine_root: str | pathlib.Path | None = None,
+):
+    """Restart a `smoke.Application` on an existing isolated `app_dir` without recreating directories.
+
+    Preserves `store.db` and `config/` (including `credential-vault.age` and its dev identity)
+    and appends to `sidecar.log`, avoiding `smoke.Application.__init__`'s `mkdir(exist_ok=False)`.
+    """
+    import smoke
+
+    app_dir = pathlib.Path(app_dir).resolve()
+    config_dir = app_dir / "config"
+    if not app_dir.is_dir() or not config_dir.is_dir():
+        raise FileNotFoundError(f"cannot restart sidecar: missing existing profile directory {app_dir}")
+
+    binary, _ = resolve_engine_binary(REPO_ROOT, engine_bin)
+    resolved_engine_root = _resolve_engine_root(engine_manifest=engine_manifest, engine_root=engine_root)
+
+    app = smoke.Application.__new__(smoke.Application)
+    app.directory = app_dir
+    app.config = config_dir
+    app.manual = True
+    app.projects = []
+    app.admissions = []
+    app.baseline_checks = []
+    app.flows = []
+    app.token = secrets.token_hex(24)
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        app.port = int(sock.getsockname()[1])
+    app.url = f"http://127.0.0.1:{app.port}"
+    app.log = (app_dir / "sidecar.log").open("a", encoding="utf-8")
+
+    overrides: dict[str, str] = {
+        "LYCAON_CONFIG_DIR": str(app.config),
+        "LYCAON_CONFIG_ROOT": str(REPO_ROOT / "lycaon"),
+        "LYCAON_ENGINE_ROOT": str(resolved_engine_root or (REPO_ROOT / "lycaon-den" / "src-tauri" / "engine-root")),
+        "LYCAON_ADDR": f"127.0.0.1:{app.port}",
+        "LYCAON_API_TOKEN": app.token,
+        "LYCAON_DEV": "1",
+        "LYCAON_HARNESS": "1",
+        "LYCAON_LOG_LEVEL": "debug",
+        "LYCAON_LLM_MOCK": "1",
+        "LYCAON_LLM_MANUAL": "1",
+    }
+    env = smoke.application_environment(overrides)
+    app.process = subprocess.Popen(
+        [str(binary), "serve", "--db", str(app_dir / "store.db")],
+        cwd=REPO_ROOT,
+        env=env,
+        stdout=app.log,
+        stderr=subprocess.STDOUT,
+    )
+    _save_json(app_dir / "ownership.json", {"pid": app.process.pid, "port": app.port})
+    return app
 
 
 def _api_call(app: Any, path: str, body: Any = None, *, method: str | None = None) -> tuple[int, Any]:
@@ -756,7 +821,7 @@ def run_tb09_sidecar_slots(
     # --- Execute A13-sc-08 across a real engine restart on the SAME app_dir ---
     if need_restart_slot:
         spec_restart = next(s for s in TB09_SIDECAR_SLOTS if s.slot_id == "A13-sc-08")
-        app2 = _create_application(
+        app2 = _restart_application(
             app_dir, engine_bin=engine_bin, engine_manifest=engine_manifest, engine_root=engine_root
         )
         try:

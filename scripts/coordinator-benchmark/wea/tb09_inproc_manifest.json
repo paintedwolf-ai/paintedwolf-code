@@ -1,7 +1,7 @@
 {
   "schema": "wea-inproc-manifest-v1",
   "card": "TB09",
-  "title": "Secret screening and custody — A10 in-process slot manifest",
+  "title": "Secret screening and custody \u2014 A10 in-process slot manifest",
   "pinned_product_base": "bbeb46e72ce3d1cfc052259cadcce29185bb40bd",
   "slots": [
     {
@@ -14,7 +14,7 @@
       "go_command": "cd lycaon && go test -v -race -count=1 -run '^TestWEATB09_A10_OutboundCardHeldPastModelDeadlineManualClock$' ./internal/llm",
       "owning_service": "internal/llm.Registry+ModelSecretScreen+CallBudget+RegistrySummarizer",
       "fixture_overlay_path": "lycaon/internal/llm/wea_tb09_a10_deadline_test.go",
-      "fixture_overlay_sha256": "97d1e0b16099b9d27a84bb2d481164ff950a7d335ae1e3618e06b03e3a13368c",
+      "fixture_overlay_sha256": "37250ae985c2f467eb5f21707dcc22fd3ecaef666e7ecd4c977f71c118daaf05",
       "receipt_prefix": "WEA_TB09_A10_INPROC_RECEIPT:",
       "receipt_schema": "wea-tb09-a10-inproc-v1",
       "platforms": [
