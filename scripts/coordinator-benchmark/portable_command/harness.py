@@ -16,7 +16,7 @@ from portable_command.artifacts import project_hashes
 from portable_command.contracts import DIRECTORY, ROOT, load_suite, materialize
 from portable_command.grading import grade_case
 from portable_command.observe import build_observation, file_sha256, source_identity
-from portable_command.provenance import materialize_helpers
+from portable_command.provenance import await_running_handle, materialize_helpers
 from portable_command.reporting import inject_drafts, make_app_factory
 from progress import save
 
@@ -241,9 +241,11 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
                 batch, envelope_mode = [{'name': 'command', 'args': {'command': turn['program']}}], 'command_only'
             results = send_tool_calls(application, session_id, batch, surface=session_surface)
             call_ids = [cid for cid, _ in results]
+            await_meta = await_running_handle(application, session_id, results[-1][1], send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface))
+            await_ids = (await_meta['wait_call_ids'] + await_meta['output_call_ids']) if await_meta else []
             turn_records.append({
-                'program': turn['program'], 'command_call_id': call_ids[-1], 'call_ids': call_ids,
-                'batch_plan': [c['name'] for c in batch], 'envelope_mode': envelope_mode,
+                'program': turn['program'], 'command_call_id': call_ids[-1], 'call_ids': call_ids, 'await_call_ids': await_ids,
+                'handle_await': await_meta, 'batch_plan': [c['name'] for c in batch], 'envelope_mode': envelope_mode,
                 'batch_outcomes': [{'call_id': cid, 'tool': c['name'], 'outcome': res.get('outcome')} for c, (cid, res) in zip(batch, results)],
             })
         save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases, 'draft_bindings': draft_bindings, 'session_surface': session_surface})
@@ -267,7 +269,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
         ('profile_binding_mismatch', bool(eff_posture) and eff_posture != session_surface['requested_posture']),
         ('uninjected_drafts', bool(case['setup'].get('drafts')) and not drafts_ok),
         ('uninjected_host_facts', bool(case['setup'].get('host_facts'))),
-    ) if cond]
+    ) if cond] + [rec['handle_await']['gap'] for rec in turn_records if (rec.get('handle_await') or {}).get('gap')]
 
     try:
         checkpoint_closed_store(app_dir / 'store.db', application.process)

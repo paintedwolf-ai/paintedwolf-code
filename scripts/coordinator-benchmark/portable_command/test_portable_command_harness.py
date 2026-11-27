@@ -330,3 +330,44 @@ class PortableCommandHarnessTests(unittest.TestCase):
             db.close()
             obs_bad, _ = observe.build_observation(CASES['source-later-syntax'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, turn_records=[{'program': CASES['source-later-syntax']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
             self.assertFalse(obs_bad['facts']['no_source_statement_started'])
+
+    def test_running_command_handle_awaits_to_terminal_and_flags_timeout(self):
+        class RunningApp(FakeApp):
+            def __init__(self, directory, *, resolve=True):
+                super().__init__(directory, mode='publish')
+                self.resolve = resolve
+            def request(self, path, body=None, missing=False, method=None):
+                res = super().request(path, body=body, missing=missing, method=method)
+                if path == '/harness/llm/pending' and isinstance(res, dict) and res.get('pending'):
+                    res['tools'] = ['command', 'update_progress', 'wait', 'command_output']
+                return res
+            def _handle_tool_calls(self, calls):
+                db = sqlite3.connect(self.directory / 'store.db')
+                for idx, tc in enumerate(calls, start=1):
+                    cid, name = tc['id'], tc['name']
+                    if name == 'command':
+                        db.execute("INSERT INTO invocation_receipts VALUES ('rcpt-cmd',?,?,'command','processes','running',1)", (self.session_id, cid))
+                        db.execute("INSERT INTO invocation_programs VALUES ('prog-1','rcpt-cmd','running',NULL,'')")
+                        res = {'outcome': 'completed', 'content': '[command#1]\n' + json.dumps({'program_id': 'prog-1', 'state': 'running', 'handle': 'command-1'})}
+                    elif name == 'wait':
+                        db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'wait','processes','completed',1)", (f'rcpt-{cid}', self.session_id, cid))
+                        res = {'outcome': 'completed', 'content': json.dumps({'outcome': 'process_done' if self.resolve else 'timeout', 'timed_out': not self.resolve})}
+                    elif name == 'command_output':
+                        db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'command_output','processes','completed',1)", (f'rcpt-{cid}', self.session_id, cid))
+                        if self.resolve:
+                            db.execute("UPDATE invocation_programs SET state='completed', status_code=0 WHERE id='prog-1'")
+                        res = {'outcome': 'completed', 'content': json.dumps({'state': 'completed', 'status': 0, 'stdout': 'ok\n'} if self.resolve else {'state': 'running'})}
+                    else:
+                        db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'update_progress','progress','completed',1)", (f'rcpt-{cid}', self.session_id, cid))
+                        res = {'outcome': 'completed', 'content': '{}'}
+                    db.execute("INSERT INTO messages VALUES (?,?,?,'tool',?,?)", (f'msg-{cid}', self.session_id, self.turn * 10 + idx, cid, json.dumps(res)))
+                db.commit(); db.close()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            with patch.object(harness, 'checkpoint_closed_store', return_value={}):
+                ok_res = harness.run_case(CASES['literal-null-sink'], root / 'ok', app_factory=lambda d: RunningApp(d, resolve=True), sse_factory=FakeSSE)
+                to_res = harness.run_case(CASES['literal-null-sink'], root / 'to', app_factory=lambda d: RunningApp(d, resolve=False), sse_factory=FakeSSE)
+            self.assertTrue(ok_res['audit']['turn_batches'][0]['handle_await']['terminal'] and ok_res['observation']['program']['complete'])
+            self.assertEqual((ok_res['observation']['program']['status'], ok_res['observation']['forbidden_replay'], ok_res['audit']['unexpected_receipt_ids']), (0, False, []))
+            self.assertFalse(to_res['audit']['turn_batches'][0]['handle_await']['terminal'])
+            self.assertIn('command_wait_timeout', to_res['audit']['observation_gaps'])

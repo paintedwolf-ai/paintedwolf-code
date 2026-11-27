@@ -46,7 +46,7 @@ def normalize_outcome(raw_result, program_row, payload):
 def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=(), baseline_hashes=None, session_surface=None, draft_bindings=None):
     """Construct a version-1 native-runtime observation from the whole isolated session."""
     prelude_calls = {r['call_id'] for r in prelude_records if r.get('call_id')}
-    expected_calls = {cid for rec in turn_records for cid in rec['call_ids']}
+    expected_calls = {cid for rec in turn_records for cid in (list(rec['call_ids']) + list(rec.get('await_call_ids') or ()))}
     audit = query_db_audit(db_path, session_id, prelude_calls)
     sidecar = scan_sidecar_launches(sidecar_log, session_id, window=sidecar_window)
     gaps = list(dict.fromkeys(extra_gaps or ()))
@@ -77,6 +77,14 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
     for rec in turn_records:
         cmd_call = rec['command_call_id']
         raw_res, payload = msgs_by_call.get(cmd_call, ({}, {}))
+        await_meta = rec.get('handle_await') or {}
+        if payload.get('state') == 'running' and await_meta.get('terminal') and isinstance(await_meta.get('final_output'), dict):
+            fo = await_meta['final_output']
+            payload = {**payload, **{k: fo[k] for k in ('state', 'stdout', 'stderr') if k in fo}}
+            if isinstance(fo.get('status'), int):
+                payload['status'] = fo['status']
+            elif isinstance(fo.get('exit_code'), int):
+                payload['status'] = fo['exit_code']
         inv_row = receipts_by_call.get(cmd_call, {})
         prog_row = progs_by_receipt.get(inv_row.get('id'))
         outcome, _, code = normalize_outcome(raw_res, prog_row, payload)
