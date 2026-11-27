@@ -1007,6 +1007,44 @@ def run_f06_instance(
         client.delete_project(project_id)
 
 
+def _run_guarded(
+    family: str,
+    case_id: str,
+    is_edge: bool,
+    fn,
+) -> CaseOutcome:
+    t0 = time.monotonic()
+    try:
+        return fn()
+    except urllib.error.HTTPError as err:
+        body = ""
+        try:
+            body = err.read().decode("utf-8", errors="replace")[:500]
+        except Exception:
+            pass
+        return CaseOutcome(
+            case_id=case_id,
+            family=family,
+            is_edge=is_edge,
+            verdict="DEFECT",
+            reason=f"HTTP {err.code}: {err.reason}",
+            declared_gaps=[],
+            elapsed_ms=int((time.monotonic() - t0) * 1000),
+            details={"http_status": err.code, "http_body": body},
+        )
+    except Exception as exc:
+        return CaseOutcome(
+            case_id=case_id,
+            family=family,
+            is_edge=is_edge,
+            verdict="UNKNOWN",
+            reason=f"harness/runtime exception: {type(exc).__name__}: {exc}",
+            declared_gaps=[],
+            elapsed_ms=int((time.monotonic() - t0) * 1000),
+            details={"exception": repr(exc)},
+        )
+
+
 def run_family_suite(
     family: str,
     client: CF05SidecarClient,
@@ -1025,34 +1063,40 @@ def run_family_suite(
     outcomes: list[CaseOutcome] = []
     if family == "F01":
         for case in f01_edge_cases(base_seed):
-            outcomes.append(run_f01_instance(client, case, fam_dir, boundary_config))
+            outcomes.append(_run_guarded("F01", case.case_id, case.is_edge, lambda c=case: run_f01_instance(client, c, fam_dir, boundary_config)))
         for i in range(count):
-            outcomes.append(run_f01_instance(client, generate_f01_case(base_seed, i), fam_dir, boundary_config))
+            case = generate_f01_case(base_seed, i)
+            outcomes.append(_run_guarded("F01", case.case_id, case.is_edge, lambda c=case: run_f01_instance(client, c, fam_dir, boundary_config)))
     elif family == "F02":
         for case in f02_edge_cases(base_seed):
-            outcomes.append(run_f02_instance(client, case, fam_dir, boundary_config))
+            outcomes.append(_run_guarded("F02", case.case_id, case.is_edge, lambda c=case: run_f02_instance(client, c, fam_dir, boundary_config)))
         for i in range(count):
-            outcomes.append(run_f02_instance(client, generate_f02_case(base_seed, i), fam_dir, boundary_config))
+            case = generate_f02_case(base_seed, i)
+            outcomes.append(_run_guarded("F02", case.case_id, case.is_edge, lambda c=case: run_f02_instance(client, c, fam_dir, boundary_config)))
     elif family == "F03":
         for case in f03_edge_cases(base_seed):
-            outcomes.append(run_f03_instance(client, case, fam_dir, boundary_config))
+            outcomes.append(_run_guarded("F03", case.case_id, case.is_edge, lambda c=case: run_f03_instance(client, c, fam_dir, boundary_config)))
         for i in range(count):
-            outcomes.append(run_f03_instance(client, generate_f03_case(base_seed, i), fam_dir, boundary_config))
+            case = generate_f03_case(base_seed, i)
+            outcomes.append(_run_guarded("F03", case.case_id, case.is_edge, lambda c=case: run_f03_instance(client, c, fam_dir, boundary_config)))
     elif family == "F04":
         for case in f04_edge_cases(base_seed):
-            outcomes.append(run_f04_instance(client, case, fam_dir, boundary_config))
+            outcomes.append(_run_guarded("F04", case.case_id, case.is_edge, lambda c=case: run_f04_instance(client, c, fam_dir, boundary_config)))
         for i in range(count):
-            outcomes.append(run_f04_instance(client, generate_f04_case(base_seed, i), fam_dir, boundary_config))
+            case = generate_f04_case(base_seed, i)
+            outcomes.append(_run_guarded("F04", case.case_id, case.is_edge, lambda c=case: run_f04_instance(client, c, fam_dir, boundary_config)))
     elif family == "F05":
         for case in f05_edge_cases(base_seed):
-            outcomes.append(run_f05_instance(client, case, fam_dir, boundary_config))
+            outcomes.append(_run_guarded("F05", case.case_id, case.is_edge, lambda c=case: run_f05_instance(client, c, fam_dir, boundary_config)))
         for i in range(count):
-            outcomes.append(run_f05_instance(client, generate_f05_case(base_seed, i), fam_dir, boundary_config))
+            case = generate_f05_case(base_seed, i)
+            outcomes.append(_run_guarded("F05", case.case_id, case.is_edge, lambda c=case: run_f05_instance(client, c, fam_dir, boundary_config)))
     elif family == "F06":
         for case in f06_edge_cases(base_seed):
-            outcomes.append(run_f06_instance(client, case, fam_dir, boundary_config))
+            outcomes.append(_run_guarded("F06", case.case_id, case.is_edge, lambda c=case: run_f06_instance(client, c, fam_dir, boundary_config)))
         for i in range(count):
-            outcomes.append(run_f06_instance(client, generate_f06_case(base_seed, i), fam_dir, boundary_config))
+            case = generate_f06_case(base_seed, i)
+            outcomes.append(_run_guarded("F06", case.case_id, case.is_edge, lambda c=case: run_f06_instance(client, c, fam_dir, boundary_config)))
     else:
         raise ValueError(f"unsupported CF05 family: {family}")
 
