@@ -44,9 +44,10 @@ webE2e("browser-obligation: build receipt leaves browser obligation open until c
 
     const driver = manualHarnessTools(request, sessionId);
     await driver.loadTools("update_progress");
-    await driver.completed(await driver.invoke("update_progress", {
+    const progressRaw = await driver.completed(await driver.invoke("update_progress", {
       content: "## Progress\n- [ ] Build index.html and verify via capture_page\n",
     }));
+    const progressSnap = (JSON.parse(progressRaw) as { snapshot: { revision: string; item_ids: string[] } }).snapshot;
 
     // Phase 1: build index.html via portable command (external_exec / completed receipt).
     const buildHtml = [
@@ -88,6 +89,8 @@ webE2e("browser-obligation: build receipt leaves browser obligation open until c
     // Mark the progress item complete so closeout is unblocked after browser verification.
     await driver.completed(await driver.invoke("update_progress", {
       content: "## Progress\n- [x] Build index.html and verify via capture_page\n",
+      expected_revision: progressSnap.revision,
+      item_ids: progressSnap.item_ids,
     }));
 
     const pending = await apiJson<PendingTurn>(request, "GET", `/harness/llm/pending?wait=30000&session_id=${sessionId}`);
