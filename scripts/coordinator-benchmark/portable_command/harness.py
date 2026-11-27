@@ -249,7 +249,8 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
             call_ids = [cid for cid, _ in results]
             await_meta = await_running_handle(application, session_id, results[-1][1], send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface))
             job_probe = probe_background_job_handles(application, session_id, app_dir / 'store.db', other_job=other_job, send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface)) if case['id'] == 'owned-background-state' and app_factory is smoke.Application else None
-            await_ids = ((await_meta['wait_call_ids'] + await_meta['output_call_ids']) if await_meta else []) + (job_probe['call_ids'] if job_probe else [])
+            verify_ids = [cid for cid, _ in send_tool_calls(application, session_id, [{'name': 'verify', 'args': {'command': 'python3 -B -m unittest discover'}}], surface=session_surface)] if 'verification_source_match' in (case.get('required_evidence') or ()) and app_factory is smoke.Application else []
+            await_ids = ((await_meta['wait_call_ids'] + await_meta['output_call_ids']) if await_meta else []) + (job_probe['call_ids'] if job_probe else []) + verify_ids
             turn_records.append({
                 'program': turn['program'], 'command_call_id': call_ids[-1], 'call_ids': call_ids, 'await_call_ids': await_ids,
                 'handle_await': await_meta, 'job_probe': job_probe, 'batch_plan': [c['name'] for c in batch], 'envelope_mode': envelope_mode,
@@ -265,8 +266,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
         save(out_dir / 'attempt.json', {'status': 'unmeasured', 'phase': 'execution', 'case_id': case['id'], 'session_id': session_id, 'error': str(exc), 'identity': identity})
         raise
     finally:
-        if sse is not None:
-            sse.close()
+        if sse is not None: sse.close()
         application.close(cleanup=False)
     window = {'pre_prompt_lines': pre_prompt_lines, 'post_tool_lines': post_tool_lines, 'post_close_lines': log_line_count(sidecar_path)}
     save(raw_dir / 'window.json', window)

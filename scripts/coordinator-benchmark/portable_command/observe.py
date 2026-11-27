@@ -264,15 +264,12 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
             and progress[0]['detail_ref'] == last_details.get('program_progress_detail_ref')
             and progress[0]['execution_id'] != last_details.get('execution_id')
         )
-    extra_facts, recovery, deliveries = extra_case_facts(case, session_id=session_id, identity=identity, project_dir=project_dir, git_setup=git_setup, receipts=receipts, effects=effects, audit=audit, recovery=recovery, last_payload=last_payload, final_hashes=final_hashes, baseline_hashes=baseline_hashes, sidecar=sidecar, session_surface=session_surface, last_raw=last_raw, no_external_launch=no_external_launch, first_rejected=first_rejected, turn_records=turn_records, invocations=cmd_invocations)
-    facts.update(extra_facts)
-    facts['structural_wrappers_valid'] = wrappers_valid
-    for req_fact in case.get('required_evidence') or ():
-        if req_fact not in facts:
-            gaps.append(f"missing_observation:{req_fact}:{FACT_OWNERS.get(req_fact, 'runtime_owner')}")
+    extra_facts, recovery, deliveries = extra_case_facts(case, session_id=session_id, identity=identity, project_dir=project_dir, git_setup=git_setup, receipts=receipts, effects=effects, audit=audit, recovery=recovery, last_payload=last_payload, final_hashes=final_hashes, baseline_hashes=baseline_hashes, sidecar=sidecar, session_surface=session_surface, last_raw=last_raw, no_external_launch=no_external_launch, first_rejected=first_rejected, turn_records=turn_records, invocations=cmd_invocations, db_path=db_path, sidecar_log=sidecar_log)
+    v_facts = extra_facts.pop('_verification_facts', None)
+    facts.update(extra_facts, structural_wrappers_valid=wrappers_valid)
+    gaps.extend(f"missing_observation:{req}:{FACT_OWNERS.get(req, 'runtime_owner')}" for req in (case.get('required_evidence') or ()) if req not in facts)
     pre_exec_refusal = bool(outcome == 'rejected' and not execs and recovery is not None)
-    raw_stderr = last_payload.get('stderr', '')
-    program_stderr = '' if pre_exec_refusal else raw_stderr
+    program_stderr = '' if pre_exec_refusal else last_payload.get('stderr', '')
     forbidden_replay = bool(unexpected_cmd) or len(cmd_receipts) > len(turn_records) or len({r['id'] for r in cmd_receipts}) != len(cmd_receipts)
     observation = {
         'version': 1, 'case_id': case['id'], 'capture_kind': 'native-runtime', 'identity': identity,
@@ -281,13 +278,14 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         'receipts': receipts, 'effects': effects, 'facts': facts, 'deliveries': deliveries, 'obligations': [],
         'closeout': 'complete' if outcome == 'completed' else 'blocked', 'forbidden_replay': forbidden_replay, 'recovery': recovery, 'invocations': cmd_invocations,
         **({'workflow_init_artifacts': (session_surface or {}).get('workflow_init_artifacts')} if (session_surface or {}).get('declared_profile_bound') else {}),
+        **({'verification_facts': v_facts} if v_facts else {}),
     }
     audit_bundle = {
         'session_id': session_id, 'session_surface': session_surface or {},
         'structural_wrappers': {'count': len(wrappers), 'valid': wrappers_valid, 'records': wrappers},
         'prelude': prelude_records, 'turn_batches': turn_records,
         'unexpected_receipt_ids': [r['id'] for r in unexpected_receipts], 'observation_gaps': gaps,
-        'refusal_stderr': raw_stderr if pre_exec_refusal else '',
+        'refusal_stderr': last_payload.get('stderr', '') if pre_exec_refusal else '',
         'retained_failure_output': failure_output,
         'external_launch_audit': {
             'sidecar': sidecar, 'source_command_windows': len(audit['source_command_windows']),

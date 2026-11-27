@@ -88,10 +88,14 @@ def _canonical_op(ex):
 
 def receipt_rows(audit, progress_receipts, draft_bindings=None):
     pubs_by_prog = {p['program_id']: p for p in audit['invocation_program_publications']}
+    verify_rids = {r['id'] for r in audit.get('invocation_receipts') or () if r.get('tool_name') == 'verify'}
+    verify_pids = {p['id'] for p in audit.get('invocation_programs') or () if p.get('parent_receipt_id') in verify_rids}
     receipts = [{'execution_id': pr['id'], 'operation': 'update_progress', 'outcome': pr['status']} for pr in progress_receipts]
     effects = [{'operation': 'update_progress', 'outcome': pr['status']} for pr in progress_receipts]
     wrappers = []
     for ex in audit['invocation_program_executions']:
+        if ex.get('program_id') in verify_pids:
+            continue
         op_id, native_cmd = ex.get('operation_id') or '', ex.get('native_command') or ''
         if (op_id in ELIGIBLE_WRAPPER_OPS and not native_cmd
                 and ex.get('effect_certainty') in {None, '', 'none'}

@@ -42,6 +42,8 @@ def resolve_engine_manifest(engine_manifest=None):
 CASE_HELPERS = {
     'temp-native-process-handoff': {'fixture-reader': {'kind': 'read-file-arg'}},
     'owned-background-state': {'fixture-job': {'kind': 'print-env-fixture'}},
+    'fractional-logstat': {'fixture-task': {'kind': 'fixture-task'}},
+    'wordle-explicit-history': {'fixture-task': {'kind': 'fixture-task'}},
 }
 
 
@@ -63,6 +65,9 @@ def materialize_helpers(helpers, helpers_dir, case_id=None):
             script.write_text("#!/bin/sh\nexec python3 -c 'import pathlib,sys; sys.stdout.buffer.write(pathlib.Path(sys.argv[1]).read_bytes())' \"$1\"\n")
         elif kind == 'print-env-fixture':
             script.write_text("#!/bin/sh\nprintf '%s\\n%s\\n' \"${FIXTURE:-}\" \"$(pwd -P)\"\n")
+        elif kind == 'fixture-task':
+            from portable_command.task_oracles import TASK_HELPER_SCRIPT
+            script.write_text(TASK_HELPER_SCRIPT)
         else:
             out = shlex.quote(str(spec.get('stdout') or ''))
             err = shlex.quote(str(spec.get('stderr') or ''))

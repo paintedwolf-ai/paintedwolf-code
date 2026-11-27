@@ -6,9 +6,12 @@ import sqlite3
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
+import focused_outcomes as oracle
 from portable_command import case_oracles, grading, observe
 from portable_command.contracts import load_suite, materialize
 from portable_command.test_portable_command_harness import create_audit_db
+from test_focused_outcomes import local_execute
 
 CASES = {c['id']: c for c in load_suite()['cases']}
 
@@ -124,3 +127,78 @@ class PortableCommandWave3Tests(unittest.TestCase):
             db.commit(); db.close()
             obs_stale, _ = observe.build_observation(case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=[{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
             self.assertFalse(obs_stale['facts']['catalog_generation_matches_live'])
+            # bounded_visits parsed from sidecar.log "command discovery completed" by execution_id.
+            db = sqlite3.connect(db_path)
+            db.execute("ALTER TABLE invocation_program_executions ADD COLUMN complete INTEGER DEFAULT 1")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,complete,effect_certainty) VALUES ('fe1','p1',1,'find','find','filesystem','completed',1,'none')")
+            db.commit(); db.close()
+            log_path.write_text('level=INFO msg="server listening"\nlevel=INFO msg="command discovery completed" execution_id=fe1 entries=10001\nlevel=INFO msg="shutdown signal received"\n')
+            obs_ok, _ = observe.build_observation(case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=[{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
+            self.assertTrue(obs_ok['facts']['bounded_visits'])
+            log_path.write_text('level=INFO msg="server listening"\nlevel=INFO msg="command discovery completed" execution_id=fe1 entries=999999\nlevel=INFO msg="shutdown signal received"\n')
+            obs_over, _ = observe.build_observation(case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=[{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
+            self.assertFalse(obs_over['facts']['bounded_visits'])
+
+    def _seed_task_env(self, root, case_id, task_arg):
+        from portable_command.artifacts import project_hashes
+        from portable_command.provenance import materialize_helpers
+        case = CASES[case_id]
+        proj, helpers = root / f'proj-{task_arg}', root / f'bin-{task_arg}'
+        proj.mkdir()
+        hdir = materialize_helpers(None, helpers, case_id=case_id)
+        subprocess.run([str(hdir / 'fixture-task'), task_arg], cwd=proj, check=True)
+        db_path, log_path = root / f'store-{task_arg}.db', root / f'sidecar-{task_arg}.log'
+        create_audit_db(db_path)
+        log_path.write_text('level=INFO msg="server listening"\nlevel=INFO msg="shutdown signal received"\n')
+        hashes = project_hashes(proj)
+        db = sqlite3.connect(db_path)
+        db.execute("CREATE TABLE sessions (id TEXT PRIMARY KEY, project_id TEXT)")
+        db.execute("CREATE TABLE source_snapshots (id TEXT PRIMARY KEY, roots_key TEXT, capture_quality TEXT)")
+        db.execute("CREATE TABLE source_snapshot_roots (snapshot_id TEXT, root_path TEXT, ordinal INTEGER, manifest_id TEXT)")
+        db.execute("CREATE TABLE source_manifest_layout (manifest_id TEXT, chunk_id TEXT, first_path TEXT)")
+        db.execute("CREATE TABLE source_manifest_entries (chunk_id TEXT, path TEXT, sha256 TEXT, git_oid TEXT, identity TEXT)")
+        db.execute("INSERT INTO sessions VALUES ('sess1234','proj1')")
+        db.execute("INSERT INTO source_snapshots VALUES ('snap-1','rk-1','exact')")
+        db.execute("INSERT INTO source_snapshot_roots VALUES ('snap-1','.',0,'man-1')")
+        db.execute("INSERT INTO source_manifest_layout VALUES ('man-1','chk-1','a')")
+        for rel, sha in sorted(hashes.items()):
+            db.execute("INSERT INTO source_manifest_entries VALUES ('chk-1',?,?,?,'hashed')", (rel, sha, ''))
+        db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','completed',1), ('r2','sess1234','v1','verify','processes','completed',1)")
+        db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,''), ('p2','r2','completed',0,'')")
+        db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e1','p1',1,'command','external','processes','completed','unknown'), ('ev1','p2',1,'command','external','processes','completed','none')")
+        db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (json.dumps({'outcome': 'completed', 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'completed', 'status': 0, 'stdout': '', 'stderr': ''})}),))
+        db.commit(); db.close()
+        ev_dir = root / 'projects' / 'proj1' / 'evidence'
+        ev_dir.mkdir(parents=True, exist_ok=True)
+        rec = {'type': 'verify', 'slot': 'tests', 'run_id': 'sess1234', 'verdict': 'passed', 'artifacts': {'session_id': 'sess1234', 'is_check': True, 'exit_code': 0, 'producer': 'verify', 'check_id': 'chk-1', 'source_revision': 'snap-1', 'source_root_digest': 'rk-1', 'cwd': '.', 'command': 'python3 -B -m unittest discover'}}
+        (ev_dir / 'sess1234.jsonl').write_text(json.dumps(rec) + '\n')
+        return case, proj, db_path, log_path
+
+    def test_q20_fractional_logstat_and_wordle_positive_and_negative_controls(self):
+        ident = {'git_head': 'a' * 40}
+        with patch.object(oracle, 'execute', local_execute), tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            # 1) fractional-logstat positive + negative controls
+            case, proj, db_path, log_path = self._seed_task_env(root, 'fractional-logstat', 'logstat')
+            turns = [{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1'], 'await_call_ids': ['v1']}]
+            obs, audit = observe.build_observation(case, session_id='sess1234', identity=ident, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=turns, prelude_records=[])
+            self.assertEqual(audit['observation_gaps'], [])
+            grade = grading.grade_case(case, obs, proj, ident)
+            self.assertTrue(grade['passed'], grade['dimensions'])
+            (proj / 'result.json').write_text('{"count":3,"mean_ms":1,"levels":{"info":2}}\n')
+            obs_bad, _ = observe.build_observation(case, session_id='sess1234', identity=ident, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=turns, prelude_records=[])
+            self.assertFalse(obs_bad['facts']['independent_artifact_oracle'])
+            self.assertFalse(obs_bad['facts']['verification_source_match'])
+            # 2) wordle-explicit-history positive + negative controls
+            wcase, wproj, wdb, wlog = self._seed_task_env(root, 'wordle-explicit-history', 'wordle')
+            wturns = [{'program': wcase['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1'], 'await_call_ids': ['v1']}]
+            wobs, waudit = observe.build_observation(wcase, session_id='sess1234', identity=ident, project_dir=wproj, db_path=wdb, sidecar_log=wlog, baseline_hashes={}, turn_records=wturns, prelude_records=[])
+            self.assertEqual(waudit['observation_gaps'], [])
+            wgrade = grading.grade_case(wcase, wobs, wproj, ident)
+            self.assertTrue(wgrade['passed'], wgrade['dimensions'])
+            (wproj / 'history.json').write_text('{"secret":"apple","guesses":[{"word":"allee","marks":"GYYXG"},{"word":"apple","marks":"GGGGG"}],"attempts":2,"status":"won"}\n')
+            wobs_bad, _ = observe.build_observation(wcase, session_id='sess1234', identity=ident, project_dir=wproj, db_path=wdb, sidecar_log=wlog, baseline_hashes={}, turn_records=wturns, prelude_records=[])
+            self.assertFalse(wobs_bad['facts']['duplicate_aware_scoring'])
+            (wproj / 'test_wordle.py').write_text('import unittest\nclass Bad(unittest.TestCase):\n def test_x(self): self.fail("bad")\n')
+            wobs_tbad, _ = observe.build_observation(wcase, session_id='sess1234', identity=ident, project_dir=wproj, db_path=wdb, sidecar_log=wlog, baseline_hashes={}, turn_records=wturns, prelude_records=[])
+            self.assertFalse(wobs_tbad['facts']['delivered_tests_separate'])

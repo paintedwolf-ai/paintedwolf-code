@@ -1,6 +1,7 @@
 """Delivery, structured-edit, bounded-visit, and confined-launch oracles (Q05, Q06, Q20, Q21)."""
 import json
 import pathlib
+import re
 from portable_command.contracts import ROOT, bytes_value
 
 
@@ -149,7 +150,7 @@ def _anchored_by_matching_pins(execs, pins, write_exec_id, rel_path):
     return any(_pins_match(rp, ep) for rp in read_pins for ep in edit_pins)
 
 
-def inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar, baseline_hashes, final_hashes, invocations=None):
+def inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar, baseline_hashes, final_hashes, invocations=None, sidecar_log=None):
     """Verify edit anchoring (Q05), Q06 unseen-span refusal, catalog generation & bounded visits (Q01/Q20), and confined launch (Q21)."""
     facts = {}
     execs = audit['invocation_program_executions']
@@ -207,8 +208,19 @@ def inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar,
         for fe in find_execs:
             total_pins += sum(1 for p in pins if p.get('execution_id') == fe['id'])
             total_pins += sum(int(s.get('pin_count') or 0) for s in segments if s.get('execution_id') == fe['id'] and len(s.get('body_sha256') or '') == 64)
-        if total_pins > 0 and limit > 0:
-            facts['bounded_visits'] = total_pins <= limit
+        log_visits = 0
+        if total_pins == 0 and sidecar_log and pathlib.Path(sidecar_log).is_file():
+            fids = {fe['id'] for fe in find_execs}
+            for line in pathlib.Path(sidecar_log).read_text(errors='replace').splitlines():
+                if 'command discovery completed' not in line:
+                    continue
+                em = re.search(r'\bexecution_id=([^\s"]+)', line)
+                vm = re.search(r'\bentries=(\d+)', line)
+                if em and vm and em.group(1) in fids:
+                    log_visits += int(vm.group(1))
+        observed_visits = total_pins or log_visits
+        if observed_visits > 0 and limit > 0:
+            facts['bounded_visits'] = observed_visits <= limit
     # 3) Q21 confined_launch: sidecar.log process boundary selected with component=sandbox & host_execution=false.
     if any(r.get('operation') == 'external_exec' and r.get('outcome') == 'completed' for r in receipts):
         if isinstance(sidecar, dict) and sidecar.get('available') and sidecar.get('complete') and sidecar.get('lines'):
