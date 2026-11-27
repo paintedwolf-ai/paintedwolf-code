@@ -1,0 +1,154 @@
+name: Portable Python Paired Timing
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Execution mode (baseline or compare)
+        type: choice
+        options:
+          - baseline
+          - compare
+        default: baseline
+      product-rev:
+        description: Baseline product git revision
+        type: string
+        default: ed905e29c75951c52e6be180630c45d2c9f07a8d
+      candidate-product-rev:
+        description: Candidate product git revision (compare mode only)
+        type: string
+        default: ''
+      artifact-base-url:
+        description: Optional read-only HTTPS base URL hosting engine/ and image/ tarballs (blank uses bundled-manifest.yaml URLs)
+        type: string
+        default: ''
+      candidate-artifact-base-url:
+        description: Optional read-only HTTPS base URL for candidate engine/ and image/ tarballs (compare mode)
+        type: string
+        default: ''
+      samples:
+        description: Number of cold and warm samples per workload
+        type: string
+        default: '5'
+      min-idle:
+        description: Minimum required pre-series CPU idle percentage
+        type: string
+        default: '90'
+      precheck-seconds:
+        description: Pre-series CPU idle sampling duration in seconds
+        type: string
+        default: '30'
+
+permissions:
+  contents: read
+
+jobs:
+  paired-timing:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-arm64
+            runs-on: macos-15
+            expected_arch: arm64
+            platform_slug: darwin-arm64
+            target_triple: aarch64-apple-darwin
+            engine_archive: pw-cpython-wasi-engine-v0.2.0-darwin-arm64.tar.gz
+            engine_manifest: artifact-manifest-darwin-arm64.json
+          - name: linux-amd64
+            runs-on: ubuntu-24.04
+            expected_arch: x86_64
+            platform_slug: linux-amd64
+            target_triple: x86_64-unknown-linux-gnu
+            engine_archive: pw-cpython-wasi-engine-v0.2.0-linux-amd64.tar.gz
+            engine_manifest: artifact-manifest-linux-amd64.json
+    name: Paired timing (${{ matrix.name }})
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 45
+    steps:
+      - name: Assert effective architecture and capture runner metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL_ARCH="$(uname -m)"
+          echo "Expected arch: ${{ matrix.expected_arch }}, actual arch: ${ACTUAL_ARCH}"
+          test "${ACTUAL_ARCH}" = "${{ matrix.expected_arch }}"
+          OUT_DIR="${RUNNER_TEMP}/paired-out"
+          mkdir -p "${OUT_DIR}"
+          {
+            echo "job_name=${{ matrix.name }}"
+            echo "runner_os=${RUNNER_OS}"
+            echo "runner_arch=${RUNNER_ARCH}"
+            echo "image_os=${ImageOS:-unknown}"
+            echo "image_version=${ImageVersion:-unknown}"
+            echo "github_run_id=${GITHUB_RUN_ID}"
+            echo "github_run_attempt=${GITHUB_RUN_ATTEMPT}"
+            echo "github_run_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "github_sha=${GITHUB_SHA}"
+            echo "uname=$(uname -a)"
+            if [[ "${RUNNER_OS}" == "macOS" ]]; then
+              echo "logical_cpus=$(sysctl -n hw.logicalcpu)"
+              echo "cpu_brand=$(sysctl -n machdep.cpu.brand_string || true)"
+              echo "mem_bytes=$(sysctl -n hw.memsize)"
+              sw_vers
+            else
+              echo "logical_cpus=$(nproc)"
+              echo "glibc=$(ldd --version | head -n 1)"
+              lsb_release -a 2>/dev/null || true
+            fi
+          } | tee "${OUT_DIR}/runner-metadata.txt"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b2a9ab24f04885adb52faf6bdccb0bb7dfb3c187 # v7.0.0
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+
+      - name: Fetch read-only PY10 baseline artifacts (pre-timing)
+        if: ${{ inputs.artifact-base-url != '' }}
+        shell: bash
+        env:
+          BASE_URL: ${{ inputs.artifact-base-url }}
+        run: |
+          set -euo pipefail
+          DST="${HOME}/.local/share/paintedwolf-portable-python/results/PY10"
+          mkdir -p "${DST}/engine" "${DST}/image"
+          curl -fsSL "${BASE_URL}/engine/${{ matrix.engine_archive }}" -o "${DST}/engine/${{ matrix.engine_archive }}"
+          curl -fsSL "${BASE_URL}/engine/release-manifest.json" -o "${DST}/engine/release-manifest.json"
+          curl -fsSL "${BASE_URL}/engine/${{ matrix.engine_manifest }}" -o "${DST}/engine/${{ matrix.engine_manifest }}"
+          curl -fsSL "${BASE_URL}/image/portable-python-image-pyc.tar.gz" -o "${DST}/image/portable-python-image-pyc.tar.gz"
+          curl -fsSL "${BASE_URL}/image/image-manifest.json" -o "${DST}/image/image-manifest.json"
+
+      - name: Run paired baseline (overrides UNSET, pre-compiled before timing)
+        if: ${{ inputs.mode == 'baseline' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset PW_PORTABLE_PYTHON_IMAGE_DIR PW_PORTABLE_PYTHON_ENGINE_DIR
+          DST="${HOME}/.local/share/paintedwolf-portable-python/results/PY10"
+          OUT_DIR="${RUNNER_TEMP}/paired-out"
+          STAGE_DIR="${RUNNER_TEMP}/paired-stage"
+          bash scripts/portable-python-qual/paired/run-paired.sh \
+            --mode baseline \
+            --stage-now \
+            --repo-root "${GITHUB_WORKSPACE}" \
+            --engine-root "${STAGE_DIR}" \
+            --out-dir "${OUT_DIR}" \
+            --product-rev "${{ inputs.product-rev }}" \
+            --image-archive "${DST}/image/portable-python-image-pyc.tar.gz" \
+            --engine-archive "${DST}/engine/${{ matrix.engine_archive }}" \
+            --samples "${{ inputs.samples }}" \
+            --min-idle "${{ inputs.min-idle }}" \
+            --precheck-seconds "${{ inputs.precheck-seconds }}" \
+            --max-attempts 3 \
+            --retry-wait 30
+
+      - name: Upload paired timing evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: portable-python-paired-${{ inputs.mode }}-${{ matrix.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/paired-out/
+          if-no-files-found: warn
+          retention-days: 14
