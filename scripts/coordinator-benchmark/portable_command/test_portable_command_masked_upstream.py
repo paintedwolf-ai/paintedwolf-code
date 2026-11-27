@@ -1,4 +1,5 @@
 """Unit controls for masked-upstream-failure pipeline publication fence grading."""
+import hashlib
 import json
 import pathlib
 import sqlite3
@@ -31,6 +32,8 @@ def _write_db(path, *, published):
         (w_state, w_cert, acc, pub, '', w_status, w_elig),
     )
     db.execute("INSERT INTO invocation_program_revision_pins VALUES ('p1','ex-wr',1,'destination','replace','result.txt')")
+    if published:
+        db.execute("INSERT INTO invocation_program_publications VALUES ('p1','s1','committed',1)")
     res_json = json.dumps({'outcome': 'completed', 'content': json.dumps({'program_id': 'p1', 'state': 'completed', 'status': 1, 'stdout': '', 'stderr': ''})})
     db.execute("INSERT INTO messages VALUES ('m1','s1',1,'tool','tc1',?)", (res_json,))
     db.commit()
@@ -61,7 +64,7 @@ class MaskedUpstreamFailureControlTests(unittest.TestCase):
                 sidecar_log=sidecar,
                 turn_records=[{'program': case['turns'][0]['program'], 'call_ids': ['tc1'], 'await_call_ids': [], 'command_call_id': 'tc1', 'batch_outcomes': [{'call_id': 'tc1', 'tool': 'command', 'outcome': 'completed'}]}],
                 prelude_records=[],
-                baseline_hashes={'result.txt': '2c0e3f276f2a2d677615a5656b9282b90c66509427029608d3790c178b56684f'},
+                baseline_hashes={'result.txt': hashlib.sha256(b'old\n').hexdigest()},
             )
             return obs, grade_case(case, obs, proj, ident)
 
