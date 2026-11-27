@@ -8,7 +8,59 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/observability/watchdiag"
 )
+
+func diagClockDomain(c Clock) watchdiag.ClockDomain {
+	if c == nil {
+		return watchdiag.ClockDomainSystem
+	}
+	if _, ok := c.(RealClock); ok {
+		return watchdiag.ClockDomainSystem
+	}
+	if _, ok := c.(*RealClock); ok {
+		return watchdiag.ClockDomainSystem
+	}
+	return watchdiag.ClockDomainManual
+}
+
+func observePresentationClaim(s *Store, owner Owner, claimID, occurrenceID string, kind PresentationKind, admitted bool, receiptID string) {
+	if !watchdiag.Enabled() {
+		return
+	}
+	clk := diagClockDomain(s.clock)
+	watchdiag.Observe(watchdiag.Observation{
+		SessionID:   owner.SessionID,
+		WorkerJobID: owner.WorkerJobID,
+		ClockDomain: clk,
+		OwningSource: watchdiag.OwningSource{
+			Component:   "watch_presentation",
+			Phase:       "presentation_claim_commit",
+			ClockDomain: clk,
+			EvidenceRef: receiptID,
+		},
+		Presentations: []watchdiag.PresentationFact{
+			{
+				ClaimID:           claimID,
+				OccurrenceID:      occurrenceID,
+				OwnerSessionID:    owner.SessionID,
+				OwnerWorkerJobID:  owner.WorkerJobID,
+				RoutedSessionID:   owner.SessionID,
+				RoutedWorkerJobID: owner.WorkerJobID,
+				Kind:              string(kind),
+				Committed:         admitted,
+				ClockDomain:       clk,
+				OwningSource: watchdiag.OwningSource{
+					Component:   "watch_presentation",
+					Phase:       "presentation_claim_commit",
+					ClockDomain: clk,
+					EvidenceRef: receiptID,
+				},
+				EvidenceRef: receiptID,
+			},
+		},
+	})
+}
 
 type PresentationKind string
 
@@ -89,6 +141,7 @@ func ClaimPresentation(
 		if err := tx.Commit(); err != nil {
 			return PresentationDecision{}, err
 		}
+		observePresentationClaim(s, owner, claimID, occurrenceID, kind, admitted, receiptID)
 		return PresentationDecision{Granted: true}, nil
 	}
 	if err != nil {
@@ -119,6 +172,7 @@ func ClaimPresentation(
 		if err := tx.Commit(); err != nil {
 			return PresentationDecision{}, err
 		}
+		observePresentationClaim(s, owner, existingID, occurrenceID, kind, admitted, nextReceipt)
 		return PresentationDecision{Granted: true, TransferredKick: true}, nil
 	}
 
@@ -138,6 +192,7 @@ func ClaimPresentation(
 		if err := tx.Commit(); err != nil {
 			return PresentationDecision{}, err
 		}
+		observePresentationClaim(s, owner, existingID, occurrenceID, kind, admitted, nextReceipt)
 		return PresentationDecision{Granted: true}, nil
 	}
 

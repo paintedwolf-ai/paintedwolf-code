@@ -15,6 +15,12 @@ var (
 	overrideObs     *Observer
 )
 
+// Default returns the active opt-in dev watch diagnostics observer, or nil
+// when diagnostics are disabled.
+func Default() *Observer {
+	return activeObserver()
+}
+
 // Enabled reports whether opt-in dev watch diagnostics are active.
 func Enabled() bool {
 	defaultMu.Lock()
