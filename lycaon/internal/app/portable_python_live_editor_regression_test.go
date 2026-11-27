@@ -13,10 +13,14 @@ import (
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/documentcore"
+	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/portablepython"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
+	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -87,7 +91,18 @@ func TestPortablePythonLiveEditorSubdirectoryAndExistingFileEdit(t *testing.T) {
 	sess := mustCreateSessionHTTP(t, ts.URL, proj.ID)
 	rootID := proj.Roots[0].ID
 
-	// Wire the REAL production editorDocumentsAdapter (just as build_server.go does).
+	// Wire the REAL production editordoc.Service + editorDocumentsAdapter.
+	// When pw-document-core is installed (e.g., ./task test), use appInst's live
+	// Watch.EditorDocuments directly; under bare `go test`, use editordoc.New
+	// with its in-process core over the same ProjectRegistry.
+	editorDocs := appInst.Server.Sources.Workspace.Watch.EditorDocuments
+	if _, binErr := documentcore.Binary(); binErr != nil {
+		editorDB := testdbfixture.Open(t, "editor.db")
+		editorLedger := sourceledger.New(editorDB, t.TempDir(), sourceledger.Timing{})
+		editorDocs = editordoc.New(editordoc.NewStore(editorDB), editorLedger, editorLedger.History, appInst.Server.Sources.Workspace.ProjectRegistry)
+		t.Cleanup(func() { _ = editorDocs.Close(ctx) })
+	}
+
 	mkTC := func(callID string) tools.ToolContext {
 		return tools.ToolContext{
 			Identity: tools.InvocationIdentity{
@@ -103,7 +118,7 @@ func TestPortablePythonLiveEditorSubdirectoryAndExistingFileEdit(t *testing.T) {
 				ProjectSourceBranch: sourcebranch.Trunk,
 				ActiveRootID:        rootID,
 				SourceLedger:        appInst.Server.Sources.Workspace.SourceLedger,
-				EditorDocuments:     editorDocumentsAdapter{service: appInst.Server.Sources.Workspace.Watch.EditorDocuments},
+				EditorDocuments:     editorDocumentsAdapter{service: editorDocs},
 				Roots: []projectroot.RootRef{{
 					ID:    rootID,
 					Label: "main",
@@ -128,11 +143,6 @@ func TestPortablePythonLiveEditorSubdirectoryAndExistingFileEdit(t *testing.T) {
 			t.Fatalf("%s settlement not clean: %+v", callID, resp.Settlement)
 		}
 		return resp
-	}
-
-	// Sanity-check direct OpenDocument call for before/uv.lock to surface any editor error clearly.
-	if doc, ok, docErr := (editorDocumentsAdapter{service: appInst.Server.Sources.Workspace.Watch.EditorDocuments}).OpenDocument(ctx, proj.ID, sourcebranch.Trunk, rootID, "before/uv.lock"); docErr != nil {
-		t.Fatalf("direct OpenDocument(before/uv.lock) failed: ok=%v doc=%+v err=%v", ok, doc, docErr)
 	}
 
 	// 1. Subdirectory stat, glob, and nested file reads must succeed without EISDIR.
