@@ -39,6 +39,12 @@ func (f *frame) statements(ctx context.Context, list []commandsurface.Statement)
 // statement charges the visit before expanding or admitting anything inside it,
 // so even an empty loop body is bounded by host counters.
 func (f *frame) statement(ctx context.Context, s commandsurface.Statement) (signal, error) {
+	return f.statementWithDeferredRedirects(ctx, s, nil)
+}
+
+// A pipeline stage transfers its directly attached redirect scope to the
+// pipeline after closing its endpoints and settling the stage's producers.
+func (f *frame) statementWithDeferredRedirects(ctx context.Context, s commandsurface.Statement, deferred **descriptorScope) (signal, error) {
 	if err := ctx.Err(); err != nil {
 		return signal{}, f.interrupt(err)
 	}
@@ -78,7 +84,9 @@ func (f *frame) statement(ctx context.Context, s commandsurface.Statement) (sign
 		_, stopped := f.state.latch.Stop()
 		eligible := err == nil && !stopped && inner.publish.eligible()
 		f.publish.mark(eligible)
-		if finishErr := descriptors.finish(ctx, eligible); finishErr != nil && err == nil {
+		if eligible && deferred != nil {
+			*deferred = descriptors
+		} else if finishErr := descriptors.finish(ctx, eligible); finishErr != nil && err == nil {
 			err = finishErr
 		}
 	}
