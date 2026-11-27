@@ -1,0 +1,29 @@
+{
+  "warehouse": "sea-01",
+  "items": [
+    {
+      "sku": "A100",
+      "category": "compute",
+      "active": true,
+      "qty": 12
+    },
+    {
+      "sku": "B200",
+      "category": "storage",
+      "active": false,
+      "qty": 4
+    },
+    {
+      "sku": "C300",
+      "category": "compute",
+      "active": true,
+      "qty": 7
+    },
+    {
+      "sku": "D400",
+      "category": "network",
+      "active": true,
+      "qty": 2
+    }
+  ]
+}

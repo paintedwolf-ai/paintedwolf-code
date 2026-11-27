@@ -106,6 +106,26 @@ def write_third_party_notices(
                 f"- {f['family']} {f['style']} ({f['license']}) at {f['guest_path']} "
                 f"(license text: {f['license_path']}) — {f['source_url']}"
             )
+    lgpl_dists = [
+        d for d in sorted(manifest_dists, key=lambda x: x["normalized_name"])
+        if "LGPL" in d.get("license", "").upper()
+    ]
+    if lgpl_dists:
+        lines.extend([
+            "",
+            "LGPL-3.0 Guest-Library Distribution & Source Availability:",
+            "  The Portable Python WASI guest image is distributed separately from host",
+            "  sidecar binaries (e.g. Git, OpenGrep). The following guest Python libraries",
+            "  are licensed under the GNU Lesser General Public License v3:",
+        ])
+        for d in lgpl_dists:
+            lines.append(f"  - {d['name']} {d['version']} ({d['license']}) — {d['source_url']}")
+        lines.extend([
+            "  Complete corresponding source archives, license texts, copyright notices,",
+            "  local patches (including the fpdf2 WASI URL-loader refusal patch), build",
+            "  scripts, and recipient relink/rebuild instructions are provided with the",
+            "  release artifacts and in scripts/portable-python/LGPL_COMPLIANCE.md.",
+        ])
     lines.append("")
     out = image_dir / "THIRD_PARTY_NOTICES.txt"
     out.write_text("\n".join(lines), encoding="utf-8")
@@ -267,6 +287,85 @@ def apply_wasi_package_patches(
                 {
                     "target": "packages/fpdf/image_parsing.py",
                     "reason": "Replace absent WASI HTTPS classes with fail-closed refusing stubs and explicitly refuse all remote URL image fetches without falling back to plain HTTP",
+                }
+            )
+
+    # Patch 4: PyJWT 2.15.1 jwt/jwks_client.py unconditionally imports
+    # ssl.SSLContext at module import time, breaking offline `import jwt`
+    # on wasm32-wasi (no _ssl). Guard SSLContext and fail closed in fetch_data
+    # if HTTPSHandler is unavailable (no plain-HTTP downgrade).
+    jwks_py = packages_root / "jwt" / "jwks_client.py"
+    if jwks_py.is_file():
+        old_ssl = "from ssl import SSLContext"
+        new_ssl = (
+            "try:\n"
+            "    from ssl import SSLContext\n"
+            "except ImportError:\n"
+            "    SSLContext = object  # type: ignore[misc,assignment]"
+        )
+        old_fetch = (
+            "            handlers: list[Any] = [_NoRedirectHandler()]\n"
+            "            if self.ssl_context is not None:\n"
+            "                handlers.append(urllib.request.HTTPSHandler(context=self.ssl_context))"
+        )
+        new_fetch = (
+            "            if not hasattr(urllib.request, \"HTTPSHandler\"):\n"
+            "                raise PyJWKClientConnectionError(\n"
+            "                    \"PyJWKClient remote HTTPS JWKS fetching is disabled in Portable Python without _ssl; \"\n"
+            "                    \"use offline key verification or mediated requests\"\n"
+            "                )\n"
+            "            handlers: list[Any] = [_NoRedirectHandler()]\n"
+            "            if self.ssl_context is not None:\n"
+            "                handlers.append(urllib.request.HTTPSHandler(context=self.ssl_context))"
+        )
+        text = jwks_py.read_text(encoding="utf-8")
+        if old_ssl in text and old_fetch in text:
+            patched_text = text.replace(old_ssl, new_ssl, 1).replace(old_fetch, new_fetch, 1)
+            jwks_py.write_text(patched_text, encoding="utf-8")
+            _refresh_record_entry(packages_root, "pyjwt-*.dist-info", "jwt/jwks_client.py", jwks_py, record_hash)
+            patches.append(
+                {
+                    "target": "packages/jwt/jwks_client.py",
+                    "reason": "Guard absent WASI ssl.SSLContext so offline import jwt succeeds and fail closed in PyJWKClient.fetch_data without plain-HTTP downgrade",
+                }
+            )
+
+    # Patch 5: xlrd 2.0.2 xlrd/book.py unconditionally imports mmap, which
+    # CPython omits on wasm32-wasi. Fall back to standard file reads (use_mmap=False).
+    xlrd_book_py = packages_root / "xlrd" / "book.py"
+    if xlrd_book_py.is_file():
+        old_mmap = "\nimport mmap\n"
+        new_mmap = "\ntry:\n    import mmap\nexcept ImportError:\n    mmap = None\n"
+        old_use = "        self.use_mmap = use_mmap\n"
+        new_use = "        self.use_mmap = bool(use_mmap and mmap is not None)\n"
+        text = xlrd_book_py.read_text(encoding="utf-8")
+        if old_mmap in text and old_use in text:
+            patched_text = text.replace(old_mmap, new_mmap, 1).replace(old_use, new_use, 1)
+            xlrd_book_py.write_text(patched_text, encoding="utf-8")
+            _refresh_record_entry(packages_root, "xlrd-*.dist-info", "xlrd/book.py", xlrd_book_py, record_hash)
+            patches.append(
+                {
+                    "target": "packages/xlrd/book.py",
+                    "reason": "Guard absent WASI mmap module and disable use_mmap when mmap is unavailable so legacy .xls files read via standard file I/O",
+                }
+            )
+
+    # Patch 6: icalendar 7.3.2 triggers a 22-level nested import chain
+    # (icalendar -> ... -> dateutil.tz -> importlib.resources -> tempfile ->
+    # shutil -> bz2 -> _compression) that exceeds wasm2c's call-stack depth
+    # limit (WASM_RT_TRAP_EXHAUSTION). Pre-importing dateutil.tz at top level
+    # keeps peak import nesting shallow (~10) with zero semantic change.
+    ical_init_py = packages_root / "icalendar" / "__init__.py"
+    if ical_init_py.is_file():
+        marker = "import dateutil.tz as _pw_dateutil_tz  # noqa: F401"
+        text = ical_init_py.read_text(encoding="utf-8")
+        if marker not in text:
+            ical_init_py.write_text(marker + "\n" + text, encoding="utf-8")
+            _refresh_record_entry(packages_root, "icalendar-*.dist-info", "icalendar/__init__.py", ical_init_py, record_hash)
+            patches.append(
+                {
+                    "target": "packages/icalendar/__init__.py",
+                    "reason": "Pre-import dateutil.tz at shallow module depth so icalendar's transitive import chain stays well below wasm2c's call-stack depth limit",
                 }
             )
     return patches

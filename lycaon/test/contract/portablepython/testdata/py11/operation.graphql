@@ -1,0 +1,11 @@
+query GetProject($projectId: ID!) {
+  project(id: $projectId) {
+    ...ProjectSummary
+    nonExistentField
+  }
+}
+
+fragment ProjectSummary on Project {
+  id
+  name
+}

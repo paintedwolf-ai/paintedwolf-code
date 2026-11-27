@@ -1,0 +1,9 @@
+# Anchored root-only pattern
+/root_only.log
+# Nested directory pattern
+build/output/*.tmp
+# Wildcard + negation
+*.bak
+!keep.bak
+# Directory-only pattern
+cache/
