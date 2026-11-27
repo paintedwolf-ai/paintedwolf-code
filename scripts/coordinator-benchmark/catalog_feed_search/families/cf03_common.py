@@ -181,6 +181,7 @@ class FamilyReport:
     edge_passed: int = 0
     edge_failed: int = 0
     edge_blocked: int = 0
+    slots_with_declared_gap: int = 0
     declared_gaps: Counter[str] = field(default_factory=Counter)
     failures: list[dict[str, object]] = field(default_factory=list)
     shrunk_files: list[str] = field(default_factory=list)
@@ -196,6 +197,8 @@ class FamilyReport:
         elif check.verdict == Verdict.PASS_DECLARED_GAP:
             self.passed += 1
             self.passed_declared_gap += 1
+            if check.accounted_gaps:
+                self.slots_with_declared_gap += 1
             for g in check.accounted_gaps:
                 self.declared_gaps[g] += 1
         elif check.verdict == Verdict.DEFECT:
@@ -242,6 +245,7 @@ class FamilyReport:
         if passed:
             self.edge_passed += 1
             if gap:
+                self.slots_with_declared_gap += 1
                 self.declared_gaps[gap] += 1
         else:
             self.edge_failed += 1
@@ -251,11 +255,11 @@ class FamilyReport:
 
     @property
     def declared_gap_rate(self) -> float:
+        """Fraction of executed slots (generated + edges) declaring >=1 gap (bounded in [0.0, 1.0])."""
         total = self.executed + self.edge_executed
         if total == 0:
             return 0.0
-        gap_total = sum(self.declared_gaps.values())
-        return round(gap_total / total, 6)
+        return round(self.slots_with_declared_gap / total, 6)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -275,6 +279,7 @@ class FamilyReport:
             "edge_passed": self.edge_passed,
             "edge_failed": self.edge_failed,
             "edge_blocked": self.edge_blocked,
+            "slots_with_declared_gap": self.slots_with_declared_gap,
             "declared_gaps": dict(sorted(self.declared_gaps.items())),
             "declared_gap_rate": self.declared_gap_rate,
             "failures": self.failures,

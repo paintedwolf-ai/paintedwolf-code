@@ -85,20 +85,25 @@ def run_k03_sidecar(
                 extra_meta = {
                     "mode": "real_restart",
                     "instance": idx,
-                    "rev_before": before.generation_revision,
+                    "prior_completed_generation_id": str(before.generation_revision) if before.generation_revision is not None else "",
                     "first_read_state": first_idx.get("state"),
-                    "first_read_rev": first_read.generation_revision,
+                    "first_read_generation_id": str(first_read.generation_revision) if first_read.generation_revision is not None else "",
+                    "generation_identity_preserved": (
+                        before.generation_revision is not None
+                        and first_read.generation_revision is not None
+                        and str(first_read.generation_revision) == str(before.generation_revision)
+                    ),
                     "first_read_items": len(first_read.items),
                     "served_persisted_immediately": served_immediately,
-                    "rev_after_settle": after_restart.generation_revision,
+                    "after_settle_generation_id": str(after_restart.generation_revision) if after_restart.generation_revision is not None else "",
                     "verdict": res.verdict.value,
                 }
                 report.record_generated(res, extra=extra_meta)
                 report.record_ledger(extra_meta)
             else:
-                # Decision 054: require real continuation cursor, revision on page 1,
-                # witnessed generation publication between pages, and typed 409 cursor_generation_expired
-                # (or exact pinned replay on rev1 with revision present on page 2).
+                # Decision 054 & 076: require real continuation cursor, opaque revision identity on page 1,
+                # witnessed generation publication (changed revision identity + newly published file visible),
+                # and typed 409 cursor_generation_expired (or exact pinned replay on rev1_id).
                 page1 = driver.file_lookup(pid, "", root_id=rid, limit=4)
                 rev1 = page1.get("revision")
                 cur = str(page1.get("next_cursor") or "")
@@ -109,25 +114,33 @@ def run_k03_sidecar(
                         reason=f"page 1 missing revision ({rev1}) or continuation cursor ({cur!r}) on >=6 file tree",
                     )
                     report.record_generated(res, extra={"mode": "page_across_mutation", "instance": idx})
-                    report.record_ledger({"mode": "page_across_mutation", "instance": idx, "rev1": rev1, "next_cursor_present": bool(cur), "verdict": res.verdict.value})
+                    report.record_ledger({"mode": "page_across_mutation", "instance": idx, "rev1_id": str(rev1), "next_cursor_present": bool(cur), "verdict": res.verdict.value})
                     shutil.rmtree(wdir, ignore_errors=True)
                     continue
 
-                # Mutate tree and witness generation publication before issuing page 2.
+                rev1_id = str(rev1)
+                # Mutate tree and witness changed revision identity + newly published file visible.
                 bump_name = f"gen_bump_{idx}.txt"
                 (wdir / bump_name).write_text("new gen\n", encoding="utf-8")
                 pub_deadline = time.monotonic() + 3.0
-                rev_after_pub = rev1
+                rev_after_pub_id = rev1_id
+                new_file_visible = False
                 while time.monotonic() < pub_deadline:
                     idx_now = driver.get_source_index(pid)
                     r_now = idx_now.get("revision")
-                    if r_now is not None and int(r_now) > int(rev1):
-                        rev_after_pub = int(r_now)
-                        break
+                    if r_now is not None and str(r_now) != rev1_id:
+                        rev_after_pub_id = str(r_now)
+                        probe_new = driver.file_lookup(pid, bump_name, root_id=rid, limit=10)
+                        if any(
+                            isinstance(m, dict) and str(m.get("path") or "") == bump_name
+                            for m in (probe_new.get("matches") or [])
+                        ):
+                            new_file_visible = True
+                            break
                     time.sleep(0.05)
-                publication_witnessed = int(rev_after_pub) > int(rev1)
+                publication_witnessed = (rev_after_pub_id != rev1_id) and new_file_visible
 
-                revs = {int(rev1)}
+                revs = {rev1_id}
                 seen_paths = [str(m.get("path") or "") for m in (page1.get("matches") or []) if isinstance(m, dict)]
                 typed_409_code = ""
                 crossed_gen = False
@@ -146,8 +159,9 @@ def run_k03_sidecar(
                     if nxt_rev is None:
                         missing_rev_on_page2 = True
                     else:
-                        revs.add(int(nxt_rev))
-                        if int(nxt_rev) != int(rev1):
+                        nxt_rev_id = str(nxt_rev)
+                        revs.add(nxt_rev_id)
+                        if nxt_rev_id != rev1_id:
                             crossed_gen = True
                     page_paths = [str(m.get("path") or "") for m in (nxt.get("matches") or []) if isinstance(m, dict)]
                     if bump_name in page_paths:
@@ -174,8 +188,9 @@ def run_k03_sidecar(
                 rec = {
                     "mode": "page_across_mutation",
                     "instance": idx,
-                    "rev_before": int(rev1),
-                    "rev_after_publication": int(rev_after_pub),
+                    "rev_before_id": rev1_id,
+                    "rev_after_publication_id": rev_after_pub_id,
+                    "new_file_visible_in_new_gen": new_file_visible,
                     "publication_witnessed": publication_witnessed,
                     "next_cursor_present": True,
                     "typed_409_code": typed_409_code,
@@ -462,10 +477,12 @@ def run_k04_sidecar(
                         "escaped": escaped,
                         "gaps": gaps,
                         "case_sensitive": case_sensitive,
+                        "output_non_escape_verdict": "PASS" if (not escaped) else "DEFECT",
+                        "host_io_clause_verdict": "UNKNOWN",
                         "host_read_attribution": (
-                            "output-level non-escape on sidecar lane; direct host syscall read tracing unavailable "
-                            "on shared sidecar process (scheduled mid-walk symlink swap verified in-process in "
-                            "TestCF03_K04_TraversalSafetyAndNames mode 0)"
+                            "output-level non-escape verified on sidecar lane; host-I/O clause carried as UNKNOWN "
+                            "(no process-scoped syscall trace attached to shared sidecar; scheduled mid-walk symlink swap "
+                            "verified in-process in TestCF03_K04_TraversalSafetyAndNames mode 0)"
                         ),
                     },
                     gap="catalog_failed" if (emode == "chmod000" and ok) else None,
@@ -476,9 +493,9 @@ def run_k04_sidecar(
                 shutil.rmtree(edir, ignore_errors=True)
 
         report.notes.append(
-            "K04 sidecar verifies exact round-trip of adversarial filenames (Unicode NFC/NFD, case-only diffs, long paths, "
-            "newline/tab) and output-level non-escape; direct host syscall read attribution is unavailable on the shared "
-            "sidecar process and scheduled mid-walk ancestor symlink swaps are verified in-process in TestCF03_K04_TraversalSafetyAndNames."
+            "K04 sidecar keeps output-level non-escape (PASS) and host-I/O read attribution (UNKNOWN on unattached shared sidecar) "
+            "explicitly separate; exact adversarial filename round-trips are verified on sidecar and scheduled mid-walk ancestor "
+            "symlink swaps are verified in-process in TestCF03_K04_TraversalSafetyAndNames."
         )
 
     return report

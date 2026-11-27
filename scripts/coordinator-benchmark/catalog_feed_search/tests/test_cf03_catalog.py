@@ -452,9 +452,21 @@ class TestCF03Families(unittest.TestCase):
             self.assertIn("shrunk/K01_20261127_99.json", sums.read_text(encoding="utf-8"))
 
             rep = FamilyReport("K01", "sidecar", BASE_SEED_PRIMARY, 1, 0)
-            rep.record_generated(CheckResult(Verdict.PASS_DECLARED_GAP, "catalog", accounted_gaps=("catalog_failed",)))
+            rep.record_generated(
+                CheckResult(
+                    Verdict.PASS_DECLARED_GAP,
+                    "catalog",
+                    accounted_gaps=("catalog_failed", "catalog_incomplete", "catalog_refreshing"),
+                )
+            )
+            # Decision 076: one slot with multiple reasons counts ONCE in declared_gap_rate (<= 1.0),
+            # while retaining separate per-reason counts.
+            self.assertEqual(rep.slots_with_declared_gap, 1)
             self.assertEqual(rep.declared_gap_rate, 1.0)
-            self.assertEqual(json.loads(json.dumps(rep.to_dict()))["declared_gaps"], {"catalog_failed": 1})
+            self.assertEqual(
+                json.loads(json.dumps(rep.to_dict()))["declared_gaps"],
+                {"catalog_failed": 1, "catalog_incomplete": 1, "catalog_refreshing": 1},
+            )
 
 
 if __name__ == "__main__":  # pragma: no cover

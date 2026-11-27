@@ -478,16 +478,24 @@ def run_k02_sidecar(
                     ]
                     ref_items = walk_entries_to_catalog_items(ref_entries, root_id=primary_rid)
                     lower_bound_ok = len(ans.items) <= len(ref_items)
-                    partial_window_captured = (len(ans.items) < len(ref_items)) and any(
+                    # Decision 076: items==0 with warming/refreshing proves cold/warming coverage, NOT partial
+                    # published membership. Only credit partial membership on sidecar when 0 < items < truth.
+                    partial_membership_proved_on_sidecar = (0 < len(ans.items) < len(ref_items)) and any(
                         g in ("catalog_warming", "catalog_incomplete", "catalog_refreshing") for g in ans_gaps
                     )
+                    if partial_membership_proved_on_sidecar:
+                        sidecar_clause_status = "proved_partial_membership"
+                    elif len(ans.items) == 0 and any(g in ("catalog_warming", "catalog_incomplete", "catalog_refreshing") for g in ans_gaps):
+                        sidecar_clause_status = "open_cold_window_only_credit_inprocess"
+                    else:
+                        sidecar_clause_status = "open_settled_before_partial_credit_inprocess"
                     if not lower_bound_ok:
                         res = CheckResult(Verdict.DEFECT, "catalog", reason=f"partly_discovered count {len(ans.items)} exceeds truth {len(ref_items)}")
                     elif len(ans.items) == 0:
                         if not ans_gaps:
                             res = CheckResult(Verdict.DEFECT, "catalog", reason="partly_discovered returned complete-looking empty answer")
                         else:
-                            res = CheckResult(Verdict.PASS_DECLARED_GAP, "catalog", declared_gaps=ans_gaps, accounted_gaps=ans_gaps, reason="partly_discovered declared warming/incomplete gap")
+                            res = CheckResult(Verdict.PASS_DECLARED_GAP, "catalog", declared_gaps=ans_gaps, accounted_gaps=ans_gaps, reason="cold/warming coverage declared (partial membership attributed to in-process lane)")
                     else:
                         res = check_catalog(ref_items, ans)
                     report.record_generated(res, extra={"state": state, "instance": idx})
@@ -496,7 +504,8 @@ def run_k02_sidecar(
                             "instance": idx,
                             "attempted_state": state,
                             "root_id": primary_rid,
-                            "partial_window_captured": partial_window_captured,
+                            "partial_membership_proved_on_sidecar": partial_membership_proved_on_sidecar,
+                            "sidecar_clause_status": sidecar_clause_status,
                             "deterministic_attribution_lane": "in-process TestCF03_K02_CoverageTruth (100/100 partly_discovered)",
                             "transition_evidence_state": earlier_index.get("state"),
                             "judged_revision": ans.generation_revision,
@@ -515,6 +524,7 @@ def run_k02_sidecar(
                     primary_rid = rids[0]
                     wait_catalog_settled(driver, pid, primary_rid, max_wait_s=15.0)
                     gen1 = driver.walk_catalog_index(pid, primary_rid)
+                    gen1_rev_id = str(gen1.generation_revision) if gen1.generation_revision is not None else ""
                     locked_dir = wdir / "refresh_locked"
                     locked_dir.mkdir(exist_ok=True)
                     (locked_dir / "hidden.txt").write_text("locked\n", encoding="utf-8")
@@ -535,6 +545,7 @@ def run_k02_sidecar(
                             break
                         time.sleep(0.1)
                     ans_gaps = _root_scoped_gaps(ans, primary_rid)
+                    judged_rev_id = str(ans.generation_revision) if ans.generation_revision is not None else ""
                     os.chmod(locked_dir, 0o755)
                     locked_dir = None
                     ref_entries = [
@@ -542,6 +553,16 @@ def run_k02_sidecar(
                     ]
                     ref_items = walk_entries_to_catalog_items(ref_entries, root_id=primary_rid)
                     lower_bound_ok = len(ans.items) <= len(ref_items)
+                    # Decision 076: distinguish root-local failed_directory on a new generation vs
+                    # failed refresh of the prior completed generation using typed state + selected generation.
+                    if "catalog_refresh_failed" in ans_gaps and judged_rev_id == gen1_rev_id:
+                        refresh_classification = "prior_generation_refresh_failed"
+                    elif "catalog_failed" in ans_gaps and judged_rev_id != gen1_rev_id:
+                        refresh_classification = "root_local_failed_dir_on_refreshed_generation"
+                    elif "catalog_failed" in ans_gaps:
+                        refresh_classification = "root_local_failed_dir_same_generation_id"
+                    else:
+                        refresh_classification = "prior_generation_readable_pending_refresh"
                     refresh_fault_observed = any(g in ("catalog_failed", "catalog_refresh_failed") for g in ans_gaps)
                     if len(ans.items) == 0 and not ans_gaps:
                         res = CheckResult(Verdict.DEFECT, "catalog", reason="failed_refresh yielded complete-looking empty answer")
@@ -550,7 +571,6 @@ def run_k02_sidecar(
                     elif refresh_fault_observed:
                         res = check_catalog(ref_items, ans)
                     else:
-                        # Gen 1 remained readable before watcher refresh completed; verify gen 1 integrity.
                         res = CheckResult(Verdict.PASS, "catalog", reason="prior generation remained readable during refresh window")
                     report.record_generated(res, extra={"state": state, "instance": idx})
                     report.record_ledger(
@@ -558,12 +578,13 @@ def run_k02_sidecar(
                             "instance": idx,
                             "attempted_state": state,
                             "verified_unreadable": True,
-                            "gen1_revision": gen1.generation_revision,
+                            "gen1_revision_id": gen1_rev_id,
                             "gen1_items": len(gen1.items),
-                            "judged_revision": ans.generation_revision,
+                            "judged_revision_id": judged_rev_id,
                             "judged_items": len(ans.items),
                             "reference_items": len(ref_items),
                             "lower_bound_ok": lower_bound_ok,
+                            "refresh_classification": refresh_classification,
                             "refresh_fault_observed_on_sidecar": refresh_fault_observed,
                             "deterministic_attribution_lane": "in-process TestCF03_K02_CoverageTruth (100/100 failed_refresh)",
                             "judged_gaps": list(ans_gaps),
