@@ -110,7 +110,7 @@ type childRun struct {
 // groups, functions, substitutions, jobs, in-process builtins, redirections)
 // and records it, so every dispatched descendant has a recorded parent.
 func (f *frame) beginRecorded(ctx context.Context, loc commandsurface.SyntaxLocation, command string) (*childRun, error) {
-	if f.activeHost != nil && f.activeHost.inv.Identity.NodeID == string(loc.ID) && f.activeHost.inv.SourceUnitID == f.unit {
+	if f.activeHost != nil && f.activeHost.inv.Identity.NodeID == string(loc.ID) && f.activeHost.inv.SourceUnitID == f.parent.SourceUnitID {
 		child := f.activeHost
 		f.activeHost = nil
 		return child, nil
