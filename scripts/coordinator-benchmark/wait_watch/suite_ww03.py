@@ -8,6 +8,7 @@ import http.server
 import json
 import os
 import pathlib
+import subprocess
 import sys
 import threading
 import time
@@ -58,6 +59,7 @@ WW03_SIDECAR_SLOTS = (
     "C03-until-complete-watch-match",
     "C05-http-port-readiness",
     "C06-refusal-while-live",
+    "C06-git-ssh-transport-refusal",
 )
 
 
@@ -574,8 +576,87 @@ def run_slot_c05(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
     )
 
 
+class LiveRefusalBarrier(ProcessBarrier):
+    """ProcessBarrier that stays live, triggers a floor-refused write to AGENTS.md, then waits for release."""
+
+    def __init__(
+        self,
+        root_dir: pathlib.Path | str,
+        *,
+        refusal_target: pathlib.Path | str,
+        exit_code: int = 17,
+        marker: str = "ww03-c06-live-refusal",
+        payload: str | None = None,
+        max_script_wait_s: int = 90,
+    ) -> None:
+        super().__init__(root_dir, exit_code=exit_code, marker=marker, payload=payload, max_script_wait_s=max_script_wait_s)
+        self.refusal_target = pathlib.Path(refusal_target).resolve()
+        self.trigger_refusal_path = self.root_dir / "trigger_refusal"
+        self.refusal_attempted_path = self.root_dir / "refusal_attempted"
+
+    def _ensure_script(self) -> pathlib.Path:
+        script_path = self.root_dir / "run_live_refusal_barrier.py"
+        body = (
+            "import json, os, pathlib, sys, time\n"
+            "root = pathlib.Path(__file__).resolve().parent\n"
+            "reached = root / 'reached'\n"
+            "reached_tmp = root / 'reached.tmp'\n"
+            "trigger = root / 'trigger_refusal'\n"
+            "attempted = root / 'refusal_attempted'\n"
+            "attempted_tmp = root / 'refusal_attempted.tmp'\n"
+            "release = root / 'release'\n"
+            f"target = pathlib.Path({str(self.refusal_target)!r})\n"
+            f"marker = {self.marker!r}\n"
+            f"payload = {self.payload!r}\n"
+            f"exit_code = {self.exit_code}\n"
+            f"max_wait = {self.max_script_wait_s}\n"
+            "reached_tmp.write_text(json.dumps({'marker': marker, 'pid': os.getpid(), 'ts_ns': time.time_ns()}), encoding='utf-8')\n"
+            "os.replace(reached_tmp, reached)\n"
+            "deadline = time.monotonic() + max_wait\n"
+            "while not trigger.is_file():\n"
+            "    if time.monotonic() >= deadline:\n"
+            "        sys.exit(124)\n"
+            "    time.sleep(0.05)\n"
+            "refusal_err = ''\n"
+            "try:\n"
+            "    with open(target, 'a', encoding='utf-8') as fh:\n"
+            "        fh.write('unexpected-write\\n')\n"
+            "except OSError as exc:\n"
+            "    refusal_err = f'{type(exc).__name__}:{exc.errno}:{exc}'\n"
+            "attempted_tmp.write_text(json.dumps({'target': str(target), 'error': refusal_err, 'pid': os.getpid(), 'ts_ns': time.time_ns()}), encoding='utf-8')\n"
+            "os.replace(attempted_tmp, attempted)\n"
+            "while not release.is_file():\n"
+            "    if time.monotonic() >= deadline:\n"
+            "        sys.exit(124)\n"
+            "    time.sleep(0.05)\n"
+            "sys.stdout.write(payload)\n"
+            "sys.stdout.flush()\n"
+            "sys.exit(exit_code)\n"
+        )
+        script_path.write_text(body, encoding="utf-8")
+        return script_path
+
+    def trigger_refusal(self) -> dict[str, Any]:
+        if not self.is_reached():
+            raise RuntimeError("cannot trigger refusal before `reached` sentinel is verified")
+        tmp = self.trigger_refusal_path.with_suffix(".tmp")
+        ts = time.time_ns()
+        tmp.write_text(json.dumps({"marker": self.marker, "triggered_at_ns": ts}), encoding="utf-8")
+        os.replace(tmp, self.trigger_refusal_path)
+        return {"triggered": True, "triggered_at_ns": ts}
+
+    def wait_refusal_attempted(self, timeout_s: float = 15.0, *, dump_state: Any = None) -> dict[str, Any]:
+        guard = TimerGuard(timeout_s, phase="c06.wait_refusal_attempted", verdict="incomplete", dump_state=dump_state)
+        guard.poll(lambda: self.refusal_attempted_path.is_file(), detail="refusal_attempted sentinel not written")
+        raw = self.refusal_attempted_path.read_text(encoding="utf-8", errors="replace").strip()
+        try:
+            return json.loads(raw)
+        except ValueError:
+            return {"raw": raw}
+
+
 def run_slot_c06(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed: int, timeout_s: float) -> dict[str, Any]:
-    """C06-refusal-while-live: live command stays running across refusal/barrier, then releases distinct terminal exit."""
+    """C06-refusal-while-live: real expected-refusal fixture while live, independent live check, then distinct exit 17 + checker ordering."""
     started = time.monotonic() * 1000.0
     out_path = out_dir.resolve()
     app_dir = out_path / "app"
@@ -585,7 +666,14 @@ def run_slot_c06(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
     raw_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "README.md").write_text("# WW03 C06 refusal-while-live fixture\n", encoding="utf-8")
 
-    barrier = ProcessBarrier(project_dir / ".ww03-c06-live", exit_code=17, marker=f"ww03-c06-s{seed}")
+    # Floor-refused target (AGENTS.md is write-refused by sandbox floor on both macOS and Linux).
+    refusal_target = project_dir / "AGENTS.md"
+    barrier = LiveRefusalBarrier(
+        project_dir / ".ww03-c06-live",
+        refusal_target=refusal_target,
+        exit_code=17,
+        marker=f"ww03-c06-s{seed}",
+    )
     source_obs = SourceObserver(clock_domain="system")
     admission_obs = AdmissionObserver(clock_domain="system")
     rendered_obs = RenderedInputObserver(clock_domain="system")
@@ -602,47 +690,117 @@ def run_slot_c06(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
     submission_id = ""
     handle = ""
     barrier_error: dict[str, Any] | None = None
+    report_pub_fact: dict[str, Any] | None = None
+    report_published_ts_ns: int | None = None
+    refusal_attempt_info: dict[str, Any] = {}
+    terminal_report_text = ""
+    terminal_exit_code: int | None = None
     assertions: dict[str, bool] = {
         "live_command_reached_barrier": False,
-        "parked_wait_armed": False,
-        "report_published_before_delivery": False,
-        "terminal_exit_17_delivered": False,
+        "parked_wait_before_refusal": False,
+        "typed_refusal_received_while_live": False,
+        "job_still_running_after_refusal": False,
+        "distinct_terminal_exit_17_no_replay": False,
+        "checker_publication_before_delivery_pass": False,
     }
 
     try:
         app.ready()
         sse = SSECollector(app.url, app.token, sse_path)
         sse.start()
-        session_id, project_id, _, _ = create_isolated_session(app, project_dir, {"profile": "implement", "turns": [1, 2, 3]})
+        session_id, project_id, _, _ = create_isolated_session(app, project_dir, {"profile": "implement", "turns": [1, 2, 3, 4]})
         submission_id = str(uuid.uuid4())
         app.request(f"/v1/sessions/{session_id}/prompts", {"operation_id": submission_id, "text": "Run WW03 C06 refusal while live."})
         driver = WaitWatchDriver(app, session_id, rendered_observer=rendered_obs, source_observer=source_obs, timeout_s=timeout_s, sse_path=sse_path)
 
-        _, _, handle = driver.call_command(barrier.command_string(relative_to=project_dir, background=True), progress_update="- [ ] C06 live job")
+        # 1. Launch live refusal barrier and confirm running.
+        _, _, handle = driver.call_command(barrier.command_string(relative_to=project_dir, background=True), progress_update="- [ ] C06 live refusal job")
         barrier.wait_reached(timeout_s=timeout_s, dump_state=driver._dump_state)
         assertions["live_command_reached_barrier"] = _pid_alive(barrier.child_pid)
 
-        # Park on live job, then release terminal exit 17 and verify publication-before-delivery (#2713).
-        driver.call_wait([{"kind": "process_done", "handles": [handle]}], until_complete=True, timeout_ms=int(timeout_s * 1000), reason="C06 live wait")
+        # 2. Park wait BEFORE triggering expected refusal.
+        driver.call_wait([{"kind": "process_done", "handles": [handle]}], until_complete=True, timeout_ms=int(timeout_s * 1000), reason="C06 wait before refusal")
         _confirm_parked_lease(app_dir / "store.db", sse_path, session_id, timeout_s, driver._dump_state)
-        assertions["parked_wait_armed"] = True
+        assertions["parked_wait_before_refusal"] = True
 
-        barrier.release()
-        resumed = driver.await_pending("c06:resumed")
-        rep, exit_code, obs_h = _extract_report_from_pending(resumed, expected_handle=handle)
-        rendered_obs.record_pending(resumed, handle=obs_h, exit_code=exit_code, report=rep, report_readable=bool(rep))
+        # 3. Trigger real floor refusal (write to AGENTS.md) while command stays live.
+        trig_info = barrier.trigger_refusal()
+        source_obs.record_event("refusal_triggered", handle=handle, **trig_info)
+        refusal_attempt_info = barrier.wait_refusal_attempted(timeout_s=timeout_s, dump_state=driver._dump_state)
+        source_obs.record_event("refusal_attempted", handle=handle, **refusal_attempt_info)
 
-        pub_fact = _observe_report_publication(app_dir / "sidecar.log", session_id=session_id, handle=handle)
-        assertions["report_published_before_delivery"] = pub_fact is not None
-        assertions["terminal_exit_17_delivered"] = (obs_h == handle and exit_code == 17)
-        source_obs.record_event("c06_terminal_delivered", handle=obs_h, exit_code=exit_code, pub_fact=pub_fact)
+        # 4. Observe resumed turn carrying typed refusal evidence and independently confirm job is STILL running.
+        refusal_req = driver.await_pending("c06:refusal_resumed")
+        refusal_text, _, refusal_handle = _extract_report_from_pending(refusal_req, expected_handle=handle)
+        refusal_lower = refusal_text.lower()
+        typed_refusal = (
+            bool(refusal_text)
+            and (
+                "sandbox_refusal" in refusal_lower
+                or "refused" in refusal_lower
+                or "file-write" in refusal_lower
+                or "agents.md" in refusal_lower
+            )
+            and "termination=exited" not in refusal_lower
+        )
+        still_alive = _pid_alive(barrier.child_pid) and not barrier.release_path.is_file()
+        assertions["typed_refusal_received_while_live"] = typed_refusal
+        assertions["job_still_running_after_refusal"] = still_alive
+        source_obs.record_event(
+            "refusal_observed_while_live",
+            handle=refusal_handle or handle,
+            typed_refusal=typed_refusal,
+            still_alive=still_alive,
+        )
 
-        driver.finish_turn(resumed, "C06 live command terminal receipt verified.")
+        # 5. Re-park on the same still-live handle, then release barrier for distinct terminal exit 17.
+        driver.call_wait([{"kind": "process_done", "handles": [handle]}], until_complete=True, timeout_ms=int(timeout_s * 1000), reason="C06 wait for terminal exit")
+        _confirm_parked_lease(app_dir / "store.db", sse_path, session_id, timeout_s, driver._dump_state)
+
+        rel_info = barrier.release()
+        source_obs.record_event("barrier_released", handle=handle, **rel_info)
+
+        resumed = driver.await_pending("c06:terminal_resumed")
+        terminal_report_text, terminal_exit_code, obs_h = _extract_report_from_pending(resumed, expected_handle=handle)
+
+        storage_now = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id)
+        prod_ids, prod_refs, _ = _observe_product_identities(storage_now)
+        report_pub_fact = _observe_report_publication(app_dir / "sidecar.log", session_id=session_id, handle=handle)
+        if report_pub_fact is not None:
+            source_obs.record_event("report_published", **report_pub_fact)
+            report_published_ts_ns = report_pub_fact.get("published_at_ns")
+
+        rendered_obs.record_pending(
+            resumed,
+            presentation_kind="new_model_presentation",
+            session_id=session_id,
+            handle=obs_h or handle,
+            invocation_id=prod_ids["invocation_id"],
+            occurrence_id=prod_ids["occurrence_id"],
+            claim_id=prod_ids["claim_id"],
+            exit_code=terminal_exit_code,
+            report=terminal_report_text,
+            report_readable=bool(terminal_report_text),
+            evidence_refs={"report": "rendered_input:pending.messages", **prod_refs},
+        )
+        assertions["distinct_terminal_exit_17_no_replay"] = (
+            (obs_h == handle)
+            and (terminal_exit_code == 17)
+            and ("sandbox_refusals:" not in terminal_report_text)
+        )
+        source_obs.record_event("c06_terminal_delivered", handle=obs_h, exit_code=terminal_exit_code, pub_fact=report_pub_fact)
+
+        driver.finish_turn(resumed, "C06 live refusal and distinct terminal receipt verified.")
         admission_obs.capture_http(app, session_id=session_id, project_id=project_id, submission_ids=[submission_id])
         app.request(f"/v1/sessions/{session_id}/abort", {})
     except BarrierTimeoutError as exc:
         barrier_error = exc.to_dict()
     finally:
+        if barrier.is_reached() and not barrier.trigger_refusal_path.is_file():
+            try:
+                barrier.trigger_refusal()
+            except Exception:
+                pass
         if barrier.is_reached() and not barrier.release_path.is_file():
             try:
                 barrier.release()
@@ -659,8 +817,27 @@ def run_slot_c06(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
     admission_obs.load_phase_records(app_dir / "sidecar.log", session_id=session_id or None)
     storage_snap = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id or None)
     prod_ids, prod_refs, _ = _observe_product_identities(storage_snap)
-    source_obs.set_facts({"barrier": barrier.source_facts(), "handle": handle, "product_identities": prod_ids, "product_identity_refs": prod_refs})
-    return _build_bundle(
+    source_obs.set_facts({
+        **barrier.source_facts(),
+        "refusal_target": str(refusal_target),
+        "refusal_attempt": refusal_attempt_info,
+        "report_publication": report_pub_fact,
+        "report_published_ts_ns": report_published_ts_ns,
+        "handle": handle,
+        "product_identities": prod_ids,
+        "product_identity_refs": prod_refs,
+    })
+
+    expectations = {
+        "expected_outcome": "delivered",
+        "owed_recipients": [f"session:{session_id}"] if session_id else [],
+        "owed_occurrences": [prod_ids["occurrence_id"]] if prod_ids.get("occurrence_id") else [],
+        "expected_invocation_id": prod_ids.get("invocation_id") or "",
+        "expected_handle": handle,
+        "expected_exit_code": 17,
+        "require_zero_armed_leases": True,
+    }
+    bundle = _build_bundle(
         slot_id="C06-refusal-while-live",
         run_id=run_id,
         candidate_head=candidate_head,
@@ -672,10 +849,84 @@ def run_slot_c06(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
         admission_obs=admission_obs,
         rendered_obs=rendered_obs,
         den_obs=den_obs,
-        correlation={"session_id": session_id, "workspace_id": project_id, "handle": handle, "clock_domain": "system"},
+        correlation={
+            "session_id": session_id,
+            "workspace_id": project_id,
+            "handle": handle,
+            "invocation_id": prod_ids.get("invocation_id") or "",
+            "occurrence_id": prod_ids.get("occurrence_id") or "",
+            "claim_id": prod_ids.get("claim_id") or "",
+            "clock_domain": "system",
+        },
         assertions=assertions,
         barrier_error=barrier_error,
+        expectations=expectations,
     )
+    verdict = bundle.get("checker_verdict") or {}
+    defects = verdict.get("defects") or []
+    no_pub_order_defect = not any(d.get("code") == "terminal_before_report" for d in defects)
+    bundle["assertions"]["checker_publication_before_delivery_pass"] = (
+        verdict.get("verdict") == "pass" and no_pub_order_defect
+    )
+    all_ok = barrier_error is None and all(bool(v) for v in bundle["assertions"].values())
+    bundle["status"] = "passed" if all_ok else ("incomplete" if barrier_error else "failed")
+    return bundle
+
+
+def run_slot_c06_git_ssh(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed: int, timeout_s: float) -> dict[str, Any]:
+    """C06-git-ssh-transport-refusal: invoke real #2708 Git SSH transport refusal & receipt parity fixture."""
+    started = time.monotonic() * 1000.0
+    out_path = out_dir.resolve()
+    out_path.mkdir(parents=True, exist_ok=True)
+    host = _host_identity()
+    candidate_head = _git_head(REPO_ROOT)
+    run_id = f"{candidate_head[:12]}-{host['os'].lower()}-c06-git-ssh-s{seed}-{uuid.uuid4().hex[:8]}"
+
+    cmd = [
+        "go",
+        "test",
+        "-v",
+        "-count=1",
+        "-run",
+        "^TestGitSSHTransport(DeliveryParityAndReceiptReopen|SetupDialUnknownAndMultiRemoteIsolation)$",
+        "./test/wiring/commands",
+    ]
+    proc = subprocess.run(
+        cmd,
+        cwd=REPO_ROOT / "lycaon",
+        capture_output=True,
+        text=True,
+        timeout=max(120.0, timeout_s * 4.0),
+    )
+    log_path = out_path / "git-ssh-transport-e2e.log"
+    combined = proc.stdout + ("\n--- STDERR ---\n" + proc.stderr if proc.stderr else "")
+    log_path.write_text(combined, encoding="utf-8")
+    log_sha = hashlib.sha256(combined.encode("utf-8")).hexdigest()
+
+    assertions = {
+        "exit_zero": proc.returncode == 0,
+        "delivery_parity_test_passed": "--- PASS: TestGitSSHTransportDeliveryParityAndReceiptReopen" in proc.stdout,
+        "setup_dial_isolation_test_passed": "--- PASS: TestGitSSHTransportSetupDialUnknownAndMultiRemoteIsolation" in proc.stdout,
+    }
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "suite": "WW03",
+        "slot_id": "C06-git-ssh-transport-refusal",
+        "case_id": "C06-git-ssh-transport-refusal",
+        "run_id": run_id,
+        "lane": "sidecar",
+        "clock_domain": "system",
+        "candidate_head": candidate_head,
+        "host": host,
+        "seed": seed,
+        "elapsed_ms": round(time.monotonic() * 1000.0 - started, 2),
+        "command": cmd,
+        "returncode": proc.returncode,
+        "log_path": str(log_path),
+        "log_sha256": log_sha,
+        "assertions": assertions,
+        "status": "passed" if all(assertions.values()) else "failed",
+    }
 
 
 SLOT_RUNNERS = {
@@ -683,6 +934,7 @@ SLOT_RUNNERS = {
     "C03-until-complete-watch-match": run_slot_c03,
     "C05-http-port-readiness": run_slot_c05,
     "C06-refusal-while-live": run_slot_c06,
+    "C06-git-ssh-transport-refusal": run_slot_c06_git_ssh,
 }
 
 

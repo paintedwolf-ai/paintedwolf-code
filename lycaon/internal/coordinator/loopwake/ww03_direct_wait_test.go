@@ -24,6 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -875,25 +876,21 @@ func TestWW03C06RefusalWhileLiveAndGitSSHTransport(t *testing.T) {
 		}
 		loop.SetDeps(deps)
 
-		// #2717 credential admission phase correlation (tool_admission_enter -> tool_admission_exit).
-		dispatchedAt := time.Now().UTC().Add(-5 * time.Millisecond)
+		// #2717 credential admission phase correlation through the real toolexecution.Executor
+		// admission path (admitCredentialFiles -> tool_admission_enter -> tool_admission_exit -> wait_handler_return).
+		dispatchedAt := time.Now().UTC().Add(-20 * time.Millisecond)
 		admitCtx := awaitstore.WithDispatchTime(t.Context(), dispatchedAt)
-		enterAt := time.Now().UTC()
-		awaitstore.EmitPhaseRecord(admitCtx, awaitstore.PhaseRecord{
-			SessionID: "s1", ToolCallID: "ww03-c06-call", Tool: "wait",
-			Phase: "tool_admission_enter", DurationMS: enterAt.Sub(dispatchedAt).Milliseconds(),
-			RecordedAt: enterAt, ReferenceAt: dispatchedAt,
-		})
-		awaitstore.EmitPhaseRecord(admitCtx, awaitstore.PhaseRecord{
-			SessionID: "s1", ToolCallID: "ww03-c06-call", Tool: "wait",
-			Phase: "tool_admission_exit", DurationMS: 1, RecordedAt: time.Now().UTC(),
-		})
-
+		executor := toolexecution.NewExecutor(nil, reg, orchestration.ProfileCoordinator)
 		tctx := tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID, ToolCallID: "ww03-c06-call"},
+			Identity: tools.InvocationIdentity{
+				SessionID:  "s1",
+				ProjectID:  testdbseed.DefaultProjectID,
+				Agent:      orchestration.ProfileCoordinator,
+				ToolCallID: "ww03-c06-call",
+			},
 		}
-		_, err := reg.Run(admitCtx, "wait", completionWaitArgs(), tctx)
-		testutil.FailErr(t, "park before refusal", err)
+		_, err := executor.Invoke(admitCtx, "wait", completionWaitArgs(), tctx)
+		testutil.FailErr(t, "park before refusal via real toolexecution.Executor", err)
 
 		// Nonqualifying control: refusal on unrelated handle does not wake.
 		loop.Nudges.NudgeProcessRefused(t.Context(), "s1", "unrelated-cmd", anchor.Envelope{CommandRefusalDigest: "unrelated refusal"})
@@ -952,19 +949,28 @@ func TestWW03C06RefusalWhileLiveAndGitSSHTransport(t *testing.T) {
 			t.Fatalf("leaked active leases: %+v", active)
 		}
 
-		var sawEnter, sawExit, sawReturn bool
-		for _, p := range gotPhases {
+		enterIdx, exitIdx, returnIdx := -1, -1, -1
+		for i, p := range gotPhases {
 			switch p.Phase {
 			case "tool_admission_enter":
-				sawEnter = true
+				if enterIdx < 0 {
+					enterIdx = i
+					if p.DurationMS < 15 || !p.ReferenceAt.Equal(dispatchedAt) {
+						t.Fatalf("tool_admission_enter timing mismatch: duration_ms=%d ref=%v want>=15ms ref=%v", p.DurationMS, p.ReferenceAt, dispatchedAt)
+					}
+				}
 			case "tool_admission_exit":
-				sawExit = true
+				if exitIdx < 0 {
+					exitIdx = i
+				}
 			case "wait_handler_return":
-				sawReturn = true
+				if returnIdx < 0 {
+					returnIdx = i
+				}
 			}
 		}
-		if !sawEnter || !sawExit || !sawReturn {
-			t.Fatalf("missing expected #2717/#2713 phases: enter=%v exit=%v return=%v", sawEnter, sawExit, sawReturn)
+		if enterIdx < 0 || exitIdx < 0 || returnIdx < 0 || !(enterIdx < exitIdx && exitIdx < returnIdx) {
+			t.Fatalf("expected real #2717/#2713 phase order enter<exit<return, got enter=%d exit=%d return=%d (%+v)", enterIdx, exitIdx, returnIdx, gotPhases)
 		}
 	})
 
