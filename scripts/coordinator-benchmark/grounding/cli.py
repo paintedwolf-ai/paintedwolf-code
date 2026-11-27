@@ -109,7 +109,7 @@ def _cmd_controls(args: argparse.Namespace) -> int:
         manifest = sidecar.build_run_manifest()
         project = client.create_project(workspace)
 
-        # Control 1 + Control 3: Supported citation & minting parity
+        # Control 1 + Control 3: Supported citation & minting parity using D1's `command` tool
         sess_sup = client.create_session(project["id"])
         sid_sup = sess_sup["id"]
         client.wait_session_ready(sid_sup)
@@ -121,7 +121,7 @@ def _cmd_controls(args: argparse.Namespace) -> int:
             turns=(
                 ScriptedTurn(
                     tool_calls=(
-                        {"name": "read_file", "args": {"path": "sample.go", "start_line": 1, "end_line": 3}},
+                        {"name": "command", "args": {"command": "cat -n sample.go"}},
                     ),
                 ),
                 ScriptedTurn(content="Verified Hello() at [read#1:3]."),
@@ -130,11 +130,14 @@ def _cmd_controls(args: argparse.Namespace) -> int:
             workspace_dir=workspace,
             submission_id=sub_sup,
             wait_for_settlement=True,
+            max_repair_replies=0,
+            source_revision="",
             engine_provenance=sidecar.provenance,
             run_manifest=manifest,
         )
 
         # Control 2: Unsupported / negative control on the same launch path
+        # Handles D1's citation-repair loop cleanly until exhaustion/settlement.
         sess_unsup = client.create_session(project["id"])
         sid_unsup = sess_unsup["id"]
         client.wait_session_ready(sid_unsup)
@@ -146,15 +149,18 @@ def _cmd_controls(args: argparse.Namespace) -> int:
             turns=(
                 ScriptedTurn(
                     tool_calls=(
-                        {"name": "read_file", "args": {"path": "sample.go", "start_line": 1, "end_line": 3}},
+                        {"name": "command", "args": {"command": "cat -n sample.go"}},
                     ),
                 ),
-                ScriptedTurn(content="Claimed unobserved line [read#1:99]."),
+                ScriptedTurn(content="Claimed unobserved line [read#99:99]."),
             ),
             db_path=sidecar.store_db_path,
             workspace_dir=workspace,
             submission_id=sub_unsup,
             wait_for_settlement=True,
+            max_repair_replies=5,
+            repair_reply_content="Claimed unobserved line [read#99:99].",
+            source_revision="",
             engine_provenance=sidecar.provenance,
             run_manifest=manifest,
         )
@@ -166,7 +172,7 @@ def _cmd_controls(args: argparse.Namespace) -> int:
             citation_type="handle", raw="[read#1:3]", handle="read#1", start_line=3, citation_id="ctrl-1"
         ),
         unsupported_citation=Citation(
-            citation_type="handle", raw="[read#1:99]", handle="read#1", start_line=99, citation_id="ctrl-2"
+            citation_type="handle", raw="[read#99:99]", handle="read#99", start_line=99, citation_id="ctrl-2"
         ),
         platform="macos" if sidecar.provenance.platform == "darwin" else "linux",
     )

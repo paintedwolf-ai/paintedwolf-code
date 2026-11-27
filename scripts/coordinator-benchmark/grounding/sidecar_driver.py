@@ -844,14 +844,16 @@ def run_scripted_session(
     workspace_dir: str | pathlib.Path | None = None,
     submission_id: str = "",
     wait_for_settlement: bool = False,
+    max_repair_replies: int = 0,
+    repair_reply_content: str = "",
     fixture_provenance: str = "host",
-    source_revision: str = "rev-1",
+    source_revision: str = "",
     round_id: str = "round-1",
     intent_window: str = "intent-1",
     engine_provenance: EngineBinaryProvenance | None = None,
     run_manifest: SidecarRunManifest | None = None,
     sse_events: Sequence[Mapping[str, Any]] = (),
-    poll_timeout: float = 15.0,
+    poll_timeout: float = 30.0,
 ) -> SidecarRunArtifact:
     """Drive scripted multi-turn completions against `/harness/llm/pending` & `/respond`.
 
@@ -859,6 +861,9 @@ def run_scripted_session(
     delivered to the mock model (real `evidence_handles`, authenticated `delivery_tags`,
     actual delivered bytes, and fixture-verified line ranges — NEVER synthesized
     handles or copied requested arguments).
+
+    When `wait_for_settlement=True` and `max_repair_replies > 0`, answers any
+    host-issued citation-repair pending turns until the submission settles cleanly.
     """
     friction_before = probe_store_db(db_path, session_id) if db_path else None
     raw_pending: list[dict[str, Any]] = []
@@ -891,35 +896,44 @@ def run_scripted_session(
         for item in newly_delivered:
             delivered_tools.append(item)
             handles = item["evidence_handles"]
-            tags = tuple(item["delivery_tags"])
+            all_tags = tuple(item["delivery_tags"])
             delivered_text = item["delivered_body"]
             args = item["arguments"]
-            path = str(args.get("path") or "")
+            arg_path = str(args.get("path") or "")
             url = str(args.get("url") or "")
 
-            # Also extract path from authenticated delivery tag if present
-            if not path and tags:
-                m = _DELIVERY_TAG_RE.match(tags[0])
-                if m and m.group("path"):
-                    path = m.group("path").strip('"')
-
-            fixture_file = (ws_path / path) if (ws_path and path) else None
-            ranges, line_numbered, printed_other = _derive_actual_range_and_numbering(
-                delivered_text,
-                delivery_tags=tags,
-                fixture_file=fixture_file,
-            )
-
-            # Only record handles actually authenticated in the delivered envelope
+            # Associate each authenticated handle with its own delivery tag & coverage
             for handle in handles:
                 kind = handle.split("#", 1)[0] if "#" in handle else ""
+                handle_tags = tuple(
+                    t for t in all_tags
+                    if (_DELIVERY_TAG_RE.match(t) and _DELIVERY_TAG_RE.match(t).group("handle") == handle)  # type: ignore[union-attr]
+                )
+                handle_path = ""
+                if handle_tags:
+                    m = _DELIVERY_TAG_RE.match(handle_tags[0])
+                    if m and m.group("path"):
+                        handle_path = m.group("path").strip('"')
+                elif kind != "command":
+                    handle_path = arg_path
+
+                if kind == "command":
+                    ranges, line_numbered, printed_other = ((), False, False)
+                else:
+                    fixture_file = (ws_path / handle_path) if (ws_path and handle_path) else None
+                    ranges, line_numbered, printed_other = _derive_actual_range_and_numbering(
+                        delivered_text,
+                        delivery_tags=handle_tags or all_tags,
+                        fixture_file=fixture_file,
+                    )
+
                 delivery_records.append(
                     DeliveryRecord(
                         tool=item["tool"],
                         arguments=args,
                         raw_bytes=delivered_text.encode("utf-8"),
                         delivered_ranges=ranges,
-                        delivery_tags=tags,
+                        delivery_tags=handle_tags,
                         line_numbered=line_numbered,
                         printed_other_numbers=printed_other,
                         session_id=session_id,
@@ -929,7 +943,7 @@ def run_scripted_session(
                         source_revision=source_revision,
                         handle=handle,
                         kind=kind,
-                        path=path,
+                        path=handle_path,
                         url=url,
                         artifact_id="",
                         call_id=item["call_id"],
@@ -952,7 +966,39 @@ def run_scripted_session(
         scripted_resps.append(resp_payload)
 
     if wait_for_settlement:
-        client.wait_settled(session_id, submission_id, timeout=poll_timeout)
+        deadline = time.monotonic() + poll_timeout
+        repair_replies_sent = 0
+        settled = False
+        while time.monotonic() < deadline:
+            if submission_id:
+                obs = client.request(
+                    f"/harness/execution/{session_id}/{submission_id}", missing=True
+                )
+                if isinstance(obs, dict) and obs.get("settled") is True:
+                    settled = True
+                    break
+            else:
+                st = client.request(f"/v1/sessions/{session_id}", missing=True)
+                if isinstance(st, dict) and st.get("status") == "idle":
+                    settled = True
+                    break
+
+            if repair_replies_sent < max_repair_replies:
+                repair_pending = client.get_pending(session_id)
+                if repair_pending is not None:
+                    raw_pending.append(dict(repair_pending))
+                    reply_text = repair_reply_content or (turns[-1].content if turns else "")
+                    resp_payload = client.respond(str(repair_pending["id"]), content=reply_text)
+                    scripted_resps.append(resp_payload)
+                    repair_replies_sent += 1
+                    continue
+            time.sleep(0.05)
+
+        if not settled:
+            raise TimeoutError(
+                f"Timed out waiting for session {session_id} (submission={submission_id!r}, "
+                f"repair_replies_sent={repair_replies_sent}) to settle"
+            )
 
     product_records, product_closeouts = (
         extract_product_observations(db_path, session_id) if db_path else ((), ())
