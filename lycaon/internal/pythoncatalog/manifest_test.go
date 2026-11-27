@@ -108,6 +108,8 @@ func TestDefaultLaunchManifestRoundTripAndRoster(t *testing.T) {
 		"drain3":             "drain3",
 		"parse":              "parse",
 		"pyelftools":         "elftools",
+		"numpy":              "numpy",
+		"pandas":             "pandas",
 	}
 	if len(wantPublic) != LaunchPublicDistributionCount {
 		t.Fatalf("wantPublic len = %d, want %d", len(wantPublic), LaunchPublicDistributionCount)
@@ -447,14 +449,14 @@ func TestManifestLookupMisses(t *testing.T) {
 	if _, ok := m.FindDistribution(""); ok {
 		t.Fatal("empty FindDistribution should miss")
 	}
-	if _, ok := m.FindDistribution("numpy"); ok {
-		t.Fatal("numpy should miss")
+	if _, ok := m.FindDistribution("scipy"); ok {
+		t.Fatal("scipy should miss")
 	}
 	if _, ok := m.FindByImport(""); ok {
 		t.Fatal("empty FindByImport should miss")
 	}
-	if _, ok := m.FindByImport("pandas"); ok {
-		t.Fatal("pandas should miss")
+	if _, ok := m.FindByImport("polars"); ok {
+		t.Fatal("polars should miss")
 	}
 	if _, _, ok := m.FindConsoleScript(""); ok {
 		t.Fatal("empty FindConsoleScript should miss")

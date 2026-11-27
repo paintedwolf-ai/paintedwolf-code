@@ -18,6 +18,10 @@ func taskSummaryForPY12Distribution(normalizedName string) string {
 		return "extract typed fields from repeated text log layouts and count unmatched lines"
 	case "pyelftools":
 		return "inspect saved ELF headers, architecture, DT_NEEDED and build ID cross-platform"
+	case "numpy":
+		return "vectorized numerical arrays, linear algebra (lapack_lite) and FFT"
+	case "pandas":
+		return "typed CSV/tabular DataFrame joins, group-by aggregations and time-series analysis"
 	default:
 		return ""
 	}
@@ -89,6 +93,20 @@ func py12OnDemandExamples() []CapabilityExample {
 			StdlibModule: "bz2",
 			TaskPhrases:  []string{"rotated logs", "gzip", "bz2", "compressed logs"},
 			Snippet:      "import bz2, gzip\nMAX_BYTES = 65536\nwith gzip.open('app.log.1.gz', 'rb') as f:\n    data = f.read(MAX_BYTES + 1)\n    truncated = len(data) > MAX_BYTES",
+		},
+		{
+			ID:           "numpy-numeric",
+			Title:        "Vectorized numerical computation with NumPy",
+			Distribution: "numpy",
+			TaskPhrases:  []string{"numerical arrays", "linear algebra", "numpy", "vectorized"},
+			Snippet:      "import numpy as np\na = np.array([[2.0, 1.0], [1.0, 3.0]])\nx = np.linalg.solve(a, np.array([5.0, 7.0]))",
+		},
+		{
+			ID:           "pandas-tabular",
+			Title:        "Typed CSV join and group-by aggregation with pandas",
+			Distribution: "pandas",
+			TaskPhrases:  []string{"csv join", "groupby", "dataframe", "tabular analysis", "pandas"},
+			Snippet:      "import pandas as pd\norders = pd.read_csv('orders.csv', dtype={'region_id': 'string', 'amount': 'float64'})\nlookup = pd.read_csv('lookup.csv', dtype={'region_id': 'string', 'region': 'string'})\nsummary = orders.merge(lookup, on='region_id').groupby('region', as_index=False)['amount'].sum()",
 		},
 	}
 }

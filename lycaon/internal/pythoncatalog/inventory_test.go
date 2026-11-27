@@ -58,14 +58,14 @@ func TestExecuteReadOnlyPipInventoryForms(t *testing.T) {
 	}
 
 	// show missing package
-	res, err = ExecuteReadOnlyPip(m, []string{"show", "numpy"})
+	res, err = ExecuteReadOnlyPip(m, []string{"show", "scipy"})
 	if err != nil || res.ExitStatus != 1 || res.Diagnostic == nil || res.Diagnostic.Kind != DiagnosticMissingDistribution {
 		t.Fatalf("expected missing distribution diagnostic, got err=%v res=%+v", err, res)
 	}
 
 	// show partial hit + miss
-	res, err = ExecuteReadOnlyPip(m, []string{"show", "PyYAML", "numpy"})
-	if err != nil || res.ExitStatus != 0 || !strings.Contains(res.Stdout, "Name: PyYAML") || !strings.Contains(res.Stderr, "not found: numpy") {
+	res, err = ExecuteReadOnlyPip(m, []string{"show", "PyYAML", "scipy"})
+	if err != nil || res.ExitStatus != 0 || !strings.Contains(res.Stdout, "Name: PyYAML") || !strings.Contains(res.Stderr, "not found: scipy") {
 		t.Fatalf("unexpected partial show result: err=%v res=%+v", err, res)
 	}
 }
@@ -200,7 +200,7 @@ func TestCompactDiscoverySummaryAndTargetedHelp(t *testing.T) {
 
 	summary := RenderCompactDiscoverySummary(m)
 	for _, want := range []string{
-		"65 public packages",
+		"67 public packages",
 		"Offline Office & PDF creation",
 		"SVG charts",
 		"Legacy XLS",
@@ -237,6 +237,8 @@ func TestCompactDiscoverySummaryAndTargetedHelp(t *testing.T) {
 		{query: "har", wantMatch: "timings", wantOmit: "PyJWT"},
 		{query: "rotated logs", wantMatch: "gzip", wantOmit: "PyJWT"},
 		{query: "elf", wantMatch: "ELFFile", wantOmit: "PyJWT"},
+		{query: "numpy", wantMatch: "linalg", wantOmit: "PyJWT"},
+		{query: "pandas", wantMatch: "groupby", wantOmit: "PyJWT"},
 	}
 	for _, tc := range targetedCases {
 		got := RenderTargetedHelp(m, tc.query)
@@ -271,14 +273,13 @@ func TestDiagnosticsDistinguishFailureClasses(t *testing.T) {
 		t.Fatalf("DiagnoseImport(BS4) = %+v", d)
 	}
 
-	// Missing distribution: numpy / pandas / matplotlib must point to sqlite3, csv, statistics, openpyxl/pygal and declared project runner
-	for _, pkg := range []string{"numpy", "pandas", "matplotlib"} {
+	// Missing distribution: scipy / polars / matplotlib must point to numpy, pandas, openpyxl/pygal and declared project runner
+	for _, pkg := range []string{"scipy", "polars", "matplotlib"} {
 		d = DiagnoseImport(m, pkg)
 		formatted := d.Format()
 		if d.Kind != DiagnosticMissingDistribution ||
-			!strings.Contains(formatted, "csv") ||
-			!strings.Contains(formatted, "sqlite3") ||
-			!strings.Contains(formatted, "statistics") ||
+			!strings.Contains(formatted, "numpy") ||
+			!strings.Contains(formatted, "pandas") ||
 			!strings.Contains(formatted, "pygal") ||
 			!strings.Contains(formatted, "declared project runner") ||
 			!strings.Contains(formatted, ExternalPythonRoute) {

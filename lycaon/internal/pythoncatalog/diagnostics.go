@@ -62,12 +62,10 @@ var legacyImportAliases = map[string]string{
 	"python_hcl2":        "hcl2",
 }
 
-// portableNumericOutOfScope lists numeric/dataframe/plotting packages outside
-// the PY11-Pure image (until PY13 ships), for which diagnostics point to stdlib
-// sqlite3, csv, statistics, workbook charts, or pygal standalone SVG charts.
+// portableNumericOutOfScope lists scientific/plotting packages outside the
+// cumulative image (where numpy and pandas ARE installed), pointing to numpy,
+// pandas, openpyxl workbook charts, or pygal standalone SVG charts.
 var portableNumericOutOfScope = map[string]bool{
-	"numpy":      true,
-	"pandas":     true,
 	"scipy":      true,
 	"polars":     true,
 	"matplotlib": true,
@@ -152,8 +150,8 @@ func DiagnoseImport(manifest ImageManifest, requested string) Diagnostic {
 			Kind:          DiagnosticMissingDistribution,
 			Requested:     trimmed,
 			Message:       fmt.Sprintf("Package or module %q is not installed in the fixed Portable Python image.", trimmed),
-			Available:     []string{"sqlite3", "csv", "statistics", "openpyxl", "pygal"},
-			Suggestion:    "For portable tabular and numeric analysis, use stdlib sqlite3, csv, and statistics (or sympy for exact symbolic math), openpyxl for workbook charts, or pygal for standalone SVG charts; for a project's own dependencies, use the declared project runner.",
+			Available:     []string{"numpy", "pandas", "openpyxl", "pygal"},
+			Suggestion:    "For portable numerical and tabular analysis, use installed `numpy` and `pandas` (or stdlib sqlite3, csv, statistics; sympy for exact symbolic math), `openpyxl` for workbook charts, or `pygal` for standalone SVG charts; for a project's own dependencies, use the declared project runner.",
 			ExternalRoute: ExternalPythonRoute,
 		}
 	}

@@ -263,6 +263,7 @@ func RenderCompactDiscoverySummary(manifest ImageManifest) string {
 	b.WriteString("- Calendar files & timezones: ICS files with TZID/recurrence (icalendar), IANA timezones (zoneinfo + tzdata; pytz compat), and cron schedules (croniter).\n")
 	b.WriteString("- Text, diffs, tokens & repo helpers: mojibake repair (ftfy), offline HS256 JWT (jwt), gitignore matching (pathspec), graph cycles (networkx), unified diffs (unidiff), SQL splitting (sqlparse), and strict YAML duplicate-key checks (ruamel.yaml).\n")
 	b.WriteString("- Saved-evidence troubleshooting: saved command output (jc), offline pcap/pcapng timelines (dpkt), DNS wire/zone decoding (dns), PEM/DER cert inspection (asn1crypto), log pattern comparison (drain3), typed log parsing (parse), and cross-arch ELF inspection (elftools).\n")
+	b.WriteString("- Numeric & tabular analysis: vectorized numerical arrays (numpy) and typed DataFrame CSV joins/group-by (pandas).\n")
 	b.WriteString("On-demand queries:\n")
 	b.WriteString("- Targeted help: query by task or import (e.g. \"jwt\", \"repair text\", \"read .xls\", \"saved captures\", \"diagnostic output\", \"log comparison\", \"har\", \"rotated logs\", \"elf\").\n")
 	b.WriteString("- Full inventory: python -m pip list | list --format=json | show NAME | freeze.\n")
