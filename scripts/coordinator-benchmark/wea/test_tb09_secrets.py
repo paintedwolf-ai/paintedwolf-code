@@ -20,11 +20,13 @@ from wea.tb09_secrets import (
     verify_reference_grammar,
 )
 from wea.tb09_sidecar_runner import (
+    RecordingOpenAIFixture,
     TB09_SIDECAR_SLOTS,
     TB09SlotSpec,
     _restart_application,
     build_parser,
     build_slot_receipt,
+    mint_detectable_canary,
 )
 
 
@@ -277,6 +279,49 @@ class TestTB09Secrets(unittest.TestCase):
                     restarted.log.close()
             # Existing pre-restart log must be preserved (opened in append mode).
             self.assertIn("pre-restart log", (app_dir / "sidecar.log").read_text(encoding="utf-8"))
+
+    def test_recording_openai_fixture_screens_canaries_and_supports_sse(self) -> None:
+        gen = CanaryGenerator("tb09-openai-unit", seed="tb09-openai-seed")
+        canary = mint_detectable_canary(gen, "model_slot")
+        self.assertTrue(canary.startswith("ghp_"))
+        self.assertEqual(len(canary), 40)
+        self.assertIn(canary, gen.tokens)
+
+        with RecordingOpenAIFixture(fixture_id="tb09-openai-test", redact_tokens=gen.tokens) as ep:
+            req = urllib.request.Request(
+                f"{ep.base_url}/v1/chat/completions",
+                data=json.dumps({
+                    "model": "tb09-m1",
+                    "stream": True,
+                    "messages": [{"role": "user", "content": f"key={canary}"}],
+                }).encode("utf-8"),
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                self.assertEqual(resp.status, 200)
+                body = resp.read().decode("utf-8")
+                self.assertIn("[DONE]", body)
+            recs = ep.chat_records_since(0)
+            self.assertEqual(len(recs), 1)
+            self.assertTrue(recs[0]["saw_canary"])
+            # D7: raw canary MUST NOT appear in the recorded fixture JSON.
+            self.assertNotIn(canary, json.dumps(recs))
+
+    def test_blocked_verdict_preserved_and_d7_checked(self) -> None:
+        gen = CanaryGenerator("tb09-blocked-unit", seed="tb09-blocked-seed")
+        spec = TB09SlotSpec("A10-sc-09", "A10", "web_search send_unchanged", "web_search", "send_unchanged")
+        prov = {"product_source": {"verified": True}, "harness_source": {"git_head": "a" * 40}}
+        rec = build_slot_receipt(
+            spec,
+            provenance=prov,
+            typed_result={"status": "blocked", "reason": "no external search key"},
+            independent_observation={"live_product_driven": False},
+            canary_tokens=gen.tokens,
+            verdict="blocked",
+        )
+        self.assertEqual(rec["verdict"], "blocked")
+        self.assertTrue(rec["canary_scan"]["clean"])
 
 
 if __name__ == "__main__":
