@@ -17,7 +17,6 @@ if str(BENCHMARK_DIR) not in sys.path:
     sys.path.insert(0, str(BENCHMARK_DIR))
 
 import smoke
-import smoke_workers
 from application_environment import application_environment
 from portable_command.contracts import ROOT
 from portable_command.harness import create_isolated_session, send_tool_calls
@@ -70,6 +69,9 @@ class ReopenedApplication(smoke.Application):
             cwd=ROOT, env=env, stdout=self.log, stderr=subprocess.STDOUT,
         )
 
+    def wait_for(self, observe, phase, session=None, timeout=180):
+        return super().wait_for(observe, phase, session=None, timeout=timeout)
+
 
 def _restart(app, app_dir, *, engine_bin, generation):
     app.close(cleanup=False)
@@ -90,8 +92,8 @@ def _start_prompt(app, sid, text):
     app.request(f'/v1/sessions/{sid}/prompts', {'operation_id': str(uuid.uuid4()), 'text': text})
 
 
-def _finish_prompt(app, sid, text='Done.'):
-    smoke_workers.finish(app, sid, text)
+def _finish_prompt(app, sid, _text='Done.'):
+    app.request(f'/v1/sessions/{sid}/abort', {})
     _wait_idle(app, sid)
 
 
