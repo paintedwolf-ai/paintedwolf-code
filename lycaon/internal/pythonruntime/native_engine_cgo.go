@@ -140,6 +140,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 )
 
@@ -531,6 +532,16 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 		select {
 		case <-execCtx.Done():
 			C.pw_py_call_instance_cancel(r.lib, cancelTarget)
+			ticker := time.NewTicker(1 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-doneCh:
+					return
+				case <-ticker.C:
+					C.pw_py_call_instance_cancel(r.lib, cancelTarget)
+				}
+			}
 		case <-doneCh:
 		}
 	}()

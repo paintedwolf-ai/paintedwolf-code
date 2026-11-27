@@ -1,19 +1,10 @@
-//go:build !pw_native_python
+//go:build cgo && (darwin || linux) && !pw_wazero_python
 
 package pythonruntime
 
-import "runtime"
-
-// DefaultBackendKind returns the build-configured default backend when the
-// explicit pw_native_python build tag is not set.
-//
-// Linux defaults to wazero-compiler (preserving static CGO_ENABLED=0 sidecar
-// builds). macOS uses wazero-interpreter until PY07's signed darwin-arm64
-// native engine release is pinned in bundled-manifest.yaml, at which point
-// darwin switches to BackendNativeAOT.
+// DefaultBackendKind returns BackendNativeAOT on both darwin/arm64 and
+// linux/amd64 product builds. Previous wazero backends remain available as
+// explicit test/benchmark controls via ServiceConfig.Backend or -tags pw_wazero_python.
 func DefaultBackendKind() BackendKind {
-	if runtime.GOOS == "darwin" {
-		return BackendWazeroInterpreter
-	}
-	return BackendWazeroCompiler
+	return BackendNativeAOT
 }

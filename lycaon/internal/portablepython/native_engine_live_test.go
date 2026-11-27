@@ -39,13 +39,17 @@ func TestNativeEngineLiveExecutionPolicyFuelAndCancel(t *testing.T) {
 	imageDir, engineDir := requireLiveNativeEngineEnv(t)
 	ctx := context.Background()
 
+	// Verify default backend selection (empty Backend + empty EngineDir discovered
+	// via PW_PORTABLE_PYTHON_ENGINE_DIR) selects BackendNativeAOT on BOTH
+	// darwin/arm64 and linux/amd64 without silent fallback.
+	if got := pythonruntime.DefaultBackendKind(); got != pythonruntime.BackendNativeAOT {
+		t.Fatalf("DefaultBackendKind()=%q want %q on %s/%s", got, pythonruntime.BackendNativeAOT, runtime.GOOS, runtime.GOARCH)
+	}
 	svc, err := portablepython.NewService(ctx, portablepython.ServiceConfig{
-		ImageDir:  imageDir,
-		Backend:   pythonruntime.BackendNativeAOT,
-		EngineDir: engineDir,
+		ImageDir: imageDir,
 	})
 	if err != nil {
-		t.Fatalf("NewService(BackendNativeAOT) failed: %v", err)
+		t.Fatalf("NewService(default native backend) failed: %v", err)
 	}
 	defer func() { _ = svc.Close(ctx) }()
 
