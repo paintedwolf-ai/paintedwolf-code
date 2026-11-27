@@ -36,7 +36,6 @@ var coordinatorOccurrenceGates = map[string]bool{
 	"observed_handles_omitted": true,
 	"observed_paths_omitted":   true,
 	"observed_urls_omitted":    true,
-	"document_issues":          true,
 	"agent_skills":             true,
 	"rating_questions":         true,
 	"agent_host_resources":     true,
@@ -49,8 +48,6 @@ var coordinatorOccurrenceGates = map[string]bool{
 	"worker_result":          true,
 	"leg_id":                 true,
 	"progress_closure_armed": true,
-	"card_label":             true,
-	"card_rule":              true,
 	"promoted_paths":         true,
 	"drafted_synthesis":      true,
 	// JSON projections of typed citation evaluation in guidance.CloseoutRepairHintData.
@@ -59,7 +56,6 @@ var coordinatorOccurrenceGates = map[string]bool{
 	"document_citation_targets":        true, // citation repair: rejected finding where entries
 	"resume_work_allowed":              true,
 	"can_recall":                       true, // recall in the closed turn's offered tools (promptloop rejectCloseoutGrounding)
-	"offenders_sample":                 true, // report-document repair: guidance.OffenderHintData
 	"offenders_omitted":                true, // report-document repair: guidance.OffenderHintData
 	"offending_keys":                   true, // report-document repair: unread key names
 	"allowed_top_level_keys":           true, // report-document repair: allowed top-level report fence keys
@@ -67,7 +63,6 @@ var coordinatorOccurrenceGates = map[string]bool{
 	"retained_document":                true, // report-document repair: guidance.ReportDocumentFence
 	"run_report":                       true, // report-document repair: the draft delivers its run's report
 	"llm_timeout":                      true,
-	"reason_text":                      true,
 	"session_command_mutation_capable": true,
 	"guidance":                         true,
 	"options_criterion":                true,
@@ -82,7 +77,6 @@ var coordinatorOccurrenceGates = map[string]bool{
 	"session_folder_changed":           true, // session folder change in EnqueueRootsChangedKick
 	"label":                            true, // detached root label in enqueueRootDetachCanceledKick
 	"evidence_digest":                  true,
-	"command_completion":               true,
 	"command_refusal":                  true,
 	"held_call_handle":                 true, // host-supplied handle of a settled held call
 	"scan_categories":                  true,
