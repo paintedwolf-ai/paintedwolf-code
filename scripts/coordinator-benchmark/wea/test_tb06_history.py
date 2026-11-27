@@ -328,6 +328,30 @@ class TestTB06InprocManifestAndSidecarRunner(unittest.TestCase):
         # POST /v1/projects/{id}/source/seen MUST include ordinal, and DELETE MUST pass through_ordinal.
         self.assertIn('{"file_id": fid, "effect_id": eff_id, "ordinal": ordinal}', src)
         self.assertIn("?through_ordinal={ordinal}", src)
+        # Agent turns MUST establish progress before command/edit, and restarts MUST reuse existing app_dir.
+        self.assertIn('"update_progress"', src)
+        self.assertIn("def _restart_application(", src)
+        self.assertIn("smoke.Application.__new__(smoke.Application)", src)
+
+    def test_extract_attached_root_id_from_project_response(self) -> None:
+        from wea.tb06_sidecar_runner import _extract_attached_root_id
+
+        with tempfile.TemporaryDirectory() as tmp:
+            p1 = pathlib.Path(tmp) / "primary"
+            p2 = pathlib.Path(tmp) / "checkout-2"
+            p1.mkdir()
+            p2.mkdir()
+            resp = {
+                "id": "proj-1",
+                "roots": [
+                    {"id": "r-primary", "path": str(p1), "label": "primary"},
+                    {"id": "r-wt2", "path": str(p2), "label": "checkout-2"},
+                ],
+            }
+            self.assertEqual(
+                _extract_attached_root_id(resp, label="checkout-2", path=p2, exclude_id="r-primary"),
+                "r-wt2",
+            )
 
 
 if __name__ == "__main__":

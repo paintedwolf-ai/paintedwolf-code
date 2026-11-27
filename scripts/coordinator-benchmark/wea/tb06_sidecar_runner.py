@@ -19,6 +19,8 @@ import base64
 import contextlib
 import json
 import pathlib
+import secrets
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -41,12 +43,13 @@ from wea.observers import (
     read_sqlite_tables_ro,
     sha256_bytes,
 )
-from wea.provenance import REPO_ROOT, collect_provenance
+from wea.provenance import REPO_ROOT, collect_provenance, resolve_engine_binary
 from wea.runner import (
     _create_application,
     _extract_edit_records_from_db,
     _init_git_repo,
     _open_session,
+    _resolve_engine_root,
     _save_json,
     _send_tool_call,
     _wait_pending,
@@ -190,6 +193,87 @@ def _create_fixture_repo(slot_dir: pathlib.Path, files: dict[str, bytes]) -> pat
     return proj
 
 
+def _restart_application(
+    app_dir: pathlib.Path,
+    *,
+    engine_bin: str | pathlib.Path | None = None,
+    engine_manifest: str | pathlib.Path | None = None,
+    engine_root: str | pathlib.Path | None = None,
+) -> Any:
+    """Restart a `smoke.Application` on an existing `app_dir`, preserving `store.db` and `config/`."""
+    import smoke
+
+    binary, _ = resolve_engine_binary(REPO_ROOT, engine_bin)
+    resolved_engine_root = _resolve_engine_root(engine_manifest=engine_manifest, engine_root=engine_root)
+
+    app = smoke.Application.__new__(smoke.Application)
+    app.directory = pathlib.Path(app_dir)
+    app.config = app.directory / "config"
+    app.config.mkdir(parents=True, exist_ok=True)
+    app.manual = True
+    app.projects = []
+    app.admissions = []
+    suite = json.loads((smoke.ROOT / "lycaon/test/fixtures/eval/coordinator-benchmark.json").read_text())
+    app.task_allowance = suite["task_allowance"]
+    app.approval_guidance = suite["unattended"]["approval_guidance"]
+    app.baseline_checks = []
+    app.flows = []
+    app.token = secrets.token_hex(24)
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        app.port = sock.getsockname()[1]
+    app.url = f"http://127.0.0.1:{app.port}"
+    app.log = (app.directory / "sidecar.log").open("a")
+    overrides: dict[str, str] = {
+        "LYCAON_CONFIG_DIR": str(app.config),
+        "LYCAON_CONFIG_ROOT": str(smoke.ROOT / "lycaon"),
+        "LYCAON_ENGINE_ROOT": str(
+            resolved_engine_root if resolved_engine_root is not None else (smoke.ROOT / "lycaon-den/src-tauri/engine-root")
+        ),
+        "LYCAON_ADDR": f"127.0.0.1:{app.port}",
+        "LYCAON_API_TOKEN": app.token,
+        "LYCAON_DEV": "1",
+        "LYCAON_HARNESS": "1",
+        "LYCAON_LOG_LEVEL": "debug",
+        "LYCAON_LLM_MOCK": "1",
+        "LYCAON_LLM_MANUAL": "1",
+    }
+    env = smoke.application_environment(overrides)
+    app.process = subprocess.Popen(
+        [str(binary), "serve", "--db", str(app.directory / "store.db")],
+        cwd=smoke.ROOT,
+        env=env,
+        stdout=app.log,
+        stderr=subprocess.STDOUT,
+    )
+    smoke.save(app.directory / "ownership.json", {"pid": app.process.pid, "port": app.port})
+    return app
+
+
+def _extract_attached_root_id(
+    resp: Any,
+    *,
+    label: str,
+    path: pathlib.Path,
+    exclude_id: str = "",
+) -> str:
+    """Extract the newly attached root_id from `POST /v1/projects/{id}/roots` (returns full Project JSON)."""
+    if not isinstance(resp, dict):
+        return ""
+    roots = resp.get("roots") or []
+    target_path = str(path.resolve())
+    for r in roots:
+        if not isinstance(r, dict):
+            continue
+        rid = str(r.get("id") or "")
+        if not rid or rid == exclude_id:
+            continue
+        rpath = str(pathlib.Path(r["path"]).resolve()) if r.get("path") else ""
+        if rpath == target_path or str(r.get("label") or "") == label:
+            return rid
+    return ""
+
+
 def _finish_turn_text(app: Any, session_id: str, text: str = "Done.") -> None:
     req = _wait_pending(app, session_id)
     app.request("/harness/llm/respond", {"id": req["id"], "content": text})
@@ -208,12 +292,18 @@ def _run_agent_edit_turn(
     new_str: str,
     prompt_text: str,
 ) -> tuple[dict[str, Any], dict[str, Any], str]:
-    """Run one complete zero-model agent turn: prompt -> cat -> edit -> finish text."""
+    """Run one complete zero-model agent turn: prompt -> update_progress -> cat -> edit -> finish text."""
     prompt_resp = app.request(
         f"/v1/sessions/{session_id}/prompts",
         {"operation_id": str(uuid.uuid4()), "text": prompt_text},
     )
     msg_id = str(prompt_resp.get("message_id") or prompt_resp.get("id") or "")
+    _send_tool_call(
+        app,
+        session_id,
+        "update_progress",
+        {"content": f"## Progress\n- [ ] Read and edit {rel_path}\n"},
+    )
     _, read_res, _ = _send_tool_call(app, session_id, "command", {"command": f"cat {rel_path}"})
     _, write_res, _ = _send_tool_call(
         app,
@@ -283,24 +373,16 @@ def _drive_e04_slot(app: Any, slot: SidecarSlotSpec, slot_dir: pathlib.Path) -> 
     proj = _create_fixture_repo(slot_dir, {"target.txt": base_bytes})
     db_path = app.directory / "store.db"
 
-    session_id, project_id, root_id = _open_session(app, proj)
-    active_root = proj
-    active_root_id = root_id
-
     if branch == "worktree":
         wt_dir = slot_dir / "wt-branch"
         _git(proj, "worktree", "add", "-q", "-b", f"tb06-{slot.slot_id.lower()}", str(wt_dir))
-        st_attach, attach_resp = _http_call(
-            app,
-            f"/v1/projects/{project_id}/roots",
-            {"path": str(wt_dir), "label": "worktree"},
-            method="POST",
-        )
-        if st_attach == 200 and isinstance(attach_resp, dict):
-            added = attach_resp.get("added") or attach_resp.get("root") or {}
-            if added.get("id"):
-                active_root_id = str(added["id"])
-                active_root = wt_dir
+        session_id, project_id, root_id = _open_session(app, wt_dir)
+        active_root = wt_dir
+        active_root_id = root_id
+    else:
+        session_id, project_id, root_id = _open_session(app, proj)
+        active_root = proj
+        active_root_id = root_id
 
     obs = EditsObserver(active_root, db_path)
     obs.capture_pre(["target.txt"])
@@ -346,6 +428,13 @@ def _drive_e04_slot(app: Any, slot: SidecarSlotSpec, slot_dir: pathlib.Path) -> 
             f"/v1/sessions/{session_id}/prompts",
             {"operation_id": str(uuid.uuid4()), "text": "Append a line via shell command."},
         )
+        _send_tool_call(
+            app,
+            session_id,
+            "update_progress",
+            {"content": "## Progress\n- [ ] Update target.txt via command\n"},
+        )
+        _send_tool_call(app, session_id, "command", {"command": "cat target.txt"})
         _, cmd_res, _ = _send_tool_call(
             app,
             session_id,
@@ -413,7 +502,8 @@ def _drive_e05_slot(app: Any, slot: SidecarSlotSpec, slot_dir: pathlib.Path) -> 
     if var in {"text_restore_api", "text_restore_tool", "disk_change_conflict_refusal", "unavailable_bytes_refusal", "base_version_mismatch_refusal", "idempotent_restore_replay", "git_produced_version_restore"}:
         _run_agent_edit_turn(app, session_id, "notes.txt", "beta", "beta-v2", "Modify notes.txt to beta-v2.")
         versions = _list_file_versions_ro(db_path, project_id, "notes.txt")
-        v1_row = versions[0] if versions else {}
+        v1_sha = sha256_bytes(v1_text)
+        v1_row = next((v for v in versions if v.get("content_sha256") == v1_sha), versions[0] if versions else {})
         v2_row = versions[-1] if versions else {}
         typed_result["versions_count"] = len(versions)
 
@@ -649,7 +739,7 @@ def _drive_e06_slot(
         if var == "restart_before_rewind_apply" and dedicated_app is not None:
             dedicated_dir = dedicated_app.directory
             dedicated_app.close(cleanup=False)
-            dedicated_app = _create_application(
+            dedicated_app = _restart_application(
                 dedicated_dir,
                 engine_bin=engine_bin,
                 engine_manifest=engine_manifest,
@@ -697,7 +787,7 @@ def _drive_e06_slot(
         if var == "restart_after_rewind_persistence" and dedicated_app is not None:
             dedicated_dir = dedicated_app.directory
             dedicated_app.close(cleanup=False)
-            dedicated_app = _create_application(
+            dedicated_app = _restart_application(
                 dedicated_dir,
                 engine_bin=engine_bin,
                 engine_manifest=engine_manifest,
@@ -808,7 +898,11 @@ def _drive_e09_slot(app: Any, slot: SidecarSlotSpec, slot_dir: pathlib.Path) -> 
         {"path": str(wt_dir), "label": "checkout-2"},
         method="POST",
     )
-    wt_root_id = str(((att_resp or {}).get("added") or (att_resp or {}).get("root") or {}).get("id") or "")
+    wt_root_id = _extract_attached_root_id(att_resp, label="checkout-2", path=wt_dir, exclude_id=root_id)
+    if not wt_root_id:
+        st_proj, proj_resp = _http_call(app, f"/v1/projects/{project_id}", method="GET")
+        if st_proj == 200:
+            wt_root_id = _extract_attached_root_id(proj_resp, label="checkout-2", path=wt_dir, exclude_id=root_id)
     failures: list[str] = []
     typed_result: dict[str, Any] = {"variant": var, "project_id": project_id, "root_id": root_id, "wt_root_id": wt_root_id, "attach_status": st_att}
 
