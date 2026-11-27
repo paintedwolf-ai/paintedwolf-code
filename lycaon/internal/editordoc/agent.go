@@ -2,6 +2,7 @@ package editordoc
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 
@@ -75,9 +76,10 @@ type DirtyRootDrafts struct {
 }
 
 // DirtyDraftsForRoot returns dirty drafts for a single (projectID, branch,
-// rootID), projecting only (path, draft) with SQL-level root/branch filtering
-// and enforcing maxDocs, maxDocBytes, and maxTotalBytes. Oversized or capped
-// dirty paths are reported in OmittedPaths without materializing their bytes.
+// rootID) from one coherent read transaction: first selecting lightweight
+// (id, path, byte_length) metadata to enforce maxDocs, maxDocBytes, and
+// maxTotalBytes without fetching omitted draft text, then materializing draft
+// bytes ONLY for admitted IDs.
 func (s *Service) DirtyDraftsForRoot(ctx context.Context, projectID string, branch sourcebranch.ID, rootID string, maxDocs int, maxDocBytes, maxTotalBytes int64) (DirtyRootDrafts, error) {
 	if s == nil || s.store == nil {
 		return DirtyRootDrafts{}, nil
@@ -91,36 +93,35 @@ func (s *Service) DirtyDraftsForRoot(ctx context.Context, projectID string, bran
 		return DirtyRootDrafts{}, err
 	}
 	targetBranch := p.BranchForRoot(rootID)
-	var (
-		query string
-		args  []any
-	)
-	if maxDocBytes > 0 {
-		query = `SELECT path, length(CAST(draft AS BLOB)), CASE WHEN length(CAST(draft AS BLOB)) <= ? THEN draft ELSE '' END FROM editor_documents WHERE project_id = ? AND branch_id = ? AND root_id = ? AND dirty = 1 ORDER BY path, id`
-		args = []any{maxDocBytes, p.ID, targetBranch, rootID}
-	} else {
-		query = `SELECT path, length(CAST(draft AS BLOB)), draft FROM editor_documents WHERE project_id = ? AND branch_id = ? AND root_id = ? AND dirty = 1 ORDER BY path, id`
-		args = []any{p.ID, targetBranch, rootID}
-	}
-	rows, err := s.store.db.QueryContext(ctx, query, args...)
+	tx, err := s.store.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return DirtyRootDrafts{}, err
 	}
-	defer func() { _ = rows.Close() }()
-	var (
-		out        DirtyRootDrafts
-		totalBytes int64
+	defer func() { _ = tx.Rollback() }()
+
+	metaRows, err := tx.QueryContext(ctx,
+		`SELECT id, path, length(CAST(draft AS BLOB)) FROM editor_documents WHERE project_id = ? AND branch_id = ? AND root_id = ? AND dirty = 1 ORDER BY path, id`,
+		p.ID, targetBranch, rootID,
 	)
-	for rows.Next() {
+	if err != nil {
+		return DirtyRootDrafts{}, err
+	}
+	var (
+		out         DirtyRootDrafts
+		admittedIDs []any
+		totalBytes  int64
+	)
+	for metaRows.Next() {
 		var (
+			id       string
 			rel      string
 			docBytes int64
-			draft    string
 		)
-		if err := rows.Scan(&rel, &docBytes, &draft); err != nil {
+		if err := metaRows.Scan(&id, &rel, &docBytes); err != nil {
+			_ = metaRows.Close()
 			return DirtyRootDrafts{}, err
 		}
-		overDocs := maxDocs > 0 && len(out.Drafts) >= maxDocs
+		overDocs := maxDocs > 0 && len(admittedIDs) >= maxDocs
 		overDocBytes := maxDocBytes > 0 && docBytes > maxDocBytes
 		overTotalBytes := maxTotalBytes > 0 && totalBytes+docBytes > maxTotalBytes
 		if overDocs || overDocBytes || overTotalBytes {
@@ -128,9 +129,36 @@ func (s *Service) DirtyDraftsForRoot(ctx context.Context, projectID string, bran
 			continue
 		}
 		totalBytes += docBytes
-		out.Drafts = append(out.Drafts, DirtyRootDraft{Path: rel, Draft: draft})
+		admittedIDs = append(admittedIDs, id)
 	}
-	if err := rows.Err(); err != nil {
+	if err := metaRows.Err(); err != nil {
+		_ = metaRows.Close()
+		return DirtyRootDrafts{}, err
+	}
+	_ = metaRows.Close()
+
+	if len(admittedIDs) == 0 {
+		return out, nil
+	}
+	placeholders := strings.Repeat("?,", len(admittedIDs))
+	placeholders = placeholders[:len(placeholders)-1]
+	draftRows, err := tx.QueryContext(ctx,
+		`SELECT path, draft FROM editor_documents WHERE id IN (`+placeholders+`) ORDER BY path, id`,
+		admittedIDs...,
+	)
+	if err != nil {
+		return DirtyRootDrafts{}, err
+	}
+	defer func() { _ = draftRows.Close() }()
+	out.Drafts = make([]DirtyRootDraft, 0, len(admittedIDs))
+	for draftRows.Next() {
+		var item DirtyRootDraft
+		if err := draftRows.Scan(&item.Path, &item.Draft); err != nil {
+			return DirtyRootDrafts{}, err
+		}
+		out.Drafts = append(out.Drafts, item)
+	}
+	if err := draftRows.Err(); err != nil {
 		return DirtyRootDrafts{}, err
 	}
 	return out, nil
