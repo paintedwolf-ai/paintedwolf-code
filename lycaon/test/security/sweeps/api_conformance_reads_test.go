@@ -1,6 +1,7 @@
 package sweeps
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -10,18 +11,22 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/test/security"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/fileops"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -212,7 +217,7 @@ type hostEffects struct {
 	hub    *events.MemoryHub
 	events <-chan wire.EventEnvelope
 	pump   *eventPump
-	settle func(context.Context)
+	settle func(context.Context) error
 	// projectDir is the watched fixture tree whose change pipeline must drain.
 	projectDir string
 	// quietGrace is how long the tree's changes must stay idle before the host
@@ -349,7 +354,9 @@ func (e *hostEffects) mark(ctx context.Context) (int64, error) {
 		e.silent = err
 		return 0, err
 	}
-	e.quiesce(ctx)
+	if err := e.quiesce(ctx); err != nil {
+		return 0, err
+	}
 	e.drain()
 	return e.dataVersion(ctx)
 }
@@ -366,7 +373,9 @@ func (e *hostEffects) awaitWatcherBarrier(ctx context.Context) error {
 		if err != nil || !rewrote {
 			return err
 		}
-		e.quiesce(ctx)
+		if err := e.quiesce(ctx); err != nil {
+			return err
+		}
 		e.drain()
 		patience *= 2
 	}
@@ -427,7 +436,9 @@ func (e *hostEffects) placeBarrier() error {
 }
 
 func (e *hostEffects) since(ctx context.Context, mark int64) ([]string, error) {
-	e.quiesce(ctx)
+	if err := e.quiesce(ctx); err != nil {
+		return nil, err
+	}
 	changes := e.drain()
 	version, err := e.dataVersion(ctx)
 	if err != nil {
@@ -446,11 +457,13 @@ func (e *hostEffects) since(ctx context.Context, mark int64) ([]string, error) {
 // only the last legs are joined by WaitForBackground, so one pass can finish
 // while a change is still in flight; a second pass that moves nothing proves
 // the pipeline is empty.
-func (e *hostEffects) quiesce(ctx context.Context) {
+func (e *hostEffects) quiesce(ctx context.Context) error {
 	version, _ := e.dataVersion(ctx)
 	for pass := 0; pass < settlePasses; pass++ {
 		repochange.WaitQuiet(ctx, e.projectDir, e.quietGrace, watcherQuietBound)
-		e.settle(ctx)
+		if err := e.settle(ctx); err != nil {
+			return err
+		}
 		var pending int64
 		if err := e.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM event_outbox").Scan(&pending); err == nil && pending > 0 {
 			continue
@@ -462,6 +475,7 @@ func (e *hostEffects) quiesce(ctx context.Context) {
 		version = next
 	}
 	e.hub.FlushDebounced()
+	return nil
 }
 
 // tables digests every table's rows.
@@ -541,9 +555,9 @@ func (e *hostEffects) drain() []string {
 
 // settleSourceWatcher waits until the project's watcher has delivered every
 // filesystem change the fixtures made, so reads start with none in flight.
-func settleSourceWatcher(t *testing.T, settle func(context.Context), hub *events.MemoryHub, projectDir string) {
+func settleSourceWatcher(t *testing.T, settle func(context.Context) error, hub *events.MemoryHub, projectDir string) {
 	t.Helper()
-	settle(t.Context())
+	testutil.FailErr(t, "settle background work", settle(t.Context()))
 	ch, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe to source changes", err)
 	defer unsubscribe()
@@ -621,6 +635,90 @@ func TestConformanceEffectsSettleLandedWritesBeforeMark(t *testing.T) {
 	}
 }
 
+// TestConformanceEffectsWaitForHeldBackgroundCommitBeforeRead proves that a
+// detached source-mutation commit still running after a 202 Accepted response
+// is drained before mark returns, so a subsequent read such as getChatVault is
+// never blamed for the background store commit.
+func TestConformanceEffectsWaitForHeldBackgroundCommitBeforeRead(t *testing.T) {
+	held, release := make(chan struct{}), make(chan struct{})
+	var heldOnce, releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(unblock)
+
+	h := wiring.BuildForTest(t,
+		wiring.WithChangeDebounce(conformanceDebounce),
+		wiring.WithFileOperationHold(func(ctx context.Context, _ fileops.Request) {
+			heldOnce.Do(func() { close(held) })
+			select {
+			case <-release:
+			case <-ctx.Done():
+			}
+		}),
+	)
+	hub := h.MemoryHub()
+	if hub == nil {
+		t.Fatal("the effects observer needs the in-memory event hub")
+	}
+	projectDir := h.ProjectDir(t, "held-commit")
+	testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(projectDir, "README.md"), []byte("held\n"), 0o644))
+	project := security.CreateTestProjectHTTP(t, h.Server, projectDir)
+	t.Cleanup(h.ProjectLiveness.ClaimWorkspace(project.ID))
+	sess := security.CreateSessionForProjectHTTP(t, h.Server, project.ID, wire.SessionPostureBuild)
+	settleSourceWatcher(t, h.Server.WaitForBackground, hub, projectDir)
+	effects := openConformanceEffects(t, h, hub, projectDir, conformanceDebounce)
+
+	body, err := json.Marshal(wire.CreateProjectSourceEntryRequest{
+		OperationID: uuid.NewString(),
+		RootID:      project.Roots[0].ID,
+		Path:        "deferred-commit.txt",
+		Kind:        "file",
+	})
+	testutil.FailErr(t, "encode create request", err)
+	reqCtx, cancelReq := context.WithCancel(t.Context())
+	defer cancelReq()
+	req := security.AuthedRequest(t, http.MethodPost, "/v1/projects/"+project.ID+"/source", bytes.NewReader(body)).WithContext(reqCtx)
+	returned := make(chan struct{})
+	go func() {
+		defer close(returned)
+		h.Server.ServeHTTP(httptest.NewRecorder(), req)
+	}()
+	<-held
+	cancelReq()
+	<-returned
+
+	ctx := t.Context()
+	type markResult struct {
+		version int64
+		err     error
+	}
+	marked := make(chan markResult, 1)
+	go func() {
+		v, err := effects.mark(ctx)
+		marked <- markResult{version: v, err: err}
+	}()
+
+	select {
+	case res := <-marked:
+		t.Fatalf("mark returned (%+v) while background file operation commit was still held", res)
+	default:
+	}
+
+	unblock()
+	res := <-marked
+	testutil.FailErr(t, "mark host state", res.err)
+
+	readRec := httptest.NewRecorder()
+	h.Server.ServeHTTP(readRec, security.AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/vault", nil))
+	if readRec.Code != http.StatusOK {
+		t.Fatalf("getChatVault status = %d, want 200 (body=%s)", readRec.Code, readRec.Body.String())
+	}
+	changes, err := effects.since(ctx, res.version)
+	testutil.FailErr(t, "observe host state after getChatVault", err)
+	if len(changes) > 0 {
+		t.Fatalf("getChatVault blamed for background commit: %v", changes)
+	}
+}
+
 // sourceChangeNamed reports whether an already delivered source_changed event
 // names path, so a passing settle proves draining rather than a blind watcher.
 func sourceChangeNamed(published <-chan wire.EventEnvelope, path string) bool {
@@ -643,7 +741,9 @@ func sourceChangeNamed(published <-chan wire.EventEnvelope, path string) bool {
 // keyRows counts, per table, the rows any text column of which equals key,
 // once the work earlier requests started has settled.
 func (e *hostEffects) keyRows(ctx context.Context, key string) (map[string]int, error) {
-	e.quiesce(ctx)
+	if err := e.quiesce(ctx); err != nil {
+		return nil, err
+	}
 	if e.textColumns == nil {
 		columns, err := storeTextColumns(ctx, e.conn)
 		if err != nil {
@@ -695,12 +795,15 @@ func storeTextColumns(ctx context.Context, conn *sql.Conn) (map[string][]string,
 
 // hostSettle waits for the server's detached work and for briefing
 // generations, which run on their own scheduler.
-func hostSettle(h *wiring.Harness) func(context.Context) {
-	return func(ctx context.Context) {
-		h.Server.WaitForBackground(ctx)
+func hostSettle(h *wiring.Harness) func(context.Context) error {
+	return func(ctx context.Context) error {
+		if err := h.Server.WaitForBackground(ctx); err != nil {
+			return err
+		}
 		if briefings := h.Server.Sources.Briefings; briefings != nil && briefings.Engine != nil && briefings.Engine.Host() != nil {
 			briefings.Engine.Host().Scheduler.Wait(ctx)
 		}
+		return ctx.Err()
 	}
 }
 
