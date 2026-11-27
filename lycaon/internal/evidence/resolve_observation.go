@@ -50,8 +50,12 @@ func observationAllowsTrace(rec Record) bool {
 	if rec.SourceDelivery != nil {
 		return false
 	}
+	// Command and opaque records verify supplied excerpts strictly against their
+	// delivered body: an absent excerpt must stay VerdictUnverifiable rather than
+	// falling back to VerdictTraced. Bare handles (Excerpt == "") still trace via
+	// the matched branch above.
 	switch RecordShape(rec) {
-	case ShapeFileRegion, ShapeCommand, ShapeOpaque:
+	case ShapeFileRegion:
 		return true
 	default:
 		return false
