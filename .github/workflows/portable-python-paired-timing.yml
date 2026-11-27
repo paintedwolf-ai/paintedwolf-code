@@ -177,6 +177,8 @@ jobs:
           DST="${HOME}/.local/share/paintedwolf-portable-python/results/PY10"
           OUT_DIR="${RUNNER_TEMP}/paired-out"
           STAGE_DIR="${RUNNER_TEMP}/paired-stage"
+          echo "Allowing fresh macOS VM boot daemons (provjobd/trustd) 45s to settle before precheck..."
+          sleep 45
           bash scripts/portable-python-qual/paired/run-paired.sh \
             --mode baseline \
             --stage-now \
@@ -189,8 +191,8 @@ jobs:
             --samples "${SAMPLES}" \
             --min-idle "${MIN_IDLE}" \
             --precheck-seconds "${PRECHECK_SECONDS}" \
-            --max-attempts 3 \
-            --retry-wait 30
+            --max-attempts 6 \
+            --retry-wait 20
 
       - name: Upload paired timing evidence (receipts and telemetry only)
         if: always()
