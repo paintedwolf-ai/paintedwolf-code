@@ -242,6 +242,9 @@ func cloneManifestControls(in ManifestControls) ManifestControls {
 }
 
 func clonePhaseDefs(in []PhaseDef) []PhaseDef {
+	if in == nil {
+		return nil
+	}
 	out := make([]PhaseDef, len(in))
 	for i := range in {
 		out[i] = in[i]
@@ -253,6 +256,10 @@ func clonePhaseDefs(in []PhaseDef) []PhaseDef {
 			value := *in[i].OnEnter.RequestUserFeedback
 			value.Options = append([]string(nil), value.Options...)
 			value.ArtifactIDs = append([]string(nil), value.ArtifactIDs...)
+			if value.Secret != nil {
+				secret := *value.Secret
+				value.Secret = &secret
+			}
 			out[i].OnEnter.RequestUserFeedback = &value
 		}
 		out[i].OnEnter.Obligations = copyObligationDefs(in[i].OnEnter.Obligations)
@@ -280,12 +287,16 @@ func clonePhaseDefs(in []PhaseDef) []PhaseDef {
 		if in[i].ReviewLoop != nil {
 			out[i].ReviewLoop = cloneReviewLoop(in[i].ReviewLoop)
 		}
+		if in[i].Explain != nil {
+			value := *in[i].Explain
+			out[i].Explain = &value
+		}
 	}
 	return out
 }
 
 func cloneWorkflowParameters(in map[string]WorkflowParameter) map[string]WorkflowParameter {
-	if len(in) == 0 {
+	if in == nil {
 		return nil
 	}
 	out := make(map[string]WorkflowParameter, len(in))
@@ -296,7 +307,7 @@ func cloneWorkflowParameters(in map[string]WorkflowParameter) map[string]Workflo
 }
 
 func cloneManifestPresets(in []ManifestPreset) []ManifestPreset {
-	if len(in) == 0 {
+	if in == nil {
 		return nil
 	}
 	out := make([]ManifestPreset, len(in))
@@ -308,7 +319,7 @@ func cloneManifestPresets(in []ManifestPreset) []ManifestPreset {
 }
 
 func cloneAgentToolAccess(in map[string]sandbox.ToolAccess) map[string]sandbox.ToolAccess {
-	if len(in) == 0 {
+	if in == nil {
 		return nil
 	}
 	out := make(map[string]sandbox.ToolAccess, len(in))

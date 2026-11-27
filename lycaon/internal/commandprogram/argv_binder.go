@@ -6,6 +6,7 @@ import (
 	"io"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -333,20 +334,33 @@ type CatalogBinder struct{}
 var _ ArgvBinder = CatalogBinder{}
 
 func (CatalogBinder) Bind(spec toolcontract.CommandSpecification, argv Fields) (BoundArgv, error) {
-	names := strings.Fields(spec.Name)
 	bound := BoundArgv{Command: spec.Name}
-	if len(names) == 0 || len(argv) == 0 || !commandWord(spec, names[0], argv[0].Value) {
+	first, rest, hasSub := splitFirstCommandWord(spec.Name)
+	if first == "" || len(argv) == 0 || !commandWord(spec, first, argv[0].Value) {
 		return bound, fmt.Errorf("argv does not name command %q", spec.Name)
 	}
 	b := argvBinding{spec: spec, argv: argv, index: 1, bound: &bound}
 	scope := ""
-	if len(names) > 1 {
-		if err := b.global(names[1:]); err != nil {
+	if hasSub {
+		if err := b.global(strings.Fields(rest)); err != nil {
 			return bound, err
 		}
 		scope = "subcommand"
 	}
 	return bound, b.options(scope)
+}
+
+func splitFirstCommandWord(name string) (first, rest string, hasSub bool) {
+	trimmed := strings.TrimLeftFunc(name, unicode.IsSpace)
+	if trimmed == "" {
+		return "", "", false
+	}
+	idx := strings.IndexFunc(trimmed, unicode.IsSpace)
+	if idx < 0 {
+		return trimmed, "", false
+	}
+	rest = strings.TrimLeftFunc(trimmed[idx:], unicode.IsSpace)
+	return trimmed[:idx], rest, rest != ""
 }
 
 func commandWord(spec toolcontract.CommandSpecification, name, word string) bool {

@@ -13,9 +13,18 @@ import change_report
 
 ROOT = Path(__file__).resolve().parents[2]
 DIRECTORIES = frozenset({'source_directories', 'test_directories'})
+MEMORY_CATEGORIES = frozenset({'package_memory_ordinary', 'package_memory_race'})
 POLICY = 'lycaon/test/contract/maintainability-budgets.yaml'
 REVIEWS = 'lycaon/test/contract/maintainability-reviews/'
 EXCEPTIONS = 'lycaon/test/contract/maintainability-exceptions/'
+MEMORY_POLICY_PATHS = frozenset({
+    'scripts/ci_policy/resources.json',
+    'scripts/ci_policy/resources.py',
+    'scripts/go-test-exec.py',
+    'lycaon/go.mod',
+    'lycaon/go.sum',
+})
+MEMORY_REVIEWS = 'scripts/ci_policy/memory-reviews/'
 
 
 def ancestor(root, older, newer):
@@ -121,6 +130,9 @@ def measured_scope(row):
     if category.startswith('go_'):
         scope = ('directory', artifact.rpartition('/')[0])
         inside = all(str(PurePosixPath(source).parent) == scope[1] for source in row.get('sources', []))
+    elif category in MEMORY_CATEGORIES:
+        scope = ('directory', artifact)
+        inside = row.get('sources', [artifact]) == [artifact]
     else:
         scope = ('directory' if category in DIRECTORIES else 'file', artifact)
         inside = row.get('sources', [artifact]) == [artifact]
@@ -143,6 +155,14 @@ class MainChanges:
     def changed(self, row):
         """Whether the artifact's measured paths, thresholds, exception, or review changed."""
         kind, path = measured_scope(row)
+        if row['category'] in MEMORY_CATEGORIES:
+            boundaries = row.get('review', {}).get('boundaries', {})
+            if (self.paths.intersection(MEMORY_POLICY_PATHS)
+                    or any(p.startswith(MEMORY_REVIEWS) for p in self.paths)
+                    or any(b in self.paths for b in boundaries)):
+                return True
+            prefix = path + '/'
+            return any(p == path or p.startswith(prefix) for p in self.paths)
         if POLICY in self.paths or key(row['category'], row['id']) in self.records:
             return True
         if kind == 'file':

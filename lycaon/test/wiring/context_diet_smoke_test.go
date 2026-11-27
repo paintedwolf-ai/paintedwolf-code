@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/llmtest"
@@ -36,6 +37,14 @@ func TestContextDietRoutingToTaskDispatch(t *testing.T) {
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
 	testutil.FailErr(t, "board orient", h.Workflows.Manager.Fanout.RecordBoardOrientReady(ctx, sess.ID, "diet-board"))
+	// Setup advances the workflow; its wake must not open a turn before the
+	// chat holds a request, whichever runs first.
+	loop := h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop()
+	loop.Nudges.Nudge(ctx, sess.ID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+	loop.Turns.WaitForAsyncTurns(ctx)
+	if stage.Load() != 0 {
+		t.Fatalf("a host wake ran a model turn before the chat held a request; tool results %v", dietToolResults(t, h, ctx, sess.ID))
+	}
 
 	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "Map this codebase"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
@@ -43,12 +52,17 @@ func TestContextDietRoutingToTaskDispatch(t *testing.T) {
 	queued, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID)
 	testutil.FailErr(t, "list session workers", err)
 	if len(queued) != 1 || queued[0].AgentType != "implementer" {
-		var results []any
-		for _, msg := range mustMessages(t, h, ctx, sess.ID) {
-			if msg.ToolResult != nil {
-				results = append(results, msg.ToolResult.Tool, msg.ToolResult.Outcome, msg.ToolResult.Feedback)
-			}
-		}
-		t.Fatalf("routing turn dispatched %+v, want one implementer worker; tool results %v", queued, results)
+		t.Fatalf("routing turn dispatched %+v, want one implementer worker; tool results %v", queued, dietToolResults(t, h, ctx, sess.ID))
 	}
+}
+
+func dietToolResults(t *testing.T, h *Harness, ctx context.Context, sessionID string) []any {
+	t.Helper()
+	var results []any
+	for _, msg := range mustMessages(t, h, ctx, sessionID) {
+		if msg.ToolResult != nil {
+			results = append(results, msg.ToolResult.Tool, msg.ToolResult.Outcome, msg.ToolResult.Feedback)
+		}
+	}
+	return results
 }

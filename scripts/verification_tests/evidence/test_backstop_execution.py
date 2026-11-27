@@ -143,7 +143,7 @@ class HungTestBackstopTests(unittest.TestCase):
     def reap(self, run):
         try:
             os.killpg(run.pid, signal.SIGKILL)
-        except ProcessLookupError:
+        except (ProcessLookupError, PermissionError):
             pass
         run.wait()
 
@@ -167,6 +167,29 @@ class FailureReportTests(unittest.TestCase):
                 # Only teardown sleeps; there is no new 60-second execution window.
                 sleep.assert_called_once_with(5)
                 self.assertTrue(flag.exists())
+
+    def test_a_group_left_with_only_unreaped_exits_ends_the_watchdog_cleanly(self):
+        spec = importlib.util.spec_from_file_location("watchdog", SCRIPTS / "process-group-watchdog.py")
+        watchdog = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(watchdog)
+        sent = []
+
+        def killpg(pgid, number):
+            sent.append(number)
+            if number == signal.SIGTERM:
+                raise PermissionError(1, "Operation not permitted")
+
+        with tempfile.TemporaryDirectory() as directory:
+            flag = Path(directory) / "timeout"
+            with patch.object(sys, "argv", ["watchdog", "1", "123", str(flag), "fixture"]), \
+                    patch.object(watchdog.time, "monotonic", side_effect=[0, 2]), \
+                    patch.object(watchdog.time, "sleep") as sleep, \
+                    patch.object(watchdog.os, "killpg", killpg), \
+                    patch.object(watchdog, "report_waits"):
+                self.assertEqual(watchdog.main(), 0)
+            self.assertTrue(flag.exists())
+        self.assertEqual(sent, [0, signal.SIGTERM])
+        sleep.assert_not_called()
 
     def test_a_test_found_waiting_is_named_with_the_tests_that_failed(self):
         spec = importlib.util.spec_from_file_location("go_test_exec", SCRIPTS / "go-test-exec.py")

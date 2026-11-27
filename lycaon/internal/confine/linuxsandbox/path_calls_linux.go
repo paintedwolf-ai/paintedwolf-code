@@ -99,7 +99,7 @@ func (s *supervisor) performPath(target *targetProcess, n seccompNotif) (int64, 
 	if !target.valid() {
 		return 0, unix.EINTR, true
 	}
-	// The performer performs the call and answers the kernel itself.
+	// The performer executes the call inside the sandbox's filesystem view.
 	call.Notification, call.Caller = target.id, target.pid
 	if err := performer.forward(call, dirs); err != nil {
 		return 0, unix.EACCES, false

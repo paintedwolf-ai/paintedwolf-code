@@ -200,7 +200,7 @@ func (w *indexWalk) readObservedIndexNodes(ctx context.Context, dir string, sequ
 
 // Search enrichment never changes structural generations.
 func (w *indexWalk) admitObservedNodes(ctx context.Context, nodes []indexNode, sequence int64) error {
-	writer, err := newIndexWriter(ctx, w.tx)
+	writer, err := newObservedIndexWriter(ctx, w.tx)
 	if err != nil {
 		return err
 	}
@@ -217,10 +217,7 @@ func (w *indexWalk) admitObservedNodes(ctx context.Context, nodes []indexNode, s
 		if node.name == "" {
 			continue
 		}
-		if err := writer.write(ctx, node); err != nil {
-			return err
-		}
-		if _, err := w.tx.ExecContext(ctx, "UPDATE nodes SET first_listed=? WHERE path=?", sequence, node.path); err != nil {
+		if err := writer.writeObserved(ctx, node, sequence); err != nil {
 			return err
 		}
 		if node.isDir && !node.isSymlink && node.refused != sandbox.BoundaryLazy {

@@ -22,6 +22,9 @@ from verification_lifecycle.completion import Publisher
 from verification_cache import Maintenance
 from verification_state import read_json, read_state, write_json
 
+if os.name != "nt":
+    from verification_lifecycle.run_lease import operation_temp, temp_environment
+
 MAX_ADDED_PACKAGES = 16
 
 
@@ -255,7 +258,9 @@ class StageEvents:
         fresh = set()
         for event in self.lines("events"):
             if isinstance(event.get("package"), str) and type(event.get("exit_code")) is int and event["exit_code"] > 0:
-                self.known[event["package"]] = {key: event[key] for key in ("output", "tests", "resource_limit") if key in event}
+                self.known[event["package"]] = {
+                    key: event[key] for key in ("output", "tests", "resource_limit", "memory") if key in event
+                }
                 fresh.add(event["package"])
         for event in self.lines("raw"):
             if event.get("Action") == "fail" and isinstance(event.get("Package"), str) and not event.get("Test"):
@@ -322,6 +327,10 @@ class Executor:
             env["PW_TEST_RESOURCE_FD"] = str(reservation.file.fileno())
             options = child_options()
             options["pass_fds"] = (*options.get("pass_fds", ()), reservation.file.fileno())
+            if os.name != "nt":
+                temp, temp_lease = files.enter_context(operation_temp("stage"))
+                env = temp_environment(env, temp)
+                options["pass_fds"] = (*options["pass_fds"], temp_lease)
             output = files.enter_context(log.open("wb"))
             error_output = files.enter_context(errors.open("wb")) if errors else subprocess.STDOUT
             child = None
@@ -636,9 +645,12 @@ class Executor:
                     "failed" if action == "fail" else "passed")
                 if package in failures:
                     status = "failed"
-                cache[package] = {"status": status, "exit_code": {"passed": 0, "failed": 1, "unverified": 2}[status],
-                                  "stage_id": stage_id, "log": str(log), "report": str(result_path),
-                                  **failures.get(package, {})}
+                entry = {"status": status, "exit_code": {"passed": 0, "failed": 1, "unverified": 2}[status],
+                         "stage_id": stage_id, "log": str(log), "report": str(result_path),
+                         **failures.get(package, {})}
+                if isinstance(outcomes.get(package, {}).get("memory"), dict):
+                    entry["memory"] = outcomes[package]["memory"]
+                cache[package] = entry
             scans = [outcomes[p]["child_scan_seconds"] for p in packages if "child_scan_seconds" in outcomes.get(p, {})]
             if scans:
                 print(f"test execution: {stage_id}: child process scans took {sum(scans):.1f} s over "

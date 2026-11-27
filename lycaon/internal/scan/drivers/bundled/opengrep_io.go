@@ -11,6 +11,7 @@ import (
 
 type opengrepRunFiles struct {
 	workspace        confine.ActionWorkspace
+	runtimeCacheDir  string
 	jsonPath         string
 	logPath          string
 	settingsPath     string
@@ -18,6 +19,13 @@ type opengrepRunFiles struct {
 }
 
 func (f opengrepRunFiles) dir() string { return f.workspace.Path() }
+
+func (f opengrepRunFiles) cache() string {
+	if f.runtimeCacheDir != "" {
+		return f.runtimeCacheDir
+	}
+	return f.dir()
+}
 
 func newOpengrepRunFiles() (files opengrepRunFiles, cleanup func(), err error) {
 	workspace, err := confine.NewActionWorkspace()

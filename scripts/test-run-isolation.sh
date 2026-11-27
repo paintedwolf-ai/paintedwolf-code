@@ -47,13 +47,28 @@ test_run_export_isolation() {
   # Toolchains and dependency stores are provisioned host inputs, not test state.
   export RUSTUP_HOME="${RUSTUP_HOME:-${HOME}/.rustup}"
   export CARGO_HOME="${CARGO_HOME:-${HOME}/.cargo}"
-  export GOCACHE="${GOCACHE:-$(go env GOCACHE)}"
-  export GOMODCACHE="${GOMODCACHE:-$(go env GOMODCACHE)}"
-  export GOPATH="${GOPATH:-$(go env GOPATH)}"
+  local goroot gocache gomodcache gopath
+  goroot="$(go env GOROOT)" || return 1
+  gocache="$(go env GOCACHE)" || return 1
+  gomodcache="$(go env GOMODCACHE)" || return 1
+  gopath="$(go env GOPATH)" || return 1
+  export GOCACHE="${GOCACHE:-${gocache}}"
+  export GOMODCACHE="${GOMODCACHE:-${gomodcache}}"
+  export GOPATH="${GOPATH:-${gopath}}"
+  # Toolchain switching can select a wrapper that finds its SDK under HOME, so the
+  # selected toolchain is pinned before HOME changes.
+  if [[ ! -x "${goroot}/bin/go" ]]; then
+    printf 'test isolation: go reports GOROOT %q, which has no bin/go\n' "${goroot}" >&2
+    return 1
+  fi
+  export PATH="${goroot}/bin:${PATH}"
   # The container client's configuration selects the daemon that holds the reference images.
   export DOCKER_CONFIG="${DOCKER_CONFIG:-${HOME}/.docker}"
+  export PW_HOST_TMPDIR="${PW_HOST_TMPDIR:-${TMPDIR:-/tmp}}"
   export HOME="${run_dir}/home"
   export TMPDIR="${run_dir}/tmp"
+  # A configured `go env GOTMPDIR` would otherwise place build work outside the run.
+  export GOTMPDIR="${TMPDIR}"
   export XDG_CACHE_HOME="${run_dir}/xdg-cache"
   export XDG_CONFIG_HOME="${run_dir}/xdg-config"
   export XDG_DATA_HOME="${run_dir}/xdg-data"

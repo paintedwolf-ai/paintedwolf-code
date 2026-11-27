@@ -303,8 +303,8 @@ func (w *refusalWatchT) register(tag string, rules FilesystemRules) *refusalFeed
 	switch w.state {
 	case watchLive:
 		if w.supervised {
-			// The supervisor reports socket calls only; a refused file access
-			// reaches no record.
+			// Linux reports mediated refusals. Direct kernel denials, including
+			// Landlock denials, have no refusal stream.
 			feed.witness = WitnessIncomplete
 		}
 	case watchStarting:

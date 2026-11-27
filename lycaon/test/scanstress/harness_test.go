@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -207,20 +208,41 @@ func awaitNoEngineProcesses(t *testing.T) time.Duration {
 	return time.Since(start)
 }
 
+// scannerArgsFromRow returns the opengrep subcommand arguments when row is the
+// actual opengrep scan process, rejecting unrelated commands and wrapped
+// non-scanners that merely carry "opengrep" or "scan" as arguments.
+func scannerArgsFromRow(row procRow) ([]string, bool) {
+	fields := strings.Fields(row.Command)
+	if len(fields) < 2 || filepath.Base(fields[0]) != "opengrep" || fields[1] != "scan" {
+		return nil, false
+	}
+	return fields[1:], true
+}
+
 // runDirsFromRows returns the engine run directories named by the given
-// processes. The driver passes --output <runDir>/report.json, so argv names the
-// exact directory that scan owns. Attribution comes from the parent-link walk
-// that produced these rows; the flag only locates the path.
+// processes. The driver launches opengrep scan with --output <runDir>/report.json
+// where <runDir> is a confine.ActionWorkspace under action-work/action-*, so
+// argv names the exact directory that scan owns while discriminating opengrep
+// from unrelated processes that may also use action workspaces. Attribution
+// comes from the parent-link walk that produced these rows; the command and
+// flag only locate the path.
 func runDirsFromRows(rows []procRow) []string {
 	seen := map[string]bool{}
 	for _, row := range rows {
-		fields := strings.Fields(row.Command)
+		fields, ok := scannerArgsFromRow(row)
+		if !ok {
+			continue
+		}
 		for i := 0; i+1 < len(fields); i++ {
 			if fields[i] != "--output" {
 				continue
 			}
-			dir := filepath.Dir(fields[i+1])
-			if strings.Contains(filepath.Base(dir), "paintedwolf-opengrep-") {
+			outPath := fields[i+1]
+			if filepath.Base(outPath) != "report.json" {
+				continue
+			}
+			dir := filepath.Dir(outPath)
+			if filepath.Base(filepath.Dir(dir)) == "action-work" && strings.HasPrefix(filepath.Base(dir), "action-") {
 				seen[dir] = true
 			}
 		}
@@ -231,6 +253,33 @@ func runDirsFromRows(rows []procRow) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func TestRunDirsFromRows(t *testing.T) {
+	rows := []procRow{
+		{PID: 10, Command: "/path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/action-work/action-bbb/report.json --jobs 2"},
+		{PID: 11, Command: "/path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/action-work/action-bbb/report.json --jobs 2"},
+		{PID: 12, Command: "/path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/action-work/action-aaa/report.json --jobs 2"},
+		{PID: 13, Command: "/path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/action-work/action-ccc/other.json --jobs 2"},
+		{PID: 14, Command: "/path/to/opengrep scan --json --output /tmp/paintedwolf-opengrep-123/report.json --jobs 2"},
+		{PID: 15, Command: "/path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/other-dir/action-ddd/report.json --jobs 2"},
+		{PID: 16, Command: "/path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/action-work/notaction-eee/report.json --jobs 2"},
+		{PID: 17, Command: "/path/to/opengrep scan --output"},
+		{PID: 18, Command: "/usr/bin/curl --output /Users/m1/.config/paintedwolf/action-work/action-fff/report.json https://example.invalid"},
+		{PID: 19, Command: "/usr/bin/sandbox-exec -p (version 1) /bin/sh -c tool --output /Users/m1/.config/paintedwolf/action-work/action-ggg/report.json"},
+		{PID: 20, Command: "/usr/bin/curl https://example.invalid/opengrep --output /Users/m1/.config/paintedwolf/action-work/action-hhh/report.json"},
+		{PID: 21, Command: "/usr/bin/sandbox-exec -p (version 1) /usr/bin/curl https://example.invalid/opengrep --config /tmp/opengrep --output /Users/m1/.config/paintedwolf/action-work/action-iii/report.json"},
+		{PID: 22, Command: "/path/to/opengrep --version --output /Users/m1/.config/paintedwolf/action-work/action-jjj/report.json"},
+		{PID: 23, Command: "/usr/bin/sandbox-exec -f /tmp/p.sb /bin/echo opengrep scan --output /Users/m1/.config/paintedwolf/action-work/action-kkk/report.json"},
+	}
+	got := runDirsFromRows(rows)
+	want := []string{
+		"/Users/m1/.config/paintedwolf/action-work/action-aaa",
+		"/Users/m1/.config/paintedwolf/action-work/action-bbb",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("runDirsFromRows() = %v, want %v", got, want)
+	}
 }
 
 // awaitEngineWorking waits until an engine below root has written to its log,

@@ -37,7 +37,8 @@ func TestWorkflowRequestUsesDefaultOnlyWhenStartIsEmpty(t *testing.T) {
 	if !ok || request.Text != "Review the project broadly." || request.Source != "default" || request.Status != runstate.RequestStatusResolved {
 		t.Fatalf("request = %+v ok=%v", request, ok)
 	}
-	resolved := mgr.Policy.ResolvedRequest(t.Context(), "sess-1")
+	resolved, err := mgr.Policy.ResolvedRequest(t.Context(), "sess-1")
+	testutil.FailErr(t, "resolve request", err)
 	if resolved.RunID != run.ID || resolved.OpeningMessageID != run.StartMessageID || resolved.Text != request.Text {
 		t.Fatalf("resolved request = %+v", resolved)
 	}

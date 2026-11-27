@@ -25,7 +25,7 @@ func (e *CodeExecutor) discoverCandidates(ctx context.Context, leg *CodePlanLeg,
 	if progress == nil {
 		progress = &CodeProgress{}
 	}
-	scanCtx, cancel := context.WithTimeout(ctx, e.legWallBudget(leg))
+	scanCtx, cancel := e.bindLegContext(ctx, leg)
 	defer cancel()
 	wallEnd, _ := scanCtx.Deadline()
 	report := ExecutorReport{}

@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"fmt"
 	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
 
 	"context"
@@ -241,19 +242,42 @@ func (m *SessionPolicy) ActiveManifest(ctx context.Context, sessionID string) (w
 	}, true
 }
 
-// ResolvedRequest returns the active run's resolved request.
-func (m *SessionPolicy) ResolvedRequest(ctx context.Context, sessionID string) workflowfacts.ResolvedWorkflowRequest {
+// ResolvedRequest returns the active run's resolved request. An unreadable run is an error,
+// never a missing request.
+func (m *SessionPolicy) ResolvedRequest(ctx context.Context, sessionID string) (workflowfacts.ResolvedWorkflowRequest, error) {
 	if m == nil || strings.TrimSpace(sessionID) == "" {
-		return workflowfacts.ResolvedWorkflowRequest{}
+		return workflowfacts.ResolvedWorkflowRequest{}, nil
 	}
 	active, vars, err := m.Runs.ActiveStateBySession(ctx, sessionID)
-	if err != nil || active == nil {
-		return workflowfacts.ResolvedWorkflowRequest{}
+	if err != nil {
+		return workflowfacts.ResolvedWorkflowRequest{}, fmt.Errorf("read active workflow run: %w", err)
 	}
-	if state, ok := runstate.RequestStateFromVars(vars); ok && state.Status == runstate.RequestStatusResolved {
-		return workflowfacts.ResolvedWorkflowRequest{RunID: active.ID, OpeningMessageID: active.StartMessageID, Text: strings.TrimSpace(state.Text)}
+	if active == nil {
+		return workflowfacts.ResolvedWorkflowRequest{}, nil
 	}
-	return workflowfacts.ResolvedWorkflowRequest{}
+	state, ok := runstate.RequestStateFromVars(vars)
+	if !ok || state.Status != runstate.RequestStatusResolved {
+		return workflowfacts.ResolvedWorkflowRequest{}, nil
+	}
+	opening, err := m.requestOpeningMessageID(ctx, active)
+	if err != nil {
+		return workflowfacts.ResolvedWorkflowRequest{}, err
+	}
+	return workflowfacts.ResolvedWorkflowRequest{RunID: active.ID, OpeningMessageID: opening, Text: strings.TrimSpace(state.Text)}, nil
+}
+
+// requestOpeningMessageID names where a run's request opened. An invoked child
+// starts without its own start message: its request is the one an ancestor's
+// start opened.
+func (m *SessionPolicy) requestOpeningMessageID(ctx context.Context, run *api.WorkflowRun) (string, error) {
+	for run.StartMessageID == "" && run.ParentRunID != nil {
+		parent, err := m.Runs.Get(ctx, *run.ParentRunID)
+		if err != nil {
+			return "", fmt.Errorf("read parent workflow run %s: %w", *run.ParentRunID, err)
+		}
+		run = parent
+	}
+	return run.StartMessageID, nil
 }
 
 func (m *SessionPolicy) AssertRunnable(ctx context.Context, runID string) error {

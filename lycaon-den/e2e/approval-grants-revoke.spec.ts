@@ -11,14 +11,16 @@ import {
 } from "./helpers.ts";
 import { harnessSocketPath, listenHarnessSocket } from "./fixtures/harness-socket.ts";
 
-let socketPath: string;
-let closeSocket: () => Promise<void>;
+let socketPath = "";
+let closeSocket: (() => Promise<void>) | undefined;
 
 webE2e.beforeAll(async () => {
   socketPath = harnessSocketPath("grants.sock");
   closeSocket = await listenHarnessSocket(socketPath);
 });
-webE2e.afterAll(() => closeSocket());
+webE2e.afterAll(async () => {
+  await closeSocket?.();
+});
 
 async function grantIDForPattern(
   request: import("@playwright/test").APIRequestContext,

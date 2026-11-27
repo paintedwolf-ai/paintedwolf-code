@@ -72,17 +72,27 @@ func Mount(t *testing.T, mode Mode) *Volume {
 	if mode == Soft {
 		options += ",soft,timeo=10,retrans=2"
 	}
-	dir := t.TempDir()
-	if out, err := host(t, "/sbin/mount_nfs", "-o", options, "127.0.0.1:/", dir); err != nil {
+	control, err := os.MkdirTemp("", "so-") //nolint:usetesting // Unix socket path must stay under macOS 104-byte limit.
+	if err != nil {
 		r.close()
 		_ = server.Close()
-		t.Fatalf("mount_nfs: %v: %s", err, out)
+		t.Fatalf("control socket directory: %v", err)
 	}
-	control := t.TempDir()
+	dir := t.TempDir()
 	volume := &Volume{Dir: dir, Control: filepath.Join(control, "c"), relay: r}
 	commands, err := lc.Listen(t.Context(), "unix", volume.Control)
 	if err != nil {
+		_ = os.RemoveAll(control)
+		r.close()
+		_ = server.Close()
 		t.Fatalf("control socket: %v", err)
+	}
+	if out, err := host(t, "/sbin/mount_nfs", "-o", options, "127.0.0.1:/", dir); err != nil {
+		_ = commands.Close()
+		_ = os.RemoveAll(control)
+		r.close()
+		_ = server.Close()
+		t.Fatalf("mount_nfs: %v: %s", err, out)
 	}
 	go volume.serve(commands)
 	t.Cleanup(func() {
@@ -96,6 +106,39 @@ func Mount(t *testing.T, mode Mode) *Volume {
 		_ = os.RemoveAll(control)
 	})
 	return volume
+}
+
+// Controlled reports whether this process runs under a mounted Volume.
+func Controlled() bool { return os.Getenv(EnvControl) != "" }
+
+// Stop cuts the transport of the Volume named by EnvControl.
+func Stop(t testing.TB) {
+	t.Helper()
+	request(t, "stop")
+}
+
+// Restore reconnects the transport of the Volume named by EnvControl.
+func Restore(t testing.TB) {
+	t.Helper()
+	request(t, "restore")
+}
+
+// request returns once the volume has carried out the command. Restore runs
+// from cleanups, after the test's context is cancelled.
+func request(t testing.TB, command string) {
+	t.Helper()
+	conn, err := new(net.Dialer).DialContext(context.Background(), "unix", os.Getenv(EnvControl)) // #nosec G704 -- the parent test names its own socket
+	if err != nil {
+		t.Fatalf("source outage control: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.Write([]byte(command + "\n")); err != nil {
+		t.Fatalf("source outage %s: %v", command, err)
+	}
+	reply, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil || strings.TrimSpace(reply) != "ok" {
+		t.Fatalf("source outage %s: %q %v", command, reply, err)
+	}
 }
 
 // host runs a mount helper through the launch door, as the mounted adapter does.

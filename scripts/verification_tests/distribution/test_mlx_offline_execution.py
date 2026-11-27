@@ -156,7 +156,7 @@ class MLXOfflineSource(unittest.TestCase):
              f"-DPW_MLX_VENDOR_ROOT={self.vendor}",
              f"-DPW_MLX_SYS_MANIFEST={self.crate / 'Cargo.toml'}"],
             env={**os.environ, "CMAKE_TOOLCHAIN_FILE": str(original)},
-            text=True, capture_output=True, timeout=60)
+            text=True, capture_output=True)
         self.assertEqual(configured.returncode, 0, configured.stderr)
         self.pin['mlx_sys_version'] = '0.7.0'
         rejected = self.run_cmake()

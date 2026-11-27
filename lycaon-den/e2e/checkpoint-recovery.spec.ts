@@ -91,9 +91,9 @@ async function openWaitingTask(page: Page, projectId: string, sessionId: string)
   await expect.poll(() => foregroundSession(page), { timeout: 30_000 }).toBe(sessionId);
 }
 
-let approvedSocketPath: string;
-let resolvedSocketPath: string;
-let closeSocket: () => Promise<void>;
+let approvedSocketPath = "";
+let resolvedSocketPath = "";
+let closeSocket: (() => Promise<void>) | undefined;
 
 // The card shows both paths, so the approved path is a link resolving elsewhere.
 webE2e.beforeAll(async () => {
@@ -105,8 +105,10 @@ webE2e.beforeAll(async () => {
   resolvedSocketPath = realpathSync(target);
 });
 webE2e.afterAll(async () => {
-  await closeSocket();
-  rmSync(approvedSocketPath, { force: true });
+  await closeSocket?.();
+  if (approvedSocketPath) {
+    rmSync(approvedSocketPath, { force: true });
+  }
 });
 
 type ApprovalCheck = { page: Page; request: APIRequestContext; sessionId: string; card: Locator };
