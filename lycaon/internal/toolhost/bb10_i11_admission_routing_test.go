@@ -127,7 +127,7 @@ func TestBB10I11AdmissionSurvivesRouting(t *testing.T) {
 				t.Fatalf("%q: outcome=%+v refusal=%+v launches=%d", source, outcome, outcome.Refusal, launches.Load())
 			}
 		}
-		for _, source := range []string{`git count-objects`, `env git count-objects`} {
+		for _, source := range []string{`git count-objects`, `git count-objects | cat`} {
 			launches.Store(0)
 			beforeGaps := gapRows()
 			outcome := callComposedProgram(t, f, source)
