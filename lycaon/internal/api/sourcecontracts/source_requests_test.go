@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fileops"
 
 	"github.com/lycaon/lycaon/internal/project/projecttest"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -182,7 +183,8 @@ func TestSourceRequestPublishesEveryPersistedState(t *testing.T) {
 }
 
 func TestSourceRequestReplayMatchesAcceptedFirstAnswer(t *testing.T) {
-	srv := contractfixture.NewTestServerWithWorkflows(t)
+	database := testdbfixture.Open(t, "source-requests-replay.db")
+	srv := contractfixture.NewTestServerWithWorkflows(t, func(d *hostapi.Dependencies) { d.Core.Database = database })
 	root := t.TempDir()
 	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
 	testutil.FailErr(t, "create project", err)
@@ -262,6 +264,21 @@ func TestSourceRequestReplayMatchesAcceptedFirstAnswer(t *testing.T) {
 	testutil.FailErr(t, "decode post-completion 202 DTO", json.Unmarshal(afterReplay.Body.Bytes(), &afterDTO))
 	if afterDTO.OperationID != id || !afterDTO.Complete || afterDTO.State != "completed" {
 		t.Fatalf("post-completion DTO = %+v, want completed operation %q", afterDTO, id)
+	}
+
+	// Simulate a host restart against the same persisted database and verify a retry still answers 202.
+	restarted := contractfixture.NewTestServerWithWorkflows(t, func(d *hostapi.Dependencies) { d.Core.Database = database })
+	never := make(chan struct{})
+	restarted.Sources.Mutations.SyncWindow = func(context.Context) <-chan struct{} { return never }
+	restartReplay := httptest.NewRecorder()
+	restarted.ServeHTTP(restartReplay, contractfixture.NewAuthedRequest(http.MethodPost, url, bytes.NewReader(body)))
+	if restartReplay.Code != http.StatusAccepted {
+		t.Fatalf("post-restart replay status = %d, want 202 (body=%s)", restartReplay.Code, restartReplay.Body.String())
+	}
+	var restartDTO wire.SourceOperationStatus
+	testutil.FailErr(t, "decode post-restart 202 DTO", json.Unmarshal(restartReplay.Body.Bytes(), &restartDTO))
+	if restartDTO.OperationID != id || !restartDTO.Complete || restartDTO.State != "completed" {
+		t.Fatalf("post-restart DTO = %+v, want completed operation %q", restartDTO, id)
 	}
 }
 

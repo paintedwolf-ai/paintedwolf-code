@@ -91,7 +91,6 @@ func (s *Mutations) startSourceRequest(w http.ResponseWriter, r *http.Request, o
 		}
 	}
 	if retry {
-		run.RecordFirstAnswer(fileops.FirstAnswerAccepted)
 		select {
 		case <-run.Done():
 			httpio.WriteJSON(w, http.StatusAccepted, SourceOperationDTO(run.Snapshot()))
@@ -104,14 +103,15 @@ func (s *Mutations) startSourceRequest(w http.ResponseWriter, r *http.Request, o
 		return
 	}
 	kind := run.FirstAnswer()
+	var recordErr error
 	if created {
 		select {
 		case <-run.Done():
-			kind = recordTerminalFirstAnswer(run)
+			kind, recordErr = recordTerminalFirstAnswer(r.Context(), run)
 		case <-syncCh:
-			kind = run.RecordFirstAnswer(fileops.FirstAnswerAccepted)
+			kind, recordErr = run.RecordFirstAnswer(r.Context(), fileops.FirstAnswerAccepted)
 		case <-timerC:
-			kind = run.RecordFirstAnswer(fileops.FirstAnswerAccepted)
+			kind, recordErr = run.RecordFirstAnswer(r.Context(), fileops.FirstAnswerAccepted)
 		case <-r.Context().Done():
 			return
 		}
@@ -120,10 +120,14 @@ func (s *Mutations) startSourceRequest(w http.ResponseWriter, r *http.Request, o
 		case <-run.FirstAnswerReady():
 			kind = run.FirstAnswer()
 		case <-run.Done():
-			kind = recordTerminalFirstAnswer(run)
+			kind, recordErr = recordTerminalFirstAnswer(r.Context(), run)
 		case <-r.Context().Done():
 			return
 		}
+	}
+	if recordErr != nil {
+		s.responses.InternalError(w, r, recordErr)
+		return
 	}
 	if kind == fileops.FirstAnswerAccepted {
 		httpio.WriteJSON(w, http.StatusAccepted, SourceOperationDTO(run.Snapshot()))
@@ -144,12 +148,12 @@ func (s *Mutations) startSourceRequest(w http.ResponseWriter, r *http.Request, o
 	_, _ = io.WriteString(w, state.ResponseBody)
 }
 
-func recordTerminalFirstAnswer(run *fileops.Run) fileops.FirstAnswerKind {
+func recordTerminalFirstAnswer(ctx context.Context, run *fileops.Run) (fileops.FirstAnswerKind, error) {
 	state := run.Snapshot()
 	if state.State == "interrupted" || state.State == "canceled" {
-		return run.RecordFirstAnswer(fileops.FirstAnswerAccepted)
+		return run.RecordFirstAnswer(ctx, fileops.FirstAnswerAccepted)
 	}
-	return run.RecordFirstAnswer(fileops.FirstAnswerResult)
+	return run.RecordFirstAnswer(ctx, fileops.FirstAnswerResult)
 }
 
 // sourceRequestBody is the request body a journaled operation carries, for

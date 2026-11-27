@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -277,19 +279,30 @@ func TestFileOperationHoldKeepsTheRunCancelable(t *testing.T) {
 	}
 }
 
-func TestServiceRecordsFirstAnswerAcrossCompletion(t *testing.T) {
-	service := NewService(NewStore(nil))
-	run, created, err := service.Admit(t.Context(), requestFixture(), false)
+func TestServiceRecordsFirstAnswerAcrossCompletionAndStoreReopen(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "operations.db")
+	database, err := db.Open(dbPath)
+	testutil.FailErr(t, "open operations db", err)
+	testdbseed.InsertProject(t, database, "project")
+	request := requestFixture()
+	testutil.FailErr(t, "read host owner", database.QueryRowContext(t.Context(), `SELECT id FROM people WHERE role='owner'`).Scan(&request.PersonID))
+
+	service := NewService(NewStore(database))
+	run, created, err := service.Admit(t.Context(), request, false)
 	testutil.FailErr(t, "admit", err)
 	if !created {
 		t.Fatal("expected new run")
 	}
-	if got := run.RecordFirstAnswer(FirstAnswerAccepted); got != FirstAnswerAccepted {
-		t.Fatalf("recorded first answer = %v, want FirstAnswerAccepted", got)
+	got, err := run.RecordFirstAnswer(t.Context(), FirstAnswerAccepted)
+	testutil.FailErr(t, "record accepted first answer", err)
+	if got != FirstAnswerAccepted {
+		t.Fatalf("recorded first answer = %q, want %q", got, FirstAnswerAccepted)
 	}
-	// A second caller attempting to record a different kind sees the latched value.
-	if got := run.RecordFirstAnswer(FirstAnswerResult); got != FirstAnswerAccepted {
-		t.Fatalf("subsequent RecordFirstAnswer = %v, want FirstAnswerAccepted", got)
+	// A second caller attempting to record a different kind sees the persisted latch.
+	got, err = run.RecordFirstAnswer(t.Context(), FirstAnswerResult)
+	testutil.FailErr(t, "re-record first answer", err)
+	if got != FirstAnswerAccepted {
+		t.Fatalf("subsequent RecordFirstAnswer = %q, want %q", got, FirstAnswerAccepted)
 	}
 	run.Execute(t.Context(), func(context.Context) Outcome {
 		return Outcome{Status: 201, Body: `{"path":"a.txt"}`}
@@ -297,12 +310,32 @@ func TestServiceRecordsFirstAnswerAcrossCompletion(t *testing.T) {
 	<-run.Done()
 
 	// After completion removes the run from active, an exact replay still sees FirstAnswerAccepted.
-	replay, created, err := service.Admit(t.Context(), requestFixture(), false)
+	replay, created, err := service.Admit(t.Context(), request, false)
 	testutil.FailErr(t, "replay admit", err)
 	if created {
 		t.Fatal("replay created a new run")
 	}
 	if got := replay.FirstAnswer(); got != FirstAnswerAccepted {
-		t.Fatalf("post-completion replay FirstAnswer = %v, want FirstAnswerAccepted", got)
+		t.Fatalf("post-completion replay FirstAnswer = %q, want %q", got, FirstAnswerAccepted)
+	}
+	testutil.FailErr(t, "close operations db", database.Close())
+
+	// Reopen the SQLite store from disk and verify the recorded kind survives restart.
+	reopened, err := db.Open(dbPath)
+	testutil.FailErr(t, "reopen operations db", err)
+	t.Cleanup(func() { _ = reopened.Close() })
+	restarted := NewService(NewStore(reopened))
+	stored, err := restarted.Get(t.Context(), request.ID)
+	testutil.FailErr(t, "get after reopen", err)
+	if stored.FirstAnswerKind != FirstAnswerAccepted {
+		t.Fatalf("reopened FirstAnswerKind = %q, want %q", stored.FirstAnswerKind, FirstAnswerAccepted)
+	}
+	reopenedReplay, created, err := restarted.Admit(t.Context(), request, false)
+	testutil.FailErr(t, "reopened replay admit", err)
+	if created {
+		t.Fatal("reopened replay created a new run")
+	}
+	if got := reopenedReplay.FirstAnswer(); got != FirstAnswerAccepted {
+		t.Fatalf("reopened replay FirstAnswer = %q, want %q", got, FirstAnswerAccepted)
 	}
 }
