@@ -115,11 +115,24 @@ func TestBB10I12PublicationFollowsProducerEligibility(t *testing.T) {
 		t.Run("canceled_producer", func(t *testing.T) {
 			f := newEvalFixture(t)
 			f.publication.published = map[string]string{"out": "seed\n"}
+			f.log.started = make(chan string, 8)
 			ctx, cancel := context.WithCancel(t.Context())
+			done := make(chan struct{})
+			var out ProgramOutcome
+			go func() {
+				defer close(done)
+				out, _ = f.run(t, ctx, "echo early > prior; { sleep 10 | cat; } > out")
+			}()
+			for seen := 0; seen < 3; seen++ {
+				<-f.log.started
+			}
 			cancel()
-			out, _ := f.run(t, ctx, "{ echo canceled | cat; } > out")
+			<-done
 			if f.publication.published["out"] != "seed\n" {
 				t.Fatalf("canceled producer published out=%q (outcome=%+v)", f.publication.published["out"], out)
+			}
+			if f.publication.published["prior"] != "early\n" {
+				t.Fatalf("earlier committed effect lost on cancel: %v", f.publication.published)
 			}
 		})
 
