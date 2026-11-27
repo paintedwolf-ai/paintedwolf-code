@@ -15,8 +15,11 @@ import (
 // Spec is docs/openapi.yaml parsed once. Every view decodes from the parsed
 // tree, so no reader parses the document again.
 type Spec struct {
-	root yaml.Node
-	text string
+	root        yaml.Node
+	text        string
+	schemasOnce sync.Once
+	schemasVal  map[string]componentSchema
+	schemasErr  error
 }
 
 // ParseSpec parses the bundled OpenAPI document.
@@ -225,18 +228,23 @@ type componentSchema struct {
 }
 
 func (s *Spec) schemas() (map[string]componentSchema, error) {
-	var doc struct {
-		Components struct {
-			Schemas map[string]componentSchema `yaml:"schemas"`
-		} `yaml:"components"`
-	}
-	if err := s.Decode(&doc); err != nil {
-		return nil, err
-	}
-	if len(doc.Components.Schemas) == 0 {
-		return nil, fmt.Errorf("docs/openapi.yaml declares no component schemas")
-	}
-	return doc.Components.Schemas, nil
+	s.schemasOnce.Do(func() {
+		var doc struct {
+			Components struct {
+				Schemas map[string]componentSchema `yaml:"schemas"`
+			} `yaml:"components"`
+		}
+		if err := s.Decode(&doc); err != nil {
+			s.schemasErr = err
+			return
+		}
+		if len(doc.Components.Schemas) == 0 {
+			s.schemasErr = fmt.Errorf("docs/openapi.yaml declares no component schemas")
+			return
+		}
+		s.schemasVal = doc.Components.Schemas
+	})
+	return s.schemasVal, s.schemasErr
 }
 
 // Enums returns each string enum component schema by name.

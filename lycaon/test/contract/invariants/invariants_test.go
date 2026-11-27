@@ -35,13 +35,13 @@ func TestMain(m *testing.M) {
 }
 
 // TestInvariants evaluates every rule of every family against the repository.
+// Running families sequentially avoids a 450-way goroutine fanout under -race
+// while keeping the shared typed program usable for the process lifetime.
 func TestInvariants(t *testing.T) {
-	t.Parallel()
 	corpus, err := invariants.Shared()
 	contractcheck.FailErr(t, "invariants.Shared failed", err)
-	for _, family := range families {
+	runFamily := func(family invariants.Family) {
 		t.Run(family.Name, func(t *testing.T) {
-			t.Parallel()
 			if len(family.Invariants) == 0 {
 				t.Fatal("family has no rules")
 			}
@@ -53,12 +53,29 @@ func TestInvariants(t *testing.T) {
 				}
 				seen[rule.Name] = true
 				t.Run(rule.Name, func(t *testing.T) {
-					t.Parallel()
 					if res := invariants.Evaluate(corpus, rule); res.Failed() {
 						t.Error(res.String())
 					}
 				})
 			}
 		})
+	}
+	typedFamilies := map[string]bool{
+		"closure":         true,
+		"enum-closure":    true,
+		"forbidden-calls": true,
+		"outbox-closure":  true,
+		"spec-sync":       true,
+		"sql-schema":      true,
+	}
+	for _, family := range families {
+		if typedFamilies[family.Name] {
+			runFamily(family)
+		}
+	}
+	for _, family := range families {
+		if !typedFamilies[family.Name] {
+			runFamily(family)
+		}
 	}
 }
