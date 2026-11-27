@@ -39,6 +39,8 @@ def normalize_outcome(raw_result, program_row, payload):
     code, _ = _structured_rejection(raw_result, payload)
     if not code and program_row:
         code = program_row.get('stop_code') or None
+    if code == 'COMMAND_REVISION_CONFLICT':
+        return 'conflict', 'conflict', code
     if raw_outcome == 'rejected' or (program_row and program_row.get('state') == 'rejected') or (isinstance(payload.get('refusal'), dict) and payload['refusal'].get('code')):
         return 'rejected', 'rejected', code
     state = (program_row or {}).get('state') or raw_outcome or None
@@ -46,7 +48,7 @@ def normalize_outcome(raw_result, program_row, payload):
     return state, stop, code
 
 
-def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=(), baseline_hashes=None, session_surface=None, draft_bindings=None, host_scope_binding=None, program_receipt_pages=None, git_setup=None):
+def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=(), baseline_hashes=None, session_surface=None, draft_bindings=None, host_scope_binding=None, program_receipt_pages=None, git_setup=None, witness_meta=None):
     """Construct a version-1 native-runtime observation from the whole isolated session."""
     prelude_calls = {r['call_id'] for r in prelude_records if r.get('call_id')}
     expected_calls = {cid for rec in turn_records for cid in (list(rec['call_ids']) + list(rec.get('await_call_ids') or ()))}
@@ -104,19 +106,22 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
 
     outcome, host_stop, last_code = normalize_outcome(last_raw, last_prog, last_payload)
     _, last_details = _structured_rejection(last_raw, last_payload)
+    last_structured_ok = bool(turn_records and turn_records[-1].get('envelope_mode') == 'structured_tool' and outcome == 'completed' and host_stop is None)
     status_code = last_payload.get('status') if isinstance(last_payload.get('status'), int) else (
         last_prog['status_code'] if last_prog and isinstance(last_prog.get('status_code'), int) else (
             last_details.get('status') if isinstance(last_details.get('status'), int) else (
-                2 if (outcome == 'rejected' and last_code == 'COMMAND_SYNTAX_INVALID'
-                      and last_details.get('diagnostic_pre_evaluation') is True
-                      and last_details.get('command_execution') == 'not_started'
-                      and (last_raw.get('invocation') or {}).get('invoked') is False) else None
+                0 if last_structured_ok else (
+                    2 if (outcome == 'rejected' and last_code == 'COMMAND_SYNTAX_INVALID'
+                          and last_details.get('diagnostic_pre_evaluation') is True
+                          and last_details.get('command_execution') == 'not_started'
+                          and (last_raw.get('invocation') or {}).get('invoked') is False) else None
+                )
             )
         )
     )
     if status_code is None:
         gaps.append('missing_program_status_code')
-    complete = bool(outcome == 'completed' and host_stop is None and last_prog is not None and last_prog.get('state') == 'completed')
+    complete = bool(outcome == 'completed' and host_stop is None and ((last_prog is not None and last_prog.get('state') == 'completed') or last_structured_ok))
     receipts, effects, wrappers = _receipt_rows(audit, progress_receipts, draft_bindings=draft_bindings)
     prog_ids = {p['id'] for p in audit['invocation_programs']}
     wrappers_valid = all(
@@ -261,30 +266,28 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
             and progress[0]['detail_ref'] == last_details.get('program_progress_detail_ref')
             and progress[0]['execution_id'] != last_details.get('execution_id')
         )
-    extra_facts, recovery = extra_case_facts(case, session_id=session_id, identity=identity, project_dir=project_dir, git_setup=git_setup, receipts=receipts, effects=effects, audit=audit, recovery=recovery, last_payload=last_payload, final_hashes=final_hashes, baseline_hashes=baseline_hashes)
-    facts.update(extra_facts)
-    facts['structural_wrappers_valid'] = wrappers_valid
-    for req_fact in case.get('required_evidence') or ():
-        if req_fact not in facts:
-            gaps.append(f"missing_observation:{req_fact}:{FACT_OWNERS.get(req_fact, 'runtime_owner')}")
+    extra_facts, recovery, deliveries = extra_case_facts(case, session_id=session_id, identity=identity, project_dir=project_dir, git_setup=git_setup, receipts=receipts, effects=effects, audit=audit, recovery=recovery, last_payload=last_payload, final_hashes=final_hashes, baseline_hashes=baseline_hashes, sidecar=sidecar, session_surface=session_surface, last_raw=last_raw, no_external_launch=no_external_launch, first_rejected=first_rejected, turn_records=turn_records, invocations=cmd_invocations, db_path=db_path, sidecar_log=sidecar_log, witness_meta=witness_meta)
+    v_facts = extra_facts.pop('_verification_facts', None)
+    facts.update(extra_facts, structural_wrappers_valid=wrappers_valid)
+    gaps.extend(f"missing_observation:{req}:{FACT_OWNERS.get(req, 'runtime_owner')}" for req in (case.get('required_evidence') or ()) if req not in facts)
     pre_exec_refusal = bool(outcome == 'rejected' and not execs and recovery is not None)
-    raw_stderr = last_payload.get('stderr', '')
-    program_stderr = '' if pre_exec_refusal else raw_stderr
+    program_stderr = '' if pre_exec_refusal else last_payload.get('stderr', '')
     forbidden_replay = bool(unexpected_cmd) or len(cmd_receipts) > len(turn_records) or len({r['id'] for r in cmd_receipts}) != len(cmd_receipts)
     observation = {
         'version': 1, 'case_id': case['id'], 'capture_kind': 'native-runtime', 'identity': identity,
         'program': {'stdout': last_payload.get('stdout', ''), 'stderr': program_stderr,
                     'status': status_code, 'host_stop': host_stop, 'complete': complete},
-        'receipts': receipts, 'effects': effects, 'facts': facts, 'deliveries': [], 'obligations': [],
-        'closeout': 'complete' if outcome == 'completed' else 'blocked', 'forbidden_replay': forbidden_replay,
-        'recovery': recovery, 'invocations': cmd_invocations,
+        'receipts': receipts, 'effects': effects, 'facts': facts, 'deliveries': deliveries, 'obligations': [],
+        'closeout': 'complete' if outcome == 'completed' else 'blocked', 'forbidden_replay': forbidden_replay, 'recovery': recovery, 'invocations': cmd_invocations,
+        **({'workflow_init_artifacts': (session_surface or {}).get('workflow_init_artifacts')} if (session_surface or {}).get('declared_profile_bound') else {}),
+        **({'verification_facts': v_facts} if v_facts else {}),
     }
     audit_bundle = {
         'session_id': session_id, 'session_surface': session_surface or {},
         'structural_wrappers': {'count': len(wrappers), 'valid': wrappers_valid, 'records': wrappers},
         'prelude': prelude_records, 'turn_batches': turn_records,
         'unexpected_receipt_ids': [r['id'] for r in unexpected_receipts], 'observation_gaps': gaps,
-        'refusal_stderr': raw_stderr if pre_exec_refusal else '',
+        'refusal_stderr': last_payload.get('stderr', '') if pre_exec_refusal else '',
         'retained_failure_output': failure_output,
         'external_launch_audit': {
             'sidecar': sidecar, 'source_command_windows': len(audit['source_command_windows']),

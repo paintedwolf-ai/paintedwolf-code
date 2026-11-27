@@ -1,10 +1,16 @@
 """Case-specific setup/oracle helpers for Q11, Q18, Q19, Q20, Q21, and Q22."""
+import hashlib
 import pathlib
 import subprocess
 import tarfile
 import zipfile
 from portable_command.contracts import bytes_value, fixture_path
+from portable_command.delivery_oracles import extract_deliveries, inspect_edit_and_bounds
+from portable_command.lifecycle_oracles import inspect_temp_handoff_and_jobs
 from portable_command.live import MODEL_FIELDS, SOURCE_FIELDS, freeze_plan, load_live_manifest, summarize_slots
+from portable_command.profile_session import explicit_effect_certainty, inspect_readonly_authority
+from portable_command.task_oracles import inspect_task_integrity
+from portable_command.witness_oracles import inspect_live_witnesses
 
 
 def _run_git(project_dir, *args):
@@ -67,18 +73,31 @@ def materialize_git_setup(git_spec, project_dir, setup_files=None):
     staged = [str(p).lstrip('./') for p in (git_spec.get('staged') or ())]
     if staged and _run_git(root, 'add', '--', *staged).returncode != 0:
         raise RuntimeError('git add failed for pre-staged fixture paths')
-    if git_spec.get('fsmonitor'):
-        _run_git(root, 'config', 'core.fsmonitor', str(git_spec['fsmonitor']))
-    if git_spec.get('external_diff'):
-        _run_git(root, 'config', 'diff.external', str(git_spec['external_diff']))
+    marker_file = ''
+    helper_path = ''
+    if git_spec.get('fsmonitor') or git_spec.get('external_diff'):
+        marker_dir = root.parent / 'git-markers'
+        marker_dir.mkdir(parents=True, exist_ok=True)
+        marker_file = str(marker_dir / 'fsmonitor.invoked')
+        helper = marker_dir / str(git_spec.get('fsmonitor') or 'fixture-unmediated-helper')
+        helper.write_text(f"#!/bin/sh\nprintf 'invoked\\n' > '{marker_file}'\nexit 0\n")
+        helper.chmod(0o755)
+        helper_path = str(helper)
+        if git_spec.get('fsmonitor'):
+            _run_git(root, 'config', 'core.fsmonitor', helper_path)
+        if git_spec.get('external_diff'):
+            _run_git(root, 'config', 'diff.external', helper_path)
+    cfg = root / '.git' / 'config'
+    config_sha = hashlib.sha256(cfg.read_bytes()).hexdigest() if cfg.is_file() else ''
     return {
         'initialized': True, 'initial_head': initial_head, 'staged': staged,
         'session_authored': [str(p).lstrip('./') for p in (git_spec.get('session_authored') or ())],
+        'marker_file': marker_file, 'helper_path': helper_path, 'config_sha256': config_sha,
     }
 
 
-def inspect_git_facts(case, project_dir, git_setup, effects):
-    """Verify Q18 Git facts directly against the repository HEAD, tree diff, and index."""
+def inspect_git_facts(case, project_dir, git_setup, effects, audit=None, invocations=None):
+    """Verify Q18 Git facts directly against repository HEAD, tree diff, index, and behavioral fsmonitor policy."""
     git_spec = (case.get('setup') or {}).get('git')
     if not isinstance(git_spec, dict) or not git_spec:
         return {}
@@ -114,11 +133,27 @@ def inspect_git_facts(case, project_dir, git_setup, effects):
         for eff in effects:
             if eff.get('operation') in {'git_add', 'git_commit'} and eff.get('outcome') == 'completed' and 'paths' not in eff:
                 eff['paths'] = list(committed)
-    return {
+    facts = {
         'foreign_index_preserved': foreign_preserved,
         'session_authored_paths': authored_only,
         'immutable_ref_evidence': head_advanced,
     }
+    marker_file = (git_setup or {}).get('marker_file') or ''
+    config_sha = (git_setup or {}).get('config_sha256') or ''
+    if marker_file and config_sha:
+        cfg = root / '.git' / 'config'
+        marker_uninvoked = not pathlib.Path(marker_file).exists()
+        config_unchanged = cfg.is_file() and hashlib.sha256(cfg.read_bytes()).hexdigest() == config_sha
+        override_refused = any(
+            inv.get('outcome') == 'rejected' and inv.get('rejection_code') == 'COMMAND_OPTION_UNSUPPORTED'
+            and 'core.fsmonitor' in (inv.get('program') or '')
+            for inv in (invocations or ())
+        )
+        execs = (audit or {}).get('invocation_program_executions') or []
+        git_pids = {e.get('program_id') for e in execs if e.get('owner') == 'git' and e.get('state') == 'completed'}
+        git_bound = len(git_pids) == 1 and head_advanced
+        facts['invocation_fsmonitor_policy'] = bool(marker_uninvoked and config_unchanged and override_refused and git_bound)
+    return facts
 
 
 def verify_tar_bz2(project_dir, receipts, effects, publications, final_hashes):
@@ -182,45 +217,67 @@ def verify_paired_manifest_contract(case, identity):
     }
 
 
-def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, receipts, effects, audit, recovery, last_payload, final_hashes, baseline_hashes):
-    """Collect Q11, Q18, Q19, Q20, Q21, and Q22 facts from SQLite audit rows and repository/filesystem state."""
+def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, receipts, effects, audit, recovery, last_payload, final_hashes, baseline_hashes, sidecar=None, session_surface=None, last_raw=None, no_external_launch=False, first_rejected=None, turn_records=None, invocations=None, db_path=None, sidecar_log=None, witness_meta=None):
+    """Collect Q05, Q06, Q11, Q18, Q19, Q20, Q21, and Q22 facts from SQLite audit rows, sidecar log, and repo state."""
     execs = audit['invocation_program_executions']
     pins = audit['invocation_program_revision_pins']
-    facts = {}
+    deliveries, delivery_facts = extract_deliveries(case, audit, baseline_hashes, project_dir=project_dir)
+    facts = dict(delivery_facts)
     if recovery and recovery.get('owner_code') == 'PROGRESS_MISSING':
-        all_refused = bool(execs) and all(e.get('state') in {'refused', 'rejected'} and e.get('effect_certainty') in {None, '', 'none'} for e in execs)
-        zero_ok = bool(all_refused and last_payload.get('completed_effects', 0) == 0 and last_payload.get('uncertain_effects', 0) == 0)
-        ref_details = (last_payload.get('refusal') or {}).get('details') if isinstance(last_payload.get('refusal'), dict) else {}
-        remedy = 'update_progress' if (
-            isinstance(ref_details, dict) and 'progress' in str(ref_details.get('expected_form') or '').lower()
-        ) else recovery.get('remedy', '')
-        recovery = {**recovery, 'cause': 'missing_progress', 'remedy': remedy}
+        rej_payload = first_rejected[0] if first_rejected else last_payload
+        rej_pid = first_rejected[2] if first_rejected else (rej_payload or {}).get('program_id')
+        rej_execs = [e for e in execs if not rej_pid or e.get('program_id') == rej_pid]
+        zero_ok = bool(explicit_effect_certainty(audit, rej_payload or {}, program_id=rej_pid, require_nonempty=True)
+                       and all(e.get('state') in {'refused', 'rejected'} for e in rej_execs))
+        ref_obj = (rej_payload or {}).get('refusal') if isinstance((rej_payload or {}).get('refusal'), dict) else {}
+        ref_details = ref_obj.get('details') if isinstance(ref_obj.get('details'), dict) else {}
+        ref_text = ' '.join(str(x or '') for x in (ref_details.get('expected_form'), ref_obj.get('feedback'), (first_rejected[1] if first_rejected else last_raw or {}).get('message'))).lower()
+        has_prog_remedy = any(tok in ref_text for tok in ('update_progress', 'progress checklist', 'record the checklist')) or 'progress' in str(ref_details.get('expected_form') or '').lower()
+        prog_applied = any(r.get('operation') == 'update_progress' and r.get('outcome') == 'completed' for r in receipts)
+        remedy = 'update_progress' if (has_prog_remedy and (prog_applied or len(turn_records or ()) == 1)) else recovery.get('remedy', '')
+        turn0_prog = (turn_records[0].get('program') if turn_records else '') or ''
+        prog_sha = hashlib.sha256(turn0_prog.encode('utf-8')).hexdigest() if turn0_prog else ''
+        sources = audit.get('invocation_program_sources') or []
+        source_matched = any(s.get('program_id') == rej_pid and s.get('sha256') == prog_sha for s in sources)
+        dref = (rej_payload or {}).get('detail_ref') or ''
+        outputs = audit.get('invocation_program_outputs') or []
+        source_record_ok = bool(dref) and any(o.get('program_id') == rej_pid and o.get('reference') == dref for o in outputs)
+        fresh_write_ok = bool(
+            len(audit.get('invocation_programs') or ()) >= 2
+            and any(e.get('program_id') != rej_pid and e.get('state') == 'completed' and e.get('effect_certainty') == 'completed' for e in execs)
+        )
+        resubmit_ok = bool(zero_ok and (rej_payload or {}).get('replay_available') is False and source_matched and source_record_ok and (fresh_write_ok or len(turn_records or ()) == 1))
+        recovery = {**recovery, 'cause': 'missing_progress', 'remedy': remedy, 'whole_program_resubmit_allowed': resubmit_ok, 'source_span_required': False}
         if zero_ok:
             recovery = {**recovery, 'zero_program_effects': True, 'effect_certainty_required': True}
-            facts['zero_program_effects'] = baseline_hashes is None or final_hashes == baseline_hashes
-        if (last_payload.get('detail_ref') or '').startswith('output:program-source:') and last_payload.get('replay_available') is False:
-            facts['validated_resubmission_reference'] = True
+            facts['zero_program_effects'] = True if fresh_write_ok else (baseline_hashes is None or final_hashes == baseline_hashes)
+        facts['validated_resubmission_reference'] = resubmit_ok
     if not (case.get('setup') or {}).get('files'):
         prog_sources = audit.get('invocation_program_sources') or []
         if prog_sources and all(len(s.get('sha256') or '') == 64 for s in prog_sources):
             facts['exact_source_binding'] = True
-    ext_ids = {r['execution_id'] for r in receipts if r.get('operation') == 'external_exec'}
-    if ext_ids and any(p.get('basis') == 'declared_at_launch' and p.get('execution_id') in ext_ids and len(p.get('disk_sha256') or '') == 64 for p in pins):
-        facts['disk_provenance'] = True
     if recovery and recovery.get('owner_code'):
-        no_escape = not (pathlib.Path(project_dir).parent / 'escape.txt').exists()
-        all_refused = all(e.get('state') in {'refused', 'rejected'} and e.get('effect_certainty') in {None, '', 'none'} for e in execs)
-        zero_ok = bool(recovery.get('zero_program_effects') or (
-            all_refused and last_payload.get('completed_effects', 0) == 0 and last_payload.get('uncertain_effects', 0) == 0
-        ))
+        root_p = pathlib.Path(project_dir)
+        out_dir = root_p / 'out'
+        out_empty = (not out_dir.exists()) or (out_dir.is_dir() and not any(out_dir.rglob('*')))
+        no_escape = not (root_p.parent / 'escape.txt').exists() and not (root_p / 'escape.txt').exists() and out_empty
+        zero_ok = bool(recovery.get('zero_program_effects') or explicit_effect_certainty(audit, last_payload or {}, require_nonempty=bool(execs)))
         facts['no_outside_effect'] = bool(zero_ok and no_escape and (baseline_hashes is None or final_hashes == baseline_hashes))
         if any(tok in recovery['owner_code'].lower() for tok in ('zip', 'traversal', 'escape', 'archive', 'path')):
             facts['zip_slip_refused'] = True
     facts.update(verify_tar_bz2(project_dir, receipts, effects, audit['invocation_program_publications'], final_hashes))
-    temp_pins = [str(p.get('path') or '') for p in pins if p.get('role') == 'destination' and f'/scratch/{session_id}/' in str(p.get('path') or '')]
-    if temp_pins:
-        facts['temp_path_owned'] = True
-        facts['same_physical_identity'] = len(set(temp_pins)) == 1
-    facts.update(inspect_git_facts(case, project_dir, git_setup, effects))
+    facts.update(inspect_temp_handoff_and_jobs(case, session_id=session_id, project_dir=project_dir, audit=audit, receipts=receipts, sidecar=sidecar, last_payload=last_payload, turn_records=turn_records))
+    ro_facts, recovery = inspect_readonly_authority(
+        case, session_surface=session_surface, project_dir=project_dir, audit=audit, recovery=recovery,
+        last_payload=last_payload, last_raw=last_raw, baseline_hashes=baseline_hashes,
+        final_hashes=final_hashes, no_external_launch=no_external_launch,
+    )
+    facts.update(ro_facts)
+    facts.update(inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar, baseline_hashes, final_hashes, invocations=invocations, sidecar_log=sidecar_log, project_dir=project_dir))
+    facts.update(inspect_git_facts(case, project_dir, git_setup, effects, audit=audit, invocations=invocations))
     facts.update(verify_paired_manifest_contract(case, identity))
-    return facts, recovery
+    if db_path is not None:
+        facts.update(inspect_task_integrity(case, db_path=db_path, session_id=session_id, project_dir=project_dir, receipts=receipts, effects=effects, baseline_hashes=baseline_hashes, final_hashes=final_hashes))
+    w_facts, recovery = inspect_live_witnesses(case, project_dir=project_dir, audit=audit, receipts=receipts, effects=effects, last_payload=last_payload, recovery=recovery, witness_meta=witness_meta, invocations=invocations)
+    facts.update(w_facts)
+    return facts, recovery, deliveries

@@ -17,7 +17,10 @@ from portable_command.case_oracles import materialize_git_setup, materialize_hos
 from portable_command.contracts import DIRECTORY, ROOT, load_suite, materialize
 from portable_command.grading import grade_case
 from portable_command.handle_await import await_running_handle
+from portable_command.lifecycle_oracles import prepare_cross_session_job_handle, probe_background_job_handles
+from portable_command.live_witness_driver import WITNESS_CASE_IDS, LiveWitnessContext
 from portable_command.observe import build_observation, file_sha256, source_identity
+from portable_command.profile_session import DECLARED_READONLY_PROFILES, create_declared_profile_session
 from portable_command.provenance import materialize_denied_progress_scope, materialize_helpers
 from portable_command.reporting import inject_drafts, make_app_factory
 from progress import save
@@ -147,18 +150,11 @@ def case_digest(case):
 def sanitized_fixture(case, baseline_hashes):
     """Build a pinned, sanitized replay fixture free of session IDs, tokens, and host paths."""
     return {
-        'schema': 'portable-command-replay-v1',
-        'version': 1,
-        'case_id': case['id'],
-        'suite_sha256': file_sha256(DIRECTORY / 'suite.json'),
-        'case_sha256': case_digest(case),
-        'profile': case['profile'],
-        'qualification_cases': list(case['qualification_cases']),
-        'setup': case['setup'],
-        'turns': case['turns'],
-        'expected': case['expected'],
-        'allowed_partial': case['allowed_partial'],
-        'required_evidence': case['required_evidence'],
+        'schema': 'portable-command-replay-v1', 'version': 1, 'case_id': case['id'],
+        'suite_sha256': file_sha256(DIRECTORY / 'suite.json'), 'case_sha256': case_digest(case),
+        'profile': case['profile'], 'qualification_cases': list(case['qualification_cases']),
+        'setup': case['setup'], 'turns': case['turns'], 'expected': case['expected'],
+        'allowed_partial': case['allowed_partial'], 'required_evidence': case['required_evidence'],
         'baseline_hashes': baseline_hashes,
     }
 
@@ -219,43 +215,49 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
     revision_aliases = {alias: baseline_hashes.get(path) for path, alias in case['setup'].get('revisions', {}).items()}
     identity = source_identity(ROOT, profile=case['profile'], engine_bin=engine_bin, engine_manifest=engine_manifest)
     save(out_dir / 'attempt.json', {'status': 'running', 'case_id': case['id'], 'identity': identity, 'revision_aliases': revision_aliases})
-    helpers_dir = materialize_helpers(case['setup'].get('helpers'), out_dir / 'helpers')
-    config_root = out_dir / 'config-root'
-    host_binding = materialize_denied_progress_scope(case, config_root) if app_factory is smoke.Application else None
+    helpers_dir = materialize_helpers(case['setup'].get('helpers'), out_dir / 'helpers', case_id=case['id'])
+    config_root, host_binding = out_dir / 'config-root', (materialize_denied_progress_scope(case, out_dir / 'config-root') if app_factory is smoke.Application else None)
     application = make_app_factory(engine_bin, app_factory, helpers_dir=helpers_dir, config_root=config_root if host_binding else None)(app_dir)
     sidecar_path = app_dir / 'sidecar.log'
-    sse, prelude_records, turn_records, draft_bindings = None, [], [], {}
+    sse, witness, witness_meta, prelude_records, turn_records, draft_bindings = None, None, None, [], [], {}
     drafts_ok, session_id, pre_prompt_lines, post_tool_lines = True, None, None, None
     try:
         application.ready()
-        sse = sse_factory(application.url, application.token, raw_dir / 'events.jsonl')
-        sse.start()
-        session_id, project_id, root_id, session_surface = create_isolated_session(application, project_dir, case)
-        if case['setup'].get('drafts'):
-            drafts_ok, draft_bindings = inject_drafts(application, project_id, root_id, case['setup']['drafts'])
+        sse = sse_factory(application.url, application.token, raw_dir / 'events.jsonl'); sse.start()
+        session_id, project_id, root_id, session_surface = (
+            create_declared_profile_session(application, project_dir, case, create_base_session=create_isolated_session, baseline_hashes=baseline_hashes, hash_fn=project_hashes)
+            if case.get('profile') in DECLARED_READONLY_PROFILES and app_factory is smoke.Application
+            else create_isolated_session(application, project_dir, case)
+        )
+        drafts_ok, draft_bindings = inject_drafts(application, project_id, root_id, case['setup']['drafts']) if case['setup'].get('drafts') and case['id'] != 'publication-barrier' else (True, {})
+        other_job = prepare_cross_session_job_handle(application, app_dir / 'store.db', project_dir=project_dir, create_base_session=create_isolated_session, send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface)) if case['id'] == 'owned-background-state' and app_factory is smoke.Application else None
         pre_prompt_lines = log_line_count(sidecar_path)
-        application.request(f'/v1/sessions/{session_id}/prompts', {'operation_id': str(uuid.uuid4()), 'text': f"Execute portable-command fixture {case['id']}."})
-        if case['setup'].get('progress') == 'valid':
-            p_calls = send_tool_calls(application, session_id, [{'name': 'update_progress', 'args': {'content': f"- [ ] Run fixture {case['id']}"}}], surface=session_surface)
-            prelude_records.append({'kind': 'valid_progress', 'call_id': p_calls[0][0], 'outcome': p_calls[0][1].get('outcome')})
+        if not session_surface.get('declared_profile_bound'):
+            application.request(f'/v1/sessions/{session_id}/prompts', {'operation_id': str(uuid.uuid4()), 'text': f"Execute portable-command fixture {case['id']}."})
+            if case['setup'].get('progress') == 'valid':
+                p_calls = send_tool_calls(application, session_id, [{'name': 'update_progress', 'args': {'content': f"- [ ] Run fixture {case['id']}"}}], surface=session_surface)
+                prelude_records.append({'kind': 'valid_progress', 'call_id': p_calls[0][0], 'outcome': p_calls[0][1].get('outcome')})
+        if case['id'] in WITNESS_CASE_IDS and app_factory is smoke.Application:
+            witness = LiveWitnessContext(case, application, session_id, project_id, root_id, project_dir, out_dir, session_surface, send_tool_calls, prelude_records)
+            witness.prepare()
         for turn in case['turns']:
-            if 'structured_tool' in turn:
-                batch, envelope_mode = [{'name': turn['structured_tool'], 'args': dict(turn.get('arguments') or {})}], 'structured_tool'
-            elif 'progress_update' in turn:
-                batch = [{'name': 'command', 'args': {'command': turn['program'], 'progress_update': turn['progress_update']}}]
-                envelope_mode = 'native_command_envelope'
-            else:
-                batch, envelope_mode = [{'name': 'command', 'args': {'command': turn['program']}}], 'command_only'
+            if 'structured_tool' in turn: batch, envelope_mode = [{'name': turn['structured_tool'], 'args': dict(turn.get('arguments') or {})}], 'structured_tool'
+            elif 'progress_update' in turn: batch, envelope_mode = [{'name': 'command', 'args': {'command': turn['program'], 'progress_update': turn['progress_update']}}], 'native_command_envelope'
+            else: batch, envelope_mode = [{'name': 'command', 'args': {'command': turn['program']}}], 'command_only'
+            if witness is not None: batch = witness.rewrite_batch(batch)
             results = send_tool_calls(application, session_id, batch, surface=session_surface)
             call_ids = [cid for cid, _ in results]
             await_meta = await_running_handle(application, session_id, results[-1][1], send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface))
-            await_ids = (await_meta['wait_call_ids'] + await_meta['output_call_ids']) if await_meta else []
+            job_probe = probe_background_job_handles(application, session_id, app_dir / 'store.db', other_job=other_job, send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface)) if case['id'] == 'owned-background-state' and app_factory is smoke.Application else None
+            verify_ids = [cid for cid, _ in send_tool_calls(application, session_id, [{'name': 'verify', 'args': {'command': 'python3 -B -m unittest discover'}}], surface=session_surface)] if 'verification_source_match' in (case.get('required_evidence') or ()) and app_factory is smoke.Application else []
+            await_ids = ((await_meta['wait_call_ids'] + await_meta['output_call_ids']) if await_meta else []) + (job_probe['call_ids'] if job_probe else []) + verify_ids
             turn_records.append({
                 'program': turn['program'], 'command_call_id': call_ids[-1], 'call_ids': call_ids, 'await_call_ids': await_ids,
-                'handle_await': await_meta, 'batch_plan': [c['name'] for c in batch], 'envelope_mode': envelope_mode,
+                'handle_await': await_meta, 'job_probe': job_probe, 'batch_plan': [c['name'] for c in batch], 'envelope_mode': envelope_mode,
                 'batch_outcomes': [{'call_id': cid, 'tool': c['name'], 'outcome': res.get('outcome')} for c, (cid, res) in zip(batch, results)],
             })
-        save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases, 'draft_bindings': draft_bindings, 'session_surface': session_surface, 'host_scope_binding': host_binding, 'git_setup': git_setup})
+        if witness is not None: witness_meta = witness.finish()
+        save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases, 'draft_bindings': draft_bindings, 'session_surface': session_surface, 'host_scope_binding': host_binding, 'git_setup': git_setup, 'witness_meta': witness_meta})
         application.request(f'/v1/sessions/{session_id}/abort', {})
         with contextlib.closing(sqlite3.connect(app_dir / 'store.db')) as db:
             pids = [r[0] for r in db.execute('SELECT p.id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE r.session_id=?', (session_id,)).fetchall()]
@@ -265,35 +267,33 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
         save(out_dir / 'attempt.json', {'status': 'unmeasured', 'phase': 'execution', 'case_id': case['id'], 'session_id': session_id, 'error': str(exc), 'identity': identity})
         raise
     finally:
-        if sse is not None:
-            sse.close()
+        if witness is not None: witness.cleanup()
+        if sse is not None: sse.close()
         application.close(cleanup=False)
     window = {'pre_prompt_lines': pre_prompt_lines, 'post_tool_lines': post_tool_lines, 'post_close_lines': log_line_count(sidecar_path)}
     save(raw_dir / 'window.json', window)
     eff_posture = session_surface.get('effective_posture', '')
     extra_gaps = [g for g, cond in (
-        ('profile_binding_approximate', case.get('profile', 'implement') != 'implement'),
+        ('profile_binding_approximate', case.get('profile', 'implement') != 'implement' and not session_surface.get('declared_profile_bound')),
         ('profile_binding_mismatch', bool(eff_posture) and eff_posture != session_surface['requested_posture']),
         ('uninjected_drafts', bool(case['setup'].get('drafts')) and not drafts_ok),
-        ('uninjected_host_facts', bool(case['setup'].get('host_facts')) and not (host_binding or host_facts_ok)),
+        ('uninjected_host_facts', bool(case['setup'].get('host_facts')) and not (host_binding or host_facts_ok or witness_meta is not None)),
     ) if cond] + [g for rec in turn_records for g in ((rec.get('handle_await') or {}).get('gaps') or ())]
     try:
         checkpoint_closed_store(app_dir / 'store.db', application.process)
         observation, audit_bundle = build_observation(
             case, session_id=session_id, identity=identity, project_dir=project_dir, db_path=app_dir / 'store.db',
             sidecar_log=sidecar_path, turn_records=turn_records, prelude_records=prelude_records, sidecar_window=window,
-            extra_gaps=extra_gaps, baseline_hashes=baseline_hashes, session_surface=session_surface,
-            draft_bindings=draft_bindings, host_scope_binding=host_binding, program_receipt_pages=program_receipt_pages, git_setup=git_setup,
+            extra_gaps=extra_gaps, baseline_hashes=session_surface.get('post_init_hashes') or baseline_hashes, session_surface=session_surface,
+            draft_bindings=draft_bindings, host_scope_binding=host_binding, program_receipt_pages=program_receipt_pages, git_setup=git_setup, witness_meta=witness_meta,
         )
         grade = grade_case(case, observation, project_dir, identity)
     except Exception as exc:
         save(out_dir / 'attempt.json', {'status': 'unmeasured', 'phase': 'observation', 'case_id': case['id'], 'session_id': session_id, 'error': str(exc), 'identity': identity})
         raise
-    save(out_dir / 'observation.json', observation)
-    save(out_dir / 'grade.json', grade)
+    save(out_dir / 'observation.json', observation); save(out_dir / 'grade.json', grade)
     save(raw_dir / 'db-audit.json', audit_bundle)
     save(raw_dir / 'filesystem.json', {'baseline': baseline_hashes, 'final': project_hashes(project_dir), 'revision_aliases': revision_aliases})
     save(out_dir / 'attempt.json', {'status': 'measured', 'case_id': case['id'], 'session_id': session_id, 'passed': grade['passed'], 'identity': identity})
-    if export_dir is not None:
-        export_bundle(export_dir, case, observation, grade, audit_bundle, baseline_hashes, raw_dir)
+    if export_dir is not None: export_bundle(export_dir, case, observation, grade, audit_bundle, baseline_hashes, raw_dir)
     return {'case_id': case['id'], 'session_id': session_id, 'observation': observation, 'grade': grade, 'audit': audit_bundle}
