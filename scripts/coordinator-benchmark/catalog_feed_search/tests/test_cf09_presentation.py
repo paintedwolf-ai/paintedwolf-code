@@ -166,6 +166,21 @@ class TestCF09Presentation(unittest.TestCase):
         )
         self.assertEqual(verify_presentation_observation(unready).verdict, "MISSING_OBSERVATION")
 
+    def test_verify_returns_unverified_when_requested_state_not_in_effect(self) -> None:
+        settled_warming = PresentationObservation(
+            surface="search_stage",
+            state="warming",
+            platform="linux",
+            native_window=True,
+            api_response={"status": "complete", "exhaustive": True, "issues": []},
+            coverage_note_visible=False,
+            request_correlated=True,
+            workspace_ready=True,
+        )
+        res = verify_presentation_observation(settled_warming)
+        self.assertEqual(res.verdict, "UNVERIFIED")
+        self.assertTrue(any("requested_state_not_in_effect" in v for v in res.violations))
+
     def test_write_presentation_evidence_writes_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "CF09"

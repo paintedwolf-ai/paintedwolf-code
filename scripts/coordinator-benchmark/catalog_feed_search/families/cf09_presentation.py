@@ -49,6 +49,22 @@ DECLARED_GAP_REASONS: frozenset[str] = frozenset(
     }
 )
 
+EXPECTED_STATE_FACTS: dict[str, frozenset[str]] = {
+    "warming": frozenset({"catalog_warming", "catalog_incomplete", "index_warming"}),
+    "refreshing": frozenset({"catalog_refreshing"}),
+    "failed": frozenset({"catalog_failed", "catalog_refresh_failed", "executor_error"}),
+    "incomplete": frozenset(
+        {
+            "catalog_incomplete",
+            "catalog_bounded",
+            "limited_preview",
+            "files_skipped",
+            "time_budget",
+            "result_limit",
+        }
+    ),
+}
+
 
 @dataclass(frozen=True)
 class CoverageFixture:
@@ -282,6 +298,26 @@ def verify_presentation_observation(obs: PresentationObservation) -> Presentatio
             request_correlated=obs.request_correlated,
         )
 
+    # Decision 042: require positive proof that the requested runtime state is
+    # actually in effect in the captured Den API response before grading PASS.
+    expected_for_state = EXPECTED_STATE_FACTS[obs.state]
+    if not (set(facts) & expected_for_state):
+        return PresentationVerdict(
+            surface=obs.surface,
+            state=obs.state,
+            platform=obs.platform,
+            verdict="UNVERIFIED",
+            declared_facts=facts,
+            violations=(
+                f"requested_state_not_in_effect: state={obs.state} requires one of "
+                f"{sorted(expected_for_state)}, got {list(facts)}",
+            ),
+            screenshot_path=obs.screenshot_path,
+            project_id=obs.project_id,
+            scope=obs.scope,
+            request_correlated=obs.request_correlated,
+        )
+
     # D14: A browser page never satisfies a native slot.
     if not obs.native_window:
         violations.append("not_native_window: D14 requires a real native Den desktop window")
@@ -362,6 +398,7 @@ def write_presentation_evidence(
             "total": len(verdicts),
             "passed": sum(1 for v in verdicts if v.verdict == "PASS"),
             "failed": sum(1 for v in verdicts if v.verdict == "DEFECT"),
+            "unverified": sum(1 for v in verdicts if v.verdict == "UNVERIFIED"),
             "missing_observation": sum(1 for v in verdicts if v.verdict == "MISSING_OBSERVATION"),
             "blocked": sum(1 for v in verdicts if v.verdict == "BLOCKED"),
         },

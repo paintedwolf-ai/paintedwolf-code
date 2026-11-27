@@ -146,6 +146,33 @@ def _capture_screen(path: Path) -> bool:
     return rc == 0 and path.exists()
 
 
+def _has_coverage_notice_in_a11y(a11y_text: str) -> bool:
+    low = a11y_text.lower()
+    markers = (
+        "incomplete",
+        "unavailable",
+        "still indexing",
+        "could not be read",
+        "indexing budget",
+        "exceeded",
+        "apply all is unavailable",
+        "being updated",
+        "refreshing",
+        "warming",
+        "limited",
+    )
+    return any(m in low for m in markers)
+
+
+def _has_final_empty_in_a11y(a11y_text: str) -> bool:
+    low = a11y_text.lower()
+    return (
+        "nothing matched in this project" in low
+        or "nothing matched this query" in low
+        or "no replaceable matches" in low
+    )
+
+
 def _read_accessibility_text() -> str:
     """Query accessibility static text / status elements from the frontmost Den window."""
     script = (
@@ -283,17 +310,22 @@ def run_macos_native(
                 search_shot = out_dir / f"macos_search_stage_{state}.png"
                 _capture_screen(search_shot)
                 a11y_text = _read_accessibility_text()
-                facts = extract_declared_facts(search_api)
                 observations.append(
                     PresentationObservation(
                         surface="search_stage",
                         state=state,
                         platform="macos",
                         native_window=focused,
+                        project_id=proj["id"],
+                        query=f"project:current {NEEDLE_TOKEN}",
+                        scope="project:current",
+                        request_url=f"{api_url}/v1/search",
+                        request_correlated=focused,
+                        workspace_ready=focused and len(a11y_text) > 0,
                         api_response=search_api,
-                        coverage_note_visible=bool(facts) and ("incomplete" in a11y_text.lower() or "unavailable" in a11y_text.lower() or "indexing" in a11y_text.lower() or "could not be read" in a11y_text.lower() or "budget" in a11y_text.lower() or a11y_text == ""),
+                        coverage_note_visible=_has_coverage_notice_in_a11y(a11y_text),
                         results_visible_count=len(search_api.get("hits") or []),
-                        empty_final_shown="nothing matched" in a11y_text.lower(),
+                        empty_final_shown=_has_final_empty_in_a11y(a11y_text),
                         screenshot_path=search_shot.name,
                         notes=f"focused={focused} a11y_len={len(a11y_text)}",
                     )
@@ -313,19 +345,26 @@ def run_macos_native(
                 )
                 replace_shot = out_dir / f"macos_replace_review_{state}.png"
                 _capture_screen(replace_shot)
+                replace_a11y = _read_accessibility_text()
                 observations.append(
                     PresentationObservation(
                         surface="replace_review",
                         state=state,
                         platform="macos",
                         native_window=focused,
+                        project_id=proj["id"],
+                        query=f"project:current {NEEDLE_TOKEN}",
+                        scope="project:current",
+                        request_url=f"{api_url}/v1/search/replace/preview",
+                        request_correlated=focused,
+                        workspace_ready=focused and len(replace_a11y) > 0,
                         api_response=replace_api,
-                        coverage_note_visible=True,
+                        coverage_note_visible=_has_coverage_notice_in_a11y(replace_a11y),
                         results_visible_count=len(replace_api.get("files") or []),
-                        empty_final_shown=False,
-                        apply_all_disabled=str(replace_api.get("state") or "") in ("limited", "preparing"),
+                        empty_final_shown=_has_final_empty_in_a11y(replace_a11y),
+                        apply_all_disabled="apply all is unavailable" in replace_a11y.lower(),
                         screenshot_path=replace_shot.name,
-                        notes=f"preview_state={replace_api.get('state')}",
+                        notes=f"preview_state={replace_api.get('state')} a11y_len={len(replace_a11y)}",
                     )
                 )
 
@@ -341,17 +380,25 @@ def run_macos_native(
                 )
                 quick_shot = out_dir / f"macos_quick_open_{state}.png"
                 _capture_screen(quick_shot)
+                quick_a11y = _read_accessibility_text()
                 observations.append(
                     PresentationObservation(
                         surface="quick_open",
                         state=state,
                         platform="macos",
                         native_window=focused,
+                        project_id=proj["id"],
+                        query="target.txt",
+                        scope="project:current",
+                        request_url=f"{api_url}/v1/projects/{proj['id']}/source/search",
+                        request_correlated=focused,
+                        workspace_ready=focused and len(quick_a11y) > 0,
                         api_response=quick_api,
-                        coverage_note_visible=True,
+                        coverage_note_visible=_has_coverage_notice_in_a11y(quick_a11y),
                         results_visible_count=len(quick_api.get("matches") or []),
-                        empty_final_shown=False,
+                        empty_final_shown=_has_final_empty_in_a11y(quick_a11y),
                         screenshot_path=quick_shot.name,
+                        notes=f"a11y_len={len(quick_a11y)}",
                     )
                 )
                 _send_escape()
@@ -364,17 +411,25 @@ def run_macos_native(
                 )
                 files_shot = out_dir / f"macos_files_tree_{state}.png"
                 _capture_screen(files_shot)
+                files_a11y = _read_accessibility_text()
                 observations.append(
                     PresentationObservation(
                         surface="files_tree",
                         state=state,
                         platform="macos",
                         native_window=focused,
+                        project_id=proj["id"],
+                        query="",
+                        scope="project:current",
+                        request_url=f"{api_url}/v1/projects/{proj['id']}/source/index",
+                        request_correlated=focused,
+                        workspace_ready=focused and len(files_a11y) > 0,
                         api_response=index_api,
-                        coverage_note_visible=True,
-                        results_visible_count=1,
-                        empty_final_shown=False,
+                        coverage_note_visible=_has_coverage_notice_in_a11y(files_a11y),
+                        results_visible_count=1 if focused else 0,
+                        empty_final_shown=_has_final_empty_in_a11y(files_a11y),
                         screenshot_path=files_shot.name,
+                        notes=f"a11y_len={len(files_a11y)}",
                     )
                 )
 

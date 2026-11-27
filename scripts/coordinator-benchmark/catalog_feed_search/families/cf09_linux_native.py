@@ -303,7 +303,7 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
     });
     await page.keyboard.press("Escape");
 
-    // 4. Files tree — correlate with /source/index for this exact project.
+    // 4. Files tree — correlate with /source/index for this exact project and read actual rendered coverage/status notice.
     const filesNav = page.locator('[data-testid="nav-files"], [aria-label="Files"]').first();
     if (await filesNav.isVisible({ timeout: 3000 }).catch(() => false)) {
       await filesNav.click();
@@ -311,6 +311,14 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
     }
     const indexApi = await apiGet(`/v1/projects/${proj.id}/source/index`);
     const treeVisible = await page.getByTestId("files-tree-pane").isVisible().catch(() => false);
+    const treeNoticeLocator = page
+      .locator(
+        '[data-testid="files-tree-pane"] [role="status"], [data-testid="source-watch-notice"], [data-testid="files-tree-coverage-note"], [data-testid="review-inventory-status"]',
+      )
+      .first();
+    const treeNoticeText = (await treeNoticeLocator.textContent().catch(() => ""))?.trim() ?? "";
+    const treeNoticeVisible =
+      (await treeNoticeLocator.isVisible().catch(() => false)) && treeNoticeText.length > 0;
     const treeFilterEmpty = await page.getByTestId("files-tree-filter-empty").isVisible().catch(() => false);
     const filesShot = path.join(outDir, `linux_files_tree_${state}.png`);
     await page.screenshot({ path: filesShot });
@@ -326,11 +334,12 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
       request_correlated: true,
       workspace_ready: treeVisible,
       api_response: indexApi,
-      coverage_note_visible: treeVisible,
-      coverage_note_testid: treeVisible ? "files-tree-pane" : "",
+      coverage_note_visible: treeNoticeVisible,
+      coverage_note_testid: treeNoticeVisible ? "files-tree-status" : "",
       results_visible_count: treeVisible ? 1 : 0,
       empty_final_shown: treeFilterEmpty,
       screenshot_path: path.basename(filesShot),
+      notes: treeNoticeText,
     });
   }
 
