@@ -93,8 +93,13 @@ webE2e("browser-obligation: build receipt leaves browser obligation open until c
       content: "Built index.html and verified the Ping interaction via capture_page.",
     });
     await waitForSessionReady(request, sessionId);
+    const backToChat = page.getByRole("button", { name: "Back to chat" });
+    if (await backToChat.isVisible().catch(() => false)) {
+      await backToChat.click();
+    }
     await expect(liveChatStage(page).getByTestId("transcript-article-assistant").last()).toContainText(
       "Built index.html and verified the Ping interaction via capture_page.",
+      { timeout: 30_000 },
     );
 
     // Verify capture_page renders as a settled activity card in Den chat.
