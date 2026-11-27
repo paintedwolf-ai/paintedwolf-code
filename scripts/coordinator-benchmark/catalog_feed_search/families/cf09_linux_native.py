@@ -162,7 +162,9 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
     }
     if (await searchInput.isVisible({ timeout: 5000 }).catch(() => false)) {
       await searchInput.fill(needle);
-      await page.waitForTimeout(800);
+      await page.waitForTimeout(400);
+      await page.getByTestId("search-loading-state").waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
+      await page.waitForTimeout(400);
     }
     const searchApi = await apiPost("/v1/search", {
       query: `project:current ${needle}`,
