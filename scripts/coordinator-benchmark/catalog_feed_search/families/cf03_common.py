@@ -75,13 +75,19 @@ class ManagedSidecar:
                 "LYCAON_LLM_MOCK": "1",
             }
         )
-        if self.repo_root is not None:
+        config_root_env = env.get("LYCAON_CONFIG_ROOT", "").strip()
+        if config_root_env:
+            run_cwd: str | None = str(Path(config_root_env).resolve().parent)
+        elif self.repo_root is not None:
             env["LYCAON_CONFIG_ROOT"] = str(self.repo_root / "lycaon")
+            run_cwd = str(self.repo_root)
+        else:
+            run_cwd = None
         log_path = self.config_dir / "sidecar.log"
         self._log_file = open(log_path, "ab")
         self.proc = subprocess.Popen(
             [str(self.binary_path), "serve", "--db", str(self.config_dir / "store.db")],
-            cwd=str(self.repo_root) if self.repo_root is not None else None,
+            cwd=run_cwd,
             env=env,
             stdout=self._log_file,
             stderr=subprocess.STDOUT,
