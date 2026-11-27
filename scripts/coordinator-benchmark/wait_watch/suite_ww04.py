@@ -361,9 +361,16 @@ def run_slot_c08(
             sse_path=sse_path,
         )
 
-        # Launch two independent barrier jobs.
-        _, _, h_sel = driver.call_command(b_sel.command_string(relative_to=project_dir, background=True), progress_update="- [ ] C08 selected job")
-        _, _, h_unsel = driver.call_command(b_unsel.command_string(relative_to=project_dir, background=True), progress_update="- [ ] C08 unselected job")
+        # Launch two independent barrier jobs (progress_update only on initial command call).
+        _, sel_cmd_res, h_sel = driver.call_command(
+            b_sel.command_string(relative_to=project_dir, background=True),
+            progress_update="- [ ] C08 selected vs unselected jobs",
+        )
+        details["cmd_selected"] = {"handle": h_sel, "outcome": (sel_cmd_res or {}).get("outcome")}
+        _, unsel_cmd_res, h_unsel = driver.call_command(
+            b_unsel.command_string(relative_to=project_dir, background=True),
+        )
+        details["cmd_unselected"] = {"handle": h_unsel, "outcome": (unsel_cmd_res or {}).get("outcome")}
         b_sel.wait_reached(timeout_s=timeout_s, dump_state=driver._dump_state)
         b_unsel.wait_reached(timeout_s=timeout_s, dump_state=driver._dump_state)
 
@@ -693,29 +700,29 @@ def run_slot_c12(
             sse_path=sse_path,
         )
 
-        # 1. Quoted ampersand must NOT create a background job.
-        _, q_res, q_handle = driver.call_command("printf 'quoted & literal\\n'", progress_update="- [ ] C12 quoted ampersand")
+        # 1. Quoted ampersand must NOT create a background job (initial command initializes progress checklist).
+        _, q_res, q_handle = driver.call_command("printf 'quoted & literal\\n'", progress_update="- [ ] C12 bash command handoff")
         q_parsed = parse_content_json(q_res)
         details["quoted_ampersand"] = {"handle": q_handle, "outcome": (q_res or {}).get("outcome"), "bg_jobs": q_parsed.get("background_jobs")}
         if not q_parsed.get("background_jobs") and (q_res or {}).get("outcome") != "rejected":
             checks["quoted_ampersand_stays_foreground"] = True
 
-        # 2. Fast-exit background command.
-        _, fast_res, fast_handle = driver.call_command("(echo fast_bg_done) &", progress_update="- [ ] C12 fast bg")
-        details["fast_bg"] = {"handle": fast_handle, "outcome": (fast_res or {}).get("outcome")}
-        if (fast_res or {}).get("outcome") != "rejected":
+        # 2. Fast-exit background command using Bash brace group `{ ...; } &`.
+        _, fast_res, fast_handle = driver.call_command('{ echo fast_bg_done; } & echo "pid=$!"')
+        fast_parsed = parse_content_json(fast_res)
+        details["fast_bg"] = {"handle": fast_handle, "outcome": (fast_res or {}).get("outcome"), "bg_jobs": fast_parsed.get("background_jobs")}
+        if (fast_res or {}).get("outcome") != "rejected" and (bool(fast_handle) or bool(fast_parsed.get("background_jobs"))):
             checks["fast_exit_bg_handled"] = True
 
-        # 3. Two background jobs launched via real Bash &.
+        # 3. Two background jobs launched via real Bash brace groups `{ ...; } & { ...; } &`.
         _, two_res, two_handle = driver.call_command(
-            "(sleep 0.1; echo job_one) & (sleep 0.2; echo job_two) &",
-            progress_update="- [ ] C12 two bg jobs",
+            "{ sleep 0.1; echo job_one; } & { sleep 0.2; echo job_two; } &"
         )
         two_parsed = parse_content_json(two_res)
         bg_jobs = two_parsed.get("background_jobs") or []
-        details["two_bg_jobs"] = {"primary_handle": two_handle, "bg_jobs": bg_jobs}
+        details["two_bg_jobs"] = {"primary_handle": two_handle, "outcome": (two_res or {}).get("outcome"), "bg_jobs": bg_jobs}
         details["primary_handle"] = two_handle
-        if len(bg_jobs) >= 2 or bool(two_handle):
+        if len(bg_jobs) >= 2:
             checks["two_bg_jobs_launched"] = True
 
         # 4. Wait on launched handles (if any) and verify shell status separate from model delivery.
