@@ -1,0 +1,95 @@
+{
+  "campaign": "paintedwolf-workers-edits-authority-bug-bash",
+  "card": "TB03",
+  "family": "W06",
+  "lane": "in-process",
+  "product_base_commit": "bbeb46e72ce3d1cfc052259cadcce29185bb40bd",
+  "branch": "wea/tb03-worker-rounds",
+  "package": "./internal/worker",
+  "test_only_overlay_files": [
+    "lycaon/internal/worker/wea_tb03_cancel_race_test.go",
+    "lycaon/internal/worker/wea_tb03_rounds_decisions_test.go",
+    "lycaon/internal/worker/wea_tb03_inproc_manifest.json"
+  ],
+  "slots": [
+    {
+      "slot_id": "W06-inproc-01",
+      "description": "Cancel before claim",
+      "selector": "TestWEATB03_W06_01_CancelBeforeClaim"
+    },
+    {
+      "slot_id": "W06-inproc-02",
+      "description": "Cancel mid-round (barrier while running)",
+      "selector": "TestWEATB03_W06_02_CancelMidRound"
+    },
+    {
+      "slot_id": "W06-inproc-03",
+      "description": "Cancel during decision hold",
+      "selector": "TestWEATB03_W06_03_CancelDuringDecisionHold"
+    },
+    {
+      "slot_id": "W06-inproc-04",
+      "description": "Cancel during parked wait",
+      "selector": "TestWEATB03_W06_04_CancelDuringParkedWait"
+    },
+    {
+      "slot_id": "W06-inproc-05",
+      "description": "Race cancel vs completion (both critical orders + concurrent race)",
+      "selector": "TestWEATB03_W06_05_RaceCancelVsCompletion",
+      "critical_order_selectors": [
+        "TestWEATB03_W06_05_RaceCancelVsCompletion/cancel_wins_first",
+        "TestWEATB03_W06_05_RaceCancelVsCompletion/completion_wins_first"
+      ],
+      "supplemental_race_selector": "TestWEATB03_W06_05_RaceCancelVsCompletion/concurrent_race"
+    },
+    {
+      "slot_id": "W06-inproc-06",
+      "description": "Race cancel vs failure (both critical orders + concurrent race)",
+      "selector": "TestWEATB03_W06_06_RaceCancelVsFailure",
+      "critical_order_selectors": [
+        "TestWEATB03_W06_06_RaceCancelVsFailure/cancel_wins_first",
+        "TestWEATB03_W06_06_RaceCancelVsFailure/failure_wins_first"
+      ],
+      "supplemental_race_selector": "TestWEATB03_W06_06_RaceCancelVsFailure/concurrent_race"
+    },
+    {
+      "slot_id": "W06-inproc-07",
+      "description": "Race cancel vs provider response",
+      "selector": "TestWEATB03_W06_07_RaceCancelVsProviderResponse",
+      "subtest_selectors": [
+        "TestWEATB03_W06_07_RaceCancelVsProviderResponse/late_provider_completion",
+        "TestWEATB03_W06_07_RaceCancelVsProviderResponse/late_provider_retryable_error"
+      ]
+    },
+    {
+      "slot_id": "W06-inproc-08",
+      "description": "Stale attempt cannot complete replacement",
+      "selector": "TestWEATB03_W06_08_StaleAttemptCannotCompleteReplacement"
+    },
+    {
+      "slot_id": "W06-inproc-09",
+      "description": "Stale attempt cannot fail replacement",
+      "selector": "TestWEATB03_W06_09_StaleAttemptCannotFailReplacement"
+    },
+    {
+      "slot_id": "W06-inproc-10",
+      "description": "Stale attempt cannot cancel replacement",
+      "selector": "TestWEATB03_W06_10_StaleAttemptCannotCancelReplacement"
+    },
+    {
+      "slot_id": "W06-inproc-11",
+      "description": "Retry reuses same job, child session, and workspace (attempt increments)",
+      "selector": "TestWEATB03_W06_11_RetryReusesJobChildSessionAndWorkspace"
+    },
+    {
+      "slot_id": "W06-inproc-12",
+      "description": "WORKER_CANCEL_TERMINAL and WORKER_CANCEL_NOT_RUNNING typed refusals + restart mid-cancellation prevents new execution attempt",
+      "selector": "TestWEATB03_W06_12_TypedRefusalsAndRestartMidCancellation",
+      "subtest_selectors": [
+        "TestWEATB03_W06_12_TypedRefusalsAndRestartMidCancellation/WORKER_CANCEL_TERMINAL",
+        "TestWEATB03_W06_12_TypedRefusalsAndRestartMidCancellation/WORKER_CANCEL_NOT_RUNNING",
+        "TestWEATB03_W06_12_TypedRefusalsAndRestartMidCancellation/restart_mid_cancellation_prevents_new_attempt"
+      ]
+    }
+  ]
+}
