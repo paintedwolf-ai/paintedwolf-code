@@ -41,8 +41,10 @@ type Change struct {
 	// AbsPath and FromAbsPath suppress watcher echoes.
 	AbsPath     string    `json:",omitempty"`
 	FromAbsPath string    `json:",omitempty"`
-	// AfterMode carries the pre-rename file mode when HasAfterMode is true so rename
-	// echo suppression binds (AfterSHA256, AfterMode) without live-FS adoption or foreground hashing.
+	// EchoSHA256, EchoGitOID, and AfterMode carry internal pre-rename/committed
+	// identity for watcher echo suppression without altering the wire event contract.
+	EchoSHA256   string      `json:"-"`
+	EchoGitOID   string      `json:"-"`
 	AfterMode    os.FileMode `json:"-"`
 	HasAfterMode bool        `json:"-"`
 	TS           time.Time   `json:",omitempty"`
@@ -302,16 +304,21 @@ func prepareChanges(changes []Change, resync bool) (preparedChanges, error) {
 		if writePaths == nil {
 			writePaths = make([]hostWriteTarget, 0, len(changes))
 		}
-		// Rename echoes are suppressed only when the committed ledger supplies the
-		// file's known AfterSHA256 (zero foreground disk read/hashing). When absent,
-		// fail open for the destination while suppressing the known source absence.
+		// Rename echoes are suppressed only when the committed ledger or immutable inventory
+		// snapshot supplies the file's known pre-rename digest/GitOID (zero foreground disk
+		// read/hashing). When absent, fail open for the destination while suppressing the
+		// known source absence.
 		if change.Op == api.SourceChangeOpRename {
-			if change.AbsPath != "" && change.AfterSHA256 != "" {
+			echoDigest := change.EchoSHA256
+			if echoDigest == "" {
+				echoDigest = change.AfterSHA256
+			}
+			if change.AbsPath != "" && (echoDigest != "" || change.EchoGitOID != "") {
 				if change.HasAfterMode || change.AfterMode != 0 {
-					state := hostWriteState{digest: change.AfterSHA256, mode: change.AfterMode}
+					state := hostWriteState{digest: echoDigest, gitOID: change.EchoGitOID, mode: change.AfterMode}
 					writePaths = append(writePaths, hostWriteTarget{path: change.AbsPath, preCaptured: &state})
 				} else {
-					writePaths = append(writePaths, hostWriteTarget{path: change.AbsPath, digest: change.AfterSHA256})
+					writePaths = append(writePaths, hostWriteTarget{path: change.AbsPath, digest: echoDigest, gitOID: change.EchoGitOID})
 				}
 			}
 			if change.FromAbsPath != "" {

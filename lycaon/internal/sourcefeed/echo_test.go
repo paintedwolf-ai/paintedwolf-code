@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -171,6 +172,46 @@ func TestHostRenameAdversarialPreCaptureAndBarrierControls(t *testing.T) {
 		}
 		if isRecentHostWrite(src) {
 			t.Fatal("concurrent outside recreation of source path before publish was falsely suppressed")
+		}
+	})
+
+	t.Run("git_oid_preexisting_rename_echo_and_adversarial_edit", func(t *testing.T) {
+		dir := t.TempDir()
+		src := filepath.Join(dir, "seed.txt")
+		dst := filepath.Join(dir, "renamed.txt")
+		testutil.FailErr(t, "seed", os.WriteFile(src, seedBytes, 0o644))
+		infoBefore, err := os.Lstat(src)
+		testutil.FailErr(t, "stat before rename", err)
+		testutil.FailErr(t, "rename", os.Rename(src, dst))
+
+		gitHash := sourceblob.GitBlobSHA1(int64(len(seedBytes)))
+		_, _ = gitHash.Write(seedBytes)
+		seedGitOID := hex.EncodeToString(gitHash.Sum(nil))
+
+		prepared, err := prepareChanges([]Change{{
+			ProjectID: "proj-git", WorkspaceID: "ws-git", WorkspaceKind: "project",
+			RootID: "r1", Path: "renamed.txt", FromPath: "seed.txt",
+			AbsPath: dst, FromAbsPath: src,
+			EchoGitOID: seedGitOID, AfterMode: infoBefore.Mode(), HasAfterMode: true,
+			Op: "rename", Origin: "user",
+		}}, false)
+		testutil.FailErr(t, "prepareChanges git oid", err)
+		if prepared.event.Changes[0].AfterSHA256 != "" {
+			t.Fatalf("wire after_sha256 must stay empty, got %q", prepared.event.Changes[0].AfterSHA256)
+		}
+		noteHostWritePaths(prepared.writePaths)
+		if !isRecentHostWrite(dst) {
+			t.Fatal("git-oid rename destination echo was not suppressed")
+		}
+		// Adversarial same-inode, same-size, preserved-mtime outside edit must break suppression.
+		f, err := os.OpenFile(dst, os.O_WRONLY|os.O_TRUNC, 0o644)
+		testutil.FailErr(t, "open dst", err)
+		_, err = f.Write([]byte("EVIL CONTENT\n"))
+		testutil.FailErr(t, "write evil", err)
+		testutil.FailErr(t, "close dst", f.Close())
+		testutil.FailErr(t, "restore mtime", os.Chtimes(dst, infoBefore.ModTime(), infoBefore.ModTime()))
+		if isRecentHostWrite(dst) {
+			t.Fatal("adversarial edit on git-oid renamed file was falsely suppressed")
 		}
 	})
 

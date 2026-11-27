@@ -124,6 +124,7 @@ func New(sqlDB db.Handle, contentDir string, timing Timing) *Store {
 // RecordInput is one exact consequence within a causal operation.
 type RecordInput struct {
 	RecordLocation
+	FromRootPath          string     `json:",omitempty"`
 	TextBefore, TextAfter *TextState `json:",omitempty"`
 	ProjectID             string     `json:",omitempty"`
 	// BranchID is the line of history this lands on; the zero value is the trunk.
@@ -174,7 +175,7 @@ type TrackInput struct {
 }
 
 type TrackedFile struct {
-	FileID, VersionID, ContentSHA256 string
+	FileID, VersionID, ContentSHA256, ContentGitOID string
 }
 
 type FileTracker interface {

@@ -103,12 +103,16 @@ func TestSourceMetadataRenameDoesNotReadMovedContents(t *testing.T) {
 	if prepared.writePaths[0].path != filepath.Join(root, "old") || prepared.writePaths[0].preCaptured == nil || !prepared.writePaths[0].preCaptured.absent {
 		t.Fatalf("metadata move should only suppress source absence when AfterSHA256 is empty: %+v", prepared.writePaths)
 	}
-	// With a committed ledger AfterSHA256 + AfterMode, destination echo suppression is staged
-	// with zero foreground file open/hashing (verified on this 0o000 3 GiB sparse file).
-	preparedTracked, err := prepareChanges([]Change{{ProjectID: "project", WorkspaceID: "workspace", WorkspaceKind: api.SourceWorkspaceKindProject, RootID: "root", Path: "large", FromPath: "old", AbsPath: path, FromAbsPath: filepath.Join(root, "old"), AfterSHA256: "known-ledger-sha", AfterMode: 0o000, HasAfterMode: true, Op: api.SourceChangeOpRename, Origin: api.SourceChangeOriginUser}}, false)
+	// With a committed ledger EchoSHA256 + AfterMode, destination echo suppression is staged
+	// with zero foreground file open/hashing (verified on this 0o000 3 GiB sparse file),
+	// while keeping wire AfterSHA256 untouched.
+	preparedTracked, err := prepareChanges([]Change{{ProjectID: "project", WorkspaceID: "workspace", WorkspaceKind: api.SourceWorkspaceKindProject, RootID: "root", Path: "large", FromPath: "old", AbsPath: path, FromAbsPath: filepath.Join(root, "old"), EchoSHA256: "known-ledger-sha", AfterMode: 0o000, HasAfterMode: true, Op: api.SourceChangeOpRename, Origin: api.SourceChangeOriginUser}}, false)
 	testutil.FailErr(t, "prepare tracked rename event", err)
 	if len(preparedTracked.writePaths) != 2 || preparedTracked.writePaths[0].preCaptured == nil {
-		t.Fatalf("tracked rename must bind preCaptured (AfterSHA256, AfterMode) without live-FS read: %+v", preparedTracked.writePaths)
+		t.Fatalf("tracked rename must bind preCaptured (EchoSHA256, AfterMode) without live-FS read: %+v", preparedTracked.writePaths)
+	}
+	if preparedTracked.event.Changes[0].AfterSHA256 != "" {
+		t.Fatalf("wire after_sha256 must remain unchanged on rename, got %q", preparedTracked.event.Changes[0].AfterSHA256)
 	}
 	noteHostWritePaths(preparedTracked.writePaths)
 	if !isRecentHostWrite(filepath.Join(root, "old")) {

@@ -66,8 +66,13 @@ func commitSourceMutationTxWithCache(ctx context.Context, tx *sql.Tx, row *sourc
 		}
 		if emitEvent {
 			changes := row.Plan.sourceChanges()
-			if row.Plan.Kind == "rename" && len(changes) == 1 && changes[0].AfterSHA256 == "" && recorded.ContentSHA256 != "" {
-				changes[0].AfterSHA256 = recorded.ContentSHA256
+			if row.Plan.Kind == "rename" && len(changes) == 1 {
+				if changes[0].EchoSHA256 == "" && recorded.ContentSHA256 != "" {
+					changes[0].EchoSHA256 = recorded.ContentSHA256
+				}
+				if changes[0].EchoGitOID == "" && recorded.ContentGitOID != "" {
+					changes[0].EchoGitOID = recorded.ContentGitOID
+				}
 			}
 			var err error
 			delivery, err = sourcefeed.EmitBatchTx(ctx, tx, changes)

@@ -44,7 +44,7 @@ func (p sourceMutationPlan) ledgerInput(operationID string) sourceledger.RecordI
 			in.After, in.AfterSHA256 = []byte{}, textfile.SHA256(nil)
 		}
 	case "rename":
-		in.Op, in.FromPath = api.SourceChangeOpRename, p.FromPath
+		in.Op, in.FromPath, in.FromRootPath = api.SourceChangeOpRename, p.FromPath, p.RootPath
 		in.Before, in.After = p.Before, p.After
 		in.BeforeSHA256, in.AfterSHA256 = p.BaseSHA256, p.AfterSHA
 		in.BeforeSize, in.AfterSize = p.BeforeSize, p.AfterSize
