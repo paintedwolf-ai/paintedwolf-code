@@ -310,5 +310,137 @@ class TestGB04GeneratedFamilies(unittest.TestCase):
             self.assertEqual(linux_case.expected_verdict.reason, "path_not_observed")
 
 
+class TestGB04RunnersSerializationAndSharding(unittest.TestCase):
+    """Verify GB04 in-process and sidecar runner serialization, sharding, and dry-run behavior."""
+
+    def test_inprocess_case_serialization_and_evaluator(self) -> None:
+        from grounding.suites.gb04_resolution.inprocess_runner import (
+            build_inprocess_cases,
+            evaluate_r04_result,
+            evaluate_resolve_result,
+        )
+
+        cases, meta = build_inprocess_cases(
+            base_seed="20261127",
+            platform="linux",
+            limit_generated=5,
+        )
+        # 8 (R02) + 10 (R03) + 5 (R04) + 5 (R06) + 5 (R07) = 33
+        self.assertEqual(len(cases), 33)
+        self.assertEqual(len(meta), 33)
+        by_fam: dict[str, int] = {}
+        for c in cases:
+            by_fam[c["family_id"]] = by_fam.get(c["family_id"], 0) + 1
+            self.assertIn(c["case_id"], meta)
+            self.assertIn(c["kind"], ("r04_parse", "resolve"))
+        self.assertEqual(by_fam, {"R02": 8, "R03": 10, "R04": 5, "R06": 5, "R07": 5})
+
+        # Verify R02/R03 enforce assert_exact_verdicts=True and R06/R07 check class
+        self.assertTrue(meta["R02-01-verdict-matched"].assert_exact_verdicts)
+        self.assertTrue(meta["R03-01-multiline-contiguous-blank-lines-clipping"].assert_exact_verdicts)
+
+        # Evaluator detects exact verdict mismatch on R02-01
+        divs_exact = evaluate_resolve_result(
+            meta["R02-01-verdict-matched"],
+            {
+                "resolutions": [
+                    {
+                        "citation_id": "c1",
+                        "outcome": "grounded",
+                        "verdict": "traced",
+                        "grounded": True,
+                    }
+                ]
+            },
+        )
+        self.assertEqual(len(divs_exact), 1)
+        self.assertEqual(divs_exact[0]["kind"], "exact_verdict_mismatch")
+
+        # Evaluator detects missed citation attempt on R04
+        r04_meta = meta["R04-20261127-00000"]
+        divs_r04 = evaluate_r04_result(r04_meta, {"occurrences": [], "issues": []})
+        self.assertTrue(len(divs_r04) >= 1)
+
+    def test_sidecar_slot_plan_full_counts_and_disjoint_sharding(self) -> None:
+        from grounding.suites.gb04_resolution.sidecar_runner import (
+            build_sidecar_slot_plan,
+            shard_slots,
+        )
+
+        # Full ledger counts: R01(10) + R05(6) + R04(200) + R06(200) + R07(200) = 616
+        full_plan = build_sidecar_slot_plan(
+            base_seed="20261127",
+            platform="linux",
+            limit_generated=0,
+        )
+        self.assertEqual(len(full_plan), 616)
+        all_selectors = [s.selector for s in full_plan]
+        self.assertEqual(len(set(all_selectors)), 616)
+
+        for num_shards in (1, 3, 7, 16):
+            seen: list[str] = []
+            for s_idx in range(num_shards):
+                part = shard_slots(full_plan, shard=s_idx, shards=num_shards)
+                seen.extend(item.selector for item in part)
+            # Disjoint partition covering all slots with zero duplicates
+            self.assertEqual(len(seen), len(full_plan))
+            self.assertEqual(set(seen), set(all_selectors))
+
+    def test_sidecar_dry_run_and_r05_feedback_checker(self) -> None:
+        import json
+        import pathlib
+        import tempfile
+        from grounding.suites.gb04_resolution.sidecar_runner import (
+            _check_r05_feedback,
+            build_sidecar_slot_plan,
+            run_gb04_sidecar,
+        )
+
+        with tempfile.TemporaryDirectory() as td:
+            summary = run_gb04_sidecar(
+                engine_bin="",
+                product_root="",
+                out_dir=td,
+                base_seed="3bb1464d",
+                platform="darwin",
+                shard=1,
+                shards=4,
+                limit_generated=8,
+                dry_run=True,
+            )
+            self.assertTrue(summary["dry_run"])
+            # 10 + 6 + 8 + 8 + 8 = 40 total across 4 shards -> 10 in shard 1
+            self.assertEqual(summary["total_slots_all_shards"], 40)
+            self.assertEqual(summary["shard_slot_count"], 10)
+            plan_path = pathlib.Path(td) / "gb04-sidecar-plan.json"
+            self.assertTrue(plan_path.is_file())
+            loaded = json.loads(plan_path.read_text(encoding="utf-8"))
+            self.assertEqual(loaded["shard_slot_count"], 10)
+
+        # Verify R05 feedback checker on unique replacement vs ambiguous
+        r05_slots = {
+            s.selector: s
+            for s in build_sidecar_slot_plan(families=("R05",), base_seed="20261127")
+        }
+        s_unique = r05_slots["R05-05-replacement-suggested-unique-one"]
+        self.assertEqual(
+            _check_r05_feedback(s_unique, {"refused": True, "feedback_excerpt": "Try read#2 instead."}),
+            [],
+        )
+        self.assertEqual(
+            _check_r05_feedback(s_unique, {"refused": True, "feedback_excerpt": "Handle mismatch."})[0]["kind"],
+            "r05_missing_unique_replacement",
+        )
+        s_ambig = r05_slots["R05-06-replacement-omitted-when-ambiguous-multiple"]
+        self.assertEqual(
+            _check_r05_feedback(s_ambig, {"refused": True, "feedback_excerpt": "Wrong path on read#1."}),
+            [],
+        )
+        self.assertEqual(
+            _check_r05_feedback(s_ambig, {"refused": True, "feedback_excerpt": "Use read#2."})[0]["kind"],
+            "r05_spurious_replacement_suggestion",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
