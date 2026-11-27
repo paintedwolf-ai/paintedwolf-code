@@ -19,20 +19,36 @@ import (
 const ImageManifestSchemaVersion = "portable-python.image-manifest/v1"
 
 // ImageManifest describes an immutable Portable Python WASI image: interpreter
-// binary, stdlib, curated packages, digests, stdlib capability dispositions,
-// and declared Wasm host imports.
+// binary, stdlib, curated packages, digests, optional checked-hash bytecode,
+// stdlib capability dispositions, and declared Wasm host imports.
 type ImageManifest struct {
-	SchemaVersion      string             `json:"schema_version"`
-	ImageID            string             `json:"image_id"`
-	BuiltAt            string             `json:"built_at"`
-	Target             string             `json:"target"`
-	Interpreter        InterpreterSpec    `json:"interpreter"`
-	PackagesRoot       string             `json:"packages_root"`
-	PackagesTreeSHA256 string             `json:"packages_tree_sha256,omitempty"`
-	Distributions      []DistributionSpec `json:"distributions"`
-	StdlibCapabilities []string           `json:"stdlib_capabilities,omitempty"`
-	WasmImports        []WasmImportSpec   `json:"wasm_imports,omitempty"`
+	SchemaVersion         string             `json:"schema_version"`
+	ImageID               string             `json:"image_id"`
+	BuiltAt               string             `json:"built_at"`
+	Target                string             `json:"target"`
+	Interpreter           InterpreterSpec    `json:"interpreter"`
+	PackagesRoot          string             `json:"packages_root"`
+	PackagesTreeSHA256    string             `json:"packages_tree_sha256,omitempty"`
+	Bytecode              *BytecodeSpec      `json:"bytecode,omitempty"`
+	Distributions         []DistributionSpec `json:"distributions"`
+	StdlibCapabilities    []string           `json:"stdlib_capabilities,omitempty"`
+	WasmImports           []WasmImportSpec   `json:"wasm_imports,omitempty"`
+	ImportInventorySHA256 string             `json:"import_inventory_sha256,omitempty"`
 }
+
+// BytecodeSpec pins deterministic PEP 552 checked-hash CPython 3.12 .pyc
+// bytecode bundled inside the immutable image tree.
+type BytecodeSpec struct {
+	InvalidationMode string `json:"invalidation_mode"`
+	CPythonVersion   string `json:"cpython_version"`
+	MagicHex         string `json:"magic_hex"`
+	PycCount         int    `json:"pyc_count"`
+	PycTreeSHA256    string `json:"pyc_tree_sha256"`
+}
+
+// CPython312BytecodeMagicHex is the little-endian 4-byte magic number (3531)
+// of CPython 3.12.0 .pyc headers.
+const CPython312BytecodeMagicHex = "cb0d0d0a"
 
 // PatchSpec records a minimal, auditable patch applied to an image file.
 type PatchSpec struct {
@@ -43,14 +59,15 @@ type PatchSpec struct {
 // InterpreterSpec records the CPython/WASI binary, stdlib archive/tree,
 // provenance inputs, and applied patches.
 type InterpreterSpec struct {
-	Name         string            `json:"name"`
-	Version      string            `json:"version"`
-	WasmPath     string            `json:"wasm_path"`
-	WasmSHA256   string            `json:"wasm_sha256"`
-	StdlibPath   string            `json:"stdlib_path"`
-	StdlibSHA256 string            `json:"stdlib_sha256"`
-	BuildInputs  map[string]string `json:"build_inputs,omitempty"`
-	Patches      []PatchSpec       `json:"patches,omitempty"`
+	Name              string            `json:"name"`
+	Version           string            `json:"version"`
+	WasmPath          string            `json:"wasm_path"`
+	WasmSHA256        string            `json:"wasm_sha256"`
+	MeteredWasmSHA256 string            `json:"metered_wasm_sha256,omitempty"`
+	StdlibPath        string            `json:"stdlib_path"`
+	StdlibSHA256      string            `json:"stdlib_sha256"`
+	BuildInputs       map[string]string `json:"build_inputs,omitempty"`
+	Patches           []PatchSpec       `json:"patches,omitempty"`
 }
 
 // DistributionSpec records a bundled third-party distribution inside the
@@ -179,8 +196,86 @@ func VerifyImage(dir string, manifest *ImageManifest) error {
 		}
 	}
 
+	if manifest.Bytecode != nil {
+		if err := verifyImageBytecode(absDir, manifest.Bytecode); err != nil {
+			return err
+		}
+	}
+
 	if err := rejectHostNativeBinaries(absDir); err != nil {
 		return err
+	}
+	return nil
+}
+
+func verifyImageBytecode(absDir string, spec *BytecodeSpec) error {
+	if spec.InvalidationMode != "checked-hash" {
+		return fmt.Errorf("image bytecode invalidation_mode %q must be checked-hash", spec.InvalidationMode)
+	}
+	if !strings.EqualFold(spec.MagicHex, CPython312BytecodeMagicHex) {
+		return fmt.Errorf("image bytecode magic_hex %q does not match CPython 3.12 (%s)", spec.MagicHex, CPython312BytecodeMagicHex)
+	}
+	if spec.PycCount <= 0 {
+		return fmt.Errorf("image bytecode pyc_count must be positive (got %d)", spec.PycCount)
+	}
+	if !isHexSHA256(spec.PycTreeSHA256) {
+		return fmt.Errorf("image bytecode invalid pyc_tree_sha256 %q", spec.PycTreeSHA256)
+	}
+
+	magicBytes, err := hex.DecodeString(CPython312BytecodeMagicHex)
+	if err != nil {
+		return err
+	}
+	var pycRels []string
+	err = filepath.WalkDir(absDir, func(p string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() || !strings.HasSuffix(d.Name(), ".pyc") {
+			return nil
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("unexpected symlink .pyc in immutable image: %s", p)
+		}
+		rel, err := filepath.Rel(absDir, p)
+		if err != nil {
+			return err
+		}
+		relSlash := filepath.ToSlash(rel)
+		// Validate 16-byte PEP 552 checked-hash header: magic (4B) + flags (4B, bit0|bit1 set) + hash (8B).
+		// #nosec G304 -- p is walked inside absDir.
+		f, err := os.Open(p)
+		if err != nil {
+			return fmt.Errorf("open bytecode %s: %w", relSlash, err)
+		}
+		var hdr [16]byte
+		_, rerr := io.ReadFull(f, hdr[:])
+		_ = f.Close()
+		if rerr != nil {
+			return fmt.Errorf("truncated bytecode header in %s: %w", relSlash, rerr)
+		}
+		if hdr[0] != magicBytes[0] || hdr[1] != magicBytes[1] || hdr[2] != magicBytes[2] || hdr[3] != magicBytes[3] {
+			return fmt.Errorf("bytecode magic mismatch in %s: got %x want %s", relSlash, hdr[:4], CPython312BytecodeMagicHex)
+		}
+		flags := uint32(hdr[4]) | uint32(hdr[5])<<8 | uint32(hdr[6])<<16 | uint32(hdr[7])<<24
+		if (flags & 0x3) != 0x3 {
+			return fmt.Errorf("bytecode %s is not PEP 552 checked-hash (flags=0x%x)", relSlash, flags)
+		}
+		pycRels = append(pycRels, relSlash)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if len(pycRels) != spec.PycCount {
+		return fmt.Errorf("image bytecode count mismatch: got %d want %d", len(pycRels), spec.PycCount)
+	}
+	gotTree, err := hashRelativeFiles(absDir, pycRels)
+	if err != nil {
+		return fmt.Errorf("hash image bytecode tree: %w", err)
+	}
+	if !strings.EqualFold(gotTree, spec.PycTreeSHA256) {
+		return fmt.Errorf("image bytecode pyc_tree_sha256 mismatch: got %s want %s", gotTree, spec.PycTreeSHA256)
 	}
 	return nil
 }

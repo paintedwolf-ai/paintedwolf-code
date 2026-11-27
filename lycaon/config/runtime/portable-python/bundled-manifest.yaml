@@ -1,0 +1,39 @@
+# Bundled Portable Python native AOT engine release manifest.
+# Updated by scripts/select-portable-python-engine.sh from an authenticated PY07 release.
+portable_python_engine:
+  version: 3.12.0+paintedwolf.1
+  origin: downstream
+  upstream_version: 3.12.0
+  base_revision: 4901dd61ee97416813f32f714b21deb0b31f98f3
+  revision: 1
+  abi_version: 1
+  abi_header_sha256: 9ec5afc672cd5d76cf184b69ae37276f2becebd8a71276d64fda7f986f1d5dbd
+  cpython_wasm_sha256: 5ce0cbeb843e6e5abf2d50c7158002e8333c26a40fbe27a7a52e66ee48cf64a8
+  metered_wasm_sha256: 774a08a7863c1dee1b2f21bb80fb9964f0dd5dc27bdf2294bdd8a11934e893c6
+  import_inventory_count: 43
+  import_inventory_sha256: d4dca3e9def0586bdc7c43af04340073fcbd99b28a87f26f33341b30f00d623b
+  license: PSF-2.0 AND Apache-2.0
+  artifacts:
+    - goos: darwin
+      goarch: arm64
+      library_name: libpw_cpython_wasi.dylib
+      archive_name: pw-cpython-wasi-engine-v0.1.0-darwin-arm64.tar.gz
+      url: ""
+      sha256: ""
+      bytes: 0
+      archive_sha256: ""
+      codesign_hardened: true
+    - goos: linux
+      goarch: amd64
+      library_name: libpw_cpython_wasi.so
+      archive_name: pw-cpython-wasi-engine-v0.1.0-linux-amd64.tar.gz
+      url: ""
+      sha256: ""
+      bytes: 0
+      archive_sha256: ""
+      codesign_hardened: false
+portable_python_engine_selection:
+  tag: ""
+  producer_commit: ""
+  descriptor_sha256: ""
+  evidence_sha256: ""

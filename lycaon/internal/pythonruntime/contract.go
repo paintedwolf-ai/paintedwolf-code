@@ -394,6 +394,8 @@ func BuildArgv(inv Invocation) ([]string, error) {
 // ExecutionResult captures the trusted host outcome of one guest execution.
 type ExecutionResult struct {
 	ExecutionID     string            `json:"execution_id"`
+	Backend         BackendKind       `json:"backend,omitempty"`
+	EngineTag       string            `json:"engine_tag,omitempty"`
 	ExitCode        int               `json:"exit_code"`
 	CleanCompletion bool              `json:"clean_completion"`
 	Stop            *TerminalStop     `json:"stop,omitempty"`
@@ -407,14 +409,19 @@ type ExecutionResult struct {
 // immutable WASI image.
 type Runtime interface {
 	Execute(ctx context.Context, inv Invocation) (*ExecutionResult, error)
+	Info() RuntimeInfo
 	Manifest() *ImageManifest
 	ImportAudit() *ImportAuditReport
 	ParkedGuests() *ParkedGuestTracker
 	Close(ctx context.Context) error
 }
 
-// RuntimeConfig configures a WazeroRuntime instance.
+// RuntimeConfig configures a Portable Python execution backend.
 type RuntimeConfig struct {
+	Backend                 BackendKind
+	EngineDir               string
+	EngineManifestPath      string
+	EngineManifest          *BundledEngineManifest
 	WasmBytes               []byte
 	ImageDir                string
 	Manifest                *ImageManifest
@@ -576,6 +583,15 @@ func CleanOrphanedScratchDirs(scratchRoot string) (int, error) {
 	return removed, firstErr
 }
 
+// Info reports the active wazero backend kind.
+func (r *WazeroRuntime) Info() RuntimeInfo {
+	kind := BackendWazeroCompiler
+	if runtime.GOOS == "darwin" {
+		kind = BackendWazeroInterpreter
+	}
+	return RuntimeInfo{Backend: kind}
+}
+
 // Manifest returns the image manifest associated with this runtime.
 func (r *WazeroRuntime) Manifest() *ImageManifest { return r.manifest }
 
@@ -719,6 +735,7 @@ func (r *WazeroRuntime) Execute(ctx context.Context, inv Invocation) (*Execution
 
 	res := &ExecutionResult{
 		ExecutionID: inv.ExecutionID,
+		Backend:     r.Info().Backend,
 		GuestStderr: stderrCapture.String(),
 		Usage: ResourceUsage{
 			GuestWork:       meter.GuestWork(),

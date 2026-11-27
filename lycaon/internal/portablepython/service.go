@@ -130,6 +130,17 @@ func hasImageManifest(dir string) bool {
 type ServiceConfig struct {
 	// ImageDir overrides DiscoverImageDir when non-empty.
 	ImageDir string
+	// Backend explicitly selects the execution backend (wazero-compiler,
+	// wazero-interpreter, or native-aot). When empty, uses the build-configured
+	// default (or native-aot when EngineDir is explicitly provided). Never
+	// silently falls back between backends.
+	Backend pythonruntime.BackendKind
+	// EngineDir overrides staged native engine discovery when non-empty.
+	EngineDir string
+	// EngineManifestPath optionally overrides bundled-manifest.yaml.
+	EngineManifestPath string
+	// EngineManifest optionally supplies a pre-parsed BundledEngineManifest.
+	EngineManifest *pythonruntime.BundledEngineManifest
 	// ScratchRoot is the host directory mounted at /tmp inside WASI guests.
 	// If empty, a temporary directory is created and removed on Close.
 	ScratchRoot string
@@ -168,7 +179,7 @@ type ServiceConfig struct {
 type Service struct {
 	imageDir        string
 	ownedScratch    string
-	runtime         *pythonruntime.WazeroRuntime
+	runtime         pythonruntime.Runtime
 	runtimeManifest *pythonruntime.ImageManifest
 	catalogManifest pythoncatalog.ImageManifest
 	clock           pythonruntime.Clock
@@ -250,7 +261,11 @@ func NewService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
 	if defaultMemPages == 0 {
 		defaultMemPages = DefaultMaxMemoryPages
 	}
-	rt, err := pythonruntime.NewWazeroRuntime(ctx, pythonruntime.RuntimeConfig{
+	rt, err := pythonruntime.NewConfiguredRuntime(ctx, pythonruntime.RuntimeConfig{
+		Backend:                 cfg.Backend,
+		EngineDir:               cfg.EngineDir,
+		EngineManifestPath:      cfg.EngineManifestPath,
+		EngineManifest:          cfg.EngineManifest,
 		WasmBytes:               wasmBytes,
 		ImageDir:                absImageDir,
 		Manifest:                rtManifest,
@@ -266,7 +281,7 @@ func NewService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
 		if ownedScratch != "" {
 			_ = os.RemoveAll(ownedScratch)
 		}
-		return nil, fmt.Errorf("initialize portable python wazero runtime: %w", err)
+		return nil, fmt.Errorf("initialize portable python runtime: %w", err)
 	}
 
 	jobReg := cfg.JobRegistry
@@ -318,8 +333,17 @@ func (s *Service) CatalogManifest() pythoncatalog.ImageManifest { return s.catal
 // RuntimeManifest returns the verified pythonruntime.ImageManifest.
 func (s *Service) RuntimeManifest() *pythonruntime.ImageManifest { return s.runtimeManifest }
 
-// Runtime returns the underlying compiled WazeroRuntime.
-func (s *Service) Runtime() *pythonruntime.WazeroRuntime { return s.runtime }
+// Runtime returns the underlying Portable Python execution runtime.
+func (s *Service) Runtime() pythonruntime.Runtime { return s.runtime }
+
+// RuntimeInfo reports the active execution backend and verified native engine
+// identity (when running on the native AOT backend).
+func (s *Service) RuntimeInfo() pythonruntime.RuntimeInfo {
+	if s == nil || s.runtime == nil {
+		return pythonruntime.RuntimeInfo{}
+	}
+	return s.runtime.Info()
+}
 
 // RetainedStore returns the bounded, secret-screened RetainedArtifactStore
 // holding overflow stdout/stderr artifacts.
