@@ -43,26 +43,34 @@ func TestPipelinePublicationFenceCoreCases(t *testing.T) {
 		if err != nil || out.Stop != nil || out.Status != 1 {
 			t.Fatalf("outcome = %+v, err = %v, want status 1 without host stop", out, err)
 		}
-		if !slices.Equal(out.PipeStatuses, []int{1, 0}) {
-			t.Fatalf("pipe statuses = %v, want [1 0]", out.PipeStatuses)
-		}
 		if f.publication.published["out"] != "old\n" {
 			t.Fatalf("out = %q, want old\\n", f.publication.published["out"])
 		}
 		if !slices.Contains(f.publication.abandoned, "out") {
 			t.Fatalf("abandoned = %v, want out", f.publication.abandoned)
 		}
-		var sawPipeline bool
+		var sawPipeline, sawFail, sawCat bool
 		for _, child := range out.Children {
-			if child.Command == "|" {
+			switch child.Command {
+			case "|":
 				sawPipeline = true
 				if child.Result.PublicationEligible {
 					t.Fatalf("pipeline marked publication eligible: %+v", child)
 				}
+			case "fail":
+				sawFail = true
+				if child.Result.Status != 1 || child.Result.PublicationEligible {
+					t.Fatalf("upstream fail = %+v, want status 1 ineligible", child)
+				}
+			case "cat":
+				sawCat = true
+				if child.Result.Status != 0 {
+					t.Fatalf("downstream cat = %+v, want status 0", child)
+				}
 			}
 		}
-		if !sawPipeline {
-			t.Fatal("missing pipeline child settlement")
+		if !sawPipeline || !sawFail || !sawCat {
+			t.Fatalf("missing child settlements: pipeline=%v fail=%v cat=%v", sawPipeline, sawFail, sawCat)
 		}
 	})
 
