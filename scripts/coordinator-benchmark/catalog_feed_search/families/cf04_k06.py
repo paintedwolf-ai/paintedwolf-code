@@ -370,8 +370,12 @@ def _verify_k06_scenario(
                 }
             )
 
-    # 5. Retired worker workspace read — contract requires explicit unavailable state, NEVER silent trunk fallback
+    # 5. Retired worker workspace read — record raw route observation separately (Decision 024 / 036 / 051).
+    # At D1, OpenAPI documents raw /source project-root fallback when a worker overlay is unavailable while
+    # Den's files-buffer-loading.ts rejects workspace_kind="project" for worker buffers. Record raw route
+    # behavior as an explicit observation rather than a defect verdict.
     retired_result: dict[str, object] | None = None
+    observations: list[dict[str, object]] = []
     if check_retired_worker:
         retired_id = str(uuid.uuid4())
         seed_worker_branch_in_db(
@@ -397,12 +401,11 @@ def _verify_k06_scenario(
             "trunk_sha256": sha256_bytes(primary_bytes),
             "body_snippet": r_resp.body_text[:300],
         }
-        # If HTTP 200 returned trunk bytes with workspace_kind="project", that is a defect (silent fallback)!
-        if r_resp.status == 200:
-            defects.append(
+        if r_resp.status == 200 and r_kind == "project":
+            observations.append(
                 {
-                    "code": "retired_worker_silent_trunk_fallback",
-                    "detail": "GET /v1/projects/{id}/source?worker_id=<retired> returned HTTP 200 with trunk bytes instead of explicit unavailable state",
+                    "code": "retired_worker_raw_api_project_fallback",
+                    "detail": "Raw GET /v1/projects/{id}/source?worker_id=<retired> returned HTTP 200 with workspace_kind='project' per D1 OpenAPI fallback (Decision 036/051: observation only; Den client rejects project bytes for worker buffers)",
                     "retired_worker_id": retired_id,
                     "workspace_kind": r_kind,
                     "returned_sha256": r_sha,
@@ -423,6 +426,7 @@ def _verify_k06_scenario(
         "export_root_ids": sorted(export_root_ids),
         "worker_results": worker_results,
         "retired_worker_result": retired_result,
+        "observations": observations,
         "defects": defects,
     }
 
@@ -651,11 +655,15 @@ def run_k06_suite(
             edge_failed = len(edge_results) - edge_passed
 
             defect_counts: dict[str, int] = {}
+            observation_counts: dict[str, int] = {}
             first_failure: dict[str, object] | None = None
             for r in all_results:
                 for d in r["defects"]:  # type: ignore[union-attr]
                     code = str(d.get("code") or "unknown")
                     defect_counts[code] = defect_counts.get(code, 0) + 1
+                for obs in r.get("observations") or []:  # type: ignore[union-attr]
+                    code = str(obs.get("code") or "unknown")
+                    observation_counts[code] = observation_counts.get(code, 0) + 1
                 if first_failure is None and r["verdict"] != "PASS":
                     first_failure = r
 
@@ -672,6 +680,7 @@ def run_k06_suite(
                 "edges_passed": edge_passed,
                 "edges_failed": edge_failed,
                 "defect_counts": defect_counts,
+                "observation_counts": observation_counts,
                 "generated_results": generated_results,
                 "edge_results": edge_results,
             }
