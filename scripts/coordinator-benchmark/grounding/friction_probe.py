@@ -108,6 +108,10 @@ def build_exact_binary_debugger_prefix(
         "set pagination off\n"
         "set confirm off\n"
         "set disable-randomization off\n"
+        "set auto-load libthread-db off\n"
+        "set libthread-db-search-path /nonexistent\n"
+        "set detach-on-fork on\n"
+        "set follow-fork-mode parent\n"
         "starti\n"
         'python print("PW_GND_OWNED_PID="+str(gdb.selected_inferior().pid),flush=True)\n'
         "rbreak recordFrictionLocked\n"
