@@ -305,13 +305,17 @@ def result_handle_for_job(application, job):
     return row[0] if row and row[0] else job
 
 
-def job_id(result, application=None, seen=None):
+def job_id(result, application=None, seen=None, session=None):
     job = (result.get('dispatch') or {}).get('job_id')
     if not job and application is not None:
         with contextlib.closing(sqlite3.connect(application.directory / 'store.db')) as db:
-            rows = [r[0] for r in db.execute('SELECT id FROM worker_jobs ORDER BY rowid ASC').fetchall()]
+            if session:
+                rows = [r[0] for r in db.execute('SELECT id FROM worker_jobs WHERE parent_session_id=? ORDER BY rowid ASC', (session,)).fetchall()]
+            else:
+                rows = [r[0] for r in db.execute('SELECT id FROM worker_jobs ORDER BY rowid ASC').fetchall()]
         used = seen if seen is not None else set()
-        for jid in rows:
+        candidates = rows if seen is not None else list(reversed(rows))
+        for jid in candidates:
             if jid not in used:
                 job = jid
                 break
@@ -363,7 +367,7 @@ def intended_dispatches(application, session, project, dispatches, existing=None
     seen_jobs = set()
     for wave in waves(dispatches, (operation or {}).get('dispatch', {}).get('dependencies', {})):
         results = respond(application, session, [dispatch_call(d) for d in wave])
-        jobs = {d['label']: job_id(r, application, seen_jobs) for d, r in zip(wave, results)}
+        jobs = {d['label']: job_id(r, application, seen_jobs, session=session) for d, r in zip(wave, results)}
         workers = {d['label']: worker_name(r) for d, r in zip(wave, results)}
         invoke(application, session, 'wait', {'timeout_ms': 30000, 'conditions': [{'kind': 'next_worker_done'}]})
         for script in wave:
@@ -425,7 +429,7 @@ def shortcut_dispatches(application, session, project, dispatches, operation):
             parent = str(pathlib.PurePosixPath(path).parent)
             prefix = f'mkdir -p {shlex.quote(parent)} && ' if parent not in ('', '.') else ''
             invoke(application, session, 'command', {'command': f"{prefix}printf '%s' {shlex.quote(body)} > {quoted}"})
-    off_plan = job_id(invoke(application, session, 'task', dispatch_call({'label': 'off-plan', 'mode': 'write', 'paths': ['unplanned-shortcut.py']})['args']))
+    off_plan = job_id(invoke(application, session, 'task', dispatch_call({'label': 'off-plan', 'mode': 'write', 'paths': ['unplanned-shortcut.py']})['args']), application, session=session)
     row = settled(application, session, off_plan, {'failed'})
     receipt = outcome(application, off_plan) or {}
     if receipt.get('code') != 'HARNESS_DISPATCH_UNPLANNED' or 'HARNESS' in (row['error'] or ''):
@@ -462,7 +466,7 @@ def unresolved_decision(application, spec, dispatch):
     application.request(f'/v1/sessions/{session}/prompts', {'operation_id':str(uuid.uuid4()), 'text':spec['prompt']})
     label = dispatch['label']
     invoke(application, session, 'update_progress', {'content':f'## Progress\n- [ ] {label}\n'})
-    job = job_id(invoke(application, session, 'task', dispatch_call(dispatch)['args']))
+    job = job_id(invoke(application, session, 'task', dispatch_call(dispatch)['args']), application, session=session)
     invoke(application, session, 'wait', {'timeout_ms':30000, 'conditions':[{'kind':'next_worker_done'}]})
     settled(application, session, job, {'held'})
     invoke(application, session, 'update_progress', {'content':f'## Progress\n- [~] {label}\n'})
@@ -484,7 +488,7 @@ def swapped_decisions(application, spec, operation):
     invoke(application,session,'update_progress',{'content':'## Progress\n'+''.join('- [ ] '+d['label']+'\n' for d in dispatches)})
     results = respond(application,session,[dispatch_call(d) for d in dispatches])
     seen_jobs = set()
-    jobs = [job_id(r, application, seen_jobs) for r in results]
+    jobs = [job_id(r, application, seen_jobs, session=session) for r in results]
     for index, (result, job) in enumerate(zip(results, jobs)):
         settled(application,session,job,{'held'})
         choice = choices[(index+1) % len(choices)]
