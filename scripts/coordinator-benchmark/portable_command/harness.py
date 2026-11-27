@@ -17,7 +17,7 @@ from portable_command.contracts import DIRECTORY, ROOT, load_suite, materialize
 from portable_command.grading import grade_case
 from portable_command.handle_await import await_running_handle
 from portable_command.observe import build_observation, file_sha256, source_identity
-from portable_command.provenance import materialize_helpers
+from portable_command.provenance import materialize_denied_progress_scope, materialize_helpers
 from portable_command.reporting import inject_drafts, make_app_factory
 from progress import save
 
@@ -216,7 +216,10 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
     save(out_dir / 'attempt.json', {'status': 'running', 'case_id': case['id'], 'identity': identity, 'revision_aliases': revision_aliases})
 
     helpers_dir = materialize_helpers(case['setup'].get('helpers'), out_dir / 'helpers')
-    application = make_app_factory(engine_bin, app_factory, helpers_dir=helpers_dir)(app_dir)
+    config_root = out_dir / 'config-root'
+    host_binding = materialize_denied_progress_scope(case, config_root) if app_factory is smoke.Application else None
+    application = make_app_factory(engine_bin, app_factory, helpers_dir=helpers_dir,
+                                   config_root=config_root if host_binding else None)(app_dir)
     sidecar_path = app_dir / 'sidecar.log'
     sse, prelude_records, turn_records, draft_bindings = None, [], [], {}
     drafts_ok, session_id, pre_prompt_lines, post_tool_lines = True, None, None, None
@@ -249,7 +252,8 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
                 'handle_await': await_meta, 'batch_plan': [c['name'] for c in batch], 'envelope_mode': envelope_mode,
                 'batch_outcomes': [{'call_id': cid, 'tool': c['name'], 'outcome': res.get('outcome')} for c, (cid, res) in zip(batch, results)],
             })
-        save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases, 'draft_bindings': draft_bindings, 'session_surface': session_surface})
+        save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases, 'draft_bindings': draft_bindings, 'session_surface': session_surface,
+                                       'host_scope_binding': host_binding})
         application.request(f'/v1/sessions/{session_id}/abort', {})
         with contextlib.closing(sqlite3.connect(app_dir / 'store.db')) as db:
             pids = [r[0] for r in db.execute('SELECT p.id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE r.session_id=?', (session_id,)).fetchall()]
@@ -269,7 +273,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
         ('profile_binding_approximate', case.get('profile', 'implement') != 'implement'),
         ('profile_binding_mismatch', bool(eff_posture) and eff_posture != session_surface['requested_posture']),
         ('uninjected_drafts', bool(case['setup'].get('drafts')) and not drafts_ok),
-        ('uninjected_host_facts', bool(case['setup'].get('host_facts'))),
+        ('uninjected_host_facts', bool(case['setup'].get('host_facts')) and not host_binding),
     ) if cond] + [g for rec in turn_records for g in ((rec.get('handle_await') or {}).get('gaps') or ())]
 
     try:
@@ -278,7 +282,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
             case, session_id=session_id, identity=identity, project_dir=project_dir, db_path=app_dir / 'store.db',
             sidecar_log=sidecar_path, turn_records=turn_records, prelude_records=prelude_records,
             sidecar_window=window, extra_gaps=extra_gaps, baseline_hashes=baseline_hashes,
-            session_surface=session_surface, draft_bindings=draft_bindings,
+            session_surface=session_surface, draft_bindings=draft_bindings, host_scope_binding=host_binding,
         )
         grade = grade_case(case, observation, project_dir, identity)
     except Exception as exc:
