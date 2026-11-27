@@ -202,21 +202,19 @@ def make_modified_lgpl_wheels(
         with zipfile.ZipFile(whl_path, "r") as zin, zipfile.ZipFile(mod_whl, "w", compression=zipfile.ZIP_DEFLATED) as zout:
             for item in zin.infolist():
                 data = zin.read(item.filename)
-                if d["normalized_name"] == "fpdf2" and item.filename == "fpdf/fpdf.py":
+                if d["normalized_name"] == "fpdf2" and item.filename == "fpdf/output.py":
                     text = data.decode("utf-8")
-                    needle = 'self.producer = f"py-pdf/fpdf{FPDF_VERSION}"'
-                    if needle in text:
-                        text = text.replace(needle, f'self.producer = f"py-pdf/fpdf{{FPDF_VERSION}} [{marker}]"', 1)
-                    else:
-                        text += f"\nPW_LGPL_RELINK_MARKER = {marker!r}\n"
+                    needle = 'producer=getattr(fpdf, "producer", None),'
+                    if needle not in text:
+                        raise RuntimeError("fpdf/output.py missing expected producer line for relink marker")
+                    text = text.replace(needle, f'producer=getattr(fpdf, "producer", None) or "py-pdf/fpdf2 [{marker}]",', 1)
                     data = text.encode("utf-8")
-                elif d["normalized_name"] == "pygal" and item.filename == "pygal/graph/base.py":
+                elif d["normalized_name"] == "pygal" and item.filename == "pygal/svg.py":
                     text = data.decode("utf-8")
-                    needle = "Generated with pygal"
-                    if needle in text:
-                        text = text.replace(needle, f"Generated with pygal [{marker}]", 1)
-                    else:
-                        text += f"\nPW_LGPL_RELINK_MARKER = {marker!r}\n"
+                    needle = "'Generated with pygal %s"
+                    if needle not in text:
+                        raise RuntimeError("pygal/svg.py missing expected header line for relink marker")
+                    text = text.replace(needle, f"'Generated with pygal [{marker}] %s", 1)
                     data = text.encode("utf-8")
                 zout.writestr(item, data)
         d["filename"] = mod_whl.name
