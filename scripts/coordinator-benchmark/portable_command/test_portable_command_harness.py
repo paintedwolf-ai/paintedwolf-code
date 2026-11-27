@@ -224,3 +224,37 @@ class PortableCommandHarnessTests(unittest.TestCase):
                 self.assertEqual(cli.main(['--replay', 'first-mutation', '--out', str(root / 'o2')], runner=lambda c, o, export_dir=None: {**fake_result, 'grade': {**fake_result['grade'], 'passed': False}}), 1)
             with self.assertRaises(ValueError):
                 harness.resolve_case('nonexistent-case-id')
+
+    def test_multi_header_parse_draft_input_revision_null_sink_helpers_and_readonly(self):
+        # Multi-header [read#1 ...]\n[command#2]\n{...} parses stdout cleanly.
+        _, parsed = observe.parse_tool_result({'tool_result_json': json.dumps({
+            'outcome': 'completed', 'content': '[read#1 input.txt:1]\n[command#2]\n{"status":0,"stdout":"alpha\\n"}',
+        })})
+        self.assertEqual(parsed['stdout'], 'alpha\n')
+        # Draft input_revision bound strictly from accepted_document pin + draft_bindings.
+        audit = {
+            'invocation_program_executions': [{'id': 'e1', 'program_id': 'p1', 'operation_id': 'read', 'native_command': 'cat', 'state': 'completed', 'effect_certainty': 'none'}],
+            'invocation_program_publications': [],
+            'invocation_program_revision_pins': [{'execution_id': 'e1', 'role': 'source', 'mode': 'accepted_document', 'path': 'settings.json', 'document_id': 'doc-1', 'document_revision': 2}],
+        }
+        r_ok, _ = observe._receipt_rows(audit, [], draft_bindings={'settings.json': {'injected': True, 'document_id': 'doc-1', 'revision': 2, 'alias': 'draft-r2'}})
+        self.assertEqual(r_ok[0]['input_revision'], 'draft-r2')
+        r_bad, _ = observe._receipt_rows(audit, [], draft_bindings={'settings.json': {'injected': True, 'document_id': 'doc-1', 'revision': 9, 'alias': 'draft-r2'}})
+        self.assertNotIn('input_revision', r_bad[0])
+        # Helper executable materialization + literal-null-sink + readonly surface facts.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            hdir = harness.materialize_helpers({'fixture-producer': {'stdout': 'alpha', 'stderr': '', 'status': 1}}, root / 'helpers')
+            self.assertTrue((hdir / 'fixture-producer').is_file())
+            db_path, log_path, proj = root / 'store.db', root / 'sidecar.log', root / 'proj'
+            create_audit_db(db_path)
+            log_path.write_text('level=INFO msg="server listening"\nlevel=INFO msg="shutdown signal received"\n')
+            proj.mkdir()
+            obs, _ = observe.build_observation(
+                CASES['literal-null-sink'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj,
+                db_path=db_path, sidecar_log=log_path, baseline_hashes={},
+                turn_records=[{'program': 'printf hidden > /dev/null; printf kept', 'command_call_id': 'c1', 'call_ids': ['c1']}],
+                prelude_records=[], session_surface={'effective_posture': 'vet'},
+            )
+            self.assertTrue(obs['facts']['typed_null_sink'])
+            self.assertTrue(obs['facts']['readonly_profile'])
