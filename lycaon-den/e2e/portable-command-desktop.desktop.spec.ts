@@ -4,16 +4,17 @@ import { fileURLToPath } from "node:url";
 import { expect, test, type APIRequestContext, type Locator, type Page, type Response } from "@playwright/test";
 import type { CheckpointListResponse, CommandProgramReceiptPage, CommandReceiptDocumentPage, Message } from "../src/api/types.ts";
 import {
+  activateProject,
   apiConfig,
   apiJson,
   apiPostPrompt,
   bootstrapChatSession,
+  expectShellReady,
   liveChatStage,
   openSessionRow,
   seedAppState,
   settledChatSessionId,
   waitForSessionReady,
-  waitHarnessConnected,
 } from "./helpers.ts";
 import { manualHarnessTools } from "./manual-harness-tools.ts";
 
@@ -35,10 +36,14 @@ function runScript(name: string, envExtra: Record<string, string>, ...args: stri
 async function ensureManualLLM(request: APIRequestContext) {
   const { apiUrl, token } = apiConfig();
   const headers = { Authorization: `Bearer ${token}` };
-  const probe = await request.post(`${apiUrl}/harness/llm/auto`, { headers, data: { enabled: true, text: "Done." } });
-  if (probe.ok()) return;
+  const probe = await request.post(`${apiUrl}/harness/llm/auto`, { headers, data: { enabled: true, text: "Done." } }).catch(() => undefined);
+  if (probe?.ok()) return;
   runScript("e2e-sidecar-stop.sh", {});
   runScript("e2e-sidecar-bg.sh", { LYCAON_LLM_MANUAL: "1", LYCAON_LLM_MOCK: "1" }, "--reuse-built");
+  await expect.poll(async () => {
+    const health = await request.get(`${apiUrl}/health`).catch(() => undefined);
+    return health?.ok() ?? false;
+  }, { timeout: 60_000 }).toBe(true);
   const retry = await request.post(`${apiUrl}/harness/llm/auto`, { headers, data: { enabled: true, text: "Done." } });
   expect(retry.ok(), await retry.text()).toBeTruthy();
 }
@@ -131,9 +136,13 @@ async function openFoldedCommand(page: Page) {
   return { span, card };
 }
 
-async function reloadToSession(page: Page, sessionId: string) {
+async function reloadToSession(page: Page, projectId: string, sessionId: string) {
   await page.reload();
-  await waitHarnessConnected(page);
+  await expect(page.getByTestId("shell")).toHaveAttribute("data-sidecar-status", "connected", { timeout: 60_000 });
+  await expectShellReady(page);
+  if (await page.getByTestId("home-nav").isVisible().catch(() => false)) {
+    await activateProject(page, projectId);
+  }
   const current = await settledChatSessionId(page).catch(() => "");
   if (current !== sessionId) {
     await openSessionRow(page, sessionId);
@@ -148,7 +157,7 @@ test.describe("portable command desktop smoke", () => {
     const recorder = attachEvidenceRecorder(page);
 
     await seedAppState(page);
-    await bootstrapChatSession(page, request);
+    const project = await bootstrapChatSession(page, request);
     const sessionId = await settledChatSessionId(page);
     await apiJson(request, "POST", "/harness/llm/auto", { enabled: false });
 
@@ -210,7 +219,7 @@ test.describe("portable command desktop smoke", () => {
       await recorder.drain();
 
       recorder.setPhase("reload");
-      await reloadToSession(page, sessionId);
+      await reloadToSession(page, project.id, sessionId);
 
       const { card: reloadedCard } = await openFoldedCommand(page);
       await expect(reloadedCard).toContainText("executions", { timeout: 15_000 });
@@ -295,7 +304,7 @@ test.describe("portable command desktop smoke", () => {
   test("M12: pending command tool approval checkpoint survives reload and clears cleanly when approved", async ({ page, request }) => {
     test.setTimeout(180_000);
     await seedAppState(page);
-    await bootstrapChatSession(page, request);
+    const project = await bootstrapChatSession(page, request);
     const sessionId = await settledChatSessionId(page);
     const { apiUrl, token } = apiConfig();
     const headers = { Authorization: `Bearer ${token}` };
@@ -309,7 +318,7 @@ test.describe("portable command desktop smoke", () => {
     const card = () => liveChatStage(page).locator(`[data-testid="tool-approval-card"][data-checkpoint-id="${checkpointId}"]`);
     await expect(card()).toBeVisible({ timeout: 30_000 });
 
-    await reloadToSession(page, sessionId);
+    await reloadToSession(page, project.id, sessionId);
     await expect(card()).toBeVisible({ timeout: 30_000 });
 
     const pendingRes = await request.get(`${apiUrl}/v1/sessions/${sessionId}/checkpoints?include_children=true`, { headers });
@@ -325,7 +334,7 @@ test.describe("portable command desktop smoke", () => {
     await card().getByTestId("approval-approve-primary").click();
     await expect(card()).toHaveCount(0, { timeout: 30_000 });
 
-    await reloadToSession(page, sessionId);
+    await reloadToSession(page, project.id, sessionId);
     await expect(card()).toHaveCount(0);
 
     const bootstrapRes = await request.get(`${apiUrl}/v1/sessions/${sessionId}/bootstrap`, { headers });
