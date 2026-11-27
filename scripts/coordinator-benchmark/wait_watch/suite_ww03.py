@@ -8,6 +8,7 @@ import http.server
 import json
 import os
 import pathlib
+import socket
 import subprocess
 import sys
 import threading
@@ -20,9 +21,12 @@ REPO_ROOT = BENCHMARK_DIR.parent.parent
 if str(BENCHMARK_DIR) not in sys.path:
     sys.path.insert(0, str(BENCHMARK_DIR))
 
+import smoke  # noqa: E402
 from capture_storage import checkpoint_closed_store  # noqa: E402
 from portable_command.handle_await import parse_content_json  # noqa: E402
 from portable_command.harness import SSECollector, create_isolated_session  # noqa: E402
+from portable_command.provenance import resolve_engine_binary  # noqa: E402
+from progress import save  # noqa: E402
 
 from wait_watch.barriers import (  # noqa: E402
     BarrierTimeoutError,
@@ -103,6 +107,42 @@ class HTTP204ReadinessFixture(HTTPReadinessFixture):
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
         return self.url
+
+
+def cold_restart_sidecar(app: WaitWatchApplication, engine_bin: pathlib.Path | None) -> None:
+    """Terminate the running sidecar, checkpoint store.db, and respawn in-place on a new free port."""
+    app.close(cleanup=False)
+    proc_prev = getattr(app, "process", None)
+    if proc_prev is not None:
+        checkpoint_closed_store(app.directory / "store.db", proc_prev)
+
+    binary, _ = resolve_engine_binary(REPO_ROOT, engine_bin)
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        app.port = sock.getsockname()[1]
+    app.url = f"http://127.0.0.1:{app.port}"
+    app.log = (app.directory / "sidecar.log").open("a", encoding="utf-8")
+    env = smoke.application_environment({
+        "LYCAON_CONFIG_DIR": str(app.config),
+        "LYCAON_CONFIG_ROOT": str(REPO_ROOT / "lycaon"),
+        "LYCAON_ENGINE_ROOT": str(REPO_ROOT / "lycaon-den/src-tauri/engine-root"),
+        "LYCAON_ADDR": f"127.0.0.1:{app.port}",
+        "LYCAON_API_TOKEN": app.token,
+        "LYCAON_DEV": "1",
+        "LYCAON_HARNESS": "1",
+        "LYCAON_LOG_LEVEL": "debug",
+        "LYCAON_LLM_MOCK": "1" if app.manual else "0",
+        "LYCAON_LLM_MANUAL": "1" if app.manual else "0",
+    })
+    app.process = subprocess.Popen(
+        [str(binary), "serve", "--db", str(app.directory / "store.db")],
+        cwd=REPO_ROOT,
+        env=env,
+        stdout=app.log,
+        stderr=subprocess.STDOUT,
+    )
+    save(app.directory / "ownership.json", {"pid": app.process.pid, "port": app.port})
+    app.ready()
 
 
 def _pid_alive(pid: int | None) -> bool:
@@ -389,19 +429,13 @@ def run_slot_c03(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
         assertions["armed_lease_persisted_before_restart"] = bool(pre_armed)
         source_obs.record_event("pre_restart_snapshot", armed_count=len(pre_armed))
 
-        # Cold restart of the sidecar against the same app_dir/store.db (D4).
+        # Cold restart of the sidecar in-place against the same app_dir/store.db (D4).
         if sse is not None:
             sse.close()
             sse = None
-        app.close(cleanup=False)
-        proc1 = getattr(app, "process", None)
-        if proc1 is not None:
-            checkpoint_closed_store(app_dir / "store.db", proc1)
-
-        app = app_factory(app_dir)
-        app.ready()
+        cold_restart_sidecar(app, engine_bin)
         assertions["sidecar_restarted_cleanly"] = True
-        source_obs.record_event("sidecar_restarted")
+        source_obs.record_event("sidecar_restarted", port=app.port, pid=app.process.pid)
 
         post_snap = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id)
         watches_after = post_snap.get("tables", {}).get("watch_registrations") or []
