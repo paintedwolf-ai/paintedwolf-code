@@ -1029,4 +1029,3 @@ func TestWEAEnabledDisabledRuntimeParityAndBoundedBurst(t *testing.T) {
 		t.Fatalf("expected explicit capture_overflow finding under WEA burst, got %+v", burstFindings)
 	}
 }
-

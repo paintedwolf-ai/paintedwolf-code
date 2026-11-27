@@ -2,13 +2,14 @@ package wea_test
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,13 +17,18 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/editordoc"
-	"github.com/lycaon/lycaon/internal/egressgate"
+	_ "github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/egressproxy"
+	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/observability/cmddiag"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
@@ -31,6 +37,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolapproval"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -64,9 +71,7 @@ func (s *stubMergeQueue) EnsureWorkerBranch(ctx context.Context, jobID string) (
 	return task, lease, nil
 }
 
-type stubMergeStore struct {
-	commits int
-}
+type stubMergeStore struct{ commits int }
 
 func (s *stubMergeStore) BeginMergeApply(context.Context, string) (string, bool, error) {
 	return "claim-1", true, nil
@@ -94,26 +99,145 @@ func (s *stubMergeStore) CommitPromotion(context.Context, string, string, worker
 }
 func (s *stubMergeStore) ClearWorkerWorkspace(context.Context, string) error { return nil }
 
+// tb11ApprovalGate requires human tool_approval on every evaluated action so the
+// real toolexecution.Executor -> hitl.Checkpoints -> ResolveApprovalOption ->
+// post-execution lifecycle is exercised end-to-end.
+type tb11ApprovalGate struct{}
+
+func (tb11ApprovalGate) Evaluate(context.Context, hitl.ProposedAction) (*hitl.ApprovalResult, error) {
+	return &hitl.ApprovalResult{
+		Decision: &gate.Decision{
+			Primary: api.GateAuthorityMisuse,
+			Cited:   []gate.Fact{{Gate: api.GateAuthorityMisuse, Key: "detection.rule", Value: "tb11 authority check", Source: "detection_pack"}},
+		},
+		DetectionCitation: &hitl.DetectionMatch{
+			PackID: "tb11-pack", RuleID: "tb11-rule", RuleTitle: "tb11 authority check", Level: "critical",
+			External: true, Unrecoverable: true, Tagged: true,
+		},
+	}, nil
+}
+func (tb11ApprovalGate) GrantOffers(hitl.ProposedAction, *hitl.ApprovalResult) []hitl.ApprovalGrantOffer {
+	return nil
+}
+func (tb11ApprovalGate) AbsorbedGrantOffers(hitl.ProposedAction, *hitl.ApprovalResult) []hitl.ApprovalGrantOffer {
+	return nil
+}
+func (tb11ApprovalGate) ApplyGrant(hitl.ApprovalGrant) (bool, error)         { return false, nil }
+func (tb11ApprovalGate) GrantCovers(hitl.ProposedAction) bool                { return false }
+func (tb11ApprovalGate) HostResourceLeaseCovers(hitl.ProposedAction) bool    { return false }
+func (tb11ApprovalGate) RevokeGrant(string) (bool, error)                    { return false, nil }
+func (tb11ApprovalGate) RevokeGrantInstalledBy(string, string) (bool, error) { return false, nil }
+func (tb11ApprovalGate) ListGrants(string) []hitl.ApprovalGrant              { return nil }
+func (tb11ApprovalGate) SecretFingerprintsCovered(string, string, string, string, []string) bool {
+	return false
+}
+func (tb11ApprovalGate) SecretRedactionStanding(string, []string) bool { return false }
+func (tb11ApprovalGate) PutAskQuiet(q hitl.AskQuiet, _ int) (hitl.AskQuiet, bool) {
+	return q, false
+}
+func (tb11ApprovalGate) AskQuietLive(string, string) (hitl.AskQuiet, bool) {
+	return hitl.AskQuiet{}, false
+}
+func (tb11ApprovalGate) NoteAskQuietSuppressed(string, string)         {}
+func (tb11ApprovalGate) ListAskQuiets(string) []hitl.AskQuiet          { return nil }
+func (tb11ApprovalGate) RevokeAskQuiet(string) bool                    { return false }
+func (tb11ApprovalGate) RevokeAskQuietInstalledBy(string, string) bool { return false }
+func (tb11ApprovalGate) ForgetSession(string)                          {}
+
+type tb11ApprovalExplainer struct{}
+
+func (tb11ApprovalExplainer) ExplainApproval(hitl.ProposedAction) toolapproval.ApprovalExplanation {
+	return toolapproval.ApprovalExplanation{
+		What:      "Read project file app.go",
+		Who:       "Agent",
+		IfWrong:   "Reads file bytes from the workspace",
+		AllowLine: "Allow reading app.go once",
+	}
+}
+
+type tb11NoopAuthzRecorder struct{}
+
+func (tb11NoopAuthzRecorder) AppendToolDenied(context.Context, authzledger.ToolDeniedRecord) {}
+func (tb11NoopAuthzRecorder) AppendCapabilityRecord(context.Context, authzledger.CapabilityRecord) error {
+	return nil
+}
+func (tb11NoopAuthzRecorder) AppendDirectIPLifecycle(context.Context, authzledger.DirectIPLifecycleRecord) {
+}
+func (tb11NoopAuthzRecorder) AppendMediatedEndpoint(context.Context, authzledger.MediatedEndpointRecord) {
+}
+func (tb11NoopAuthzRecorder) AppendApprovalGateTx(context.Context, *sql.Tx, authzledger.ApprovalDecisionRecord) error {
+	return nil
+}
+func (tb11NoopAuthzRecorder) AppendCapabilityGateTx(context.Context, *sql.Tx, authzledger.CapabilityRecord) error {
+	return nil
+}
+func (tb11NoopAuthzRecorder) AppendHumanGateTx(context.Context, *sql.Tx, authzledger.HumanGateRecord) error {
+	return nil
+}
+
+type tb11NoopInstaller struct{}
+
+func (tb11NoopInstaller) InstallApprovalOption(context.Context, string, hitl.ApprovalOption) (func(), error) {
+	return func() {}, nil
+}
+
+type tb11CheckpointEvents struct{ pending chan string }
+
+func (e tb11CheckpointEvents) PublishCheckpoint(_ context.Context, _, _ string, ev api.CheckpointEvent) {
+	if ev.Status == "pending" && ev.ID != "" {
+		select {
+		case e.pending <- ev.ID:
+		default:
+		}
+	}
+}
+func (tb11CheckpointEvents) PublishAttention(context.Context) {}
+
+func driveBrokerCurl(t *testing.T, ctx context.Context, c *confine.Confinement, brokerAddr, targetURL string) string {
+	t.Helper()
+	curlPath, err := exec.LookPath("curl")
+	if err != nil {
+		t.Skip("curl is required to drive a confined process through the confine egress broker")
+	}
+	cmd, cleanup, err := confine.Command(ctx, os.Args[0], curlPath, []string{
+		"-s", "-o", "/dev/null", "-m", "5", "-w", "%{http_code}", "-x", "http://" + brokerAddr, targetURL,
+	}, *c)
+	testutil.FailErr(t, "confine.Command curl", err)
+	defer cleanup()
+	out, err := cmd.Output()
+	if err != nil && len(out) == 0 {
+		t.Fatalf("confined curl failed: %v", err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
 type e2eRunOutcome struct {
 	PromotedFilesOnDisk   int
 	PromotionCommits      int
 	EditedFilesOnDisk     int
 	RetainedVersionsInDB  int
-	EgressHTTPArrivals    int
-	EgressRefusals        int
-	ToolExecutions        int
+	BrokerAllowedReceipts int
+	BrokerDeniedReceipts  int
+	BrokerHTTPArrivals    int
+	ApprovalResolutions   int
+	AuthorizedToolRuns    int
 	EmittedFindings       int
 	ContradictionRuleHits map[cmddiag.RuleID]int
 }
 
-// runWiredProductWorkflow executes real production entry points (worker.MergeService.PromoteOverlay,
-// editordoc.Service.ApplyAgentEdit + real SQLite sourceledger.History, egressgate.AwaitHTTPRequest +
-// real httptest.Server, and toolexecution.Executor.Invoke) without ever calling cmddiag.ObserveWEA
-// directly. It independently observes disk bytes, SQLite rows, HTTP arrivals, and tool executions.
+// runWiredProductWorkflow executes real production entry points without ever
+// calling cmddiag.ObserveWEA directly:
+//  1. worker.MergeService.PromoteOverlay (real disk writes + commits)
+//  2. editordoc.Service.ApplyAgentEdit + real SQLite sourceledger.History
+//  3. confine.StartEgressBroker + BindAction + real descendant curl through broker
+//     (real broker-owned positive AND denial receipts + real HTTP arrivals)
+//  4. toolexecution.Executor.Invoke("read") + real SQLite hitl.Checkpoints +
+//     hitl.ApprovalAuthority.ResolveApprovalOption("approve_current_action")
 func runWiredProductWorkflow(t *testing.T, obs *cmddiag.Observer, injectContradictions bool) e2eRunOutcome {
 	t.Helper()
 	ctx := context.Background()
 	out := e2eRunOutcome{ContradictionRuleHits: map[cmddiag.RuleID]int{}}
+	const sessionID = "11111111-2222-3333-4444-555555555555"
 
 	// 1. REAL WORKER PROMOTION (worker.MergeService.PromoteOverlay)
 	runPromotion := func(jobID string, touchedPaths []string, fileName, body string) {
@@ -126,7 +250,7 @@ func runWiredProductWorkflow(t *testing.T, obs *cmddiag.Observer, injectContradi
 		scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{fileName}}
 		task := &api.WorkerTask{
 			ID:                    jobID,
-			ParentSessionID:       "11111111-2222-3333-4444-555555555555",
+			ParentSessionID:       sessionID,
 			ProjectID:             testdbseed.DefaultProjectID,
 			WorkerName:            "worker-e2e",
 			ResultHandle:          "res-" + jobID,
@@ -161,10 +285,9 @@ func runWiredProductWorkflow(t *testing.T, obs *cmddiag.Observer, injectContradi
 		out.PromotionCommits += store.commits
 	}
 
-	// Healthy promotion: TouchedPaths matches landed file.
 	runPromotion("job-healthy-1", []string{"landed.go"}, "landed.go", "package landed\n")
 	if injectContradictions {
-		// Contradiction #1 (RuleWEALandedPathMismatch): landed.go absent from committed TouchedPaths.
+		// Wired contradiction #1 (RuleWEALandedPathMismatch): landed.go absent from TouchedPaths.
 		runPromotion("job-unlisted-1", []string{"other.go"}, "landed.go", "package landed\n")
 	}
 
@@ -185,13 +308,11 @@ func runWiredProductWorkflow(t *testing.T, obs *cmddiag.Observer, injectContradi
 		t.Fatal("expected OpenText to open app.go")
 	}
 
-	// Healthy edit: whole-document read recorded in owning a.agentReads cache.
-	editSvc.RememberAgentRead(projectID, "11111111-2222-3333-4444-555555555555", doc.ID, doc.Revision)
-	opHealthy := uuid.NewString()
+	editSvc.RememberAgentRead(projectID, sessionID, doc.ID, doc.Revision)
 	resEdit, err := editSvc.ApplyAgentEdit(ctx, editordoc.AgentEdit{
 		ProjectID: projectID, DocumentID: doc.ID, ExpectedRevision: doc.Revision,
-		Content: "line1\nline2-edited\n", OperationID: opHealthy,
-		SessionID: "11111111-2222-3333-4444-555555555555", Turn: 1, ToolCallID: "call-edit-1", ToolName: "edit",
+		Content: "line1\nline2-edited\n", OperationID: uuid.NewString(),
+		SessionID: sessionID, Turn: 1, ToolCallID: "call-edit-1", ToolName: "edit",
 	})
 	testutil.FailErr(t, "ApplyAgentEdit healthy", err)
 	if !resEdit.Saved {
@@ -205,32 +326,32 @@ func runWiredProductWorkflow(t *testing.T, obs *cmddiag.Observer, injectContradi
 	out.EditedFilesOnDisk++
 
 	if injectContradictions {
-		// Contradiction #2 (RuleWEAEditStaleReadBasis): partial span read only (not whole).
+		// Wired contradiction #2 (RuleWEAEditStaleReadBasis): partial span read only.
 		testutil.FailErr(t, "seed partial.go", os.WriteFile(filepath.Join(editRoot, "partial.go"), []byte("a\nb\nc\n"), 0o644))
 		docPartial, ok, err := editSvc.OpenText(ctx, projectID, sourcebranch.Trunk, rootID, "partial.go")
 		testutil.FailErr(t, "OpenText partial.go", err)
 		if !ok {
 			t.Fatal("expected partial.go open")
 		}
-		editSvc.RememberAgentReadSpans(projectID, "11111111-2222-3333-4444-555555555555", docPartial.ID, docPartial.Revision, []documentcore.LineSpan{{StartLine: 1, EndLine: 1}})
+		editSvc.RememberAgentReadSpans(projectID, sessionID, docPartial.ID, docPartial.Revision, []documentcore.LineSpan{{StartLine: 1, EndLine: 1}})
 		_, err = editSvc.ApplyAgentEdit(ctx, editordoc.AgentEdit{
 			ProjectID: projectID, DocumentID: docPartial.ID, ExpectedRevision: docPartial.Revision,
 			Content: "a\nb-edited\nc\n", OperationID: uuid.NewString(),
-			SessionID: "11111111-2222-3333-4444-555555555555", Turn: 2, ToolCallID: "call-edit-partial", ToolName: "edit",
+			SessionID: sessionID, Turn: 2, ToolCallID: "call-edit-partial", ToolName: "edit",
 		})
 		testutil.FailErr(t, "ApplyAgentEdit partial", err)
 		out.EditedFilesOnDisk++
 
-		// Contradiction #3 (RuleWEAEditWrongAuthor): tamper retained source_versions row in SQLite
-		// before the deferred editordoc QueryFileVersions reader inspects it.
+		// Wired contradiction #3 (RuleWEAEditWrongAuthor): tamper persisted source_operations
+		// author before editordoc's deferred QueryFileVersions reader inspects it.
 		testutil.FailErr(t, "seed author.go", os.WriteFile(filepath.Join(editRoot, "author.go"), []byte("v1\n"), 0o644))
 		docAuthor, ok, err := editSvc.OpenText(ctx, projectID, sourcebranch.Trunk, rootID, "author.go")
 		testutil.FailErr(t, "OpenText author.go", err)
 		if !ok {
 			t.Fatal("expected author.go open")
 		}
-		editSvc.RememberAgentRead(projectID, "11111111-2222-3333-4444-555555555555", docAuthor.ID, docAuthor.Revision)
-		gate := make(chan struct{})
+		editSvc.RememberAgentRead(projectID, sessionID, docAuthor.ID, docAuthor.Revision)
+		gateCh := make(chan struct{})
 		entered := make(chan struct{})
 		if obs != nil && cmddiag.Enabled() {
 			obs.SubmitTask(cmddiag.Task{
@@ -238,7 +359,7 @@ func runWiredProductWorkflow(t *testing.T, obs *cmddiag.Observer, injectContradi
 				Fetch: func(taskCtx context.Context) (cmddiag.Observation, error) {
 					close(entered)
 					select {
-					case <-gate:
+					case <-gateCh:
 					case <-taskCtx.Done():
 					}
 					return cmddiag.WrapWEAObservation(cmddiag.WEAObservation{Settled: true}), nil
@@ -246,35 +367,34 @@ func runWiredProductWorkflow(t *testing.T, obs *cmddiag.Observer, injectContradi
 			})
 			<-entered
 		}
-		opTamper := uuid.NewString()
 		_, err = editSvc.ApplyAgentEdit(ctx, editordoc.AgentEdit{
 			ProjectID: projectID, DocumentID: docAuthor.ID, ExpectedRevision: docAuthor.Revision,
-			Content: "v2\n", OperationID: opTamper,
-			SessionID: "11111111-2222-3333-4444-555555555555", Turn: 3, ToolCallID: "call-edit-author", ToolName: "edit",
+			Content: "v2\n", OperationID: uuid.NewString(),
+			SessionID: sessionID, Turn: 3, ToolCallID: "call-edit-author", ToolName: "edit",
 		})
 		testutil.FailErr(t, "ApplyAgentEdit author", err)
 		_, err = sqlDB.ExecContext(ctx, `UPDATE source_operations SET origin='external', tool_call_id='call-tampered' WHERE id IN (SELECT operation_id FROM source_versions WHERE file_id=?)`, docAuthor.FileID)
 		testutil.FailErr(t, "tamper persisted source_operations author", err)
-		close(gate)
+		close(gateCh)
 		out.EditedFilesOnDisk++
 	}
 
-	// Independently count retained versions persisted in SQLite for app.go.
 	versionsPage, err := ledger.History.QueryFileVersions(ctx, projectID, doc.FileID, 32, 0)
 	testutil.FailErr(t, "QueryFileVersions independent count", err)
 	out.RetainedVersionsInDB = len(versionsPage.Versions)
 
-	// 3. REAL EGRESSGATE + REAL HTTP FIXTURE SERVER (egressgate.AwaitHTTPRequest)
+	// 3. REAL CONFINE EGRESS BROKER (positive + denial receipts with shared action/destination identities)
+	testutil.RequireLineage(t, lineage.Supported())
+	addrs, err := confine.StartEgressBroker(t.TempDir(), net.Listen)
+	testutil.FailErr(t, "start confine egress broker", err)
+	defer func() { _ = confine.StopEgressBroker() }()
+
 	var httpArrivals atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		httpArrivals.Add(1)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
-	targetURL, err := url.Parse(srv.URL + "/ping")
-	testutil.FailErr(t, "parse fixture server URL", err)
-	portNum, err := strconv.Atoi(targetURL.Port())
-	testutil.FailErr(t, "parse fixture server port", err)
 
 	prevPosture := confine.EffectivePosture(confine.EgressCommand{})
 	defer func() {
@@ -282,67 +402,122 @@ func runWiredProductWorkflow(t *testing.T, obs *cmddiag.Observer, injectContradi
 		confine.SetEgressResolver(nil)
 	}()
 
-	// Healthy allowed egress + real HTTP arrival.
+	// 3a. Broker-owned positive receipt: descendant dials fixture through real broker while allowed.
 	confine.SetEgressPosture(confine.PostureAsk)
 	confine.SetEgressResolver(func(context.Context, confine.EgressCommand, egressproxy.Endpoint, *confine.EgressDetectionCitation) bool {
 		return true
 	})
-	egressCtx := egressgate.WithAttribution(ctx, confine.EgressCommand{
-		OwnedLoopbackPorts: []uint16{uint16(portNum)},
-		SessionID:          "11111111-2222-3333-4444-555555555555",
-		ProjectID:          projectID,
-		ActionID:           "act-egress-allow",
-		ToolCallID:         "call-egress-allow",
-	})
-	testutil.FailErr(t, "AwaitHTTPRequest allow", egressgate.AwaitHTTPRequest(egressCtx, targetURL, http.MethodGet))
-	confine.ForgetEgressAction("11111111-2222-3333-4444-555555555555", "act-egress-allow")
-	resp, err := http.Get(targetURL.String())
-	testutil.FailErr(t, "HTTP GET fixture", err)
-	_ = resp.Body.Close()
+	allowConf := &confine.Confinement{Network: confine.NetworkProxyOnly, ProjectID: projectID, LoopbackConnect: true, HostExecution: true}
+	allowCmd := confine.EgressCommand{SessionID: sessionID, ProjectID: projectID, ActionID: "act-broker-allow", ToolCallID: "call-broker-allow"}
+	allowLease, err := confine.BindAction(allowConf, allowCmd)
+	testutil.FailErr(t, "BindAction allow", err)
+	statusAllow := driveBrokerCurl(t, ctx, allowConf, addrs.HTTP, srv.URL+"/ping")
+	allowHosts := allowLease.Close(ctx)
+	confine.ForgetEgressAction(sessionID, allowCmd.ActionID)
+	if statusAllow != "200" {
+		t.Fatalf("broker allow HTTP status=%q want 200", statusAllow)
+	}
+	for _, h := range allowHosts {
+		if h.Allowed && (h.Outcome == "connected" || h.Outcome == "response_received") {
+			out.BrokerAllowedReceipts++
+		}
+	}
+	if out.BrokerAllowedReceipts == 0 {
+		t.Fatalf("expected broker-owned connected receipt, got %+v", allowHosts)
+	}
 
-	// Expected refusal: resolver denies host and must not dial fixture server.
+	// 3b. Broker-owned denial receipt: descendant dials fixture through real broker while denied.
 	confine.SetEgressResolver(func(context.Context, confine.EgressCommand, egressproxy.Endpoint, *confine.EgressDetectionCitation) bool {
 		return false
 	})
-	denyCtx := egressgate.WithAttribution(ctx, confine.EgressCommand{
-		SessionID:  "11111111-2222-3333-4444-555555555555",
-		ProjectID:  projectID,
-		ActionID:   "act-egress-deny",
-		ToolCallID: "call-egress-deny",
-	})
-	if err := egressgate.AwaitHTTPRequest(denyCtx, targetURL, http.MethodGet); err == nil {
-		t.Fatal("expected AwaitHTTPRequest to refuse when resolver denies")
-	} else {
-		out.EgressRefusals++
+	denyConf := &confine.Confinement{Network: confine.NetworkProxyOnly, ProjectID: projectID, LoopbackConnect: true, HostExecution: true}
+	denyCmd := confine.EgressCommand{SessionID: sessionID, ProjectID: projectID, ActionID: "act-broker-deny", ToolCallID: "call-broker-deny"}
+	denyLease, err := confine.BindAction(denyConf, denyCmd)
+	testutil.FailErr(t, "BindAction deny", err)
+	statusDeny := driveBrokerCurl(t, ctx, denyConf, addrs.HTTP, srv.URL+"/denied")
+	denyHosts := denyLease.Close(ctx)
+	confine.ForgetEgressAction(sessionID, denyCmd.ActionID)
+	if statusDeny == "200" {
+		t.Fatalf("broker deny unexpectedly returned HTTP 200")
 	}
-	confine.ForgetEgressAction("11111111-2222-3333-4444-555555555555", "act-egress-deny")
-	out.EgressHTTPArrivals = int(httpArrivals.Load())
+	for _, h := range denyHosts {
+		if !h.Allowed {
+			out.BrokerDeniedReceipts++
+		}
+	}
+	if out.BrokerDeniedReceipts == 0 {
+		t.Fatalf("expected broker-owned denial receipt, got %+v", denyHosts)
+	}
+	out.BrokerHTTPArrivals = int(httpArrivals.Load())
 
-	// 4. REAL TOOLEXECUTION.EXECUTOR.INVOKE
+	// 4. REAL TOOLEXECUTION.EXECUTOR + REAL SQLITE HITL.CHECKPOINTS APPROVAL LIFECYCLE
+	// Authority effect exercised: tool_approval checkpoint on "read" ->
+	// hitl.ApprovalAuthority.ResolveApprovalOption("approve_current_action") ->
+	// toolexecution.Executor.Invoke("read") -> post-execution authority effect joined
+	// against hitl's ApprovalPlan by ActionDigest + CheckpointID.
+	testdbseed.InsertSession(t, sqlDB, sessionID, projectID)
+	ownerCtx := testdbseed.OwnerCaller(t, ctx, sqlDB)
+	evPub := tb11CheckpointEvents{pending: make(chan string, 4)}
+	cpMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), evPub, tb11NoopAuthzRecorder{})
+	cpMgr.Authority.SetApprovalAuthorityInstaller(tb11NoopInstaller{})
+
 	var toolRuns atomic.Int32
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register verify", reg.Register("verify", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+	testutil.FailErr(t, "register read", reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		toolRuns.Add(1)
-		return "probe-ok", nil
+		return "read-ok", nil
 	}))
 	boundary := sandbox.NewBoundary(sandbox.Config{}, []sandbox.ToolProfile{{
-		ID:    "default",
-		Tools: map[string]bool{"verify": true},
+		ID:    "implement",
+		Tools: map[string]bool{"read": true},
 	}})
-	policy := toolprofiles.NewProfilePolicyEngine(boundary)
-	exec := toolexecution.NewExecutor(policy, reg, "default")
-	toolOut, err := exec.Invoke(ctx, "verify", map[string]any{"command": "true"}, tools.ToolContext{
-		Identity: tools.InvocationIdentity{
-			SessionID:  "11111111-2222-3333-4444-555555555555",
-			ProjectID:  projectID,
-			ToolCallID: "call-probe-1",
-		},
-	})
-	testutil.FailErr(t, "Executor.Invoke", err)
-	if toolOut != "probe-ok" {
-		t.Fatalf("Executor.Invoke output=%q want probe-ok", toolOut)
+	gateImpl := tb11ApprovalGate{}
+	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gateImpl)
+	execSvc := toolexecution.NewExecutor(policy, reg, "implement")
+	execSvc.Approvals.SetApprovalExplainer(tb11ApprovalExplainer{})
+	execSvc.Approvals.SetCheckpointManager(ctx, cpMgr, gateImpl)
+
+	type invokeRes struct {
+		out string
+		err error
 	}
-	out.ToolExecutions = int(toolRuns.Load())
+	invokeCh := make(chan invokeRes, 1)
+	go func() {
+		res, invErr := execSvc.Invoke(ctx, "read", map[string]any{"path": "app.go"}, tools.ToolContext{
+			Source: tools.InvocationSource{
+				Roots:        []projectroot.RootRef{{ID: rootID, Label: "root", Path: editRoot, IsPrimary: true}},
+				ActiveRootID: rootID,
+			},
+			Identity: tools.InvocationIdentity{
+				SessionID:  sessionID,
+				ProjectID:  projectID,
+				ToolCallID: "call-read-auth-1",
+				Agent:      "implement",
+			},
+		})
+		invokeCh <- invokeRes{res, invErr}
+	}()
+
+	select {
+	case cpID := <-evPub.pending:
+		resolved, resolveErr := cpMgr.Authority.ResolveApprovalOption(ownerCtx, sessionID, cpID, "approve_current_action")
+		testutil.FailErr(t, "ResolveApprovalOption approve_current_action", resolveErr)
+		if resolved == nil || resolved.Status != hitl.DecisionStatusApproved {
+			t.Fatalf("unexpected resolved checkpoint: %+v", resolved)
+		}
+		out.ApprovalResolutions++
+	case early := <-invokeCh:
+		t.Fatalf("Invoke returned before tool_approval checkpoint: out=%q err=%v", early.out, early.err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for real hitl tool_approval checkpoint")
+	}
+
+	invRes := <-invokeCh
+	testutil.FailErr(t, "Executor.Invoke read after real hitl approval", invRes.err)
+	if invRes.out != "read-ok" {
+		t.Fatalf("Executor.Invoke output=%q want read-ok", invRes.out)
+	}
+	out.AuthorizedToolRuns = int(toolRuns.Load())
 
 	return out
 }
@@ -350,7 +525,7 @@ func runWiredProductWorkflow(t *testing.T, obs *cmddiag.Observer, injectContradi
 func TestTB11WiredEndToEndParityAndContradictions(t *testing.T) {
 	fixed := time.Date(2026, 11, 27, 14, 0, 0, 0, time.UTC)
 
-	// 1. Healthy workflow: DISABLED vs ENABLED parity (0 contradictions on both).
+	// 1. Healthy wired workflow: DISABLED vs ENABLED parity (0 contradictions on both).
 	obsOff := cmddiag.NewObserver(cmddiag.Config{Enabled: false})
 	restoreOff := cmddiag.SetObserver(obsOff)
 	healthyOff := runWiredProductWorkflow(t, obsOff, false)
@@ -374,14 +549,15 @@ func TestTB11WiredEndToEndParityAndContradictions(t *testing.T) {
 	restoreHealthyOn()
 	obsHealthyOn.Close()
 
-	// Assert strict functional parity between DISABLED and ENABLED runs.
 	if healthyOff.PromotedFilesOnDisk != healthyOn.PromotedFilesOnDisk ||
 		healthyOff.PromotionCommits != healthyOn.PromotionCommits ||
 		healthyOff.EditedFilesOnDisk != healthyOn.EditedFilesOnDisk ||
 		healthyOff.RetainedVersionsInDB != healthyOn.RetainedVersionsInDB ||
-		healthyOff.EgressHTTPArrivals != healthyOn.EgressHTTPArrivals ||
-		healthyOff.EgressRefusals != healthyOn.EgressRefusals ||
-		healthyOff.ToolExecutions != healthyOn.ToolExecutions {
+		healthyOff.BrokerAllowedReceipts != healthyOn.BrokerAllowedReceipts ||
+		healthyOff.BrokerDeniedReceipts != healthyOn.BrokerDeniedReceipts ||
+		healthyOff.BrokerHTTPArrivals != healthyOn.BrokerHTTPArrivals ||
+		healthyOff.ApprovalResolutions != healthyOn.ApprovalResolutions ||
+		healthyOff.AuthorizedToolRuns != healthyOn.AuthorizedToolRuns {
 		t.Fatalf("healthy enabled/disabled parity mismatch:\noff=%+v\non=%+v", healthyOff, healthyOn)
 	}
 	if obsOff.Stats().Emitted != 0 {
@@ -395,7 +571,7 @@ func TestTB11WiredEndToEndParityAndContradictions(t *testing.T) {
 	}
 	mu.Unlock()
 
-	// 2. Contradiction workflow through real wired production entry points (DISABLED vs ENABLED).
+	// 2. Wired contradiction injection (worker landing + edit read-basis + edit retained author): DISABLED vs ENABLED.
 	obsInjOff := cmddiag.NewObserver(cmddiag.Config{Enabled: false})
 	restoreInjOff := cmddiag.SetObserver(obsInjOff)
 	injOff := runWiredProductWorkflow(t, obsInjOff, true)
@@ -427,44 +603,95 @@ func TestTB11WiredEndToEndParityAndContradictions(t *testing.T) {
 		}
 	}
 
+	// 3. Safe synthetic checker contradictions with independent source linkage for the two
+	//    unbypassable authority/broker invariants (RuleWEAUnauthorizedEffect + RuleWEAUnrecordedOrRefusedEgress).
+	synthFindings := cmddiag.EvaluateWEA(cmddiag.WEAObservation{
+		SessionID:    "11111111-2222-3333-4444-555555555555",
+		ProjectID:    testdbseed.DefaultProjectID,
+		InvocationID: "inv-synth-checker-1",
+		ScopeKey:     "synth-checker-1",
+		Settled:      true,
+		AuthorityEffects: []cmddiag.WEAAuthorityEffectFact{{
+			EffectID:          "eff-synth-unauth",
+			SessionID:         "11111111-2222-3333-4444-555555555555",
+			ProjectID:         testdbseed.DefaultProjectID,
+			InvocationID:      "inv-synth-checker-1",
+			ActionKind:        "read",
+			ActionDigest:      "sha256:synth-unauth",
+			EventSeq:          cmddiag.NextWEASeq(),
+			RequiresAuthority: true,
+			Executed:          true,
+			Settled:           true,
+			SourceRef:         "toolexecution/eff-synth-unauth",
+		}},
+		ObservedConnections: []cmddiag.WEAEgressConnectionFact{{
+			ConnectionID:   "conn-synth-unrec",
+			SessionID:      "11111111-2222-3333-4444-555555555555",
+			ProjectID:      testdbseed.DefaultProjectID,
+			InvocationID:   "inv-synth-checker-1",
+			DestinationRef: "unrecorded.fixture.invalid:443",
+			ObservedSeq:    cmddiag.NextWEASeq(),
+			Settled:        true,
+			SourceRef:      "confine_broker/conn-synth-unrec",
+		}},
+	}, fixed)
+	synthHits := map[cmddiag.RuleID]int{}
+	for _, f := range synthFindings {
+		if f.Disposition == cmddiag.DispositionContradiction {
+			if len(f.SourceIDs) == 0 {
+				t.Fatalf("synthetic checker finding missing redacted source linkage: %+v", f)
+			}
+			synthHits[f.RuleID]++
+		}
+	}
+
 	var b strings.Builder
 	b.WriteString("\nTB11 Wired Production E2E Parity Receipt (zero direct cmddiag.ObserveWEA calls):\n")
-	b.WriteString(fmt.Sprintf("  %-26s | %-10s | %-10s\n", "Metric (Healthy Run)", "Disabled", "Enabled"))
-	b.WriteString(fmt.Sprintf("  %-26s-+-%-10s-+-%-10s\n", "--------------------------", "----------", "----------"))
-	b.WriteString(fmt.Sprintf("  %-26s | %-10d | %-10d\n", "PromotedFilesOnDisk", healthyOff.PromotedFilesOnDisk, healthyOn.PromotedFilesOnDisk))
-	b.WriteString(fmt.Sprintf("  %-26s | %-10d | %-10d\n", "PromotionCommits", healthyOff.PromotionCommits, healthyOn.PromotionCommits))
-	b.WriteString(fmt.Sprintf("  %-26s | %-10d | %-10d\n", "EditedFilesOnDisk", healthyOff.EditedFilesOnDisk, healthyOn.EditedFilesOnDisk))
-	b.WriteString(fmt.Sprintf("  %-26s | %-10d | %-10d\n", "RetainedVersionsInDB", healthyOff.RetainedVersionsInDB, healthyOn.RetainedVersionsInDB))
-	b.WriteString(fmt.Sprintf("  %-26s | %-10d | %-10d\n", "EgressHTTPArrivals", healthyOff.EgressHTTPArrivals, healthyOn.EgressHTTPArrivals))
-	b.WriteString(fmt.Sprintf("  %-26s | %-10d | %-10d\n", "EgressRefusals", healthyOff.EgressRefusals, healthyOn.EgressRefusals))
-	b.WriteString(fmt.Sprintf("  %-26s | %-10d | %-10d\n", "ToolExecutions", healthyOff.ToolExecutions, healthyOn.ToolExecutions))
-	b.WriteString(fmt.Sprintf("  %-26s | %-10d | %-10d\n", "HealthyContradictions", 0, 0))
-	b.WriteString(fmt.Sprintf("  %-26s | %-10d | %-10d\n", "InjectedContradictionsE2E", len(injOff.ContradictionRuleHits), len(injOn.ContradictionRuleHits)))
-	b.WriteString("  Component-boundary contradictions (unexported broker/approval bypass hooks):\n")
-	b.WriteString("    - RuleWEAUnauthorizedEffect: internal/toolexecution/wea_diagnostics_test.go\n")
-	b.WriteString("    - RuleWEAUnrecordedOrRefusedEgress: internal/confine/wea_diagnostics_test.go\n")
+	b.WriteString(fmt.Sprintf("  %-28s | %-10s | %-10s\n", "Metric (Healthy Run)", "Disabled", "Enabled"))
+	b.WriteString(fmt.Sprintf("  %-28s-+-%-10s-+-%-10s\n", "----------------------------", "----------", "----------"))
+	b.WriteString(fmt.Sprintf("  %-28s | %-10d | %-10d\n", "PromotedFilesOnDisk", healthyOff.PromotedFilesOnDisk, healthyOn.PromotedFilesOnDisk))
+	b.WriteString(fmt.Sprintf("  %-28s | %-10d | %-10d\n", "PromotionCommits", healthyOff.PromotionCommits, healthyOn.PromotionCommits))
+	b.WriteString(fmt.Sprintf("  %-28s | %-10d | %-10d\n", "EditedFilesOnDisk", healthyOff.EditedFilesOnDisk, healthyOn.EditedFilesOnDisk))
+	b.WriteString(fmt.Sprintf("  %-28s | %-10d | %-10d\n", "RetainedVersionsInDB", healthyOff.RetainedVersionsInDB, healthyOn.RetainedVersionsInDB))
+	b.WriteString(fmt.Sprintf("  %-28s | %-10d | %-10d\n", "BrokerAllowedReceipts", healthyOff.BrokerAllowedReceipts, healthyOn.BrokerAllowedReceipts))
+	b.WriteString(fmt.Sprintf("  %-28s | %-10d | %-10d\n", "BrokerDeniedReceipts", healthyOff.BrokerDeniedReceipts, healthyOn.BrokerDeniedReceipts))
+	b.WriteString(fmt.Sprintf("  %-28s | %-10d | %-10d\n", "BrokerHTTPArrivals", healthyOff.BrokerHTTPArrivals, healthyOn.BrokerHTTPArrivals))
+	b.WriteString(fmt.Sprintf("  %-28s | %-10d | %-10d\n", "ApprovalResolutions(hitl)", healthyOff.ApprovalResolutions, healthyOn.ApprovalResolutions))
+	b.WriteString(fmt.Sprintf("  %-28s | %-10d | %-10d\n", "AuthorizedToolRuns(read)", healthyOff.AuthorizedToolRuns, healthyOn.AuthorizedToolRuns))
+	b.WriteString(fmt.Sprintf("  %-28s | %-10d | %-10d\n", "HealthyContradictions", 0, 0))
+	b.WriteString(fmt.Sprintf("  %-28s | %-10d | %-10d\n", "WiredContradictionsFired", len(injOff.ContradictionRuleHits), len(injOn.ContradictionRuleHits)))
+	b.WriteString(fmt.Sprintf("  %-28s | %-10d | %-10d\n", "SynthCheckerContradictions", 0, len(synthHits)))
+	b.WriteString("  Authority effect exercised: tool_approval checkpoint on read -> hitl.ResolveApprovalOption(approve_current_action) -> toolexecution.Executor.Invoke(read)\n")
 	t.Log(b.String())
 
-	// Assert identical functional outcomes on injected run too.
 	if injOff.PromotedFilesOnDisk != injOn.PromotedFilesOnDisk ||
 		injOff.EditedFilesOnDisk != injOn.EditedFilesOnDisk ||
 		injOff.RetainedVersionsInDB != injOn.RetainedVersionsInDB ||
-		injOff.EgressHTTPArrivals != injOn.EgressHTTPArrivals ||
-		injOff.ToolExecutions != injOn.ToolExecutions {
+		injOff.BrokerAllowedReceipts != injOn.BrokerAllowedReceipts ||
+		injOff.BrokerDeniedReceipts != injOn.BrokerDeniedReceipts ||
+		injOff.BrokerHTTPArrivals != injOn.BrokerHTTPArrivals ||
+		injOff.ApprovalResolutions != injOn.ApprovalResolutions ||
+		injOff.AuthorizedToolRuns != injOn.AuthorizedToolRuns {
 		t.Fatalf("injected enabled/disabled parity mismatch:\noff=%+v\non=%+v", injOff, injOn)
 	}
 	if obsInjOff.Stats().Emitted != 0 {
 		t.Fatalf("disabled injected run emitted %d findings, want 0", obsInjOff.Stats().Emitted)
 	}
-
-	// Assert all 3 end-to-end injectable contradictions fired through real production owners.
 	for _, want := range []cmddiag.RuleID{
 		cmddiag.RuleWEALandedPathMismatch,
 		cmddiag.RuleWEAEditStaleReadBasis,
 		cmddiag.RuleWEAEditWrongAuthor,
 	} {
 		if injOn.ContradictionRuleHits[want] != 1 {
-			t.Fatalf("expected wired production owner to emit %q once, got hits=%+v (all=%+v)", want, injOn.ContradictionRuleHits, injFindings)
+			t.Fatalf("expected wired production owner to emit %q once, got hits=%+v", want, injOn.ContradictionRuleHits)
+		}
+	}
+	for _, want := range []cmddiag.RuleID{
+		cmddiag.RuleWEAUnauthorizedEffect,
+		cmddiag.RuleWEAUnrecordedOrRefusedEgress,
+	} {
+		if synthHits[want] != 1 {
+			t.Fatalf("expected synthetic checker to emit %q once with source linkage, got hits=%+v", want, synthHits)
 		}
 	}
 }

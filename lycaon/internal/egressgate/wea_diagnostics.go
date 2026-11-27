@@ -11,6 +11,13 @@ import (
 )
 
 func init() {
+	confine.SetBrokerDecisionObserver(func(cmd confine.EgressCommand, ep egressproxy.Endpoint, allowed bool) {
+		dest := strings.ToLower(strings.TrimSpace(ep.Host))
+		if dest != "" && ep.Port > 0 {
+			dest = net.JoinHostPort(dest, strconv.Itoa(int(ep.Port)))
+		}
+		observeEgressDecisionWEA(cmd, dest, allowed)
+	})
 	confine.SetBrokerConnectionObserver(func(cmd confine.EgressCommand, ep egressproxy.Endpoint) {
 		observeBrokerConnectionWEA(cmd, ep)
 	})
