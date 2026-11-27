@@ -178,7 +178,7 @@ A family extracts when its only shared needs are the **`toolkit` primitives** be
 
 #### The `toolkit` shared primitives
 
-[`tools/native/toolkit`](../lycaon/internal/tools/native/toolkit) holds the primitives every family speaks: bounded argument parsing (`BoundedIntArg`, `ClampIntArg`, `AppendClampBanner`, `BoolArg`), the survey-JSON response envelope (`MarshalResponse`, `PatchCoverage`, `TruncationBanner`, `OutlineBanner`, `AttachReceipt`, `AppendNote`), the path-escape guard (`PathEscapeReject`), and logical-line helpers (`SplitLines`, `CountLines`, `TrimPartialTrailingRune`). Binary content is not decided here: it is whatever the shared text gateway refuses to decode, so tools ask `internal/textfile` rather than carrying a second opinion about what counts as text.
+[`tools/native/toolkit`](../lycaon/internal/tools/native/toolkit) holds the primitives every family speaks: bounded argument parsing (`BoundedIntArg`, `ClampIntArg`, `BoolArg`, `MissingArg`), the survey-JSON response envelope (`MarshalResponse`, `PatchCoverage`, `OutlineBanner`, `AttachReceipt`), the path-escape guard (`PathEscapeReject`), and logical-line helpers (`SplitLines`, `CountLines`). Binary content is not decided here: it is whatever the shared text gateway refuses to decode, so tools ask `internal/textfile` rather than carrying a second opinion about what counts as text.
 
 The **mutation floor** is not a toolkit primitive. `IsSensitivePath` lives in the `tools` hub beside `IsGitInternalsWritePath` and is applied once, in [`tools/projectpaths.ResolveWrite`](../lycaon/internal/tools/projectpaths/projectpaths.go) — the resolver every mutating tool crosses. A guard each family opts into is a guard a family can forget, letting one write tool truncate a file another refuses to delete.
 
@@ -229,7 +229,7 @@ Coordinator wake decisions and tool policy use their own narrow resource sets in
 
 | Subpackage | Holds |
 |------------|-------|
-| [`session/store`](../lycaon/internal/session/store) | Session persistence ports and implementations: separate `QueryStore` / `CommandStore`, `store.SQL` / `store.Memory`, durable turns and model outputs, evidence-ledger paths, draft-version history, and compaction projections. Query freshness cannot redefine a command result; command preconditions and return values stay inside the writer transaction |
+| [`session/store`](../lycaon/internal/session/store) | Session persistence: per-concern repository ports (turns, submissions, compaction, rewind, checkpoints) behind `store.NewSQL`, durable turns and model outputs, evidence-ledger paths, draft-version history, and compaction projections. Query freshness cannot redefine a command result; command preconditions and return values stay inside the writer transaction |
 | [`session/stream`](../lycaon/internal/session/stream) | Transient session output: replay, active-message state, and coalesced live projection |
 | [`session/lifecycle`](../lycaon/internal/session/lifecycle) | Admission and stop transitions serialized across a session tree |
 | [`session/promptstate`](../lycaon/internal/session/promptstate) | Prompt exclusion, durable submission order, and cancellation scopes |

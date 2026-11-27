@@ -4,7 +4,7 @@ How Painted Wolf Code consumes the agents.md open standard in a user's project: 
 
 **See also:** [Projects](projects.md) · [Session](session.md) · [Docs map](README.md)
 
-**Machine truth:** `lycaon/internal/governance/` (resolve, inject, degrade) · `lycaon/internal/session/agentsmd_cache.go` · template [`platform/guidance/agents-md.md`](../lycaon/config/packs/painted-wolf/platform/guidance/agents-md.md) · budget `agents_md_inject.max_body_bytes` in [`prompt-budgets.yaml`](../lycaon/config/packs/painted-wolf/platform/host/prompt-budgets.yaml)
+**Machine truth:** `lycaon/internal/governance/` (resolve, inject, degrade) · template [`platform/guidance/agents-md.md`](../lycaon/config/packs/painted-wolf/platform/guidance/agents-md.md) · budget `agents_md_inject.max_body_bytes` in [`prompt-budgets.yaml`](../lycaon/config/packs/painted-wolf/platform/host/prompt-budgets.yaml)
 
 ---
 
@@ -58,7 +58,7 @@ Session AGENTS.md index/chain inject runs only when the `agents_md` trust surfac
 
 Human AGENTS.md edits are not gated by the surface enable: the Files editor treats the file as ordinary source (`PUT /v1/projects/{id}/source`), so operators can edit repo policy files while session inject is off.
 
-At session create, or when a project directory is set, the sidecar warms an `AGENTS.md` index via `governance.ListIndex` (`WarmAgentsMD`). Coordinator and worker turn assembly then prepend applicable guidance:
+The project contribution inventory indexes `AGENTS.md` files through `governance.ListIndex`. Coordinator and worker turn assembly then prepend applicable guidance:
 
 1. **Session start** — `BuildIndexInject` names the discovered regular `AGENTS.md` files under the session folder without opening their bodies. The walk prunes engine/VCS dirs (`.git`, the project overlay), dot-prefixed directories, and index-only omits (`testdata`, `node_modules`; `ListIndexOmitDir`). Index omit is not the survey walk prune set: a file inside an omitted or hidden tree is still applied by chain resolution when work goes there.
 2. **Working scopes** — resolved source observations and reached operations select their attached physical workspaces. `BuildScopedInject` supplies current policy bodies with explicit jurisdiction, ancestors first and the applicable root overlay last. Shared policy files appear once. Human edits take effect on the next completion; reached mutations also check freshness before their effect. A worker with no narrower scope receives its actual attached-root chain.

@@ -4,7 +4,7 @@ Prompt assembly turns durable session facts and current host state into the boun
 
 **See also:** [Architecture](architecture.md#facts-projections-and-caches) · [Session](session.md#continuous-context-budgets) · [Grounding](grounding.md) · [SQL persistence](sql-persistence.md) · [Security](security.md#untrusted-content-inbound)
 
-**Machine truth:** `lycaon/internal/session/prompt_assembly.go` · `lycaon/internal/session/promptassembly` · `lycaon/internal/llm/compaction` · `lycaon/internal/prompts` (template engine) · `lycaon/internal/tokenest` · `lycaon/internal/db/schema.sql` (`compaction_views`) · rendered-prompt byte caps in [`prompt-budgets.yaml`](../lycaon/config/packs/painted-wolf/platform/host/prompt-budgets.yaml)
+**Machine truth:** `lycaon/internal/session/promptassembly` · `lycaon/internal/llm/compaction` · `lycaon/internal/prompts` (template engine) · `lycaon/internal/tokenest` · `lycaon/internal/db/schema.sql` (`compaction_views`) · rendered-prompt byte caps in [`prompt-budgets.yaml`](../lycaon/config/packs/painted-wolf/platform/host/prompt-budgets.yaml)
 
 ## Facts, projections, and caches
 

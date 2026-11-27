@@ -164,7 +164,7 @@ host commits state + outbox event
 
 Events do not authorize client-side speculative transitions.
 
-**A run event precedes every transcript row that names it.** The outbox drains in insertion order, and a mutation that writes both enqueues the run event before appending rows (`enqueueRunTx` then `AppendMessagesTx` in `internal/workflow/sql_store.go`). A client never holds a span whose run is absent, so span shape is settled at first paint; rendering still tolerates a missing run, but the wire does not produce one.
+**A run event precedes every transcript row that names it.** The outbox drains in insertion order, and a mutation that writes both enqueues the run event before appending rows (`enqueueRunTx` then `AppendMessagesTx`, [`workflow/persistence/transactions.go`](../lycaon/internal/workflow/persistence/transactions.go)). A client never holds a span whose run is absent, so span shape is settled at first paint; rendering still tolerates a missing run, but the wire does not produce one.
 
 ### Pagination
 

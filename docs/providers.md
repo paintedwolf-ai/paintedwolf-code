@@ -321,7 +321,7 @@ Two scoped planes match a **model id** rather than a provider kind, because the 
 | Thinking | `model_thinking:` | The reasoning wire form, the two polarity flags below, and the family's reasoning markers | The request an adapter builds, and how its output is read |
 | Cutoff | `model_cutoff:` | The family's approximate knowledge-cutoff month | Prompt text, through the date preamble |
 
-A thinking vocabulary is plain text, an effort level, a boolean flag, a budget-token count, an adaptive mode, or a structured reasoning object. `DriverProfile` still constrains which of those the transport can carry. Neither plane widens authority: a rule changes how a request is dressed or what a prompt says about dates, never which tools, roots, or destinations are reachable.
+A thinking vocabulary is plain text, an effort level, a boolean flag, a budget-token count, an adaptive mode, or a structured reasoning object. The provider profile (`providerprofile.Profile`, its thinking styles) still constrains which of those the transport can carry. Neither plane widens authority: a rule changes how a request is dressed or what a prompt says about dates, never which tools, roots, or destinations are reachable.
 
 #### Reasoning polarity
 

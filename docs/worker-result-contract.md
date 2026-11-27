@@ -4,7 +4,7 @@ A worker result is the bounded, host-verifiable handoff from a worker round to i
 
 **See also:** [Coordination](coordination.md) · [Grounding](grounding.md) · [Tools](tools.md#worker-scope-coordination) · [Session](session.md)
 
-**Machine truth:** `lycaon/internal/session/worker_completion.go` · report, proof, and summary in `lycaon/internal/session/workercompletion/` · finalizer in `lycaon/internal/session/workercloseout/` · the parent `<task>` block in `lycaon/internal/workercompletionxml/` · status vocabulary in `lycaon/pkg/api/session_types.go`
+**Machine truth:** report, proof, and summary in `lycaon/internal/session/workercompletion/` · finalizer in `lycaon/internal/session/workercloseout/` · the parent `<task>` block in `lycaon/internal/workercompletionxml/` · status vocabulary in `lycaon/pkg/api/session_types.go`
 
 The contract separates three layers:
 
