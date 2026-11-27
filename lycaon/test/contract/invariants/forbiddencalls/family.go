@@ -11,6 +11,7 @@ import (
 // Family is the forbidden-calls rule table.
 var Family = invariants.Family{Name: "forbidden-calls", Invariants: slices.Concat(
 	testInfrastructure,
+	memoryContracts,
 	agentDoors,
 	approvals,
 	concurrency,
