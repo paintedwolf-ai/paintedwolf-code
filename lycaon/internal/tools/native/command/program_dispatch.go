@@ -84,11 +84,8 @@ type ProgramOwners struct {
 	Input           commandprogram.InputRedirection
 	Sources         commandprogram.SourceCapture
 	// Redirections binds redirect owners to a directory frame after cd.
-	Redirections func(*projectpaths.ProgramPaths, tools.CommandOutputAdmission) (commandprogram.InputRedirection, commandprogram.OutputPublication)
-	// Builtins are in-process utility owners bound to this program's ports;
-	// release runs once the program and its jobs have settled.
-	Builtins func(BuiltinPorts) (builtins map[string]commandprogram.OperationDispatcher, release func(), err error)
-	// DeclareLaunch verifies and pins explicitly resolved managed-temp launch inputs.
+	Redirections  func(*projectpaths.ProgramPaths, tools.CommandOutputAdmission) (commandprogram.InputRedirection, commandprogram.OutputPublication)
+	Builtins      func(BuiltinPorts) (builtins map[string]commandprogram.OperationDispatcher, release func(), err error)
 	DeclareLaunch func(ctx context.Context, tc tools.ToolContext, executionID, cwd string, argv []string) error
 }
 
