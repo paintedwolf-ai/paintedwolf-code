@@ -39,6 +39,14 @@ func NewManagedTempTracker() *ManagedTempTracker {
 	return &ManagedTempTracker{entries: map[string]managedTempEntry{}}
 }
 
+func (o *Owners) applyWrite(ctx context.Context, tc tools.ToolContext, input native.WriteInput) (native.WriteResult, error) {
+	result, err := o.Operations.Write.Apply(ctx, input, tc)
+	if err == nil && o.ManagedTemps != nil {
+		o.ManagedTemps.Record(ctx, tc, o.Revisions, input.Path)
+	}
+	return result, err
+}
+
 // Record captures the physical identity and declared-at-launch revision of a
 // managed-temp file published through the native write door.
 func (t *ManagedTempTracker) Record(ctx context.Context, tc tools.ToolContext, revisions native.ExecutionRevisions, abs string) {
