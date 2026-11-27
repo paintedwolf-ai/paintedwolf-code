@@ -10,6 +10,7 @@ from portable_command.lifecycle_oracles import inspect_temp_handoff_and_jobs
 from portable_command.live import MODEL_FIELDS, SOURCE_FIELDS, freeze_plan, load_live_manifest, summarize_slots
 from portable_command.profile_session import explicit_effect_certainty, inspect_readonly_authority
 from portable_command.task_oracles import inspect_task_integrity
+from portable_command.witness_oracles import inspect_live_witnesses
 
 
 def _run_git(project_dir, *args):
@@ -216,7 +217,7 @@ def verify_paired_manifest_contract(case, identity):
     }
 
 
-def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, receipts, effects, audit, recovery, last_payload, final_hashes, baseline_hashes, sidecar=None, session_surface=None, last_raw=None, no_external_launch=False, first_rejected=None, turn_records=None, invocations=None, db_path=None, sidecar_log=None):
+def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, receipts, effects, audit, recovery, last_payload, final_hashes, baseline_hashes, sidecar=None, session_surface=None, last_raw=None, no_external_launch=False, first_rejected=None, turn_records=None, invocations=None, db_path=None, sidecar_log=None, witness_meta=None):
     """Collect Q05, Q06, Q11, Q18, Q19, Q20, Q21, and Q22 facts from SQLite audit rows, sidecar log, and repo state."""
     execs = audit['invocation_program_executions']
     pins = audit['invocation_program_revision_pins']
@@ -277,4 +278,6 @@ def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, rece
     facts.update(verify_paired_manifest_contract(case, identity))
     if db_path is not None:
         facts.update(inspect_task_integrity(case, db_path=db_path, session_id=session_id, project_dir=project_dir, receipts=receipts, effects=effects, baseline_hashes=baseline_hashes, final_hashes=final_hashes))
+    w_facts, recovery = inspect_live_witnesses(case, project_dir=project_dir, audit=audit, receipts=receipts, effects=effects, last_payload=last_payload, recovery=recovery, witness_meta=witness_meta, invocations=invocations)
+    facts.update(w_facts)
     return facts, recovery, deliveries

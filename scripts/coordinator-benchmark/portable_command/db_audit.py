@@ -69,6 +69,8 @@ def _canonical_op(ex):
         return 'write'
     if op_id == 'code_rewrite' or native_cmd == 'code-rewrite':
         return 'code_rewrite'
+    if op_id == 'http_request' or native_cmd == 'curl':
+        return 'http_request'
     if op_id == 'read' and native_cmd in {'', 'cat', 'head', 'read'}:
         return 'read'
     if op_id == 'command' and native_cmd == 'external' and owner == 'processes':

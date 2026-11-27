@@ -39,6 +39,8 @@ def normalize_outcome(raw_result, program_row, payload):
     code, _ = _structured_rejection(raw_result, payload)
     if not code and program_row:
         code = program_row.get('stop_code') or None
+    if code == 'COMMAND_REVISION_CONFLICT':
+        return 'conflict', 'conflict', code
     if raw_outcome == 'rejected' or (program_row and program_row.get('state') == 'rejected') or (isinstance(payload.get('refusal'), dict) and payload['refusal'].get('code')):
         return 'rejected', 'rejected', code
     state = (program_row or {}).get('state') or raw_outcome or None
@@ -46,7 +48,7 @@ def normalize_outcome(raw_result, program_row, payload):
     return state, stop, code
 
 
-def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=(), baseline_hashes=None, session_surface=None, draft_bindings=None, host_scope_binding=None, program_receipt_pages=None, git_setup=None):
+def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=(), baseline_hashes=None, session_surface=None, draft_bindings=None, host_scope_binding=None, program_receipt_pages=None, git_setup=None, witness_meta=None):
     """Construct a version-1 native-runtime observation from the whole isolated session."""
     prelude_calls = {r['call_id'] for r in prelude_records if r.get('call_id')}
     expected_calls = {cid for rec in turn_records for cid in (list(rec['call_ids']) + list(rec.get('await_call_ids') or ()))}
@@ -264,7 +266,7 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
             and progress[0]['detail_ref'] == last_details.get('program_progress_detail_ref')
             and progress[0]['execution_id'] != last_details.get('execution_id')
         )
-    extra_facts, recovery, deliveries = extra_case_facts(case, session_id=session_id, identity=identity, project_dir=project_dir, git_setup=git_setup, receipts=receipts, effects=effects, audit=audit, recovery=recovery, last_payload=last_payload, final_hashes=final_hashes, baseline_hashes=baseline_hashes, sidecar=sidecar, session_surface=session_surface, last_raw=last_raw, no_external_launch=no_external_launch, first_rejected=first_rejected, turn_records=turn_records, invocations=cmd_invocations, db_path=db_path, sidecar_log=sidecar_log)
+    extra_facts, recovery, deliveries = extra_case_facts(case, session_id=session_id, identity=identity, project_dir=project_dir, git_setup=git_setup, receipts=receipts, effects=effects, audit=audit, recovery=recovery, last_payload=last_payload, final_hashes=final_hashes, baseline_hashes=baseline_hashes, sidecar=sidecar, session_surface=session_surface, last_raw=last_raw, no_external_launch=no_external_launch, first_rejected=first_rejected, turn_records=turn_records, invocations=cmd_invocations, db_path=db_path, sidecar_log=sidecar_log, witness_meta=witness_meta)
     v_facts = extra_facts.pop('_verification_facts', None)
     facts.update(extra_facts, structural_wrappers_valid=wrappers_valid)
     gaps.extend(f"missing_observation:{req}:{FACT_OWNERS.get(req, 'runtime_owner')}" for req in (case.get('required_evidence') or ()) if req not in facts)

@@ -75,8 +75,8 @@
       "automatic_execution": false,
       "remedy": "fresh_read_and_preparation",
       "effect_certainty_required": true,
-      "source_span_required": true,
-      "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+      "source_span_required": false,
+      "owner_code": "COMMAND_REVISION_CONFLICT"
     },
     {
       "case_id": "oar-unavailable-remedy",
@@ -97,8 +97,7 @@
       "automatic_execution": false,
       "remedy": "specific_remaining_status_action",
       "effect_certainty_required": true,
-      "source_span_required": false,
-      "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+      "source_span_required": false
     }
   ]
 }

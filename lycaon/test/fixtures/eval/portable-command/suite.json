@@ -909,16 +909,16 @@
       "profile": "implement",
       "setup": {
         "files": {
-          "input.txt": "alpha\n"
+          "AGENTS.md": "alpha\n"
         },
         "drafts": {},
         "progress": "valid",
         "revisions": {
-          "input.txt": "baseline:input.txt"
+          "AGENTS.md": "baseline:AGENTS.md"
         },
         "host_facts": {
           "during_review": {
-            "input.txt": {
+            "AGENTS.md": {
               "revision": "human-r2",
               "bytes": "human\n"
             }
@@ -927,8 +927,9 @@
       },
       "turns": [
         {
-          "program": "sed -i 's/alpha/beta/' ./input.txt",
-          "expected_outcome": "conflict"
+          "program": "sed -i 's/alpha/beta/' ./AGENTS.md",
+          "expected_outcome": "conflict",
+          "expected_rejection": "COMMAND_REVISION_CONFLICT"
         }
       ],
       "expected": {
@@ -938,18 +939,13 @@
         "host_stop": "conflict",
         "complete": false,
         "files": {
-          "input.txt": "human\n"
+          "AGENTS.md": "alpha\n"
         },
         "absent": [],
         "receipts": [
           {
             "operation": "sed",
-            "outcome": "completed"
-          },
-          {
-            "operation": "write",
-            "outcome": "rejected",
-            "path": "input.txt"
+            "outcome": "rejected"
           }
         ],
         "effects": [],
@@ -963,8 +959,8 @@
           "automatic_execution": false,
           "remedy": "fresh_read_and_preparation",
           "effect_certainty_required": true,
-          "source_span_required": true,
-          "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+          "source_span_required": false,
+          "owner_code": "COMMAND_REVISION_CONFLICT"
         },
         "closeout": "blocked"
       },
@@ -985,7 +981,7 @@
       "profile": "implement",
       "setup": {
         "files": {
-          "input.txt": "old\n",
+          "dir/input.txt": "old\n",
           "unrelated.txt": "disk\n"
         },
         "drafts": {
@@ -996,7 +992,7 @@
         },
         "progress": "valid",
         "revisions": {
-          "input.txt": "baseline:input.txt",
+          "dir/input.txt": "baseline:dir/input.txt",
           "unrelated.txt": "baseline:unrelated.txt"
         },
         "host_facts": {
@@ -1005,7 +1001,7 @@
       },
       "turns": [
         {
-          "program": "printf 'next\\n' > ./input.txt && fixture-verifier",
+          "program": "printf 'next\\n' > ./dir/input.txt && printf 'RAN\\n' > ./marker.txt",
           "expected_outcome": "incomplete"
         }
       ],
@@ -1016,10 +1012,12 @@
         "host_stop": "incomplete",
         "complete": false,
         "files": {
-          "input.txt": "old\n",
+          "dir/input.txt": "old\n",
           "unrelated.txt": "disk\n"
         },
-        "absent": [],
+        "absent": [
+          "marker.txt"
+        ],
         "receipts": [
           {
             "operation": "printf",
@@ -1028,7 +1026,7 @@
           {
             "operation": "write",
             "outcome": "failed",
-            "path": "input.txt",
+            "path": "dir/input.txt",
             "accepted": true,
             "published": false
           }
@@ -1037,7 +1035,7 @@
           {
             "operation": "write",
             "outcome": "failed",
-            "path": "input.txt",
+            "path": "dir/input.txt",
             "accepted": true,
             "published": false
           }
@@ -1071,7 +1069,7 @@
       },
       "turns": [
         {
-          "program": "printf 'first\\n' > ./first.txt; curl -d payload \"$FIXTURE_HTTP\"; touch ./never",
+          "program": "printf 'first\\n' > ./first.txt && curl -fsS -d payload \"$FIXTURE_HTTP\" && touch ./never",
           "expected_outcome": "interrupted"
         }
       ],
@@ -1130,8 +1128,7 @@
           "automatic_execution": false,
           "remedy": "specific_remaining_status_action",
           "effect_certainty_required": true,
-          "source_span_required": false,
-          "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+          "source_span_required": false
         },
         "closeout": "blocked"
       },
@@ -1693,14 +1690,15 @@
       },
       "turns": [
         {
-          "program": "curl \"$FIXTURE_HTTP\"",
-          "expected_outcome": "rejected"
+          "program": "curl -fsS \"$FIXTURE_HTTP\"",
+          "expected_outcome": "rejected",
+          "expected_rejection": "SANDBOX_LOOPBACK_CONNECT_DENIED"
         }
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
-        "status": 2,
+        "stderr": "curl: request: The person declined this connection to the local service [SANDBOX_LOOPBACK_CONNECT_DENIED]\n",
+        "status": 1,
         "host_stop": "rejected",
         "complete": false,
         "files": {},
