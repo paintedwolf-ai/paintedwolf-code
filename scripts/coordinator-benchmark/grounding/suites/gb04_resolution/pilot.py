@@ -23,19 +23,32 @@ from grounding.friction_probe import probe_store_db
 from grounding.sidecar_driver import (
     IsolatedSidecarProcess,
     ScriptedTurn,
+    SidecarRunArtifact,
     run_scripted_session,
 )
 
 
-def _extract_verdicts_summary(artifact_dict: dict[str, Any]) -> dict[str, Any]:
-    ce = artifact_dict.get("cited_evidence") or []
-    refusals = artifact_dict.get("refusals") or []
+def _inspect_artifact(art: SidecarRunArtifact, *, initial_turns: int) -> dict[str, Any]:
+    closeout = art.product_closeouts[-1] if art.product_closeouts else {}
+    grounding = (closeout or {}).get("grounding") or {}
+    cited = grounding.get("cited_evidence") or []
+    retry_count = int(grounding.get("retry_count") or 0)
+    host_assembled = bool(grounding.get("host_assembled") is True)
+    hint_code = str(grounding.get("hint_code") or "")
+    extra_repair_prompts = max(0, len(art.raw_pending_requests) - initial_turns)
+    refused = bool(retry_count > 0 or host_assembled or hint_code or extra_repair_prompts > 0)
     return {
-        "cited_evidence_count": len(ce),
-        "cited_evidence": ce,
-        "refusal_count": len(refusals),
-        "refusals": refusals,
-        "minted_handles": [r.get("handle") for r in (artifact_dict.get("product_records") or [])],
+        "session_id": art.session_id,
+        "traced": grounding.get("traced"),
+        "evidence_optional": grounding.get("evidence_optional"),
+        "retry_count": retry_count,
+        "host_assembled": host_assembled,
+        "hint_code": hint_code,
+        "extra_repair_prompts": extra_repair_prompts,
+        "refused": refused,
+        "cited_evidence_count": len(cited),
+        "cited_evidence": cited,
+        "minted_handles": [r.handle for r in art.product_records],
     }
 
 
@@ -126,13 +139,14 @@ def run_gb04_pilot(
             client.wait_session_ready(sid)
             before = probe_store_db(sidecar.store_db_path, sid)
             p = client.send_prompt(sid, f"Inspect sample.go for {selector}.")
+            turns = (
+                ScriptedTurn(tool_calls=({"name": "command", "args": {"command": "cat -n sample.go"}},)),
+                ScriptedTurn(content=reply_text),
+            )
             art = run_scripted_session(
                 client,
                 session_id=sid,
-                turns=(
-                    ScriptedTurn(tool_calls=({"name": "command", "args": {"command": "cat -n sample.go"}},)),
-                    ScriptedTurn(content=reply_text),
-                ),
+                turns=turns,
                 db_path=sidecar.store_db_path,
                 workspace_dir=workspace,
                 submission_id=str(p.get("submission_id") or p.get("id") or ""),
@@ -144,16 +158,16 @@ def run_gb04_pilot(
                 poll_timeout=60.0,
             )
             after = probe_store_db(sidecar.store_db_path, sid)
-            art_d = art.to_dict()
             (out_dir / f"{selector}.json").write_text(
-                json.dumps(art_d, indent=2, sort_keys=True), encoding="utf-8"
+                json.dumps(art.to_dict(), indent=2, sort_keys=True), encoding="utf-8"
             )
+            info = _inspect_artifact(art, initial_turns=len(turns))
 
             if expected_class == "grounded":
-                passed = len(art.refusals) == 0 and len(art.cited_evidence) >= 1
+                passed = (not info["refused"]) and info["cited_evidence_count"] >= 1
                 div_kind = "false_reject"
             else:
-                passed = len(art.refusals) >= 1
+                passed = info["refused"]
                 div_kind = "false_accept"
 
             delta = after.delta_observed(before)
@@ -165,7 +179,7 @@ def run_gb04_pilot(
                 "d10_before": before.to_dict(),
                 "d10_after": after.to_dict(),
                 "d10_delta": delta,
-                "summary": _extract_verdicts_summary(art_d),
+                "summary": info,
             })
             if not passed:
                 divergences.append({
@@ -173,8 +187,9 @@ def run_gb04_pilot(
                     "family_id": family_id,
                     "kind": div_kind,
                     "detail": (
-                        f"expected={expected_class}, refusals={len(art.refusals)}, "
-                        f"cited_evidence={len(art.cited_evidence)}, "
+                        f"expected={expected_class}, refused={info['refused']}, "
+                        f"retry_count={info['retry_count']}, hint_code={info['hint_code']!r}, "
+                        f"cited_evidence={info['cited_evidence_count']}, "
                         f"d10_delta={delta}"
                     ),
                 })
