@@ -197,15 +197,17 @@ def run_macos_native(
             sidecar_env.update(
                 {
                     "LYCAON_CONFIG_DIR": str(cfg_dir),
+                    "LYCAON_ADDR": f"127.0.0.1:{port}",
                     "LYCAON_API_TOKEN": token,
                     "LYCAON_DEV": "1",
+                    "LYCAON_DEV_CORS": "1",
                     "LYCAON_LLM_MOCK": "1",
                     "NO_PROXY": "127.0.0.1,localhost",
                 }
             )
             sidecar_log = (out_dir / "sidecar_macos.log").open("wb")
             sidecar_proc = subprocess.Popen(
-                [str(engine_bin), "serve", "--addr", f"127.0.0.1:{port}"],
+                [str(engine_bin), "serve", "--db", str(cfg_dir / "store.db")],
                 env=sidecar_env,
                 stdout=sidecar_log,
                 stderr=subprocess.STDOUT,
