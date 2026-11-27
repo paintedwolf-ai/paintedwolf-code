@@ -9,6 +9,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcescope"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -23,10 +24,6 @@ func TestDiagnosticDetectsEachInjectedDisagreement(t *testing.T) {
 	store := reader.store
 	testutil.FailErr(t, "close initial reader", reader.Close())
 
-	// Inject three disagreements directly into the index DB without advancing disk:
-	// 1. missing_in_catalog: delete src/missing_in_cat.txt from nodes
-	// 2. extra_in_catalog: insert ghost row src/ghost_in_cat.txt
-	// 3. kind_mismatch: flip src/kind_flip.txt to is_dir=1, regular=0
 	db, err := openTreeDB(t.Context(), store.file)
 	testutil.FailErr(t, "open tree db", err)
 	defer func() { _ = db.Close() }()
@@ -53,14 +50,16 @@ func TestDiagnosticDetectsEachInjectedDisagreement(t *testing.T) {
 		{Path: "src/kind_flip.txt", Kind: DisagreementKindMismatch, CatalogKind: "dir", DiskKind: "file"},
 		{Path: "src/missing_in_cat.txt", Kind: DisagreementMissingInCatalog, DiskKind: "file"},
 	}
+	if !report.GenerationConsistent {
+		t.Fatal("expected GenerationConsistent=true on settled tree")
+	}
 	if !slices.Equal(report.Disagreements, want) {
 		t.Fatalf("disagreements = %+v, want %+v", report.Disagreements, want)
 	}
-	if report.DiagnosticReads.DirReads == 0 || report.DiagnosticReads.EntryReads == 0 {
+	if report.DiagnosticReads.DirReads == 0 || report.DiagnosticReads.EntryReads == 0 || report.DiagnosticReads.CatalogRowsRead == 0 {
 		t.Fatalf("expected separate diagnostic read counts > 0, got %+v", report.DiagnosticReads)
 	}
 
-	// Verify bounded JSONL output is valid typed JSON.
 	raw, err := os.ReadFile(reportPath)
 	testutil.FailErr(t, "read diagnostic jsonl", err)
 	var decoded DiagnosticReport
@@ -97,7 +96,6 @@ func TestDiagnosticRaisesNothingOnDeclaredGaps(t *testing.T) {
 		store := reader.store
 		testutil.FailErr(t, "close reader", reader.Close())
 
-		// Record a declared fault on private and remove its child from nodes.
 		db, err := openTreeDB(t.Context(), store.file)
 		testutil.FailErr(t, "open db", err)
 		defer func() { _ = db.Close() }()
@@ -120,7 +118,6 @@ func TestDiagnosticRaisesNothingOnDeclaredGaps(t *testing.T) {
 		store := reader.store
 		testutil.FailErr(t, "close reader", reader.Close())
 
-		// Drop good.txt from DB to prove declared root gaps suppress reporting.
 		db, err := openTreeDB(t.Context(), store.file)
 		testutil.FailErr(t, "open db", err)
 		defer func() { _ = db.Close() }()
@@ -183,7 +180,7 @@ func TestDiagnosticRaisesNothingOnDeclaredGaps(t *testing.T) {
 	})
 }
 
-func TestDiagnosticReportIsBoundedAndDeduplicated(t *testing.T) {
+func TestDiagnosticRetainedReportDoesNotGrowOnCleanOrDuplicateSamples(t *testing.T) {
 	catalog, root := indexFixture(t)
 	for i := 0; i < 12; i++ {
 		writeIndexFile(t, root.Path, fmt.Sprintf("f_%02d.txt", i), "data")
@@ -192,31 +189,64 @@ func TestDiagnosticReportIsBoundedAndDeduplicated(t *testing.T) {
 	store := reader.store
 	testutil.FailErr(t, "close reader", reader.Close())
 
+	reportPath := filepath.Join(t.TempDir(), "bounded.jsonl")
+	sampler := NewDiagnosticSampler()
+	cfg := DiagnosticConfig{
+		Enabled:            true,
+		MaxDisagreements:   5,
+		MaxRetainedReports: 3,
+		ReportPath:         reportPath,
+	}
+
+	// Clean samples must not create or grow the retained report file.
+	for i := 0; i < 5; i++ {
+		clean, err := catalog.Trees.SampleCatalogDiagnostic(t.Context(), "p", root, cfg, sampler)
+		testutil.FailErr(t, "clean sample", err)
+		if len(clean.Disagreements) != 0 {
+			t.Fatalf("clean sample raised disagreements: %+v", clean.Disagreements)
+		}
+	}
+	if _, err := os.Stat(reportPath); !os.IsNotExist(err) {
+		t.Fatalf("expected no report file written on clean samples, stat err=%v", err)
+	}
+
+	// Inject disagreements: first sample writes 1 bounded line; repeated samples do not grow file.
 	db, err := openTreeDB(t.Context(), store.file)
 	testutil.FailErr(t, "open db", err)
 	defer func() { _ = db.Close() }()
 	_, err = db.ExecContext(t.Context(), "DELETE FROM nodes WHERE regular=1")
 	testutil.FailErr(t, "delete all files", err)
 
-	reportPath := filepath.Join(t.TempDir(), "bounded.jsonl")
-	sampler := NewDiagnosticSampler()
-	cfg := DiagnosticConfig{
-		Enabled:          true,
-		MaxDisagreements: 5,
-		ReportPath:       reportPath,
-	}
-
 	first, err := catalog.Trees.SampleCatalogDiagnostic(t.Context(), "p", root, cfg, sampler)
 	testutil.FailErr(t, "first sample", err)
 	if len(first.Disagreements) != 5 || !first.Truncated || first.TotalObserved != 12 {
 		t.Fatalf("first bounded report = len:%d truncated:%v total:%d", len(first.Disagreements), first.Truncated, first.TotalObserved)
 	}
+	info1, err := os.Stat(reportPath)
+	testutil.FailErr(t, "stat after first write", err)
 
-	// Second sample on the same generation deduplicates all 12 previously seen keys.
-	second, err := catalog.Trees.SampleCatalogDiagnostic(t.Context(), "p", root, cfg, sampler)
-	testutil.FailErr(t, "second sample", err)
-	if len(second.Disagreements) != 0 || second.DedupedCount != 12 {
-		t.Fatalf("second deduped report = len:%d deduped:%d", len(second.Disagreements), second.DedupedCount)
+	for i := 0; i < 4; i++ {
+		dup, err := catalog.Trees.SampleCatalogDiagnostic(t.Context(), "p", root, cfg, sampler)
+		testutil.FailErr(t, "duplicate sample", err)
+		if len(dup.Disagreements) != 0 || dup.DedupedCount != 12 {
+			t.Fatalf("duplicate sample = len:%d deduped:%d", len(dup.Disagreements), dup.DedupedCount)
+		}
+	}
+	info2, err := os.Stat(reportPath)
+	testutil.FailErr(t, "stat after duplicate samples", err)
+	if info2.Size() != info1.Size() {
+		t.Fatalf("report file grew on duplicate samples: %d -> %d", info1.Size(), info2.Size())
+	}
+
+	// Simulate distinct generations to verify retained report cap (MaxRetainedReports=3).
+	for rev := uint64(2); rev <= 6; rev++ {
+		_, err = db.ExecContext(t.Context(), "UPDATE meta SET revision=? WHERE id=1", rev)
+		testutil.FailErr(t, "bump meta revision", err)
+		store.mu.Lock()
+		store.status.Revision = rev
+		store.mu.Unlock()
+		_, err = catalog.Trees.SampleCatalogDiagnostic(t.Context(), "p", root, cfg, sampler)
+		testutil.FailErr(t, "sample distinct generation", err)
 	}
 
 	f, err := os.Open(reportPath)
@@ -227,9 +257,109 @@ func TestDiagnosticReportIsBoundedAndDeduplicated(t *testing.T) {
 	for sc.Scan() {
 		lines++
 	}
-	if lines != 2 {
-		t.Fatalf("expected 2 JSONL report lines, got %d", lines)
+	if lines != 3 {
+		t.Fatalf("expected retained report capped at 3 lines, got %d", lines)
 	}
+}
+
+func TestDiagnosticSubtreeReadIsBoundedOnLargeCatalog(t *testing.T) {
+	catalog, root := indexFixture(t)
+	for d := 0; d < 25; d++ {
+		for f := 0; f < 40; f++ {
+			writeIndexFile(t, root.Path, fmt.Sprintf("unrelated_%02d/file_%02d.txt", d, f), "x")
+		}
+	}
+	for f := 0; f < 4; f++ {
+		writeIndexFile(t, root.Path, fmt.Sprintf("focus_pkg/item_%02d.txt", f), "target")
+	}
+	reader := waitIndex(t, catalog, root)
+	testutil.FailErr(t, "close reader", reader.Close())
+
+	report, err := catalog.Trees.SampleCatalogDiagnostic(t.Context(), "p", root, DiagnosticConfig{
+		Enabled:    true,
+		Subtree:    "focus_pkg",
+		MaxDirs:    8,
+		MaxEntries: 32,
+	}, NewDiagnosticSampler())
+	testutil.FailErr(t, "sample small subtree in large catalog", err)
+
+	if len(report.Disagreements) != 0 {
+		t.Fatalf("expected 0 disagreements, got %+v", report.Disagreements)
+	}
+	// Catalog has >1,000 rows, but bounded subtree query must only read target rows + coverage + ancestors.
+	if report.DiagnosticReads.CatalogRowsRead > 20 {
+		t.Fatalf("subtree diagnostic scanned too many catalog rows: %d (want <= 20)", report.DiagnosticReads.CatalogRowsRead)
+	}
+	if report.DiagnosticReads.DirReads != 1 || report.DiagnosticReads.EntryReads != 4 {
+		t.Fatalf("unexpected direct walk counts: %+v", report.DiagnosticReads)
+	}
+}
+
+func TestDiagnosticSkipsComparisonWhenLiveChangeOccursDuringSample(t *testing.T) {
+	catalog, root := indexFixture(t)
+	writeIndexFile(t, root.Path, "src/a.txt", "a")
+	reader := waitIndex(t, catalog, root)
+	store := reader.store
+	testutil.FailErr(t, "close reader", reader.Close())
+
+	// Inject a file on disk after publication without updating catalog, AND simulate a
+	// live epoch/invalidation movement occurring during the direct walk.
+	writeIndexFile(t, root.Path, "src/concurrent_new.txt", "new")
+	workBefore, err := catalog.Trees.ProductWorkCounters(t.Context(), "p", root)
+	testutil.FailErr(t, "work before", err)
+
+	report, err := catalog.Trees.sampleCatalogDiagnosticWithHook(
+		t.Context(),
+		"p",
+		root,
+		DiagnosticConfig{Enabled: true, Subtree: "src"},
+		NewDiagnosticSampler(),
+		func() {
+			repochange.Advance(root.Path)
+		},
+	)
+	testutil.FailErr(t, "sample with concurrent live change", err)
+
+	if report.GenerationConsistent {
+		t.Fatal("expected GenerationConsistent=false when live change occurred during sample")
+	}
+	if len(report.Disagreements) != 0 {
+		t.Fatalf("live change during sample must not raise false disagreements, got %+v", report.Disagreements)
+	}
+	workAfter, err := catalog.Trees.ProductWorkCounters(t.Context(), "p", root)
+	testutil.FailErr(t, "work after", err)
+	if workAfter != workBefore {
+		t.Fatalf("diagnostic modified ordinary product work counters: before=%+v after=%+v", workBefore, workAfter)
+	}
+	_ = store
+}
+
+func TestDiagnosticEnvOptInRunsFromNormalReconcile(t *testing.T) {
+	reportPath := filepath.Join(t.TempDir(), "env-optin-diagnostic.jsonl")
+	t.Setenv("LYCAON_CATALOG_DIAGNOSTIC", "1")
+	t.Setenv("LYCAON_CATALOG_DIAGNOSTIC_FILE", reportPath)
+	t.Setenv("LYCAON_CATALOG_DIAGNOSTIC_SUBTREE", "src")
+
+	catalog, root := indexFixture(t)
+	writeIndexFile(t, root.Path, "src/a.txt", "a")
+
+	// Normal product reconciliation triggers maybeSampleCatalogDiagnostic end-to-end.
+	reader := waitIndex(t, catalog, root)
+	store := reader.store
+	testutil.FailErr(t, "close reader", reader.Close())
+
+	// Verify the per-TreeStores diagnostic sampler was initialized by the normal path
+	// (clean run writes no file, proving zero growth on no-disagreement runs).
+	catalog.Trees.diagMu.Lock()
+	samplerInit := catalog.Trees.diagSampler != nil
+	catalog.Trees.diagMu.Unlock()
+	if !samplerInit {
+		t.Fatal("expected LYCAON_CATALOG_DIAGNOSTIC=1 to invoke diagnostic sampler during normal publishFinal")
+	}
+	if _, err := os.Stat(reportPath); !os.IsNotExist(err) {
+		t.Fatalf("clean normal reconcile should not write report file, stat err=%v", err)
+	}
+	_ = store
 }
 
 func TestDiagnosticEnabledAndDisabledMatchAnswersAndProductWorkCounters(t *testing.T) {
@@ -282,7 +412,7 @@ func TestDiagnosticEnabledAndDisabledMatchAnswersAndProductWorkCounters(t *testi
 	if disabledWork.DirReads == 0 || disabledWork.MetadataReads == 0 || disabledWork.PublishedBatches == 0 || disabledWork.RowsRead == 0 {
 		t.Fatalf("expected non-zero ordinary product work counters, got %+v", disabledWork)
 	}
-	if enabledReport.DiagnosticReads.DirReads == 0 || enabledReport.DiagnosticReads.EntryReads == 0 {
+	if enabledReport.DiagnosticReads.DirReads == 0 || enabledReport.DiagnosticReads.EntryReads == 0 || enabledReport.DiagnosticReads.CatalogRowsRead == 0 {
 		t.Fatalf("expected separate diagnostic read counts > 0, got %+v", enabledReport.DiagnosticReads)
 	}
 	if len(enabledReport.Disagreements) != 0 {

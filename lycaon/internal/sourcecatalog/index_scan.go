@@ -132,6 +132,7 @@ func (w *indexWalk) publishFinal(ctx context.Context, epoch repochange.Epoch) er
 	w.store.mu.Lock()
 	w.store.publishFinalLocked(status, epoch)
 	w.store.mu.Unlock()
+	w.store.stores.maybeSampleCatalogDiagnostic(ctx, w.store.projectID, w.store.root)
 	return nil
 }
 

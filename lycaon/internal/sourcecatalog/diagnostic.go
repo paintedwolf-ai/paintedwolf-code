@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/debugpaths"
+	"github.com/lycaon/lycaon/internal/repochange"
 )
 
 // WorkCounters tracks ordinary product catalog work independently of any
@@ -46,12 +47,13 @@ func (c *atomicWorkCounters) snapshot() WorkCounters {
 	}
 }
 
-// DiagnosticReadCounts counts filesystem reads performed by the opt-in
-// diagnostic itself, kept strictly separate from ordinary product WorkCounters.
+// DiagnosticReadCounts counts reads performed by the opt-in diagnostic itself,
+// kept strictly separate from ordinary product WorkCounters.
 type DiagnosticReadCounts struct {
-	DirReads      int `json:"dir_reads"`
-	EntryReads    int `json:"entry_reads"`
-	MetadataReads int `json:"metadata_reads"`
+	DirReads        int `json:"dir_reads"`
+	EntryReads      int `json:"entry_reads"`
+	MetadataReads   int `json:"metadata_reads"`
+	CatalogRowsRead int `json:"catalog_rows_read"`
 }
 
 // DiagnosticDisagreementKind identifies a typed mismatch between the catalog
@@ -74,33 +76,41 @@ type DiagnosticDisagreement struct {
 
 // DiagnosticConfig bounds one opt-in dev diagnostic subtree sample.
 type DiagnosticConfig struct {
-	Enabled          bool
-	Subtree          string
-	MaxDirs          int
-	MaxEntries       int
-	MaxDepth         int
-	MaxDisagreements int
-	ReportPath       string
+	Enabled            bool
+	Subtree            string
+	MaxDirs            int
+	MaxEntries         int
+	MaxDepth           int
+	MaxDisagreements   int
+	MaxRetainedReports int
+	ReportPath         string
 }
 
 const (
-	defaultDiagnosticMaxDirs          = 64
-	defaultDiagnosticMaxEntries       = 1024
-	defaultDiagnosticMaxDepth         = 8
-	defaultDiagnosticMaxDisagreements = 64
+	defaultDiagnosticMaxDirs            = 64
+	defaultDiagnosticMaxEntries         = 1024
+	defaultDiagnosticMaxDepth           = 8
+	defaultDiagnosticMaxDisagreements   = 64
+	defaultDiagnosticMaxRetainedReports = 32
+	diagnosticSubtreeEnv                = "LYCAON_CATALOG_DIAGNOSTIC_SUBTREE"
 )
 
 // DiagnosticConfigFromEnv builds a DiagnosticConfig gated on LYCAON_CATALOG_DIAGNOSTIC.
 func DiagnosticConfigFromEnv() DiagnosticConfig {
 	enabled := debugpaths.Enabled(debugpaths.KindCatalogDiagnostic)
+	subtree := strings.TrimSpace(os.Getenv(diagnosticSubtreeEnv))
+	if subtree == "" {
+		subtree = "."
+	}
 	return DiagnosticConfig{
-		Enabled:          enabled,
-		Subtree:          ".",
-		MaxDirs:          defaultDiagnosticMaxDirs,
-		MaxEntries:       defaultDiagnosticMaxEntries,
-		MaxDepth:         defaultDiagnosticMaxDepth,
-		MaxDisagreements: defaultDiagnosticMaxDisagreements,
-		ReportPath:       debugpaths.FilePath(debugpaths.KindCatalogDiagnostic),
+		Enabled:            enabled,
+		Subtree:            subtree,
+		MaxDirs:            defaultDiagnosticMaxDirs,
+		MaxEntries:         defaultDiagnosticMaxEntries,
+		MaxDepth:           defaultDiagnosticMaxDepth,
+		MaxDisagreements:   defaultDiagnosticMaxDisagreements,
+		MaxRetainedReports: defaultDiagnosticMaxRetainedReports,
+		ReportPath:         debugpaths.FilePath(debugpaths.KindCatalogDiagnostic),
 	}
 }
 
@@ -122,25 +132,29 @@ func (c DiagnosticConfig) normalized() DiagnosticConfig {
 	if c.MaxDisagreements <= 0 {
 		c.MaxDisagreements = defaultDiagnosticMaxDisagreements
 	}
+	if c.MaxRetainedReports <= 0 {
+		c.MaxRetainedReports = defaultDiagnosticMaxRetainedReports
+	}
 	return c
 }
 
 // DiagnosticReport is one bounded, deduplicated local report emitted by the
 // opt-in dev catalog diagnostic. It uses typed records and identities only.
 type DiagnosticReport struct {
-	ProjectID          string                   `json:"project_id"`
-	RootID             string                   `json:"root_id"`
-	GenerationInstance uint64                   `json:"generation_instance"`
-	GenerationRevision uint64                   `json:"generation_revision"`
-	Subtree            string                   `json:"subtree"`
-	Coverage           IndexCoverage            `json:"coverage"`
-	Disagreements      []DiagnosticDisagreement `json:"disagreements"`
-	DedupedCount       int                      `json:"deduped_count"`
-	TotalObserved      int                      `json:"total_observed"`
-	Truncated          bool                     `json:"truncated"`
-	DiagnosticReads    DiagnosticReadCounts     `json:"diagnostic_reads"`
-	ProductWork        WorkCounters             `json:"product_work"`
-	RecordedAt         time.Time                `json:"recorded_at"`
+	ProjectID            string                   `json:"project_id"`
+	RootID               string                   `json:"root_id"`
+	GenerationInstance   uint64                   `json:"generation_instance"`
+	GenerationRevision   uint64                   `json:"generation_revision"`
+	GenerationConsistent bool                     `json:"generation_consistent"`
+	Subtree              string                   `json:"subtree"`
+	Coverage             IndexCoverage            `json:"coverage"`
+	Disagreements        []DiagnosticDisagreement `json:"disagreements"`
+	DedupedCount         int                      `json:"deduped_count"`
+	TotalObserved        int                      `json:"total_observed"`
+	Truncated            bool                     `json:"truncated"`
+	DiagnosticReads      DiagnosticReadCounts     `json:"diagnostic_reads"`
+	ProductWork          WorkCounters             `json:"product_work"`
+	RecordedAt           time.Time                `json:"recorded_at"`
 }
 
 type diagnosticDedupKey struct {
@@ -152,12 +166,13 @@ type diagnosticDedupKey struct {
 	kind      DiagnosticDisagreementKind
 }
 
-// DiagnosticSampler deduplicates disagreements across samples and writes
-// bounded local JSONL reports.
+// DiagnosticSampler deduplicates disagreements across samples and maintains
+// a bounded retained local JSONL report.
 type DiagnosticSampler struct {
-	mu      sync.Mutex
-	seen    map[diagnosticDedupKey]struct{}
-	maxSeen int
+	mu       sync.Mutex
+	seen     map[diagnosticDedupKey]struct{}
+	retained []DiagnosticReport
+	maxSeen  int
 }
 
 // NewDiagnosticSampler creates a bounded deduplicating diagnostic sampler.
@@ -181,10 +196,56 @@ func (s *DiagnosticSampler) recordUnique(key diagnosticDedupKey) bool {
 		return false
 	}
 	if s.maxSeen > 0 && len(s.seen) >= s.maxSeen {
-		clear(s.seen)
+		return false
 	}
 	s.seen[key] = struct{}{}
 	return true
+}
+
+func (s *DiagnosticSampler) retainAndWrite(reportPath string, report *DiagnosticReport, maxRetained int) error {
+	if strings.TrimSpace(reportPath) == "" || report == nil || len(report.Disagreements) == 0 {
+		return nil
+	}
+	if maxRetained <= 0 {
+		maxRetained = defaultDiagnosticMaxRetainedReports
+	}
+	var snapshot []DiagnosticReport
+	if s != nil {
+		s.mu.Lock()
+		s.retained = append(s.retained, *report)
+		if len(s.retained) > maxRetained {
+			s.retained = s.retained[len(s.retained)-maxRetained:]
+		}
+		snapshot = make([]DiagnosticReport, len(s.retained))
+		copy(snapshot, s.retained)
+		s.mu.Unlock()
+	} else {
+		snapshot = []DiagnosticReport{*report}
+	}
+	return writeBoundedDiagnosticReports(reportPath, snapshot)
+}
+
+func (c *TreeStores) diagnosticSampler() *DiagnosticSampler {
+	c.diagMu.Lock()
+	defer c.diagMu.Unlock()
+	if c.diagSampler == nil {
+		c.diagSampler = NewDiagnosticSampler()
+	}
+	return c.diagSampler
+}
+
+// maybeSampleCatalogDiagnostic is the opt-in dev entry point invoked after a
+// catalog generation publishes. When LYCAON_CATALOG_DIAGNOSTIC is unset, it
+// returns immediately with zero work.
+func (c *TreeStores) maybeSampleCatalogDiagnostic(ctx context.Context, projectID string, root Root) {
+	if c == nil || !debugpaths.Enabled(debugpaths.KindCatalogDiagnostic) {
+		return
+	}
+	cfg := DiagnosticConfigFromEnv()
+	if !cfg.Enabled {
+		return
+	}
+	_, _ = c.SampleCatalogDiagnostic(ctx, projectID, root, cfg, c.diagnosticSampler())
 }
 
 type catalogNodeRecord struct {
@@ -214,7 +275,8 @@ func (c *TreeStores) ProductWorkCounters(ctx context.Context, projectID string, 
 
 // SampleCatalogDiagnostic compares a bounded subtree of the published catalog
 // against an independent direct filesystem listing, reporting only disagreements
-// not accounted for by any declared coverage gap.
+// not accounted for by any declared coverage gap and only when the direct sample
+// is generation-consistent with the pinned catalog generation.
 //
 // When cfg.Enabled is false, it returns immediately with zero work.
 func (c *TreeStores) SampleCatalogDiagnostic(
@@ -227,6 +289,17 @@ func (c *TreeStores) SampleCatalogDiagnostic(
 	if !cfg.Enabled {
 		return nil, nil
 	}
+	return c.sampleCatalogDiagnosticWithHook(ctx, projectID, root, cfg, sampler, nil)
+}
+
+func (c *TreeStores) sampleCatalogDiagnosticWithHook(
+	ctx context.Context,
+	projectID string,
+	root Root,
+	cfg DiagnosticConfig,
+	sampler *DiagnosticSampler,
+	afterWalk func(),
+) (*DiagnosticReport, error) {
 	cfg = cfg.normalized()
 
 	s, err := c.indexStore(ctx, projectID, root)
@@ -235,32 +308,41 @@ func (c *TreeStores) SampleCatalogDiagnostic(
 	}
 
 	s.mu.Lock()
-	status := s.status
-	status.Instance = s.instance
-	status.Refreshing = s.refreshingLocked()
+	beforeStatus := s.status
+	beforeStatus.Instance = s.instance
+	beforeStatus.Refreshing = s.refreshingLocked()
+	beforeSettledEpoch := s.epoch
 	policy := s.policy
 	s.mu.Unlock()
 
+	beforeEpoch := repochange.CurrentEpoch(s.root.Path)
+
 	report := &DiagnosticReport{
-		ProjectID:          projectID,
-		RootID:             s.root.ID,
-		GenerationInstance: status.Instance,
-		GenerationRevision: status.Revision,
-		Subtree:            cfg.Subtree,
-		Coverage:           CoverageFromStatus(status),
-		Disagreements:      []DiagnosticDisagreement{},
-		ProductWork:        s.work.snapshot(),
-		RecordedAt:         time.Now().UTC(),
+		ProjectID:            projectID,
+		RootID:               s.root.ID,
+		GenerationInstance:   beforeStatus.Instance,
+		GenerationRevision:   beforeStatus.Revision,
+		GenerationConsistent: true,
+		Subtree:              cfg.Subtree,
+		Coverage:             CoverageFromStatus(beforeStatus),
+		Disagreements:        []DiagnosticDisagreement{},
+		ProductWork:          s.work.snapshot(),
+		RecordedAt:           time.Now().UTC(),
 	}
 
 	// A warming, failed, or on-demand root has a declared coverage gap at root scope.
-	if status.State != StateReady || s.root.OnDemand || policy.rootOnDemand() {
-		return report, writeDiagnosticReport(cfg.ReportPath, report)
+	if beforeStatus.State != StateReady || s.root.OnDemand || policy.rootOnDemand() {
+		return report, nil
+	}
+	// If the repository epoch already moved past what the catalog settled, skip comparison.
+	if beforeSettledEpoch != (repochange.Epoch{}) && beforeSettledEpoch != beforeEpoch {
+		report.GenerationConsistent = false
+		return report, nil
 	}
 
 	// Open a private read-only snapshot transaction so ordinary product
 	// IndexReader.RowsRead and store.work counters are never incremented.
-	db, tx, pinnedStatus, err := s.readTx(ctx, status)
+	db, tx, pinnedStatus, err := s.readTx(ctx, beforeStatus)
 	if err != nil {
 		return nil, err
 	}
@@ -269,25 +351,42 @@ func (c *TreeStores) SampleCatalogDiagnostic(
 		_ = db.Close()
 	}()
 
-	coverage, faults, refusedDirs, catalogEntries, err := readDiagnosticCatalogSnapshot(ctx, tx, pinnedStatus, cfg.Subtree)
+	coverage, faults, refusedDirs, catalogEntries, catalogRowsRead, catalogTruncated, err := readBoundedDiagnosticCatalogSnapshot(
+		ctx, tx, pinnedStatus, cfg.Subtree, cfg.MaxEntries,
+	)
 	if err != nil {
 		return nil, err
 	}
 	report.GenerationInstance = pinnedStatus.Instance
 	report.GenerationRevision = pinnedStatus.Revision
 	report.Coverage = coverage
+	report.DiagnosticReads.CatalogRowsRead = catalogRowsRead
 
 	// Root-level declared coverage gap suppresses all missing/stale disagreements.
 	if !coverage.DiscoveryComplete || coverage.Refreshing || coverage.Error != "" {
-		return report, writeDiagnosticReport(cfg.ReportPath, report)
+		return report, nil
 	}
 
-	diskEntries, sampledDirs, reads, truncatedWalk, err := walkDirectSubtree(s.root.Path, cfg, policy, faults, refusedDirs)
+	diskEntries, sampledDirs, dirStamps, reads, truncatedWalk, err := walkDirectSubtree(
+		s.root.Path, cfg, policy, faults, refusedDirs,
+	)
 	if err != nil {
 		return nil, err
 	}
+	reads.CatalogRowsRead = catalogRowsRead
 	report.DiagnosticReads = reads
 	report.ProductWork = s.work.snapshot()
+
+	if afterWalk != nil {
+		afterWalk()
+	}
+
+	// Generation consistency assertion: verify neither the published generation,
+	// nor repochange epoch, nor any sampled directory stamp moved during the walk.
+	if !verifyGenerationConsistency(s, pinnedStatus, beforeEpoch, dirStamps) {
+		report.GenerationConsistent = false
+		return report, nil
+	}
 
 	rawDisagreements := compareCatalogAndDisk(
 		catalogEntries,
@@ -296,7 +395,7 @@ func (c *TreeStores) SampleCatalogDiagnostic(
 		faults,
 		refusedDirs,
 		policy,
-		truncatedWalk,
+		truncatedWalk || catalogTruncated,
 	)
 
 	report.TotalObserved = len(rawDisagreements)
@@ -320,60 +419,170 @@ func (c *TreeStores) SampleCatalogDiagnostic(
 		report.Disagreements = append(report.Disagreements, d)
 	}
 
-	return report, writeDiagnosticReport(cfg.ReportPath, report)
+	if err := sampler.retainAndWrite(cfg.ReportPath, report, cfg.MaxRetainedReports); err != nil {
+		return report, err
+	}
+	return report, nil
 }
 
-func readDiagnosticCatalogSnapshot(
+func verifyGenerationConsistency(
+	s *indexStore,
+	pinnedStatus TreeStatus,
+	beforeEpoch repochange.Epoch,
+	dirStamps map[string]DirectoryStamp,
+) bool {
+	s.mu.Lock()
+	afterStatus := s.status
+	afterStatus.Instance = s.instance
+	afterRefreshing := s.refreshingLocked()
+	afterSettledEpoch := s.epoch
+	s.mu.Unlock()
+
+	afterEpoch := repochange.CurrentEpoch(s.root.Path)
+	if afterStatus.Instance != pinnedStatus.Instance || afterStatus.Revision != pinnedStatus.Revision {
+		return false
+	}
+	if afterRefreshing || afterEpoch != beforeEpoch || (afterSettledEpoch != (repochange.Epoch{}) && afterSettledEpoch != beforeEpoch) {
+		return false
+	}
+	osRoot, err := os.OpenRoot(s.root.Path)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = osRoot.Close() }()
+	for dir, beforeStamp := range dirStamps {
+		info, statErr := osRoot.Lstat(filepath.FromSlash(dir))
+		if statErr != nil {
+			return false
+		}
+		afterStamp := directoryStampOf(info)
+		if beforeStamp.known() && afterStamp != beforeStamp {
+			return false
+		}
+	}
+	return true
+}
+
+func subtreePrefixBounds(subtree string) (string, string) {
+	return subtree + "/", subtree + "0"
+}
+
+func readBoundedDiagnosticCatalogSnapshot(
 	ctx context.Context,
 	tx *sql.Tx,
 	status TreeStatus,
 	subtree string,
-) (IndexCoverage, map[string]struct{}, map[string]string, map[string]catalogNodeRecord, error) {
+	maxEntries int,
+) (IndexCoverage, map[string]struct{}, map[string]string, map[string]catalogNodeRecord, int, bool, error) {
+	rowsRead := 0
 	coverage := CoverageFromStatus(status)
 	err := tx.QueryRowContext(ctx, `SELECT
 		(SELECT count(*) FROM nodes WHERE refused<>'' AND refused<>'lazy'),
 		(SELECT count(*) FROM faults)`).Scan(&coverage.BoundedDirectories, &coverage.FailedDirectories)
+	rowsRead++
 	if err != nil {
-		return IndexCoverage{}, nil, nil, nil, err
+		return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
 	}
 
 	faults := make(map[string]struct{})
-	faultRows, err := tx.QueryContext(ctx, "SELECT path FROM faults")
-	if err != nil {
-		return IndexCoverage{}, nil, nil, nil, err
-	}
-	for faultRows.Next() {
-		var p string
-		if err := faultRows.Scan(&p); err != nil {
-			_ = faultRows.Close()
-			return IndexCoverage{}, nil, nil, nil, err
+	refusedDirs := make(map[string]string)
+
+	// 1. Read ancestor boundary and fault rows for the selected subtree only.
+	ancestors := indexAncestors(subtree)
+	if len(ancestors) > 0 {
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ancestors)), ",")
+		args := make([]any, len(ancestors))
+		for i, a := range ancestors {
+			args[i] = a
 		}
-		faults[p] = struct{}{}
-	}
-	if err := faultRows.Close(); err != nil {
-		return IndexCoverage{}, nil, nil, nil, err
+		// #nosec G202 -- Fixed placeholder list with bound ancestor paths.
+		fRows, qErr := tx.QueryContext(ctx, "SELECT path FROM faults WHERE path IN ("+placeholders+")", args...)
+		if qErr != nil {
+			return IndexCoverage{}, nil, nil, nil, rowsRead, false, qErr
+		}
+		for fRows.Next() {
+			var p string
+			if err := fRows.Scan(&p); err != nil {
+				_ = fRows.Close()
+				return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+			}
+			faults[p] = struct{}{}
+			rowsRead++
+		}
+		if err := fRows.Close(); err != nil {
+			return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+		}
+
+		// #nosec G202 -- Fixed placeholder list with bound ancestor paths.
+		rRows, qErr := tx.QueryContext(ctx, "SELECT path, refused FROM nodes WHERE refused<>'' AND path IN ("+placeholders+")", args...)
+		if qErr != nil {
+			return IndexCoverage{}, nil, nil, nil, rowsRead, false, qErr
+		}
+		for rRows.Next() {
+			var p, ref string
+			if err := rRows.Scan(&p, &ref); err != nil {
+				_ = rRows.Close()
+				return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+			}
+			refusedDirs[p] = ref
+			rowsRead++
+		}
+		if err := rRows.Close(); err != nil {
+			return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+		}
 	}
 
-	refusedDirs := make(map[string]string)
-	entries := make(map[string]catalogNodeRecord)
-	nodeRows, err := tx.QueryContext(ctx, "SELECT path, is_dir, symlink, regular, refused, indexed FROM nodes")
-	if err != nil {
-		return IndexCoverage{}, nil, nil, nil, err
+	// 2. Read bounded faults inside the selected subtree.
+	limit := maxEntries + 1
+	var subFaultRows *sql.Rows
+	if subtree == "." {
+		subFaultRows, err = tx.QueryContext(ctx, "SELECT path FROM faults ORDER BY path LIMIT ?", limit)
+	} else {
+		lo, hi := subtreePrefixBounds(subtree)
+		subFaultRows, err = tx.QueryContext(ctx, "SELECT path FROM faults WHERE path=? OR (path>=? AND path<?) ORDER BY path LIMIT ?", subtree, lo, hi, limit)
 	}
+	if err != nil {
+		return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+	}
+	for subFaultRows.Next() {
+		var p string
+		if err := subFaultRows.Scan(&p); err != nil {
+			_ = subFaultRows.Close()
+			return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+		}
+		faults[p] = struct{}{}
+		rowsRead++
+	}
+	if err := subFaultRows.Close(); err != nil {
+		return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+	}
+
+	// 3. Read bounded nodes inside the selected subtree using the unique path index.
+	entries := make(map[string]catalogNodeRecord)
+	var nodeRows *sql.Rows
+	if subtree == "." {
+		nodeRows, err = tx.QueryContext(ctx, "SELECT path, is_dir, symlink, regular, refused, indexed FROM nodes WHERE path<>'.' ORDER BY path LIMIT ?", limit)
+	} else {
+		lo, hi := subtreePrefixBounds(subtree)
+		nodeRows, err = tx.QueryContext(ctx, "SELECT path, is_dir, symlink, regular, refused, indexed FROM nodes WHERE path=? OR (path>=? AND path<?) ORDER BY path LIMIT ?", subtree, lo, hi, limit)
+	}
+	if err != nil {
+		return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+	}
+	scannedNodes := 0
 	for nodeRows.Next() {
 		var p, refused string
 		var isDir, isSymlink, isRegular, indexed bool
 		if err := nodeRows.Scan(&p, &isDir, &isSymlink, &isRegular, &refused, &indexed); err != nil {
 			_ = nodeRows.Close()
-			return IndexCoverage{}, nil, nil, nil, err
+			return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
 		}
+		rowsRead++
+		scannedNodes++
 		if refused != "" {
 			refusedDirs[p] = refused
 		}
-		if p == "." || !indexed {
-			continue
-		}
-		if !pathInSubtree(p, subtree) {
+		if p == "." || !indexed || scannedNodes > maxEntries {
 			continue
 		}
 		entries[p] = catalogNodeRecord{
@@ -386,10 +595,10 @@ func readDiagnosticCatalogSnapshot(
 		}
 	}
 	if err := nodeRows.Close(); err != nil {
-		return IndexCoverage{}, nil, nil, nil, err
+		return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
 	}
 
-	return coverage, faults, refusedDirs, entries, nil
+	return coverage, faults, refusedDirs, entries, rowsRead, scannedNodes > maxEntries, nil
 }
 
 func walkDirectSubtree(
@@ -398,10 +607,10 @@ func walkDirectSubtree(
 	policy walkPolicy,
 	faults map[string]struct{},
 	refusedDirs map[string]string,
-) (map[string]diskNodeRecord, map[string]struct{}, DiagnosticReadCounts, bool, error) {
+) (map[string]diskNodeRecord, map[string]struct{}, map[string]DirectoryStamp, DiagnosticReadCounts, bool, error) {
 	osRoot, err := os.OpenRoot(rootPath)
 	if err != nil {
-		return nil, nil, DiagnosticReadCounts{}, false, err
+		return nil, nil, nil, DiagnosticReadCounts{}, false, err
 	}
 	defer func() { _ = osRoot.Close() }()
 
@@ -412,6 +621,7 @@ func walkDirectSubtree(
 
 	diskEntries := make(map[string]diskNodeRecord)
 	sampledDirs := make(map[string]struct{})
+	dirStamps := make(map[string]DirectoryStamp)
 	var reads DiagnosticReadCounts
 	truncated := false
 
@@ -430,9 +640,9 @@ func walkDirectSubtree(
 
 		f, openErr := osRoot.Open(filepath.FromSlash(item.dir))
 		if openErr != nil {
-			// If a directory became unreadable after publication, do not fail the whole diagnostic.
 			continue
 		}
+		dirInfo, statErr := f.Stat()
 		dirEntries, readErr := f.ReadDir(-1)
 		_ = f.Close()
 		reads.DirReads++
@@ -440,6 +650,9 @@ func walkDirectSubtree(
 			continue
 		}
 		sampledDirs[item.dir] = struct{}{}
+		if statErr == nil {
+			dirStamps[item.dir] = directoryStampOf(dirInfo)
+		}
 
 		sort.Slice(dirEntries, func(i, j int) bool { return dirEntries[i].Name() < dirEntries[j].Name() })
 		for _, de := range dirEntries {
@@ -462,9 +675,9 @@ func walkDirectSubtree(
 			isDir := mode.IsDir()
 			isRegular := mode.IsRegular()
 			if mode == 0 {
-				info, statErr := osRoot.Lstat(filepath.FromSlash(rel))
+				info, lstatErr := osRoot.Lstat(filepath.FromSlash(rel))
 				reads.MetadataReads++
-				if statErr != nil {
+				if lstatErr != nil {
 					continue
 				}
 				m := info.Mode()
@@ -491,7 +704,7 @@ func walkDirectSubtree(
 		}
 	}
 
-	return diskEntries, sampledDirs, reads, truncated, nil
+	return diskEntries, sampledDirs, dirStamps, reads, truncated, nil
 }
 
 func compareCatalogAndDisk(
@@ -600,13 +813,6 @@ func hasDeclaredAncestorGap(rel string, faults map[string]struct{}, refusedDirs 
 	return false
 }
 
-func pathInSubtree(rel, subtree string) bool {
-	if subtree == "." || subtree == "" {
-		return true
-	}
-	return rel == subtree || strings.HasPrefix(rel, subtree+"/")
-}
-
 func typedEntryKind(isDir, isSymlink, isRegular bool) string {
 	switch {
 	case isSymlink:
@@ -620,22 +826,27 @@ func typedEntryKind(isDir, isSymlink, isRegular bool) string {
 	}
 }
 
-func writeDiagnosticReport(reportPath string, report *DiagnosticReport) error {
-	if strings.TrimSpace(reportPath) == "" || report == nil {
+func writeBoundedDiagnosticReports(reportPath string, reports []DiagnosticReport) error {
+	if strings.TrimSpace(reportPath) == "" || len(reports) == 0 {
 		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(reportPath), 0o700); err != nil {
 		return err
 	}
-	encoded, err := json.Marshal(report)
+	var buf []byte
+	for _, r := range reports {
+		encoded, err := json.Marshal(r)
+		if err != nil {
+			return err
+		}
+		buf = append(buf, encoded...)
+		buf = append(buf, '\n')
+	}
+	f, err := os.OpenFile(reportPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
 	}
-	f, err := os.OpenFile(reportPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return err
-	}
-	_, writeErr := f.Write(append(encoded, '\n'))
+	_, writeErr := f.Write(buf)
 	closeErr := f.Close()
 	return errors.Join(writeErr, closeErr)
 }

@@ -467,4 +467,6 @@ type TreeStores struct {
 	Directories   *Directories
 	scopesMu      sync.RWMutex
 	scopes        ScopeProvider
+	diagMu        sync.Mutex
+	diagSampler   *DiagnosticSampler
 }
