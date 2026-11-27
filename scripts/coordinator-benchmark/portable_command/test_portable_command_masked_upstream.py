@@ -22,7 +22,7 @@ def _write_db(path, *, published):
     """)
     db.execute("INSERT INTO invocation_receipts VALUES ('r1','s1','tc1','command','command','completed',1)")
     db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',1,'')")
-    db.execute("INSERT INTO invocation_program_executions VALUES ('ex-ext','p1',1,'external_exec','external','processes','completed','completed','','','',1,0,1)")
+    db.execute("INSERT INTO invocation_program_executions VALUES ('ex-ext','p1',1,'command','external','processes','completed','completed','','','',1,0,1)")
     db.execute("INSERT INTO invocation_program_executions VALUES ('ex-cat','p1',2,'read','cat','files','completed','none','','','',0,1,1)")
     w_state, w_cert, acc, pub, w_status, w_elig = (
         ('completed', 'completed', 'rev1', 'rev2', 0, 1) if published else ('failed', 'none', '', '', 1, 0)
