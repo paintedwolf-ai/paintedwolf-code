@@ -255,9 +255,6 @@ def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, rece
         prog_sources = audit.get('invocation_program_sources') or []
         if prog_sources and all(len(s.get('sha256') or '') == 64 for s in prog_sources):
             facts['exact_source_binding'] = True
-    ext_ids = {r['execution_id'] for r in receipts if r.get('operation') == 'external_exec'}
-    if ext_ids and any(p.get('basis') == 'declared_at_launch' and p.get('execution_id') in ext_ids and len(p.get('disk_sha256') or '') == 64 for p in pins):
-        facts['disk_provenance'] = True
     if recovery and recovery.get('owner_code'):
         root_p = pathlib.Path(project_dir)
         out_dir = root_p / 'out'

@@ -1,4 +1,5 @@
 """Delivery, structured-edit, bounded-visit, and confined-launch oracles (Q05, Q06, Q20, Q21)."""
+import hashlib
 import json
 import pathlib
 import re
@@ -124,6 +125,9 @@ def extract_deliveries(case, audit, baseline_hashes, project_dir=None):
                 for p in max_source_end_by_path if p in setup_files
             ) and bool(max_source_end_by_path)
             facts['unseen_ranges_not_read_bases'] = unseen_ok
+            trunc_entries = [v for (oid, _, _, _), v in grouped.items() if oid in truncated_oids]
+            if trunc_entries:
+                facts['preview_only_first_line'] = all(e.get('lines') == [1, 1] for e in trunc_entries)
     return deliveries, facts
 
 
@@ -234,11 +238,30 @@ def inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar,
                     log_visits += int(vm.group(1))
         if matched_fids == fids and log_visits > 0 and limit > 0:
             facts['bounded_visits'] = log_visits <= limit
-    # 3) Q21 confined_launch: sidecar.log process boundary selected with component=sandbox & host_execution=false.
-    if any(r.get('operation') == 'external_exec' and r.get('outcome') == 'completed' for r in receipts):
+    # 3) Q21 confined_launch & disk_provenance: sidecar.log process boundary + execution-attributed executable SHA-256.
+    ext_ids = {r['execution_id'] for r in receipts if r.get('operation') == 'external_exec' and r.get('outcome') == 'completed'}
+    if ext_ids:
         if isinstance(sidecar, dict) and sidecar.get('available') and sidecar.get('complete') and sidecar.get('lines'):
             facts['confined_launch'] = any(
                 'component=sandbox' in (m.get('excerpt') or '') and 'host_execution=false' in (m.get('excerpt') or '')
                 for m in sidecar['lines']
             )
+        if any(p.get('basis') == 'declared_at_launch' and p.get('execution_id') in ext_ids and len(p.get('disk_sha256') or '') == 64 for p in pins):
+            facts['disk_provenance'] = True
+        elif sidecar_log and pathlib.Path(sidecar_log).is_file():
+            matched_ids, all_valid = set(), True
+            for line in pathlib.Path(sidecar_log).read_text(errors='replace').splitlines():
+                if 'command external launch' not in line:
+                    continue
+                em = re.search(r'\bexecution_id=([^\s"]+)', line)
+                pm = re.search(r'\bexecutable_path=(?:"([^"]+)"|([^\s"]+))', line)
+                dm = re.search(r'\bexecutable_sha256=([0-9a-f]{64})\b', line)
+                if not em or em.group(1) not in ext_ids:
+                    continue
+                matched_ids.add(em.group(1))
+                epath = pathlib.Path(pm.group(1) or pm.group(2)) if pm else None
+                if not (epath and epath.is_file() and dm and hashlib.sha256(epath.resolve().read_bytes()).hexdigest() == dm.group(1)):
+                    all_valid = False
+            if matched_ids == ext_ids:
+                facts['disk_provenance'] = all_valid
     return facts

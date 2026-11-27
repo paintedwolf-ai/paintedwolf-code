@@ -205,3 +205,34 @@ class PortableCommandWave3Tests(unittest.TestCase):
             (wproj / 'test_wordle.py').write_text('import unittest\nclass Bad(unittest.TestCase):\n def test_x(self): self.fail("bad")\n')
             wobs_tbad, _ = observe.build_observation(wcase, session_id='sess1234', identity=ident, project_dir=wproj, db_path=wdb, sidecar_log=wlog, baseline_hashes={}, turn_records=wturns, prelude_records=[])
             self.assertFalse(wobs_tbad['facts']['delivered_tests_separate'])
+
+    def test_q21_external_launch_log_disk_provenance_controls(self):
+        import hashlib
+        case = CASES['external-argv']
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            proj, db_path, log_path, helper = root / 'proj', root / 'store.db', root / 'sidecar.log', root / 'fixture-argv'
+            proj.mkdir()
+            helper.write_bytes(b'#!/bin/sh\necho ok\n')
+            sha = hashlib.sha256(helper.read_bytes()).hexdigest()
+            create_audit_db(db_path)
+            db = sqlite3.connect(db_path)
+            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','completed',1)")
+            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,'')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e1','p1',1,'command','external','processes','completed','unknown')")
+            db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (json.dumps({'outcome': 'completed', 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'completed', 'status': 0, 'stdout': '["a b"]\n', 'stderr': ''})}),))
+            db.commit(); db.close()
+            turns = [{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}]
+            # Positive: matching execution_id + resolved path + on-disk SHA-256.
+            log_path.write_text(f'level=INFO msg="server listening"\nlevel=INFO msg="command external launch" execution_id=e1 executable_path="{helper}" executable_sha256={sha}\nlevel=INFO msg="shutdown signal received"\n')
+            obs, _ = observe.build_observation(case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=turns, prelude_records=[])
+            self.assertTrue(obs['facts']['disk_provenance'])
+            # Negative (a): mismatched SHA-256 -> False.
+            log_path.write_text(f'level=INFO msg="server listening"\nlevel=INFO msg="command external launch" execution_id=e1 executable_path="{helper}" executable_sha256={"0" * 64}\nlevel=INFO msg="shutdown signal received"\n')
+            obs_bad, _ = observe.build_observation(case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=turns, prelude_records=[])
+            self.assertFalse(obs_bad['facts']['disk_provenance'])
+            # Negative (b): unattributed / foreign execution_id -> unobserved.
+            log_path.write_text(f'level=INFO msg="server listening"\nlevel=INFO msg="command external launch" execution_id=other executable_path="{helper}" executable_sha256={sha}\nlevel=INFO msg="shutdown signal received"\n')
+            obs_un, audit_un = observe.build_observation(case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=turns, prelude_records=[])
+            self.assertNotIn('disk_provenance', obs_un['facts'])
+            self.assertTrue(any('disk_provenance' in g for g in audit_un['observation_gaps']))
