@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -22,11 +23,11 @@ func TestBB05_M07_DuplicateStopAndForegroundDoneWithHeldWork(t *testing.T) {
 	var stopCount atomic.Int32
 
 	_, err := sup.RunProgram(t.Context(), root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
-		var setStop func(func())
+		var setStop func(func(bgprocess.TerminationReason))
 		var holdErr error
 		jobCtx, setStop, release, holdErr = sup.Hold(ctx)
 		if holdErr == nil {
-			setStop(func() { stopCount.Add(1) })
+			setStop(func(bgprocess.TerminationReason) { stopCount.Add(1) })
 		}
 		return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted}, holdErr
 	})
@@ -79,13 +80,13 @@ func TestBB05_M07_SiblingIsolationAndForegroundInterrupt(t *testing.T) {
 	a1Done := make(chan error, 1)
 	go func() {
 		_, err := sup.RunProgram(t.Context(), rootA1, func(ctx context.Context) (toolcontract.ProducerResult, error) {
-			var setStop func(func())
+			var setStop func(func(bgprocess.TerminationReason))
 			var holdErr error
 			a1JobCtx, setStop, a1JobRelease, holdErr = sup.Hold(ctx)
 			if holdErr != nil {
 				return toolcontract.ProducerResult{}, holdErr
 			}
-			setStop(func() {})
+			setStop(func(bgprocess.TerminationReason) {})
 			close(a1Ready)
 			<-ctx.Done()
 			return toolcontract.ProducerResult{Status: 130}, ctx.Err()
