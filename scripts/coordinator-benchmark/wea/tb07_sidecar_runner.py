@@ -174,6 +174,41 @@ def _close_session_turn(app: Any, session_id: str, *, timeout_s: float = 15.0) -
         _wait_session_idle(app, session_id, f"close {session_id}", timeout_s=timeout_s)
 
 
+def _wait_pending_checkpoint_or_settled(
+    app: Any,
+    session_id: str,
+    call_id: str,
+    *,
+    timeout_s: float = 20.0,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Poll for EITHER a pending checkpoint for `call_id` OR the tool_result settling.
+
+    Returns `(checkpoint, None)` if a checkpoint opened, `(None, tool_result)` if the
+    tool settled without opening a checkpoint, or `(None, {"outcome": "timeout", ...})`
+    on timeout — never raises on settlement without a checkpoint.
+    """
+    db_path = app.directory / "store.db"
+
+    def poll() -> tuple[dict[str, Any] | None, dict[str, Any] | None] | None:
+        cps = (app.request(f"/v1/sessions/{session_id}/checkpoints?status=pending") or {}).get("checkpoints") or []
+        for cp in cps:
+            if (cp.get("tool_approval") or {}).get("tool_call_id") == call_id:
+                return (cp, None)
+        with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+            row = conn.execute(
+                "SELECT tool_result_json FROM messages WHERE session_id=? AND tool_result_call_id=?",
+                (session_id, call_id),
+            ).fetchone()
+        if row:
+            return (None, json.loads(row[0]))
+        return None
+
+    try:
+        return app.wait_for(poll, "tb07 pending checkpoint or settled", None, timeout=timeout_s)
+    except RuntimeError as exc:
+        return (None, {"outcome": "timeout", "error": str(exc)})
+
+
 def _call_with_checkpoint_inspect(
     app: Any,
     session_id: str,
@@ -304,6 +339,8 @@ def _run_warmed_slots(
     *,
     specs: list[dict[str, str]],
     work_dir: pathlib.Path,
+    receipts_dir: pathlib.Path,
+    receipts_out: list[dict[str, Any]],
     prov: dict[str, Any],
     engine_bin: str | pathlib.Path | None,
     engine_manifest: str | pathlib.Path | None,
@@ -311,7 +348,17 @@ def _run_warmed_slots(
 ) -> list[dict[str, Any]]:
     """Run all non-restart TB07 sidecar slots (A01, A02, A03, A04) on one warmed lycaon-dev instance."""
     spec_map = {s["slot_id"]: s for s in specs}
-    receipts: list[dict[str, Any]] = []
+
+    class _FlushingReceiptList(list):
+        def append(self, rec: dict[str, Any]) -> None:  # type: ignore[override]
+            super().append(rec)
+            _save_json(receipts_dir / f"{rec['slot_id']}.json", rec)
+
+    receipts = _FlushingReceiptList(receipts_out)
+    # Keep receipts_out synced in-place so caller sees every completed slot even on exception.
+    def _sync() -> None:
+        receipts_out[:] = list(receipts)
+
     app_dir = work_dir / "warmed-app"
     db_path = app_dir / "store.db"
     outside_dir = work_dir / "outside-root"
@@ -323,6 +370,7 @@ def _run_warmed_slots(
     with (
         RecordingHTTPFixture(fixture_id="tb07-ep1") as ep1,
         RecordingHTTPFixture(fixture_id="tb07-ep2") as ep2,
+        RecordingHTTPFixture(fixture_id="tb07-ep3") as ep3,
     ):
         app = _create_application(app_dir, engine_bin=engine_bin, engine_manifest=engine_manifest, engine_root=engine_root)
         try:
@@ -1084,7 +1132,7 @@ def _run_warmed_slots(
 
             # A04-02: Stop while checkpoint pending cancels held effect (0 arrivals) and keeps committed chat grant
             if "A04-02-stop-releases-pending-without-effect" in spec_map:
-                b_ep2 = len(ep2.snapshot()["requests"])
+                b_ep3 = len(ep3.snapshot()["requests"])
                 req = _wait_pending_bounded(app, a04_sid)
                 held_call_id = str(uuid.uuid4())
                 app.request(
@@ -1095,36 +1143,43 @@ def _run_warmed_slots(
                             "id": held_call_id,
                             "name": "command",
                             "args": {
-                                "command": _http_probe_cmd(f"{ep2.base_url}/a04-02-stop"),
-                                "capability_request": {"loopback_connect": {"ports": [ep2.port]}},
+                                "command": _http_probe_cmd(f"{ep3.base_url}/a04-02-stop"),
+                                "capability_request": {"loopback_connect": {"ports": [ep3.port]}},
                             },
                         }],
                     },
                 )
-                cp_held = _read_pending_checkpoint_for_call(app, a04_sid, held_call_id)
+                cp_held, settled_early = _wait_pending_checkpoint_or_settled(app, a04_sid, held_call_id, timeout_s=20.0)
                 app.request(f"/v1/sessions/{a04_sid}/abort", {})
                 _wait_session_idle(app, a04_sid, "a04 idle after stop")
-                a_ep2 = len(ep2.snapshot()["requests"])
+                a_ep3 = len(ep3.snapshot()["requests"])
                 grants_after_stop = (app.request(f"/v1/approval-grants?session_id={a04_sid}") or {}).get("grants") or []
-                ok = bool(cp_held.get("id")) and (a_ep2 - b_ep2) == 0 and len(grants_after_stop) >= 1
+                ok = bool(cp_held and cp_held.get("id")) and (a_ep3 - b_ep3) == 0 and len(grants_after_stop) >= 1
                 receipts.append(_build_receipt(
                     spec=spec_map["A04-02-stop-releases-pending-without-effect"], prov=prov,
-                    typed_result={"held_checkpoint_id": cp_held.get("id"), "surviving_chat_grants": len(grants_after_stop)},
-                    independent_observation={"held_fixture_arrivals": a_ep2 - b_ep2},
+                    typed_result={
+                        "held_checkpoint_id": (cp_held or {}).get("id"),
+                        "settled_without_checkpoint": settled_early,
+                        "surviving_chat_grants": len(grants_after_stop),
+                    },
+                    independent_observation={"held_fixture_arrivals": a_ep3 - b_ep3},
                     passed=ok,
                 ))
 
             abort_session(a04_sid)
         finally:
+            _sync()
             app.close(cleanup=False)
 
-    return receipts
+    return list(receipts)
 
 
 def _run_a12_restart_slots(
     *,
     specs: list[dict[str, str]],
     work_dir: pathlib.Path,
+    receipts_dir: pathlib.Path,
+    receipts_out: list[dict[str, Any]],
     prov: dict[str, Any],
     engine_bin: str | pathlib.Path | None,
     engine_manifest: str | pathlib.Path | None,
@@ -1132,7 +1187,14 @@ def _run_a12_restart_slots(
 ) -> list[dict[str, Any]]:
     """Run the 3 A12 sidecar restart slots with a real stop+restart cycle of lycaon-dev."""
     spec_map = {s["slot_id"]: s for s in specs}
-    receipts: list[dict[str, Any]] = []
+
+    class _FlushingReceiptList(list):
+        def append(self, rec: dict[str, Any]) -> None:  # type: ignore[override]
+            super().append(rec)
+            _save_json(receipts_dir / f"{rec['slot_id']}.json", rec)
+            receipts_out.append(rec)
+
+    receipts = _FlushingReceiptList()
     if not any(k in spec_map for k in (
         "A12-01-restart-pending-preserved-no-double-run",
         "A12-02-restart-chat-grant-replays-in-scope",
@@ -1199,9 +1261,9 @@ def _run_a12_restart_slots(
                     }],
                 },
             )
-            cp_before = _read_pending_checkpoint_for_call(app1, session_id, pending_call_id)
-            pending_cp_id = str(cp_before["id"])
-            pre_plan_id = str(((cp_before.get("tool_approval") or {}).get("plan") or {}).get("id") or "")
+            cp_before, _settled_before = _wait_pending_checkpoint_or_settled(app1, session_id, pending_call_id, timeout_s=20.0)
+            pending_cp_id = str((cp_before or {}).get("id") or "")
+            pre_plan_id = str((((cp_before or {}).get("tool_approval") or {}).get("plan") or {}).get("id") or "")
         finally:
             app1.close(cleanup=False)
 
@@ -1328,29 +1390,37 @@ def run_tb07_sidecar_batch(
     receipts: list[dict[str, Any]] = []
     batch_errors: list[str] = []
     if warmed_specs:
+        warmed_out: list[dict[str, Any]] = []
         try:
-            receipts.extend(_run_warmed_slots(
+            _run_warmed_slots(
                 specs=warmed_specs,
                 work_dir=work_dir,
+                receipts_dir=receipts_dir,
+                receipts_out=warmed_out,
                 prov=prov,
                 engine_bin=engine_bin,
                 engine_manifest=engine_manifest,
                 engine_root=engine_root,
-            ))
+            )
         except Exception as exc:  # noqa: BLE001
             batch_errors.append(f"warmed_batch:{type(exc).__name__}:{exc}")
+        receipts.extend(warmed_out)
     if restart_specs:
+        restart_out: list[dict[str, Any]] = []
         try:
-            receipts.extend(_run_a12_restart_slots(
+            _run_a12_restart_slots(
                 specs=restart_specs,
                 work_dir=work_dir,
+                receipts_dir=receipts_dir,
+                receipts_out=restart_out,
                 prov=prov,
                 engine_bin=engine_bin,
                 engine_manifest=engine_manifest,
                 engine_root=engine_root,
-            ))
+            )
         except Exception as exc:  # noqa: BLE001
             batch_errors.append(f"restart_batch:{type(exc).__name__}:{exc}")
+        receipts.extend(restart_out)
 
     emitted_ids = {r["slot_id"] for r in receipts}
     for spec in selected:
