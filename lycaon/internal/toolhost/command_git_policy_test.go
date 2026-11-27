@@ -19,6 +19,11 @@ func TestGitDisallowedConfigOverridesRefuseWithoutExternalFallback(t *testing.T)
 	t.Setenv("PATH", filepath.Dir(bin)+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	f := newComposedProgramFixture(t)
+	// Match production toolhost registration where git subcommand tools are
+	// registered so invokeNative's native-gap fallback path is active for git.
+	gitOp := f.Runtime.Owners.Natives["git"]
+	gitOp.Tools = []string{"git_status"}
+	f.Runtime.Owners.Natives["git"] = gitOp
 	var launches atomic.Int64
 	configure := f.Configure
 	f.Configure = func(tc *tools.ToolContext) {
