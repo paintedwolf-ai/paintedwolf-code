@@ -5,11 +5,13 @@ import (
 
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
 	"slices"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+
+	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
@@ -99,7 +101,12 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 	ctx = hitl.WithPreparedApprovalAnswer(ctx, reviews, final)
 	if !hitl.CheckpointAuthorizes(final) {
 		denialCode, denialPath := capabilityReviewDenialCodeAndPath(plan)
-		reject := isolationCheckpointReject(denialCode, final)
+		var reject *toolrejection.ToolReject
+		if final != nil && final.Status == hitl.DecisionStatusRejected && final.ResolvedBy != authzledger.ResolvedByHuman {
+			reject = approvalRefusalReject(denialCode, isolation.PathDenialNonHumanRejected, final.ResolvedBy, "")
+		} else {
+			reject = isolationCheckpointReject(denialCode, final)
+		}
 		if denialPath != "" {
 			if reject.Data == nil {
 				reject.Data = map[string]any{}

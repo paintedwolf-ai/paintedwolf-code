@@ -3,10 +3,11 @@ package promptloop
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"

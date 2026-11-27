@@ -124,7 +124,6 @@ type GroundingFacts struct {
 	SurfaceClaimUngrounded     bool
 	PageMeasureUngrounded      bool
 	ProfileSurveysProjectTree  bool
-	ProfileFetchesURLs         bool
 	RepoKnownEmpty             bool
 	LastAuditUngrounded        bool
 	GroundingEscalated         bool

@@ -37,6 +37,31 @@ func TestRuntimePersonaValidationDoesNotEnforceAuthoringByteCap(t *testing.T) {
 	}
 }
 
+func TestRenderPersonaHandlesDisabledWebSearchAndWithheldTools(t *testing.T) {
+	engine := NewFileTemplateEngineLayers(PromptLayers{})
+	profiles, err := declaredToolProfiles(nil)
+	testutil.FailErr(t, "declaredToolProfiles", err)
+	reader, err := NewReader(HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: false,
+	}, TurnProjection{
+		ProfileID: "implement",
+		Offered:   []string{"command", "fetch_url", "complete_leg", "update_progress"},
+		Declared:  true,
+	})
+	testutil.FailErr(t, "NewReader implementer web=false", err)
+	rendered, err := RenderPersona(context.Background(), engine, "implementer", reader, nil)
+	testutil.FailErr(t, "RenderPersona implementer web=false", err)
+	if !strings.Contains(rendered, "External facts:") {
+		t.Fatalf("expected External facts fallback when WebSearch=false, got:\n%s", rendered)
+	}
+	if strings.Contains(rendered, "web_search") {
+		t.Fatalf("implementer rendered unoffered web_search when WebSearch=false:\n%s", rendered)
+	}
+}
+
 func containsViolationPrefix(violations []string, prefix string) bool {
 	for _, violation := range violations {
 		if strings.HasPrefix(violation, prefix) {

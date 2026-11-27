@@ -1,15 +1,15 @@
 # Page evidence reference
 
-Source of truth for host rules: `docs/den.md` (visual evidence) and `docs/tools.md` (page tools). This file is a task recipe, not a second contract.
+Host rules: `docs/den.md` (visual evidence), `docs/tools.md` (page tools).
 
 ## Capture binding
 
 | Binding | Use when | Do not |
 |---|---|---|
 | `project_dir` | Plain static HTML/CSS/JS or a built export on disk. The tree is served same-origin at `http://lycaon.capture/`, so site-absolute assets including JSON (`/config.json`) are fulfilled from disk | Point at `src/` or bare `.` for bundler-only trees; start a generic HTTP file server |
-| `url` | Project's own loopback server (dev/SSR/HMR/auth/API), started with `command(command="npm run dev &")` with `capability_request.local_listen`. The managed browser reaches host-local TCP | Pass remote/LAN URLs; combine with `project_dir` in one call |
+| `url` | Project's own loopback server (dev/SSR/HMR/auth/API){% if profile_command_external_exec %}, started with `command(command="npm run dev &")`{% if "command" in runner_local_listen_tools %} with `capability_request.local_listen`{% endif %}{% endif %}. The managed browser reaches host-local TCP | Pass remote/LAN URLs; combine with `project_dir` in one call |
 
-Pick exactly one binding. Prefer `url` when the ask is how it looks **running**. Prefer `project_dir` for "do these built files render?" A click handler that `fetch`es a file from the same tree does not require a loopback server. `CAPTURE_URL_UNREACHABLE` after a successful request to that URL is a down server or a wrong port.
+Pick one binding. Prefer `url` for how the app looks **running**, and `project_dir` for built static output. A click handler that `fetch`es a same-tree file needs no loopback server. `CAPTURE_URL_UNREACHABLE` after a successful request indicates a down server or wrong port.
 
 Use one-shot `capture_page` when one bounded check can establish the state. Use `page_open` followed by `page_snapshot` / `page_act` for stateful, authenticated, or exploratory flows, and close the held page with `page_close` when finished.
 
@@ -86,5 +86,5 @@ N action steps produce N+1 settled frames (navigate idle + after each action). D
 ## Presentation
 
 - Write producer `artifact_id` values as `[artifact:<uuid>]`, in a mid-run update or in your final answer.
-- Never embed `![…](artifact-uuid)` or `<img src="artifact-uuid">` in your text.
-- Stop a `url` server with `command_stop(handle=…)` when the turn is done. `project_dir` leaves nothing to stop.
+- Never embed `![…](artifact-uuid)` or `<img src="artifact-uuid">` in your text.{% if profile_has_command_stop %}
+- Stop a `url` server with `command_stop(handle=…)` when the turn is done. `project_dir` leaves nothing to stop.{% endif %}

@@ -8,6 +8,6 @@ type PromptTemplateEngine interface {
 	Render(ctx context.Context, template string, data map[string]any) (string, error)
 	RenderInject(ctx context.Context, ref string, data map[string]any) (string, error)
 	RenderGuidance(ctx context.Context, ref string, data map[string]any) (string, error)
-	RenderKick(ctx context.Context, name string, data map[string]any) (string, error)
+	RenderKick(ctx context.Context, reader Reader, name string, data map[string]any) (string, error)
 	Register(name string, template string) error
 }

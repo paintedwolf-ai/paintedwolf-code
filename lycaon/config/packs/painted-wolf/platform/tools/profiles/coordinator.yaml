@@ -25,7 +25,6 @@ tools:
   workflow_compose_from_template: sticky
   workflow_catalog_summaries: sticky
   workflow_persist: sticky
-  workflow_user_feedback: sticky
   ask_user: sticky
   workflow_advance: sticky
   workflow_transition: sticky

@@ -1,13 +1,12 @@
 package toolfeedback
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // Grounding repair names recall only when the request offered it; producer
@@ -27,7 +26,7 @@ func TestGroundingRejectionsNameRecallOnlyWhenOffered(t *testing.T) {
 			t.Run(tc.code+"/"+strings.Join(offered, ","), func(t *testing.T) {
 				ctx := t.Context()
 				if offered != nil {
-					ctx = tools.WithCallReach(ctx, toolreach.Offered(offered))
+					ctx = toolreach.WithRequest(ctx, toolreach.Offered(offered))
 				}
 				data := map[string]any{"can_recall": !callable}
 				for k, v := range tc.data {

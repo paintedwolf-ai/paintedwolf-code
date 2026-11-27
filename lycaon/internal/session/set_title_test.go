@@ -296,11 +296,13 @@ func TestStoreOrdAndTSSurvivePatch(t *testing.T) {
 }
 
 func TestSurveyStreakNudgeNamesTheStreakForTheCoordinatorOnly(t *testing.T) {
-	mgr, _ := newTestManager(t)
+	mgr, st := newTestManager(t)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
+	root, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
 
-	nudge := mgr.Coordinator.Nudges.SurveyStreak(t.Context(), &api.Session{ID: "root"}, 6, []string{"git_diff", "read"})
+	nudge := mgr.Coordinator.Nudges.SurveyStreak(t.Context(), root, sessionRequestReader(t, mgr, root), 6, []string{"git_diff", "read"})
 	if nudge.Empty() {
 		t.Fatal("coordinator survey streak rendered empty")
 	}
@@ -309,7 +311,8 @@ func TestSurveyStreakNudgeNamesTheStreakForTheCoordinatorOnly(t *testing.T) {
 			t.Fatalf("nudge missing %q:\n%s", want, nudge.Content)
 		}
 	}
-	worker := mgr.Coordinator.Nudges.SurveyStreak(t.Context(), &api.Session{ID: "child", ParentSessionID: "root"}, 6, []string{"read"})
+	child := &api.Session{ID: "child", ParentSessionID: root.ID}
+	worker := mgr.Coordinator.Nudges.SurveyStreak(t.Context(), child, sessionRequestReader(t, mgr, child), 6, []string{"read"})
 	if !worker.Empty() {
 		t.Fatalf("a worker's reads are its job, not a streak: %q", worker.Content)
 	}
@@ -325,16 +328,16 @@ func TestSurveyStreakNudgeStaysQuietOnInspectTurns(t *testing.T) {
 	sess := &api.Session{ID: "root"}
 
 	ledger.BeginTurn(sess.ID, turnload.TurnOpening{}, turnload.Decision{Kind: turnload.KindInspect})
-	if nudge := mgr.Coordinator.Nudges.SurveyStreak(t.Context(), sess, 6, []string{"grep"}); !nudge.Empty() {
+	if nudge := mgr.Coordinator.Nudges.SurveyStreak(t.Context(), sess, sessionRequestReader(t, mgr, sess), 6, []string{"grep"}); !nudge.Empty() {
 		t.Fatalf("an inspect turn's reads are its work, not a streak: %q", nudge.Content)
 	}
 	ledger.BeginTurn(sess.ID, turnload.TurnOpening{}, turnload.Decision{Kind: turnload.KindChange})
-	if nudge := mgr.Coordinator.Nudges.SurveyStreak(t.Context(), sess, 6, []string{"grep"}); nudge.Empty() {
+	if nudge := mgr.Coordinator.Nudges.SurveyStreak(t.Context(), sess, sessionRequestReader(t, mgr, sess), 6, []string{"grep"}); nudge.Empty() {
 		t.Fatal("a change turn's read-only streak rendered empty")
 	}
 	ledger.BeginTurn(sess.ID, turnload.TurnOpening{}, turnload.Decision{Kind: turnload.KindInspect})
 	ledger.BeginUndecidedTurn(sess.ID, turnload.TurnOpening{})
-	if nudge := mgr.Coordinator.Nudges.SurveyStreak(t.Context(), sess, 6, []string{"grep"}); nudge.Empty() {
+	if nudge := mgr.Coordinator.Nudges.SurveyStreak(t.Context(), sess, sessionRequestReader(t, mgr, sess), 6, []string{"grep"}); nudge.Empty() {
 		t.Fatal("an undecided turn kept the previous turn's kind")
 	}
 }

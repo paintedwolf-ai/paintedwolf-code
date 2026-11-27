@@ -38,8 +38,8 @@ func TestCapabilitySurfaceOmitsWebToolsWhenSearchDisabled(t *testing.T) {
 	}
 
 	on := resolve(true)
-	if !slices.Contains(on.SpawnAllowlist, webResearcherAgent) || !on.Flags.CanSpawnWebResearch {
-		t.Fatalf("search enabled: spawn allowlist %v, can spawn web research %t; want the researcher", on.SpawnAllowlist, on.Flags.CanSpawnWebResearch)
+	if !slices.Contains(on.SpawnAllowlist, webResearcherAgent) {
+		t.Fatalf("search enabled: spawn allowlist %v; want the researcher", on.SpawnAllowlist)
 	}
 
 	off := resolve(false)
@@ -48,7 +48,7 @@ func TestCapabilitySurfaceOmitsWebToolsWhenSearchDisabled(t *testing.T) {
 			t.Errorf("search disabled: resolved tools still contain %s: %v", tool, off.ResolvedTools)
 		}
 	}
-	if slices.Contains(off.SpawnAllowlist, webResearcherAgent) || off.Flags.CanSpawnWebResearch {
-		t.Errorf("search disabled: spawn allowlist %v, can spawn web research %t; want no researcher", off.SpawnAllowlist, off.Flags.CanSpawnWebResearch)
+	if slices.Contains(off.SpawnAllowlist, webResearcherAgent) {
+		t.Errorf("search disabled: spawn allowlist %v; want no researcher", off.SpawnAllowlist)
 	}
 }

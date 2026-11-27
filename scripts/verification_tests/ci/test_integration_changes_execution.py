@@ -14,16 +14,16 @@ DECLARED = catalog()["go"]["test:integration"]["packages"]
 class IntegrationChangesTests(unittest.TestCase):
     def test_a_changed_file_selects_the_package_that_holds_it(self):
         self.assertEqual(integration_changes.edited_packages([
-            "lycaon/internal/parse/impl.go",
-            "lycaon/internal/parse/fuzz_test.go",
+            "lycaon/internal/jsonfence/trailing.go",
+            "lycaon/internal/jsonfence/trailing_test.go",
             "lycaon/test/integration/git_parity_test.go",
             "lycaon/internal/tools/native/survey/summarize_integration_test.go",
             "lycaon/internal/tools/native/extract_archive_capacity_integration_test.go",
-        ], DECLARED), ["./internal/parse", "./internal/tools/native", "./internal/tools/native/survey", "./test/integration"])
+        ], DECLARED), ["./internal/jsonfence", "./internal/tools/native", "./internal/tools/native/survey", "./test/integration"])
 
     def test_testdata_belongs_to_the_package_above_it(self):
         self.assertEqual(integration_changes.edited_packages(
-            ["lycaon/internal/parse/testdata/fuzz/FuzzValidate/seed"], DECLARED), ["./internal/parse"])
+            ["lycaon/internal/jsonfence/testdata/fuzz/FuzzTrailing/seed"], DECLARED), ["./internal/jsonfence"])
 
     def test_paths_the_recipe_does_not_cover_select_nothing(self):
         for path in ("lycaon/cmd/arch-lint/main.go", "lycaon-den/src/app.ts", "lycaon/go.mod",
@@ -40,21 +40,21 @@ class IntegrationChangesTests(unittest.TestCase):
         completed = subprocess.CompletedProcess(
             args=[], returncode=0,
             stdout=(
-                "/repo/internal/parse\t\n"
+                "/repo/internal/jsonfence\t\n"
                 "/repo/internal/layeredfs/adapter/nfsdarwin\tbuild constraints exclude all Go files in /repo/nfsdarwin\n"
                 "/repo/internal/broken\tsyntax error\n"
             ),
         )
         with patch.object(integration_changes.subprocess, "run", return_value=completed) as run:
             kept = integration_changes.host_packages(
-                ["./internal/parse", "./internal/layeredfs/adapter/nfsdarwin", "./internal/broken"], {"integration"})
-        self.assertEqual(kept, ["./internal/parse", "./internal/broken"])
+                ["./internal/jsonfence", "./internal/layeredfs/adapter/nfsdarwin", "./internal/broken"], {"integration"})
+        self.assertEqual(kept, ["./internal/jsonfence", "./internal/broken"])
         self.assertIn("-tags=integration", run.call_args.args[0])
 
     def test_the_recipes_tags_decide_which_packages_the_host_builds(self):
         """A package whose files all carry the integration tag is built by the recipe, so it stays selected."""
-        scope = change_report.Scope("base", "test", ["lycaon/internal/parse/impl.go"])
-        listed = subprocess.CompletedProcess(args=[], returncode=0, stdout="/repo/internal/parse\t\n")
+        scope = change_report.Scope("base", "test", ["lycaon/internal/jsonfence/trailing.go"])
+        listed = subprocess.CompletedProcess(args=[], returncode=0, stdout="/repo/internal/jsonfence\t\n")
         with patch.object(integration_changes.change_report, "resolve", return_value=scope), \
                 patch.object(integration_changes.subprocess, "run", return_value=listed) as run, \
                 patch.object(integration_changes.os, "execv"):
@@ -62,13 +62,13 @@ class IntegrationChangesTests(unittest.TestCase):
         self.assertIn("-tags=integration", run.call_args.args[0])
 
     def test_edited_packages_run_through_the_integration_recipe(self):
-        scope = change_report.Scope("base", "test", ["lycaon/internal/parse/impl.go", "docs/README.md"])
+        scope = change_report.Scope("base", "test", ["lycaon/internal/jsonfence/trailing.go", "docs/README.md"])
         with patch.object(integration_changes.change_report, "resolve", return_value=scope), \
                 patch.object(integration_changes, "host_packages", side_effect=lambda pkgs, _tags: pkgs), \
                 patch.object(integration_changes.os, "execv") as execute:
             integration_changes.main()
         command = execute.call_args.args[1]
-        self.assertEqual(command[2:], ["plan", "--", "test:integration", "--", "./internal/parse"])
+        self.assertEqual(command[2:], ["plan", "--", "test:integration", "--", "./internal/jsonfence"])
         self.assertTrue(command[1].endswith("/scripts/test-execution.py"))
 
     def test_a_change_without_edited_packages_runs_nothing(self):

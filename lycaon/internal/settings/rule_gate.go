@@ -81,7 +81,7 @@ func deniedByRules(matches []ApprovalRule, primary ApprovalRule, command string)
 		matches = []ApprovalRule{primary}
 	}
 	return &hitl.ApprovalResult{
-		Denied: true, DenyCode: "APPROVAL_RULE_DENIED",
+		Denied: true, DenyCode: hitl.CodeApprovalRuleDenied,
 		MatchedRules: approvalRuleMatches(matches, command),
 	}
 }

@@ -1,6 +1,7 @@
 package invariants_test
 
 import (
+	"github.com/lycaon/lycaon/test/contract/invariants/invariantstest"
 	"strings"
 	"testing"
 
@@ -179,9 +180,9 @@ func Refresh() { CreateWidget(); RenameWidget() }
 // are not.
 func TestOutboxScanResolvesCallsByType(t *testing.T) {
 	t.Parallel()
-	corpus := fixture(t, outboxFixture)
-	res := invariants.Evaluate(corpus, bare(rule(t, outbox.Family, "mutators-announce-their-transition")))
-	expect(t, res, violates, 3)
+	corpus := invariantstest.Fixture(t, outboxFixture)
+	res := invariants.Evaluate(corpus, invariantstest.Bare(invariantstest.Rule(t, outbox.Family, "mutators-announce-their-transition")))
+	invariantstest.Expect(t, res, invariantstest.Violates, 3)
 	for i, key := range []string{
 		"internal/store/store.go:MarkSeen",
 		"internal/store/store.go:RenameWidget",
@@ -191,33 +192,33 @@ func TestOutboxScanResolvesCallsByType(t *testing.T) {
 			t.Errorf("violation %d = %q, want %s writing widgets", i, res.Violations[i], key)
 		}
 	}
-	expect(t, invariants.Evaluate(corpus, rule(t, outbox.Family, "enqueues-take-a-mutation-transaction")), passes, 0)
+	invariantstest.Expect(t, invariants.Evaluate(corpus, invariantstest.Rule(t, outbox.Family, "enqueues-take-a-mutation-transaction")), invariantstest.Passes, 0)
 }
 
-// The family fails on each kind of drift.
+// The family invariantstest.Fails on each kind of drift.
 func TestOutboxClosureFailsClosed(t *testing.T) {
 	t.Parallel()
-	mutators := bare(rule(t, outbox.Family, "mutators-announce-their-transition"))
+	mutators := invariantstest.Bare(invariantstest.Rule(t, outbox.Family, "mutators-announce-their-transition"))
 	exempted := mutators
 	exempted.Exempt = []invariants.Exemption{{Key: "internal/store/store.go:CreateWidget", Reason: "fixture"}}
 	for name, tc := range map[string]struct {
 		rule  invariants.Invariant
 		files map[string]string
-		want  outcome
+		want  invariantstest.Outcome
 	}{
-		"seeded violation": {rule: mutators, files: outboxFixture, want: violates},
-		"renamed anchor": {rule: mutators, files: with(outboxFixture, map[string]string{
+		"seeded violation": {rule: mutators, files: outboxFixture, want: invariantstest.Violates},
+		"renamed anchor": {rule: mutators, files: invariantstest.With(outboxFixture, map[string]string{
 			"lycaon/internal/eventoutbox/outbox.go": strings.ReplaceAll(outboxFixture["lycaon/internal/eventoutbox/outbox.go"], "EnqueueTx", "Enqueue"),
-		}), want: missesAnchor},
-		"stale exemption": {rule: exempted, files: outboxFixture, want: staleExemption},
-		"empty corpus":    {rule: mutators, files: with(outboxFixture, map[string]string{"lycaon/internal/db/queries/widgets.sql": ""}), want: fails},
-		"unparsable file": {rule: mutators, files: with(outboxFixture, map[string]string{
+		}), want: invariantstest.MissesAnchor},
+		"stale exemption": {rule: exempted, files: outboxFixture, want: invariantstest.StaleExemption},
+		"empty corpus":    {rule: mutators, files: invariantstest.With(outboxFixture, map[string]string{"lycaon/internal/db/queries/widgets.sql": ""}), want: invariantstest.Fails},
+		"unparsable file": {rule: mutators, files: invariantstest.With(outboxFixture, map[string]string{
 			"lycaon/internal/store/broken.go": "package store\n\nfunc broken( {\n",
-		}), want: fails},
+		}), want: invariantstest.Fails},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			expect(t, invariants.Evaluate(fixture(t, tc.files), tc.rule), tc.want, 0)
+			invariantstest.Expect(t, invariants.Evaluate(invariantstest.Fixture(t, tc.files), tc.rule), tc.want, 0)
 		})
 	}
 }

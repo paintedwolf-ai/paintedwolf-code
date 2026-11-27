@@ -138,7 +138,7 @@ func TestAttachGateObligationsProjectsUnsatisfiedLeaves(t *testing.T) {
 			Gates: []WorkflowGateState{{ID: "research_satisfied", Satisfied: false}},
 		}}},
 	})
-	data = AttachGateObligations(t.Context(), data, catalog, "coordinator", "")
+	data = AttachGateObligations(t.Context(), data, catalog, "coordinator", "", nil)
 	if len(data.GateObligations) != 1 || data.GateObligations[0].ID != "research_satisfied" {
 		t.Fatalf("obligations = %+v", data.GateObligations)
 	}
@@ -150,7 +150,7 @@ func TestAttachGateObligationsProjectsUnsatisfiedLeaves(t *testing.T) {
 	data.CurrentGates[0].Satisfied = true
 	data.UnsatisfiedGateLeaves = UnsatisfiedGateIDs(data.CurrentGates)
 	data.GateObligations = nil
-	data = AttachGateObligations(t.Context(), data, catalog, "coordinator", "")
+	data = AttachGateObligations(t.Context(), data, catalog, "coordinator", "", nil)
 	if len(data.GateObligations) != 0 {
 		t.Fatalf("satisfied gate must clear obligations; got %+v", data.GateObligations)
 	}

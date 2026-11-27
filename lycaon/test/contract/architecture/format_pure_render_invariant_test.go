@@ -24,7 +24,6 @@ type purityClaim struct {
 var purityClaims = []purityClaim{
 	{"(*StaticRejectFormatter).Format", "internal/guidance", "StaticRejectFormatter", "Format"},
 	{"EnvelopeHintMessage", "internal/guidance", "", "EnvelopeHintMessage"},
-	{"(*DefaultService).Validate", "internal/parse", "DefaultService", "Validate"},
 	{"(*Runner).ValidateStages", "internal/hostcmd", "Runner", "ValidateStages"},
 	{"ParseOutput", "internal/scan", "", "ParseOutput"},
 	{"(*guidancedelivery.Service).Emit", "internal/session/guidancedelivery", "Service", "Emit"},

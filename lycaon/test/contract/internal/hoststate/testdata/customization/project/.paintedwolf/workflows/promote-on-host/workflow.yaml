@@ -1,0 +1,12 @@
+id: fixture-promote-on-host
+version: 1.0.0
+name: Fixture promote on host
+trigger: /fixture-promote-on-host
+request:
+  question: What should this phase work on?
+phases:
+  - id: bound
+    activity_label: Working
+    coordinator_surface: await_host
+    surface_template: agents/coordinator-surface-build.md
+    mode_refs: [implement-overlay-promote]

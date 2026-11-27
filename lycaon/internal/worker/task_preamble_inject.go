@@ -91,6 +91,7 @@ func WorkerTaskPreambleToMap(data WorkerTaskPreambleData) map[string]any {
 func RenderWorkerTaskPreamble(
 	ctx context.Context,
 	renderer *prompts.InjectRenderer,
+	reader prompts.Reader,
 	sessionID string,
 	projectDir string,
 	touchPaths []string,
@@ -103,7 +104,7 @@ func RenderWorkerTaskPreamble(
 	if data.empty() {
 		return "", nil
 	}
-	block, err := anchor.RenderInform(ctx, anchor.InjectWorkerTaskPreamble, anchor.MatchContext{Surface: "worker", SessionID: sessionID}, renderer, WorkerTaskPreambleToMap(data))
+	block, err := anchor.RenderInformWithReader(ctx, anchor.InjectWorkerTaskPreamble, anchor.MatchContext{Surface: "worker", SessionID: sessionID}, renderer, reader, WorkerTaskPreambleToMap(data))
 	if err != nil {
 		return "", err
 	}
@@ -133,13 +134,14 @@ func JoinWorkerAssignment(preamble, assignment string) string {
 func BuildWorkerPrompt(
 	ctx context.Context,
 	renderer *prompts.InjectRenderer,
+	reader prompts.Reader,
 	sessionID string,
 	projectDir string,
 	touchPaths []string,
 	scope *api.TaskScope,
 	assignment string,
 ) (string, error) {
-	preamble, err := RenderWorkerTaskPreamble(ctx, renderer, sessionID, projectDir, touchPaths, scope)
+	preamble, err := RenderWorkerTaskPreamble(ctx, renderer, reader, sessionID, projectDir, touchPaths, scope)
 	if err != nil {
 		return "", err
 	}
