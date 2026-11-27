@@ -467,36 +467,43 @@ def run_f02_instance(
             )
             baseline_idx = len(init_frames) if init_seen else len(sub.frames())
 
-            # Execute storm and track touched path count for Decision 050 watermark audit
-            touched_paths_count = 0
+            # Execute storm and track exact expected touched paths for Decision 071 audit
+            expected_paths: set[str] = set()
             if case.storm_kind == "mass_create":
                 for i in range(case.write_count):
-                    p = root_dir / f"storm_{i % 64:02d}" / f"c_{i:05d}.txt"
+                    rel = f"storm_{i % 64:02d}/c_{i:05d}.txt"
+                    p = root_dir / rel
                     p.parent.mkdir(parents=True, exist_ok=True)
                     p.write_bytes(f"created {i}\n".encode("utf-8"))
-                touched_paths_count = case.write_count
+                    expected_paths.add(rel)
             elif case.storm_kind == "mass_rename":
                 dst_root = root_dir / "moved_storm"
                 dst_root.mkdir(parents=True, exist_ok=True)
                 for i, p in enumerate(init_paths[: case.write_count]):
-                    dst = dst_root / f"m_{i % 64:02d}" / p.name
+                    src_rel = p.relative_to(root_dir).as_posix()
+                    dst_rel = f"moved_storm/m_{i % 64:02d}/{p.name}"
+                    dst = root_dir / dst_rel
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     os.replace(p, dst)
-                touched_paths_count = case.write_count * 2
+                    expected_paths.add(src_rel)
+                    expected_paths.add(dst_rel)
             elif case.storm_kind == "mass_delete":
                 for p in init_paths[: case.write_count]:
                     if p.exists():
+                        expected_paths.add(p.relative_to(root_dir).as_posix())
                         p.unlink()
-                touched_paths_count = case.write_count
             elif case.storm_kind == "branch_rewrite":
+                before_tree = set(e.path for e in reference_walk(root_dir, include_hidden=True) if e.kind == "file")
                 _git(root_dir, "checkout", "storm-branch")
-                touched_paths_count = case.write_count
+                after_tree = set(e.path for e in reference_walk(root_dir, include_hidden=True) if e.kind == "file")
+                expected_paths = before_tree | after_tree
             elif case.storm_kind == "overflow_fanout":
                 for i in range(case.write_count):
-                    d = root_dir / f"fan_{i // 10:04d}"
-                    d.mkdir(parents=True, exist_ok=True)
-                    (d / f"f_{i:05d}.txt").write_bytes(f"fanout {i}\n".encode("utf-8"))
-                touched_paths_count = case.write_count
+                    rel = f"fan_{i // 10:04d}/f_{i:05d}.txt"
+                    p = root_dir / rel
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    p.write_bytes(f"fanout {i}\n".encode("utf-8"))
+                    expected_paths.add(rel)
 
             sentinel.write_bytes(f"f02 sentinel after {case.case_id}\n".encode("utf-8"))
 
@@ -541,25 +548,23 @@ def run_f02_instance(
         )
         post_storm_revision = cat_details.get("revision")
 
-        # Decision 050: if no resync was emitted, named changes MUST cover the storm
+        # Decision 071: grade scoped path coverage against actual changed paths when no resync emitted
+        missing_named = sorted(expected_paths - named_paths)
+        extra_named = sorted(named_paths - expected_paths)
         defects: list[str] = []
         if not ok:
             defects.append(f"post-storm catalog mismatch: {cat_res.reason}")
-        if not resync_seen and len(named_paths) < touched_paths_count:
+        if not resync_seen and missing_named:
             defects.append(
-                f"storm dropped paths without scoped resync: named={len(named_paths)} < touched={touched_paths_count}"
+                f"storm dropped {len(missing_named)} expected path(s) without scoped resync (named={len(named_paths)} expected={len(expected_paths)})"
             )
         if not arrived and not scoped_frames:
             defects.append("no scoped source_changed SSE frames arrived for storm")
 
-        # Decision 050: explicitly classify overflow limit proof vs batch-cap resync
-        overflow_coverage = "batch_cap_512_resync" if (resync_seen and case.write_count > 512) else "no_resync"
-        if case.storm_kind == "overflow_fanout":
-            overflow_coverage = (
-                "batch_cap_512_resync_kernel_watch_limit_unresolved"
-                if resync_seen
-                else "unresolved_no_resync"
-            )
+        # Decision 071: preserve honest resync attribution without assuming which limit fired
+        overflow_coverage = (
+            "resync_emitted_cause_unattributed" if resync_seen else "unresolved_no_resync"
+        )
 
         gaps = ["resync"] if resync_seen else []
         if defects:
@@ -577,7 +582,9 @@ def run_f02_instance(
             details={
                 "storm_kind": case.storm_kind,
                 "write_count": case.write_count,
-                "touched_paths_count": touched_paths_count,
+                "expected_paths_count": len(expected_paths),
+                "missing_named_sample": missing_named[:20],
+                "extra_named_sample": extra_named[:20],
                 "pre_storm_revision": pre_storm_revision,
                 "post_storm_revision": post_storm_revision,
                 "sse_arrived": arrived,
@@ -1254,6 +1261,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed", default=BASE_SEED_PRIMARY, help="Base seed")
     parser.add_argument("--binary", required=True, help="Path to D1 lycaon-dev binary")
     parser.add_argument("--d1-worktree", required=True, help="Path to D1 worktree (cwd for launch)")
+    parser.add_argument("--d1-commit", default="", help="Pinned D1 commit SHA (auto-detected from --d1-worktree if omitted)")
+    parser.add_argument("--d1-tree", default="", help="Pinned D1 tree OID (auto-detected from --d1-worktree if omitted)")
     parser.add_argument("--repo-root", default="", help="Harness repo root for git provenance")
     parser.add_argument("--out-dir", required=True, help="Output directory for evidence & manifest")
     parser.add_argument("--rg-bin", default="rg", help="Path to ripgrep 15.2.0")
@@ -1267,20 +1276,35 @@ def main(argv: list[str] | None = None) -> int:
     repo_root = Path(args.repo_root).resolve() if args.repo_root else Path(__file__).resolve().parents[4]
     boundary_config = load_repo_boundary_config(d1_worktree)
 
+    d1_commit = args.d1_commit.strip()
+    d1_tree = args.d1_tree.strip()
+    if not d1_commit:
+        try:
+            d1_commit = subprocess.run(["git", "-C", str(d1_worktree), "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+        except Exception:
+            d1_commit = "unknown"
+    if not d1_tree:
+        try:
+            d1_tree = subprocess.run(["git", "-C", str(d1_worktree), "rev-parse", "HEAD^{tree}"], capture_output=True, text=True, check=True).stdout.strip()
+        except Exception:
+            d1_tree = "unknown"
+
     with tempfile.TemporaryDirectory(prefix="cfs-cf05-") as tmp:
         tmp_path = Path(tmp)
         provenance = collect_run_provenance(
             harness_repo=repo_root,
             work_dir=tmp_path,
             binary_path=Path(args.binary),
-            d1_commit="3bb1464d22dd0a38a149d37610810e7a0324e8cf",
-            d1_tree="a05c37487b1254b32be0640bcf47c0d52172f088",
+            d1_commit=d1_commit,
+            d1_tree=d1_tree,
             rg_bin=args.rg_bin,
         )
         sidecar = start_isolated_sidecar(
             binary_path=Path(args.binary),
             d1_worktree=d1_worktree,
             state_dir=tmp_path / "sidecar",
+            d1_commit=d1_commit,
+            d1_tree=d1_tree,
             harness_commit=provenance.harness_commit,
             harness_tree=provenance.harness_tree,
         )
