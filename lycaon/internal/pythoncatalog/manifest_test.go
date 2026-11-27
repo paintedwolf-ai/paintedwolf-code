@@ -20,8 +20,11 @@ func TestDefaultLaunchManifestRoundTripAndRoster(t *testing.T) {
 	if len(m.PublicDistributions()) != LaunchPublicDistributionCount {
 		t.Fatalf("public distributions = %d, want %d", len(m.PublicDistributions()), LaunchPublicDistributionCount)
 	}
-	if len(m.StdlibCapabilities) != 27 {
-		t.Fatalf("stdlib capabilities = %d, want 27", len(m.StdlibCapabilities))
+	if len(m.StdlibCapabilities) != 29 {
+		t.Fatalf("stdlib capabilities = %d, want 29", len(m.StdlibCapabilities))
+	}
+	if len(m.BundledFonts) != 3 {
+		t.Fatalf("bundled fonts = %d, want 3", len(m.BundledFonts))
 	}
 
 	raw, err := MarshalImageManifest(m)
@@ -51,8 +54,17 @@ func TestDefaultLaunchManifestRoundTripAndRoster(t *testing.T) {
 		"Jinja2":         "jinja2",
 		"beautifulsoup4": "bs4",
 		"markdown-it-py": "markdown_it",
-		"requests":       "requests",
-		"pypdf":          "pypdf",
+		"requests":        "requests",
+		"pypdf":           "pypdf",
+		"json5":           "json5",
+		"tzdata":          "tzdata",
+		"python-dateutil": "dateutil",
+		"sympy":           "sympy",
+		"Pillow":          "PIL",
+		"lxml":            "lxml.etree",
+		"python-docx":     "docx",
+		"python-pptx":     "pptx",
+		"fpdf2":           "fpdf",
 	}
 	for distName, wantImport := range wantPublic {
 		dist, ok := parsed.FindDistribution(distName)

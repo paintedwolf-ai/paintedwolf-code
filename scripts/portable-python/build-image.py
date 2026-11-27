@@ -31,7 +31,7 @@ PINNED_METERED_WASM_SHA256 = "774a08a7863c1dee1b2f21bb80fb9964f0dd5dc27bdf2294bd
 PINNED_IMPORT_INVENTORY_SHA256 = "d4dca3e9def0586bdc7c43af04340073fcbd99b28a87f26f33341b30f00d623b"
 CPYTHON_312_MAGIC_HEX = "cb0d0d0a"
 
-FORBIDDEN_SUFFIXES = (".so", ".dylib", ".pyd", ".dll", ".a", ".o", ".c", ".h", ".pyx")
+FORBIDDEN_SUFFIXES = (".so", ".dylib", ".pyd", ".dll", ".a", ".o", ".c", ".h", ".pyx", ".pxd", ".pxi")
 
 STDLIB_CAPABILITIES = [
     "ast",
@@ -54,6 +54,7 @@ STDLIB_CAPABILITIES = [
     "pyexpat",
     "re",
     "sqlite3",
+    "statistics",
     "tokenize",
     "tomllib",
     "unittest",
@@ -61,6 +62,7 @@ STDLIB_CAPABILITIES = [
     "xml.etree.ElementTree",
     "zipfile",
     "zlib",
+    "zoneinfo",
 ]
 
 
@@ -319,6 +321,8 @@ def install_sdist_pure_python(
     sdist_cfg = {
         "PyYAML": ("lib/yaml/", "yaml", "LICENSE"),
         "MarkupSafe": ("src/markupsafe/", "markupsafe", "LICENSE.txt"),
+        "Pillow": ("src/PIL/", "PIL", "LICENSE"),
+        "lxml": ("src/lxml/", "lxml", "LICENSES.txt"),
     }
     if name not in sdist_cfg:
         raise RuntimeError(f"No sdist_pure_python mapping for {name}")
@@ -449,6 +453,103 @@ def install_wasi_pure_python_rpds(
 
     source_sha = sha256_tree(src_root)
     return dist_info_name, installed, source_sha
+
+
+def install_bundled_fonts(
+    lock: dict[str, Any],
+    cache_dir: Path,
+    packages_dir: Path,
+) -> list[dict[str, Any]]:
+    """Extract verified redistributable Unicode TrueType fonts and license notices."""
+    bundles = lock.get("bundled_fonts") or []
+    if not bundles:
+        return []
+    fonts_dir = packages_dir / "fonts"
+    fonts_dir.mkdir(parents=True, exist_ok=True)
+    manifest_fonts: list[dict[str, Any]] = []
+    for bundle in bundles:
+        archive = download_verified(
+            bundle["source_url"],
+            cache_dir / "fonts" / bundle["filename"],
+            bundle["source_sha256"],
+        )
+        license_member = bundle["license_member"]
+        license_dest_name = bundle["license_dest"]
+        wanted = {f["archive_member"]: f for f in bundle["files"]}
+        found_files: dict[str, bytes] = {}
+        license_bytes: bytes | None = None
+        mode = "r:bz2" if archive.name.endswith(".bz2") else "r:gz"
+        with tarfile.open(archive, mode) as tf:
+            for member in tf.getmembers():
+                if not member.isfile():
+                    continue
+                if member.name == license_member:
+                    fh = tf.extractfile(member)
+                    assert fh is not None
+                    license_bytes = fh.read()
+                elif member.name in wanted:
+                    fh = tf.extractfile(member)
+                    assert fh is not None
+                    found_files[member.name] = fh.read()
+        if license_bytes is None:
+            raise RuntimeError(f"Font archive {archive.name} missing license {license_member}")
+        lic_out = fonts_dir / license_dest_name
+        lic_out.write_bytes(license_bytes)
+        for member_name, spec in wanted.items():
+            if member_name not in found_files:
+                raise RuntimeError(f"Font archive {archive.name} missing {member_name}")
+            out_path = fonts_dir / spec["dest_name"]
+            out_path.write_bytes(found_files[member_name])
+            manifest_fonts.append(
+                {
+                    "family": spec["family"],
+                    "style": spec["style"],
+                    "image_path": f"packages/fonts/{spec['dest_name']}",
+                    "guest_path": f"/packages/fonts/{spec['dest_name']}",
+                    "sha256": sha256_file(out_path),
+                    "license": bundle["license"],
+                    "license_path": f"packages/fonts/{license_dest_name}",
+                    "source_url": bundle["source_url"],
+                }
+            )
+            print(f"[font] {spec['family']} {spec['style']} -> /packages/fonts/{spec['dest_name']}")
+    return manifest_fonts
+
+
+def write_third_party_notices(
+    image_dir: Path,
+    manifest_dists: list[dict[str, Any]],
+    bundled_fonts: list[dict[str, Any]],
+) -> str:
+    """Write THIRD_PARTY_NOTICES.txt listing all bundled distributions, fonts, and native libs."""
+    lines = [
+        "Painted Wolf Portable Python — Third-Party Notices",
+        "==================================================",
+        "",
+        "Interpreter & Built-in WASI Native Components:",
+        "- CPython 3.12 (PSF-2.0)",
+        "- WASI SDK / wasi-libc (Apache-2.0 WITH LLVM-exception / MIT)",
+        "- zlib (Zlib License) — built into WASI guest for PNG/DEFLATE support",
+        "- libjpeg / libjpeg-turbo (IJG / BSD-3-Clause / Zlib) — built into WASI guest for Pillow JPEG codec",
+        "- libxml2 & libxslt (MIT) — built into WASI guest for lxml.etree XPath/XML support",
+        "",
+        "Bundled Python Distributions:",
+    ]
+    for d in sorted(manifest_dists, key=lambda x: x["normalized_name"]):
+        vis = "public" if d["public"] else "dependency"
+        lines.append(f"- {d['name']} {d['version']} ({d['license']}) [{vis}] — {d['source_url']}")
+    if bundled_fonts:
+        lines.append("")
+        lines.append("Bundled Redistributable Fonts:")
+        for f in bundled_fonts:
+            lines.append(
+                f"- {f['family']} {f['style']} ({f['license']}) at {f['guest_path']} "
+                f"(license text: {f['license_path']}) — {f['source_url']}"
+            )
+    lines.append("")
+    out = image_dir / "THIRD_PARTY_NOTICES.txt"
+    out.write_text("\n".join(lines), encoding="utf-8")
+    return "THIRD_PARTY_NOTICES.txt"
 
 
 def apply_wasi_package_patches(packages_root: Path) -> list[dict[str, str]]:
@@ -635,6 +736,18 @@ def main() -> None:
         default="",
         help="Pinned SHA-256 of the InstrumentWasmFuel-metered python.wasm",
     )
+    ap.add_argument(
+        "--interpreter-wasm",
+        type=Path,
+        default=None,
+        help="Optional override path to a rebuilt CPython/WASI python.wasm (e.g. PY10 with built-in Pillow/lxml)",
+    )
+    ap.add_argument(
+        "--import-inventory-sha256",
+        type=str,
+        default="",
+        help="Optional override for import_inventory_sha256 paired with --interpreter-wasm",
+    )
     args = ap.parse_args()
 
     script_dir = Path(__file__).resolve().parent
@@ -679,6 +792,11 @@ def main() -> None:
                 f = tf.extractfile(member)
                 assert f is not None
                 out.write_bytes(f.read())
+
+    if args.interpreter_wasm is not None:
+        shutil.copyfile(args.interpreter_wasm, wasm_out)
+        os.chmod(wasm_out, 0o755)
+        print(f"[interpreter] using override wasm {args.interpreter_wasm}")
 
     if not wasm_out.is_file():
         raise RuntimeError("Failed to extract python.wasm from interpreter archive")
@@ -756,6 +874,10 @@ def main() -> None:
                 ]
                 md["tree_sha256"] = sha256_tree(packages_dir, rel_files)
 
+    # 2c. Install pinned redistributable Unicode fonts (e.g. DejaVuSans for fpdf2)
+    bundled_fonts = install_bundled_fonts(lock, args.cache_dir, packages_dir)
+    notices_path = write_third_party_notices(image_dir, manifest_dists, bundled_fonts)
+
     # 3. Optional deterministic checked-hash CPython 3.12 bytecode generation
     bytecode_spec: dict[str, Any] | None = None
     if args.with_pyc or args.with_stdlib_pyc:
@@ -818,9 +940,11 @@ def main() -> None:
         "packages_root": "packages",
         "packages_tree_sha256": packages_tree_sha256,
         "distributions": manifest_dists,
+        "bundled_fonts": bundled_fonts,
+        "notices_path": notices_path,
         "stdlib_capabilities": STDLIB_CAPABILITIES,
         "wasm_imports": wasm_imports,
-        "import_inventory_sha256": PINNED_IMPORT_INVENTORY_SHA256,
+        "import_inventory_sha256": args.import_inventory_sha256.strip().lower() or PINNED_IMPORT_INVENTORY_SHA256,
     }
     if bytecode_spec is not None:
         manifest["bytecode"] = bytecode_spec

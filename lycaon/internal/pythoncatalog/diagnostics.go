@@ -44,13 +44,28 @@ func (d Diagnostic) Format() string {
 
 // legacyImportAliases maps common wrong/legacy import spellings to the shipped import name.
 var legacyImportAliases = map[string]string{
-	"pyyaml":         "yaml",
-	"beautifulsoup4": "bs4",
-	"beautifulsoup":  "bs4",
-	"markdown-it-py": "markdown_it",
-	"markdown_it_py": "markdown_it",
-	"pypdf2":         "pypdf",
-	"ruamel_yaml":    "ruamel.yaml",
+	"pyyaml":          "yaml",
+	"beautifulsoup4":  "bs4",
+	"beautifulsoup":   "bs4",
+	"markdown-it-py":  "markdown_it",
+	"markdown_it_py":  "markdown_it",
+	"pypdf2":          "pypdf",
+	"ruamel_yaml":     "ruamel.yaml",
+	"python_dateutil": "dateutil",
+	"python_docx":     "docx",
+	"python_pptx":     "pptx",
+	"etree":           "lxml.etree",
+}
+
+// portableNumericOutOfScope lists numeric/dataframe/plotting packages deliberately
+// outside the PY10 image, for which diagnostics point to stdlib csv, sqlite3, and
+// statistics for portable analysis and to the declared project runner for project deps.
+var portableNumericOutOfScope = map[string]bool{
+	"numpy":      true,
+	"pandas":     true,
+	"scipy":      true,
+	"polars":     true,
+	"matplotlib": true,
 }
 
 // DiagnoseImport distinguishes wrong import names (when the distribution is installed under
@@ -100,6 +115,16 @@ func DiagnoseImport(manifest ImageManifest, requested string) Diagnostic {
 					Suggestion: fmt.Sprintf("Use `import %s`.", imp),
 				}
 			}
+		}
+	}
+	if portableNumericOutOfScope[lower] {
+		return Diagnostic{
+			Kind:          DiagnosticMissingDistribution,
+			Requested:     trimmed,
+			Message:       fmt.Sprintf("Package or module %q is not installed in the fixed Portable Python image.", trimmed),
+			Available:     []string{"csv", "sqlite3", "statistics"},
+			Suggestion:    "For portable tabular and numeric analysis, use stdlib csv, sqlite3, and statistics (or sympy for exact symbolic math); for a project's own dependencies, use the declared project runner.",
+			ExternalRoute: ExternalPythonRoute,
 		}
 	}
 	return Diagnostic{
