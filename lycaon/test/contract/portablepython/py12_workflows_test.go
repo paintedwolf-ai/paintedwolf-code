@@ -212,7 +212,7 @@ Path("jc_result.json").write_text(json.dumps(out), encoding="utf-8")
 		}
 
 		runPY12Code(t, svc, ws, "py12-dpkt", `
-import json, socket
+import ipaddress, json
 from pathlib import Path
 import dpkt
 
@@ -227,8 +227,8 @@ def summarize_reader(reader):
         pkt_count += 1
         eth = dpkt.ethernet.Ethernet(buf)
         ip = eth.data
-        src = socket.inet_ntoa(ip.src)
-        dst = socket.inet_ntoa(ip.dst)
+        src = str(ipaddress.IPv4Address(ip.src))
+        dst = str(ipaddress.IPv4Address(ip.dst))
         if isinstance(ip.data, dpkt.udp.UDP):
             udp = ip.data
             dns_pkt = dpkt.dns.DNS(udp.data)
@@ -366,7 +366,7 @@ out = {
     "nx_answers": len(msg_nx.answer),
     "nx_authority_soa": len(msg_nx.authority),
     "zone_a_ips": sorted(r.address for r in zone_a),
-    "zone_cname": str(list(zone_cname)[0].target),
+    "zone_cname": str(list(zone_cname)[0].target.derelativize(z.origin)),
     "include_rejected": include_rejected,
 }
 Path("dns_result.json").write_text(json.dumps(out), encoding="utf-8")
