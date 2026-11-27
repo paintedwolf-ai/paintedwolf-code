@@ -40,9 +40,7 @@ class LoopbackFixtureServer:
 
     def __init__(self):
         self._lock = threading.Lock()
-        self.requests = []
-        self._server = None
-        self._thread = None
+        self.requests, self._server, self._thread = [], None, None
 
     def start(self):
         owner = self
@@ -61,13 +59,8 @@ class LoopbackFixtureServer:
                 head, rest = buf.split(b'\r\n\r\n', 1)
                 lines = head.decode('latin-1', errors='replace').split('\r\n')
                 parts = lines[0].split(' ')
-                method = parts[0] if len(parts) > 0 else ''
-                path = parts[1] if len(parts) > 1 else ''
-                headers = {}
-                for line in lines[1:]:
-                    if ':' in line:
-                        k, v = line.split(':', 1)
-                        headers[k.strip().lower()] = v.strip()
+                method, path = (parts[0] if parts else ''), (parts[1] if len(parts) > 1 else '')
+                headers = {k.strip().lower(): v.strip() for ln in lines[1:] if ':' in ln for k, v in [ln.split(':', 1)]}
                 length = int(headers.get('content-length', '0') or '0')
                 body = rest
                 while len(body) < length:
@@ -77,29 +70,18 @@ class LoopbackFixtureServer:
                     body += chunk
                 body = body[:length]
                 with owner._lock:
-                    seq = len(owner.requests) + 1
                     owner.requests.append({
-                        'seq': seq,
-                        'method': method,
-                        'path': path,
-                        'headers': headers,
-                        'body': body.decode('utf-8', errors='replace'),
+                        'seq': len(owner.requests) + 1, 'method': method, 'path': path,
+                        'headers': headers, 'body': body.decode('utf-8', errors='replace'),
                     })
                 if method == 'GET' and path == '/ok':
-                    resp = (
-                        f'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n'
-                        f'Content-Length: {len(OK_BODY)}\r\nConnection: close\r\n\r\n'
-                    ).encode('ascii') + OK_BODY
+                    resp = (f'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n'
+                            f'Content-Length: {len(OK_BODY)}\r\nConnection: close\r\n\r\n').encode('ascii') + OK_BODY
                     self.request.sendall(resp)
                 elif method == 'GET' and path == '/interrupted':
-                    resp = (
-                        b'HTTP/1.1 200 OK\r\nContent-Length: 100\r\n'
-                        b'Connection: close\r\n\r\npartial-prefix'
-                    )
-                    self.request.sendall(resp)
+                    self.request.sendall(b'HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\npartial-prefix')
                 elif method == 'POST' and path == '/commit':
-                    # Request already recorded; drop TCP connection with zero response bytes.
-                    return
+                    return  # Recorded in request log; drop TCP without response bytes.
                 else:
                     self.request.sendall(b'HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n')
 
@@ -141,11 +123,8 @@ class ApprovalPoller:
     """Approve host-authored loopback/HTTP checkpoints during scripted tool turns."""
 
     def __init__(self, application, session_id):
-        self._app = application
-        self._sid = session_id
-        self._stop = threading.Event()
-        self._seen = set()
-        self.approved = []
+        self._app, self._sid = application, session_id
+        self._stop, self._seen, self.approved = threading.Event(), set(), []
         self._thread = threading.Thread(target=self._run, daemon=True)
 
     def start(self):
@@ -169,11 +148,9 @@ class ApprovalPoller:
                         {'kind': 'tool_approval', 'action': 'approve', 'option_id': opt['id']},
                     )
                     self.approved.append({
-                        'checkpoint_id': cid,
-                        'tool_call_id': payload.get('tool_call_id'),
+                        'checkpoint_id': cid, 'tool_call_id': payload.get('tool_call_id'),
                         'subject_kind': ((payload.get('plan') or {}).get('subject') or {}).get('kind'),
-                        'option_id': opt['id'],
-                        'rung': opt.get('rung'),
+                        'option_id': opt['id'], 'rung': opt.get('rung'),
                     })
             self._stop.wait(0.15)
 
@@ -189,15 +166,10 @@ def _run_turn(application, session_id, surface, cmd, port):
     raw_parsed, payload = parse_tool_result({'tool_result_json': json.dumps(raw_res)})
     code, details = structured_rejection(raw_parsed, payload)
     return {
-        'tool_call_id': call_id,
-        'command': cmd,
-        'outcome': raw_parsed.get('outcome'),
-        'state': payload.get('state'),
-        'status': payload.get('status'),
-        'completed_effects': payload.get('completed_effects'),
-        'uncertain_effects': payload.get('uncertain_effects'),
-        'rejection_code': code,
-        'rejection_details': details,
+        'tool_call_id': call_id, 'command': cmd, 'outcome': raw_parsed.get('outcome'),
+        'state': payload.get('state'), 'status': payload.get('status'),
+        'completed_effects': payload.get('completed_effects'), 'uncertain_effects': payload.get('uncertain_effects'),
+        'rejection_code': code, 'rejection_details': details,
         'program_id': payload.get('program_id') or (raw_parsed.get('command_program') or {}).get('id'),
     }
 
@@ -214,8 +186,7 @@ def run_m06_replay(repo_root, out_path, engine_manifest=None, engine_bin=None):
     prior_sha = sha256_bytes(PRIOR_BYTES)
 
     application = make_app_factory(engine_bin, smoke.Application)(app_dir)
-    poller = None
-    approvals_granted = []
+    poller, approvals_granted = None, []
     try:
         application.ready()
         sid, project_id, root_id, surface = create_isolated_session(application, project_dir, {'profile': 'implement'})
@@ -254,7 +225,6 @@ def run_m06_replay(repo_root, out_path, engine_manifest=None, engine_bin=None):
     ok_reqs = [r for r in req_log if r['method'] == 'GET' and r['path'] == '/ok']
     int_reqs = [r for r in req_log if r['method'] == 'GET' and r['path'] == '/interrupted']
     commit_reqs = [r for r in req_log if r['method'] == 'POST' and r['path'] == '/commit']
-
     downloaded = project_dir / 'downloaded.txt'
     dl_bytes = downloaded.read_bytes() if downloaded.is_file() else None
     dest_sha = sha256_file(dest_file)
@@ -266,30 +236,23 @@ def run_m06_replay(repo_root, out_path, engine_manifest=None, engine_bin=None):
         ),
         'case3_commit_no_resend': (
             (t3['status'] != 0 or (t3['uncertain_effects'] or 0) >= 1 or t3['state'] != 'completed')
-            and len(commit_reqs) == 1
-            and commit_reqs[0]['body'] == 'payload=1'
+            and len(commit_reqs) == 1 and commit_reqs[0]['body'] == 'payload=1'
         ),
         'provenance_verified': (identity.get('engine_provenance') or {}).get('provenance_verified') is True,
     }
     report = {
-        'case_id': 'M06-http-loopback-fixture',
-        'model_calls': 0,
-        'passed': all(checks.values()),
-        'checks': checks,
-        'identity': identity,
-        'provenance_verified': checks['provenance_verified'],
+        'case_id': 'M06-http-loopback-fixture', 'model_calls': 0,
+        'passed': all(checks.values()), 'checks': checks,
+        'identity': identity, 'provenance_verified': checks['provenance_verified'],
         'session': {'id': sid, 'project_id': project_id, 'root_id': root_id, 'surface': surface},
         'fixture_server': {'port': port, 'request_log': req_log, 'commit_count': len(commit_reqs)},
         'approvals_granted': approvals_granted,
         'artifacts': {
-            'downloaded_sha256': sha256_file(downloaded),
-            'expected_ok_sha256': sha256_bytes(OK_BODY),
-            'dest_prior_sha256': prior_sha,
-            'dest_final_sha256': dest_sha,
+            'downloaded_sha256': sha256_file(downloaded), 'expected_ok_sha256': sha256_bytes(OK_BODY),
+            'dest_prior_sha256': prior_sha, 'dest_final_sha256': dest_sha,
         },
         'turns': {'ok_download': t1, 'interrupted_response': t2, 'commit_outcome_loss': t3},
-        'invocations': invocations,
-        'program_receipts': program_receipts,
+        'invocations': invocations, 'program_receipts': program_receipts,
     }
     out_file = pathlib.Path(out_path)
     out_file.parent.mkdir(parents=True, exist_ok=True)
