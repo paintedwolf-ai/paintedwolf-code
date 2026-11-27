@@ -2,6 +2,7 @@
 import json
 from portable_command.artifacts import project_hashes
 from portable_command.contracts import bytes_value
+from portable_command.case_oracles import extra_case_facts
 from portable_command.db_audit import ELIGIBLE_WRAPPER_OPS, query_db_audit, receipt_rows as _receipt_rows
 from portable_command.reporting import (
     FACT_OWNERS,
@@ -45,7 +46,7 @@ def normalize_outcome(raw_result, program_row, payload):
     return state, stop, code
 
 
-def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=(), baseline_hashes=None, session_surface=None, draft_bindings=None, host_scope_binding=None, program_receipt_pages=None):
+def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=(), baseline_hashes=None, session_surface=None, draft_bindings=None, host_scope_binding=None, program_receipt_pages=None, git_setup=None):
     """Construct a version-1 native-runtime observation from the whole isolated session."""
     prelude_calls = {r['call_id'] for r in prelude_records if r.get('call_id')}
     expected_calls = {cid for rec in turn_records for cid in (list(rec['call_ids']) + list(rec.get('await_call_ids') or ()))}
@@ -260,6 +261,8 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
             and progress[0]['detail_ref'] == last_details.get('program_progress_detail_ref')
             and progress[0]['execution_id'] != last_details.get('execution_id')
         )
+    extra_facts, recovery = extra_case_facts(case, session_id=session_id, identity=identity, project_dir=project_dir, git_setup=git_setup, receipts=receipts, effects=effects, audit=audit, recovery=recovery, last_payload=last_payload, final_hashes=final_hashes, baseline_hashes=baseline_hashes)
+    facts.update(extra_facts)
     facts['structural_wrappers_valid'] = wrappers_valid
     for req_fact in case.get('required_evidence') or ():
         if req_fact not in facts:
