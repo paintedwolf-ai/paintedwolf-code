@@ -27,6 +27,7 @@ import (
 type ManagedTempTracker struct {
 	mu      sync.RWMutex
 	entries map[string]managedTempEntry
+	aliases map[string]string
 }
 
 type managedTempEntry struct {
@@ -79,8 +80,39 @@ func (t *ManagedTempTracker) Record(ctx context.Context, tc tools.ToolContext, r
 	if t.entries == nil {
 		t.entries = map[string]managedTempEntry{}
 	}
+	if t.aliases == nil {
+		t.aliases = map[string]string{}
+	}
 	t.entries[canonicalAbs] = managedTempEntry{abs: canonicalAbs, info: after, pin: pin}
+	if cleanAbs := filepath.Clean(abs); cleanAbs != canonicalAbs {
+		t.aliases[cleanAbs] = canonicalAbs
+	}
+	if rel, err := filepath.Rel(canonicalScratch, canonicalAbs); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
+		if rawAlias := filepath.Clean(filepath.Join(scratch, rel)); rawAlias != canonicalAbs {
+			t.aliases[rawAlias] = canonicalAbs
+		}
+	}
 	t.mu.Unlock()
+}
+
+func (t *ManagedTempTracker) lookupLocked(candidate string) (managedTempEntry, bool) {
+	cleaned := filepath.Clean(candidate)
+	if entry, ok := t.entries[cleaned]; ok {
+		return entry, true
+	}
+	if canonical, ok := t.aliases[cleaned]; ok {
+		entry, ok := t.entries[canonical]
+		return entry, ok
+	}
+	// Resolve only the parent directory so a symlinked, dangling, or removed
+	// leaf still maps back to the tracked managed-temp entry instead of
+	// dropping out as an untracked operand.
+	parent := fspath.CanonicalPath(filepath.Dir(cleaned))
+	parentKey := filepath.Join(parent, filepath.Base(cleaned))
+	if entry, ok := t.entries[parentKey]; ok {
+		return entry, true
+	}
+	return managedTempEntry{}, false
 }
 
 func (t *ManagedTempTracker) resolve(scratchDir, cwd, arg string) (managedTempEntry, bool) {
@@ -92,10 +124,10 @@ func (t *ManagedTempTracker) resolve(scratchDir, cwd, arg string) (managedTempEn
 	if len(t.entries) == 0 {
 		return managedTempEntry{}, false
 	}
-	if entry, ok := t.entries[filepath.Clean(arg)]; ok {
-		return entry, true
-	}
 	if filepath.IsAbs(arg) {
+		if entry, ok := t.lookupLocked(arg); ok {
+			return entry, true
+		}
 		if entry, ok := t.entries[fspath.CanonicalPath(arg)]; ok {
 			return entry, true
 		}
@@ -105,13 +137,14 @@ func (t *ManagedTempTracker) resolve(scratchDir, cwd, arg string) (managedTempEn
 	if scratch == "" || cwd == "" {
 		return managedTempEntry{}, false
 	}
+	if entry, ok := t.lookupLocked(filepath.Join(cwd, arg)); ok {
+		return entry, true
+	}
 	canonicalCwd := fspath.CanonicalPath(cwd)
 	if !confine.PathAtOrUnder(canonicalCwd, fspath.CanonicalPath(scratch)) {
 		return managedTempEntry{}, false
 	}
-	candidate := filepath.Join(canonicalCwd, arg)
-	entry, ok := t.entries[filepath.Clean(candidate)]
-	return entry, ok
+	return t.lookupLocked(filepath.Join(canonicalCwd, arg))
 }
 
 // DeclareLaunchInputs verifies and records declared_at_launch revision pins

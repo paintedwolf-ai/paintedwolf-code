@@ -116,14 +116,14 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		}
 		return externalLaunchFailure(err, refusedResult("TOOL_OWNER_FAILED")), err
 	}
-	if res, err := l.declareLaunchInputs(ctx, tctx, request.Invocation.Identity.ExecutionID, cwd, launchArgv); err != nil {
-		return res, err
-	}
 	release, err := l.window.enter(ctx, tctx, boundary)
 	if err != nil {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, err
 	}
 	defer release()
+	if res, err := l.declareLaunchInputs(ctx, tctx, request.Invocation.Identity.ExecutionID, cwd, launchArgv); err != nil {
+		return res, err
+	}
 	opts.Started = func(pid int) { noteJobProcess(ctx, pid, launchArgv) }
 	async, err := lycexec.StartPipelineAsync(ctx, []lycexec.Stage{{Name: launchArgv[0], Args: launchArgv[1:]}}, opts, nonNilWriter(streams.Output), nonNilWriter(streams.Error))
 	if err != nil {
