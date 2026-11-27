@@ -326,10 +326,14 @@ def _spawn_sidecar(
         "LYCAON_DEV": "1",
         "LYCAON_HARNESS": "1",
         "LYCAON_LOG_LEVEL": "debug",
-        "LYCAON_LLM_MOCK": "1" if manual else "0",
-        "LYCAON_LLM_MANUAL": "1" if manual else "0",
+        "LYCAON_LLM_MOCK": "1" if manual else "",
+        "LYCAON_LLM_MANUAL": "1" if manual else "",
     }
     env = smoke.application_environment(overrides)
+    if not manual:
+        # Ensure real provider dispatch (never mock/manual fallback) on model_request sidecar.
+        env["LYCAON_LLM_MOCK"] = ""
+        env["LYCAON_LLM_MANUAL"] = ""
     app.process = subprocess.Popen(
         [str(binary), "serve", "--db", str(app_dir / "store.db")],
         cwd=REPO_ROOT,
@@ -451,6 +455,8 @@ def _drive_model_prompt_with_secret_option(
     option: str,
     *,
     expect_secret_card: bool = True,
+    endpoint: RecordingOpenAIFixture | None = None,
+    endpoint_before: int = 0,
     timeout_s: float = 30.0,
 ) -> dict[str, Any]:
     """Open a fresh session on the real-LLM sidecar, submit a prompt, handle real secret-screen
@@ -467,7 +473,7 @@ def _drive_model_prompt_with_secret_option(
             break
         time.sleep(0.1)
 
-    _api_call(
+    st_prompt, prompt_resp = _api_call(
         app,
         f"/v1/sessions/{sid}/prompts",
         {"operation_id": str(uuid.uuid4()), "text": prompt_text},
@@ -479,9 +485,8 @@ def _drive_model_prompt_with_secret_option(
     seen_cp_ids: set[str] = set()
     final_status = "unknown"
 
-    deadline = time.monotonic() + timeout_s
-    # Brief initial yield so the prompt starts running before polling idle.
-    time.sleep(0.15)
+    started_at = time.monotonic()
+    deadline = started_at + timeout_s
     saw_running = False
     while time.monotonic() < deadline:
         _, cps_resp = _api_call(app, f"/v1/sessions/{sid}/checkpoints?status=pending")
@@ -504,7 +509,6 @@ def _drive_model_prompt_with_secret_option(
                 })
                 answer_info = _answer_secret_checkpoint(app, sid, cp, option)
             else:
-                # Unexpected non-secret checkpoint -> reject safely.
                 _api_call(
                     app,
                     f"/v1/sessions/{sid}/checkpoints/{cp_id}",
@@ -515,16 +519,19 @@ def _drive_model_prompt_with_secret_option(
         status = str(state.get("status") or "")
         if status not in ("idle", ""):
             saw_running = True
-        if status in ("idle", "error", "failed") and (saw_running or secret_cards_seen or not expect_secret_card):
+        ep_hit = endpoint is not None and len(endpoint.chat_records_since(endpoint_before)) > 0
+        settled = status in ("idle", "error", "failed")
+        if settled and (
+            (expect_secret_card and (len(secret_cards_seen) > 0 or (saw_running and time.monotonic() - started_at > 2.0)))
+            or (not expect_secret_card and (ep_hit or (saw_running and time.monotonic() - started_at > 1.0) or time.monotonic() - started_at > 4.0))
+        ):
             final_status = status
-            if not expect_secret_card and not saw_running:
-                # Give one more brief tick for fast completion.
-                time.sleep(0.2)
             break
         time.sleep(0.1)
 
     return {
         "session_id": sid,
+        "prompt_status": st_prompt,
         "final_status": final_status,
         "secret_card_count": len(secret_cards_seen),
         "secret_cards": secret_cards_seen,
@@ -532,7 +539,7 @@ def _drive_model_prompt_with_secret_option(
     }
 
 
-def _send_curl_with_secret_option(
+def _send_http_request_with_secret_option(
     app: Any,
     session_id: str,
     url: str,
@@ -542,10 +549,29 @@ def _send_curl_with_secret_option(
     *,
     timeout_s: float = 45.0,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
-    """Drive a real `command` (`curl -s -X POST ...`) through the sidecar's `http_request` owner,
-    approving loopback capability once and answering the real `secret_screen` checkpoint.
+    """Drive the first-class `http_request` tool directly through the sidecar's `outbound_http`
+    owner, approving loopback capability once and answering the real `secret_screen` checkpoint.
     """
     req = _wait_pending(app, session_id)
+    if "http_request" not in (req.get("tools") or ()) and "request_tools" in (req.get("tools") or ()):
+        load_id = str(uuid.uuid4())
+        app.request(
+            "/harness/llm/respond",
+            {"id": req["id"], "tool_calls": [{"id": load_id, "name": "request_tools", "args": {"need": "http_request"}}]},
+        )
+        db_path = app.directory / "store.db"
+        dl = time.monotonic() + 20.0
+        while time.monotonic() < dl:
+            with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+                row = conn.execute(
+                    "SELECT tool_result_json FROM messages WHERE session_id=? AND tool_result_call_id=?",
+                    (session_id, load_id),
+                ).fetchone()
+            if row:
+                break
+            time.sleep(0.1)
+        req = _wait_pending(app, session_id)
+
     call_id = str(uuid.uuid4())
     app.request(
         "/harness/llm/respond",
@@ -553,9 +579,12 @@ def _send_curl_with_secret_option(
             "id": req["id"],
             "tool_calls": [{
                 "id": call_id,
-                "name": "command",
+                "name": "http_request",
                 "args": {
-                    "command": f"curl -s -X POST {url} -d 'token={canary}'",
+                    "method": "POST",
+                    "url": url,
+                    "headers": [{"name": "Authorization", "value": f"Bearer {canary}"}],
+                    "body": f"token={canary}",
                     "capability_request": {"loopback_connect": {"ports": [port]}},
                 },
             }],
@@ -673,6 +702,7 @@ def _run_a10_model_slots(
     out_dir: pathlib.Path,
     proj_dir: pathlib.Path,
     canaries: CanaryGenerator,
+    a10_probe_canaries: CanaryGenerator,
     prov: dict[str, Any],
     engine_bin: str | pathlib.Path | None,
     engine_manifest: str | pathlib.Path | None,
@@ -724,7 +754,7 @@ def _run_a10_model_slots(
                 if st_c not in (200, 201):
                     raise RuntimeError(f"create provider {pid} failed: {st_c} {body_c}")
 
-            _api_call(
+            st_pol, pol_resp = _api_call(
                 app_m,
                 "/v1/settings/model-policy",
                 {
@@ -737,9 +767,11 @@ def _run_a10_model_slots(
                 },
                 method="PATCH",
             )
+            if st_pol not in (200, 201):
+                raise RuntimeError(f"PATCH /v1/settings/model-policy failed: {st_pol} {pol_resp}")
 
             for spec in specs:
-                slot_canary = mint_detectable_canary(canaries, spec.slot_id)
+                slot_canary = mint_detectable_canary(a10_probe_canaries, spec.slot_id)
                 primary_ep.add_redact_token(slot_canary)
                 secondary_ep.add_redact_token(slot_canary)
                 before_p = primary_ep.total_count()
@@ -752,6 +784,8 @@ def _run_a10_model_slots(
                         f"Inspect synthetic credential {slot_canary} and reply ok.",
                         spec.option,
                         expect_secret_card=True,
+                        endpoint=primary_ep,
+                        endpoint_before=before_p,
                     )
                     recs = primary_ep.chat_records_since(before_p)
                     saw_card = turn["secret_card_count"] >= 1
@@ -802,6 +836,8 @@ def _run_a10_model_slots(
                         f"Inspect trusted provider canary {slot_canary} and reply ok.",
                         "withhold",
                         expect_secret_card=False,
+                        endpoint=primary_ep,
+                        endpoint_before=before_p,
                     )
                     recs = primary_ep.chat_records_since(before_p)
                     st_u, untrusted_resp = _api_call(
@@ -946,7 +982,11 @@ def run_tb09_sidecar_slots(
     ]
 
     run_id = f"tb09-sc-{uuid.uuid4().hex[:8]}"
+    # Keep managed vault canaries strictly separate from unmanaged A10 user-typed prompt probes:
+    # managed vault canaries MUST NEVER appear in any SQLite table, log, or export;
+    # unmanaged A10 probes are checked on outbound wires, logs, and exported receipts.
     canaries = CanaryGenerator(run_id)
+    a10_probe_canaries = CanaryGenerator(f"{run_id}-a10")
     canary_a11_alpha = canaries.mint("a11_alpha")
     canary_a11_beta = canaries.mint("a11_beta")
     canary_a13_v1 = canaries.mint("a13_v1")
@@ -976,6 +1016,7 @@ def run_tb09_sidecar_slots(
             out_dir=out_dir,
             proj_dir=proj_model,
             canaries=canaries,
+            a10_probe_canaries=a10_probe_canaries,
             prov=prov,
             engine_bin=engine_bin,
             engine_manifest=engine_manifest,
@@ -1043,6 +1084,13 @@ def run_tb09_sidecar_slots(
                 f"/v1/sessions/{sess_a1}/prompts",
                 {"operation_id": str(uuid.uuid4()), "text": "Run TB09 secret screening and custody checks."},
             )
+            # Establish progress checklist so file writes and tool calls proceed cleanly.
+            _send_tool_call(
+                app,
+                sess_a1,
+                "update_progress",
+                {"content": "## Progress\n- [ ] Run TB09 secret screening and custody checks\n"},
+            )
 
             # Seed project A & B managed secrets via real sidecar API.
             st_a, sec_a = _api_call(
@@ -1094,15 +1142,16 @@ def run_tb09_sidecar_slots(
             if m:
                 chat_gen_ref = m.group(0)
 
-            # --- Execute A10 `http_request` slots (real `curl` through sidecar `http_request` owner!) ---
+            # --- Execute A10 `http_request` slots (first-class `http_request` tool through `outbound_http` owner!) ---
             for spec in [s for s in selected if s.family == "A10" and s.seam == "http_request"]:
-                slot_canary = mint_detectable_canary(canaries, spec.slot_id)
+                slot_canary = mint_detectable_canary(a10_probe_canaries, spec.slot_id)
+                probe_tokens = (slot_canary,)
                 with RecordingHTTPFixture(
                     fixture_id=f"tb09-{spec.slot_id}",
                     routes={"/deliver": (200, {"ok": True})},
-                    redact_tokens=tuple(canaries.tokens),
+                    redact_tokens=tuple([*canaries.tokens, *a10_probe_canaries.tokens]),
                 ) as ep:
-                    tool_res, secret_cards, ans = _send_curl_with_secret_option(
+                    tool_res, secret_cards, ans = _send_http_request_with_secret_option(
                         app,
                         sess_a1,
                         f"{ep.base_url}/deliver",
@@ -1114,16 +1163,16 @@ def run_tb09_sidecar_slots(
                     code = _extract_refusal_code(tool_res)
                     saw_card = len(secret_cards) >= 1
                     if spec.option == "send_unchanged":
-                        chk = verify_outbound_screening_option("send_unchanged", snap, canaries.tokens)
+                        chk = verify_outbound_screening_option("send_unchanged", snap, probe_tokens)
                         ok = saw_card and chk["passed"]
                     elif spec.option == "send_redacted":
-                        chk = verify_outbound_screening_option("send_redacted", snap, canaries.tokens)
+                        chk = verify_outbound_screening_option("send_redacted", snap, probe_tokens)
                         ok = saw_card and chk["passed"]
                     elif spec.option == "withhold":
-                        chk = verify_outbound_screening_option("withhold", snap, canaries.tokens)
+                        chk = verify_outbound_screening_option("withhold", snap, probe_tokens)
                         ok = saw_card and chk["passed"] and tool_res.get("outcome") != "completed"
                     else:  # protect on http_request -> CanTrack is false, track_and_replace NOT offered, 0 sends
-                        chk = verify_outbound_screening_option("withhold", snap, canaries.tokens)
+                        chk = verify_outbound_screening_option("withhold", snap, probe_tokens)
                         ok = (
                             saw_card
                             and secret_cards[0].get("can_track") is False
@@ -1144,7 +1193,7 @@ def run_tb09_sidecar_slots(
                             "fixture_check": chk,
                             "endpoint_snapshot": snap,
                         },
-                        canary_tokens=canaries.tokens,
+                        canary_tokens=[*canaries.tokens, *a10_probe_canaries.tokens],
                         passed=ok,
                     )
 
@@ -1292,7 +1341,7 @@ def run_tb09_sidecar_slots(
                         app,
                         sess_a1,
                         "command",
-                        {"command": f"write --path .env --content 'MODEL_LITERAL={literal_val}\\n'"},
+                        {"command": f"printf 'MODEL_LITERAL=%s\\n' '{literal_val}' > .env"},
                     )
                     _, r_res, _ = _send_tool_call(
                         app,
@@ -1551,6 +1600,11 @@ def run_tb09_sidecar_slots(
         log_paths=all_logs,
         export_paths=[slots_dir],
     )
+    a10_probe_export_audit = audit_stores_for_canaries(
+        a10_probe_canaries.tokens,
+        log_paths=all_logs,
+        export_paths=[slots_dir],
+    )
     by_family: dict[str, dict[str, int]] = {}
     for rec in ordered_receipts:
         fam = rec["family"]
@@ -1576,9 +1630,11 @@ def run_tb09_sidecar_slots(
         "unknown_slots": unknown_n,
         "by_family": by_family,
         "canary_digests": [canary_digest(t) for t in canaries.tokens],
+        "a10_probe_canary_digests": [canary_digest(t) for t in a10_probe_canaries.tokens],
         "final_canary_audit": final_audit,
-        "executed_all_passed": failed_n == 0 and final_audit["clean"],
-        "all_passed": failed_n == 0 and blocked_n == 0 and unknown_n == 0 and final_audit["clean"],
+        "a10_probe_export_audit": a10_probe_export_audit,
+        "executed_all_passed": failed_n == 0 and final_audit["clean"] and a10_probe_export_audit["clean"],
+        "all_passed": failed_n == 0 and blocked_n == 0 and unknown_n == 0 and final_audit["clean"] and a10_probe_export_audit["clean"],
         "slot_receipts": [
             {"slot_id": r["slot_id"], "family": r["family"], "verdict": r["verdict"], "path": f"slots/{r['slot_id']}.json"}
             for r in ordered_receipts
