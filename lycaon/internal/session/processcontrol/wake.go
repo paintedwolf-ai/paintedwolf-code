@@ -153,10 +153,6 @@ func observeProcessReportDelivery(sessionID, handle, occID, evidenceRef string, 
 	if !watchdiag.Enabled() {
 		return
 	}
-	committedAt := time.Now().UTC()
-	if committedAt.Before(publishedAt) {
-		committedAt = publishedAt
-	}
 	watchdiag.Observe(watchdiag.Observation{
 		SessionID:   sessionID,
 		Handle:      handle,
@@ -178,27 +174,6 @@ func observeProcessReportDelivery(sessionID, handle, occID, evidenceRef string, 
 				OwningSource: watchdiag.OwningSource{
 					Component:   "processcontrol",
 					Phase:       watchdiag.PhaseProcessReportPublished,
-					ClockDomain: watchdiag.ClockDomainSystem,
-					EvidenceRef: evidenceRef,
-				},
-				EvidenceRef: evidenceRef,
-			},
-		},
-		Deliveries: []watchdiag.DeliveryFact{
-			{
-				DeliveryID:      evidenceRef,
-				Handle:          handle,
-				OccurrenceID:    occID,
-				OwnerSessionID:  sessionID,
-				RoutedSessionID: sessionID,
-				Terminal:        true,
-				Committed:       true,
-				RequiresReport:  true,
-				CommittedAt:     committedAt,
-				ClockDomain:     watchdiag.ClockDomainSystem,
-				OwningSource: watchdiag.OwningSource{
-					Component:   "processcontrol",
-					Phase:       "terminal_delivery_commit",
 					ClockDomain: watchdiag.ClockDomainSystem,
 					EvidenceRef: evidenceRef,
 				},

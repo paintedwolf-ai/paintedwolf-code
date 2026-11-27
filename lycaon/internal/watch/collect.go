@@ -232,6 +232,7 @@ func CommitCollectBatch(ctx context.Context, s *Store, sessionID, deliveryID str
 		for _, m := range batch.Matches {
 			_ = MarkPresentationAdmitted(ctx, s, owner, m.OccurrenceID, deliveryID)
 		}
+		observeCommittedDeliveryBoundary(ctx, s, sessionID, workerJobID, deliveryID, "collected_frame", false, watchIDs, batch, s.clock.Now().UTC())
 	}
 	return nil
 }

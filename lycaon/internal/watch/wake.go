@@ -371,6 +371,7 @@ func commitAmbientWakeAdmission(ctx context.Context, s *Store, sessionID, delive
 		for _, m := range batch.Matches {
 			_ = MarkPresentationAdmitted(ctx, s, SessionOwner(sessionID), m.OccurrenceID, deliveryID)
 		}
+		observeCommittedDeliveryBoundary(ctx, s, sessionID, "", deliveryID, "ambient_wake", true, watchIDs, batch, now.UTC())
 	}
 	return nil
 }
