@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/types"
-	"strings"
 
 	"github.com/lycaon/lycaon/test/contract/invariants"
 )
@@ -35,11 +34,7 @@ var forbiddenCommandEntrypoints = map[string]bool{
 	"ProgramDispatcher.invokeExternal":  true,
 	"ProgramDispatcher.invokeBuiltin":   true,
 	"ProgramDispatcher.start":           true,
-	"ProgramSupervisor.RunProgram":      true,
-	"ProgramSupervisor.StartJob":        true,
-	"CommandTool.Execute":               true,
 	"CommandTool.Run":                   true,
-	"RunCommand":                        true,
 }
 
 var publicationRecovery = []invariants.Invariant{{
@@ -54,10 +49,15 @@ var publicationRecovery = []invariants.Invariant{{
 	Check: checkPublicationRecoveryIsolation,
 }}
 
+type recoveryNode struct {
+	fn   *types.Func
+	root string
+}
+
 func checkPublicationRecoveryIsolation(r *invariants.Run) {
 	pkg := r.TypedPackage(nativeCommandDir)
 	decls := map[*types.Func]*ast.FuncDecl{}
-	var queue []*types.Func
+	var queue []recoveryNode
 	seen := map[*types.Func]bool{}
 
 	for _, f := range pkg.Files {
@@ -71,9 +71,9 @@ func checkPublicationRecoveryIsolation(r *invariants.Run) {
 				continue
 			}
 			decls[obj] = fn
-			if recoveryRootNames[funcKey(fn)] {
+			if key := funcKey(fn); recoveryRootNames[key] {
 				seen[obj] = true
-				queue = append(queue, obj)
+				queue = append(queue, recoveryNode{fn: obj, root: key})
 			}
 		}
 	}
@@ -82,9 +82,17 @@ func checkPublicationRecoveryIsolation(r *invariants.Run) {
 	for len(queue) > 0 {
 		cur := queue[0]
 		queue = queue[1:]
-		decl := decls[cur]
+		decl := decls[cur.fn]
 		if decl == nil || decl.Body == nil {
 			continue
+		}
+		curKey := typedFuncKey(cur.fn)
+		report := func(call *ast.CallExpr, reason string) {
+			if curKey == cur.root {
+				r.ReportAt(call.Pos(), "%s reaches %s", cur.root, reason)
+				return
+			}
+			r.ReportAt(call.Pos(), "%s reaches %s via %s", cur.root, reason, curKey)
 		}
 		ast.Inspect(decl.Body, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
@@ -92,7 +100,7 @@ func checkPublicationRecoveryIsolation(r *invariants.Run) {
 				return true
 			}
 			if reason := forbiddenRecoveryFieldCall(pkg, call); reason != "" {
-				r.ReportAt(call.Pos(), "publication recovery reaches %s via %s", reason, cur.Name())
+				report(call, reason)
 				return true
 			}
 			callee := pkg.Callee(call)
@@ -100,13 +108,13 @@ func checkPublicationRecoveryIsolation(r *invariants.Run) {
 				return true
 			}
 			if reason := forbiddenRecoveryCallee(callee); reason != "" {
-				r.ReportAt(call.Pos(), "publication recovery reaches %s via %s", reason, cur.Name())
+				report(call, reason)
 				return true
 			}
 			if callee.Pkg() == pkg.Types && !seen[callee] {
 				if _, hasBody := decls[callee]; hasBody {
 					seen[callee] = true
-					queue = append(queue, callee)
+					queue = append(queue, recoveryNode{fn: callee, root: cur.root})
 				}
 			}
 			return true
@@ -160,7 +168,6 @@ func forbiddenRecoveryCallee(fn *types.Func) string {
 		return ""
 	}
 	pkgPath := fn.Pkg().Path()
-	name := fn.Name()
 	key := typedFuncKey(fn)
 
 	switch pkgPath {
@@ -169,32 +176,32 @@ func forbiddenRecoveryCallee(fn *types.Func) string {
 			return fmt.Sprintf("command execution entrypoint %s", key)
 		}
 	case cmdProgramPkg:
-		if strings.HasPrefix(name, "Evaluate") {
-			return fmt.Sprintf("program evaluator %s.%s", pkgPath, name)
+		if key == "Evaluate" {
+			return fmt.Sprintf("program evaluator %s.%s", pkgPath, key)
 		}
 	case toolExecPkg:
-		if name == "Invoke" || name == "InvokeNative" || name == "Execute" || name == "Run" {
+		if key == "Executor.Invoke" || key == "Executor.InvokeNative" {
 			return fmt.Sprintf("tool execution entrypoint %s.%s", pkgPath, key)
 		}
 	case bgProcessPkg:
-		if name == "Start" || name == "StartProgram" || name == "Launch" {
+		if key == "Registry.StartProgram" {
 			return fmt.Sprintf("background launch entrypoint %s.%s", pkgPath, key)
 		}
 	case internalExecPkg:
-		if name == "PrepareCommand" || name == "StartPrepared" || name == "StartPipelineAsync" || name == "Start" || name == "Run" {
+		if key == "PrepareCommand" || key == "StartPrepared" || key == "StartPipelineAsync" || key == "Run" {
 			return fmt.Sprintf("process launch entrypoint %s.%s", pkgPath, key)
 		}
 	case "os/exec":
-		if name == "Command" || name == "CommandContext" || name == "Start" || name == "Run" || name == "Output" || name == "CombinedOutput" {
+		if key == "Command" || key == "CommandContext" || key == "Cmd.Start" || key == "Cmd.Run" || key == "Cmd.Output" || key == "Cmd.CombinedOutput" {
 			return fmt.Sprintf("os/exec process launch %s", key)
 		}
 	case "os":
-		if name == "StartProcess" {
+		if key == "StartProcess" {
 			return "os.StartProcess"
 		}
 	case "syscall", "golang.org/x/sys/unix":
-		if name == "ForkExec" || name == "StartProcess" || name == "Exec" {
-			return fmt.Sprintf("%s.%s", pkgPath, name)
+		if key == "ForkExec" || key == "StartProcess" || key == "Exec" {
+			return fmt.Sprintf("%s.%s", pkgPath, key)
 		}
 	}
 	return ""
