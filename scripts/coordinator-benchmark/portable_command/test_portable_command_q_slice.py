@@ -213,11 +213,11 @@ class PortableCommandQSliceTests(unittest.TestCase):
             db.execute("CREATE TABLE invocation_program_deliveries (id TEXT PRIMARY KEY, output_id TEXT, response_id TEXT, delivery_id TEXT, start_byte INTEGER, end_byte INTEGER, source_owner_ref TEXT, mappings_json TEXT)")
             db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','completed',1), ('r2','sess1234','c2','command','processes','completed',1)")
             db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,''), ('p2','r2','completed',0,'')")
-            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,accepted_revision,published_revision) VALUES ('e1','p1',1,'read','cat','filesystem','completed','none','',''), ('e2','p2',1,'write','edit','filesystem','completed','completed','rev1','rev2')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,accepted_revision,published_revision) VALUES ('e1','p1',1,'read','cat','filesystem','completed','none','',''), ('e2','p2',1,'edit','edit','filesystem','completed','completed','rev1','rev2')")
             db.execute("INSERT INTO invocation_program_revision_pins VALUES ('p2','e2',0,'destination','published_disk','input.txt')")
             db.execute("INSERT INTO invocation_program_publications VALUES ('p2','sess1234','committed',1)")
             db.execute("INSERT INTO invocation_program_outputs VALUES ('o1','p1','e1','stdout','ref:o1',1,0,'1\\talpha\\n2\\tbeta\\n',0,2,'','b'*64)")
-            src_id = 'disk:' + str((proj / 'input.txt').resolve())
+            src_id = 'root-uuid-1234/input.txt'
             m1 = json.dumps([{'Source': {'SourceID': src_id, 'SHA256': base['input.txt'], 'Representation': 'utf8-no-bom'}, 'SourceStartByte': 0, 'SourceEndByte': 6, 'OutputStartByte': 2, 'OutputEndByte': 8, 'PrintedLine': 1}])
             m2 = json.dumps([{'Source': {'SourceID': src_id, 'SHA256': base['input.txt'], 'Representation': 'utf8-no-bom'}, 'SourceStartByte': 6, 'SourceEndByte': 11, 'OutputStartByte': 10, 'OutputEndByte': 15, 'PrintedLine': 2}])
             db.execute("INSERT INTO invocation_program_deliveries VALUES ('d1','o1','resp1','del1',2,8,'owner:1',?), ('d2','o1','resp1','del1#1',10,15,'owner:1',?)", (m1, m2))

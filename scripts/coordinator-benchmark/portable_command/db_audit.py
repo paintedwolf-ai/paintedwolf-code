@@ -64,7 +64,7 @@ def query_db_audit(db_path, session_id, prelude_call_ids=()):
 def _canonical_op(ex):
     op_id, native_cmd = ex.get('operation_id') or '', ex.get('native_command') or ''
     owner, canonical = ex.get('owner') or '', ex.get('canonical') or ''
-    if op_id == 'write':
+    if op_id == 'write' or (op_id == 'edit' and owner == 'filesystem'):
         return 'write'
     if op_id == 'read' and native_cmd in {'', 'cat', 'head', 'read'}:
         return 'read'
@@ -131,7 +131,7 @@ def receipt_rows(audit, progress_receipts, draft_bindings=None):
                         and b.get('revision') == src_pin.get('document_revision')
                         and (not src_pin.get('document_id') or b.get('document_id') == src_pin.get('document_id'))):
                     row['input_revision'] = b['alias']
-        if op_id == 'write' or ex.get('accepted_revision') or ex.get('published_revision'):
+        if op_id in {'write', 'edit'} or ex.get('accepted_revision') or ex.get('published_revision'):
             pin = next((p for p in audit['invocation_program_revision_pins']
                         if p['execution_id'] == ex['id'] and p['role'] == 'destination'), None)
             if pin:

@@ -4,6 +4,13 @@ import json
 import pathlib
 import sqlite3
 import uuid
+import smoke_workers
+
+
+def _settle_turn(application, session_id):
+    req = application.wait_for(lambda: smoke_workers.pending(application, session_id), 'settle manual turn', session_id)
+    application.request('/harness/llm/respond', {'id': req['id'], 'text': 'Done.'})
+    application.wait_for(lambda: application.request(f'/v1/sessions/{session_id}')['status'] == 'idle', 'session idle', session_id)
 
 
 def _parse_body(raw_result):
@@ -56,20 +63,26 @@ def probe_background_job_handles(application, session_id, db_path, *, project_di
         handle_outputs[handle] = info
     bad_cid, bad_info = _read_handle_output(application, session_id, 'nonexistent-job-handle', send_calls)
     call_ids.append(bad_cid)
+    _settle_turn(application, session_id)
     cross_refused, other_usable, other_handle = False, False, ''
     sid2, _, _, _ = create_base_session(application, project_dir, {'profile': 'implement', 'turns': []})
     try:
         application.request(f'/v1/sessions/{sid2}/prompts', {'operation_id': str(uuid.uuid4()), 'text': 'Cross-session Q16 handle witness.'})
         send_calls(application, sid2, [{'name': 'update_progress', 'args': {'content': '- [ ] Cross-session witness'}}])
         send_calls(application, sid2, [{'name': 'command', 'args': {'command': 'export FIXTURE=other; fixture-job & job=$!; wait "$job"'}}])
+        _settle_turn(application, sid2)
         h2 = _read_handles(db_path, sid2)
         if h2:
             other_handle = h2[-1]
+            application.request(f'/v1/sessions/{session_id}/prompts', {'operation_id': str(uuid.uuid4()), 'text': 'Cross-session Q16 refusal witness.'})
             c_cid, c_info = _read_handle_output(application, session_id, other_handle, send_calls)
             call_ids.append(c_cid)
             cross_refused = c_info['outcome'] == 'rejected'
+            _settle_turn(application, session_id)
+            application.request(f'/v1/sessions/{sid2}/prompts', {'operation_id': str(uuid.uuid4()), 'text': 'Cross-session Q16 own-session witness.'})
             _, own_info = _read_handle_output(application, sid2, other_handle, send_calls)
             other_usable = bool(own_info['outcome'] == 'completed' and own_info['returned_handle'] == other_handle and own_info['stdout'].startswith('other\n'))
+            _settle_turn(application, sid2)
     finally:
         with contextlib.suppress(Exception):
             application.request(f'/v1/sessions/{sid2}/abort', {})

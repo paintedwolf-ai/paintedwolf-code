@@ -27,7 +27,7 @@ def _line_span_from_bytes(raw_bytes, start_byte, end_byte):
     return [start_line, max(start_line, end_line)]
 
 
-def _resolve_source_path(src, project_dir):
+def _resolve_source_path(src, project_dir, known_paths=()):
     direct = str(src.get('Path') or src.get('path') or '').lstrip('./')
     if direct:
         return direct
@@ -40,7 +40,12 @@ def _resolve_source_path(src, project_dir):
             return pathlib.Path(raw).resolve().relative_to(pathlib.Path(project_dir).resolve()).as_posix()
         except ValueError:
             pass
-    return raw.lstrip('./')
+    cleaned = raw.lstrip('./')
+    if cleaned not in known_paths and '/' in cleaned:
+        tail = cleaned.split('/', 1)[1]
+        if tail in known_paths or (project_dir and (pathlib.Path(project_dir) / tail).exists()):
+            return tail
+    return cleaned
 
 
 DELIVERY_EVIDENCE_FACTS = {'delivery_owner_identity', 'exact_mapped_ranges', 'unseen_ranges_not_read_bases', 'no_conversational_read_base'}
@@ -75,7 +80,7 @@ def extract_deliveries(case, audit, baseline_hashes, project_dir=None):
                 all_ranges_exact = False
                 continue
             src = m.get('Source') or m.get('source') or {}
-            path = _resolve_source_path(src, project_dir)
+            path = _resolve_source_path(src, project_dir, known_paths=set(setup_files) | set(revisions))
             s_start = m.get('SourceStartByte', m.get('source_start_byte'))
             s_end = m.get('SourceEndByte', m.get('source_end_byte'))
             o_start = m.get('OutputStartByte', m.get('output_start_byte'))
