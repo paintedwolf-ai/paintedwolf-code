@@ -67,10 +67,10 @@ static pw_py_status_t pw_py_call_init(pw_py_lib_t* lib) {
     return lib->engine_init();
 }
 
-extern pw_py_wasi_action_t pwGoWasiCallback(
+extern uint32_t pwGoWasiCallback(
     uintptr_t handle_val,
     uint32_t op_id,
-    const uint64_t* args,
+    uint64_t* args,
     uint32_t argc,
     uint32_t* out_ret);
 
@@ -82,7 +82,7 @@ static pw_py_wasi_action_t pw_py_c_wasi_trampoline(
     uint32_t argc,
     uint32_t* out_ret) {
     (void)op_name;
-    return pwGoWasiCallback((uintptr_t)host_ctx, (uint32_t)op_id, args, argc, out_ret);
+    return (pw_py_wasi_action_t)pwGoWasiCallback((uintptr_t)host_ctx, (uint32_t)op_id, (uint64_t*)args, argc, out_ret);
 }
 
 static pw_py_status_t pw_py_call_instance_new(
@@ -141,14 +141,14 @@ type nativeExecHandle struct {
 }
 
 //export pwGoWasiCallback
-func pwGoWasiCallback(handleVal C.uintptr_t, opID C.uint32_t, argsPtr *C.uint64_t, argc C.uint32_t, outRet *C.uint32_t) C.pw_py_wasi_action_t {
+func pwGoWasiCallback(handleVal C.uintptr_t, opID C.uint32_t, argsPtr *C.uint64_t, argc C.uint32_t, outRet *C.uint32_t) C.uint32_t {
 	h := cgo.Handle(handleVal)
 	ctxObj, ok := h.Value().(*nativeExecHandle)
 	if !ok || ctxObj == nil || ctxObj.host == nil {
 		if outRet != nil {
 			*outRet = C.uint32_t(wasiErrnoIO)
 		}
-		return C.PW_PY_WASI_TRAP
+		return C.uint32_t(C.PW_PY_WASI_TRAP)
 	}
 
 	var mem []byte
@@ -168,7 +168,7 @@ func pwGoWasiCallback(handleVal C.uintptr_t, opID C.uint32_t, argsPtr *C.uint64_
 	if outRet != nil {
 		*outRet = C.uint32_t(ret)
 	}
-	return C.pw_py_wasi_action_t(action)
+	return C.uint32_t(action)
 }
 
 // NativeEngineRuntime executes isolated Portable Python invocations using
