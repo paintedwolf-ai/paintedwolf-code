@@ -77,9 +77,10 @@ class MemoryBudgetTests(unittest.TestCase):
             (artifacts / "verification" / "b1" / "1.progress.json").write_text("{}")
 
             # Latest qualifying ordinary and race receipts for `tree`.
+            exact_threshold = (ordinary_limit * 80 + 99) // 100
             _write_receipt(artifacts, "b1", "1.json", tree, "test:contract", {
-                "example/under": _obs(ordinary_limit * 80 // 100 - 1, ordinary_limit),
-                "example/exact": _obs(ordinary_limit * 80 // 100, ordinary_limit),
+                "example/under": _obs(exact_threshold - 1, ordinary_limit),
+                "example/exact": _obs(exact_threshold, ordinary_limit),
                 "example/above81": _obs(int(ordinary_limit * 0.81), ordinary_limit, source="proc_vmrss", lower_bound=True),
                 "example/retained": _obs(int(ordinary_limit * 0.85), ordinary_limit),
                 "example/stale-ceiling": _obs(int(ordinary_limit * 0.92), ordinary_limit),
