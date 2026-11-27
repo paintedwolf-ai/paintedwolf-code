@@ -218,7 +218,7 @@ type skillRenderMemo struct {
 	err error
 }
 
-var skillRenderCache = scopedstore.New[skillRenderMemo](2048)
+var skillRenderCache = scopedstore.New[skillRenderMemo](256)
 
 func varsDigestKey(vars map[string]any) string {
 	h := sha256.New()
@@ -226,8 +226,23 @@ func varsDigestKey(vars map[string]any) string {
 	return string(h.Sum(nil))
 }
 
+func skillRenderCacheKey(varsKey, text string) string {
+	sum := sha256.Sum256([]byte(text))
+	return varsKey + "\x00" + string(sum[:])
+}
+
+func renderSkillTextIn(cache map[string]skillRenderMemo, varsKey, text string, vars map[string]any) (string, error) {
+	key := skillRenderCacheKey(varsKey, text)
+	if hit, ok := cache[key]; ok {
+		return hit.out, hit.err
+	}
+	out, err := renderSkillText(text, vars)
+	cache[key] = skillRenderMemo{out: out, err: err}
+	return out, err
+}
+
 func renderSkillTextCached(varsKey, text string, vars map[string]any) (string, error) {
-	key := varsKey + "\x00" + text
+	key := skillRenderCacheKey(varsKey, text)
 	if hit, ok := skillRenderCache.Load(key); ok {
 		return hit.out, hit.err
 	}
@@ -390,6 +405,7 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 		problems = append(problems, skillVocabularyProblems(c, s)...)
 	}
 	offeredByProfile := map[string]bool{}
+	validationRenderCache := map[string]skillRenderMemo{}
 	for _, agent := range agents {
 		reader, err := c.profileReader(agent.ProfileID)
 		if err != nil {
@@ -410,7 +426,7 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 		}
 		memoRender := func(varsKey string) func(string, map[string]any) (string, error) {
 			return func(body string, renderVars map[string]any) (string, error) {
-				return renderSkillTextCached(varsKey, body, renderVars)
+				return renderSkillTextIn(validationRenderCache, varsKey, body, renderVars)
 			}
 		}
 		seen := map[string]bool{}
@@ -441,7 +457,7 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 			offerKey := agent.ProfileID + "\x00" + skill.Name + "\x00" + skill.Body
 			isOffered, cachedOffer := offeredByProfile[offerKey]
 			if !cachedOffer {
-				isOffered = SkillToolsOffered(skill, held)
+				isOffered = skillToolsOfferedWith(skill, held, validationRenderCache)
 				offeredByProfile[offerKey] = isOffered
 			}
 			if !isOffered {
@@ -563,6 +579,10 @@ var fallbackStockCatalog = sync.OnceValue(func() *Catalog {
 // SkillToolsOffered reports whether offered covers every tool, operation, and
 // command form sk's rendered body requires, and satisfies any_of_tools.
 func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
+	return skillToolsOfferedWith(sk, offered, nil)
+}
+
+func skillToolsOfferedWith(sk skills.Skill, offered map[string]bool, localCache map[string]skillRenderMemo) bool {
 	if sk.UserProvided {
 		return true
 	}
@@ -574,7 +594,7 @@ func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 		return true
 	}
 	anyOf := sk.AnyOfTools()
-	for _, name := range UnreachableNames(c, renderSkillBody(sk, offered), offered) {
+	for _, name := range UnreachableNames(c, renderSkillBodyWith(sk, offered, localCache), offered) {
 		if !slices.Contains(anyOf, name) {
 			return false
 		}
@@ -616,12 +636,17 @@ func offeredSkillVars(offered map[string]bool) (string, map[string]any, error) {
 	return cacheKey, vars, nil
 }
 
-func renderSkillBody(sk skills.Skill, offered map[string]bool) string {
+func renderSkillBodyWith(sk skills.Skill, offered map[string]bool, localCache map[string]skillRenderMemo) string {
 	cacheKey, vars, err := offeredSkillVars(offered)
 	if err != nil {
 		return sk.Body
 	}
-	rendered, err := renderSkillTextCached(cacheKey, sk.Body, vars)
+	var rendered string
+	if localCache != nil {
+		rendered, err = renderSkillTextIn(localCache, cacheKey, sk.Body, vars)
+	} else {
+		rendered, err = renderSkillTextCached(cacheKey, sk.Body, vars)
+	}
 	if err != nil {
 		return sk.Body
 	}
