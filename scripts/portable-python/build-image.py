@@ -26,12 +26,18 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-PINNED_CPYTHON_WASM_SHA256 = "5ce0cbeb843e6e5abf2d50c7158002e8333c26a40fbe27a7a52e66ee48cf64a8"
-PINNED_METERED_WASM_SHA256 = "774a08a7863c1dee1b2f21bb80fb9964f0dd5dc27bdf2294bdd8a11934e893c6"
+from image_assets import (
+    apply_wasi_package_patches,
+    install_bundled_fonts,
+    write_third_party_notices,
+)
+
+PINNED_CPYTHON_WASM_SHA256 = "dbd949fbb473d96277cc3fff67fae32b14d713830b339b1687bc9180cbc3c88c"
+PINNED_METERED_WASM_SHA256 = "3e54c6e508679f660356422f4640f971c9ecf1acc7a3e1754547c6be2153c91a"
 PINNED_IMPORT_INVENTORY_SHA256 = "d4dca3e9def0586bdc7c43af04340073fcbd99b28a87f26f33341b30f00d623b"
 CPYTHON_312_MAGIC_HEX = "cb0d0d0a"
 
-FORBIDDEN_SUFFIXES = (".so", ".dylib", ".pyd", ".dll", ".a", ".o", ".c", ".h", ".pyx")
+FORBIDDEN_SUFFIXES = (".so", ".dylib", ".pyd", ".dll", ".a", ".o", ".c", ".h", ".pyx", ".pxd", ".pxi")
 
 STDLIB_CAPABILITIES = [
     "ast",
@@ -54,6 +60,7 @@ STDLIB_CAPABILITIES = [
     "pyexpat",
     "re",
     "sqlite3",
+    "statistics",
     "tokenize",
     "tomllib",
     "unittest",
@@ -61,6 +68,7 @@ STDLIB_CAPABILITIES = [
     "xml.etree.ElementTree",
     "zipfile",
     "zlib",
+    "zoneinfo",
 ]
 
 
@@ -319,6 +327,8 @@ def install_sdist_pure_python(
     sdist_cfg = {
         "PyYAML": ("lib/yaml/", "yaml", "LICENSE"),
         "MarkupSafe": ("src/markupsafe/", "markupsafe", "LICENSE.txt"),
+        "Pillow": ("src/PIL/", "PIL", "LICENSE"),
+        "lxml": ("src/lxml/", "lxml", "LICENSES.txt"),
     }
     if name not in sdist_cfg:
         raise RuntimeError(f"No sdist_pure_python mapping for {name}")
@@ -449,39 +459,6 @@ def install_wasi_pure_python_rpds(
 
     source_sha = sha256_tree(src_root)
     return dist_info_name, installed, source_sha
-
-
-def apply_wasi_package_patches(packages_root: Path) -> list[dict[str, str]]:
-    """Apply minimal, auditable WASI compatibility patches and refresh RECORD."""
-    patches: list[dict[str, str]] = []
-
-    # Patch 1: pytest 8.4.1 _pytest/compat.py checks win32/emscripten for os.getuid()
-    # but omits wasi, breaking the tmp_path fixture on wasm32-wasi.
-    compat_py = packages_root / "_pytest" / "compat.py"
-    if compat_py.is_file():
-        old = 'if sys.platform == "win32" or sys.platform == "emscripten":'
-        new = 'if sys.platform in ("win32", "emscripten", "wasi"):'
-        text = compat_py.read_text(encoding="utf-8")
-        if old in text:
-            compat_py.write_text(text.replace(old, new, 1), encoding="utf-8")
-            # Refresh pytest RECORD entry for _pytest/compat.py
-            for dist_info in packages_root.glob("pytest-*.dist-info"):
-                rec = dist_info / "RECORD"
-                if rec.is_file():
-                    h, sz = record_hash(compat_py)
-                    lines = rec.read_text(encoding="utf-8").splitlines()
-                    updated = [
-                        f"_pytest/compat.py,{h},{sz}" if l.startswith("_pytest/compat.py,") else l
-                        for l in lines
-                    ]
-                    rec.write_text("\n".join(updated) + "\n", encoding="utf-8")
-            patches.append(
-                {
-                    "target": "packages/_pytest/compat.py",
-                    "reason": "Treat sys.platform == 'wasi' like emscripten/win32 in get_user_id() so tmp_path fixture works without os.getuid()",
-                }
-            )
-    return patches
 
 
 def assert_no_host_binaries(root: Path) -> None:
@@ -635,6 +612,24 @@ def main() -> None:
         default="",
         help="Pinned SHA-256 of the InstrumentWasmFuel-metered python.wasm",
     )
+    ap.add_argument(
+        "--interpreter-archive",
+        type=Path,
+        default=None,
+        help="Optional local path to verified CPython/WASI guest archive (e.g. python-3.12.0-wasi-py10.tar.gz)",
+    )
+    ap.add_argument(
+        "--interpreter-wasm",
+        type=Path,
+        default=None,
+        help="Optional override path to a rebuilt CPython/WASI python.wasm (e.g. PY10 with built-in Pillow/lxml)",
+    )
+    ap.add_argument(
+        "--import-inventory-sha256",
+        type=str,
+        default="",
+        help="Optional override for import_inventory_sha256 paired with --interpreter-wasm",
+    )
     args = ap.parse_args()
 
     script_dir = Path(__file__).resolve().parent
@@ -652,11 +647,19 @@ def main() -> None:
 
     # 1. Fetch & extract CPython WASI interpreter + stdlib
     interp = lock["interpreter"]
-    interp_tar = download_verified(
-        interp["source_url"],
-        args.cache_dir / interp["filename"],
-        interp["source_sha256"],
-    )
+    if args.interpreter_archive is not None:
+        interp_tar = args.interpreter_archive
+        got_tar_sha = sha256_file(interp_tar)
+        if got_tar_sha != interp["source_sha256"]:
+            raise RuntimeError(
+                f"SHA-256 mismatch for {interp_tar}: expected {interp['source_sha256']}, got {got_tar_sha}"
+            )
+    else:
+        interp_tar = download_verified(
+            interp["source_url"],
+            args.cache_dir / interp["filename"],
+            interp["source_sha256"],
+        )
     print(f"[interpreter] verified {interp_tar.name} ({interp['source_sha256'][:16]}...)")
 
     wasm_out = bin_dir / "python.wasm"
@@ -665,13 +668,13 @@ def main() -> None:
             if not member.isfile():
                 continue
             name = member.name.lstrip("./")
-            if name == "bin/python-3.12.0.wasm":
+            if name in ("bin/python.wasm", "bin/python-3.12.0.wasm"):
                 f = tf.extractfile(member)
                 assert f is not None
                 wasm_out.write_bytes(f.read())
                 os.chmod(wasm_out, 0o755)
-            elif name.startswith("usr/local/lib/"):
-                sub = name[len("usr/local/lib/") :]
+            elif name.startswith("usr/local/lib/") or name.startswith("lib/"):
+                sub = name[len("usr/local/lib/") :] if name.startswith("usr/local/lib/") else name[len("lib/") :]
                 if not sub or "/__pycache__/" in sub or sub.endswith(".pyc"):
                     continue
                 out = lib_dir / sub
@@ -679,6 +682,11 @@ def main() -> None:
                 f = tf.extractfile(member)
                 assert f is not None
                 out.write_bytes(f.read())
+
+    if args.interpreter_wasm is not None:
+        shutil.copyfile(args.interpreter_wasm, wasm_out)
+        os.chmod(wasm_out, 0o755)
+        print(f"[interpreter] using override wasm {args.interpreter_wasm}")
 
     if not wasm_out.is_file():
         raise RuntimeError("Failed to extract python.wasm from interpreter archive")
@@ -741,13 +749,16 @@ def main() -> None:
         print(f"[package] {dist['name']}=={dist['version']} ({kind}) files={len(installed)}")
 
     # 2b. Apply minimal WASI compatibility patches (e.g. pytest get_user_id on wasi)
-    applied_patches = apply_wasi_package_patches(packages_dir)
+    applied_patches = apply_wasi_package_patches(packages_dir, record_hash)
     for p in applied_patches:
         print(f"[patch] {p['target']}: {p['reason']}")
-        # Recompute tree_sha256 for pytest if patched
+        # Recompute tree_sha256 for any patched distribution using its RECORD file
         for md in manifest_dists:
-            if md["normalized_name"] == "pytest" and p["target"].startswith("packages/_pytest/"):
-                # Re-hash using its RECORD file
+            if (
+                (md["normalized_name"] == "pytest" and p["target"].startswith("packages/_pytest/"))
+                or (md["normalized_name"] == "sympy" and p["target"].startswith("packages/sympy/"))
+                or (md["normalized_name"] == "fpdf2" and p["target"].startswith("packages/fpdf/"))
+            ):
                 rec_path = packages_dir / md["dist_info_path"].removeprefix("packages/") / "RECORD"
                 rel_files = [
                     line.split(",", 1)[0]
@@ -755,6 +766,10 @@ def main() -> None:
                     if line.strip()
                 ]
                 md["tree_sha256"] = sha256_tree(packages_dir, rel_files)
+
+    # 2c. Install pinned redistributable Unicode fonts (e.g. DejaVuSans for fpdf2)
+    bundled_fonts = install_bundled_fonts(lock, args.cache_dir, packages_dir, download_verified, sha256_file)
+    notices_path = write_third_party_notices(image_dir, manifest_dists, bundled_fonts)
 
     # 3. Optional deterministic checked-hash CPython 3.12 bytecode generation
     bytecode_spec: dict[str, Any] | None = None
@@ -818,9 +833,11 @@ def main() -> None:
         "packages_root": "packages",
         "packages_tree_sha256": packages_tree_sha256,
         "distributions": manifest_dists,
+        "bundled_fonts": bundled_fonts,
+        "notices_path": notices_path,
         "stdlib_capabilities": STDLIB_CAPABILITIES,
         "wasm_imports": wasm_imports,
-        "import_inventory_sha256": PINNED_IMPORT_INVENTORY_SHA256,
+        "import_inventory_sha256": args.import_inventory_sha256.strip().lower() or PINNED_IMPORT_INVENTORY_SHA256,
     }
     if bytecode_spec is not None:
         manifest["bytecode"] = bytecode_spec

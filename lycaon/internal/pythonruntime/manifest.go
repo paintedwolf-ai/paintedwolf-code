@@ -31,9 +31,24 @@ type ImageManifest struct {
 	PackagesTreeSHA256    string             `json:"packages_tree_sha256,omitempty"`
 	Bytecode              *BytecodeSpec      `json:"bytecode,omitempty"`
 	Distributions         []DistributionSpec `json:"distributions"`
+	BundledFonts          []BundledFontSpec  `json:"bundled_fonts,omitempty"`
+	NoticesPath           string             `json:"notices_path,omitempty"`
 	StdlibCapabilities    []string           `json:"stdlib_capabilities,omitempty"`
 	WasmImports           []WasmImportSpec   `json:"wasm_imports,omitempty"`
 	ImportInventorySHA256 string             `json:"import_inventory_sha256,omitempty"`
+}
+
+// BundledFontSpec pins one redistributable font asset bundled inside the
+// immutable image (for example DejaVuSans.ttf for fpdf2 Unicode PDF layout).
+type BundledFontSpec struct {
+	Family      string `json:"family"`
+	Style       string `json:"style"`
+	ImagePath   string `json:"image_path"`
+	GuestPath   string `json:"guest_path"`
+	SHA256      string `json:"sha256"`
+	License     string `json:"license"`
+	LicensePath string `json:"license_path,omitempty"`
+	SourceURL   string `json:"source_url,omitempty"`
 }
 
 // BytecodeSpec pins deterministic PEP 552 checked-hash CPython 3.12 .pyc
@@ -452,7 +467,7 @@ func rejectHostNativeBinaries(root string) error {
 
 func isHostNativeBinaryName(name string) bool {
 	lower := strings.ToLower(name)
-	if strings.HasSuffix(lower, ".so") || strings.HasSuffix(lower, ".dylib") || strings.HasSuffix(lower, ".dll") {
+	if strings.HasSuffix(lower, ".so") || strings.HasSuffix(lower, ".dylib") || strings.HasSuffix(lower, ".dll") || strings.HasSuffix(lower, ".pyd") {
 		return true
 	}
 	return strings.Contains(lower, ".so.")

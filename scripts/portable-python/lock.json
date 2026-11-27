@@ -4,11 +4,21 @@
     "name": "cpython",
     "version": "3.12.0",
     "target": "wasm32-wasi",
-    "release_tag": "python/3.12.0+20231211-040d5a6",
+    "release_tag": "pw-cpython-wasi-engine-v0.2.0",
     "wasi_sdk": "20.0",
-    "filename": "python-3.12.0-wasi-sdk-20.0.tar.gz",
-    "source_url": "https://github.com/vmware-labs/webassembly-language-runtimes/releases/download/python%2F3.12.0%2B20231211-040d5a6/python-3.12.0-wasi-sdk-20.0.tar.gz",
-    "source_sha256": "6c1cddbb69ae09e87eee2906bdc70539bff5f2969818a6f8457d4e6a6eb67d4d"
+    "filename": "python-3.12.0-wasi-py10.tar.gz",
+    "source_url": "https://github.com/paintedwolf-ai/paintedwolf-python-engine/releases/download/v0.2.0/python-3.12.0-wasi-py10.tar.gz",
+    "source_sha256": "66644449c1b4d0af58dab8066f00feb34361c4e2b6ff53b0a6f8299462bb7b3e",
+    "builtin_extensions": {
+      "pillow": "11.1.0",
+      "lxml": "5.3.0",
+      "zlib": "1.3.1",
+      "bzip2": "1.0.8",
+      "sqlite3": "3.45.3",
+      "libjpeg": "9f",
+      "libxml2": "2.12.9",
+      "libxslt": "1.1.42"
+    }
   },
   "distributions": [
     {
@@ -604,6 +614,316 @@
       "filename": "pypdf-5.9.0-py3-none-any.whl",
       "source_url": "https://files.pythonhosted.org/packages/48/d9/6cff57c80a6963e7dd183bf09e9f21604a77716644b1e580e97b259f7612/pypdf-5.9.0-py3-none-any.whl",
       "source_sha256": "be10a4c54202f46d9daceaa8788be07aa8cd5ea8c25c529c50dd509206382c35"
+    },
+    {
+      "name": "json5",
+      "normalized_name": "json5",
+      "version": "0.17.3",
+      "public": true,
+      "imports": [
+        "json5"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "comments",
+        "trailing_commas",
+        "json5_parse"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "Apache-2.0",
+      "source_kind": "wheel",
+      "filename": "json5-0.17.3-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/ae/39/e689b616c4279a821d5842a8a85c1874540f8d58e35028df93f2182120c2/json5-0.17.3-py3-none-any.whl",
+      "source_sha256": "2c8b22a893c35cd6a3c5ccbf1dd1c7d02c25dc1b5897fea658f9bf08c2e05f9a"
+    },
+    {
+      "name": "tzdata",
+      "normalized_name": "tzdata",
+      "version": "2026.6",
+      "public": true,
+      "imports": [
+        "tzdata"
+      ],
+      "backend": "iana-tzif-data",
+      "features": [
+        "zoneinfo",
+        "iana_timezones"
+      ],
+      "console_scripts": [],
+      "has_package_data": true,
+      "license": "Apache-2.0",
+      "source_kind": "wheel",
+      "filename": "tzdata-2026.6-py2.py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/0a/66/9a06c2227fedfd4919f0eaaa8b94377d9730882a7e4f95823c9a331ab5e1/tzdata-2026.6-py2.py3-none-any.whl",
+      "source_sha256": "0a10eec6e13ef16b627fabed9a5f2ba61a62b1c67f327305f4e7e412a70b4aec"
+    },
+    {
+      "name": "python-dateutil",
+      "normalized_name": "python-dateutil",
+      "version": "4.0.0",
+      "public": true,
+      "imports": [
+        "dateutil"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "rrule",
+        "relativedelta",
+        "tz",
+        "parser"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "wheel",
+      "filename": "python_dateutil-4.0.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/2f/a9/52b89563d154433d79b51ed1eb4842bf7334cb2696891a7fe135618853d7/python_dateutil-4.0.0-py3-none-any.whl",
+      "source_sha256": "a5e246f79eb80475e691bf93862cead98decd8a498cf53ba0516fcdc0f50dc1c"
+    },
+    {
+      "name": "sympy",
+      "normalized_name": "sympy",
+      "version": "1.14.0",
+      "public": true,
+      "imports": [
+        "sympy"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "exact_symbolic_math",
+        "solve",
+        "diff",
+        "mpmath_pure_python"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "wheel",
+      "filename": "sympy-1.14.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl",
+      "source_sha256": "e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5"
+    },
+    {
+      "name": "mpmath",
+      "normalized_name": "mpmath",
+      "version": "1.3.0",
+      "public": false,
+      "imports": [
+        "mpmath"
+      ],
+      "backend": "pure-python",
+      "features": [],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "wheel",
+      "filename": "mpmath-1.3.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl",
+      "source_sha256": "a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c"
+    },
+    {
+      "name": "Pillow",
+      "normalized_name": "pillow",
+      "version": "11.1.0",
+      "public": true,
+      "imports": [
+        "PIL"
+      ],
+      "backend": "wasi-builtin-extension",
+      "features": [
+        "png",
+        "jpeg",
+        "exif_transpose",
+        "resize",
+        "rgba"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT-CMU",
+      "source_kind": "sdist_pure_python",
+      "filename": "pillow-11.1.0.tar.gz",
+      "source_url": "https://files.pythonhosted.org/packages/f3/af/c097e544e7bd278333db77933e535098c259609c4eb3b85381109602fb5b/pillow-11.1.0.tar.gz",
+      "source_sha256": "368da70808b36d73b4b390a8ffac11069f8a5c85f29eff1f1b01bcf3ef5b2a20"
+    },
+    {
+      "name": "lxml",
+      "normalized_name": "lxml",
+      "version": "5.3.0",
+      "public": true,
+      "imports": [
+        "lxml",
+        "lxml.etree"
+      ],
+      "backend": "wasi-builtin-extension",
+      "features": [
+        "xpath",
+        "namespaces",
+        "etree",
+        "ooxml"
+      ],
+      "console_scripts": [],
+      "has_package_data": true,
+      "license": "BSD-3-Clause",
+      "source_kind": "sdist_pure_python",
+      "filename": "lxml-5.3.0.tar.gz",
+      "source_url": "https://files.pythonhosted.org/packages/e7/6b/20c3a4b24751377aaa6307eb230b66701024012c29dd374999cc92983269/lxml-5.3.0.tar.gz",
+      "source_sha256": "4e109ca30d1edec1ac60cdbe341905dc3b8f55b16855e03a54aaf59e51ec8c6f"
+    },
+    {
+      "name": "python-docx",
+      "normalized_name": "python-docx",
+      "version": "1.2.0",
+      "public": true,
+      "imports": [
+        "docx"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "docx_read",
+        "docx_write",
+        "tables",
+        "images"
+      ],
+      "console_scripts": [],
+      "has_package_data": true,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "python_docx-1.2.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/d0/00/1e03a4989fa5795da308cd774f05b704ace555a70f9bf9d3be057b680bcf/python_docx-1.2.0-py3-none-any.whl",
+      "source_sha256": "3fd478f3250fbbbfd3b94fe1e985955737c145627498896a8a6bf81f4baf66c7"
+    },
+    {
+      "name": "python-pptx",
+      "normalized_name": "python-pptx",
+      "version": "1.0.2",
+      "public": true,
+      "imports": [
+        "pptx"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "pptx_read",
+        "pptx_write",
+        "charts",
+        "images"
+      ],
+      "console_scripts": [],
+      "has_package_data": true,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "python_pptx-1.0.2-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/d9/4f/00be2196329ebbff56ce564aa94efb0fbc828d00de250b1980de1a34ab49/python_pptx-1.0.2-py3-none-any.whl",
+      "source_sha256": "160838e0b8565a8b1f67947675886e9fea18aa5e795db7ae531606d68e785cba"
+    },
+    {
+      "name": "XlsxWriter",
+      "normalized_name": "xlsxwriter",
+      "version": "3.3.4",
+      "public": false,
+      "imports": [
+        "xlsxwriter"
+      ],
+      "backend": "pure-python",
+      "features": [],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-2-Clause",
+      "source_kind": "wheel",
+      "filename": "xlsxwriter-3.3.4-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/a4/f4/42d98147a0e3e2ae905a1c51bd6fcac1e551e4223b35fbf5d9769f59ffb6/xlsxwriter-3.3.4-py3-none-any.whl",
+      "source_sha256": "da62fecb24fdd0f003c874c86109b9e1245ae89533052745ab85a085eb2b04d7"
+    },
+    {
+      "name": "fpdf2",
+      "normalized_name": "fpdf2",
+      "version": "2.9.0",
+      "public": true,
+      "imports": [
+        "fpdf"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "pdf_layout",
+        "tables",
+        "images",
+        "unicode_ttf"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "LGPL-3.0-only",
+      "source_kind": "wheel",
+      "filename": "fpdf2-2.9.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/2f/b0/f0e770163d0e635c81e8ba117686e31c6b172715e1185ff00ea2eb0b2f3d/fpdf2-2.9.0-py3-none-any.whl",
+      "source_sha256": "e57f9eb183a61bbfc1a16ccb3eb68654f9ef3de0d9a78e37015a0df2eb29ab89"
+    },
+    {
+      "name": "fonttools",
+      "normalized_name": "fonttools",
+      "version": "4.69.1",
+      "public": false,
+      "imports": [
+        "fontTools"
+      ],
+      "backend": "pure-python",
+      "features": [],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "fonttools-4.69.1-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/43/ef/3575cacafe63d7d78b639e815bb3637cd0a66c6365efc5aed636a92cdb12/fonttools-4.69.1-py3-none-any.whl",
+      "source_sha256": "20e9dfac71694d9eeae48bb53c877bdf43b914794d69a769940728a1929cc835"
+    },
+    {
+      "name": "defusedxml",
+      "normalized_name": "defusedxml",
+      "version": "0.7.1",
+      "public": false,
+      "imports": [
+        "defusedxml"
+      ],
+      "backend": "pure-python",
+      "features": [],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "PSF-2.0",
+      "source_kind": "wheel",
+      "filename": "defusedxml-0.7.1-py2.py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/07/6c/aa3f2f849e01cb6a001cd8554a88d4c77c5c1a31c95bdf1cf9301e6d9ef4/defusedxml-0.7.1-py2.py3-none-any.whl",
+      "source_sha256": "a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61"
+    }
+  ],
+  "bundled_fonts": [
+    {
+      "name": "dejavu-fonts-ttf",
+      "version": "2.37",
+      "license": "DejaVu Fonts License (Bitstream Vera)",
+      "filename": "dejavu-fonts-ttf-2.37.tar.bz2",
+      "source_url": "https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.tar.bz2",
+      "source_sha256": "fa9ca4d13871dd122f61258a80d01751d603b4d3ee14095d65453b4e846e17d7",
+      "license_member": "dejavu-fonts-ttf-2.37/LICENSE",
+      "license_dest": "LICENSE-DEJAVU.txt",
+      "files": [
+        {
+          "family": "DejaVuSans",
+          "style": "Regular",
+          "archive_member": "dejavu-fonts-ttf-2.37/ttf/DejaVuSans.ttf",
+          "dest_name": "DejaVuSans.ttf"
+        },
+        {
+          "family": "DejaVuSans",
+          "style": "Bold",
+          "archive_member": "dejavu-fonts-ttf-2.37/ttf/DejaVuSans-Bold.ttf",
+          "dest_name": "DejaVuSans-Bold.ttf"
+        },
+        {
+          "family": "DejaVuSansMono",
+          "style": "Regular",
+          "archive_member": "dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono.ttf",
+          "dest_name": "DejaVuSansMono.ttf"
+        }
+      ]
     }
   ]
 }

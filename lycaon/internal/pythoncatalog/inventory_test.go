@@ -118,6 +118,16 @@ func TestRenderPackageHelp(t *testing.T) {
 		"PyYAML 6.0.2 (import yaml)",
 		"beautifulsoup4 4.12.3 (import bs4) [backend: html.parser]",
 		"markdown-it-py 3.0.0 (import markdown_it)",
+		"json5 0.17.3 (import json5)",
+		"tzdata 2026.6 (import tzdata)",
+		"python-dateutil 4.0.0 (import dateutil)",
+		"sympy 1.14.0 (import sympy)",
+		"Pillow 11.1.0 (import PIL)",
+		"lxml 5.3.0 (import lxml, lxml.etree)",
+		"python-docx 1.2.0 (import docx)",
+		"python-pptx 1.0.2 (import pptx)",
+		"fpdf2 2.9.0 (import fpdf)",
+		"/packages/fonts/DejaVuSans.ttf",
 		"- pytest\n",
 		"- markdown-it\n",
 		"Standard-library capabilities:",
@@ -126,6 +136,61 @@ func TestRenderPackageHelp(t *testing.T) {
 		if !strings.Contains(help, want) {
 			t.Errorf("RenderPackageHelp missing %q:\n%s", want, help)
 		}
+	}
+}
+
+func TestRenderPackageExamplesCoversPY10AndBaselineDiscoveries(t *testing.T) {
+	t.Parallel()
+	m := DefaultLaunchManifest()
+	// Include baseline supporting distributions Pygments and charset-normalizer as in built images.
+	m.Distributions = append(m.Distributions,
+		DistributionRecord{
+			Name:           "Pygments",
+			NormalizedName: "pygments",
+			Version:        "2.19.2",
+			Public:         false,
+			Imports:        []string{"pygments"},
+			DistInfoPath:   "packages/pygments-2.19.2.dist-info",
+		},
+		DistributionRecord{
+			Name:           "charset-normalizer",
+			NormalizedName: "charset-normalizer",
+			Version:        "3.4.3",
+			Public:         false,
+			Imports:        []string{"charset_normalizer"},
+			DistInfoPath:   "packages/charset_normalizer-3.4.3.dist-info",
+		},
+	)
+	all := RenderPackageExamples(m, "")
+	for _, want := range []string{
+		"(json5)",
+		"(tzdata-zoneinfo)",
+		"(python-dateutil)",
+		"(sympy)",
+		"(pillow)",
+		"(lxml)",
+		"(python-docx)",
+		"(python-pptx)",
+		"(fpdf2)",
+		"(pygments)",
+		"(charset-normalizer)",
+		"(sqlite3-join)",
+		"(openpyxl-chart)",
+		"/packages/fonts/DejaVuSans.ttf",
+	} {
+		if !strings.Contains(all, want) {
+			t.Errorf("RenderPackageExamples missing %q:\n%s", want, all)
+		}
+	}
+
+	// Task-oriented query lookup
+	imgEx := RenderPackageExamples(m, "resize an image")
+	if !strings.Contains(imgEx, "(pillow)") || strings.Contains(imgEx, "(sympy)") {
+		t.Fatalf("unexpected task query result for 'resize an image':\n%s", imgEx)
+	}
+	deckEx := RenderPackageExamples(m, "write a slide deck")
+	if !strings.Contains(deckEx, "(python-pptx)") || strings.Contains(deckEx, "(fpdf2)") {
+		t.Fatalf("unexpected task query result for 'write a slide deck':\n%s", deckEx)
 	}
 }
 
@@ -151,10 +216,18 @@ func TestDiagnosticsDistinguishFailureClasses(t *testing.T) {
 		t.Fatalf("DiagnoseImport(BS4) = %+v", d)
 	}
 
-	// Missing distribution
-	d = DiagnoseImport(m, "pandas")
-	if d.Kind != DiagnosticMissingDistribution || !strings.Contains(d.Format(), ExternalPythonRoute) {
-		t.Fatalf("DiagnoseImport(pandas) = %+v", d)
+	// Missing distribution: numpy / pandas must point to csv, sqlite3, statistics and declared project runner
+	for _, pkg := range []string{"numpy", "pandas"} {
+		d = DiagnoseImport(m, pkg)
+		formatted := d.Format()
+		if d.Kind != DiagnosticMissingDistribution ||
+			!strings.Contains(formatted, "csv") ||
+			!strings.Contains(formatted, "sqlite3") ||
+			!strings.Contains(formatted, "statistics") ||
+			!strings.Contains(formatted, "declared project runner") ||
+			!strings.Contains(formatted, ExternalPythonRoute) {
+			t.Fatalf("DiagnoseImport(%s) = %+v (formatted: %q)", pkg, d, formatted)
+		}
 	}
 
 	// Empty import

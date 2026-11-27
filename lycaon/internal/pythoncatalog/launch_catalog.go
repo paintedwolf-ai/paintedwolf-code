@@ -6,10 +6,11 @@ const ToolDescription = "Run helper scripts here with the standard library and f
 // ExternalPythonRoute is the documented command route for system or project Python environments.
 const ExternalPythonRoute = "external -- python3"
 
-// LaunchPublicDistributionCount is the exact number of public launch distributions in the contract.
-const LaunchPublicDistributionCount = 13
+// LaunchPublicDistributionCount is the exact number of public distributions in the PY10 contract
+// (13 baseline distributions + 9 PY10 general-purpose distributions).
+const LaunchPublicDistributionCount = 22
 
-// LaunchDistributions returns the thirteen public distributions defined by the launch package contract.
+// LaunchDistributions returns the twenty-two public distributions defined by the PY10 package contract.
 func LaunchDistributions() []DistributionRecord {
 	return []DistributionRecord{
 		{
@@ -220,6 +221,150 @@ func LaunchDistributions() []DistributionRecord {
 			SourceSHA256:   "unbuilt-launch-contract",
 			TreeSHA256:     "unbuilt-launch-contract",
 		},
+		{
+			Name:           "json5",
+			NormalizedName: "json5",
+			Version:        "0.17.3",
+			Public:         true,
+			Imports:        []string{"json5"},
+			Backend:        "pure-python",
+			Features:       []string{"comments", "trailing_commas", "json5_parse"},
+			ConsoleScripts: []string{},
+			HasPackageData: false,
+			DistInfoPath:   "packages/json5-0.17.3.dist-info",
+			License:        "Apache-2.0",
+			SourceURL:      "https://files.pythonhosted.org/packages/ae/39/e689b616c4279a821d5842a8a85c1874540f8d58e35028df93f2182120c2/json5-0.17.3-py3-none-any.whl",
+			SourceSHA256:   "unbuilt-launch-contract",
+			TreeSHA256:     "unbuilt-launch-contract",
+		},
+		{
+			Name:           "tzdata",
+			NormalizedName: "tzdata",
+			Version:        "2026.6",
+			Public:         true,
+			Imports:        []string{"tzdata"},
+			Backend:        "iana-tzif-data",
+			Features:       []string{"zoneinfo", "iana_timezones"},
+			ConsoleScripts: []string{},
+			HasPackageData: true,
+			DistInfoPath:   "packages/tzdata-2026.6.dist-info",
+			License:        "Apache-2.0",
+			SourceURL:      "https://files.pythonhosted.org/packages/0a/66/9a06c2227fedfd4919f0eaaa8b94377d9730882a7e4f95823c9a331ab5e1/tzdata-2026.6-py2.py3-none-any.whl",
+			SourceSHA256:   "unbuilt-launch-contract",
+			TreeSHA256:     "unbuilt-launch-contract",
+		},
+		{
+			Name:           "python-dateutil",
+			NormalizedName: "python-dateutil",
+			Version:        "4.0.0",
+			Public:         true,
+			Imports:        []string{"dateutil"},
+			Backend:        "pure-python",
+			Features:       []string{"rrule", "relativedelta", "tz", "parser"},
+			ConsoleScripts: []string{},
+			HasPackageData: false,
+			DistInfoPath:   "packages/python_dateutil-4.0.0.dist-info",
+			License:        "BSD-3-Clause",
+			SourceURL:      "https://files.pythonhosted.org/packages/2f/a9/52b89563d154433d79b51ed1eb4842bf7334cb2696891a7fe135618853d7/python_dateutil-4.0.0-py3-none-any.whl",
+			SourceSHA256:   "unbuilt-launch-contract",
+			TreeSHA256:     "unbuilt-launch-contract",
+		},
+		{
+			Name:           "sympy",
+			NormalizedName: "sympy",
+			Version:        "1.14.0",
+			Public:         true,
+			Imports:        []string{"sympy"},
+			Backend:        "pure-python",
+			Features:       []string{"exact_symbolic_math", "solve", "diff", "mpmath_pure_python"},
+			ConsoleScripts: []string{},
+			HasPackageData: false,
+			DistInfoPath:   "packages/sympy-1.14.0.dist-info",
+			License:        "BSD-3-Clause",
+			SourceURL:      "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl",
+			SourceSHA256:   "unbuilt-launch-contract",
+			TreeSHA256:     "unbuilt-launch-contract",
+		},
+		{
+			Name:           "Pillow",
+			NormalizedName: "pillow",
+			Version:        "11.1.0",
+			Public:         true,
+			Imports:        []string{"PIL"},
+			Backend:        "wasi-builtin-extension",
+			Features:       []string{"png", "jpeg", "exif_transpose", "resize", "rgba"},
+			ConsoleScripts: []string{},
+			HasPackageData: false,
+			DistInfoPath:   "packages/pillow-11.1.0.dist-info",
+			License:        "MIT-CMU",
+			SourceURL:      "https://files.pythonhosted.org/packages/f3/af/c097e544e7bd278333db77933e535098c259609c4eb3b85381109602fb5b/pillow-11.1.0.tar.gz",
+			SourceSHA256:   "unbuilt-launch-contract",
+			TreeSHA256:     "unbuilt-launch-contract",
+		},
+		{
+			Name:           "lxml",
+			NormalizedName: "lxml",
+			Version:        "5.3.0",
+			Public:         true,
+			Imports:        []string{"lxml", "lxml.etree"},
+			Backend:        "wasi-builtin-extension",
+			Features:       []string{"xpath", "namespaces", "etree", "ooxml"},
+			ConsoleScripts: []string{},
+			HasPackageData: true,
+			DistInfoPath:   "packages/lxml-5.3.0.dist-info",
+			License:        "BSD-3-Clause",
+			SourceURL:      "https://files.pythonhosted.org/packages/e7/6b/20c3a4b24751377aaa6307eb230b66701024012c29dd374999cc92983269/lxml-5.3.0.tar.gz",
+			SourceSHA256:   "unbuilt-launch-contract",
+			TreeSHA256:     "unbuilt-launch-contract",
+		},
+		{
+			Name:           "python-docx",
+			NormalizedName: "python-docx",
+			Version:        "1.2.0",
+			Public:         true,
+			Imports:        []string{"docx"},
+			Backend:        "pure-python",
+			Features:       []string{"docx_read", "docx_write", "tables", "images"},
+			ConsoleScripts: []string{},
+			HasPackageData: true,
+			DistInfoPath:   "packages/python_docx-1.2.0.dist-info",
+			License:        "MIT",
+			SourceURL:      "https://files.pythonhosted.org/packages/d0/00/1e03a4989fa5795da308cd774f05b704ace555a70f9bf9d3be057b680bcf/python_docx-1.2.0-py3-none-any.whl",
+			SourceSHA256:   "unbuilt-launch-contract",
+			TreeSHA256:     "unbuilt-launch-contract",
+		},
+		{
+			Name:           "python-pptx",
+			NormalizedName: "python-pptx",
+			Version:        "1.0.2",
+			Public:         true,
+			Imports:        []string{"pptx"},
+			Backend:        "pure-python",
+			Features:       []string{"pptx_read", "pptx_write", "charts", "images"},
+			ConsoleScripts: []string{},
+			HasPackageData: true,
+			DistInfoPath:   "packages/python_pptx-1.0.2.dist-info",
+			License:        "MIT",
+			SourceURL:      "https://files.pythonhosted.org/packages/d9/4f/00be2196329ebbff56ce564aa94efb0fbc828d00de250b1980de1a34ab49/python_pptx-1.0.2-py3-none-any.whl",
+			SourceSHA256:   "unbuilt-launch-contract",
+			TreeSHA256:     "unbuilt-launch-contract",
+		},
+		{
+			Name:           "fpdf2",
+			NormalizedName: "fpdf2",
+			Version:        "2.9.0",
+			Public:         true,
+			Imports:        []string{"fpdf"},
+			Backend:        "pure-python",
+			Features:       []string{"pdf_layout", "tables", "images", "unicode_ttf"},
+			ConsoleScripts: []string{},
+			HasPackageData: false,
+			DistInfoPath:   "packages/fpdf2-2.9.0.dist-info",
+			License:        "LGPL-3.0-only",
+			SourceURL:      "https://files.pythonhosted.org/packages/2f/b0/f0e770163d0e635c81e8ba117686e31c6b172715e1185ff00ea2eb0b2f3d/fpdf2-2.9.0-py3-none-any.whl",
+			SourceSHA256:   "unbuilt-launch-contract",
+			TreeSHA256:     "unbuilt-launch-contract",
+		},
 	}
 }
 
@@ -246,6 +391,7 @@ func LaunchStdlibCapabilities() []string {
 		"pyexpat",
 		"re",
 		"sqlite3",
+		"statistics",
 		"tokenize",
 		"tomllib",
 		"unittest",
@@ -253,6 +399,45 @@ func LaunchStdlibCapabilities() []string {
 		"xml.etree.ElementTree",
 		"zipfile",
 		"zlib",
+		"zoneinfo",
+	}
+}
+
+// DefaultBundledFonts returns the pinned redistributable Unicode TrueType fonts
+// bundled inside the immutable image for PDF layout (fpdf2).
+func DefaultBundledFonts() []BundledFontRecord {
+	const src = "https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.tar.bz2"
+	return []BundledFontRecord{
+		{
+			Family:      "DejaVuSans",
+			Style:       "Regular",
+			ImagePath:   "packages/fonts/DejaVuSans.ttf",
+			GuestPath:   "/packages/fonts/DejaVuSans.ttf",
+			SHA256:      "unbuilt-launch-contract",
+			License:     "DejaVu Fonts License (Bitstream Vera)",
+			LicensePath: "packages/fonts/LICENSE-DEJAVU.txt",
+			SourceURL:   src,
+		},
+		{
+			Family:      "DejaVuSans",
+			Style:       "Bold",
+			ImagePath:   "packages/fonts/DejaVuSans-Bold.ttf",
+			GuestPath:   "/packages/fonts/DejaVuSans-Bold.ttf",
+			SHA256:      "unbuilt-launch-contract",
+			License:     "DejaVu Fonts License (Bitstream Vera)",
+			LicensePath: "packages/fonts/LICENSE-DEJAVU.txt",
+			SourceURL:   src,
+		},
+		{
+			Family:      "DejaVuSansMono",
+			Style:       "Regular",
+			ImagePath:   "packages/fonts/DejaVuSansMono.ttf",
+			GuestPath:   "/packages/fonts/DejaVuSansMono.ttf",
+			SHA256:      "unbuilt-launch-contract",
+			License:     "DejaVu Fonts License (Bitstream Vera)",
+			LicensePath: "packages/fonts/LICENSE-DEJAVU.txt",
+			SourceURL:   src,
+		},
 	}
 }
 
@@ -277,6 +462,8 @@ func DefaultLaunchManifest() ImageManifest {
 		},
 		PackagesRoot:       "packages",
 		Distributions:      LaunchDistributions(),
+		BundledFonts:       DefaultBundledFonts(),
+		NoticesPath:        "THIRD_PARTY_NOTICES.txt",
 		StdlibCapabilities: LaunchStdlibCapabilities(),
 		WasmImports: []WasmImportRecord{
 			{

@@ -216,10 +216,19 @@ func RenderPackageHelp(manifest ImageManifest) string {
 		if d.Backend != "" {
 			fmt.Fprintf(&b, " [backend: %s]", d.Backend)
 		}
-		if len(d.Features) > 0 {
+		if task := TaskSummaryForDistribution(d.NormalizedName); task != "" {
+			fmt.Fprintf(&b, " — %s", task)
+		} else if len(d.Features) > 0 {
 			fmt.Fprintf(&b, " — %s", strings.Join(d.Features, ", "))
 		}
 		b.WriteByte('\n')
+	}
+
+	if len(manifest.BundledFonts) > 0 {
+		b.WriteString("\nBundled Unicode fonts (for PDF layout):\n")
+		for _, f := range manifest.BundledFonts {
+			fmt.Fprintf(&b, "- %s %s: %s (%s)\n", f.Family, f.Style, f.GuestPath, f.License)
+		}
 	}
 
 	scripts := manifest.AdvertisedConsoleScripts()
