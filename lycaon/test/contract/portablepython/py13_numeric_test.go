@@ -393,8 +393,7 @@ while True:
 	})
 
 	t.Run("04_stale_pair_refusal", func(t *testing.T) {
-		manifestPath := filepath.Join("..", "..", "..", "config", "runtime", "portable-python", "bundled-manifest.yaml")
-		m, err := pythonruntime.LoadBundledEngineManifest(manifestPath)
+		m, err := pythonruntime.LoadBundledEngineManifest()
 		contractcheck.FailErr(t, "load bundled manifest", err)
 
 		// Pair A: PY13 engine manifest + tampered/stale PY10 image_id & wasm hash
