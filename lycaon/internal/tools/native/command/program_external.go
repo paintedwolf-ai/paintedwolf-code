@@ -79,14 +79,14 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	boundary := confine.BoundaryOf(bound.confinement)
 	report := CommandConfinementReport(boundary, "", tools.LocalNetworkGrantOf(tctx), tctx.Files.PackageExecution)
 	settleJob := attachJobStage(ctx, bgprocess.ProgramStage{Boundary: boundary, Report: report, Lease: bound.lease})
-	// A launch that never starts its process still detaches the stage.
-	defer settleJob(confine.SandboxRefusals{}, nil)
+	defer settleJob(confine.SandboxRefusals{}, nil) // Detach stage even if process never starts.
 	launch := agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine).WithTrustedEnvironment(l.BaseEnvironment)
 	opts, err := lycexec.AgentLaunchOptions(launch, cwd, request.Environment, tctx.Host.HostResourcePathExtra)
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "external", "reason": err.Error(), "expected": "an environment without host-reserved keys"})
 	}
-	if _, err := lycexec.LaunchLookup(argv[0], opts); confine.IsCommandNotFound(err) {
+	execPath, lookupErr := lycexec.LaunchLookup(argv[0], opts)
+	if confine.IsCommandNotFound(lookupErr) {
 		_, _ = fmt.Fprintf(nonNilWriter(streams.Error), "bash: %s: command not found\n", argv[0])
 		return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
 	}
@@ -124,6 +124,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	if res, err := l.declareLaunchInputs(ctx, tctx, request.Invocation.Identity.ExecutionID, cwd, launchArgv); err != nil {
 		return res, err
 	}
+	logExternalLaunchProvenance(ctx, request.Invocation.Identity.ExecutionID, execPath)
 	opts.Started = func(pid int) { noteJobProcess(ctx, pid, launchArgv) }
 	async, err := lycexec.StartPipelineAsync(ctx, []lycexec.Stage{{Name: launchArgv[0], Args: launchArgv[1:]}}, opts, nonNilWriter(streams.Output), nonNilWriter(streams.Error))
 	if err != nil {
