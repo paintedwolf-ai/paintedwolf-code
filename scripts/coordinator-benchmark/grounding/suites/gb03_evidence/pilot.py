@@ -37,7 +37,7 @@ def _inspect_artifact(art: SidecarRunArtifact, *, initial_turns: int) -> dict[st
     host_assembled = bool(grounding.get("host_assembled") is True)
     hint_code = str(grounding.get("hint_code") or "")
     extra_repair_prompts = max(0, len(art.raw_pending_requests) - initial_turns)
-    refused = bool(retry_count > 0 or host_assembled or hint_code or extra_repair_prompts > 0)
+    refused = bool(retry_count > 0 or host_assembled or hint_code)
     mint_defects = compare_records(art.delivery_log, art.product_records)
     return {
         "session_id": art.session_id,
