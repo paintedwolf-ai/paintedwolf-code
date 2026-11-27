@@ -77,6 +77,8 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
     for rec in turn_records:
         cmd_call = rec['command_call_id']
         raw_res, payload = msgs_by_call.get(cmd_call, ({}, {}))
+        inv_row = receipts_by_call.get(cmd_call, {})
+        prog_row = progs_by_receipt.get(inv_row.get('id'))
         await_meta = rec.get('handle_await') or {}
         if payload.get('state') == 'running' and await_meta.get('terminal') and isinstance(await_meta.get('final_output'), dict):
             fo = await_meta['final_output']
@@ -88,8 +90,6 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
                     payload['status'] = fo['status']
                 elif isinstance(fo.get('exit_code'), int):
                     payload['status'] = fo['exit_code']
-        inv_row = receipts_by_call.get(cmd_call, {})
-        prog_row = progs_by_receipt.get(inv_row.get('id'))
         outcome, _, code = normalize_outcome(raw_res, prog_row, payload)
         cmd_invocations.append({'id': (prog_row or {}).get('id') or inv_row.get('id') or cmd_call,
                                 'program': rec['program'], 'outcome': outcome, 'rejection_code': code})
