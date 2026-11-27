@@ -21,6 +21,7 @@ from catalog_feed_search.families.cf04_k05 import (
     write_scalefixture_tree,
 )
 from catalog_feed_search.families.cf04_k06 import classify_retired_worker_response, generate_k06_spec
+from catalog_feed_search.families.cf04_k05_trace import parse_strace_fixture_ops
 from catalog_feed_search.seeds import BASE_SEED_PRIMARY
 
 
@@ -187,6 +188,28 @@ class TestCF04GeneratorsAndHelpers(unittest.TestCase):
         )
         self.assertEqual(kind, "defect")
         self.assertEqual(rec["code"], "retired_worker_unexpected_http_error")
+
+    def test_parse_strace_fixture_ops_positive_and_negative_controls(self) -> None:
+        root = Path("/tmp/fixroot")
+        sample = "\n".join(
+            [
+                '101 getdents64(5</tmp/fixroot>, 0x1, 8192) = 128',
+                '101 getdents64(5</tmp/fixroot>, 0x1, 8192) = 0',
+                '101 getdents64(6</tmp/fixroot/sub>, 0x1, 8192) = 64',
+                '101 getdents64(7</etc>, 0x1, 8192) = 512',
+                '101 newfstatat(6</tmp/fixroot/sub>, "a.go", {st_mode=S_IFREG}, 0) = 0',
+                '101 newfstatat(AT_FDCWD, "/tmp/fixroot/sub", {st_mode=S_IFDIR}, 0) = 0',
+            ]
+        )
+        obs = parse_strace_fixture_ops(sample, root, known_dir_rels={".", "sub"})
+        self.assertEqual(obs["status"], "ok")
+        self.assertEqual(obs["distinct_directories_read"], 2)
+        self.assertEqual(obs["directory_read_calls"], 2)
+        self.assertEqual(obs["per_file_metadata_reads"], 1)
+        self.assertEqual(obs["directory_metadata_reads"], 1)
+
+        empty = parse_strace_fixture_ops("", root, known_dir_rels={"."})
+        self.assertEqual(empty["status"], "unknown")
 
 
 if __name__ == "__main__":
