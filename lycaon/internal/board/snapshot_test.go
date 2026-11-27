@@ -36,6 +36,8 @@ func (progressiveRepoProvider) Warm(string)                                     
 func (progressiveRepoProvider) Changed(context.Context, string)                  {}
 func (progressiveRepoProvider) SetOnSettled(func(string))                        {}
 func (progressiveRepoProvider) Wait(context.Context) error                       { return nil }
+func (progressiveRepoProvider) Epoch() uint64                                    { return 0 }
+func (progressiveRepoProvider) Busy() bool                                       { return false }
 func (progressiveRepoProvider) Stop()                                            {}
 func (progressiveRepoProvider) Close() error                                     { return nil }
 

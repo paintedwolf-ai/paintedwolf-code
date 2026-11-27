@@ -140,8 +140,8 @@ func sessionInt(answer map[string]any, key string) int64 {
 	return int64(value)
 }
 
-func sessionSettle(ctx context.Context, s *conformanceSweep) {
-	s.host.Server.WaitForBackground(ctx)
+func sessionSettle(ctx context.Context, s *conformanceSweep) error {
+	return s.host.Server.WaitForBackground(ctx)
 }
 
 func sessionSuffix() string {
@@ -158,7 +158,9 @@ func sessionNewChat(ctx context.Context, s *conformanceSweep, projectID, posture
 	if id == "" {
 		return "", errors.New("createSession answered no id")
 	}
-	sessionSettle(ctx, s)
+	if err := sessionSettle(ctx, s); err != nil {
+		return "", err
+	}
 	return id, nil
 }
 
@@ -242,7 +244,9 @@ func sessionStartBody(ctx context.Context, s *conformanceSweep, chat string, fie
 }
 
 func sessionStartRun(ctx context.Context, s *conformanceSweep, chat string, fields map[string]any) (sessionRun, error) {
-	sessionSettle(ctx, s)
+	if err := sessionSettle(ctx, s); err != nil {
+		return sessionRun{}, err
+	}
 	body, err := sessionStartBody(ctx, s, chat, fields)
 	if err != nil {
 		return sessionRun{}, err
@@ -253,7 +257,9 @@ func sessionStartRun(ctx context.Context, s *conformanceSweep, chat string, fiel
 	}
 	run := sessionRun{id: sessionString(answer, "id"), session: chat}
 	// Start hooks may stamp the run after answering.
-	sessionSettle(ctx, s)
+	if err := sessionSettle(ctx, s); err != nil {
+		return sessionRun{}, err
+	}
 	run.revision, err = sessionRunRevision(ctx, s, run.id)
 	return run, err
 }
@@ -279,7 +285,9 @@ func sessionPrepareStartRun(ctx context.Context, s *conformanceSweep, _ *conform
 	if err != nil {
 		return successInputs{}, err
 	}
-	sessionSettle(ctx, s)
+	if err := sessionSettle(ctx, s); err != nil {
+		return successInputs{}, err
+	}
 	body, err := sessionStartBody(ctx, s, chat, map[string]any{
 		"workflow_id": "plan", "workflow_version": "1.0.1", "request": "Plan the fixture change",
 	})
@@ -493,7 +501,9 @@ func sessionPrepareApproveBlueprint(ctx context.Context, s *conformanceSweep, _ 
 func sessionDrivePlanToApproval(ctx context.Context, s *conformanceSweep, runID string) error {
 	workflows := s.host.Workflows.Manager
 	for range 8 {
-		sessionSettle(ctx, s)
+		if err := sessionSettle(ctx, s); err != nil {
+			return err
+		}
 		run, err := workflows.Store.Runs.Get(ctx, runID)
 		if err != nil {
 			return err
@@ -664,12 +674,16 @@ func sessionPrepareDispatchLeg(ctx context.Context, s *conformanceSweep, _ *conf
 // sessionPrompt sends a prompt to chat and waits for its turn; the prompt's
 // operation id names its user message.
 func sessionPrompt(ctx context.Context, s *conformanceSweep, chat, text string) (string, error) {
-	sessionSettle(ctx, s)
+	if err := sessionSettle(ctx, s); err != nil {
+		return "", err
+	}
 	id := uuid.NewString()
 	if _, err := s.prerequisite(ctx, "sendPrompt", sessionJSON(map[string]string{"id": chat}, map[string]any{"operation_id": id, "text": text})); err != nil {
 		return "", err
 	}
-	sessionSettle(ctx, s)
+	if err := sessionSettle(ctx, s); err != nil {
+		return "", err
+	}
 	// A finished prompt may schedule a follow-up wake that takes the turn lock.
 	wiring.WaitForSessionIdleGate(s.fixture.t, s.host, ctx, chat)
 	return id, nil

@@ -13,6 +13,7 @@ type Group struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	active   int
+	epoch    uint64
 	idle     chan struct{}
 	services sync.WaitGroup
 }
@@ -41,6 +42,7 @@ func (s *Group) Go(parent context.Context, fn func(ctx context.Context)) {
 		s.idle = make(chan struct{})
 	}
 	s.active++
+	s.epoch++
 	s.mu.Unlock()
 	go func() {
 		defer s.finish()
@@ -83,6 +85,21 @@ func (s *Group) Wait(ctx context.Context) {
 	case <-stopped:
 	case <-ctx.Done():
 	}
+}
+
+// Epoch increases each time detached work is admitted, so callers draining
+// multiple subsystems can tell whether a pass spawned new detached work.
+func (s *Group) Epoch() uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.epoch
+}
+
+// Busy reports whether any detached work is currently running.
+func (s *Group) Busy() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.active > 0
 }
 
 func (s *Group) Context() context.Context {

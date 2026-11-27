@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"strings"
@@ -90,8 +91,13 @@ type Server struct {
 	repoProvider   repoinfo.Provider
 	events         events.ReplayHub
 	eventPublisher *events.Publisher
-	presence       *events.Presence
-	harness        harnessServices
+	eventOutbox    interface {
+		Wait(context.Context) error
+		Epoch() uint64
+		Busy() bool
+	}
+	presence *events.Presence
+	harness  harnessServices
 	storagePaths
 	health
 }
