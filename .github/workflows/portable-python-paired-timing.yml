@@ -12,15 +12,7 @@ on:
         options:
           - baseline
           - compare
-        default: baseline
-      product-rev:
-        description: Baseline product git revision
-        type: string
-        default: ed905e29c75951c52e6be180630c45d2c9f07a8d
-      artifact-base-url:
-        description: Optional read-only HTTPS base URL hosting engine/ and image/ tarballs (blank uses ephemeral encrypted transport)
-        type: string
-        default: ''
+        default: compare
       samples:
         description: Number of cold and warm samples per workload
         type: string
@@ -38,17 +30,12 @@ permissions:
   contents: read
 
 jobs:
-  macos-arm64-baseline:
-    name: Paired baseline (macos-15 arm64)
+  macos-arm64-paired:
+    name: Paired timing (macos-15 arm64)
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       EXPECTED_ARCH: arm64
-      ENGINE_ARCHIVE: pw-cpython-wasi-engine-v0.2.0-darwin-arm64.tar.gz
-      ENGINE_ARCHIVE_SHA256: 9987fed688b2a04d962b1b5b68912889d897fa3602afae4eb35ca5a003bf6376
-      IMAGE_ARCHIVE: portable-python-image-pyc.tar.gz
-      IMAGE_ARCHIVE_SHA256: a17b6d837216eb0824edfd6d5555fd2bd725a03212ac570fd1f6b475129393b6
-      PRODUCT_REV: ${{ inputs.product-rev || 'ed905e29c75951c52e6be180630c45d2c9f07a8d' }}
       SAMPLES: ${{ inputs.samples || '5' }}
       MIN_IDLE: ${{ inputs.min-idle || '90' }}
       PRECHECK_SECONDS: ${{ inputs.precheck-seconds || '30' }}
@@ -60,12 +47,11 @@ jobs:
           ACTUAL_ARCH="$(uname -m)"
           echo "Expected arch: ${EXPECTED_ARCH}, actual arch: ${ACTUAL_ARCH}"
           test "${ACTUAL_ARCH}" = "${EXPECTED_ARCH}"
-          # Disable Spotlight indexing on this ephemeral CI VM before checkout/build so mds_stores does not saturate the 3 vCPUs.
           sudo mdutil -a -i off || true
           OUT_DIR="${RUNNER_TEMP}/paired-out"
           mkdir -p "${OUT_DIR}"
           {
-            echo "job_name=macos-arm64-baseline"
+            echo "job_name=macos-arm64-paired"
             echo "runner_os=${RUNNER_OS}"
             echo "runner_arch=${RUNNER_ARCH}"
             echo "image_os=${ImageOS:-unknown}"
@@ -82,7 +68,6 @@ jobs:
           } | tee "${OUT_DIR}/runner-metadata.txt"
 
       - name: Generate ephemeral RSA-4096 keypair (pre-timing)
-        if: ${{ inputs.artifact-base-url == '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -91,11 +76,9 @@ jobs:
           chmod 700 "${KEY_DIR}"
           openssl genrsa -out "${KEY_DIR}/priv.pem" 4096 2>/dev/null
           openssl rsa -in "${KEY_DIR}/priv.pem" -pubout -out "${KEY_DIR}/pub.pem" 2>/dev/null
-          echo "Generated ephemeral RSA-4096 public key for run ${GITHUB_RUN_ID}:"
           shasum -a 256 "${KEY_DIR}/pub.pem"
 
       - name: Upload ephemeral public key artifact
-        if: ${{ inputs.artifact-base-url == '' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ephemeral-pubkey-${{ github.run_id }}
@@ -109,15 +92,15 @@ jobs:
           go-version-file: lycaon/go.mod
           cache: false
 
-      - name: Fetch and decrypt frozen PY10 artifacts from ephemeral transport ref (pre-timing)
-        if: ${{ inputs.artifact-base-url == '' }}
+      - name: Fetch, decrypt, verify, and pre-stage artifacts from ephemeral transport ref (pre-timing)
         shell: bash
         run: |
           set -euo pipefail
+          unset PW_PORTABLE_PYTHON_IMAGE_DIR PW_PORTABLE_PYTHON_ENGINE_DIR
           REF="refs/heads/tmp/py10-transport-${GITHUB_RUN_ID}"
-          echo "Waiting for encrypted transport ref ${REF} (up to 300s)..."
+          echo "Waiting for encrypted transport ref ${REF} (up to 360s)..."
           FOUND=0
-          for i in $(seq 1 60); do
+          for i in $(seq 1 72); do
             if git ls-remote --exit-code --heads origin "${REF}" >/dev/null 2>&1; then
               FOUND=1
               echo "Found ${REF} on poll ${i}"
@@ -131,7 +114,8 @@ jobs:
           fi
 
           TDIR="${RUNNER_TEMP}/transport-extract"
-          mkdir -p "${TDIR}"
+          PDIR="${RUNNER_TEMP}/paired-payload"
+          mkdir -p "${TDIR}" "${PDIR}"
           git fetch --depth=1 origin "${REF}:refs/remotes/origin/py10-transport" --quiet
           git archive "refs/remotes/origin/py10-transport" | tar -C "${TDIR}" -xf -
 
@@ -140,65 +124,122 @@ jobs:
             cat chunk_* > payload.enc
             shasum -a 256 -c payload.enc.sha256
             openssl pkeyutl -decrypt -inkey "${RUNNER_TEMP}/ephemeral-key/priv.pem" -pkeyopt rsa_padding_mode:oaep -in sym.key.enc -out sym.key
-            DST="${HOME}/.local/share/paintedwolf-portable-python/results/PY10"
-            mkdir -p "${DST}"
-            openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -pass file:sym.key -in payload.enc | tar -C "${DST}" -xf -
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -pass file:sym.key -in payload.enc | tar -C "${PDIR}" -xf -
           )
           rm -rf "${TDIR}" "${RUNNER_TEMP}/ephemeral-key"
 
-          # Independently verify pinned PY10 SHA-256 digests BEFORE staging.
-          DST="${HOME}/.local/share/paintedwolf-portable-python/results/PY10"
-          echo "${ENGINE_ARCHIVE_SHA256}  ${DST}/engine/${ENGINE_ARCHIVE}" | shasum -a 256 -c -
-          echo "${IMAGE_ARCHIVE_SHA256}  ${DST}/image/${IMAGE_ARCHIVE}" | shasum -a 256 -c -
-          echo "PY10_FROZEN_ARTIFACTS_VERIFIED_OK"
+          # Pre-compile the Go test binary ONCE before any staging/timing
+          TEST_BIN="${RUNNER_TEMP}/paired_baseline.test"
+          (
+            cd "${GITHUB_WORKSPACE}/lycaon"
+            CGO_ENABLED=1 go test -c -o "${TEST_BIN}" ./internal/portablepython
+          ) 2>&1 | tee "${RUNNER_TEMP}/paired-out/compile-harness.log"
 
-      - name: Fetch read-only PY10 baseline artifacts from HTTPS URL (pre-timing)
-        if: ${{ inputs.artifact-base-url != '' }}
-        shell: bash
-        env:
-          BASE_URL: ${{ inputs.artifact-base-url }}
-        run: |
-          set -euo pipefail
-          DST="${HOME}/.local/share/paintedwolf-portable-python/results/PY10"
-          mkdir -p "${DST}/engine" "${DST}/image"
-          curl -fsSL "${BASE_URL}/engine/${ENGINE_ARCHIVE}" -o "${DST}/engine/${ENGINE_ARCHIVE}"
-          curl -fsSL "${BASE_URL}/engine/release-manifest.json" -o "${DST}/engine/release-manifest.json"
-          curl -fsSL "${BASE_URL}/engine/artifact-manifest-darwin-arm64.json" -o "${DST}/engine/artifact-manifest-darwin-arm64.json"
-          curl -fsSL "${BASE_URL}/image/${IMAGE_ARCHIVE}" -o "${DST}/image/${IMAGE_ARCHIVE}"
-          curl -fsSL "${BASE_URL}/image/image-manifest.json" -o "${DST}/image/image-manifest.json"
-          echo "${ENGINE_ARCHIVE_SHA256}  ${DST}/engine/${ENGINE_ARCHIVE}" | shasum -a 256 -c -
-          echo "${IMAGE_ARCHIVE_SHA256}  ${DST}/image/${IMAGE_ARCHIVE}" | shasum -a 256 -c -
+          # Stage every pair defined in compare-plan.json (with exact manifest & SHA-256 verification) BEFORE timing
+          python3 - "${PDIR}" "${RUNNER_TEMP}/stages" "${GITHUB_WORKSPACE}" "${RUNNER_TEMP}/paired-out" <<'PY'
+          import hashlib, json, subprocess, sys
+          from pathlib import Path
 
-      - name: Run paired baseline (overrides UNSET, pre-compiled before timing)
+          pdir = Path(sys.argv[1])
+          stage_base = Path(sys.argv[2])
+          repo = Path(sys.argv[3])
+          out_dir = Path(sys.argv[4])
+          plan = json.loads((pdir / "compare-plan.json").read_text())
+
+          def sha256_file(p: Path) -> str:
+              h = hashlib.sha256()
+              with p.open("rb") as fh:
+                  for chunk in iter(lambda: fh.read(65536), b""):
+                      h.update(chunk)
+              return h.hexdigest()
+
+          for name, spec in plan["pairs"].items():
+              eng_arc = pdir / spec["engine_archive"]
+              img_arc = pdir / spec["image_archive"]
+              mf = pdir / spec["manifest"]
+              got_e = sha256_file(eng_arc)
+              got_i = sha256_file(img_arc)
+              if got_e != spec["engine_archive_sha256"]:
+                  raise SystemExit(f"SHA256 mismatch for {name} engine: got {got_e}, want {spec['engine_archive_sha256']}")
+              if got_i != spec["image_archive_sha256"]:
+                  raise SystemExit(f"SHA256 mismatch for {name} image: got {got_i}, want {spec['image_archive_sha256']}")
+              sroot = stage_base / name
+              sroot.mkdir(parents=True, exist_ok=True)
+              cmd = [
+                  "bash", str(repo / "scripts/portable-python/stage-bundled.sh"),
+                  "--manifest", str(mf),
+                  "--root", str(sroot),
+                  "--target", "aarch64-apple-darwin",
+                  "--artifact-dir", str(eng_arc.parent),
+                  "--image-source", str(img_arc),
+                  "--require-engine", "--require-image",
+              ]
+              print(f"Staging pair {name} -> {sroot}")
+              res = subprocess.run(cmd, capture_output=True, text=True)
+              (out_dir / f"stage-{name}.log").write_text(res.stdout + res.stderr)
+              if res.returncode != 0:
+                  print(res.stdout, res.stderr)
+                  raise SystemExit(f"stage-bundled.sh failed for {name}: rc={res.returncode}")
+          print("ALL_PAIRS_VERIFIED_AND_STAGED_OK")
+          PY
+
+      - name: Run alternating in-runner paired comparisons (overrides UNSET, graded by grade_paired_receipt.py)
         shell: bash
         run: |
           set -euo pipefail
           unset PW_PORTABLE_PYTHON_IMAGE_DIR PW_PORTABLE_PYTHON_ENGINE_DIR
-          DST="${HOME}/.local/share/paintedwolf-portable-python/results/PY10"
-          OUT_DIR="${RUNNER_TEMP}/paired-out"
-          STAGE_DIR="${RUNNER_TEMP}/paired-stage"
-          echo "Allowing fresh macOS VM boot daemons (provjobd/trustd) 45s to settle before precheck..."
+          echo "Allowing fresh macOS VM boot daemons 45s to settle before timed comparisons..."
           sleep 45
-          bash scripts/portable-python-qual/paired/run-paired.sh \
-            --mode baseline \
-            --stage-now \
-            --repo-root "${GITHUB_WORKSPACE}" \
-            --engine-root "${STAGE_DIR}" \
-            --out-dir "${OUT_DIR}" \
-            --product-rev "${PRODUCT_REV}" \
-            --image-archive "${DST}/image/${IMAGE_ARCHIVE}" \
-            --engine-archive "${DST}/engine/${ENGINE_ARCHIVE}" \
-            --samples "${SAMPLES}" \
-            --min-idle "${MIN_IDLE}" \
-            --precheck-seconds "${PRECHECK_SECONDS}" \
-            --max-attempts 6 \
-            --retry-wait 20
+          python3 - "${RUNNER_TEMP}/paired-payload" "${RUNNER_TEMP}/stages" "${GITHUB_WORKSPACE}" "${RUNNER_TEMP}/paired-out" "${RUNNER_TEMP}/paired_baseline.test" "${SAMPLES}" "${MIN_IDLE}" "${PRECHECK_SECONDS}" <<'PY'
+          import json, subprocess, sys
+          from pathlib import Path
+
+          pdir, sbase, repo, out_base, test_bin, samples, min_idle, pre_s = sys.argv[1:]
+          pdir, sbase, repo, out_base = Path(pdir), Path(sbase), Path(repo), Path(out_base)
+          plan = json.loads((pdir / "compare-plan.json").read_text())
+
+          overall_rc = 0
+          for cmp in plan["comparisons"]:
+              cname = cmp["name"]
+              b_spec = plan["pairs"][cmp["baseline"]]
+              c_spec = plan["pairs"][cmp["candidate"]]
+              c_out = out_base / cname
+              c_out.mkdir(parents=True, exist_ok=True)
+              cmd = [
+                  "bash", str(repo / "scripts/portable-python-qual/paired/run-paired.sh"),
+                  "--mode", "compare",
+                  "--repo-root", str(repo),
+                  "--out-dir", str(c_out),
+                  "--test-bin", test_bin,
+                  "--baseline-dir", str(sbase / cmp["baseline"]),
+                  "--candidate-dir", str(sbase / cmp["candidate"]),
+                  "--baseline-manifest", str(pdir / b_spec["manifest"]),
+                  "--candidate-manifest", str(pdir / c_spec["manifest"]),
+                  "--baseline-product-rev", b_spec["product_rev"],
+                  "--candidate-product-rev", c_spec["product_rev"],
+                  "--baseline-image-archive", str(pdir / b_spec["image_archive"]),
+                  "--baseline-engine-archive", str(pdir / b_spec["engine_archive"]),
+                  "--candidate-image-archive", str(pdir / c_spec["image_archive"]),
+                  "--candidate-engine-archive", str(pdir / c_spec["engine_archive"]),
+                  "--samples", samples,
+                  "--min-idle", min_idle,
+                  "--precheck-seconds", pre_s,
+                  "--max-attempts", "6",
+                  "--retry-wait", "20",
+              ]
+              print(f"=== Running comparison {cname}: {cmp['baseline']} vs {cmp['candidate']} ===", flush=True)
+              res = subprocess.run(cmd)
+              if res.returncode != 0:
+                  print(f"Comparison {cname} exited with rc={res.returncode}", flush=True)
+                  overall_rc = res.returncode
+          sys.exit(overall_rc)
+          PY
 
       - name: Upload paired timing evidence (receipts and telemetry only)
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: portable-python-paired-baseline-macos-arm64-${{ github.run_id }}-${{ github.run_attempt }}
+          name: portable-python-paired-compare-macos-arm64-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/paired-out/
           if-no-files-found: warn
           retention-days: 14

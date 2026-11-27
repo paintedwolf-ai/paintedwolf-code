@@ -23,9 +23,11 @@ usage() {
 usage: run-paired.sh --mode <baseline|compare> --repo-root <dir> --out-dir <dir>
        [--engine-root <dir>] [--product-rev <sha>] [--image-archive <tar.gz>] [--engine-archive <tar.gz>]
        [--baseline-dir <dir>] [--candidate-dir <dir>]
+       [--baseline-manifest <yaml>] [--candidate-manifest <yaml>]
        [--baseline-product-rev <sha>] [--candidate-product-rev <sha>]
        [--baseline-image-archive <tar.gz>] [--baseline-engine-archive <tar.gz>]
        [--candidate-image-archive <tar.gz>] [--candidate-engine-archive <tar.gz>]
+       [--test-bin <path>]
        [--allow-same-image] [--check-identities-only]
        [--samples <N>] [--min-idle <pct>] [--precheck-seconds <S>]
        [--max-attempts <K>] [--retry-wait <S>] [--stage-now]
@@ -39,6 +41,9 @@ OUT_DIR=""
 ENGINE_ROOT=""
 BASELINE_DIR=""
 CANDIDATE_DIR=""
+BASELINE_MANIFEST=""
+CANDIDATE_MANIFEST=""
+TEST_BIN_ARG=""
 PRODUCT_REV=""
 BASELINE_PRODUCT_REV=""
 CANDIDATE_PRODUCT_REV=""
@@ -65,6 +70,9 @@ while [[ $# -gt 0 ]]; do
     --engine-root) ENGINE_ROOT="$2"; shift 2 ;;
     --baseline-dir) BASELINE_DIR="$2"; shift 2 ;;
     --candidate-dir) CANDIDATE_DIR="$2"; shift 2 ;;
+    --baseline-manifest) BASELINE_MANIFEST="$2"; shift 2 ;;
+    --candidate-manifest) CANDIDATE_MANIFEST="$2"; shift 2 ;;
+    --test-bin) TEST_BIN_ARG="$2"; shift 2 ;;
     --product-rev) PRODUCT_REV="$2"; shift 2 ;;
     --baseline-product-rev) BASELINE_PRODUCT_REV="$2"; shift 2 ;;
     --candidate-product-rev) CANDIDATE_PRODUCT_REV="$2"; shift 2 ;;
@@ -209,12 +217,16 @@ if [[ "${MODE}" == "baseline" && "${STAGE_NOW}" == "1" ]]; then
 fi
 
 # Pre-compile the Go test binary outside timed windows so compilation never pollutes idle or timing!
-TEST_BIN="${OUT_DIR}/.paired_baseline.test"
-(
-  cd "${REPO_ROOT}/lycaon"
-  CGO_ENABLED=1 go test -c -o "${TEST_BIN}" ./internal/portablepython
-) 2>&1 | tee "${OUT_DIR}/compile-harness.log"
-trap 'rm -f "${TEST_BIN}"' EXIT
+if [[ -n "${TEST_BIN_ARG}" && -x "${TEST_BIN_ARG}" ]]; then
+  TEST_BIN="${TEST_BIN_ARG}"
+else
+  TEST_BIN="${OUT_DIR}/.paired_baseline.test"
+  (
+    cd "${REPO_ROOT}/lycaon"
+    CGO_ENABLED=1 go test -c -o "${TEST_BIN}" ./internal/portablepython
+  ) 2>&1 | tee "${OUT_DIR}/compile-harness.log"
+  trap 'rm -f "${TEST_BIN}"' EXIT
+fi
 
 run_one_baseline_attempt() {
   local attempt_dir="$1"
@@ -366,38 +378,44 @@ if [[ "${MODE}" == "baseline" ]]; then
   exit 0
 fi
 
-if [[ "${MODE}" == "compare" ]]; then
-  PRE_RC=0
+run_one_compare_attempt() {
+  local attempt_dir="$1"
+  mkdir -p "${attempt_dir}"
+  cp -f "${OUT_DIR}/compare-identities.json" "${attempt_dir}/compare-identities.json"
+
+  local pre_rc=0
   python3 "${SCRIPT_DIR}/monitor_host.py" precheck \
     --duration "${PRECHECK_SECONDS}" \
     --min-idle "${MIN_IDLE}" \
     --ignore-pid "$$" \
-    --out "${OUT_DIR}/host-precheck.json" \
-    2>&1 | tee "${OUT_DIR}/host-precheck.log" || PRE_RC=$?
+    --out "${attempt_dir}/host-precheck.json" \
+    2>&1 | tee "${attempt_dir}/host-precheck.log" || pre_rc=$?
 
-  STOP_FILE="${OUT_DIR}/.watch.stop"
-  rm -f "${STOP_FILE}"
+  local stop_file="${attempt_dir}/.watch.stop"
+  rm -f "${stop_file}"
   python3 "${SCRIPT_DIR}/monitor_host.py" watch \
-    --stop-file "${STOP_FILE}" \
+    --stop-file "${stop_file}" \
     --ignore-pid "$$" \
-    --out "${OUT_DIR}/host-during.json" &
-  WATCH_PID=$!
+    --out "${attempt_dir}/host-during.json" &
+  local watch_pid=$!
 
-  mkdir -p "${OUT_DIR}/cold-rounds" "${OUT_DIR}/warm-series"
+  mkdir -p "${attempt_dir}/cold-rounds" "${attempt_dir}/warm-series"
 
   run_side() {
     local side="$1" workloads="$2" modes="$3" n_samples="$4" out_json="$5" label="$6"
-    local root_dir="${BASELINE_DIR}" prod_rev="${BASELINE_PRODUCT_REV}" img_arc="${BASELINE_IMAGE_ARCHIVE}" eng_arc="${BASELINE_ENGINE_ARCHIVE}"
+    local root_dir="${BASELINE_DIR}" prod_rev="${BASELINE_PRODUCT_REV}" img_arc="${BASELINE_IMAGE_ARCHIVE}" eng_arc="${BASELINE_ENGINE_ARCHIVE}" mf_path="${BASELINE_MANIFEST}"
     if [[ "${side}" == "candidate" ]]; then
       root_dir="${CANDIDATE_DIR}"
       prod_rev="${CANDIDATE_PRODUCT_REV}"
       img_arc="${CANDIDATE_IMAGE_ARCHIVE}"
       eng_arc="${CANDIDATE_ENGINE_ARCHIVE}"
+      mf_path="${CANDIDATE_MANIFEST}"
     fi
     (
       cd "${REPO_ROOT}/lycaon/internal/portablepython"
       env -u PW_PORTABLE_PYTHON_IMAGE_DIR -u PW_PORTABLE_PYTHON_ENGINE_DIR \
         PW_QUAL_ENGINE_ROOT="${root_dir}" \
+        PW_PORTABLE_PYTHON_ENGINE_MANIFEST="${mf_path}" \
         PW_PY10_PAIRED_BASELINE=1 \
         PW_PY10_REQUIRE_INSTALLED=1 \
         PW_PAIRED_LABEL="${label}" \
@@ -410,28 +428,29 @@ if [[ "${MODE}" == "compare" ]]; then
         PW_PAIRED_ENGINE_ARCHIVE="${eng_arc}" \
         PW_PAIRED_OUT_JSON="${out_json}" \
         "${TEST_BIN}" -test.v -test.count=1 -test.timeout=300s -test.run '^TestPY10_PairedBaseline$' \
-        >> "${OUT_DIR}/compare-test.log" 2>&1
+        >> "${attempt_dir}/compare-test.log" 2>&1
     )
   }
 
   # Phase 1: Alternating cold rounds (A_cold_1, B_cold_1, ..., A_cold_N, B_cold_N) — each is a brand-new service + 1 fresh guest.
   for ((r=1; r<=SAMPLES; r++)); do
-    run_side baseline "pass_noop,frozen_workbook" "cold" 1 "${OUT_DIR}/cold-rounds/round-${r}-baseline.json" "baseline-cold-${r}"
-    run_side candidate "pass_noop,frozen_workbook" "cold" 1 "${OUT_DIR}/cold-rounds/round-${r}-candidate.json" "candidate-cold-${r}"
+    run_side baseline "pass_noop,frozen_workbook" "cold" 1 "${attempt_dir}/cold-rounds/round-${r}-baseline.json" "baseline-cold-${r}"
+    run_side candidate "pass_noop,frozen_workbook" "cold" 1 "${attempt_dir}/cold-rounds/round-${r}-candidate.json" "candidate-cold-${r}"
   done
 
   # Phase 2: Reused-service warm series (1 initialized service + 1 excluded priming call + N subsequent fresh guests
   # on that SAME service), alternating which side runs first across workloads.
-  run_side baseline "pass_noop" "warm" "${SAMPLES}" "${OUT_DIR}/warm-series/pass_noop-baseline.json" "baseline-warm-pass_noop"
-  run_side candidate "pass_noop" "warm" "${SAMPLES}" "${OUT_DIR}/warm-series/pass_noop-candidate.json" "candidate-warm-pass_noop"
-  run_side candidate "frozen_workbook" "warm" "${SAMPLES}" "${OUT_DIR}/warm-series/frozen_workbook-candidate.json" "candidate-warm-frozen_workbook"
-  run_side baseline "frozen_workbook" "warm" "${SAMPLES}" "${OUT_DIR}/warm-series/frozen_workbook-baseline.json" "baseline-warm-frozen_workbook"
+  run_side baseline "pass_noop" "warm" "${SAMPLES}" "${attempt_dir}/warm-series/pass_noop-baseline.json" "baseline-warm-pass_noop"
+  run_side candidate "pass_noop" "warm" "${SAMPLES}" "${attempt_dir}/warm-series/pass_noop-candidate.json" "candidate-warm-pass_noop"
+  run_side candidate "frozen_workbook" "warm" "${SAMPLES}" "${attempt_dir}/warm-series/frozen_workbook-candidate.json" "candidate-warm-frozen_workbook"
+  run_side baseline "frozen_workbook" "warm" "${SAMPLES}" "${attempt_dir}/warm-series/frozen_workbook-baseline.json" "baseline-warm-frozen_workbook"
 
-  touch "${STOP_FILE}"
-  wait "${WATCH_PID}" || true
-  rm -f "${STOP_FILE}"
+  touch "${stop_file}"
+  wait "${watch_pid}" || true
+  rm -f "${stop_file}"
 
-  python3 - "${OUT_DIR}" "${SAMPLES}" "${PRE_RC}" <<'PY'
+  local cmp_rc=0
+  python3 - "${attempt_dir}" "${SAMPLES}" "${pre_rc}" <<'PY' || cmp_rc=$?
 import json, statistics, sys
 from pathlib import Path
 
@@ -447,7 +466,6 @@ reasons = list(pre.get("contamination_reasons", [])) + list(dur.get("contaminati
 agg = {"baseline": {}, "candidate": {}}
 priming = {"baseline": {}, "candidate": {}}
 
-# Collect alternating cold rounds
 for r in range(1, samples + 1):
     for side in ("baseline", "candidate"):
         d = json.loads((out_dir / "cold-rounds" / f"round-{r}-{side}.json").read_text())
@@ -455,7 +473,6 @@ for r in range(1, samples + 1):
             if w.get("cold"):
                 agg[side].setdefault((w["workload"], "cold"), []).extend(w["cold"]["samples"])
 
-# Collect true reused-service warm series (1 excluded priming call + N subsequent fresh guests)
 for wn in ("pass_noop", "frozen_workbook"):
     for side in ("baseline", "candidate"):
         d = json.loads((out_dir / "warm-series" / f"{wn}-{side}.json").read_text())
@@ -515,6 +532,12 @@ report = {
     "samples": samples,
     "contaminated": contaminated,
     "contamination_reasons": reasons,
+    "host_telemetry": {
+        "hostname": pre.get("hostname"),
+        "logical_cpus": pre.get("logical_cpus"),
+        "precheck_summary": pre.get("summary"),
+        "during_summary": dur.get("summary"),
+    },
     "identities": idents,
     "priming_samples_excluded": priming,
     "comparisons": comparisons,
@@ -522,14 +545,55 @@ report = {
 }
 (out_dir / "paired-compare-report.json").write_text(json.dumps(report, indent=2) + "\n")
 print(json.dumps(report, indent=2))
-sys.exit(1 if (contaminated or regression_flags) else 0)
+if contaminated:
+    sys.exit(2)
+sys.exit(1 if regression_flags else 0)
 PY
-  cmp_rc=$?
+  if [[ "${cmp_rc}" == "2" ]]; then
+    return 2
+  fi
   python3 "${SCRIPT_DIR}/grade_paired_receipt.py" \
     --kind compare \
-    --receipt "${OUT_DIR}/paired-compare-report.json" \
-    --expected-samples "${SAMPLES}" || exit 1
-  exit "${cmp_rc}"
+    --receipt "${attempt_dir}/paired-compare-report.json" \
+    --expected-samples "${SAMPLES}" || return 1
+  return "${cmp_rc}"
+}
+
+if [[ "${MODE}" == "compare" ]]; then
+  CLEAN=0
+  FINAL_RC=0
+  for ((attempt=1; attempt<=MAX_ATTEMPTS; attempt++)); do
+    ATTEMPT_DIR="${OUT_DIR}/attempt-${attempt}"
+    rc=0
+    run_one_compare_attempt "${ATTEMPT_DIR}" || rc=$?
+    if [[ "${rc}" == "0" ]]; then
+      cp -rf "${ATTEMPT_DIR}/"* "${OUT_DIR}/"
+      rm -rf "${ATTEMPT_DIR}"
+      CLEAN=1
+      FINAL_RC=0
+      break
+    elif [[ "${rc}" == "2" ]]; then
+      mv "${ATTEMPT_DIR}" "${OUT_DIR}/contaminated-attempt-${attempt}"
+      echo "Compare attempt ${attempt}/${MAX_ATTEMPTS} marked CONTAMINATED (retained in ${OUT_DIR}/contaminated-attempt-${attempt})" >&2
+      if [[ "${attempt}" -lt "${MAX_ATTEMPTS}" ]]; then
+        echo "Waiting ${RETRY_WAIT}s before retry..." >&2
+        sleep "${RETRY_WAIT}"
+      fi
+    else
+      cp -rf "${ATTEMPT_DIR}/"* "${OUT_DIR}/"
+      rm -rf "${ATTEMPT_DIR}"
+      CLEAN=1
+      FINAL_RC="${rc}"
+      break
+    fi
+  done
+
+  if [[ "${CLEAN}" != "1" ]]; then
+    echo "ERROR: All ${MAX_ATTEMPTS} compare attempts were contaminated." >&2
+    exit 1
+  fi
+  echo "PAIRED_COMPARE_DONE (rc=${FINAL_RC}): ${OUT_DIR}/paired-compare-report.json"
+  exit "${FINAL_RC}"
 fi
 
 usage
