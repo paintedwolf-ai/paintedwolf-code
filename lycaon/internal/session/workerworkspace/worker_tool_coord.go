@@ -112,6 +112,40 @@ func (m *Service) BoardRoots(ctx context.Context, sess *api.Session) ([]projectr
 	return tctx.Source.Roots, nil
 }
 
+// OnWorkerBranch reports the isolated branch root for a worker child session,
+// or ("", false) when the session runs on the live project tree.
+func (m *Service) OnWorkerBranch(ctx context.Context, sess *api.Session) (string, bool) {
+	if sess == nil || strings.TrimSpace(sess.ParentSessionID) == "" {
+		return "", false
+	}
+	jobID := workercontext.Job(ctx)
+	if m != nil && m.tasks != nil && jobID != "" {
+		if task, ok := m.tasks.Get(jobID); ok && task != nil {
+			if root := strings.TrimSpace(task.WorkspaceRoot); root != "" {
+				return root, true
+			}
+		}
+	}
+	if m != nil {
+		m.obsMu.RLock()
+		st := lookupStateLocked(&m.WorkspaceTrackerRegistry, jobID, strings.TrimSpace(sess.ID), "")
+		var branchRoot string
+		if st != nil {
+			branchRoot = strings.TrimSpace(st.BranchRoot)
+		}
+		m.obsMu.RUnlock()
+		if branchRoot != "" {
+			return branchRoot, true
+		}
+	}
+	if wsPath := strings.TrimSpace(sess.WorkspacePath); wsPath != "" {
+		if _, err := workspace.LoadBranchLayout(wsPath); err == nil {
+			return wsPath, true
+		}
+	}
+	return "", false
+}
+
 // BeforeWorkerWrite rejects read-scoped worker file mutations and records live touches.
 func (m *Service) BeforeWorkerWrite(ctx context.Context, tctx tools.ToolContext, relPath string) error {
 	if m == nil || strings.TrimSpace(tctx.Identity.WorkerJobID) == "" {

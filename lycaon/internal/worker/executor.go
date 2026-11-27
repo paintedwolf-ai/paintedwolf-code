@@ -59,6 +59,8 @@ type WorkerExecutionSessions interface {
 	SpawnChild(context.Context, string, api.SpawnChildRequest) (*api.Session, error)
 	workercloseout.WorkerSummaryFinalizeBounds
 	SessionByID(ctx context.Context, id string) (*api.Session, error)
+	// WorkerRequestReader projects the worker child's first request.
+	WorkerRequestReader(ctx context.Context, parentID, childSessionID, agentType string) (prompts.Reader, error)
 }
 
 type WorkerGracefulCloseout interface {
@@ -128,7 +130,11 @@ func (e *LocalWorkerExecutor) Execute(ctx context.Context, task api.WorkerTask, 
 	if e.TouchPaths != nil {
 		touchPaths = e.TouchPaths.PhaseTouchPaths(ctx, parentID)
 	}
-	builtPrompt, err := BuildWorkerPrompt(ctx, e.Injects, parentID, run.ProjectDir, touchPaths, task.Scope, prompt)
+	preambleReader, err := e.Sessions.WorkerRequestReader(ctx, parentID, task.ChildSessionID, agentType)
+	if err != nil {
+		return api.WorkerResult{}, fmt.Errorf("worker task preamble reader: %w", err)
+	}
+	builtPrompt, err := BuildWorkerPrompt(ctx, e.Injects, preambleReader, parentID, run.ProjectDir, touchPaths, task.Scope, prompt)
 	if err != nil {
 		return api.WorkerResult{}, fmt.Errorf("worker task preamble: %w", err)
 	}

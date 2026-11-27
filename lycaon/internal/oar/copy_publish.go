@@ -1,18 +1,21 @@
 package oar
 
 import (
+	"context"
 	"maps"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func decisionFromRule(r *Rule, gc *GuardContext, data map[string]any) Decision {
+func decisionFromRule(ctx context.Context, r *Rule, gc *GuardContext, data map[string]any) Decision {
 	if data == nil {
 		data = rejectDataFor(gc, r.ID)
 	}
 	facts := activation(gc)
+	var nextStepsErr error
 	if bindsNextSteps(r) {
-		steps := ResolveNextSteps(r, gc)
+		steps := ResolveNextSteps(ctx, r, gc)
+		nextStepsErr = steps.Err
 		facts[NextStepsFact] = steps.Text
 		if len(steps.Calls) > 0 {
 			data = maps.Clone(data)
@@ -29,5 +32,7 @@ func decisionFromRule(r *Rule, gc *GuardContext, data map[string]any) Decision {
 		Data:   data,
 		OnFire: append([]OnFireAction(nil), r.OnFire...),
 		Copy:   RenderRuleCopy(r, facts),
+
+		NextStepsErr: nextStepsErr,
 	}
 }

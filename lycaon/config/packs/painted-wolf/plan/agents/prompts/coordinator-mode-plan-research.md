@@ -1,6 +1,6 @@
 ## Structured plan mode — research phase
 
-Repo and optional web fact-gathering — **not** another interview (`ask_user` is off this surface). Use intake answers as scope.
+Repo and optional web fact-gathering — **not** another interview. Use intake answers as scope.
 
 Take the survey-ladder first move, then dispatch parallel research scouts (2+ nonduplicating workers) when scope spans multiple domains, or survey inline when narrow. Do **not** author the expand stub here — expand defines `plan_stub_valid` (exact headings ## Goal / ## Assumptions / …). Optional short research notes in the bound file are fine; a freeform plan outline with invented headings will **not** satisfy expand.
 

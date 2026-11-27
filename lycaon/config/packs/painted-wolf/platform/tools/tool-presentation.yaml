@@ -247,15 +247,6 @@ tools:
     running_label: "Searching…"
     title_keys: [pattern, path]
     activity: {headline: "searching codebase", salience: supporting, role: investigation}
-  handoff_health:
-    label: "Handoff status"
-    title_keys: []
-    activity: {headline: "coordinating", salience: incidental, role: coordination}
-  handoff_init:
-    label: "Reserve files"
-    title_keys: []
-    title_fallback: "Worker coordination"
-    activity: {headline: "coordinating", salience: incidental, role: coordination}
   handoff_release:
     label: "Release files"
     title_keys: [paths]
@@ -306,21 +297,6 @@ tools:
     title_keys: []
     visibility: coordinator_internal
     activity: {headline: "coordinating", salience: primary, role: coordination}
-  parse_evaluation:
-    label: "Parse plan"
-    title_keys: []
-    running_label: "Validating evaluation…"
-    activity: {headline: "coordinating", salience: incidental, role: coordination}
-  parse_extract_json:
-    label: "Parse plan"
-    title_keys: []
-    running_label: "Extracting JSON…"
-    activity: {headline: "coordinating", salience: incidental, role: coordination}
-  parse_validate:
-    label: "Parse plan"
-    title_keys: []
-    running_label: "Validating JSON…"
-    activity: {headline: "coordinating", salience: incidental, role: coordination}
   page_act:
     label: "Act on page"
     # Titled from the drive script by the Den resolver; a page id is a uuid.
@@ -344,10 +320,6 @@ tools:
     title_keys: [caption]
     running_label: "Snapshotting page…"
     activity: {headline: "testing the interface", salience: defining, role: interface_test}
-  plan_append_review_evidence:
-    label: "Review evidence"
-    title_keys: [blueprint_path, evidence]
-    activity: {headline: "recording review", salience: primary, role: coordination}
   plan_from_blueprint:
     label: "Plan workers"
     running_label: "Seeding planned workers…"
@@ -444,21 +416,9 @@ tools:
     running_label: "Checking files…"
     title_keys: [paths]
     activity: {headline: "checking file metadata", salience: supporting, role: investigation}
-  state_close:
-    label: "Workflow state"
-    title_keys: [reason]
-    activity: {headline: "coordinating", salience: incidental, role: coordination}
-  state_query:
-    label: "Workflow state"
-    title_keys: [path]
-    activity: {headline: "coordinating", salience: incidental, role: coordination}
   state_start:
     label: "Workflow state"
     title_keys: [workflow_id, blueprint_path]
-    activity: {headline: "coordinating", salience: incidental, role: coordination}
-  state_update:
-    label: "Workflow state"
-    title_keys: [path]
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   submit_verdict:
     label: "Verdict"
@@ -605,10 +565,6 @@ tools:
   workflow_transition:
     label: "Workflow step"
     title_keys: [transition_id]
-    activity: {headline: "managing workflow", salience: primary, role: coordination}
-  workflow_user_feedback:
-    label: "Workflow step"
-    title_keys: []
     activity: {headline: "managing workflow", salience: primary, role: coordination}
   write:
     label: "Write file"

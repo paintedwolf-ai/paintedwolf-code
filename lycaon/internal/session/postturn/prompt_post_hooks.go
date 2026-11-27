@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -74,12 +75,24 @@ func (m *Service) ProgressMissing(ctx context.Context, sessionID string, turnToo
 	}
 	if m.sessionStore != nil && m.transcriptStore != nil {
 		if sess, err := m.sessionStore.Get(ctx, strings.TrimSpace(sessionID)); err == nil && sess != nil {
-			if sess.Posture == api.SessionPostureSpec || sess.IsWorkerChild() {
+			if sess.Posture == api.SessionPostureSpec || sess.Mode == api.SessionModeAsk || sess.IsWorkerChild() {
 				return
 			}
 		}
 	}
-	if turnCalledUpdateProgress(turnTools) || !progress.TurnHasProgressGatedTool(turnTools) {
+	if turnCalledUpdateProgress(turnTools) {
+		return
+	}
+	if reach := toolreach.FromContext(ctx); reach.Known() {
+		reachableTools := make([]string, 0, len(turnTools))
+		for _, tool := range turnTools {
+			if reach.Status(strings.TrimSpace(tool)) != toolreach.Absent {
+				reachableTools = append(reachableTools, tool)
+			}
+		}
+		turnTools = reachableTools
+	}
+	if !progress.TurnHasProgressGatedTool(turnTools) {
 		return
 	}
 	if !progress.ProgressMissing(m.progress.Get(ctx, sessionID)) {

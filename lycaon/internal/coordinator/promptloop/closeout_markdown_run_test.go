@@ -407,8 +407,8 @@ func TestWorkerCoordinateRepairsToTheOfferedBareHandle(t *testing.T) {
 	r.deps.Context.Limits = loopTestLimits(4)
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	var kick string
-	r.deps.Closeout.RenderHostKick = func(ctx context.Context, id string, data map[string]any) (string, error) {
-		rendered, err := engine.RenderKick(ctx, id, data)
+	r.deps.Closeout.RenderHostKick = func(ctx context.Context, reader prompts.Reader, id string, data map[string]any) (string, error) {
+		rendered, err := engine.RenderKick(ctx, reader, id, data)
 		kick = rendered
 		return rendered, err
 	}

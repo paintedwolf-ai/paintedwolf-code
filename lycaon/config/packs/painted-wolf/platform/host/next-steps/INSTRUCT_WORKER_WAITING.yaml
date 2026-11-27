@@ -4,5 +4,5 @@ steps:
     args:
       worker: "{{ paintedwolf.worker }}"
     complete: true
-    say: "It starts on its own when its prerequisite lands; to withdraw it instead, call {{ call }}."
+    say: "It starts on its own when its prerequisite lands; to withdraw it instead, call {% if load %}{{ load }}, then {% endif %}{{ call }}."
     otherwise: "It starts on its own when its prerequisite lands."

@@ -2,6 +2,7 @@
 name: run-the-project-stack
 description: Start, observe, or rebuild the project’s declared multi-service Compose stack.
 metadata:
+  paintedwolf.any_of_tools: command
   host_resources: docker|podman
 ---
 

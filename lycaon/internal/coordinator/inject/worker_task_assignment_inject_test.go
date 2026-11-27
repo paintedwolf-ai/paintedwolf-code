@@ -28,7 +28,7 @@ func testWorkerCharter(goal string) api.WorkerTaskCharter {
 func TestWorkerAssignmentCarriesInventoryIndependentlyOfTheBrief(t *testing.T) {
 	inventory := `{"scan_ids":["scan-1"],"groups":[{"id":"group:unmentioned","level":"unknown"}],"next_offset":50}`
 	out, err := RenderWorkerTaskAssignment(t.Context(), testInjectRenderer(t), WorkerTaskAssignmentInput{
-		SessionID: "parent", ProjectDir: t.TempDir(), AgentType: "web-researcher", WorkerJobID: "worker",
+		Reader: testWorkerReader(t), SessionID: "parent", ProjectDir: t.TempDir(), AgentType: "web-researcher", WorkerJobID: "worker",
 		Charter: testWorkerCharter("Challenge the single coordinator claim"), Scope: api.TaskScope{Mode: api.TaskScopeModeRead},
 		ScanInventory: inventory,
 	})
@@ -40,6 +40,7 @@ func TestWorkerAssignmentCarriesInventoryIndependentlyOfTheBrief(t *testing.T) {
 
 func TestRenderWorkerTaskAssignment_rendersStructuredCharter(t *testing.T) {
 	out, err := RenderWorkerTaskAssignment(context.Background(), testInjectRenderer(t), WorkerTaskAssignmentInput{
+		Reader:     testWorkerReader(t),
 		SessionID:  "sess-inject-test",
 		ProjectDir: t.TempDir(),
 		Charter: api.WorkerTaskCharter{
@@ -68,6 +69,7 @@ func TestRenderWorkerTaskAssignment_rendersStructuredCharter(t *testing.T) {
 func TestRenderWorkerTaskAssignmentForwardsAttachmentsWhenBriefSet(t *testing.T) {
 	body := strings.Repeat("SECRET-BODY", 80)
 	out, err := RenderWorkerTaskAssignment(context.Background(), testInjectRenderer(t), WorkerTaskAssignmentInput{
+		Reader:      testWorkerReader(t),
 		SessionID:   "sess-inject-test",
 		ProjectDir:  t.TempDir(),
 		Charter:     testWorkerCharter("Analyze only the attached 33MB browser timeline JSON."),
@@ -105,7 +107,7 @@ func TestRenderWorkerTaskAssignmentForwardsAttachmentsWhenBriefSet(t *testing.T)
 
 func TestWorkerAssignmentCarriesCoverageIndependentlyOfClaims(t *testing.T) {
 	assignment := reviewcoverage.Assign(reviewcoverage.Facts{Gaps: []reviewcoverage.Fact{{ID: "gap/all", Kind: "partial", FileCount: 654, Paths: []string{"server/entry.go"}}}}, api.CoverageReview{Revision: "candidate"}, "check")
-	in := WorkerTaskAssignmentInput{SessionID: "parent", ProjectDir: t.TempDir(), AgentType: "reviewer", WorkerJobID: "job", Charter: testWorkerCharter("Challenge one claim"), CoverageAssignment: &reviewcoverage.Binding{Subject: assignment, CoverageRequired: true}}
+	in := WorkerTaskAssignmentInput{Reader: testWorkerReader(t), SessionID: "parent", ProjectDir: t.TempDir(), AgentType: "reviewer", WorkerJobID: "job", Charter: testWorkerCharter("Challenge one claim"), CoverageAssignment: &reviewcoverage.Binding{Subject: assignment, CoverageRequired: true}}
 	out, err := RenderWorkerTaskAssignment(t.Context(), testInjectRenderer(t), in)
 	testutil.FailErr(t, "render coverage assignment", err)
 	page, _, err := reviewcoverage.Page(assignment, 0, 50)
@@ -146,6 +148,7 @@ func TestRenderWorkerTaskAssignmentLinkedCheckoutOrientation(t *testing.T) {
 	testutil.FailErr(t, "write worktree .git", os.WriteFile(filepath.Join(wtDir, ".git"), []byte("gitdir: /real/repo/.git/worktrees/wt\n"), 0o644))
 
 	out, err := RenderWorkerTaskAssignment(t.Context(), testInjectRenderer(t), WorkerTaskAssignmentInput{
+		Reader:      testWorkerReader(t),
 		SessionID:   "sess-linked",
 		ProjectDir:  projectDir,
 		Charter:     testWorkerCharter("Update worktree/main.go"),

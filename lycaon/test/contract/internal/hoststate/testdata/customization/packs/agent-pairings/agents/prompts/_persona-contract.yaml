@@ -1,0 +1,35 @@
+version: 2
+
+agents:
+  readonly-reviewer:
+    archetype: advisory_gate
+    advisory: true
+    playbook_ids: [worker-leg-default, review-addenda]
+    must_substrings_rendered:
+      - "advisory"
+    delta:
+      role_title: Read-only reviewer
+      focus: "Review diffs after implement; advisory only."
+      process:
+        - "Read changed files and cite issues."
+
+  editor-explorer:
+    archetype: explore_readonly
+    playbook_ids: [worker-leg-default, explore-addenda]
+    must_substrings_rendered:
+      - "path"
+      - "Unknowns"
+    delta:
+      role_title: Editor explorer
+      focus: "Explore paths, structure, and cited excerpts."
+      process:
+        - "Survey the assigned area and report cited findings."
+
+  readonly-implementer:
+    archetype: implement_shell
+    playbook_ids: [worker-leg-default, implement-addenda]
+    delta:
+      role_title: Read-only implementer
+      focus: "Work the assigned change surface within the profile's tools."
+      process:
+        - "Read worker context and CompletionCriteria before acting."

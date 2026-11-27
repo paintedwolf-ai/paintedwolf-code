@@ -1,10 +1,11 @@
 package promptloop
 
 import (
-	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolfeedback"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/guidance"

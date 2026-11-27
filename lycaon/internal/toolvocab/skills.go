@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io/fs"
+	"maps"
 	"regexp"
 	"slices"
 	"sort"
@@ -18,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
@@ -157,60 +159,13 @@ func (c *Catalog) profileReader(profileID string) (prompts.Reader, error) {
 	if prof.CommandEffects == 0 && prof.ToolAllowed("command") {
 		prof.CommandEffects = toolcontract.AllCommandEffects()
 	}
-	return prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prof.ID,
+	return prompts.NewReader(prompts.HostFacts{
 		Profiles:  []sandbox.ToolProfile{prof},
-		Visible:   visible,
-		Loaded:    loaded,
 		Schemas:   c.schemas,
 		RootCount: 1,
 		HasGit:    true,
 		WebSearch: true,
-	})
-}
-
-func offeredReader(offered map[string]bool) (prompts.Reader, error) {
-	profileID := "worker"
-	if offered["task"] {
-		profileID = prompts.CoordinatorProfileID
-	}
-	tools := make(map[string]bool, len(offered))
-	var visible []string
-	for name, ok := range offered {
-		if !ok || toolcontract.IsReachMark(name) || !plainToolName(name) {
-			continue
-		}
-		tools[name] = true
-		visible = append(visible, name)
-	}
-	sort.Strings(visible)
-	var effects toolcontract.CommandEffects
-	if tools["command"] {
-		classes := []toolcontract.CommandEffectClass{toolcontract.CommandReadOnly}
-		if offered[toolcontract.ReachCommandMutation] {
-			classes = append(classes, toolcontract.CommandMutation)
-		}
-		if offered[toolcontract.ReachCommandExternalExec] {
-			classes = append(classes, toolcontract.CommandExternalExec)
-		}
-		if offered[toolcontract.ReachCommandNetworkEgress] {
-			classes = append(classes, toolcontract.CommandNetworkEgress)
-		}
-		effects, _ = toolcontract.NewCommandEffects(classes...)
-	}
-	return prompts.NewReader(prompts.ReaderInput{
-		ProfileID: profileID,
-		Profiles: []sandbox.ToolProfile{{
-			ID:             profileID,
-			Tools:          tools,
-			CommandEffects: effects,
-		}},
-		Visible:   visible,
-		Loaded:    tools,
-		RootCount: 1,
-		HasGit:    true,
-		WebSearch: true,
-	})
+	}, prompts.TurnProjection{ProfileID: prof.ID, Offered: visible, Declared: true})
 }
 
 type skillRenderMemo struct {
@@ -218,7 +173,11 @@ type skillRenderMemo struct {
 	err error
 }
 
-var skillRenderCache = scopedstore.New[skillRenderMemo](256)
+var (
+	skillRenderCache           = scopedstore.New[skillRenderMemo](256)
+	readerSkillVarsCache       = scopedstore.New[map[string]any](256)
+	skillOfferedForReaderCache = scopedstore.New[bool](4096)
+)
 
 func varsDigestKey(vars map[string]any) string {
 	h := sha256.New()
@@ -257,7 +216,7 @@ func renderSkillText(text string, vars map[string]any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return pongoplain.ExecuteDetached(tpl, vars)
+	return pongoplain.ExecuteDetachedUnobserved(tpl, vars)
 }
 
 // guardSuggestion names the profile_has_ fact that gates name for readers: the
@@ -451,13 +410,12 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 				continue
 			}
 			// Runtime and the contract matrix only offer a skill to readers
-			// whose tools cover its rendered body (SkillToolsOffered), so
-			// validation checks the same eligibility set rather than demanding
-			// every skill render clean for every profile.
-			offerKey := agent.ProfileID + "\x00" + skill.Name + "\x00" + skill.Body
+			// whose tools and projected schemas cover its rendered body, so
+			// validation checks the same eligibility set.
+			offerKey := reader.Fingerprint() + "\x00" + skill.Name + "\x00" + skill.Body
 			isOffered, cachedOffer := offeredByProfile[offerKey]
 			if !cachedOffer {
-				isOffered = skillToolsOfferedWith(skill, held, validationRenderCache)
+				isOffered = skillToolsOfferedForReaderWith(skill, reader, validationRenderCache)
 				offeredByProfile[offerKey] = isOffered
 			}
 			if !isOffered {
@@ -576,25 +534,129 @@ var fallbackStockCatalog = sync.OnceValue(func() *Catalog {
 	return c
 })
 
-// SkillToolsOffered reports whether offered covers every tool, operation, and
-// command form sk's rendered body requires, and satisfies any_of_tools.
-func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
-	return skillToolsOfferedWith(sk, offered, nil)
+// SkillToolsOfferedForReader reports whether reader's offered tools and
+// projected schemas cover sk's rendered body, host_resources, and any_of_tools.
+func SkillToolsOfferedForReader(sk skills.Skill, reader prompts.Reader) bool {
+	return skillToolsOfferedForReaderWith(sk, reader, nil)
 }
 
-func skillToolsOfferedWith(sk skills.Skill, offered map[string]bool, localCache map[string]skillRenderMemo) bool {
+// A non-nil localCache keeps one validation pass's renders out of the
+// process-wide cache.
+func skillToolsOfferedForReaderWith(sk skills.Skill, reader prompts.Reader, localCache map[string]skillRenderMemo) bool {
 	if sk.UserProvided {
 		return true
 	}
-	if strings.TrimSpace(sk.Metadata["host_resources"]) != "" && !offered[toolcontract.ReachCommandExternalExec] && !offered["terminal_open"] && !offered["verify"] {
+	if !reader.Valid() {
+		return false
+	}
+	fp := reader.Fingerprint()
+	var memoKey string
+	if fp != "" {
+		h := sha256.New()
+		h.Write([]byte(fp))
+		h.Write([]byte{0})
+		h.Write([]byte(sk.Name))
+		h.Write([]byte{0})
+		h.Write([]byte(sk.Description))
+		h.Write([]byte{0})
+		h.Write([]byte(sk.Metadata["host_resources"]))
+		h.Write([]byte{0})
+		h.Write([]byte(sk.Metadata["any_of_tools"]))
+		h.Write([]byte{0})
+		h.Write([]byte(sk.Body))
+		memoKey = string(h.Sum(nil))
+		if cached, ok := skillOfferedForReaderCache.Load(memoKey); ok {
+			return cached
+		}
+	}
+	var (
+		vars map[string]any
+		err  error
+	)
+	if fp != "" {
+		if cachedVars, ok := readerSkillVarsCache.Load(fp); ok {
+			vars = cachedVars
+		} else {
+			vars, err = prompts.SkillVars(reader)
+			if err == nil {
+				readerSkillVarsCache.Store(fp, vars)
+			}
+		}
+	} else {
+		vars, err = prompts.SkillVars(reader)
+	}
+	if err != nil {
 		return false
 	}
 	c := StockCatalog()
 	if c == nil {
 		return true
 	}
+	// A host_resources skill needs a tool accepting the field; decide that
+	// before rendering, so an unoffered skill never renders for this reader.
+	if strings.TrimSpace(sk.Metadata["host_resources"]) != "" {
+		if hostResTools, _ := vars["runner_host_resources_tools"].([]string); len(hostResTools) == 0 {
+			if memoKey != "" {
+				skillOfferedForReaderCache.Store(memoKey, false)
+			}
+			return false
+		}
+	}
+	offered := reader.Held()
 	anyOf := sk.AnyOfTools()
-	for _, name := range UnreachableNames(c, renderSkillBodyWith(sk, offered, localCache), offered) {
+	cacheKey := "reader:" + fp
+	if fp == "" {
+		cacheKey = "reader-nofp:" + varsDigestKey(vars)
+	}
+	var rendered string
+	var renderErr error
+	if localCache != nil {
+		rendered, renderErr = renderSkillTextIn(localCache, cacheKey, sk.Body, vars)
+	} else {
+		rendered, renderErr = renderSkillTextCached(cacheKey, sk.Body, vars)
+	}
+	if renderErr != nil {
+		rendered = sk.Body
+	}
+	res := evalSkillRenderedReach(c, sk, offered, reader.Requestable(), anyOf, rendered)
+	if memoKey != "" {
+		skillOfferedForReaderCache.Store(memoKey, res)
+	}
+	return res
+}
+
+func evalSkillRenderedReach(
+	c *Catalog,
+	sk skills.Skill,
+	offered map[string]bool,
+	requestable []string,
+	anyOf []string,
+	rendered string,
+) bool {
+	checkText := rendered
+	if desc := strings.TrimSpace(sk.Description); desc != "" {
+		checkText = desc + "\n" + rendered
+	}
+	reachable := offered
+	if offered[toolreach.LoaderTool] && len(requestable) > 0 {
+		reachable = maps.Clone(offered)
+		for _, name := range requestable {
+			reachable[name] = true
+		}
+		for _, call := range UnheldCalls(c, checkText, offered, requestable) {
+			if !slices.Contains(anyOf, call.Tool) {
+				return false
+			}
+		}
+		if !offered[toolreach.ProgramTool] && slices.Contains(requestable, toolreach.ProgramTool) &&
+			!slices.Contains(anyOf, toolreach.ProgramTool) &&
+			strings.TrimSpace(sk.Metadata["authoring_reference"]) != "true" {
+			if len(UnloadedCommandSpans(c, checkText)) > 0 {
+				return false
+			}
+		}
+	}
+	for _, name := range UnreachableNames(c, checkText, reachable) {
 		if !slices.Contains(anyOf, name) {
 			return false
 		}
@@ -608,47 +670,4 @@ func skillToolsOfferedWith(sk skills.Skill, offered map[string]bool, localCache 
 		}
 	}
 	return false
-}
-
-var offeredSkillVarsCache = scopedstore.New[map[string]any](64)
-
-func offeredSkillVars(offered map[string]bool) (string, map[string]any, error) {
-	keys := make([]string, 0, len(offered))
-	for name, ok := range offered {
-		if ok {
-			keys = append(keys, name)
-		}
-	}
-	sort.Strings(keys)
-	cacheKey := "offered:" + strings.Join(keys, "\x00")
-	if vars, ok := offeredSkillVarsCache.Load(cacheKey); ok {
-		return cacheKey, vars, nil
-	}
-	reader, err := offeredReader(offered)
-	if err != nil {
-		return "", nil, err
-	}
-	vars, err := prompts.SkillVars(reader)
-	if err != nil {
-		return "", nil, err
-	}
-	offeredSkillVarsCache.Store(cacheKey, vars)
-	return cacheKey, vars, nil
-}
-
-func renderSkillBodyWith(sk skills.Skill, offered map[string]bool, localCache map[string]skillRenderMemo) string {
-	cacheKey, vars, err := offeredSkillVars(offered)
-	if err != nil {
-		return sk.Body
-	}
-	var rendered string
-	if localCache != nil {
-		rendered, err = renderSkillTextIn(localCache, cacheKey, sk.Body, vars)
-	} else {
-		rendered, err = renderSkillTextCached(cacheKey, sk.Body, vars)
-	}
-	if err != nil {
-		return sk.Body
-	}
-	return rendered
 }

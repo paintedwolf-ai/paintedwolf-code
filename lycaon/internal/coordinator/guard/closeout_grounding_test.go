@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance/ledgertest"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -198,8 +199,19 @@ func TestFormatCloseoutGroundingReject_rendersFullCitationKick(t *testing.T) {
 	t.Parallel()
 	rejectFmt := coordinatorRejectFmt(t)
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	reader, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Declared:  true,
+	})
+	testutil.FailErr(t, "NewReader coordinator", err)
 	render := func(kickID string, data map[string]any) string {
-		out, err := engine.RenderKick(context.Background(), strings.TrimSpace(kickID), data)
+		out, err := engine.RenderKick(context.Background(), reader, strings.TrimSpace(kickID), data)
 		if err != nil || strings.TrimSpace(out) == "" {
 			return ""
 		}

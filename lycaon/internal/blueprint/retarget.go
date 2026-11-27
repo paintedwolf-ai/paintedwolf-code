@@ -3,12 +3,10 @@ package blueprint
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/blueprintfile"
-	"github.com/lycaon/lycaon/internal/fseffect"
 )
 
 // BeforeRetarget runs after the destination is chosen and before the file moves.
@@ -51,7 +49,6 @@ func (m *Manager) RetargetToTitle(ctx context.Context, projectID, path, title st
 	if err := m.Store.Rename(ctx, projectID, path, to); err != nil {
 		return "", err
 	}
-	m.relocateCriticEvidence(projectID, path, to)
 	if m.Approvals != nil {
 		if err := m.Approvals.Relocate(ctx, projectID, path, to); err != nil {
 			return "", err
@@ -63,19 +60,4 @@ func (m *Manager) RetargetToTitle(ctx context.Context, projectID, path, title st
 		}
 	}
 	return to, nil
-}
-
-func (m *Manager) relocateCriticEvidence(projectID, from, to string) {
-	src, err := m.criticEvidencePath(projectID, from)
-	if err != nil {
-		return
-	}
-	dst, err := m.criticEvidencePath(projectID, to)
-	if err != nil {
-		return
-	}
-	root := filepath.Dir(src)
-	if err := fseffect.Rename(root, filepath.Base(src), filepath.Base(dst)); err != nil && !os.IsNotExist(err) {
-		m.dropCriticEvidence(projectID, from)
-	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -89,14 +90,23 @@ func RenderPromptDump(
 	if err != nil {
 		return "", err
 	}
-	reader, err := prompts.NewReader(prompts.ReaderInput{
+	var hasGit bool
+	if sess.WorkspacePath != "" {
+		_, hasGit = gitrepo.Discover(sess.WorkspacePath)
+	}
+	reader, err := prompts.NewReader(prompts.HostFacts{
+		SessionMode:    string(api.SessionModeAgent),
+		Profiles:       profiles,
+		RootCount:      rootCount,
+		HasGit:         hasGit,
+		HasAnyGitRoot:  hasGit,
+		WebSearch:      true,
+		SpawnAllowlist: roster.Effective,
+	}, prompts.TurnProjection{
 		ProfileID: prompts.CoordinatorProfileID,
 		SurfaceID: profile.SurfaceID,
-		Mode:      current,
-		Profiles:  profiles,
 		Plan:      plan,
-		RootCount: rootCount,
-		WebSearch: true,
+		Offered:   plan.ImmediateNames(),
 	})
 	if err != nil {
 		return "", err

@@ -2,13 +2,17 @@ package assembly
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -32,7 +36,15 @@ func (e *turnContextAssembler) appendPreHistorySystemInjects(
 // fixed at turn open, so history stays append-only until the surface's tools
 // change, when the provider's cached prefix has already moved.
 func (e *turnContextAssembler) interleaveSourceBriefs(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, history []api.Message, turn *TurnAssemblyScratch, messages []api.Message) []api.Message {
-	blocks := e.sourceBriefBlocks(ctx, sess, e.surface.toolAddressable(ctx, sess, frame, history, turn, "source_history"), turn)
+	if e == nil || e.surface == nil {
+		return messages
+	}
+	reader, err := e.surface.turnReader(ctx, sess, frame, history, turn)
+	if err != nil {
+		return messages
+	}
+	sourceHistoryAddressable := e.surface.toolAddressable(ctx, sess, frame, history, turn, "source_history")
+	blocks := e.sourceBriefBlocks(ctx, sess, reader, sourceHistoryAddressable, turn)
 	if len(blocks) == 0 {
 		return messages
 	}
@@ -51,17 +63,12 @@ func (e *turnContextAssembler) interleaveSourceBriefs(ctx context.Context, sess 
 }
 
 // interleaveViewContexts places each prompt's recorded view context
-// directly before that prompt. The context is fixed on the prompt, so history
-// stays append-only until the surface's tools change.
-func (e *turnContextAssembler) interleaveViewContexts(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, history []api.Message, turn *TurnAssemblyScratch, messages []api.Message) []api.Message {
-	readOffered, checked := false, false
+// directly before that prompt.
+func (e *turnContextAssembler) interleaveViewContexts(ctx context.Context, sess *api.Session, _ inject.CoordinatorTurnFrame, _ []api.Message, _ *TurnAssemblyScratch, messages []api.Message) []api.Message {
 	out := make([]api.Message, 0, len(messages))
 	for _, m := range messages {
 		if m.SourceContext != nil && m.SourceContext.View != nil && m.Role == api.MessageRoleUser {
-			if !checked {
-				readOffered, checked = e.surface.toolAddressable(ctx, sess, frame, history, turn, "read"), true
-			}
-			if block := inject.RenderViewContextBlock(ctx, e.deps.Injects, sess.ID, *m.SourceContext.View, readOffered); block != "" {
+			if block := inject.RenderViewContextBlock(ctx, e.deps.Injects, sess.ID, *m.SourceContext.View); block != "" {
 				out = append(out, api.Message{
 					ID:   hostmarker.ViewContextBlockPrefix + m.ID,
 					Role: api.MessageRoleSystem, Content: block,
@@ -74,17 +81,26 @@ func (e *turnContextAssembler) interleaveViewContexts(ctx context.Context, sess 
 	return out
 }
 
+func sourceBriefReaderKey(reader prompts.Reader, sourceHistoryAddressable bool) string {
+	offered := sourceHistoryAddressable && slices.Contains(reader.Offered(), "source_history")
+	requestable := sourceHistoryAddressable && slices.Contains(reader.Requestable(), "source_history") && slices.Contains(reader.Offered(), "request_tools")
+	held := reader.Held()
+	mutCapable := held[toolcontract.ReachCommandMutation] || held["code_rewrite"] || held["restore_version"] || held["plan_from_blueprint"]
+	return fmt.Sprintf("%t:%t:%t", offered, requestable, mutCapable)
+}
+
 // sourceBriefBlocks renders the session's turn briefs once per prompt run, and
-// again if the surface's answer on source_history changes within it.
-func (e *turnContextAssembler) sourceBriefBlocks(ctx context.Context, sess *api.Session, sourceHistoryOffered bool, turn *TurnAssemblyScratch) map[string]string {
-	if turn != nil && turn.SourceBriefsLoaded && turn.SourceBriefsOffered == sourceHistoryOffered {
+// again if the surface's source_history or mutation capability changes within it.
+func (e *turnContextAssembler) sourceBriefBlocks(ctx context.Context, sess *api.Session, reader prompts.Reader, sourceHistoryAddressable bool, turn *TurnAssemblyScratch) map[string]string {
+	key := sourceBriefReaderKey(reader, sourceHistoryAddressable)
+	if turn != nil && turn.SourceBriefsLoaded && turn.SourceBriefsKey == key {
 		return turn.SourceBriefBlocks
 	}
 	deps := e.deps
 	var blocks map[string]string
 	if deps.TurnSourceBriefs != nil {
 		for openingID, brief := range deps.TurnSourceBriefs(ctx, sess) {
-			if block := inject.RenderSourceChangesBlock(ctx, deps.Injects, sess.ID, brief, sourceHistoryOffered); block != "" {
+			if block := inject.RenderSourceChangesBlock(ctx, deps.Injects, reader, sess.ID, brief); block != "" {
 				if blocks == nil {
 					blocks = map[string]string{}
 				}
@@ -93,7 +109,7 @@ func (e *turnContextAssembler) sourceBriefBlocks(ctx context.Context, sess *api.
 		}
 	}
 	if turn != nil {
-		turn.SourceBriefBlocks, turn.SourceBriefsLoaded, turn.SourceBriefsOffered = blocks, true, sourceHistoryOffered
+		turn.SourceBriefBlocks, turn.SourceBriefsLoaded, turn.SourceBriefsKey = blocks, true, key
 	}
 	return blocks
 }
@@ -129,15 +145,19 @@ func (e *turnContextAssembler) buildTailSystemInjects(
 		if deps.HeldCalls != nil {
 			held = deps.HeldCalls(sess.ID)
 		}
-		surface := "worker"
-		if coordinator {
-			surface = "coordinator"
-		}
-		if block := inject.RenderCommandJobsBlock(ctx, deps.Injects, sess.ID, jobs, held, time.Now().UTC(), surface); block != "" {
-			tail = append(tail, api.Message{
-				Role: api.MessageRoleSystem, Content: block,
-				Origin: api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted,
-			})
+		if len(jobs)+len(held) > 0 && e.surface != nil {
+			surface := "worker"
+			if coordinator {
+				surface = "coordinator"
+			}
+			if reader, waitSchema, rErr := e.surface.commandJobsReader(ctx, sess, coordinator, frame, history, turn); rErr == nil {
+				if block := inject.RenderCommandJobsBlock(ctx, deps.Injects, reader, waitSchema, sess.ID, jobs, held, time.Now().UTC(), surface); block != "" {
+					tail = append(tail, api.Message{
+						Role: api.MessageRoleSystem, Content: block,
+						Origin: api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted,
+					})
+				}
+			}
 		}
 	}
 
@@ -177,7 +197,7 @@ func (e *turnContextAssembler) buildTailSystemInjects(
 	}
 
 	if sess.IsWorkerChild() && deps.Board != nil {
-		if block, ok := e.workerBoard(ctx, sess, turn); ok {
+		if block, ok := e.workerBoard(ctx, sess, frame, turn); ok {
 			tail = append(tail, api.Message{Role: api.MessageRoleSystem, Content: block})
 		}
 	}
@@ -193,6 +213,7 @@ func (e *turnContextAssembler) prepareCoordinatorBoard(
 	ctx context.Context,
 	sess *api.Session,
 	frame inject.CoordinatorTurnFrame,
+	history []api.Message,
 	turn *TurnAssemblyScratch,
 ) (inject.CoordinatorTurnFrame, string, error) {
 	deps := e.deps
@@ -204,8 +225,16 @@ func (e *turnContextAssembler) prepareCoordinatorBoard(
 	}); ok {
 		ctx = scoped.WithRepositoryFacts(ctx)
 	}
+	resolveBoardReader := func(f *inject.CoordinatorTurnFrame) prompts.Reader {
+		if e.surface == nil {
+			return prompts.Reader{}
+		}
+		f.Roster = e.surface.resolveTurnRoster(ctx, sess, *f, history, turn)
+		r, _ := e.surface.turnReader(ctx, sess, *f, history, turn)
+		return r
+	}
 	run := frame.RunContext
-	block, changed := deps.Board.PrependBoardIfChanged(ctx, sess, run)
+	block, changed := deps.Board.PrependBoardIfChanged(ctx, sess, resolveBoardReader(&frame), run)
 	// The board marks each run and phase oriented once, so every inject it
 	// renders is recorded; a refresh onto another run or phase renders a new one.
 	for pass := 0; changed && deps.BoardOrientReady != nil; pass++ {
@@ -231,7 +260,7 @@ func (e *turnContextAssembler) prepareCoordinatorBoard(
 		}
 		run = frame.RunContext
 		var refreshedBlock string
-		refreshedBlock, changed = deps.Board.PrependBoardIfChanged(ctx, sess, run)
+		refreshedBlock, changed = deps.Board.PrependBoardIfChanged(ctx, sess, resolveBoardReader(&frame), run)
 		if changed {
 			block = refreshedBlock
 		}
@@ -241,7 +270,7 @@ func (e *turnContextAssembler) prepareCoordinatorBoard(
 		// A turn that moved surface renders the board for the surface it is on.
 		if turn.BoardSurfaceID != turn.SurfaceID {
 			deps.Board.InvalidateOrientation(sess.ID)
-			if refreshed, changed := deps.Board.PrependBoardIfChanged(ctx, sess, frame.RunContext); changed {
+			if refreshed, changed := deps.Board.PrependBoardIfChanged(ctx, sess, resolveBoardReader(&frame), frame.RunContext); changed {
 				block = refreshed
 				if hash := deps.Board.BoardInjectHash(sess.ID); hash != "" && deps.BoardOrientReady != nil {
 					if err := deps.BoardOrientReady.RecordBoardOrientReady(ctx, sess.ID, hash); err != nil {
@@ -272,7 +301,7 @@ func (e *turnContextAssembler) turnStateInject(
 		return "", false
 	}
 	_, implState := e.surface.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
-	reader, err := e.surface.turnReader(ctx, sess, frame, history, turn, 0)
+	reader, err := e.surface.turnReader(ctx, sess, frame, history, turn)
 	if err != nil {
 		return "", false
 	}

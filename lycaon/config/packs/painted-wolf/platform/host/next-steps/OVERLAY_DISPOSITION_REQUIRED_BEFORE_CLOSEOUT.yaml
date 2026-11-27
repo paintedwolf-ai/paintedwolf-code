@@ -3,17 +3,17 @@ steps:
     args:
       overlay_id: "{{ paintedwolf.overlay_id }}"
     complete: true
-    say: "Use {{ call }} to inspect the changes if needed."
+    say: "Use {% if load %}{{ load }}, then {% endif %}{{ call }} to inspect the changes if needed."
   - tool: "promote_overlay"
     args:
       overlay_id: "{{ paintedwolf.overlay_id }}"
     complete: true
-    say: "Call {{ call }} to land accepted work."
+    say: "Call {% if load %}{{ load }}, then {% endif %}{{ call }} to land accepted work."
   - tool: "reject_overlay"
     args:
       overlay_id: "{{ paintedwolf.overlay_id }}"
-    say: "Call {{ call }} with a reason if the work should be discarded."
+    say: "Call {% if load %}{{ load }}, then {% endif %}{{ call }} with a reason if the work should be discarded."
   - tool: "shelve_overlay"
     args:
       overlay_id: "{{ paintedwolf.overlay_id }}"
-    say: "Call {{ call }} with a reason to keep the changes unlanded for later."
+    say: "Call {% if load %}{{ load }}, then {% endif %}{{ call }} with a reason to keep the changes unlanded for later."

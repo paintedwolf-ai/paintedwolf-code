@@ -7,7 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -26,7 +25,7 @@ func TestFetchTransferGuidanceUsesFrozenProgramReach(t *testing.T) {
 					offered = append(offered, "command")
 				}
 				reach := toolreach.Offered(offered).WithPrograms(func(name string) bool { return state.curl && name == "curl" })
-				ctx := tools.WithCallReach(t.Context(), reach)
+				ctx := toolreach.WithRequest(t.Context(), reach)
 				err := bp.RejectObservation(ctx, "fetch_url", "web_research", nil, &toolrejection.ToolReject{Code: code, Data: map[string]any{"content_type": "application/zip", "reason": "content_type", "mode": "unknown", "path": "asset.zip"}})
 				refusal, ok := guidance.RefusalFromError(err)
 				if !ok || refusal.Copy == nil {
