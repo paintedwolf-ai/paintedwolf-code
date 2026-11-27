@@ -5,7 +5,7 @@ import sqlite3
 
 # Eligible structural orchestration wrappers emitted by the program runtime
 # (pipeline/list/loop containers with no direct native command or file effect).
-ELIGIBLE_WRAPPER_OPS = {'program |', 'program ;', 'program &&', 'program ||', 'program for', 'program while', 'program if', 'program $()'}
+ELIGIBLE_WRAPPER_OPS = {'program |', 'program ;', 'program &&', 'program ||', 'program for', 'program while', 'program if', 'program $()', 'program &'}
 
 
 def _rows(db, sql, params):

@@ -1536,7 +1536,7 @@
         }
       ],
       "expected": {
-        "stdout": "before\n",
+        "stdout": "",
         "stderr": "",
         "status": 0,
         "host_stop": null,
@@ -1545,23 +1545,22 @@
         "absent": [],
         "receipts": [
           {
-            "operation": "export",
-            "outcome": "completed"
-          },
-          {
             "operation": "external_exec",
-            "outcome": "completed"
-          },
-          {
-            "operation": "export",
-            "outcome": "completed"
+            "outcome": "completed",
+            "status": 0
           },
           {
             "operation": "wait",
+            "outcome": "completed",
+            "status": 0
+          }
+        ],
+        "effects": [
+          {
+            "operation": "external_exec",
             "outcome": "completed"
           }
         ],
-        "effects": [],
         "obligations": [],
         "deliveries": [],
         "closeout": "complete"
