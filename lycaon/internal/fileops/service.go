@@ -12,13 +12,30 @@ import (
 
 var ErrCapacity = errors.New("file operation queue is full")
 
+// FirstAnswerKind records which transport response kind was first written for
+// an admitted request, so retries return the same kind regardless of timing.
+// This state is process-local (not persisted in SQLite): after a process
+// restart, completed rows replay their persisted response status and body,
+// while interrupted or canceled rows answer 202 Accepted.
+type FirstAnswerKind int
+
+const (
+	FirstAnswerPending FirstAnswerKind = iota
+	FirstAnswerResult
+	FirstAnswerAccepted
+)
+
+const maxTrackedAcceptedAsync = 4096
+
 type Service struct {
-	store     *Store
-	mu        sync.Mutex
-	active    map[string]*Run
-	workers   chan struct{}
-	projects  keylock.Group
-	observers []func(Request)
+	store         *Store
+	mu            sync.Mutex
+	active        map[string]*Run
+	acceptedAsync map[string]bool
+	acceptedOrder []string
+	workers       chan struct{}
+	projects      keylock.Group
+	observers     []func(Request)
 	// holdBeforeWork lets a test host hold a cancelable run; nil in the product.
 	holdBeforeWork func(context.Context, Request)
 }
@@ -40,13 +57,15 @@ func (s *Service) notify(request Request) {
 }
 
 type Run struct {
-	service    *Service
-	mu         sync.Mutex
-	request    Request
-	done       chan struct{}
-	canceled   chan struct{}
-	cancelOnce sync.Once
-	lastSaved  time.Time
+	service          *Service
+	mu               sync.Mutex
+	request          Request
+	done             chan struct{}
+	canceled         chan struct{}
+	cancelOnce       sync.Once
+	firstAnswer      FirstAnswerKind
+	firstAnswerReady chan struct{}
+	lastSaved        time.Time
 }
 
 type Outcome struct {
@@ -55,7 +74,12 @@ type Outcome struct {
 }
 
 func NewService(store *Store) *Service {
-	return &Service{store: store, active: make(map[string]*Run), workers: make(chan struct{}, 4)}
+	return &Service{
+		store:         store,
+		active:        make(map[string]*Run),
+		acceptedAsync: make(map[string]bool),
+		workers:       make(chan struct{}, 4),
+	}
 }
 
 // HoldBeforeWorkForTest runs hold before each run's work, while it is still
@@ -99,9 +123,16 @@ func (s *Service) admit(ctx context.Context, request Request, retry bool) (*Run,
 		}
 		if !retry || held.State == "completed" {
 			run := newRun(s, held)
+			if s.acceptedAsync[held.ID] {
+				run.firstAnswer = FirstAnswerAccepted
+			} else {
+				run.firstAnswer = FirstAnswerResult
+			}
+			close(run.firstAnswerReady)
 			close(run.done)
 			return run, false, nil
 		}
+		delete(s.acceptedAsync, held.ID)
 		request = held
 	}
 	if len(s.active) >= 64 && s.active[request.ID] == nil {
@@ -128,10 +159,52 @@ func (s *Service) admit(ctx context.Context, request Request, retry bool) (*Run,
 }
 
 func newRun(s *Service, r Request) *Run {
-	return &Run{service: s, request: r, done: make(chan struct{}), canceled: make(chan struct{})}
+	return &Run{
+		service:          s,
+		request:          r,
+		done:             make(chan struct{}),
+		canceled:         make(chan struct{}),
+		firstAnswerReady: make(chan struct{}),
+	}
 }
-func (r *Run) Done() <-chan struct{} { return r.done }
-func (r *Run) Snapshot() Request     { r.mu.Lock(); defer r.mu.Unlock(); return r.request }
+func (r *Run) Done() <-chan struct{}             { return r.done }
+func (r *Run) FirstAnswerReady() <-chan struct{} { return r.firstAnswerReady }
+func (r *Run) FirstAnswer() FirstAnswerKind      { r.mu.Lock(); defer r.mu.Unlock(); return r.firstAnswer }
+func (r *Run) Snapshot() Request                 { r.mu.Lock(); defer r.mu.Unlock(); return r.request }
+
+// RecordFirstAnswer latches the first transport response kind emitted for r
+// and returns the latched value so concurrent waiters agree on one kind.
+func (r *Run) RecordFirstAnswer(kind FirstAnswerKind) FirstAnswerKind {
+	r.mu.Lock()
+	if r.firstAnswer == FirstAnswerPending && kind != FirstAnswerPending {
+		r.firstAnswer = kind
+		close(r.firstAnswerReady)
+		id := r.request.ID
+		r.mu.Unlock()
+		if kind == FirstAnswerAccepted {
+			r.service.markAcceptedAsync(id)
+		}
+		return kind
+	}
+	got := r.firstAnswer
+	r.mu.Unlock()
+	return got
+}
+
+func (s *Service) markAcceptedAsync(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.acceptedAsync[id] {
+		return
+	}
+	if len(s.acceptedOrder) >= maxTrackedAcceptedAsync {
+		evict := s.acceptedOrder[0]
+		s.acceptedOrder = s.acceptedOrder[1:]
+		delete(s.acceptedAsync, evict)
+	}
+	s.acceptedAsync[id] = true
+	s.acceptedOrder = append(s.acceptedOrder, id)
+}
 
 func (s *Service) Get(ctx context.Context, id string) (Request, error) {
 	s.mu.Lock()

@@ -276,3 +276,33 @@ func TestFileOperationHoldKeepsTheRunCancelable(t *testing.T) {
 		t.Fatalf("state=%s want=canceled", got)
 	}
 }
+
+func TestServiceRecordsFirstAnswerAcrossCompletion(t *testing.T) {
+	service := NewService(NewStore(nil))
+	run, created, err := service.Admit(t.Context(), requestFixture(), false)
+	testutil.FailErr(t, "admit", err)
+	if !created {
+		t.Fatal("expected new run")
+	}
+	if got := run.RecordFirstAnswer(FirstAnswerAccepted); got != FirstAnswerAccepted {
+		t.Fatalf("recorded first answer = %v, want FirstAnswerAccepted", got)
+	}
+	// A second caller attempting to record a different kind sees the latched value.
+	if got := run.RecordFirstAnswer(FirstAnswerResult); got != FirstAnswerAccepted {
+		t.Fatalf("subsequent RecordFirstAnswer = %v, want FirstAnswerAccepted", got)
+	}
+	run.Execute(t.Context(), func(context.Context) Outcome {
+		return Outcome{Status: 201, Body: `{"path":"a.txt"}`}
+	})
+	<-run.Done()
+
+	// After completion removes the run from active, an exact replay still sees FirstAnswerAccepted.
+	replay, created, err := service.Admit(t.Context(), requestFixture(), false)
+	testutil.FailErr(t, "replay admit", err)
+	if created {
+		t.Fatal("replay created a new run")
+	}
+	if got := replay.FirstAnswer(); got != FirstAnswerAccepted {
+		t.Fatalf("post-completion replay FirstAnswer = %v, want FirstAnswerAccepted", got)
+	}
+}
