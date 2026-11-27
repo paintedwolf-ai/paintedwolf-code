@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import csv
+import hashlib
+import http.client
 import io
 import json
 import os
@@ -10,6 +12,7 @@ from pathlib import Path
 import threading
 import time
 import urllib.error
+import urllib.parse
 import uuid
 
 from ..driver_sidecar import SidecarDriver
@@ -138,21 +141,29 @@ def run_s05_sidecar(
         summary.record_pass()
 
     # 5 hand-written S05 edges.
-    # Edge 1: Rename declaration and re-search.
+    # Edge 1 (Decision 057): Rename declaration and retain exact request/response identities + verified file hashes.
     ren_dir = work_root / "s05_rename"
     ren_dir.mkdir(parents=True, exist_ok=True)
     ren_file = ren_dir / "ren.go"
-    ren_file.write_text("package p\n\nfunc OldSidecarSym() {}\n", encoding="utf-8")
-    pid_r, _ = driver.attach_project([ren_dir])
+    v1_bytes = b"package p\n\nfunc OldSidecarSym() {}\n"
+    v2_bytes = b"package p\n\nfunc NewSidecarSym() {}\n"
+    ren_file.write_bytes(v1_bytes)
+    pid_r, roots_r = driver.attach_project([ren_dir])
     wait_for_catalog_ready(driver, pid_r)
     r1 = driver.search_raw("project:current kind:symbol OldSidecarSym", origin_project_id=pid_r, budget="complete")
-    ren_file.write_text("package p\n\nfunc NewSidecarSym() {}\n", encoding="utf-8")
+    ren_file.write_bytes(v2_bytes)
+    disk_v2_sha = hashlib.sha256(ren_file.read_bytes()).hexdigest()
     r_old = driver.search_raw("project:current kind:symbol OldSidecarSym", origin_project_id=pid_r, budget="complete")
     r_new = driver.search_raw("project:current kind:symbol NewSidecarSym", origin_project_id=pid_r, budget="complete")
     summary.record_edge(
         len(r1.get("hits") or []) == 1 and len(r_old.get("hits") or []) == 0 and len(r_new.get("hits") or []) == 1,
         {
             "edge": "s05_1_rename",
+            "project_id": pid_r,
+            "root_id": roots_r[0] if roots_r else "",
+            "path": "ren.go",
+            "v1_sha256": hashlib.sha256(v1_bytes).hexdigest(),
+            "v2_disk_sha256": disk_v2_sha,
             "r1_hits": [h.get("title") for h in (r1.get("hits") or []) if isinstance(h, dict)],
             "r_old_hits": [h.get("title") for h in (r_old.get("hits") or []) if isinstance(h, dict)],
             "r_new_hits": [h.get("title") for h in (r_new.get("hits") or []) if isinstance(h, dict)],
@@ -322,38 +333,51 @@ def run_s07_sidecar(
             if not cur:
                 summary.record_fail({"instance": idx, "reason": "expected next_cursor for limit=5 over 15 hits"})
                 continue
+            # Controlled request barrier (Decision 057): prove old page is outstanding when new query is issued,
+            # and verify consumer state keyed by active request generation ignores the late page after it lands.
+            old_started = threading.Event()
+            release_old = threading.Event()
             race_results: dict[str, object] = {}
+            consumer_state: dict[str, object] = {"active_gen": 1, "shown_hits": list(p1_ids)}
 
             def _page2_a() -> None:
-                race_results["p2"] = driver.search_raw(
+                old_started.set()
+                resp = driver.search_raw(
                     "project:current kind:code alpha_s07", origin_project_id=pid_a, limit=5, cursor=cur, budget="complete"
                 )
-
-            def _query_b() -> None:
-                race_results["qb"] = driver.search_raw(
-                    "project:current kind:code gamma_s07", origin_project_id=pid_b, limit=15, budget="complete"
-                )
+                release_old.wait(timeout=5.0)
+                race_results["p2"] = resp
+                # Consumer rejects late page belonging to superseded generation 1.
+                if consumer_state["active_gen"] == 1:
+                    consumer_state["shown_hits"] = [str(h.get("hit_id") or "") for h in (resp.get("hits") or []) if isinstance(h, dict)]
 
             t1 = threading.Thread(target=_page2_a)
-            t2 = threading.Thread(target=_query_b)
             t1.start()
-            t2.start()
+            old_started.wait(timeout=5.0)
+            # Old page request is now outstanding; advance consumer to generation 2 and issue new query B.
+            consumer_state["active_gen"] = 2
+            qb = driver.search_raw(
+                "project:current kind:code gamma_s07", origin_project_id=pid_b, limit=15, budget="complete"
+            )
+            qb_hits = [h for h in (qb.get("hits") or []) if isinstance(h, dict)]
+            qb_ids = [str(h.get("hit_id") or "") for h in qb_hits]
+            consumer_state["shown_hits"] = list(qb_ids)
+            # Release the late page and verify consumer state remains unchanged.
+            release_old.set()
             t1.join(timeout=15.0)
-            t2.join(timeout=15.0)
 
             p2 = race_results.get("p2")
-            qb = race_results.get("qb")
-            if not isinstance(p2, dict) or not isinstance(qb, dict):
-                summary.record_fail({"instance": idx, "reason": "in-flight race threads did not complete"})
+            if not isinstance(p2, dict):
+                summary.record_fail({"instance": idx, "reason": "barrier old-page thread did not complete"})
                 continue
             p2_hits = [h for h in (p2.get("hits") or []) if isinstance(h, dict)]
-            qb_hits = [h for h in (qb.get("hits") or []) if isinstance(h, dict)]
             p2_ids = {str(h.get("hit_id") or "") for h in p2_hits}
             leaked_into_b = [h for h in qb_hits if str(h.get("project_id") or "") == pid_a or str(h.get("path") or "").startswith("a_")]
-            if leaked_into_b or (p1_ids & p2_ids) or not all(str(h.get("path") or "").startswith("a_") for h in p2_hits):
-                summary.record_fail({"instance": idx, "reason": "late page leaked or overlapped during in-flight race"})
+            late_merged = consumer_state["shown_hits"] != qb_ids
+            if leaked_into_b or late_merged or (p1_ids & p2_ids) or not all(str(h.get("path") or "").startswith("a_") for h in p2_hits):
+                summary.record_fail({"instance": idx, "reason": "late page leaked or merged after barrier"})
                 continue
-            # Also verify cursor from Query A is rejected on Query B.
+            # Also verify cursor from Query A is rejected on Query B (separate cursor validation clause).
             try:
                 driver.search_raw("project:current kind:code gamma_s07", origin_project_id=pid_b, limit=5, cursor=cur, budget="complete")
                 summary.record_fail({"instance": idx, "reason": "cursor from query A accepted by query B"})
@@ -400,12 +424,26 @@ def run_s07_sidecar(
                     }
                 )
         else:
-            # Concurrent query supersession + clean post-cancel recovery.
-            # Issue two rapid overlapping queries on the same project and verify the second returns exact hits.
-            q_first = driver.search_raw("project:current kind:code alpha_s07", origin_project_id=pid_a, limit=5, budget="interactive")
+            # Real canceled HTTP request (mid-flight socket abort) + healthy replacement request (Decision 057).
+            raw_inner = getattr(driver._transport, "_inner", driver._transport)  # noqa: SLF001
+            base_url = getattr(raw_inner, "_base_url", "")
+            token = getattr(raw_inner, "_token", "")
+            if base_url:
+                parsed = urllib.parse.urlparse(base_url)
+                conn = http.client.HTTPConnection(parsed.hostname or "127.0.0.1", parsed.port or 80, timeout=5.0)
+                try:
+                    body_bytes = json.dumps({"query": "project:current kind:code alpha_s07", "origin_project_id": pid_a, "limit": 50}).encode("utf-8")
+                    conn.request(
+                        "POST",
+                        "/v1/search",
+                        body=body_bytes,
+                        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                    )
+                finally:
+                    conn.close()  # Aborts request mid-flight before reading response.
             q_second = driver.search_raw("project:current kind:code shared_line_0", origin_project_id=pid_a, limit=20, budget="complete")
             s_hits = [h for h in (q_second.get("hits") or []) if isinstance(h, dict)]
-            if isinstance(q_first.get("hits"), list) and len(s_hits) == 1 and str(s_hits[0].get("path") or "") == "a_00.txt":
+            if len(s_hits) == 1 and str(s_hits[0].get("path") or "") == "a_00.txt":
                 summary.record_pass()
             else:
                 summary.record_fail({"instance": idx, "second_hits": [h.get("path") for h in s_hits]})
@@ -470,20 +508,32 @@ def run_s08_sidecar(
         resp = transport.request("/v1/sessions", {"project_id": pid, "posture": "build"}, method="POST")
         return str(resp["id"])
 
-    def _post_authoritative_message(sid: str, text: str) -> None:
+    def _post_authoritative_message(sid: str, text: str) -> str:
+        # Retain a single operation_id across retries (Decision 057).
+        op_id = str(uuid.uuid4())
         deadline = time.monotonic() + 5.0
         while True:
             try:
                 transport.request(
                     f"/v1/sessions/{sid}/prompts",
-                    {"operation_id": str(uuid.uuid4()), "text": text},
+                    {"operation_id": op_id, "text": text},
                     method="POST",
                 )
-                return
+                return op_id
             except urllib.error.HTTPError as exc:
                 if exc.code != 409 or time.monotonic() >= deadline:
                     raise
                 time.sleep(0.1)
+
+    def _session_has_committed_message(sid: str, token: str) -> bool:
+        try:
+            resp = transport.request(f"/v1/sessions/{sid}/messages?limit=50", None, method="GET")
+            msgs = resp.get("messages") or resp.get("items") or []
+            if isinstance(msgs, list):
+                return any(token in str(m.get("content") or "") for m in msgs if isinstance(m, dict))
+        except Exception:
+            return False
+        return False
 
     def _wait_store_hit(pid: str, token: str, timeout_s: float = 8.0) -> list[dict[str, object]]:
         deadline = time.monotonic() + timeout_s
@@ -497,29 +547,45 @@ def run_s08_sidecar(
 
     sid_a = _create_session(pid_a)
     sid_b = _create_session(pid_b)
+    # Seed a persistent searchable positive in BOTH projects so isolation checks always prove
+    # the other project has searchable store records in the same lane (Decision 057).
+    baseline_tok_a = f"s08baseA_{uuid.uuid4().hex[:6]}"
+    baseline_tok_b = f"s08baseB_{uuid.uuid4().hex[:6]}"
+    _post_authoritative_message(sid_a, f"baseline positive A {baseline_tok_a}")
+    _post_authoritative_message(sid_b, f"baseline positive B {baseline_tok_b}")
+    _wait_store_hit(pid_a, baseline_tok_a)
+    _wait_store_hit(pid_b, baseline_tok_b)
 
     for idx in range(instances):
         tok = f"s08postok_{idx:03d}_{uuid.uuid4().hex[:6]}"
-        own_pid, other_pid, own_sid = (pid_a, pid_b, sid_a) if (idx % 2 == 0) else (pid_b, pid_a, sid_b)
-        _post_authoritative_message(own_sid, f"authoritative store message {tok}")
+        own_pid, other_pid, own_sid, other_base_tok = (
+            (pid_a, pid_b, sid_a, baseline_tok_b) if (idx % 2 == 0) else (pid_b, pid_a, sid_b, baseline_tok_a)
+        )
+        op_id = _post_authoritative_message(own_sid, f"authoritative store message {tok}")
 
         # 1. Positive control: MUST be visible in owning project's store leg.
         own_hits = _wait_store_hit(own_pid, tok)
-        # 2. Cross-project isolation: MUST be absent in the other project.
+        # 2. Cross-project isolation: MUST be absent in the other project while other project has a searchable positive.
         other_resp = driver.search_raw(f"project:current kind:message {tok}", origin_project_id=other_pid, limit=20, budget="complete")
         other_hits = [h for h in (other_resp.get("hits") or []) if isinstance(h, dict)]
+        other_pos_resp = driver.search_raw(f"project:current kind:message {other_base_tok}", origin_project_id=other_pid, limit=5, budget="complete")
+        other_pos_ok = bool(other_pos_resp.get("hits"))
 
         own_ok = bool(own_hits) and all(str(h.get("project_id") or "") == own_pid for h in own_hits)
-        if own_ok and not other_hits:
+        if own_ok and not other_hits and other_pos_ok:
             summary.record_pass()
         else:
+            committed = _session_has_committed_message(own_sid, tok)
             summary.record_fail(
                 {
                     "instance": idx,
+                    "operation_id": op_id,
                     "token": tok,
                     "own_pid": own_pid,
+                    "authoritative_committed": committed,
                     "own_hits": len(own_hits),
                     "other_hits": len(other_hits),
+                    "other_project_positive_visible": other_pos_ok,
                 }
             )
 

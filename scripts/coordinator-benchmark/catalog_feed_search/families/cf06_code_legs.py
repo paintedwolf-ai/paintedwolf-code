@@ -276,13 +276,65 @@ def run_s02_sidecar(
     ans1 = _filter_code_hits(driver.search("project:current kind:code after_edit_s02_needle", default_root_id=roots[0], origin_project_id=pid, budget="complete"))
     summary.record_edge(any(h.hit.path == "live.txt" for h in ans1.hits), {"edge": "s02_1_edit_before_reindex", "hits": len(ans1.hits)})
 
-    # Edge 2: Unsaved editor draft injected via /editor-documents PUT.
+    # Edge 2 (Decision 057): Unsaved editor draft with authoritative open/update/reread, unchanged disk bytes, and saved-file positive.
     try:
-        driver.inject_editor_draft(pid, roots[0], "live.txt", "unsaved_draft_s02_token\n")
-        ans2 = _filter_code_hits(driver.search("project:current kind:code unsaved_draft_s02_token", default_root_id=roots[0], origin_project_id=pid, budget="complete"))
+        saved_file = edir / "saved_control.txt"
+        saved_file.write_text("saved_s02_positive_control\n", encoding="utf-8")
+        disk_before_bytes = target.read_bytes()
+        opened_resp = driver._transport.request(  # noqa: SLF001
+            f"/v1/projects/{pid}/editor-documents",
+            {"path": "live.txt", "root_id": roots[0], "client_id": "cfs-driver"},
+            method="POST",
+        )
+        doc_id = str(opened_resp.get("id") or "")
+        updated_resp = driver._transport.request(  # noqa: SLF001
+            f"/v1/projects/{pid}/editor-documents/{doc_id}",
+            {
+                "operation_id": f"s02-draft-{int(time.time() * 1000)}",
+                "client_id": "cfs-driver",
+                "expected_revision": opened_resp.get("revision"),
+                "content": "unsaved_draft_s02_token\n",
+                "eol": "lf",
+                "mixed_eol": False,
+                "history_vector": None,
+                "session_id": None,
+            },
+            method="PUT",
+        )
+        reread_resp: dict[str, object] = {}
+        try:
+            reread_resp = driver._transport.request(  # noqa: SLF001
+                f"/v1/projects/{pid}/editor-documents/{doc_id}",
+                None,
+                method="GET",
+            )
+        except Exception as reread_exc:
+            reread_resp = {"reread_error": str(reread_exc)}
+        disk_after_bytes = target.read_bytes()
+        saved_pos = _filter_code_hits(
+            driver.search("project:current kind:code saved_s02_positive_control", default_root_id=roots[0], origin_project_id=pid, budget="complete")
+        )
+        draft_dsl = "project:current kind:code unsaved_draft_s02_token"
+        ans2 = _filter_code_hits(driver.search(draft_dsl, default_root_id=roots[0], origin_project_id=pid, budget="complete"))
         summary.record_edge(
             any(h.hit.path == "live.txt" for h in ans2.hits),
-            {"edge": "s02_2_unsaved_editor_draft", "hits": len(ans2.hits), "note": "unsaved draft search"},
+            {
+                "edge": "s02_2_unsaved_editor_draft",
+                "hits": len(ans2.hits),
+                "request_scope": {"origin_project_id": pid, "root_id": roots[0], "dsl": draft_dsl},
+                "draft_open": {"id": doc_id, "revision": opened_resp.get("revision")},
+                "draft_update": {"id": updated_resp.get("id"), "revision": updated_resp.get("revision"), "dirty": updated_resp.get("dirty")},
+                "draft_reread": {
+                    "id": reread_resp.get("id"),
+                    "revision": reread_resp.get("revision"),
+                    "dirty": reread_resp.get("dirty"),
+                    "content": reread_resp.get("content"),
+                    "reread_error": reread_resp.get("reread_error"),
+                },
+                "disk_unchanged": disk_before_bytes == disk_after_bytes,
+                "disk_bytes_len": len(disk_after_bytes),
+                "saved_control_hits": len(saved_pos.hits),
+            },
         )
     except Exception as exc:
         summary.record_edge(False, {"edge": "s02_2_unsaved_editor_draft", "error": str(exc)})
