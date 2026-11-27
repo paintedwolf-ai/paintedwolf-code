@@ -30,6 +30,7 @@ import (
 
 func TestWatchProducersAuthorityAndStateLookup(t *testing.T) {
 	wireWatchProducers(nil, nil)
+	wireProcessOutputWatchProducer(nil, nil)
 	bindWorkerOutcomeWatches(nil, nil)
 
 	database := testdbfixture.Open(t, "watch_producers.db")
@@ -68,6 +69,7 @@ func TestWatchProducersAuthorityAndStateLookup(t *testing.T) {
 
 	b := newTestWatchProducerBuilder(t, database, repos, procs, rt)
 	wireWatchProducers(b, ws)
+	wireProcessOutputWatchProducer(b, ws)
 
 	if ok, code := checkWatchAuthority(b, t.Context(), watch.Registration{Owner: watch.Owner{Kind: watch.OwnerPerson}}); !ok || code != "" {
 		t.Fatalf("person authority = (%v, %q), want (true, \"\")", ok, code)

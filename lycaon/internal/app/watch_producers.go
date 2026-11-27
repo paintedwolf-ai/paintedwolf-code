@@ -24,15 +24,6 @@ func wireWatchProducers(b *serveBuilder, watchStore *watch.Store) {
 		return lookupCoordinatorWatchState(b, ctx, sessionID)
 	})
 
-	if b.sessions != nil && b.sessions.Manager != nil && b.sessions.Manager.Processes != nil && b.sessions.Manager.Processes.Background != nil {
-		bg := b.sessions.Manager.Processes.Background
-		watchStore.SetProcessOutputLookup(func(ctx context.Context, sessionID, handle string, since int64) (bgprocess.ProcessOutputState, error) {
-			return bg.Output.InspectProcessOutput(ctx, sessionID, handle, since)
-		})
-		bg.Output.SetWatchOutputHook(b.startup.ctx, func(ctx context.Context, sessionID, handle string) {
-			_ = watchStore.NotifyProcessOutput(ctx, sessionID, handle)
-		})
-	}
 	unsubRepo := repochange.RegisterObserver(func(ctx context.Context, ev repochange.Event) {
 		if ev.Kind == repochange.HeadMoved || ev.Kind == repochange.WorktreeChanged {
 			_ = watchStore.NotifyWorkspaceChange(ctx, "", ev.ProjectDir)
@@ -128,6 +119,19 @@ func wireWatchProducers(b *serveBuilder, watchStore *watch.Store) {
 			}
 		}
 	}
+}
+
+func wireProcessOutputWatchProducer(b *serveBuilder, watchStore *watch.Store) {
+	if b == nil || watchStore == nil || b.sessions == nil || b.sessions.Manager == nil || b.sessions.Manager.Processes == nil || b.sessions.Manager.Processes.Background == nil {
+		return
+	}
+	bg := b.sessions.Manager.Processes.Background
+	watchStore.SetProcessOutputLookup(func(ctx context.Context, sessionID, handle string, since int64) (bgprocess.ProcessOutputState, error) {
+		return bg.Output.InspectProcessOutput(ctx, sessionID, handle, since)
+	})
+	bg.Output.SetWatchOutputHook(b.startup.ctx, func(ctx context.Context, sessionID, handle string) {
+		_ = watchStore.NotifyProcessOutput(ctx, sessionID, handle)
+	})
 }
 
 func bindWorkerOutcomeWatches(b *serveBuilder, bridge *worker.SessionOutcomeBridge) {
