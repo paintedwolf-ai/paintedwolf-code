@@ -1,0 +1,93 @@
+{
+  "bead": "TB04",
+  "branch": "wea/tb04-overlay-promotion",
+  "product_base_commit": "bbeb46e72ce3d1cfc052259cadcce29185bb40bd",
+  "package": "./internal/worker",
+  "test_only_overlay_files": [
+    "lycaon/internal/worker/wea_tb04_promotion_commit_test.go",
+    "lycaon/internal/worker/wea_tb04_overlay_dispositions_test.go",
+    "lycaon/internal/worker/wea_tb04_inproc_manifest.json"
+  ],
+  "inproc_slots": [
+    {
+      "slot_id": "W04-inproc-01",
+      "family": "W04",
+      "description": "Atomic promotion commit and lease claim/commit boundary (all-or-nothing rollback on durable commit fault, clean commit, and duplicate promote refusal)",
+      "file": "lycaon/internal/worker/wea_tb04_promotion_commit_test.go",
+      "selector": "^TestWEATB04_W04_AtomicPromotionCommitAndLeaseBoundary$"
+    },
+    {
+      "slot_id": "W04-inproc-02",
+      "family": "W04",
+      "description": "Concurrent promotion conflict (barrier race + both promotion orders; OVERLAY_PROMOTE_CONFLICT and OVERLAY_PROMOTE_RESOLUTIONS_REQUIRED; worker bytes never silently win)",
+      "file": "lycaon/internal/worker/wea_tb04_promotion_commit_test.go",
+      "selector": "^TestWEATB04_W04_ConcurrentPromotionConflictNeverSilentlyWins$",
+      "subtests": [
+        "^TestWEATB04_W04_ConcurrentPromotionConflictNeverSilentlyWins/concurrent_barrier_race$",
+        "^TestWEATB04_W04_ConcurrentPromotionConflictNeverSilentlyWins/order_a_then_b$",
+        "^TestWEATB04_W04_ConcurrentPromotionConflictNeverSilentlyWins/order_b_then_a$"
+      ]
+    },
+    {
+      "slot_id": "W04-inproc-03",
+      "family": "W04",
+      "description": "Overlapping opaque/binary file conflict never silently dropped or overwritten; explicit keep_theirs and keep_ours preserve exact bytes",
+      "file": "lycaon/internal/worker/wea_tb04_promotion_commit_test.go",
+      "selector": "^TestWEATB04_W04_OverlappingOpaqueBinaryConflictNeverSilentlyDropped$",
+      "subtests": [
+        "^TestWEATB04_W04_OverlappingOpaqueBinaryConflictNeverSilentlyDropped/keep_theirs$",
+        "^TestWEATB04_W04_OverlappingOpaqueBinaryConflictNeverSilentlyDropped/keep_ours$"
+      ]
+    },
+    {
+      "slot_id": "W04-inproc-04",
+      "family": "W04",
+      "description": "Promotion lease expiry and reclaim prevents duplicate landing and fences stale claims",
+      "file": "lycaon/internal/worker/wea_tb04_promotion_commit_test.go",
+      "selector": "^TestWEATB04_W04_PromotionLeaseExpiryReclaimPreventsDuplicateLanding$"
+    },
+    {
+      "slot_id": "W10-inproc-01",
+      "family": "W10",
+      "description": "Restart boundary around report validation (real workercompletion.AcceptWorkerReport + OAR guard pipeline + SQLite child transcript + workercloseout.FinalizeWorkerSummaryForChild; one result per round)",
+      "file": "lycaon/internal/worker/wea_tb04_promotion_commit_test.go",
+      "selector": "^TestWEATB04_W10_RestartBoundaryAroundReportValidation$",
+      "subtests": [
+        "^TestWEATB04_W10_RestartBoundaryAroundReportValidation/restart_before_report_validation_persists$",
+        "^TestWEATB04_W10_RestartBoundaryAroundReportValidation/restart_after_report_validation_persists_before_result_commit$"
+      ]
+    },
+    {
+      "slot_id": "W10-inproc-02",
+      "family": "W10",
+      "description": "Restart boundary around result-handle commit (aborted insert recovers cleanly; post-commit restart fences stale duplicate Complete)",
+      "file": "lycaon/internal/worker/wea_tb04_promotion_commit_test.go",
+      "selector": "^TestWEATB04_W10_RestartBoundaryAroundResultHandleCommit$"
+    },
+    {
+      "slot_id": "W10-inproc-03",
+      "family": "W10",
+      "description": "Restart boundary around parent projection (crash during projection and before MarkOutcomeDelivered keep committed result handle intact)",
+      "file": "lycaon/internal/worker/wea_tb04_promotion_commit_test.go",
+      "selector": "^TestWEATB04_W10_RestartBoundaryAroundParentProjection$"
+    },
+    {
+      "slot_id": "W10-inproc-04",
+      "family": "W10",
+      "description": "Restart boundary around promotion commit (pre-commit rollback + resume; post-commit journal settlement without rollback or duplicate landing)",
+      "file": "lycaon/internal/worker/wea_tb04_promotion_commit_test.go",
+      "selector": "^TestWEATB04_W10_RestartBoundaryAroundPromotionCommit$",
+      "subtests": [
+        "^TestWEATB04_W10_RestartBoundaryAroundPromotionCommit/restart_before_promotion_commit$",
+        "^TestWEATB04_W10_RestartBoundaryAroundPromotionCommit/restart_after_promotion_commit_before_journal_close$"
+      ]
+    },
+    {
+      "slot_id": "W10-inproc-05",
+      "family": "W10",
+      "description": "Baseline manifest retention across retries, restart, pending promotion, branch cleanup, and worker deletion ref-count release check",
+      "file": "lycaon/internal/worker/wea_tb04_promotion_commit_test.go",
+      "selector": "^TestWEATB04_W10_BaselineManifestRetentionAndDeletionRefCount$"
+    }
+  ]
+}
