@@ -14,13 +14,15 @@ var ErrRuntimeClosed = errors.New("portable python native runtime is closed")
 // the bundled release manifest, its runtime pw_py_engine_identity() response,
 // and the paired Portable Python WASI image.
 type HandshakeVerificationInput struct {
-	BundledManifest  *BundledEngineManifest
-	EngineDir        string
-	ImageDir         string
-	ImageManifest    *ImageManifest
-	ReportedIdentity *NativeEngineIdentity
-	GOOS             string
-	GOARCH           string
+	BundledManifest       *BundledEngineManifest
+	EngineDir             string
+	ImageDir              string
+	ImageManifest         *ImageManifest
+	ReportedIdentity      *NativeEngineIdentity
+	GOOS                  string
+	GOARCH                string
+	verifiedEngineLibPath string
+	skipImageVerify       bool
 }
 
 // VerifyNativeEngineHandshake performs complete fail-closed verification BEFORE
@@ -55,12 +57,15 @@ func VerifyNativeEngineHandshake(in HandshakeVerificationInput) (*NativeEngineId
 			Err:     err,
 		}
 	}
-	libPath, err := VerifyEngineDir(in.BundledManifest, in.EngineDir, in.GOOS, in.GOARCH, art)
-	if err != nil {
-		return nil, &NativeEngineVerificationError{
-			Stage:   "artifact",
-			Message: "staged native engine library or artifact-manifest.json failed integrity check",
-			Err:     err,
+	libPath := in.verifiedEngineLibPath
+	if libPath == "" {
+		libPath, err = VerifyEngineDir(in.BundledManifest, in.EngineDir, in.GOOS, in.GOARCH, art)
+		if err != nil {
+			return nil, &NativeEngineVerificationError{
+				Stage:   "artifact",
+				Message: "staged native engine library or artifact-manifest.json failed integrity check",
+				Err:     err,
+			}
 		}
 	}
 	if in.ReportedIdentity == nil {
@@ -138,7 +143,7 @@ func VerifyNativeEngineHandshake(in HandshakeVerificationInput) (*NativeEngineId
 			Message: fmt.Sprintf("engine/image skew: engine import_inventory_sha256 %s != image %s", id.ImportInventorySHA256, in.ImageManifest.ImportInventorySHA256),
 		}
 	}
-	if strings.TrimSpace(in.ImageDir) != "" {
+	if strings.TrimSpace(in.ImageDir) != "" && !in.skipImageVerify {
 		if err := VerifyImage(in.ImageDir, in.ImageManifest); err != nil {
 			return nil, &NativeEngineVerificationError{
 				Stage:   "image",

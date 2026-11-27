@@ -19,8 +19,9 @@ const maxImageArchiveBytes = 512 << 20
 
 // ResolveRetainedDevArtifact searches explicit local artifact directories,
 // PW_PORTABLE_PYTHON_ARTIFACT_DIR, and the canonical retained development
-// producer directories (~/.local/share/paintedwolf-portable-python/results/PY10/{engine,image}
-// and PY07/PY08) for a pinned archive file by exact filename. Returns empty string if not found.
+// producer directories (~/.local/share/paintedwolf-portable-python/results/PY11/image,
+// PY10/{engine,image}, and PY07/PY08) for a pinned archive file by exact filename.
+// Returns empty string if not found.
 func ResolveRetainedDevArtifact(filename string, extraDirs ...string) string {
 	filename = filepath.Base(strings.TrimSpace(filename))
 	if filename == "" || filename == "." || filename == string(filepath.Separator) {
@@ -31,6 +32,14 @@ func ResolveRetainedDevArtifact(filename string, extraDirs ...string) string {
 		if trimmed := strings.TrimSpace(d); trimmed != "" {
 			searchDirs = append(searchDirs,
 				trimmed,
+				filepath.Join(trimmed, "cumulative", "image"),
+				filepath.Join(trimmed, "cumulative", "engine"),
+				filepath.Join(trimmed, "PY13", "engine"),
+				filepath.Join(trimmed, "PY13", "image"),
+				filepath.Join(trimmed, "PY12", "image"),
+				filepath.Join(trimmed, "PY11", "native-image"),
+				filepath.Join(trimmed, "PY11", "engine"),
+				filepath.Join(trimmed, "PY11", "image"),
 				filepath.Join(trimmed, "PY10", "engine"),
 				filepath.Join(trimmed, "PY10", "image"),
 				filepath.Join(trimmed, "PY07"),
@@ -41,6 +50,14 @@ func ResolveRetainedDevArtifact(filename string, extraDirs ...string) string {
 	if envDir := strings.TrimSpace(os.Getenv(EnvArtifactDir)); envDir != "" {
 		searchDirs = append(searchDirs,
 			envDir,
+			filepath.Join(envDir, "cumulative", "image"),
+			filepath.Join(envDir, "cumulative", "engine"),
+			filepath.Join(envDir, "PY13", "engine"),
+			filepath.Join(envDir, "PY13", "image"),
+			filepath.Join(envDir, "PY12", "image"),
+			filepath.Join(envDir, "PY11", "native-image"),
+			filepath.Join(envDir, "PY11", "engine"),
+			filepath.Join(envDir, "PY11", "image"),
 			filepath.Join(envDir, "PY10", "engine"),
 			filepath.Join(envDir, "PY10", "image"),
 			filepath.Join(envDir, "PY07"),
@@ -50,6 +67,14 @@ func ResolveRetainedDevArtifact(filename string, extraDirs ...string) string {
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		base := filepath.Join(home, ".local", "share", "paintedwolf-portable-python", "results")
 		searchDirs = append(searchDirs,
+			filepath.Join(base, "cumulative", "image"),
+			filepath.Join(base, "cumulative", "engine"),
+			filepath.Join(base, "PY13", "engine"),
+			filepath.Join(base, "PY13", "image"),
+			filepath.Join(base, "PY12", "image"),
+			filepath.Join(base, "PY11", "native-image"),
+			filepath.Join(base, "PY11", "engine"),
+			filepath.Join(base, "PY11", "image"),
 			filepath.Join(base, "PY10", "engine"),
 			filepath.Join(base, "PY10", "image"),
 			filepath.Join(base, "PY07"),

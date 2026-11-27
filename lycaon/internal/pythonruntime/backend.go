@@ -2,6 +2,7 @@ package pythonruntime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -109,6 +110,41 @@ func NewConfiguredRuntime(ctx context.Context, cfg RuntimeConfig) (Runtime, erro
 		return NewNativeEngineRuntime(ctx, cfg)
 	case BackendWazeroCompiler, BackendWazeroInterpreter:
 		return NewWazeroRuntime(ctx, cfg)
+	default:
+		return nil, fmt.Errorf("unsupported portable python runtime backend %q", backend)
+	}
+}
+
+// NewVerifiedRuntime verifies cfg.ImageDir against cfg.Manifest once inside
+// pythonruntime, privately consumes the verified image and python.wasm bytes
+// to construct the requested backend, and never caches or exposes any reusable
+// verification proof. Every call independently verifies the staged image on
+// disk and fails closed on any tamper or skew.
+func NewVerifiedRuntime(ctx context.Context, cfg RuntimeConfig) (Runtime, error) {
+	if strings.TrimSpace(cfg.ImageDir) == "" {
+		return nil, errors.New("verified runtime requires non-empty ImageDir")
+	}
+	if cfg.Manifest == nil {
+		return nil, errors.New("verified runtime requires non-nil Manifest")
+	}
+	verified, err := verifyImageInternal(cfg.ImageDir, cfg.Manifest, true)
+	if err != nil {
+		return nil, fmt.Errorf("verify portable python image: %w", err)
+	}
+	localCfg := cfg
+	localCfg.ImageDir = verified.imageDir
+	localCfg.Manifest = verified.manifest
+	localCfg.WasmBytes = verified.wasmBytes
+
+	backend := localCfg.Backend
+	if backend == "" {
+		backend = DefaultBackendKind()
+	}
+	switch backend {
+	case BackendNativeAOT:
+		return newNativeEngineRuntime(ctx, localCfg, verified)
+	case BackendWazeroCompiler, BackendWazeroInterpreter:
+		return NewWazeroRuntime(ctx, localCfg)
 	default:
 		return nil, fmt.Errorf("unsupported portable python runtime backend %q", backend)
 	}

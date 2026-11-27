@@ -4,11 +4,11 @@
     "name": "cpython",
     "version": "3.12.0",
     "target": "wasm32-wasi",
-    "release_tag": "pw-cpython-wasi-engine-v0.2.0",
+    "release_tag": "pw-cpython-wasi-engine-v0.5.0",
     "wasi_sdk": "20.0",
-    "filename": "python-3.12.0-wasi-py10.tar.gz",
-    "source_url": "https://github.com/paintedwolf-ai/paintedwolf-python-engine/releases/download/v0.2.0/python-3.12.0-wasi-py10.tar.gz",
-    "source_sha256": "5d6ba6b729f0dbb08959e086116974d2acc290c7d5c586d2b8e98abe6b118331",
+    "filename": "python-3.12.0-wasi-cumulative.tar.gz",
+    "source_url": "https://github.com/paintedwolf-ai/paintedwolf-python-engine/releases/download/pw-cpython-wasi-engine-v0.5.0/python-3.12.0-wasi-cumulative.tar.gz",
+    "source_sha256": "2f231b7dfb256cbbc0ee0316d358055b2049959c0f0d659b23e56f29d251468b",
     "builtin_extensions": {
       "pillow": "11.1.0",
       "lxml": "5.3.0",
@@ -17,7 +17,10 @@
       "sqlite3": "3.45.3",
       "libjpeg": "9f",
       "libxml2": "2.12.9",
-      "libxslt": "1.1.42"
+      "libxslt": "1.1.42",
+      "regex": "2024.11.6",
+      "numpy": "1.26.4",
+      "pandas": "2.2.3"
     }
   },
   "distributions": [
@@ -892,6 +895,1212 @@
       "filename": "defusedxml-0.7.1-py2.py3-none-any.whl",
       "source_url": "https://files.pythonhosted.org/packages/07/6c/aa3f2f849e01cb6a001cd8554a88d4c77c5c1a31c95bdf1cf9301e6d9ef4/defusedxml-0.7.1-py2.py3-none-any.whl",
       "source_sha256": "a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61"
+    },
+    {
+      "name": "pathspec",
+      "normalized_name": "pathspec",
+      "version": "1.1.1",
+      "public": true,
+      "imports": [
+        "pathspec"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "gitignore",
+        "gitignorespec",
+        "wildmatch"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MPL-2.0",
+      "source_kind": "wheel",
+      "filename": "pathspec-1.1.1-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl",
+      "source_sha256": "a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189"
+    },
+    {
+      "name": "networkx",
+      "normalized_name": "networkx",
+      "version": "3.7",
+      "public": true,
+      "imports": [
+        "networkx"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "graphs",
+        "cycles",
+        "ancestors",
+        "shortest_path"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "wheel",
+      "filename": "networkx-3.7-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/7e/cd/fe58041e9011f307c490e3e17dd48cc516448f7c698a3f2d9d9d65d7e6a8/networkx-3.7-py3-none-any.whl",
+      "source_sha256": "e3fd2c13a7814cee3746340d8d7f8598a67f16a58bf47fb7f8793fab6efca1b0"
+    },
+    {
+      "name": "unidiff",
+      "normalized_name": "unidiff",
+      "version": "1.0.1",
+      "public": true,
+      "imports": [
+        "unidiff"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "patchset",
+        "hunk_coordinates",
+        "no_newline_marker"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "unidiff-1.0.1-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/af/c9/a0529375e0162327fd1cb0dc6785c7a6e56dfae011c2d7b57d611ff84347/unidiff-1.0.1-py3-none-any.whl",
+      "source_sha256": "5e2ca461eda8a4c761ad0922e3e8a65742f359dc60301a3a055b70fd7c158680"
+    },
+    {
+      "name": "croniter",
+      "normalized_name": "croniter",
+      "version": "7.0.0",
+      "public": true,
+      "imports": [
+        "croniter"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "cron_schedules",
+        "aware_datetime"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "croniter-7.0.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/4c/89/10f9987ebdef47dbe9db94e9c00dcbd91a6ff1aa46ad58bee5b50fa454c9/croniter-7.0.0-py3-none-any.whl",
+      "source_sha256": "92090bce3cef195a037a46b78430c4cdd6250e90671d9d7dcd9e486147daaca4"
+    },
+    {
+      "name": "PyJWT",
+      "normalized_name": "pyjwt",
+      "version": "2.15.1",
+      "public": true,
+      "imports": [
+        "jwt"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "hs256",
+        "jwt_decode",
+        "jwt_encode",
+        "offline_verify"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "pyjwt-2.15.1-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/50/ca/44de4e75f8aadc457f0634be3b542815078ded46dca30efb960edeecad6e/pyjwt-2.15.1-py3-none-any.whl",
+      "source_sha256": "42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193"
+    },
+    {
+      "name": "python-dotenv",
+      "normalized_name": "python-dotenv",
+      "version": "1.2.4",
+      "public": true,
+      "imports": [
+        "dotenv"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "dotenv_values",
+        "stream_parse",
+        "multiline"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "wheel",
+      "filename": "python_dotenv-1.2.4-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/60/d1/38f3a3405989a89ac18390803e70c6ad7c7760da4f9b83cbeca0c44a0c72/python_dotenv-1.2.4-py3-none-any.whl",
+      "source_sha256": "42269a8a5b3fd54ffa6f3d84b18abed50064717576b4ecf03dc4a55d8aa04fdc"
+    },
+    {
+      "name": "ftfy",
+      "normalized_name": "ftfy",
+      "version": "6.3.1",
+      "public": true,
+      "imports": [
+        "ftfy"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "fix_text",
+        "mojibake_repair"
+      ],
+      "console_scripts": [],
+      "has_package_data": true,
+      "license": "Apache-2.0",
+      "source_kind": "wheel",
+      "filename": "ftfy-6.3.1-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/ab/6e/81d47999aebc1b155f81eca4477a616a70f238a2549848c38983f3c22a82/ftfy-6.3.1-py3-none-any.whl",
+      "source_sha256": "7c70eb532015cd2f9adb53f101fb6c7945988d023a085d127d1573dc49dd0083"
+    },
+    {
+      "name": "wcwidth",
+      "normalized_name": "wcwidth",
+      "version": "0.9.5",
+      "public": false,
+      "imports": [
+        "wcwidth"
+      ],
+      "backend": "pure-python",
+      "features": [],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "wcwidth-0.9.5-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/ca/77/61587cff9534a911b3116009f42de1edb2fa12bbb7c45ca92c4a415993f1/wcwidth-0.9.5-py3-none-any.whl",
+      "source_sha256": "ef205150ff317032d633de2d8ca26d03dc8d5ba6a00294f6acfd1d0cfe1365d6"
+    },
+    {
+      "name": "sqlparse",
+      "normalized_name": "sqlparse",
+      "version": "0.6.1",
+      "public": true,
+      "imports": [
+        "sqlparse"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "split",
+        "format",
+        "parse"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "wheel",
+      "filename": "sqlparse-0.6.1-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/df/ff/2fee788e82e75be8f210c65c5d103bf44c880e3769c884652a4cd911b8ba/sqlparse-0.6.1-py3-none-any.whl",
+      "source_sha256": "3be5a72d04c873d690d7c6dedd33d6fae2ef82759881ceec02fc2efd0cba564f"
+    },
+    {
+      "name": "xmltodict",
+      "normalized_name": "xmltodict",
+      "version": "1.0.4",
+      "public": true,
+      "imports": [
+        "xmltodict"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "parse",
+        "unparse",
+        "attributes"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "xmltodict-1.0.4-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/38/34/98a2f52245f4d47be93b580dae5f9861ef58977d73a79eb47c58f1ad1f3a/xmltodict-1.0.4-py3-none-any.whl",
+      "source_sha256": "a4a00d300b0e1c59fc2bfccb53d7b2e88c32f200df138a0dd2229f842497026a"
+    },
+    {
+      "name": "jmespath",
+      "normalized_name": "jmespath",
+      "version": "1.1.0",
+      "public": true,
+      "imports": [
+        "jmespath"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "search",
+        "compile",
+        "json_projection"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "jmespath-1.1.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/14/2f/967ba146e6d58cf6a652da73885f52fc68001525b4197effc174321d70b4/jmespath-1.1.0-py3-none-any.whl",
+      "source_sha256": "a5663118de4908c91729bea0acadca56526eb2698e83de10cd116ae0f4e97c64"
+    },
+    {
+      "name": "toml",
+      "normalized_name": "toml",
+      "version": "0.10.2",
+      "public": true,
+      "imports": [
+        "toml"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "loads",
+        "dumps"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "toml-0.10.2-py2.py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/44/6f/7120676b6d73228c96e17f1f794d8ab046fc910d781c8d151120c3f1569e/toml-0.10.2-py2.py3-none-any.whl",
+      "source_sha256": "806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b"
+    },
+    {
+      "name": "tomli",
+      "normalized_name": "tomli",
+      "version": "2.5.0",
+      "public": true,
+      "imports": [
+        "tomli"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "loads",
+        "load"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "tomli-2.5.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/60/3f/3e3f8fd0919249b0200c80fbc4f9a1e70be19f9883da71dfb7f8b9ab8aca/tomli-2.5.0-py3-none-any.whl",
+      "source_sha256": "32a7b79ac57a2e83670ce329ccf675798bc5a2094783a63676866b70503f2e2b"
+    },
+    {
+      "name": "pytest-mock",
+      "normalized_name": "pytest-mock",
+      "version": "3.17.0",
+      "public": true,
+      "imports": [
+        "pytest_mock"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "mocker",
+        "spy",
+        "stub"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "pytest_mock-3.17.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/e8/ea/47fbdc8f37410956fd445720e927589b1e2a47772c5f28109f0ce2fa26d9/pytest_mock-3.17.0-py3-none-any.whl",
+      "source_sha256": "1b82aa4b37137248bd687055e109723debeb07b489de1565297dc9589c5f2d6b"
+    },
+    {
+      "name": "freezegun",
+      "normalized_name": "freezegun",
+      "version": "1.5.5",
+      "public": true,
+      "imports": [
+        "freezegun"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "freeze_time",
+        "context_manager"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "Apache-2.0",
+      "source_kind": "wheel",
+      "filename": "freezegun-1.5.5-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/5e/2e/b41d8a1a917d6581fc27a35d05561037b048e47df50f27f8ac9c7e27a710/freezegun-1.5.5-py3-none-any.whl",
+      "source_sha256": "cd557f4a75cf074e84bc374249b9dd491eaeacd61376b9eb3c423282211619d2"
+    },
+    {
+      "name": "Faker",
+      "normalized_name": "faker",
+      "version": "40.63.0",
+      "public": true,
+      "imports": [
+        "faker"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "seeded_providers",
+        "locales"
+      ],
+      "console_scripts": [],
+      "has_package_data": true,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "faker-40.63.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/76/54/f1a9cf45b52014d221d8ef4b29f13df8e11fbd8dba854a075ac3f3b16dcf/faker-40.63.0-py3-none-any.whl",
+      "source_sha256": "36627c20b575b4138f54b6c21f8703e9ab122fd487aca11319beec2aa6ca7232"
+    },
+    {
+      "name": "Markdown",
+      "normalized_name": "markdown",
+      "version": "3.11.4",
+      "public": true,
+      "imports": [
+        "markdown"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "markdown_to_html",
+        "extensions"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "wheel",
+      "filename": "markdown-3.11.4-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/61/54/188fcc228c71a4ae33244008af08c2e7b1945b657390f56d82dfbe4059f0/markdown-3.11.4-py3-none-any.whl",
+      "source_sha256": "2e30b19cead1968f391206e184ca67dfe6805c2eb8f383fb07b4dc90f8288075"
+    },
+    {
+      "name": "markdownify",
+      "normalized_name": "markdownify",
+      "version": "1.2.4",
+      "public": true,
+      "imports": [
+        "markdownify"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "html_to_markdown"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "markdownify-1.2.4-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/df/37/9905803c2df99e10c69df1b0ecaad16a559d51cec20e2929006975d1bedc/markdownify-1.2.4-py3-none-any.whl",
+      "source_sha256": "e0375484fdd2bb007e86779fe34c59673d0011b14f8299953aaf0bf092269220"
+    },
+    {
+      "name": "html5lib",
+      "normalized_name": "html5lib",
+      "version": "1.1",
+      "public": true,
+      "imports": [
+        "html5lib"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "html5_parse",
+        "bs4_builder"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "html5lib-1.1-py2.py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/6c/dd/a834df6482147d48e225a49515aabc28974ad5a4ca3215c18a882565b028/html5lib-1.1-py2.py3-none-any.whl",
+      "source_sha256": "0d78f8fde1c230e99fe37986a60526d7049ed4bf8a9fadbad5f00e22e58e041d"
+    },
+    {
+      "name": "six",
+      "normalized_name": "six",
+      "version": "1.17.0",
+      "public": false,
+      "imports": [
+        "six"
+      ],
+      "backend": "pure-python",
+      "features": [],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "six-1.17.0-py2.py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl",
+      "source_sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274"
+    },
+    {
+      "name": "webencodings",
+      "normalized_name": "webencodings",
+      "version": "0.6.1",
+      "public": false,
+      "imports": [
+        "webencodings"
+      ],
+      "backend": "pure-python",
+      "features": [],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "wheel",
+      "filename": "webencodings-0.6.1-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/77/c6/040cbc72480d789a5f40d63fb484d3106554c4dfa2d2b70ad5022057750f/webencodings-0.6.1-py3-none-any.whl",
+      "source_sha256": "7fab6269c8bf237c657876b52058ccb182e861518d1c695c1a9aaa8c1c105d5b"
+    },
+    {
+      "name": "xlrd",
+      "normalized_name": "xlrd",
+      "version": "2.0.2",
+      "public": true,
+      "imports": [
+        "xlrd"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "legacy_xls_read",
+        "sheets",
+        "cells"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "wheel",
+      "filename": "xlrd-2.0.2-py2.py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/1a/62/c8d562e7766786ba6587d09c5a8ba9f718ed3fa8af7f4553e8f91c36f302/xlrd-2.0.2-py2.py3-none-any.whl",
+      "source_sha256": "ea762c3d29f4cca48d82df517b6d89fbce4db3107f9d78713e48cd321d5c9aa9"
+    },
+    {
+      "name": "filetype",
+      "normalized_name": "filetype",
+      "version": "1.2.0",
+      "public": true,
+      "imports": [
+        "filetype"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "magic_bytes",
+        "guess_mime"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "filetype-1.2.0-py2.py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/18/79/1b8fa1bb3568781e84c9200f951c735f3f157429f44be0495da55894d620/filetype-1.2.0-py2.py3-none-any.whl",
+      "source_sha256": "7ce71b6880181241cf7ac8697a2f1eb6a8bd9b429f7ad6d27b8db9ba5f1c2d25"
+    },
+    {
+      "name": "pytz",
+      "normalized_name": "pytz",
+      "version": "2026.6",
+      "public": true,
+      "imports": [
+        "pytz"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "localize",
+        "olson_tz",
+        "legacy_tz_compat"
+      ],
+      "console_scripts": [],
+      "has_package_data": true,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "pytz-2026.6-py2.py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/b6/25/564f3fc5b70c1398d706c51f2b1470d0ea0b1b2f96fee67877b6f5bdf3b6/pytz-2026.6-py2.py3-none-any.whl",
+      "source_sha256": "7fed3fee8fd6bd4a2b7b75a8d56021d0624127bf69bd5691f115db929ac570b3"
+    },
+    {
+      "name": "icalendar",
+      "normalized_name": "icalendar",
+      "version": "7.3.2",
+      "public": true,
+      "imports": [
+        "icalendar"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "ics_parse",
+        "ics_write",
+        "tzid",
+        "rrule"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-2-Clause",
+      "source_kind": "wheel",
+      "filename": "icalendar-7.3.2-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/a5/f9/ececbb7618626dd6f70603d2b8d6faa39d7c81631b434fa242288ede4719/icalendar-7.3.2-py3-none-any.whl",
+      "source_sha256": "f95ce4ff8f41d8ad9ca253a676ef40c672abd3774458d197c215055a0d805cc4"
+    },
+    {
+      "name": "tabulate",
+      "normalized_name": "tabulate",
+      "version": "0.10.0",
+      "public": true,
+      "imports": [
+        "tabulate"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "markdown_table",
+        "grid_table",
+        "plain_table"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "tabulate-0.10.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/99/55/db07de81b5c630da5cbf5c7df646580ca26dfaefa593667fc6f2fe016d2e/tabulate-0.10.0-py3-none-any.whl",
+      "source_sha256": "f0b0622e567335c8fabaaa659f1b33bcb6ddfe2e496071b743aa113f8774f2d3"
+    },
+    {
+      "name": "pygal",
+      "normalized_name": "pygal",
+      "version": "3.1.3",
+      "public": true,
+      "imports": [
+        "pygal"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "standalone_svg",
+        "bar_chart",
+        "line_chart"
+      ],
+      "console_scripts": [],
+      "has_package_data": true,
+      "license": "LGPL-3.0-or-later",
+      "source_kind": "wheel",
+      "filename": "pygal-3.1.3-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/c3/43/5441ea0f9a35a0f2d30a79712cc21c737cf959a3451565d41e09d2fd90de/pygal-3.1.3-py3-none-any.whl",
+      "source_sha256": "c0b9bc2d31df4094c9f65b0969b62571a47b28197aced081b1a9433c3a760f32"
+    },
+    {
+      "name": "importlib-metadata",
+      "normalized_name": "importlib-metadata",
+      "version": "10.2.0",
+      "public": false,
+      "imports": [
+        "importlib_metadata"
+      ],
+      "backend": "pure-python",
+      "features": [],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "Apache-2.0",
+      "source_kind": "wheel",
+      "filename": "importlib_metadata-10.2.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/7f/61/0c0fae37eb561d8fddb788cbae0f227051628d70d67498a8a116c1f547d7/importlib_metadata-10.2.0-py3-none-any.whl",
+      "source_sha256": "c7a4bf1c7479601f6b8e437cfc14f4f77028ba62a8f34ae95cd93d9774dfba51"
+    },
+    {
+      "name": "zipp",
+      "normalized_name": "zipp",
+      "version": "4.1.2",
+      "public": false,
+      "imports": [
+        "zipp"
+      ],
+      "backend": "pure-python",
+      "features": [],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "zipp-4.1.2-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/b8/44/7bd2007260da11cccca29ba2d4c345f1287aa663db38ee7cefeabf6386a5/zipp-4.1.2-py3-none-any.whl",
+      "source_sha256": "b30cb6cd253122169c47de245ca24a86bac2a5d3802ba15bf7ba6414eb9e144d"
+    },
+    {
+      "name": "lazy-importer",
+      "normalized_name": "lazy-importer",
+      "version": "0.1.0",
+      "public": false,
+      "imports": [
+        "lazy_importer"
+      ],
+      "backend": "pure-python",
+      "features": [],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "Apache-2.0",
+      "source_kind": "wheel",
+      "filename": "lazy_importer-0.1.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/0a/28/7ded071d0975dcc6d5d106ffbf7b3ca420f7caa3b8a235fa604b6e37032a/lazy_importer-0.1.0-py3-none-any.whl",
+      "source_sha256": "bd93fab7bef18e842eea02b839410954d37889140dc64ca4d9680aec6880c739"
+    },
+    {
+      "name": "tqdm",
+      "normalized_name": "tqdm",
+      "version": "4.70.1",
+      "public": true,
+      "imports": [
+        "tqdm"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "disabled_progress",
+        "iterable_wrapper"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MPL-2.0 AND MIT",
+      "source_kind": "wheel",
+      "filename": "tqdm-4.70.1-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/a7/03/921a3d3c75785aca9ebfbfcabfbc3a1be12e2ab5265deb026d55a5a3f83e/tqdm-4.70.1-py3-none-any.whl",
+      "source_sha256": "c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73"
+    },
+    {
+      "name": "colorama",
+      "normalized_name": "colorama",
+      "version": "0.4.6",
+      "public": true,
+      "imports": [
+        "colorama"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "ansi_fore_back_style"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "wheel",
+      "filename": "colorama-0.4.6-py2.py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl",
+      "source_sha256": "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"
+    },
+    {
+      "name": "termcolor",
+      "normalized_name": "termcolor",
+      "version": "3.3.0",
+      "public": true,
+      "imports": [
+        "termcolor"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "colored",
+        "cprint"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "termcolor-3.3.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/33/d1/8bb87d21e9aeb323cc03034f5eaf2c8f69841e40e4853c2627edf8111ed3/termcolor-3.3.0-py3-none-any.whl",
+      "source_sha256": "cf642efadaf0a8ebbbf4bc7a31cec2f9b5f21a9f726f4ccbb08192c9c26f43a5"
+    },
+    {
+      "name": "rich",
+      "normalized_name": "rich",
+      "version": "15.0.0",
+      "public": true,
+      "imports": [
+        "rich"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "console_stringio",
+        "table",
+        "markdown",
+        "syntax"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "rich-15.0.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/82/3b/64d4899d73f91ba49a8c18a8ff3f0ea8f1c1d75481760df8c68ef5235bf5/rich-15.0.0-py3-none-any.whl",
+      "source_sha256": "33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb"
+    },
+    {
+      "name": "click",
+      "normalized_name": "click",
+      "version": "8.5.1",
+      "public": true,
+      "imports": [
+        "click"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "cli_runner",
+        "commands",
+        "options"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "wheel",
+      "filename": "click-8.5.1-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/31/7d/164b7ffc8624fe9efb4221bf9af485d5c1e41b9ae118045d2b6dc5457d8b/click-8.5.1-py3-none-any.whl",
+      "source_sha256": "8bb5376d2006950386f8c6427613334a2acadc5f559cb80e638d00b4df957e37"
+    },
+    {
+      "name": "univers",
+      "normalized_name": "univers",
+      "version": "32.0.1",
+      "public": true,
+      "imports": [
+        "univers"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "npm_ranges",
+        "maven_ranges",
+        "rubygems_ranges",
+        "vers"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "Apache-2.0 AND BSD-3-Clause AND MIT",
+      "source_kind": "wheel",
+      "filename": "univers-32.0.1-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/a7/4f/1c7953d10a9147dc1ec8a4902a1e08d7107d1f4833e316470190039e8507/univers-32.0.1-py3-none-any.whl",
+      "source_sha256": "50a574ff2321e31e1eba7aa586bf63a9558d91c69c70316bf26c75e1b122499b"
+    },
+    {
+      "name": "semantic-version",
+      "normalized_name": "semantic-version",
+      "version": "2.10.0",
+      "public": false,
+      "imports": [
+        "semantic_version"
+      ],
+      "backend": "pure-python",
+      "features": [],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-2-Clause",
+      "source_kind": "wheel",
+      "filename": "semantic_version-2.10.0-py2.py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/6a/23/8146aad7d88f4fcb3a6218f41a60f6c2d4e3a72de72da1825dc7c8f7877c/semantic_version-2.10.0-py2.py3-none-any.whl",
+      "source_sha256": "de78a3b8e0feda74cabc54aab2da702113e33ac9d9eb9d2389bcf1f58b7d9177"
+    },
+    {
+      "name": "semver",
+      "normalized_name": "semver",
+      "version": "3.2.0",
+      "public": false,
+      "imports": [
+        "semver"
+      ],
+      "backend": "pure-python",
+      "features": [],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "wheel",
+      "filename": "semver-3.2.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/04/6b/3d136df12e661b573a66aa322b85361c13ddd6e37351dea4676612bb2a4e/semver-3.2.0-py3-none-any.whl",
+      "source_sha256": "7a90434311f2d9914b1902490439d2c37b9477cd27958ff5f67021afa3e5db0b"
+    },
+    {
+      "name": "jproperties",
+      "normalized_name": "jproperties",
+      "version": "2.1.2",
+      "public": true,
+      "imports": [
+        "jproperties"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "java_properties",
+        "escapes",
+        "continuations"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "wheel",
+      "filename": "jproperties-2.1.2-py2.py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/75/6f/55bc5837e9fe7a86a5acb553adec901257d709062bfaef7debd4d8cfee12/jproperties-2.1.2-py2.py3-none-any.whl",
+      "source_sha256": "4108e868353a9f4a12bb86a92df5462d0e18d00119169533972ce473029be79a"
+    },
+    {
+      "name": "license-expression",
+      "normalized_name": "license-expression",
+      "version": "30.4.4",
+      "public": true,
+      "imports": [
+        "license_expression"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "spdx_parse",
+        "and_or_with",
+        "symbol_table"
+      ],
+      "console_scripts": [],
+      "has_package_data": true,
+      "license": "Apache-2.0",
+      "source_kind": "wheel",
+      "filename": "license_expression-30.4.4-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/af/40/791891d4c0c4dab4c5e187c17261cedc26285fd41541577f900470a45a4d/license_expression-30.4.4-py3-none-any.whl",
+      "source_sha256": "421788fdcadb41f049d2dc934ce666626265aeccefddd25e162a26f23bcbf8a4"
+    },
+    {
+      "name": "boolean.py",
+      "normalized_name": "boolean-py",
+      "version": "5.0",
+      "public": false,
+      "imports": [
+        "boolean"
+      ],
+      "backend": "pure-python",
+      "features": [],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-2-Clause",
+      "source_kind": "wheel",
+      "filename": "boolean_py-5.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/e5/ca/78d423b324b8d77900030fa59c4aa9054261ef0925631cd2501dd015b7b7/boolean_py-5.0-py3-none-any.whl",
+      "source_sha256": "ef28a70bd43115208441b53a045d1549e2f0ec6e3d08a9d142cbc41c1938e8d9"
+    },
+    {
+      "name": "graphql-core",
+      "normalized_name": "graphql-core",
+      "version": "3.3.2",
+      "public": true,
+      "imports": [
+        "graphql"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "schema_build",
+        "parse",
+        "validate_local"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "graphql_core-3.3.2-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/9b/c0/dec5c3a96d9e47c7aaaa6a062e065e6c738d67d11a9cda15705592f45409/graphql_core-3.3.2-py3-none-any.whl",
+      "source_sha256": "d83f49ee18d2db89fb575dab6ffefa8aa1bf5f60dff8a6781db6f63420041348"
+    },
+    {
+      "name": "tinycss2",
+      "normalized_name": "tinycss2",
+      "version": "1.5.1",
+      "public": true,
+      "imports": [
+        "tinycss2"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "css_parse",
+        "at_rules",
+        "custom_properties",
+        "error_tokens"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "wheel",
+      "filename": "tinycss2-1.5.1-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/60/45/c7b5c3168458db837e8ceab06dc77824e18202679d0463f0e8f002143a97/tinycss2-1.5.1-py3-none-any.whl",
+      "source_sha256": "3415ba0f5839c062696996998176c4a3751d18b7edaaeeb658c9ce21ec150661"
+    },
+    {
+      "name": "regex",
+      "normalized_name": "regex",
+      "version": "2024.11.6",
+      "public": true,
+      "imports": [
+        "regex"
+      ],
+      "backend": "wasi-builtin-extension",
+      "features": [
+        "grapheme_clusters",
+        "unicode_properties",
+        "overlapped",
+        "timeout"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "Apache-2.0",
+      "source_kind": "sdist_pure_python",
+      "filename": "regex-2024.11.6.tar.gz",
+      "source_url": "https://files.pythonhosted.org/packages/8e/5f/bd69653fbfb76cf8604468d3b4ec4c403197144c7bfe0e6a5fc9e02a07cb/regex-2024.11.6.tar.gz",
+      "source_sha256": "7ab159b063c52a0333c884e4679f8d7a85112ee3078fe3d9004b2dd875585519"
+    },
+    {
+      "name": "python-hcl2",
+      "normalized_name": "python-hcl2",
+      "version": "8.2.0",
+      "public": true,
+      "imports": [
+        "hcl2"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "hcl2_parse",
+        "terraform_blocks",
+        "expressions"
+      ],
+      "console_scripts": [],
+      "has_package_data": true,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "python_hcl2-8.2.0-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/a3/65/bf71aaef9b8fe677e8a9d8f96f67b4f6989fe59eeeef177288de70513f8a/python_hcl2-8.2.0-py3-none-any.whl",
+      "source_sha256": "00a213df1b33e4d69b607b2f0a6a0a21f2c0df2d69ad6a2cb3d5af468f17a087"
+    },
+    {
+      "name": "lark",
+      "normalized_name": "lark",
+      "version": "1.3.1",
+      "public": false,
+      "imports": [
+        "lark"
+      ],
+      "backend": "pure-python",
+      "features": [],
+      "console_scripts": [],
+      "has_package_data": true,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "lark-1.3.1-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/82/3d/14ce75ef66813643812f3093ab17e46d3a206942ce7376d31ec2d36229e7/lark-1.3.1-py3-none-any.whl",
+      "source_sha256": "c629b661023a014c37da873b4ff58a817398d12635d3bbb2c5a03be7fe5d1e12"
+    },
+    {
+      "name": "jc",
+      "normalized_name": "jc",
+      "version": "1.26.2",
+      "public": true,
+      "imports": [
+        "jc"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "ss",
+        "netstat",
+        "dig",
+        "clf"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "jc-1.26.2-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/0f/5a/ee625e6fb827519a9b3cc1abe571958806d67a3bfb425d5eabb4c2d1064d/jc-1.26.2-py3-none-any.whl",
+      "source_sha256": "3250b83b55435e3f272238b2d1063eacda1458df6c90daccff459800171bfc40"
+    },
+    {
+      "name": "dpkt",
+      "normalized_name": "dpkt",
+      "version": "1.9.8",
+      "public": true,
+      "imports": [
+        "dpkt"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "pcap",
+        "pcapng",
+        "ethernet",
+        "dns",
+        "tcp"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "wheel",
+      "filename": "dpkt-1.9.8-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/11/79/479e2194c9096b92aecdf33634ae948d2be306c6011673e98ee1917f32c2/dpkt-1.9.8-py3-none-any.whl",
+      "source_sha256": "4da4d111d7bf67575b571f5c678c71bddd2d8a01a3d57d489faf0a92c748fbfd"
+    },
+    {
+      "name": "dnspython",
+      "normalized_name": "dnspython",
+      "version": "2.9.2",
+      "public": true,
+      "imports": [
+        "dns"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "offline_wire",
+        "zone_parse",
+        "no_resolver"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "ISC",
+      "source_kind": "wheel",
+      "filename": "dnspython-2.9.2-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/1e/0c/5346358b3a20275d256978c35203ddc2c8617f78c1b23795b79ba22ced6d/dnspython-2.9.2-py3-none-any.whl",
+      "source_sha256": "af15f7d385a6ae2fb35a796fde2138004c8c42c7389090e2addc83e3b3340fd8"
+    },
+    {
+      "name": "asn1crypto",
+      "normalized_name": "asn1crypto",
+      "version": "1.5.1",
+      "public": true,
+      "imports": [
+        "asn1crypto"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "pem",
+        "der",
+        "x509_metadata",
+        "spki_fingerprint"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "asn1crypto-1.5.1-py2.py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/c9/7f/09065fd9e27da0eda08b4d6897f1c13535066174cc023af248fc2a8d5e5a/asn1crypto-1.5.1-py2.py3-none-any.whl",
+      "source_sha256": "db4e40728b728508912cbb3d44f19ce188f218e9eba635821bb4b68564f8fd67"
+    },
+    {
+      "name": "drain3",
+      "normalized_name": "drain3",
+      "version": "0.9.11",
+      "public": true,
+      "imports": [
+        "drain3"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "in_memory_miner",
+        "log_templates",
+        "rare_failure_detection"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "sdist_pure_python",
+      "filename": "drain3-0.9.11.tar.gz",
+      "source_url": "https://files.pythonhosted.org/packages/dc/83/4da2d3a11b5e0edf1a4f4c0c2dd42126d2eb1f31c733967edd3dfac1af94/drain3-0.9.11.tar.gz",
+      "source_sha256": "9ab4b1407fad74f56554ae371ef019c3c7985861631f4bab46a0e92585125f75"
+    },
+    {
+      "name": "jsonpickle",
+      "normalized_name": "jsonpickle",
+      "version": "4.1.4",
+      "public": false,
+      "imports": [
+        "jsonpickle"
+      ],
+      "backend": "pure-python",
+      "features": [],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "wheel",
+      "filename": "jsonpickle-4.1.4-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/c9/25/7fc775e2c25d5484a1333bb2d3d59adf024438dee1ff416675293fb6ea75/jsonpickle-4.1.4-py3-none-any.whl",
+      "source_sha256": "c46024ba4acd8adb9a8b8485d074e141cbfacafe334c2aa982e5b32efabc2f0e"
+    },
+    {
+      "name": "cachetools",
+      "normalized_name": "cachetools",
+      "version": "8.0.3",
+      "public": false,
+      "imports": [
+        "cachetools"
+      ],
+      "backend": "pure-python",
+      "features": [],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "cachetools-8.0.3-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/31/48/50e8de023394349623d6065fd4a8d2a52cc5cc06d9ac96d0e765a5bf556c/cachetools-8.0.3-py3-none-any.whl",
+      "source_sha256": "08bc12eeb7c7ab68abbe2d64d07fd7923ff532e32ff04ae27d22add1c5e8a5f9"
+    },
+    {
+      "name": "parse",
+      "normalized_name": "parse",
+      "version": "1.22.4",
+      "public": true,
+      "imports": [
+        "parse"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "typed_extraction",
+        "format_strings"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "parse-1.22.4-py2.py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/8f/5f/fbe039e06108eefad9e6b1f7d915a9c73ca0451700c7d48ce05eaa3a2833/parse-1.22.4-py2.py3-none-any.whl",
+      "source_sha256": "ae430a4477316eed4a9710f642b2db968ec89d5d82e6b0908b8169673b476847"
+    },
+    {
+      "name": "pyelftools",
+      "normalized_name": "pyelftools",
+      "version": "0.33",
+      "public": true,
+      "imports": [
+        "elftools"
+      ],
+      "backend": "pure-python",
+      "features": [
+        "elf_headers",
+        "dt_needed",
+        "build_id",
+        "cross_arch"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "Public-Domain",
+      "source_kind": "wheel",
+      "filename": "pyelftools-0.33-py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/46/2a/f9697576603dae937727827505a6126a066affb227034e77e6f9068910da/pyelftools-0.33-py3-none-any.whl",
+      "source_sha256": "f215ad5f47d3f1373a21496a6c9e0707c622840d0622f23ff7ce08678b020036"
+    },
+    {
+      "name": "numpy",
+      "normalized_name": "numpy",
+      "version": "1.26.4",
+      "public": true,
+      "imports": [
+        "numpy"
+      ],
+      "backend": "builtin-wasi-extension",
+      "features": [
+        "arrays",
+        "broadcasting",
+        "matmul",
+        "lapack_lite",
+        "fft",
+        "random"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "sdist_pure_python",
+      "filename": "numpy-1.26.4.tar.gz",
+      "source_url": "https://files.pythonhosted.org/packages/source/n/numpy/numpy-1.26.4.tar.gz",
+      "source_sha256": "2a02aba9ed12e4ac4eb3ea9421c420301a0c6460d9830d74a9df87efa4912010"
+    },
+    {
+      "name": "pandas",
+      "normalized_name": "pandas",
+      "version": "2.2.3",
+      "public": true,
+      "imports": [
+        "pandas"
+      ],
+      "backend": "builtin-wasi-extension",
+      "features": [
+        "dataframe",
+        "read_csv",
+        "merge",
+        "groupby"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "sdist_pure_python",
+      "filename": "pandas-2.2.3.tar.gz",
+      "source_url": "https://files.pythonhosted.org/packages/source/p/pandas/pandas-2.2.3.tar.gz",
+      "source_sha256": "4f18ba62b61d7e192368b84517265a99b4d7ee8912f8708660fb4a366cc82667"
     }
   ],
   "bundled_fonts": [
@@ -924,6 +2133,30 @@
           "dest_name": "DejaVuSansMono.ttf"
         }
       ]
+    }
+  ],
+  "lgpl_sources": [
+    {
+      "distribution": "fpdf2",
+      "normalized_name": "fpdf2",
+      "version": "2.9.0",
+      "license": "LGPL-3.0-only",
+      "sdist_filename": "fpdf2-2.9.0.tar.gz",
+      "sdist_url": "https://files.pythonhosted.org/packages/ec/be/440da8ede1cf7aaff73be5c5a6d0dc6f2938df6604ffbc313f9c6dc63f55/fpdf2-2.9.0.tar.gz",
+      "sdist_sha256": "af2e7e06a5a2f9e32e24b146b56f58166142dfff45f55370ab03bfac9c8e3e21",
+      "local_patches": [
+        "packages/fpdf/image_parsing.py"
+      ]
+    },
+    {
+      "distribution": "pygal",
+      "normalized_name": "pygal",
+      "version": "3.1.3",
+      "license": "LGPL-3.0-or-later",
+      "sdist_filename": "pygal-3.1.3.tar.gz",
+      "sdist_url": "https://files.pythonhosted.org/packages/dd/b9/58bbfa4d0e2672b0f0baf84047b17d58fda0d9351427e2b6784899924a1b/pygal-3.1.3.tar.gz",
+      "sdist_sha256": "dd119c14cdeb56beb85282e3e2687ece30561225d410a822e6bb68699aa6e7b1",
+      "local_patches": []
     }
   ]
 }

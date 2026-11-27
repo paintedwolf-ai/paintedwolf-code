@@ -62,9 +62,62 @@ func TestDefaultLaunchManifestRoundTripAndRoster(t *testing.T) {
 		"sympy":           "sympy",
 		"Pillow":          "PIL",
 		"lxml":            "lxml.etree",
-		"python-docx":     "docx",
-		"python-pptx":     "pptx",
-		"fpdf2":           "fpdf",
+		"python-docx":        "docx",
+		"python-pptx":        "pptx",
+		"fpdf2":              "fpdf",
+		"pathspec":           "pathspec",
+		"networkx":           "networkx",
+		"unidiff":            "unidiff",
+		"croniter":           "croniter",
+		"PyJWT":              "jwt",
+		"python-dotenv":      "dotenv",
+		"ftfy":               "ftfy",
+		"sqlparse":           "sqlparse",
+		"xmltodict":          "xmltodict",
+		"jmespath":           "jmespath",
+		"toml":               "toml",
+		"tomli":              "tomli",
+		"pytest-mock":        "pytest_mock",
+		"freezegun":          "freezegun",
+		"Faker":              "faker",
+		"Markdown":           "markdown",
+		"markdownify":        "markdownify",
+		"html5lib":           "html5lib",
+		"xlrd":               "xlrd",
+		"filetype":           "filetype",
+		"pytz":               "pytz",
+		"icalendar":          "icalendar",
+		"tabulate":           "tabulate",
+		"pygal":              "pygal",
+		"tqdm":               "tqdm",
+		"colorama":           "colorama",
+		"termcolor":          "termcolor",
+		"rich":               "rich",
+		"click":              "click",
+		"univers":            "univers",
+		"jproperties":        "jproperties",
+		"license-expression": "license_expression",
+		"graphql-core":       "graphql",
+		"tinycss2":           "tinycss2",
+		"regex":              "regex",
+		"python-hcl2":        "hcl2",
+		"jc":                 "jc",
+		"dpkt":               "dpkt",
+		"dnspython":          "dns",
+		"asn1crypto":         "asn1crypto",
+		"drain3":             "drain3",
+		"parse":              "parse",
+		"pyelftools":         "elftools",
+		"numpy":              "numpy",
+		"pandas":             "pandas",
+	}
+	if len(wantPublic) != LaunchPublicDistributionCount {
+		t.Fatalf("wantPublic len = %d, want %d", len(wantPublic), LaunchPublicDistributionCount)
+	}
+	for _, omitted := range []string{"yamllint"} {
+		if _, ok := parsed.FindDistribution(omitted); ok {
+			t.Fatalf("%q must not be in the PY11 launch roster", omitted)
+		}
 	}
 	for distName, wantImport := range wantPublic {
 		dist, ok := parsed.FindDistribution(distName)
@@ -396,14 +449,14 @@ func TestManifestLookupMisses(t *testing.T) {
 	if _, ok := m.FindDistribution(""); ok {
 		t.Fatal("empty FindDistribution should miss")
 	}
-	if _, ok := m.FindDistribution("numpy"); ok {
-		t.Fatal("numpy should miss")
+	if _, ok := m.FindDistribution("scipy"); ok {
+		t.Fatal("scipy should miss")
 	}
 	if _, ok := m.FindByImport(""); ok {
 		t.Fatal("empty FindByImport should miss")
 	}
-	if _, ok := m.FindByImport("pandas"); ok {
-		t.Fatal("pandas should miss")
+	if _, ok := m.FindByImport("polars"); ok {
+		t.Fatal("polars should miss")
 	}
 	if _, _, ok := m.FindConsoleScript(""); ok {
 		t.Fatal("empty FindConsoleScript should miss")

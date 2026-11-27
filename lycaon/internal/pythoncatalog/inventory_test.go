@@ -58,14 +58,14 @@ func TestExecuteReadOnlyPipInventoryForms(t *testing.T) {
 	}
 
 	// show missing package
-	res, err = ExecuteReadOnlyPip(m, []string{"show", "numpy"})
+	res, err = ExecuteReadOnlyPip(m, []string{"show", "scipy"})
 	if err != nil || res.ExitStatus != 1 || res.Diagnostic == nil || res.Diagnostic.Kind != DiagnosticMissingDistribution {
 		t.Fatalf("expected missing distribution diagnostic, got err=%v res=%+v", err, res)
 	}
 
 	// show partial hit + miss
-	res, err = ExecuteReadOnlyPip(m, []string{"show", "PyYAML", "numpy"})
-	if err != nil || res.ExitStatus != 0 || !strings.Contains(res.Stdout, "Name: PyYAML") || !strings.Contains(res.Stderr, "not found: numpy") {
+	res, err = ExecuteReadOnlyPip(m, []string{"show", "PyYAML", "scipy"})
+	if err != nil || res.ExitStatus != 0 || !strings.Contains(res.Stdout, "Name: PyYAML") || !strings.Contains(res.Stderr, "not found: scipy") {
 		t.Fatalf("unexpected partial show result: err=%v res=%+v", err, res)
 	}
 }
@@ -194,6 +194,63 @@ func TestRenderPackageExamplesCoversPY10AndBaselineDiscoveries(t *testing.T) {
 	}
 }
 
+func TestCompactDiscoverySummaryAndTargetedHelp(t *testing.T) {
+	t.Parallel()
+	m := DefaultLaunchManifest()
+
+	summary := RenderCompactDiscoverySummary(m)
+	for _, want := range []string{
+		"67 public packages",
+		"Offline Office & PDF creation",
+		"SVG charts",
+		"Legacy XLS",
+		"Calendar files",
+		"Saved-evidence troubleshooting",
+		"python -m pip list",
+	} {
+		if !strings.Contains(summary, want) {
+			t.Errorf("RenderCompactDiscoverySummary missing %q:\n%s", want, summary)
+		}
+	}
+	if strings.Contains(summary, "markdown-it-py 3.0.0") {
+		t.Errorf("RenderCompactDiscoverySummary should stay a short task index, not a full package dump")
+	}
+
+	targetedCases := []struct {
+		query     string
+		wantMatch string
+		wantOmit  string
+	}{
+		{query: "jwt", wantMatch: "PyJWT", wantOmit: "tinycss2"},
+		{query: "repair text", wantMatch: "ftfy", wantOmit: "PyJWT"},
+		{query: "read .xls", wantMatch: "xlrd", wantOmit: "PyJWT"},
+		{query: "jproperties", wantMatch: "iso-8859-1", wantOmit: "tinycss2"},
+		{query: "univers", wantMatch: "NpmVersionRange", wantOmit: "tinycss2"},
+		{query: "spdx", wantMatch: "license_expression", wantOmit: "tinycss2"},
+		{query: "graphql", wantMatch: "build_schema", wantOmit: "tinycss2"},
+		{query: "css", wantMatch: "tinycss2", wantOmit: "PyJWT"},
+		{query: "Unicode text boundaries", wantMatch: "regex", wantOmit: "hcl2"},
+		{query: "read Terraform blocks", wantMatch: "hcl2", wantOmit: "tinycss2"},
+		{query: "saved captures", wantMatch: "dpkt", wantOmit: "PyJWT"},
+		{query: "diagnostic output", wantMatch: "jc", wantOmit: "PyJWT"},
+		{query: "log comparison", wantMatch: "drain3", wantOmit: "PyJWT"},
+		{query: "har", wantMatch: "timings", wantOmit: "PyJWT"},
+		{query: "rotated logs", wantMatch: "gzip", wantOmit: "PyJWT"},
+		{query: "elf", wantMatch: "ELFFile", wantOmit: "PyJWT"},
+		{query: "numpy", wantMatch: "linalg", wantOmit: "PyJWT"},
+		{query: "pandas", wantMatch: "groupby", wantOmit: "PyJWT"},
+	}
+	for _, tc := range targetedCases {
+		got := RenderTargetedHelp(m, tc.query)
+		if !strings.Contains(got, tc.wantMatch) {
+			t.Errorf("RenderTargetedHelp(%q) missing %q:\n%s", tc.query, tc.wantMatch, got)
+		}
+		if strings.Contains(got, tc.wantOmit) {
+			t.Errorf("RenderTargetedHelp(%q) unexpectedly included %q:\n%s", tc.query, tc.wantOmit, got)
+		}
+	}
+}
+
 func TestDiagnosticsDistinguishFailureClasses(t *testing.T) {
 	t.Parallel()
 	m := DefaultLaunchManifest()
@@ -216,18 +273,58 @@ func TestDiagnosticsDistinguishFailureClasses(t *testing.T) {
 		t.Fatalf("DiagnoseImport(BS4) = %+v", d)
 	}
 
-	// Missing distribution: numpy / pandas must point to csv, sqlite3, statistics and declared project runner
-	for _, pkg := range []string{"numpy", "pandas"} {
+	// Missing distribution: scipy / polars / matplotlib must point to numpy, pandas, openpyxl/pygal and declared project runner
+	for _, pkg := range []string{"scipy", "polars", "matplotlib"} {
 		d = DiagnoseImport(m, pkg)
 		formatted := d.Format()
 		if d.Kind != DiagnosticMissingDistribution ||
-			!strings.Contains(formatted, "csv") ||
-			!strings.Contains(formatted, "sqlite3") ||
-			!strings.Contains(formatted, "statistics") ||
+			!strings.Contains(formatted, "numpy") ||
+			!strings.Contains(formatted, "pandas") ||
+			!strings.Contains(formatted, "pygal") ||
 			!strings.Contains(formatted, "declared project runner") ||
 			!strings.Contains(formatted, ExternalPythonRoute) {
 			t.Fatalf("DiagnoseImport(%s) = %+v (formatted: %q)", pkg, d, formatted)
 		}
+	}
+
+	// Missing HTTP clients -> mediated requests
+	for _, pkg := range []string{"httpx", "aiohttp"} {
+		d = DiagnoseImport(m, pkg)
+		if d.Kind != DiagnosticMissingDistribution || !strings.Contains(d.Format(), "requests") {
+			t.Fatalf("DiagnoseImport(%s) = %+v", pkg, d)
+		}
+	}
+
+	// Missing fast JSON -> stdlib json
+	for _, pkg := range []string{"orjson", "ujson"} {
+		d = DiagnoseImport(m, pkg)
+		if d.Kind != DiagnosticMissingDistribution || !strings.Contains(d.Format(), "json") {
+			t.Fatalf("DiagnoseImport(%s) = %+v", pkg, d)
+		}
+	}
+
+	// Missing fuzzy matching -> difflib noting different semantics
+	d = DiagnoseImport(m, "rapidfuzz")
+	if d.Kind != DiagnosticMissingDistribution || !strings.Contains(d.Format(), "difflib") || !strings.Contains(d.Format(), "semantics") {
+		t.Fatalf("DiagnoseImport(rapidfuzz) = %+v", d)
+	}
+
+	// Missing scapy -> dpkt for offline capture reading
+	d = DiagnoseImport(m, "scapy")
+	if d.Kind != DiagnosticMissingDistribution || !strings.Contains(d.Format(), "dpkt") {
+		t.Fatalf("DiagnoseImport(scapy) = %+v", d)
+	}
+
+	// Omitted yamllint -> strict ruamel.yaml
+	d = DiagnoseImport(m, "yamllint")
+	if d.Kind != DiagnosticMissingDistribution || !strings.Contains(d.Format(), "ruamel.yaml") {
+		t.Fatalf("DiagnoseImport(yamllint) = %+v", d)
+	}
+
+	// Keccak -> never suggest hashlib.sha3_256
+	d = DiagnoseImport(m, "eth_hash")
+	if d.Kind != DiagnosticMissingDistribution || strings.Contains(d.Format(), "hashlib.sha3_256") || !strings.Contains(d.Format(), ExternalPythonRoute) {
+		t.Fatalf("DiagnoseImport(eth_hash) = %+v", d)
 	}
 
 	// Empty import

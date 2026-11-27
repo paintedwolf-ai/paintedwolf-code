@@ -1,0 +1,5 @@
+Netid State  Recv-Q Send-Q Local Address:Port  Peer Address:Port Process
+tcp   LISTEN 0      128    127.0.0.1:8080      0.0.0.0:*         users:(("api-srv",pid=1042,fd=6))
+tcp   LISTEN 0      4096   0.0.0.0:443         0.0.0.0:*         users:(("envoy",pid=811,fd=12))
+tcp   ESTAB  0      0      10.0.1.5:5432       10.0.1.22:49152   users:(("postgres",pid=2001,fd=9))
+udp   UNCONN 0      0      127.0.0.1:5353      0.0.0.0:*         users:(("mdnsd",pid=412,fd=4))

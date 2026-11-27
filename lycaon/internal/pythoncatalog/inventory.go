@@ -249,3 +249,84 @@ func RenderPackageHelp(manifest ImageManifest) string {
 	fmt.Fprintf(&b, "- Packages cannot be added to this image; use `%s` or an explicit project interpreter path for system or project environments.\n", ExternalPythonRoute)
 	return b.String()
 }
+
+// RenderCompactDiscoverySummary renders the default short task-index discovery summary
+// highlighting non-obvious offline capabilities without enumerating every package.
+// Explicit inventory requests use RenderPackageHelp or `python -m pip list`.
+func RenderCompactDiscoverySummary(manifest ImageManifest) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Portable Python %s (%s / %s) — %d public packages\n", manifest.Interpreter.Version, manifest.Interpreter.Name, manifest.Target, len(manifest.PublicDistributions()))
+	b.WriteString("Notable offline capabilities:\n")
+	b.WriteString("- Offline Office & PDF creation: Word (.docx), PowerPoint (.pptx), Excel (.xlsx), Unicode PDF reports (fpdf2 + bundled DejaVu fonts), and PDF reading/merging (pypdf).\n")
+	b.WriteString("- Standalone SVG charts & images: offline SVG charts (pygal), workbook charts (openpyxl), and PNG/JPEG processing (Pillow).\n")
+	b.WriteString("- Legacy XLS & structured data: binary Excel .xls reading (xlrd), Java .properties (jproperties), SPDX licenses (license_expression), npm/Maven/RubyGems version ranges (univers), GraphQL validation (graphql), and CSS parsing (tinycss2).\n")
+	b.WriteString("- Calendar files & timezones: ICS files with TZID/recurrence (icalendar), IANA timezones (zoneinfo + tzdata; pytz compat), and cron schedules (croniter).\n")
+	b.WriteString("- Text, diffs, tokens & repo helpers: mojibake repair (ftfy), offline HS256 JWT (jwt), gitignore matching (pathspec), graph cycles (networkx), unified diffs (unidiff), SQL splitting (sqlparse), and strict YAML duplicate-key checks (ruamel.yaml).\n")
+	b.WriteString("- Saved-evidence troubleshooting: saved command output (jc), offline pcap/pcapng timelines (dpkt), DNS wire/zone decoding (dns), PEM/DER cert inspection (asn1crypto), log pattern comparison (drain3), typed log parsing (parse), and cross-arch ELF inspection (elftools).\n")
+	b.WriteString("- Numeric & tabular analysis: vectorized numerical arrays (numpy) and typed DataFrame CSV joins/group-by (pandas).\n")
+	b.WriteString("On-demand queries:\n")
+	b.WriteString("- Targeted help: query by task or import (e.g. \"jwt\", \"repair text\", \"read .xls\", \"saved captures\", \"diagnostic output\", \"log comparison\", \"har\", \"rotated logs\", \"elf\").\n")
+	b.WriteString("- Full inventory: python -m pip list | list --format=json | show NAME | freeze.\n")
+	fmt.Fprintf(&b, "- Project environments: `%s`.\n", ExternalPythonRoute)
+	return b.String()
+}
+
+// RenderTargetedHelp renders only the installed distributions and curated examples
+// matching query (e.g., "jwt", "repair text", "read .xls", "jproperties", "univers",
+// "spdx", "graphql", "css"). When query is empty, returns RenderCompactDiscoverySummary.
+func RenderTargetedHelp(manifest ImageManifest, query string) string {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return RenderCompactDiscoverySummary(manifest)
+	}
+	var matchedDists []DistributionRecord
+	for _, d := range manifest.PublicDistributions() {
+		if distributionMatchesQuery(d, q) {
+			matchedDists = append(matchedDists, d)
+		}
+	}
+	examples := RenderPackageExamples(manifest, q)
+	hasExamples := !strings.HasPrefix(examples, "No matching on-demand examples")
+
+	if len(matchedDists) == 0 && !hasExamples {
+		return fmt.Sprintf("No matching Portable Python package or example for %q. Run `python -m pip list` for the full inventory.\n", strings.TrimSpace(query))
+	}
+
+	var b strings.Builder
+	if len(matchedDists) > 0 {
+		b.WriteString("Matching packages:\n")
+		for _, d := range matchedDists {
+			fmt.Fprintf(&b, "- %s %s (import %s)", d.Name, d.Version, strings.Join(d.Imports, ", "))
+			if task := TaskSummaryForDistribution(d.NormalizedName); task != "" {
+				fmt.Fprintf(&b, " — %s", task)
+			}
+			b.WriteByte('\n')
+		}
+	}
+	if hasExamples {
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(examples)
+	}
+	return b.String()
+}
+
+func distributionMatchesQuery(d DistributionRecord, q string) bool {
+	if strings.Contains(strings.ToLower(d.Name), q) ||
+		strings.Contains(strings.ToLower(d.NormalizedName), q) ||
+		strings.Contains(strings.ToLower(TaskSummaryForDistribution(d.NormalizedName)), q) {
+		return true
+	}
+	for _, imp := range d.Imports {
+		if strings.Contains(strings.ToLower(imp), q) {
+			return true
+		}
+	}
+	for _, feat := range d.Features {
+		if strings.Contains(strings.ToLower(feat), q) {
+			return true
+		}
+	}
+	return false
+}

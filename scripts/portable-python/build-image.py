@@ -32,8 +32,8 @@ from image_assets import (
     write_third_party_notices,
 )
 
-PINNED_CPYTHON_WASM_SHA256 = "bea5b8f2cb633212d4be85a668ad13246dc0c1b65c29796cf5d990ec1956b052"
-PINNED_METERED_WASM_SHA256 = "92755437dfb30aa41a5868f06d585dac55990474e07ebca53d9e5b1f009758f4"
+PINNED_CPYTHON_WASM_SHA256 = "fd955c1b91ef90a070564314f9bc6c98443bc731c462191ebca2e5a1ec317c8c"
+PINNED_METERED_WASM_SHA256 = "22d6ad6719bd89707465bcf066b02b411d53ebe710cce056af3ec41cbaca257d"
 PINNED_IMPORT_INVENTORY_SHA256 = "d4dca3e9def0586bdc7c43af04340073fcbd99b28a87f26f33341b30f00d623b"
 CPYTHON_312_MAGIC_HEX = "cb0d0d0a"
 
@@ -329,14 +329,25 @@ def install_sdist_pure_python(
         "MarkupSafe": ("src/markupsafe/", "markupsafe", "LICENSE.txt"),
         "Pillow": ("src/PIL/", "PIL", "LICENSE"),
         "lxml": ("src/lxml/", "lxml", "LICENSES.txt"),
+        "regex": ("regex_3/", "regex", "LICENSE.txt"),
+        "drain3": ("drain3/", "drain3", "LICENSE"),
+        "numpy": ("numpy/", "numpy", "LICENSE.txt"),
+        "pandas": ("pandas/", "pandas", "LICENSE"),
     }
     if name not in sdist_cfg:
         raise RuntimeError(f"No sdist_pure_python mapping for {name}")
     src_prefix, pkg_name, license_name = sdist_cfg[name]
+    strip_build_sources = name in ("numpy", "pandas")
+    build_source_suffixes = (
+        ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".hh",
+        ".pyx", ".pxd", ".pxi", ".pyi", ".src", ".f", ".f90",
+        ".tp", ".in", ".meson",
+    )
 
     installed: list[str] = []
     pkg_info_bytes: bytes | None = None
     license_bytes: bytes | None = None
+    pandas_version_meson: bytes | None = None
 
     with tarfile.open(sdist_path, "r:gz") as tf:
         for member in tf.getmembers():
@@ -354,10 +365,20 @@ def install_sdist_pure_python(
                 f = tf.extractfile(member)
                 assert f is not None
                 license_bytes = f.read()
+            elif name == "pandas" and inner == "_version_meson.py":
+                f = tf.extractfile(member)
+                assert f is not None
+                pandas_version_meson = f.read()
             elif inner.startswith(src_prefix):
                 sub = inner[len(src_prefix) :]
                 if sub.endswith(FORBIDDEN_SUFFIXES):
                     continue
+                if strip_build_sources:
+                    sub_parts = Path(sub).parts
+                    if "tests" in sub_parts or "testing" in sub_parts and name == "pandas" and "tests" in sub_parts:
+                        continue
+                    if "tests" in sub_parts or Path(sub).name == "meson.build" or sub.endswith(build_source_suffixes):
+                        continue
                 rel = f"{pkg_name}/{sub}"
                 out = packages_root / rel
                 out.parent.mkdir(parents=True, exist_ok=True)
@@ -365,6 +386,46 @@ def install_sdist_pure_python(
                 assert f is not None
                 out.write_bytes(f.read())
                 installed.append(rel)
+
+    if name == "numpy":
+        cfg_rel = "numpy/__config__.py"
+        cfg_path = packages_root / cfg_rel
+        cfg_path.write_text(
+            "# Deterministic WASI build config for Painted Wolf Portable Python\n"
+            "from enum import Enum\n"
+            "from numpy.core._multiarray_umath import (\n"
+            "    __cpu_features__,\n"
+            "    __cpu_baseline__,\n"
+            "    __cpu_dispatch__,\n"
+            ")\n\n"
+            "__all__ = ['show']\n"
+            "_built_with_meson = True\n\n"
+            "class DisplayModes(Enum):\n"
+            "    stdout = 'stdout'\n"
+            "    dicts = 'dicts'\n\n"
+            "CONFIG = {\n"
+            "    'Compilers': {'c': {'name': 'clang', 'version': '16.0.0', 'linker': 'ld.lld'}},\n"
+            "    'Machine Information': {'host': {'cpu': 'wasm32', 'family': 'wasm32', 'endian': 'little', 'system': 'wasi'}, 'cross-compiled': True},\n"
+            "    'Build Dependencies': {\n"
+            "        'blas': {'name': 'none', 'found': False},\n"
+            "        'lapack': {'name': 'lapack_lite', 'found': True, 'version': '1.26.4', 'detection method': 'internal'},\n"
+            "    },\n"
+            "}\n\n"
+            "def show(mode=DisplayModes.stdout.value):\n"
+            "    if mode == DisplayModes.stdout.value:\n"
+            "        print(CONFIG)\n"
+            "    elif mode == DisplayModes.dicts.value:\n"
+            "        return CONFIG\n"
+            "    else:\n"
+            "        raise AttributeError(f'Invalid mode: {mode!r}')\n",
+            encoding="utf-8",
+        )
+        installed.append(cfg_rel)
+    elif name == "pandas" and pandas_version_meson is not None:
+        vm_rel = "pandas/_version_meson.py"
+        vm_path = packages_root / vm_rel
+        vm_path.write_bytes(pandas_version_meson)
+        installed.append(vm_rel)
 
     if pkg_info_bytes is None:
         raise RuntimeError(f"sdist {sdist_path.name} missing PKG-INFO")
@@ -750,21 +811,19 @@ def main() -> None:
 
     # 2b. Apply minimal WASI compatibility patches (e.g. pytest get_user_id on wasi)
     applied_patches = apply_wasi_package_patches(packages_dir, record_hash)
+    patched_rels = {p["target"].removeprefix("packages/") for p in applied_patches}
     for p in applied_patches:
         print(f"[patch] {p['target']}: {p['reason']}")
-        # Recompute tree_sha256 for any patched distribution using its RECORD file
+    if patched_rels:
+        # Recompute tree_sha256 for every distribution whose RECORD contains a patched file
         for md in manifest_dists:
-            if (
-                (md["normalized_name"] == "pytest" and p["target"].startswith("packages/_pytest/"))
-                or (md["normalized_name"] == "sympy" and p["target"].startswith("packages/sympy/"))
-                or (md["normalized_name"] == "fpdf2" and p["target"].startswith("packages/fpdf/"))
-            ):
-                rec_path = packages_dir / md["dist_info_path"].removeprefix("packages/") / "RECORD"
-                rel_files = [
-                    line.split(",", 1)[0]
-                    for line in rec_path.read_text(encoding="utf-8").splitlines()
-                    if line.strip()
-                ]
+            rec_path = packages_dir / md["dist_info_path"].removeprefix("packages/") / "RECORD"
+            rel_files = [
+                line.split(",", 1)[0]
+                for line in rec_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            if any(rf in patched_rels for rf in rel_files):
                 md["tree_sha256"] = sha256_tree(packages_dir, rel_files)
 
     # 2c. Install pinned redistributable Unicode fonts (e.g. DejaVuSans for fpdf2)

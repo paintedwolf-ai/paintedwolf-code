@@ -1,0 +1,32 @@
+{
+  "edges": [
+    [
+      "app",
+      "api"
+    ],
+    [
+      "api",
+      "auth"
+    ],
+    [
+      "auth",
+      "session"
+    ],
+    [
+      "session",
+      "auth"
+    ],
+    [
+      "worker",
+      "session"
+    ],
+    [
+      "cli",
+      "app"
+    ],
+    [
+      "utils",
+      "logging"
+    ]
+  ]
+}

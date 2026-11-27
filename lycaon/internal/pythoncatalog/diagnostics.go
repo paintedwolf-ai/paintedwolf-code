@@ -44,28 +44,56 @@ func (d Diagnostic) Format() string {
 
 // legacyImportAliases maps common wrong/legacy import spellings to the shipped import name.
 var legacyImportAliases = map[string]string{
-	"pyyaml":          "yaml",
-	"beautifulsoup4":  "bs4",
-	"beautifulsoup":   "bs4",
-	"markdown-it-py":  "markdown_it",
-	"markdown_it_py":  "markdown_it",
-	"pypdf2":          "pypdf",
-	"ruamel_yaml":     "ruamel.yaml",
-	"python_dateutil": "dateutil",
-	"python_docx":     "docx",
-	"python_pptx":     "pptx",
-	"etree":           "lxml.etree",
+	"pyyaml":             "yaml",
+	"beautifulsoup4":     "bs4",
+	"beautifulsoup":      "bs4",
+	"markdown-it-py":     "markdown_it",
+	"markdown_it_py":     "markdown_it",
+	"pypdf2":             "pypdf",
+	"ruamel_yaml":        "ruamel.yaml",
+	"python_dateutil":    "dateutil",
+	"python_docx":        "docx",
+	"python_pptx":        "pptx",
+	"etree":              "lxml.etree",
+	"pyjwt":              "jwt",
+	"python_dotenv":      "dotenv",
+	"license-expression": "license_expression",
+	"graphql-core":       "graphql",
+	"python_hcl2":        "hcl2",
 }
 
-// portableNumericOutOfScope lists numeric/dataframe/plotting packages deliberately
-// outside the PY10 image, for which diagnostics point to stdlib csv, sqlite3, and
-// statistics for portable analysis and to the declared project runner for project deps.
+// portableNumericOutOfScope lists scientific/plotting packages outside the
+// cumulative image (where numpy and pandas ARE installed), pointing to numpy,
+// pandas, openpyxl workbook charts, or pygal standalone SVG charts.
 var portableNumericOutOfScope = map[string]bool{
-	"numpy":      true,
-	"pandas":     true,
 	"scipy":      true,
 	"polars":     true,
 	"matplotlib": true,
+}
+
+var portableHTTPOutOfScope = map[string]bool{
+	"httpx":   true,
+	"aiohttp": true,
+}
+
+var portableJSONOutOfScope = map[string]bool{
+	"orjson": true,
+	"ujson":  true,
+}
+
+var portableFuzzyOutOfScope = map[string]bool{
+	"rapidfuzz":   true,
+	"thefuzz":     true,
+	"fuzzywuzzy":  true,
+	"levenshtein": true,
+}
+
+var portableKeccakOutOfScope = map[string]bool{
+	"eth_hash":     true,
+	"eth-hash":     true,
+	"pysha3":       true,
+	"keccak":       true,
+	"pycryptodome": true,
 }
 
 // DiagnoseImport distinguishes wrong import names (when the distribution is installed under
@@ -122,8 +150,67 @@ func DiagnoseImport(manifest ImageManifest, requested string) Diagnostic {
 			Kind:          DiagnosticMissingDistribution,
 			Requested:     trimmed,
 			Message:       fmt.Sprintf("Package or module %q is not installed in the fixed Portable Python image.", trimmed),
-			Available:     []string{"csv", "sqlite3", "statistics"},
-			Suggestion:    "For portable tabular and numeric analysis, use stdlib csv, sqlite3, and statistics (or sympy for exact symbolic math); for a project's own dependencies, use the declared project runner.",
+			Available:     []string{"numpy", "pandas", "openpyxl", "pygal"},
+			Suggestion:    "For portable numerical and tabular analysis, use installed `numpy` and `pandas` (or stdlib sqlite3, csv, statistics; sympy for exact symbolic math), `openpyxl` for workbook charts, or `pygal` for standalone SVG charts; for a project's own dependencies, use the declared project runner.",
+			ExternalRoute: ExternalPythonRoute,
+		}
+	}
+	if portableHTTPOutOfScope[lower] {
+		return Diagnostic{
+			Kind:          DiagnosticMissingDistribution,
+			Requested:     trimmed,
+			Message:       fmt.Sprintf("Package or module %q is not installed in the fixed Portable Python image.", trimmed),
+			Available:     []string{"requests"},
+			Suggestion:    "Use the host-mediated `requests` client for authorized synchronous HTTPS requests.",
+			ExternalRoute: ExternalPythonRoute,
+		}
+	}
+	if portableJSONOutOfScope[lower] {
+		return Diagnostic{
+			Kind:          DiagnosticMissingDistribution,
+			Requested:     trimmed,
+			Message:       fmt.Sprintf("Package or module %q is not installed in the fixed Portable Python image.", trimmed),
+			Available:     []string{"json"},
+			Suggestion:    "Use stdlib `json` (or `json5` for JSON5 with comments/trailing commas).",
+			ExternalRoute: ExternalPythonRoute,
+		}
+	}
+	if portableFuzzyOutOfScope[lower] {
+		return Diagnostic{
+			Kind:          DiagnosticMissingDistribution,
+			Requested:     trimmed,
+			Message:       fmt.Sprintf("Package or module %q is not installed in the fixed Portable Python image.", trimmed),
+			Available:     []string{"difflib"},
+			Suggestion:    "For basic sequence similarity, use stdlib `difflib` (note: SequenceMatcher semantics and scoring differ from Levenshtein/edit-distance libraries).",
+			ExternalRoute: ExternalPythonRoute,
+		}
+	}
+	if lower == "scapy" {
+		return Diagnostic{
+			Kind:          DiagnosticMissingDistribution,
+			Requested:     trimmed,
+			Message:       fmt.Sprintf("Package or module %q is not installed in the fixed Portable Python image.", trimmed),
+			Available:     []string{"dpkt"},
+			Suggestion:    "For offline pcap/pcapng capture reading, use `dpkt` (Scapy is not included in the fixed Portable Python image).",
+			ExternalRoute: ExternalPythonRoute,
+		}
+	}
+	if lower == "yamllint" {
+		return Diagnostic{
+			Kind:          DiagnosticMissingDistribution,
+			Requested:     trimmed,
+			Message:       fmt.Sprintf("Package or module %q is omitted from the fixed Portable Python image.", trimmed),
+			Available:     []string{"ruamel.yaml"},
+			Suggestion:    "For duplicate YAML key checks with line numbers, use strict `ruamel.yaml` (`allow_duplicate_keys = False` and `exc.problem_mark.line + 1`); for full yamllint rules, use the declared project runner.",
+			ExternalRoute: ExternalPythonRoute,
+		}
+	}
+	if portableKeccakOutOfScope[lower] {
+		return Diagnostic{
+			Kind:          DiagnosticMissingDistribution,
+			Requested:     trimmed,
+			Message:       fmt.Sprintf("Package or module %q is not installed in the fixed Portable Python image.", trimmed),
+			Suggestion:    "Ethereum Keccak-256 is outside the fixed image (do not substitute FIPS SHA3-256 for Ethereum Keccak); run in the declared project runner.",
 			ExternalRoute: ExternalPythonRoute,
 		}
 	}

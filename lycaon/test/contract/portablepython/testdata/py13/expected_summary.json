@@ -1,0 +1,6 @@
+[
+  {"category": "gadget", "order_count": 2, "missing_qty_count": 0, "total_qty": 6, "total_rev": 150.0},
+  {"category": "sprocket", "order_count": 2, "missing_qty_count": 1, "total_qty": 4, "total_rev": 30.0},
+  {"category": "widget", "order_count": 2, "missing_qty_count": 1, "total_qty": 2, "total_rev": 20.0},
+  {"category": null, "order_count": 1, "missing_qty_count": 0, "total_qty": 3, "total_rev": 0.0}
+]

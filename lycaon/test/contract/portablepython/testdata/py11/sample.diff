@@ -1,0 +1,14 @@
+--- a/src/config.py
++++ b/src/config.py
+@@ -1,4 +1,5 @@
+ # header
+-TIMEOUT = 10
++TIMEOUT = 30
++RETRIES = 3
+ HOST = "localhost"
+ PORT = 8080
+@@ -10,2 +11,2 @@
+ def endpoint():
+-    return f"http://{HOST}:{PORT}"
++    return f"https://{HOST}:{PORT}"
+\ No newline at end of file

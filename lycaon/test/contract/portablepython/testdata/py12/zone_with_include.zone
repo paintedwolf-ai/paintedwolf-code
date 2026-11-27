@@ -1,0 +1,5 @@
+$ORIGIN example.test.
+$TTL 300
+$INCLUDE secret.zone
+@       IN SOA  ns1.example.test. hostmaster.example.test. 1 3600 600 86400 300
+@       IN NS   ns1.example.test.

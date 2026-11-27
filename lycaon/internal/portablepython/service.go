@@ -214,23 +214,9 @@ func NewService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load runtime image manifest: %w", err)
 	}
-	if err := pythonruntime.VerifyImage(absImageDir, rtManifest); err != nil {
-		return nil, fmt.Errorf("verify portable python image: %w", err)
-	}
-
 	catManifest, err := pythoncatalog.LoadImageManifest(manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("load catalog image manifest: %w", err)
-	}
-
-	wasmPath, _, _, err := pythonruntime.ResolveImagePaths(absImageDir, rtManifest)
-	if err != nil {
-		return nil, fmt.Errorf("resolve image wasm path: %w", err)
-	}
-	// #nosec G304 -- wasmPath is verified inside absImageDir via ResolveImagePaths and SHA-256 checked by VerifyImage.
-	wasmBytes, err := os.ReadFile(wasmPath)
-	if err != nil {
-		return nil, fmt.Errorf("read python.wasm: %w", err)
 	}
 
 	scratchRoot := strings.TrimSpace(cfg.ScratchRoot)
@@ -271,12 +257,11 @@ func NewService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
 			}
 		}
 	}
-	rt, err := pythonruntime.NewConfiguredRuntime(ctx, pythonruntime.RuntimeConfig{
+	rt, err := pythonruntime.NewVerifiedRuntime(ctx, pythonruntime.RuntimeConfig{
 		Backend:                 cfg.Backend,
 		EngineDir:               engineDir,
 		EngineManifestPath:      cfg.EngineManifestPath,
 		EngineManifest:          cfg.EngineManifest,
-		WasmBytes:               wasmBytes,
 		ImageDir:                absImageDir,
 		Manifest:                rtManifest,
 		EnforceImportAudit:      true,

@@ -1,0 +1,14 @@
+$ORIGIN example.test.
+$TTL 300
+@       IN SOA  ns1.example.test. hostmaster.example.test. (
+                2026112701 ; serial
+                3600       ; refresh
+                600        ; retry
+                86400      ; expire
+                300 )      ; minimum
+@       IN NS   ns1.example.test.
+ns1     IN A    198.51.100.53
+api     IN A    203.0.113.10
+api     IN A    203.0.113.11
+api     IN TXT  "v=py12"
+www     IN CNAME api.example.test.

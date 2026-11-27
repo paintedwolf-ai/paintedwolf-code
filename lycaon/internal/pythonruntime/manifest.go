@@ -146,84 +146,295 @@ func (m *ImageManifest) Validate() error {
 	return nil
 }
 
+// verifiedImage is a strictly private, single-call verification result
+// produced by verifyImageInternal and consumed immediately inside
+// NewVerifiedRuntime. It is never exported, cached, or returned to callers.
+type verifiedImage struct {
+	imageDir   string
+	manifest   *ImageManifest
+	wasmPath   string
+	wasmSHA256 string
+	wasmBytes  []byte
+}
+
 // VerifyImage checks that the image directory matches manifest digests for
 // python.wasm, stdlib, and declared package trees, and contains zero host
 // native dynamic libraries (.so, .dylib, .dll).
 func VerifyImage(dir string, manifest *ImageManifest) error {
+	_, err := verifyImageInternal(dir, manifest, false)
+	return err
+}
+
+func verifyImageInternal(dir string, manifest *ImageManifest, retainWasmBytes bool) (*verifiedImage, error) {
 	if err := manifest.Validate(); err != nil {
-		return err
+		return nil, err
 	}
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
-		return fmt.Errorf("resolve image dir: %w", err)
+		return nil, fmt.Errorf("resolve image dir: %w", err)
 	}
 
 	wasmPath, err := resolveInsideDir(absDir, manifest.Interpreter.WasmPath)
 	if err != nil {
-		return fmt.Errorf("interpreter.wasm_path: %w", err)
+		return nil, fmt.Errorf("interpreter.wasm_path: %w", err)
 	}
-	wasmDigest, err := HashFile(wasmPath)
-	if err != nil {
-		return fmt.Errorf("hash interpreter wasm: %w", err)
+	var wasmBytes []byte
+	var wasmDigest string
+	if retainWasmBytes {
+		// #nosec G304 -- wasmPath is resolved inside absDir via resolveInsideDir.
+		wasmBytes, err = os.ReadFile(wasmPath)
+		if err != nil {
+			return nil, fmt.Errorf("hash interpreter wasm: %w", err)
+		}
+		sum := sha256.Sum256(wasmBytes)
+		wasmDigest = hex.EncodeToString(sum[:])
+	} else {
+		wasmDigest, err = HashFile(wasmPath)
+		if err != nil {
+			return nil, fmt.Errorf("hash interpreter wasm: %w", err)
+		}
 	}
 	if !strings.EqualFold(wasmDigest, manifest.Interpreter.WasmSHA256) {
-		return fmt.Errorf("interpreter wasm sha256 mismatch: got %s, want %s", wasmDigest, manifest.Interpreter.WasmSHA256)
+		return nil, fmt.Errorf("interpreter wasm sha256 mismatch: got %s, want %s", wasmDigest, manifest.Interpreter.WasmSHA256)
 	}
 
 	stdlibPath, err := resolveInsideDir(absDir, manifest.Interpreter.StdlibPath)
 	if err != nil {
-		return fmt.Errorf("interpreter.stdlib_path: %w", err)
+		return nil, fmt.Errorf("interpreter.stdlib_path: %w", err)
 	}
-	stdlibDigest, err := HashPath(stdlibPath)
+	stdlibInfo, err := os.Stat(stdlibPath)
 	if err != nil {
-		return fmt.Errorf("hash interpreter stdlib: %w", err)
+		return nil, fmt.Errorf("hash interpreter stdlib: %w", err)
 	}
-	if !strings.EqualFold(stdlibDigest, manifest.Interpreter.StdlibSHA256) {
-		return fmt.Errorf("interpreter stdlib sha256 mismatch: got %s, want %s", stdlibDigest, manifest.Interpreter.StdlibSHA256)
-	}
+	stdlibIsDir := stdlibInfo.IsDir()
 
+	var pkgRoot string
 	if strings.TrimSpace(manifest.PackagesRoot) != "" {
-		pkgRoot, err := resolveInsideDir(absDir, manifest.PackagesRoot)
+		pkgRoot, err = resolveInsideDir(absDir, manifest.PackagesRoot)
 		if err != nil {
-			return fmt.Errorf("packages_root: %w", err)
+			return nil, fmt.Errorf("packages_root: %w", err)
 		}
 		info, err := os.Stat(pkgRoot)
 		if err != nil {
-			return fmt.Errorf("stat packages_root: %w", err)
+			return nil, fmt.Errorf("stat packages_root: %w", err)
 		}
 		if !info.IsDir() {
-			return fmt.Errorf("packages_root %q is not a directory", manifest.PackagesRoot)
+			return nil, fmt.Errorf("packages_root %q is not a directory", manifest.PackagesRoot)
 		}
 		if !isHexSHA256(manifest.PackagesTreeSHA256) {
-			return fmt.Errorf("image manifest missing or invalid packages_tree_sha256 %q", manifest.PackagesTreeSHA256)
+			return nil, fmt.Errorf("image manifest missing or invalid packages_tree_sha256 %q", manifest.PackagesTreeSHA256)
 		}
-		pkgTreeDigest, err := HashTree(pkgRoot)
+	}
+
+	var magicBytes []byte
+	checkBytecode := manifest.Bytecode != nil
+	if checkBytecode {
+		magicBytes, err = hex.DecodeString(CPython312BytecodeMagicHex)
 		if err != nil {
-			return fmt.Errorf("hash packages_root tree: %w", err)
+			return nil, err
 		}
+	}
+
+	stdlibFiles := make(map[string]string)
+	pkgFiles := make(map[string]string)
+	pycFiles := make(map[string]string)
+	var nativeBinaries []string
+	var stdlibWalkErr error
+	var pkgWalkErr error
+	var pycWalkErr error
+	buf := make([]byte, 32*1024)
+
+	err = filepath.WalkDir(absDir, func(p string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		relAbs, err := filepath.Rel(absDir, p)
+		if err != nil {
+			return err
+		}
+		relAbsSlash := filepath.ToSlash(relAbs)
+		if isHostNativeBinaryName(d.Name()) {
+			nativeBinaries = append(nativeBinaries, relAbsSlash)
+		}
+
+		inStdlib, stdlibRel := relIfInsideDir(stdlibPath, p, stdlibIsDir)
+		inPkg, pkgRel := relIfInsideDir(pkgRoot, p, pkgRoot != "")
+		isPyc := checkBytecode && strings.HasSuffix(d.Name(), ".pyc")
+
+		if !inStdlib && !inPkg && !isPyc {
+			return nil
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			if inStdlib && stdlibWalkErr == nil {
+				stdlibWalkErr = fmt.Errorf("unexpected symlink in immutable image tree: %s", p)
+			}
+			if inPkg && pkgWalkErr == nil {
+				pkgWalkErr = fmt.Errorf("unexpected symlink in immutable image tree: %s", p)
+			}
+			if isPyc && pycWalkErr == nil {
+				pycWalkErr = fmt.Errorf("unexpected symlink .pyc in immutable image: %s", p)
+			}
+			return nil
+		}
+
+		digest, pycHdrErr, hashErr := hashFileWithBuf(p, relAbsSlash, buf, isPyc, magicBytes)
+		if hashErr != nil {
+			if inStdlib {
+				return fmt.Errorf("hash interpreter stdlib: hash %s: %w", stdlibRel, hashErr)
+			}
+			if inPkg {
+				return fmt.Errorf("hash packages_root tree: hash %s: %w", pkgRel, hashErr)
+			}
+			return fmt.Errorf("open bytecode %s: %w", relAbsSlash, hashErr)
+		}
+		if inStdlib {
+			stdlibFiles[stdlibRel] = digest
+		}
+		if inPkg {
+			pkgFiles[pkgRel] = digest
+		}
+		if isPyc {
+			if pycHdrErr != nil && pycWalkErr == nil {
+				pycWalkErr = pycHdrErr
+			}
+			pycFiles[relAbsSlash] = digest
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var stdlibDigest string
+	if stdlibIsDir {
+		if stdlibWalkErr != nil {
+			return nil, fmt.Errorf("hash interpreter stdlib: %w", stdlibWalkErr)
+		}
+		stdlibDigest = hashDigestMap(stdlibFiles)
+	} else {
+		stdlibDigest, err = HashFile(stdlibPath)
+		if err != nil {
+			return nil, fmt.Errorf("hash interpreter stdlib: %w", err)
+		}
+	}
+	if !strings.EqualFold(stdlibDigest, manifest.Interpreter.StdlibSHA256) {
+		return nil, fmt.Errorf("interpreter stdlib sha256 mismatch: got %s, want %s", stdlibDigest, manifest.Interpreter.StdlibSHA256)
+	}
+
+	if pkgRoot != "" {
+		if pkgWalkErr != nil {
+			return nil, fmt.Errorf("hash packages_root tree: %w", pkgWalkErr)
+		}
+		pkgTreeDigest := hashDigestMap(pkgFiles)
 		if !strings.EqualFold(pkgTreeDigest, manifest.PackagesTreeSHA256) {
-			return fmt.Errorf("packages_root tree sha256 mismatch: got %s, want %s", pkgTreeDigest, manifest.PackagesTreeSHA256)
+			return nil, fmt.Errorf("packages_root tree sha256 mismatch: got %s, want %s", pkgTreeDigest, manifest.PackagesTreeSHA256)
 		}
 		for _, dist := range manifest.Distributions {
-			if err := verifyDistributionTree(absDir, pkgRoot, dist); err != nil {
-				return err
+			if err := verifyDistributionTreeWithDigests(absDir, pkgRoot, dist, pkgFiles); err != nil {
+				return nil, err
 			}
 		}
 	}
 
 	if manifest.Bytecode != nil {
-		if err := verifyImageBytecode(absDir, manifest.Bytecode); err != nil {
-			return err
+		if err := verifyImageBytecodeWithDigests(manifest.Bytecode, pycFiles, pycWalkErr); err != nil {
+			return nil, err
 		}
 	}
 
-	if err := rejectHostNativeBinaries(absDir); err != nil {
-		return err
+	if len(nativeBinaries) > 0 {
+		sort.Strings(nativeBinaries)
+		return nil, fmt.Errorf("host native binaries forbidden in WASI image: %s", strings.Join(nativeBinaries, ", "))
 	}
-	return nil
+
+	return &verifiedImage{
+		imageDir:   absDir,
+		manifest:   manifest,
+		wasmPath:   wasmPath,
+		wasmSHA256: strings.ToLower(wasmDigest),
+		wasmBytes:  wasmBytes,
+	}, nil
 }
 
-func verifyImageBytecode(absDir string, spec *BytecodeSpec) error {
+func relIfInsideDir(root, p string, enabled bool) (bool, string) {
+	if !enabled || root == "" {
+		return false, ""
+	}
+	prefix := root + string(filepath.Separator)
+	if !strings.HasPrefix(p, prefix) {
+		return false, ""
+	}
+	return true, filepath.ToSlash(p[len(prefix):])
+}
+
+func hashFileWithBuf(path, relAbsSlash string, buf []byte, checkPyc bool, magicBytes []byte) (string, error, error) {
+	// #nosec G304 -- path is walked inside absDir.
+	f, err := os.Open(path)
+	if err != nil {
+		return "", nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	h := sha256.New()
+	var hdr [16]byte
+	totalRead := 0
+	for {
+		n, rerr := f.Read(buf)
+		if n > 0 {
+			if checkPyc && totalRead < len(hdr) {
+				copied := copy(hdr[totalRead:], buf[:n])
+				_ = copied
+			}
+			totalRead += n
+			_, _ = h.Write(buf[:n])
+		}
+		if rerr == io.EOF {
+			break
+		}
+		if rerr != nil {
+			return "", nil, rerr
+		}
+	}
+	var pycErr error
+	if checkPyc {
+		if totalRead < len(hdr) {
+			eofErr := io.ErrUnexpectedEOF
+			if totalRead == 0 {
+				eofErr = io.EOF
+			}
+			pycErr = fmt.Errorf("truncated bytecode header in %s: %w", relAbsSlash, eofErr)
+		} else if hdr[0] != magicBytes[0] || hdr[1] != magicBytes[1] || hdr[2] != magicBytes[2] || hdr[3] != magicBytes[3] {
+			pycErr = fmt.Errorf("bytecode magic mismatch in %s: got %x want %s", relAbsSlash, hdr[:4], CPython312BytecodeMagicHex)
+		} else {
+			flags := uint32(hdr[4]) | uint32(hdr[5])<<8 | uint32(hdr[6])<<16 | uint32(hdr[7])<<24
+			if (flags & 0x3) != 0x3 {
+				pycErr = fmt.Errorf("bytecode %s is not PEP 552 checked-hash (flags=0x%x)", relAbsSlash, flags)
+			}
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil)), pycErr, nil
+}
+
+func hashDigestMap(digests map[string]string) string {
+	rels := make([]string, 0, len(digests))
+	for rel := range digests {
+		rels = append(rels, rel)
+	}
+	sort.Strings(rels)
+	outer := sha256.New()
+	for _, rel := range rels {
+		_, _ = io.WriteString(outer, rel)
+		_, _ = outer.Write([]byte{0})
+		_, _ = io.WriteString(outer, digests[rel])
+		_, _ = outer.Write([]byte{'\n'})
+	}
+	return hex.EncodeToString(outer.Sum(nil))
+}
+
+func verifyImageBytecodeWithDigests(spec *BytecodeSpec, pycFiles map[string]string, pycWalkErr error) error {
 	if spec.InvalidationMode != "checked-hash" {
 		return fmt.Errorf("image bytecode invalidation_mode %q must be checked-hash", spec.InvalidationMode)
 	}
@@ -236,66 +447,20 @@ func verifyImageBytecode(absDir string, spec *BytecodeSpec) error {
 	if !isHexSHA256(spec.PycTreeSHA256) {
 		return fmt.Errorf("image bytecode invalid pyc_tree_sha256 %q", spec.PycTreeSHA256)
 	}
-
-	magicBytes, err := hex.DecodeString(CPython312BytecodeMagicHex)
-	if err != nil {
-		return err
+	if pycWalkErr != nil {
+		return pycWalkErr
 	}
-	var pycRels []string
-	err = filepath.WalkDir(absDir, func(p string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() || !strings.HasSuffix(d.Name(), ".pyc") {
-			return nil
-		}
-		if d.Type()&os.ModeSymlink != 0 {
-			return fmt.Errorf("unexpected symlink .pyc in immutable image: %s", p)
-		}
-		rel, err := filepath.Rel(absDir, p)
-		if err != nil {
-			return err
-		}
-		relSlash := filepath.ToSlash(rel)
-		// Validate 16-byte PEP 552 checked-hash header: magic (4B) + flags (4B, bit0|bit1 set) + hash (8B).
-		// #nosec G304 -- p is walked inside absDir.
-		f, err := os.Open(p)
-		if err != nil {
-			return fmt.Errorf("open bytecode %s: %w", relSlash, err)
-		}
-		var hdr [16]byte
-		_, rerr := io.ReadFull(f, hdr[:])
-		_ = f.Close()
-		if rerr != nil {
-			return fmt.Errorf("truncated bytecode header in %s: %w", relSlash, rerr)
-		}
-		if hdr[0] != magicBytes[0] || hdr[1] != magicBytes[1] || hdr[2] != magicBytes[2] || hdr[3] != magicBytes[3] {
-			return fmt.Errorf("bytecode magic mismatch in %s: got %x want %s", relSlash, hdr[:4], CPython312BytecodeMagicHex)
-		}
-		flags := uint32(hdr[4]) | uint32(hdr[5])<<8 | uint32(hdr[6])<<16 | uint32(hdr[7])<<24
-		if (flags & 0x3) != 0x3 {
-			return fmt.Errorf("bytecode %s is not PEP 552 checked-hash (flags=0x%x)", relSlash, flags)
-		}
-		pycRels = append(pycRels, relSlash)
-		return nil
-	})
-	if err != nil {
-		return err
+	if len(pycFiles) != spec.PycCount {
+		return fmt.Errorf("image bytecode count mismatch: got %d want %d", len(pycFiles), spec.PycCount)
 	}
-	if len(pycRels) != spec.PycCount {
-		return fmt.Errorf("image bytecode count mismatch: got %d want %d", len(pycRels), spec.PycCount)
-	}
-	gotTree, err := hashRelativeFiles(absDir, pycRels)
-	if err != nil {
-		return fmt.Errorf("hash image bytecode tree: %w", err)
-	}
+	gotTree := hashDigestMap(pycFiles)
 	if !strings.EqualFold(gotTree, spec.PycTreeSHA256) {
 		return fmt.Errorf("image bytecode pyc_tree_sha256 mismatch: got %s want %s", gotTree, spec.PycTreeSHA256)
 	}
 	return nil
 }
 
-func verifyDistributionTree(absDir, pkgRoot string, dist DistributionSpec) error {
+func verifyDistributionTreeWithDigests(absDir, pkgRoot string, dist DistributionSpec, pkgFiles map[string]string) error {
 	if strings.TrimSpace(dist.DistInfoPath) == "" {
 		return nil
 	}
@@ -311,25 +476,49 @@ func verifyDistributionTree(absDir, pkgRoot string, dist DistributionSpec) error
 		return nil
 	}
 	recPath := filepath.Join(distInfoAbs, "RECORD")
+	// #nosec G304 -- distInfoAbs is verified inside absDir via resolveInsideDir.
 	recBytes, err := os.ReadFile(recPath)
 	if err != nil {
 		return fmt.Errorf("distribution %s missing RECORD: %w", dist.Name, err)
 	}
-	var rels []string
+	seen := make(map[string]struct{})
+	var unique []string
 	for _, line := range strings.Split(string(recBytes), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		rel := strings.SplitN(line, ",", 2)[0]
-		if rel != "" {
-			rels = append(rels, rel)
+		rel := filepath.ToSlash(strings.SplitN(line, ",", 2)[0])
+		if rel == "" {
+			continue
 		}
+		if _, ok := seen[rel]; ok {
+			continue
+		}
+		seen[rel] = struct{}{}
+		unique = append(unique, rel)
 	}
-	digest, err := hashRelativeFiles(pkgRoot, rels)
-	if err != nil {
-		return fmt.Errorf("hash distribution %s tree: %w", dist.Name, err)
+	sort.Strings(unique)
+	outer := sha256.New()
+	for _, rel := range unique {
+		full, err := resolveInsideDir(pkgRoot, filepath.FromSlash(rel))
+		if err != nil {
+			return fmt.Errorf("hash distribution %s tree: %w", dist.Name, err)
+		}
+		cleanRel, err := filepath.Rel(pkgRoot, full)
+		if err != nil {
+			return fmt.Errorf("hash distribution %s tree: %w", dist.Name, err)
+		}
+		digest, ok := pkgFiles[filepath.ToSlash(cleanRel)]
+		if !ok {
+			continue
+		}
+		_, _ = io.WriteString(outer, rel)
+		_, _ = outer.Write([]byte{0})
+		_, _ = io.WriteString(outer, digest)
+		_, _ = outer.Write([]byte{'\n'})
 	}
+	digest := hex.EncodeToString(outer.Sum(nil))
 	if !strings.EqualFold(digest, dist.TreeSHA256) {
 		return fmt.Errorf("distribution %s tree sha256 mismatch: got %s, want %s", dist.Name, digest, dist.TreeSHA256)
 	}
@@ -435,34 +624,6 @@ func HashTree(root string) (string, error) {
 		_, _ = outer.Write([]byte{'\n'})
 	}
 	return hex.EncodeToString(outer.Sum(nil)), nil
-}
-
-func rejectHostNativeBinaries(root string) error {
-	var found []string
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if isHostNativeBinaryName(d.Name()) {
-			rel, relErr := filepath.Rel(root, p)
-			if relErr != nil {
-				rel = p
-			}
-			found = append(found, filepath.ToSlash(rel))
-		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("scan image for native binaries: %w", err)
-	}
-	if len(found) > 0 {
-		sort.Strings(found)
-		return fmt.Errorf("host native binaries forbidden in WASI image: %s", strings.Join(found, ", "))
-	}
-	return nil
 }
 
 func isHostNativeBinaryName(name string) bool {
