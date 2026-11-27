@@ -1043,19 +1043,46 @@ def _resolve_engine_root(engine_bin: pathlib.Path | None) -> pathlib.Path | None
     candidates: list[pathlib.Path] = []
     if env_root := os.environ.get("LYCAON_ENGINE_ROOT", "").strip():
         candidates.append(pathlib.Path(env_root))
-    candidates.append(REPO_ROOT / "lycaon-den/src-tauri/engine-root")
+    candidates.extend([
+        REPO_ROOT / "lycaon-den/src-tauri/engine-root",
+        REPO_ROOT / "e2e-go-cache",
+        REPO_ROOT.parent / "e2e-go-cache",
+        pathlib.Path.home() / "e2e-go-cache",
+    ])
     if engine_bin is not None:
         eb = engine_bin.resolve()
         candidates.extend([
             eb.parent / "engine-root",
             eb.parent,
+            eb.parent / "e2e-go-cache",
             eb.parent.parent / "engine-root",
+            eb.parent.parent / "e2e-go-cache",
             eb.parent.parent / "lycaon-den/src-tauri/engine-root",
         ])
     for cand in candidates:
         if (cand / "gitengine" / "bin" / "git").is_file():
             return cand
-    # Fall back to the canonical repo engine-root if it exists.
+    return None
+
+
+def _ensure_engine_root(engine_bin: pathlib.Path | None, timeout_s: float) -> pathlib.Path | None:
+    """Resolve an existing engine-root with gitengine/bin/git, or stage via scripts/gitengine-ensure.sh."""
+    found = _resolve_engine_root(engine_bin)
+    if found is not None:
+        return found
+    ensure_script = REPO_ROOT / "scripts/gitengine-ensure.sh"
+    if ensure_script.is_file():
+        subprocess.run(
+            ["bash", str(ensure_script)],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=max(120.0, timeout_s * 4.0),
+            check=False,
+        )
+    found = _resolve_engine_root(engine_bin)
+    if found is not None:
+        return found
     default_root = REPO_ROOT / "lycaon-den/src-tauri/engine-root"
     return default_root if default_root.is_dir() else None
 
@@ -1078,7 +1105,7 @@ def run_slot_c06_git_ssh(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | No
         "./test/wiring/commands",
     ]
     env = dict(os.environ)
-    engine_root = _resolve_engine_root(engine_bin)
+    engine_root = _ensure_engine_root(engine_bin, timeout_s)
     if engine_root is not None:
         env["LYCAON_ENGINE_ROOT"] = str(engine_root)
     timed_out = False
