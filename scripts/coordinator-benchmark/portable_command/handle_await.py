@@ -42,7 +42,8 @@ def drain_command_output(application, session_id, handle, *, send_calls, start_c
             gaps.append('command_output_rejected')
             break
         page = parse_content_json(o_res)
-        if (not page or not isinstance(page.get('chunks'), list)
+        if (not page or 'chunks' not in page
+                or (page.get('chunks') is not None and not isinstance(page.get('chunks'), list))
                 or 'handle' not in page or 'cursor' not in page
                 or 'next_cursor' not in page or not isinstance(page.get('running'), bool)):
             gaps.append('command_output_missing')
@@ -58,9 +59,15 @@ def drain_command_output(application, session_id, handle, *, send_calls, start_c
         if p_cur != cursor or n_cur is None or n_cur < cursor:
             gaps.append('command_output_cursor_gap')
             break
+        raw_chunks = page.get('chunks')
+        if raw_chunks is None:
+            if n_cur > cursor:
+                gaps.append('command_output_missing')
+                break
+            raw_chunks = []
         prev_c = None
         bad_chunk = False
-        for ch in page['chunks']:
+        for ch in raw_chunks:
             c_cur = _int_cursor(ch.get('cursor')) if isinstance(ch, dict) else None
             if c_cur is None or c_cur < cursor or c_cur >= n_cur or (prev_c is not None and c_cur <= prev_c):
                 bad_chunk = True
