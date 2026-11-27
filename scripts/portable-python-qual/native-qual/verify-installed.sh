@@ -232,7 +232,12 @@ TARGET_PYC="$(find "${S4}/portable-python/image/lib" -type f -name '*.pyc' 2>/de
 if [[ -n "${TARGET_PYC}" ]]; then
   printf '# corrupted pyc sentinel\n' >> "${TARGET_PYC}"
 else
-  printf '# corrupted stdlib sentinel\n' >> "${S4}/portable-python/image/lib/python3.12/site.py"
+  TARGET_PY="$(find "${S4}/portable-python/image/lib" -type f -name '*.py' 2>/dev/null | head -n 1 || true)"
+  if [[ -n "${TARGET_PY}" ]]; then
+    printf '# corrupted stdlib sentinel\n' >> "${TARGET_PY}"
+  else
+    printf '# corrupted image sentinel\n' > "${S4}/portable-python/image/lib/__corrupted_qual__.py"
+  fi
 fi
 run_skew_check "4-corrupted-image" "${S4}"
 

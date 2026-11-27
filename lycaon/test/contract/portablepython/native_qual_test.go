@@ -670,14 +670,19 @@ func TestNativeQual_FailClosedSkewSwaps(t *testing.T) {
 		dst := filepath.Join(t.TempDir(), "engine-root")
 		contractcheck.FailErr(t, "copy engine-root", copyDirRecursive(engineRoot, dst))
 		var targetFile string
-		_ = filepath.Walk(filepath.Join(dst, "portable-python", "image", "lib"), func(p string, info os.FileInfo, err error) error {
-			if err == nil && !info.IsDir() && strings.HasSuffix(p, ".pyc") && targetFile == "" {
-				targetFile = p
+		for _, ext := range []string{".pyc", ".py"} {
+			if targetFile != "" {
+				break
 			}
-			return nil
-		})
+			_ = filepath.Walk(filepath.Join(dst, "portable-python", "image", "lib"), func(p string, info os.FileInfo, err error) error {
+				if err == nil && !info.IsDir() && strings.HasSuffix(p, ext) && targetFile == "" {
+					targetFile = p
+				}
+				return nil
+			})
+		}
 		if targetFile == "" {
-			targetFile = filepath.Join(dst, "portable-python", "image", "lib", "python3.12", "site.py")
+			t.Fatal("no .pyc or .py file found under portable-python/image/lib")
 		}
 		f, err := os.OpenFile(targetFile, os.O_APPEND|os.O_WRONLY, 0o644)
 		contractcheck.FailErr(t, "open image file to corrupt", err)
