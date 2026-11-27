@@ -38,10 +38,11 @@ type Operations struct {
 // Owners holds the operations behind every mutation utility. One value serves
 // many programs; per-invocation state lives in Prepared and Publication.
 type Owners struct {
-	Revisions  native.ExecutionRevisions
-	Pins       PinRecorder
-	Operations Operations
-	Admission  tooloutput.SpillAdmission
+	Revisions    native.ExecutionRevisions
+	Pins         PinRecorder
+	Operations   Operations
+	Admission    tooloutput.SpillAdmission
+	ManagedTemps *ManagedTempTracker
 
 	catalog toolcontract.LanguageCatalog
 	specs   map[string]toolcontract.CommandSpecification

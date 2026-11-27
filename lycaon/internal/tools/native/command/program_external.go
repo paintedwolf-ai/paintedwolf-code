@@ -33,6 +33,7 @@ type ExternalStages struct {
 	Cwd             projectpaths.Resolved
 	BaseEnvironment []string
 	ObserveStage    func(tools.ToolContext, confine.StampedRefusal, []confine.EgressHost, bool)
+	DeclareLaunch   func(ctx context.Context, tc tools.ToolContext, executionID, cwd string, argv []string) error
 	// window observes the source changes of the program this launch belongs to.
 	window *programWindow
 }
@@ -114,6 +115,14 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
 		}
 		return externalLaunchFailure(err, refusedResult("TOOL_OWNER_FAILED")), err
+	}
+	if l.DeclareLaunch != nil {
+		if err := l.DeclareLaunch(ctx, tctx, request.Invocation.Identity.ExecutionID, cwd, launchArgv); err != nil {
+			if ctx.Err() != nil {
+				return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
+			}
+			return externalLaunchFailure(err, refusedResult("COMMAND_REVISION_CONFLICT")), err
+		}
 	}
 	// Open before the process starts, so earlier drift is not attributed to it,
 	// and stay held until it has exited, on every path out of this launch.
