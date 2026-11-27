@@ -55,7 +55,7 @@ func fixturePrepare(t *testing.T, onPrepare func()) func() (opengrepRunFiles, fu
 	}
 }
 
-func TestOpenGrepHardLimitClassification(t *testing.T) {
+func TestOpenGrepHardLimitPreservesCallerContext(t *testing.T) {
 	t.Run("caller cancellation", func(t *testing.T) {
 		root := t.TempDir()
 		bin := writeSlowFixtureBinary(t, root)
@@ -119,7 +119,9 @@ func TestOpenGrepHardLimitClassification(t *testing.T) {
 			t.Fatalf("shorter caller deadline misclassified with ErrHardLimitExceeded: %v", err)
 		}
 	})
+}
 
+func TestOpenGrepHardLimitClassification(t *testing.T) {
 	t.Run("hard limit expires during execution", func(t *testing.T) {
 		root := t.TempDir()
 		bin := writeSlowFixtureBinary(t, root)
