@@ -1008,6 +1008,10 @@ def run_tb09_sidecar_slots(
     extra_dbs: list[pathlib.Path] = []
     extra_logs: list[pathlib.Path] = []
 
+    def _record_slot(rec: dict[str, Any]) -> None:
+        receipts[rec["slot_id"]] = rec
+        _save_json(slots_dir / f"{rec['slot_id']}.json", rec)
+
     # 1. Real `model_request` A10 slots (dedicated non-manual sidecar with local OpenAI recording fixtures).
     model_specs = [s for s in selected if s.family == "A10" and s.seam == "model_request"]
     if model_specs:
@@ -1022,7 +1026,8 @@ def run_tb09_sidecar_slots(
             engine_manifest=engine_manifest,
             engine_root=engine_root,
         )
-        receipts.update(model_receipts)
+        for rec in model_receipts.values():
+            _record_slot(rec)
         extra_dbs.append(model_app_dir / "store.db")
         extra_logs.append(model_app_dir / "sidecar.log")
 
@@ -1034,14 +1039,14 @@ def run_tb09_sidecar_slots(
         else:
             reason = "local MCP Streamable HTTP fixture server not staged in headless sidecar harness"
             inproc_ref = "lycaon/test/wea/tb09_secrets_test.go::TestWEATB09_A10_OutboundSecretScreeningOptions"
-        receipts[spec.slot_id] = build_slot_receipt(
+        _record_slot(build_slot_receipt(
             spec,
             provenance=prov,
             typed_result={"status": "blocked", "reason": reason},
             independent_observation={"live_product_driven": False, "covered_in_process": inproc_ref},
             canary_tokens=canaries.tokens,
             verdict="blocked",
-        )
+        ))
 
     # 3. Warmed manual-mode sidecar for A10 `http_request` (4 slots), A11 (12 slots), and A13 (8 slots).
     need_manual_sidecar = any(
@@ -1179,7 +1184,7 @@ def run_tb09_sidecar_slots(
                             and ans.get("option_offered") is False
                             and chk["passed"]
                         )
-                    receipts[spec.slot_id] = build_slot_receipt(
+                    _record_slot(build_slot_receipt(
                         spec,
                         provenance=prov,
                         typed_result={
@@ -1195,7 +1200,7 @@ def run_tb09_sidecar_slots(
                         },
                         canary_tokens=[*canaries.tokens, *a10_probe_canaries.tokens],
                         passed=ok,
-                    )
+                    ))
 
             # --- Execute A11 slots ---
             for spec in [s for s in selected if s.family == "A11"]:
@@ -1270,6 +1275,7 @@ def run_tb09_sidecar_slots(
                         sess_a1,
                         "command",
                         {"command": f"echo {bad_ref}"},
+                        checkpoint_policy="reject",
                     )
                     code = _extract_refusal_code(bad_res)
                     g = verify_reference_grammar(bad_ref)
@@ -1342,12 +1348,14 @@ def run_tb09_sidecar_slots(
                         sess_a1,
                         "command",
                         {"command": f"printf 'MODEL_LITERAL=%s\\n' '{literal_val}' > .env"},
+                        checkpoint_policy="approve_once",
                     )
                     _, r_res, _ = _send_tool_call(
                         app,
                         sess_a1,
                         "command",
                         {"command": "cat .env"},
+                        checkpoint_policy="approve_once",
                     )
                     _, after_sec_list = _api_call(app, f"/v1/projects/{proj_a_id}/secrets")
                     after_sec_count = len(after_sec_list.get("secrets") or [])
@@ -1384,14 +1392,14 @@ def run_tb09_sidecar_slots(
                     typed = {"tool_outcome": sink_res.get("outcome"), "refusal_code": code}
                     obs = {"outside_sink_refused": ok}
 
-                receipts[sid] = build_slot_receipt(
+                _record_slot(build_slot_receipt(
                     spec,
                     provenance=prov,
                     typed_result=typed,
                     independent_observation=obs,
                     canary_tokens=canaries.tokens,
                     passed=ok,
-                )
+                ))
 
             # --- Execute A13 non-restart slots (A13-sc-01..A13-sc-07) ---
             for spec in [s for s in selected if s.family == "A13" and s.slot_id != "A13-sc-08"]:
@@ -1510,14 +1518,14 @@ def run_tb09_sidecar_slots(
                     }
                     obs = {"revocation_terminal": ok}
 
-                receipts[sid] = build_slot_receipt(
+                _record_slot(build_slot_receipt(
                     spec,
                     provenance=prov,
                     typed_result=typed,
                     independent_observation=obs,
                     canary_tokens=canaries.tokens,
                     passed=ok,
-                )
+                ))
 
             if need_restart_slot and "A13-sc-07" not in receipts:
                 _api_call(app, f"/v1/projects/{proj_a_id}/secrets/{secret_a13_id}", None, method="DELETE")
@@ -1569,7 +1577,7 @@ def run_tb09_sidecar_slots(
                 and st_rep_post in (400, 409, 410)
                 and post_audit["clean"]
             )
-            receipts["A13-sc-08"] = build_slot_receipt(
+            _record_slot(build_slot_receipt(
                 spec_restart,
                 provenance=prov,
                 typed_result={
@@ -1585,7 +1593,7 @@ def run_tb09_sidecar_slots(
                 },
                 canary_tokens=canaries.tokens,
                 passed=ok,
-            )
+            ))
 
     # Persist individual slot receipts & summary manifest.
     ordered_receipts = [receipts[s.slot_id] for s in selected if s.slot_id in receipts]
