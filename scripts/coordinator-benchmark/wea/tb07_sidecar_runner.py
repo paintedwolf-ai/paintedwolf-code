@@ -319,6 +319,8 @@ def _build_receipt(
     reasons = list(failure_reasons or [])
     if not product_verified:
         reasons.append("unverified_source_witness")
+    if not passed and not reasons:
+        reasons.append(f"assertion_failed:{spec['slot_id']}")
     verdict = "pass" if (passed and not reasons) else "fail"
     return {
         "schema": "wea-tb07-slot-receipt-v1",
@@ -478,7 +480,7 @@ def _run_warmed_slots(
                     app, a01_sid, "command",
                     {
                         "command": _py_write_cmd(target, "after-01\n"),
-                        "capability_request": {"write_roots": [str(outside_dir)]},
+                        "capability_request": {"write_root": str(outside_dir)},
                     },
                     action="approve", rung="once",
                 )
@@ -591,7 +593,7 @@ def _run_warmed_slots(
                     app, a01_sid, "command",
                     {
                         "command": _py_write_cmd(target, "mutated-05\n"),
-                        "capability_request": {"write_roots": [str(outside_dir)]},
+                        "capability_request": {"write_root": str(outside_dir)},
                     },
                     action="reject",
                 )
@@ -702,25 +704,45 @@ def _run_warmed_slots(
             # ------------------------------------------------------------------
             a02_sid, _ = open_prompted_session(proj_main, "Run A02 grant scope checks.")
 
-            # A02-01: once single-use
+            # A02-01: once single-use (dedicated outside write_root so it never collides with loopback grants)
             if "A02-01-scope-once-single-use" in spec_map:
-                b0 = len(ep3.snapshot()["requests"])
+                outside_a02_once = work_dir / "outside-a02-once"
+                outside_a02_once.mkdir(parents=True, exist_ok=True)
+                once_target = outside_a02_once / "once_check.txt"
                 c1 = _call_with_checkpoint_inspect(
                     app, a02_sid, "command",
-                    {"command": _http_probe_cmd(f"{ep3.base_url}/a02-01"), "capability_request": {"loopback_connect": {"ports": [ep3.port]}}},
+                    {
+                        "command": _py_write_cmd(once_target, "once-1\n"),
+                        "capability_request": {"write_root": str(outside_a02_once)},
+                    },
                     action="approve", rung="once",
                 )
+                after_c1 = hash_file(once_target)
                 c2 = _call_with_checkpoint_inspect(
                     app, a02_sid, "command",
-                    {"command": _http_probe_cmd(f"{ep3.base_url}/a02-01"), "capability_request": {"loopback_connect": {"ports": [ep3.port]}}},
+                    {
+                        "command": _py_write_cmd(once_target, "once-2-denied\n"),
+                        "capability_request": {"write_root": str(outside_a02_once)},
+                    },
                     action="reject",
                 )
-                a0 = len(ep3.snapshot()["requests"])
-                ok = c1["checkpoint"]["asked"] and c2["checkpoint"]["asked"] and (a0 - b0) == 1
+                after_c2 = hash_file(once_target)
+                want_sha = sha256_bytes(b"once-1\n")
+                ok = (
+                    c1["checkpoint"]["asked"]
+                    and c2["checkpoint"]["asked"]
+                    and after_c1["sha256"] == want_sha
+                    and after_c2["sha256"] == want_sha
+                )
                 receipts.append(_build_receipt(
                     spec=spec_map["A02-01-scope-once-single-use"], prov=prov,
-                    typed_result={"first_asked": c1["checkpoint"]["asked"], "second_asked": c2["checkpoint"]["asked"]},
-                    independent_observation={"fixture_arrivals_delta": a0 - b0},
+                    typed_result={
+                        "first_asked": c1["checkpoint"]["asked"],
+                        "second_asked": c2["checkpoint"]["asked"],
+                        "c1_outcome": c1["result"].get("outcome"),
+                        "c2_outcome": c2["result"].get("outcome"),
+                    },
+                    independent_observation={"after_c1": after_c1, "after_c2": after_c2, "expected_sha256": want_sha},
                     passed=ok,
                 ))
 
@@ -776,7 +798,7 @@ def _run_warmed_slots(
                     app, a02_sid, "command",
                     {
                         "command": _py_write_cmd(diff_target, "must-not-write\n"),
-                        "capability_request": {"write_roots": [str(outside_a02_diff)]},
+                        "capability_request": {"write_root": str(outside_a02_diff)},
                     },
                     action="reject",
                 )
@@ -900,7 +922,7 @@ def _run_warmed_slots(
                 app, s_p1, "command",
                 {
                     "command": _py_write_cmd(proj_write_target, "project-grant-1\n"),
-                    "capability_request": {"write_roots": [str(outside_proj_dir)]},
+                    "capability_request": {"write_root": str(outside_proj_dir)},
                 },
                 action="approve", rung="project",
             )
@@ -912,7 +934,7 @@ def _run_warmed_slots(
                     app, s_p2, "command",
                     {
                         "command": _py_write_cmd(proj_write_target, "project-grant-2\n"),
-                        "capability_request": {"write_roots": [str(outside_proj_dir)]},
+                        "capability_request": {"write_root": str(outside_proj_dir)},
                     },
                     action=None,
                 )
@@ -931,7 +953,7 @@ def _run_warmed_slots(
                     app, s_pb, "command",
                     {
                         "command": _py_write_cmd(proj_write_target, "cross-project-denied\n"),
-                        "capability_request": {"write_roots": [str(outside_proj_dir)]},
+                        "capability_request": {"write_root": str(outside_proj_dir)},
                     },
                     action="reject",
                 )
@@ -965,7 +987,7 @@ def _run_warmed_slots(
                     app, s_del, "command",
                     {
                         "command": _py_write_cmd(proj_write_target, "fresh-chat-denied\n"),
-                        "capability_request": {"write_roots": [str(outside_proj_dir)]},
+                        "capability_request": {"write_root": str(outside_proj_dir)},
                     },
                     action="reject",
                 )
@@ -1205,7 +1227,7 @@ def _run_warmed_slots(
                     app, a04_sid, "command",
                     {
                         "command": _py_write_cmd(rej_target, "should-not-write\n"),
-                        "capability_request": {"write_roots": [str(outside_a04_dir)]},
+                        "capability_request": {"write_root": str(outside_a04_dir)},
                     },
                     action="reject",
                 )
@@ -1250,7 +1272,7 @@ def _run_warmed_slots(
                             "name": "command",
                             "args": {
                                 "command": _py_write_cmd(stop_target, "must-not-exist\n"),
-                                "capability_request": {"write_roots": [str(outside_a04_stop)]},
+                                "capability_request": {"write_root": str(outside_a04_stop)},
                             },
                         }],
                     },
@@ -1309,47 +1331,59 @@ def _run_a12_restart_slots(
 
     proj = _make_project(work_dir, "proj-a12")
     app_dir = work_dir / "a12-app"
+    outside_a12_pending = work_dir / "outside-a12-pending"
+    outside_a12_pending.mkdir(parents=True, exist_ok=True)
+    pending_target = outside_a12_pending / "a12_pending_once.txt"
     pre_plan_id = ""
     post_plan_id = ""
     pending_cp_id = ""
     pending_preserved = False
+    pre_restart_target_existed = False
     session_id = ""
+    session_rev_id = ""
     project_id = ""
+    revoked_before_restart = 0
 
     with (
-        RecordingHTTPFixture(fixture_id="tb07-a12-pending") as ep_pending,
         RecordingHTTPFixture(fixture_id="tb07-a12-chat") as ep_chat,
         RecordingHTTPFixture(fixture_id="tb07-a12-revoked") as ep_revoked,
     ):
         # Boot 1:
-        # 1) Install chat grant for ep_chat (keep across restart)
-        # 2) Install & revoke chat grant for ep_revoked (verify stays revoked across restart)
-        # 3) Open pending checkpoint for ep_pending and stop engine before resolving
+        # 1) On session_id: install chat-scoped loopback_connect grant (keep across restart)
+        # 2) On dedicated session_rev_id: install chat-scoped loopback_connect grant, then revoke ALL grants for session_rev_id
+        # 3) On session_id: open pending write_root checkpoint (distinct capability from loopback_connect!) and stop engine before resolving
         app1 = _create_application(app_dir, engine_bin=engine_bin, engine_manifest=engine_manifest, engine_root=engine_root)
         try:
             app1.ready()
             session_id, project_id, _ = _open_session(app1, proj)
-            app1.request(f"/v1/sessions/{session_id}/prompts", {"operation_id": str(uuid.uuid4()), "text": "A12 pre-restart setup."})
-
+            app1.request(f"/v1/sessions/{session_id}/prompts", {"operation_id": str(uuid.uuid4()), "text": "A12 pre-restart chat grant setup."})
             _call_with_checkpoint_inspect(
                 app1, session_id, "command",
                 {"command": _http_probe_cmd(f"{ep_chat.base_url}/boot1"), "capability_request": {"loopback_connect": {"ports": [ep_chat.port]}}},
                 action="approve", rung="chat",
             )
+            _close_session_turn(app1, session_id)
+
+            # Separate session for A12-03 revoked grant so session_id's loopback_connect grant cannot overlap it.
+            sess_rev = app1.request("/v1/sessions", {"project_id": project_id, "posture": "build"})
+            session_rev_id = sess_rev["id"]
+            app1.request("/harness/model-limit", {"session_id": session_rev_id, "limit": 10})
+            _wait_session_idle(app1, session_rev_id, "a12 session_rev ready")
+            app1.request(f"/v1/sessions/{session_rev_id}/prompts", {"operation_id": str(uuid.uuid4()), "text": "A12 pre-restart revoked grant setup."})
             _call_with_checkpoint_inspect(
-                app1, session_id, "command",
+                app1, session_rev_id, "command",
                 {"command": _http_probe_cmd(f"{ep_revoked.base_url}/boot1"), "capability_request": {"loopback_connect": {"ports": [ep_revoked.port]}}},
                 action="approve", rung="chat",
             )
-            # Revoke only ep_revoked's grant (keep ep_chat's grant live)
-            grants = (app1.request(f"/v1/approval-grants?session_id={session_id}") or {}).get("grants") or []
-            rev_ids = [
-                g["id"] for g in grants
-                if isinstance(g, dict) and str(ep_revoked.port) in json.dumps(g)
-            ]
+            rev_grants = (app1.request(f"/v1/approval-grants?session_id={session_rev_id}") or {}).get("grants") or []
+            rev_ids = [g["id"] for g in rev_grants if isinstance(g, dict) and g.get("id")]
             if rev_ids:
                 app1.request("/v1/approval-grants/revoke", {"ids": rev_ids})
+                revoked_before_restart = len(rev_ids)
+            _close_session_turn(app1, session_rev_id)
 
+            # Now open a pending write_root checkpoint on session_id and stop engine before resolving.
+            app1.request(f"/v1/sessions/{session_id}/prompts", {"operation_id": str(uuid.uuid4()), "text": "A12 pending write_root across restart."})
             req = _wait_pending_bounded(app1, session_id)
             pending_call_id = str(uuid.uuid4())
             app1.request(
@@ -1360,8 +1394,8 @@ def _run_a12_restart_slots(
                         "id": pending_call_id,
                         "name": "command",
                         "args": {
-                            "command": _http_probe_cmd(f"{ep_pending.base_url}/after-restart"),
-                            "capability_request": {"loopback_connect": {"ports": [ep_pending.port]}},
+                            "command": _py_write_cmd(pending_target, "a12-once-after-restart\n"),
+                            "capability_request": {"write_root": str(outside_a12_pending)},
                         },
                     }],
                 },
@@ -1369,6 +1403,7 @@ def _run_a12_restart_slots(
             cp_before, _settled_before = _wait_pending_checkpoint_or_settled(app1, session_id, pending_call_id, timeout_s=20.0)
             pending_cp_id = str((cp_before or {}).get("id") or "")
             pre_plan_id = str((((cp_before or {}).get("tool_approval") or {}).get("plan") or {}).get("id") or "")
+            pre_restart_target_existed = pending_target.exists()
         finally:
             app1.close(cleanup=False)
 
@@ -1377,7 +1412,7 @@ def _run_a12_restart_slots(
         try:
             app2.ready()
 
-            # A12-01: Pending checkpoint preserved with identical plan ID; approve once -> exact 1 arrival
+            # A12-01: Pending checkpoint preserved with identical plan ID; approve once
             cps_after = (app2.request(f"/v1/sessions/{session_id}/checkpoints?status=pending") or {}).get("checkpoints") or []
             matched_cp = next((c for c in cps_after if c.get("id") == pending_cp_id), None)
             if matched_cp is not None:
@@ -1388,7 +1423,6 @@ def _run_a12_restart_slots(
                     f"/v1/sessions/{session_id}/checkpoints/{pending_cp_id}",
                     {"kind": "tool_approval", "action": "approve", "option_id": opt["id"]},
                 )
-            # Abort the pre-restart turn (or wait if it settled) so session is clean for A12-02/03 probes
             with contextlib.suppress(Exception):
                 app2.request(f"/v1/sessions/{session_id}/abort", {})
             _wait_session_idle(app2, session_id, "a12 idle after restart")
@@ -1402,17 +1436,18 @@ def _run_a12_restart_slots(
                 action=None,
             )
             a_chat = len(ep_chat.snapshot()["requests"])
+            _close_session_turn(app2, session_id)
 
-            # A12-03: Revoked grant for ep_revoked stayed revoked across restart -> asks!
+            # A12-03: Revoked grant on session_rev_id stayed revoked across restart -> asks!
+            app2.request(f"/v1/sessions/{session_rev_id}/prompts", {"operation_id": str(uuid.uuid4()), "text": "A12 post-restart revoked check."})
             b_rev = len(ep_revoked.snapshot()["requests"])
             c_rev_after = _call_with_checkpoint_inspect(
-                app2, session_id, "command",
+                app2, session_rev_id, "command",
                 {"command": _http_probe_cmd(f"{ep_revoked.base_url}/boot2"), "capability_request": {"loopback_connect": {"ports": [ep_revoked.port]}}},
                 action="reject",
             )
             a_rev = len(ep_revoked.snapshot()["requests"])
-            with contextlib.suppress(Exception):
-                app2.request(f"/v1/sessions/{session_id}/abort", {})
+            _close_session_turn(app2, session_rev_id)
 
             # Cross-chat isolation after restart
             sess_b = app2.request("/v1/sessions", {"project_id": project_id, "posture": "build"})
@@ -1425,15 +1460,12 @@ def _run_a12_restart_slots(
                 {"command": _http_probe_cmd(f"{ep_chat.base_url}/boot2-other"), "capability_request": {"loopback_connect": {"ports": [ep_chat.port]}}},
                 action="reject",
             )
-            with contextlib.suppress(Exception):
-                app2.request(f"/v1/sessions/{sid_b}/abort", {})
+            _close_session_turn(app2, sid_b)
         finally:
             app2.close(cleanup=False)
 
-        pending_arrivals = len(ep_pending.snapshot()["requests"])
-
     if "A12-01-restart-pending-preserved-no-double-run" in spec_map:
-        ok = pending_preserved and bool(pre_plan_id) and pre_plan_id == post_plan_id and pending_arrivals <= 1
+        ok = pending_preserved and (not pre_restart_target_existed) and bool(pre_plan_id) and pre_plan_id == post_plan_id
         receipts.append(_build_receipt(
             spec=spec_map["A12-01-restart-pending-preserved-no-double-run"], prov=prov,
             typed_result={
@@ -1442,7 +1474,7 @@ def _run_a12_restart_slots(
                 "pre_restart_plan_id": pre_plan_id,
                 "post_restart_plan_id": post_plan_id,
             },
-            independent_observation={"pending_fixture_arrivals": pending_arrivals, "no_double_run": pending_arrivals <= 1},
+            independent_observation={"pre_restart_target_existed": pre_restart_target_existed, "post_restart_target_exists": pending_target.exists()},
             passed=ok,
         ))
 
@@ -1459,10 +1491,13 @@ def _run_a12_restart_slots(
         ))
 
     if "A12-03-restart-revoked-grant-stays-revoked" in spec_map:
-        ok = c_rev_after["checkpoint"]["asked"] and (a_rev - b_rev) == 0
+        ok = revoked_before_restart >= 1 and c_rev_after["checkpoint"]["asked"] and (a_rev - b_rev) == 0
         receipts.append(_build_receipt(
             spec=spec_map["A12-03-restart-revoked-grant-stays-revoked"], prov=prov,
-            typed_result={"revoked_grant_asked_after_restart": c_rev_after["checkpoint"]["asked"]},
+            typed_result={
+                "revoked_before_restart": revoked_before_restart,
+                "revoked_grant_asked_after_restart": c_rev_after["checkpoint"]["asked"],
+            },
             independent_observation={"revoked_fixture_arrivals_delta": a_rev - b_rev},
             passed=ok,
         ))
