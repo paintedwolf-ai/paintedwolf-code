@@ -24,7 +24,7 @@ def run_cancellation_turn(app, session_id, project_id, db_path, surface, send_ca
             row = db.execute(
                 "SELECT p.id, (SELECT count(*) FROM invocation_program_executions e "
                 "WHERE e.program_id=p.id AND (e.operation_id IS NULL OR e.operation_id NOT LIKE 'program %') "
-                "AND e.owner_started=1 AND e.owner_invoked=1) "
+                "AND e.owner_started=1) "
                 "FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE r.tool_call_id=?",
                 (call_id,),
             ).fetchone()
