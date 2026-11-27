@@ -10,6 +10,7 @@ from pathlib import Path
 import platform
 import re
 import secrets
+import shutil
 import signal
 import subprocess
 import sys
@@ -682,8 +683,379 @@ def run_small_fixture_strace_controls(
         return report
 
 
+def parse_strace_fixture_ops_file(
+    trace_path: Path,
+    fixture_root: Path,
+    *,
+    known_dir_rels: set[str] | None = None,
+    known_file_rels: set[str] | None = None,
+) -> dict[str, object]:
+    """Streaming line-by-line equivalent of parse_strace_fixture_ops for 50k/500k scale traces."""
+    if not trace_path.is_file() or trace_path.stat().st_size == 0:
+        return parse_strace_fixture_ops("", fixture_root, known_dir_rels=known_dir_rels, known_file_rels=known_file_rels)
+
+    root_path = Path(fixture_root)
+    root_str = str(root_path.resolve()) if root_path.exists() else os.path.normpath(str(root_path))
+    dirs_known = set(known_dir_rels) if known_dir_rels is not None else set()
+    dirs_known.add(".")
+    files_known = set(known_file_rels) if known_file_rels is not None else None
+
+    pending: dict[str, str] = {}
+    total_lines = 0
+    fixture_scoped_events = 0
+    productive_dir_reads = 0
+    eof_dir_reads = 0
+    failed_dir_reads = 0
+    distinct_dirs: set[str] = set()
+    known_file_stats = 0
+    distinct_known_files: set[str] = set()
+    known_dir_stats = 0
+    unsuccessful_or_unknown = 0
+
+    with trace_path.open("r", encoding="utf-8", errors="replace") as fh:
+        for raw in fh:
+            line = raw.strip()
+            if not line:
+                continue
+            mu = _UNFINISHED_RE.match(line)
+            if mu:
+                pending[mu.group(1)] = f"{mu.group(1)} {mu.group(2)}"
+                continue
+            mr = _RESUMED_RE.match(line)
+            if mr and mr.group(1) in pending:
+                line = pending.pop(mr.group(1)) + mr.group(2)
+            total_lines += 1
+
+            mg = _GETDENTS_RE.search(line)
+            if mg:
+                dir_path, ret_val = mg.group(1), int(mg.group(2))
+                rel = _under_root(dir_path, root_str)
+                if rel is not None:
+                    fixture_scoped_events += 1
+                    if ret_val > 0:
+                        productive_dir_reads += 1
+                        distinct_dirs.add(rel)
+                    elif ret_val == 0:
+                        eof_dir_reads += 1
+                    else:
+                        failed_dir_reads += 1
+                continue
+
+            rel_stat: str | None = None
+            ret_stat: int | None = None
+            mf = _FSTATAT_FD_RE.search(line)
+            if mf:
+                base_dir, name, ret_stat = mf.group(1), mf.group(2), int(mf.group(3))
+                full = base_dir if name in ("", ".") else os.path.join(base_dir, name)
+                rel_stat = _under_root(full, root_str)
+            else:
+                mc = _FSTATAT_CWD_RE.search(line)
+                if mc:
+                    rel_stat = _under_root(mc.group(1), root_str)
+                    ret_stat = int(mc.group(2))
+
+            if rel_stat is not None and ret_stat is not None:
+                fixture_scoped_events += 1
+                if ret_stat < 0:
+                    unsuccessful_or_unknown += 1
+                elif rel_stat in dirs_known:
+                    known_dir_stats += 1
+                elif files_known is None or rel_stat in files_known:
+                    known_file_stats += 1
+                    distinct_known_files.add(rel_stat)
+                else:
+                    unsuccessful_or_unknown += 1
+
+    if fixture_scoped_events == 0:
+        return {
+            "status": "unknown",
+            "reason": "no fixture-scoped syscalls observed in trace",
+            "trace_lines": total_lines,
+            "productive_dir_read_calls": "unknown",
+            "eof_dir_read_calls": "unknown",
+            "failed_dir_read_calls": "unknown",
+            "distinct_directories_read": "unknown",
+            "per_file_metadata_reads": "unknown",
+            "distinct_known_files_statted": "unknown",
+            "known_directory_metadata_reads": "unknown",
+            "unsuccessful_or_unknown_lookups": "unknown",
+        }
+
+    return {
+        "status": "ok",
+        "trace_lines": total_lines,
+        "fixture_scoped_events": fixture_scoped_events,
+        "productive_dir_read_calls": productive_dir_reads,
+        "eof_dir_read_calls": eof_dir_reads,
+        "failed_dir_read_calls": failed_dir_reads,
+        "distinct_directories_read": len(distinct_dirs),
+        "per_file_metadata_reads": known_file_stats,
+        "distinct_known_files_statted": len(distinct_known_files),
+        "known_directory_metadata_reads": known_dir_stats,
+        "unsuccessful_or_unknown_lookups": unsuccessful_or_unknown,
+    }
+
+
+def run_linux_straced_scale_suite(
+    *,
+    engine_bin: Path,
+    d1_worktree: Path,
+    d1_commit: str,
+    d1_tree: str,
+    out_dir: Path,
+    sizes: tuple[int, ...] = (50_000, 500_000),
+    rg_bin: str = "rg",
+    repo_root: Path | None = None,
+) -> dict[str, object]:
+    """Run Decision-060 Linux K05 straced cold observation boundary on 50k/500k scalefixture trees."""
+    out = Path(out_dir).resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    harness_root = Path(repo_root).resolve() if repo_root else Path(__file__).resolve().parents[4]
+
+    results: list[dict[str, object]] = []
+    with tempfile.TemporaryDirectory(prefix="cf04-k05-strace-scale-") as tmp_s:
+        tmp = Path(tmp_s)
+        other_dir = tmp / "other-project"
+        other_dir.mkdir(parents=True, exist_ok=True)
+        (other_dir / "ping.txt").write_bytes(b"K05OtherProjectPingToken responsive\n")
+
+        for idx, sz in enumerate(sizes):
+            tree_dir = tmp / f"scale-{idx}-{sz}"
+            shape = write_scalefixture_tree(tree_dir, sz)
+            known_dirs, known_files = _collect_inventory_rels(tree_dir)
+
+            cfg_dir = tmp / f"cfg-{idx}"
+            cfg_dir.mkdir(parents=True, exist_ok=True)
+            db_path = cfg_dir / "store.db"
+            trace_file = tmp / f"scale-{idx}-{sz}.strace"
+            stderr_log = tmp / f"stderr-{idx}.log"
+            port = free_tcp_port()
+            token = secrets.token_hex(16)
+            addr = f"127.0.0.1:{port}"
+            url = f"http://{addr}"
+
+            env = dict(os.environ)
+            env.update(
+                {
+                    "LYCAON_ADDR": addr,
+                    "LYCAON_API_TOKEN": token,
+                    "LYCAON_CONFIG_DIR": str(cfg_dir),
+                    "LYCAON_LLM_MOCK": "1",
+                    "LYCAON_LOG_LEVEL": "info",
+                }
+            )
+            stderr_fh = stderr_log.open("wb")
+            t0 = time.monotonic()
+            proc = subprocess.Popen(
+                [
+                    "strace",
+                    "-f",
+                    "-y",
+                    "-e",
+                    "trace=getdents64,newfstatat,statx",
+                    "-o",
+                    str(trace_file),
+                    str(engine_bin),
+                    "serve",
+                    "--db",
+                    str(db_path),
+                ],
+                cwd=str(d1_worktree),
+                env=env,
+                stdout=stderr_fh,
+                stderr=stderr_fh,
+                start_new_session=True,
+            )
+            stderr_fh.close()
+
+            settled = False
+            settled_file_count = -1
+            bounded_dirs = -1
+            failed_dirs = -1
+            fg_probe: dict[str, object] | None = None
+            other_probe: dict[str, object] | None = None
+            revisions_seen: list[int] = []
+            try:
+                deadline = time.monotonic() + 30.0
+                waiter = threading.Event()
+                healthy = False
+                while time.monotonic() < deadline:
+                    try:
+                        with urllib.request.urlopen(f"{url}/health", timeout=1.0) as resp:
+                            if resp.status == 200:
+                                healthy = True
+                                break
+                    except Exception:
+                        pass
+                    waiter.wait(0.1)
+                if not healthy:
+                    raise RuntimeError(f"straced sidecar for {sz} did not become healthy")
+
+                client = CF04SidecarClient(url, token)
+                other_p = client.create_project([{"path": str(other_dir.resolve()), "label": "other", "is_primary": True}])
+                other_pid = str(other_p["id"])
+                other_rid = str(other_p["roots"][0]["id"])  # type: ignore[index]
+
+                proj = client.create_project([{"path": str(tree_dir.resolve()), "label": f"scale-{sz}", "is_primary": True}])
+                pid = str(proj["id"])
+                rid = str(proj["roots"][0]["id"])  # type: ignore[index]
+
+                def _read_state() -> tuple[dict[str, object], dict[str, object], bool, int]:
+                    resp = client.get_source_index(pid)
+                    if resp.status != 200 or not isinstance(resp.json_body, dict):
+                        return {}, {}, False, -1
+                    b = resp.json_body
+                    cov = next((c for c in (b.get("coverage") or []) if isinstance(c, dict) and str(c.get("root_id") or "") == rid), {})
+                    rent = next((r for r in (b.get("roots") or []) if isinstance(r, dict) and str(r.get("root_id") or "") == rid), {})
+                    fc = int(rent.get("file_count", b.get("file_count", -1)))
+                    comp = bool(cov.get("discovery_complete")) and str(cov.get("state") or "").lower() == "ready"
+                    return b, cov, comp, fc
+
+                settle_deadline = time.monotonic() + 600.0
+                while time.monotonic() < settle_deadline:
+                    body, cov, comp, fc = _read_state()
+                    if body:
+                        rev = int(body.get("revision") or 0)
+                        if not revisions_seen or revisions_seen[-1] != rev:
+                            revisions_seen.append(rev)
+                        if not comp:
+                            if fg_probe is None:
+                                bs = time.monotonic()
+                                br = client.browse_dir(pid, rid, ".")
+                                bms = round((time.monotonic() - bs) * 1000.0, 2)
+                                _, _, after_c, after_fc = _read_state()
+                                entries = br.json_body.get("entries") if isinstance(br.json_body, dict) else []
+                                fg_probe = {
+                                    "status": br.status,
+                                    "entry_count": len(entries) if isinstance(entries, list) else 0,
+                                    "elapsed_ms_diagnostic": bms,
+                                    "before_complete": comp,
+                                    "after_complete": after_c,
+                                    "before_file_count": fc,
+                                    "after_file_count": after_fc,
+                                    "causally_during_walk": (not comp) and (not after_c),
+                                }
+                            if other_probe is None:
+                                _, _, pre_c, pre_fc = _read_state()
+                                if not pre_c:
+                                    os_t = time.monotonic()
+                                    ob = client.browse_dir(other_pid, other_rid, ".")
+                                    oread = client.get_source_file(other_pid, other_rid, "ping.txt")
+                                    osrch = client.driver.search_raw("K05OtherProjectPingToken", origin_project_id=other_pid, case_sensitive=True)
+                                    oms = round((time.monotonic() - os_t) * 1000.0, 2)
+                                    _, _, post_c, post_fc = _read_state()
+                                    other_probe = {
+                                        "browse_status": ob.status,
+                                        "read_status": oread.status,
+                                        "search_hit_count": len(osrch.get("hits") or []),
+                                        "elapsed_ms_diagnostic": oms,
+                                        "before_complete": pre_c,
+                                        "after_complete": post_c,
+                                        "before_file_count": pre_fc,
+                                        "after_file_count": post_fc,
+                                        "causally_during_walk": (not pre_c) and (not post_c),
+                                    }
+                        else:
+                            settled = True
+                            settled_file_count = fc
+                            bounded_dirs = int(cov.get("bounded_directories") or 0)
+                            failed_dirs = int(cov.get("failed_directories") or 0)
+                            break
+                    waiter.wait(0.2)
+            finally:
+                with contextlib.suppress(OSError):
+                    os.killpg(proc.pid, signal.SIGINT)
+                try:
+                    proc.wait(timeout=10.0)
+                except subprocess.TimeoutExpired:
+                    with contextlib.suppress(OSError):
+                        os.killpg(proc.pid, signal.SIGTERM)
+                    try:
+                        proc.wait(timeout=3.0)
+                    except subprocess.TimeoutExpired:
+                        with contextlib.suppress(OSError):
+                            os.killpg(proc.pid, signal.SIGKILL)
+                        proc.wait(timeout=3.0)
+
+            elapsed_s = round(time.monotonic() - t0, 3)
+            trace_obs = parse_strace_fixture_ops_file(
+                trace_file,
+                tree_dir,
+                known_dir_rels=known_dirs,
+                known_file_rels=known_files,
+            )
+            # Remove large trace & tree immediately to keep disk clean
+            with contextlib.suppress(OSError):
+                trace_file.unlink()
+            shutil.rmtree(tree_dir, ignore_errors=True)
+
+            ok_settled = settled and settled_file_count == shape.files and bounded_dirs == 0 and failed_dirs == 0
+            ok_trace = trace_obs.get("status") == "ok" and int(trace_obs.get("distinct_directories_read", 0)) == shape.total_directories
+            ok_fg = bool(fg_probe and fg_probe.get("status") == 200 and fg_probe.get("causally_during_walk"))
+            ok_other = bool(
+                other_probe
+                and other_probe.get("browse_status") == 200
+                and other_probe.get("read_status") == 200
+                and int(other_probe.get("search_hit_count", 0)) >= 1
+                and other_probe.get("causally_during_walk")
+            )
+            results.append(
+                {
+                    "name": f"K05-strace-{idx:02d}-{sz}",
+                    "verdict": "PASS" if (ok_settled and ok_trace and ok_fg and ok_other) else "DEFECT",
+                    "tree_shape": {
+                        "files": shape.files,
+                        "leaf_directories": shape.leaf_directories,
+                        "group_directories": shape.group_directories,
+                        "total_directories": shape.total_directories,
+                        "total_bytes": shape.total_bytes,
+                    },
+                    "settled": settled,
+                    "settled_file_count": settled_file_count,
+                    "bounded_directories": bounded_dirs,
+                    "failed_directories": failed_dirs,
+                    "observed_revision_transitions_diagnostic": len(revisions_seen),
+                    "elapsed_s_diagnostic": elapsed_s,
+                    "foreground_browse": fg_probe,
+                    "other_project_probe": other_probe,
+                    "strace_observation": trace_obs,
+                }
+            )
+
+        prov = collect_run_provenance(
+            harness_repo=harness_root,
+            work_dir=tmp,
+            binary_path=engine_bin,
+            d1_commit=d1_commit,
+            d1_tree=d1_tree,
+            rg_bin=rg_bin,
+        )
+
+    passed = sum(1 for r in results if r["verdict"] == "PASS")
+    report = {
+        "family": "K05-strace-scale",
+        "platform": platform.system(),
+        "observer": "/usr/bin/strace -f -y -e trace=getdents64,newfstatat,statx",
+        "sizes": list(sizes),
+        "executed": len(results),
+        "passed": passed,
+        "failed": len(results) - passed,
+        "results": results,
+    }
+    res_path = out / "k05_strace_scale_results.json"
+    res_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    finalize_family_evidence(
+        out,
+        prov,
+        {"k05_strace_scale_results": res_path},
+        {"family": "K05-strace-scale", "sizes": list(sizes), "passed": passed, "failed": len(results) - passed},
+        replay_command=["python3", "-m", "catalog_feed_search.families.cf04_k05_trace", "--scale-sizes", ",".join(str(s) for s in sizes), "--out-dir", "."],
+    )
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run Decision-053/055 K05 strace operation-trace controls")
+    parser = argparse.ArgumentParser(description="Run Decision-053/055/060 K05 operation-trace controls & scale runner")
     parser.add_argument("--engine-bin", required=True)
     parser.add_argument("--d1-worktree", required=True)
     parser.add_argument("--d1-commit", default="3bb1464d22dd0a38a149d37610810e7a0324e8cf")
@@ -691,17 +1063,31 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--rg-bin", default="rg")
     parser.add_argument("--repo-root", default="")
+    parser.add_argument("--scale-sizes", default="", help="Optional comma-separated sizes (e.g. 50000,500000) for Linux straced K05 scale run")
     args = parser.parse_args(argv)
 
-    rep = run_small_fixture_strace_controls(
-        engine_bin=Path(args.engine_bin),
-        d1_worktree=Path(args.d1_worktree),
-        d1_commit=args.d1_commit,
-        d1_tree=args.d1_tree,
-        out_dir=Path(args.out_dir),
-        rg_bin=args.rg_bin,
-        repo_root=Path(args.repo_root) if args.repo_root else None,
-    )
+    if args.scale_sizes.strip():
+        sizes = tuple(int(s.strip()) for s in args.scale_sizes.split(",") if s.strip())
+        rep = run_linux_straced_scale_suite(
+            engine_bin=Path(args.engine_bin),
+            d1_worktree=Path(args.d1_worktree),
+            d1_commit=args.d1_commit,
+            d1_tree=args.d1_tree,
+            out_dir=Path(args.out_dir),
+            sizes=sizes,
+            rg_bin=args.rg_bin,
+            repo_root=Path(args.repo_root) if args.repo_root else None,
+        )
+    else:
+        rep = run_small_fixture_strace_controls(
+            engine_bin=Path(args.engine_bin),
+            d1_worktree=Path(args.d1_worktree),
+            d1_commit=args.d1_commit,
+            d1_tree=args.d1_tree,
+            out_dir=Path(args.out_dir),
+            rg_bin=args.rg_bin,
+            repo_root=Path(args.repo_root) if args.repo_root else None,
+        )
     print(json.dumps(rep, indent=2, sort_keys=True))
     return 0
 
