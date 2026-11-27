@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -456,7 +457,12 @@ func NewWazeroRuntime(ctx context.Context, cfg RuntimeConfig) (*WazeroRuntime, e
 		return nil, errors.New("wazero runtime requires non-empty WasmBytes")
 	}
 
-	rtCfg := wazero.NewRuntimeConfig().WithCloseOnContextDone(true)
+	rtCfg := wazero.NewRuntimeConfig()
+	if runtime.GOOS == "darwin" {
+		// The hardened engine cannot execute runtime-generated native code.
+		rtCfg = wazero.NewRuntimeConfigInterpreter()
+	}
+	rtCfg = rtCfg.WithCloseOnContextDone(true)
 	if cfg.DefaultMemoryLimitPages > 0 {
 		rtCfg = rtCfg.WithMemoryLimitPages(cfg.DefaultMemoryLimitPages)
 	}
