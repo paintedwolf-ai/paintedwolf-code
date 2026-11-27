@@ -66,6 +66,16 @@ func (p i15ProgressFacts) ProgramProgressState(ctx context.Context, id string) (
 	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: p.store.Get(ctx, id)}, nil
 }
 
+type i15LoopbackGate struct{ ports []uint16 }
+
+func (g i15LoopbackGate) Await(_ context.Context, _ tools.LoopbackConnectAsk) (tools.LoopbackConnectResult, error) {
+	return tools.LoopbackConnectResult{Authorized: true, Ports: append([]uint16(nil), g.ports...)}, nil
+}
+
+func (g i15LoopbackGate) SessionLoopbackGrant(_ context.Context, _, _ string) (bool, []uint16) {
+	return len(g.ports) > 0, append([]uint16(nil), g.ports...)
+}
+
 type i15Env struct {
 	dbPath     string
 	projectDir string
@@ -140,6 +150,9 @@ func (e *i15Env) boot(t *testing.T, reopen bool) *i15Host {
 	testutil.FailErr(t, "load stock hints", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	rt.Authority.ApplyGuidanceRejects(guidance.NewStaticRejectFormatter(hints))
+	if len(e.ownedPorts) > 0 {
+		rt.Authority.SetSandboxLoopbackGate(i15LoopbackGate{ports: e.ownedPorts})
+	}
 
 	bg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	bg.Output.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
