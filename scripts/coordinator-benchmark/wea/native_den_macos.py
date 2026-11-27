@@ -113,21 +113,28 @@ def _send_owned_keystrokes(owned_pid: int, key_codes: list[int]) -> list[dict[st
     return executed
 
 
-def capture_owned_window_screenshot(window_id: int, dest_path: pathlib.Path) -> dict[str, Any]:
+def capture_owned_window_screenshot(window_id: int, dest_path: pathlib.Path, *, timeout: float = 15.0) -> dict[str, Any]:
     """Capture ONLY the owned CGWindowID (`screencapture -x -l <window_id>`)."""
     dest_path.parent.mkdir(parents=True, exist_ok=True)
-    proc = subprocess.run(
-        ["screencapture", "-x", "-l", str(int(window_id)), str(dest_path)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            ["screencapture", "-x", "-l", str(int(window_id)), str(dest_path)],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+        stderr = proc.stderr.strip()
+        rc = proc.returncode
+    except subprocess.TimeoutExpired:
+        stderr = "screencapture_timeout"
+        rc = -1
     return {
         "window_id": int(window_id),
         "path": str(dest_path),
-        "captured": proc.returncode == 0 and dest_path.is_file() and dest_path.stat().st_size > 0,
+        "captured": rc == 0 and dest_path.is_file() and dest_path.stat().st_size > 0,
         "bytes": dest_path.stat().st_size if dest_path.is_file() else 0,
-        "stderr": proc.stderr.strip(),
+        "stderr": stderr,
     }
 
 
@@ -300,3 +307,202 @@ def run_macos_native_den(
             except subprocess.TimeoutExpired:
                 den_proc.kill()
                 den_proc.wait()
+
+
+def run_macos_tauri_native(
+    app_bin: str | pathlib.Path,
+    out_dir: str | pathlib.Path,
+    *,
+    api_url: str | None = None,
+    token: str | None = None,
+    profile_dir: str | pathlib.Path | None = None,
+    engine_bin: str | pathlib.Path | None = None,
+    engine_manifest: str | pathlib.Path | None = None,
+    startup_timeout_s: float = 15.0,
+) -> dict[str, Any]:
+    """Launch the real macOS `painted-wolf-code` Tauri desktop binary in an isolated profile.
+
+    Attempts owned-PID window attribution, Accessibility keyboard navigation, and owned-window
+    screenshot capture. If macOS TCC / SSH GUI blocks window attribution, Accessibility, or
+    Screen Recording, writes a clean `status: "blocked"` receipt with the exact observed error
+    instead of crashing, and always terminates ONLY the owned process.
+    """
+    import hashlib
+
+    out = pathlib.Path(out_dir).resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    receipt_path = out / "native-den-macos-tauri-receipt.json"
+    app_path = pathlib.Path(app_bin).resolve()
+    profile = pathlib.Path(profile_dir).resolve() if profile_dir else (out / "tauri-profile")
+    profile.mkdir(parents=True, exist_ok=True)
+    prov = collect_provenance(
+        REPO_ROOT,
+        engine_bin=engine_bin,
+        engine_manifest=engine_manifest,
+        lane="sidecar-native-den",
+    )
+
+    def _save(data: dict[str, Any]) -> dict[str, Any]:
+        receipt_path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return data
+
+    if platform.system() != "Darwin":
+        return _save({
+            "schema": "wea-native-den-macos-tauri-v1",
+            "tier": "native-den-tauri-app",
+            "status": "blocked",
+            "blocked_reason": "requires_macos_darwin",
+            "app_bin": str(app_path),
+            "provenance": prov,
+            "passed": False,
+        })
+
+    if not app_path.is_file():
+        return _save({
+            "schema": "wea-native-den-macos-tauri-v1",
+            "tier": "native-den-tauri-app",
+            "status": "blocked",
+            "blocked_reason": f"app_bin_not_found:{app_path}",
+            "app_bin": str(app_path),
+            "provenance": prov,
+            "passed": False,
+        })
+
+    app_sha = hashlib.sha256(app_path.read_bytes()).hexdigest()
+    env = dict(os.environ)
+    env["LYCAON_CONFIG_DIR"] = str(profile / "config")
+    env["XDG_CONFIG_HOME"] = str(profile / "xdg-config")
+    env["XDG_DATA_HOME"] = str(profile / "xdg-data")
+    if api_url:
+        env["LYCAON_E2E_API_URL"] = api_url
+    if token:
+        env["LYCAON_E2E_TOKEN"] = token
+        env["LYCAON_API_TOKEN"] = token
+
+    log_fh = (out / "tauri-app.log").open("w", encoding="utf-8")
+    proc = subprocess.Popen(
+        [str(app_path)],
+        cwd=str(REPO_ROOT),
+        env=env,
+        stdout=log_fh,
+        stderr=subprocess.STDOUT,
+    )
+    try:
+        deadline = time.monotonic() + startup_timeout_s
+        window_id: int | None = None
+        while time.monotonic() < deadline and proc.poll() is None:
+            window_id = _resolve_owned_window_id(proc.pid, timeout=5.0)
+            if window_id is not None:
+                break
+            time.sleep(0.5)
+
+        ps_table = read_host_process_table([proc.pid])
+        api_readback: dict[str, Any] = {}
+        if api_url and token:
+            try:
+                api_readback["health"] = _api_readback(api_url, token, "/health")
+                api_readback["projects"] = _api_readback(api_url, token, "/v1/projects")
+            except Exception as exc:  # noqa: BLE001
+                api_readback["error"] = str(exc)
+
+        if proc.poll() is not None:
+            return _save({
+                "schema": "wea-native-den-macos-tauri-v1",
+                "tier": "native-den-tauri-app",
+                "status": "blocked",
+                "blocked_reason": f"tauri_app_exited_early (rc={proc.returncode})",
+                "app_bin": str(app_path),
+                "app_bin_sha256": app_sha,
+                "app_pid": proc.pid,
+                "isolated_profile_dir": str(profile),
+                "api_readback": api_readback,
+                "provenance": prov,
+                "passed": False,
+            })
+
+        if window_id is None:
+            return _save({
+                "schema": "wea-native-den-macos-tauri-v1",
+                "tier": "native-den-tauri-app",
+                "status": "blocked",
+                "blocked_reason": f"unable_to_attribute_cgwindow_for_pid_{proc.pid}_possible_tcc_or_ssh_gui_session",
+                "app_bin": str(app_path),
+                "app_bin_sha256": app_sha,
+                "app_pid": proc.pid,
+                "app_alive": proc.poll() is None,
+                "isolated_profile_dir": str(profile),
+                "host_processes": ps_table,
+                "api_readback": api_readback,
+                "provenance": prov,
+                "passed": False,
+            })
+
+        focus_before = _read_focused_element(proc.pid)
+        try:
+            keyboard_log = _send_owned_keystrokes(proc.pid, [48, 48, 53])
+        except RuntimeError as exc:
+            return _save({
+                "schema": "wea-native-den-macos-tauri-v1",
+                "tier": "native-den-tauri-app",
+                "status": "blocked",
+                "blocked_reason": f"accessibility_keyboard_blocked:{exc}",
+                "app_bin": str(app_path),
+                "app_bin_sha256": app_sha,
+                "app_pid": proc.pid,
+                "owned_window_id": window_id,
+                "isolated_profile_dir": str(profile),
+                "host_processes": ps_table,
+                "api_readback": api_readback,
+                "provenance": prov,
+                "passed": False,
+            })
+
+        focus_after = _read_focused_element(proc.pid)
+        screenshot = capture_owned_window_screenshot(window_id, out / "macos-native-den-tauri.png")
+        if not screenshot["captured"]:
+            return _save({
+                "schema": "wea-native-den-macos-tauri-v1",
+                "tier": "native-den-tauri-app",
+                "status": "blocked",
+                "blocked_reason": f"screencapture_blocked:{screenshot.get('stderr') or 'empty_capture'}",
+                "app_bin": str(app_path),
+                "app_bin_sha256": app_sha,
+                "app_pid": proc.pid,
+                "owned_window_id": window_id,
+                "isolated_profile_dir": str(profile),
+                "keyboard_steps": keyboard_log,
+                "focus_transition": {"before": focus_before, "after": focus_after},
+                "screenshot": screenshot,
+                "api_readback": api_readback,
+                "provenance": prov,
+                "passed": False,
+            })
+
+        focus_changed = bool(focus_before and focus_after and focus_after != focus_before)
+        passed = bool(screenshot["captured"] and focus_changed and proc.poll() is None)
+        return _save({
+            "schema": "wea-native-den-macos-tauri-v1",
+            "tier": "native-den-tauri-app",
+            "status": "passed" if passed else "failed",
+            "app_bin": str(app_path),
+            "app_bin_sha256": app_sha,
+            "app_pid": proc.pid,
+            "owned_window_id": window_id,
+            "isolated_profile_dir": str(profile),
+            "host_processes": ps_table,
+            "focus_transition": {"before": focus_before, "after": focus_after, "transitioned": focus_changed},
+            "keyboard_steps": keyboard_log,
+            "screenshot": screenshot,
+            "api_readback": api_readback,
+            "provenance": prov,
+            "passed": passed,
+        })
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+        log_fh.close()

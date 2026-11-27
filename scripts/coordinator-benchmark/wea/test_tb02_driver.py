@@ -64,7 +64,10 @@ class TestTB02DesktopDrivers(unittest.TestCase):
                 }
                 return mock.Mock(returncode=0, stdout=json.dumps(payload) + "\n", stderr="")
 
-            with mock.patch.object(desktop_driver.subprocess, "run", side_effect=fake_run_ok):
+            with (
+                mock.patch.object(desktop_driver, "collect_provenance", return_value={"product_source": {"verified": True}, "harness_source": {"git_head": "abc"}}),
+                mock.patch.object(desktop_driver.subprocess, "run", side_effect=fake_run_ok),
+            ):
                 rec = desktop_driver.run_desktop_driver(
                     "macos-wkwebview-native",
                     "http://127.0.0.1:4173",
@@ -94,7 +97,10 @@ class TestTB02DesktopDrivers(unittest.TestCase):
                 }
                 return mock.Mock(returncode=0, stdout=json.dumps(payload) + "\n", stderr="")
 
-            with mock.patch.object(desktop_driver.subprocess, "run", side_effect=fake_run_no_focus):
+            with (
+                mock.patch.object(desktop_driver, "collect_provenance", return_value={"product_source": {"verified": True}, "harness_source": {"git_head": "abc"}}),
+                mock.patch.object(desktop_driver.subprocess, "run", side_effect=fake_run_no_focus),
+            ):
                 rec_fail = desktop_driver.run_desktop_driver(
                     "macos-wkwebview-native",
                     "http://127.0.0.1:4173",
@@ -157,6 +163,39 @@ class TestTB02DesktopDrivers(unittest.TestCase):
             )
             self.assertFalse(rec_missing["passed"])
             self.assertEqual(rec_missing["status"], "blocked")
+
+    def test_find_x11_window_skips_unmapped_gtk_leader(self) -> None:
+        def fake_which(name):
+            return f"/usr/bin/{name}"
+
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "xdotool":
+                return mock.Mock(returncode=0, stdout="2097153\n2097160\n", stderr="")
+            if cmd[0] == "xwininfo":
+                if cmd[2] == hex(2097153):
+                    return mock.Mock(returncode=0, stdout="  Width: 1\n  Height: 1\n  Map State: IsUnMapped\n", stderr="")
+                return mock.Mock(returncode=0, stdout="  Width: 1280\n  Height: 800\n  Map State: IsViewable\n", stderr="")
+            raise AssertionError(f"unexpected cmd {cmd}")
+
+        with (
+            mock.patch.object(native_den_linux.shutil, "which", side_effect=fake_which),
+            mock.patch.object(native_den_linux.subprocess, "run", side_effect=fake_run),
+        ):
+            wid = native_den_linux._find_x11_window_for_pid(1234, timeout_s=2.0)
+        self.assertEqual(wid, 2097160)
+
+    def test_macos_tauri_native_missing_bin_blocks_cleanly(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            rec = desktop_driver.run_desktop_driver(
+                "macos-tauri-native",
+                "",
+                root / "mac-tauri-missing",
+                app_bin=root / "nonexistent-painted-wolf-code",
+            )
+            self.assertFalse(rec["passed"])
+            self.assertEqual(rec["status"], "blocked")
+            self.assertEqual(rec["tier"], "native-den-tauri-app")
 
 
 if __name__ == "__main__":

@@ -167,26 +167,61 @@ def _probe_atspi(target_pid: int) -> dict[str, Any]:
         return {"available": False, "observed": False, "reason": str(exc)}
 
 
+def _is_viewable_x11_window(wid: int) -> bool:
+    """Return True iff `xwininfo` confirms `wid` is mapped (`IsViewable`) with non-trivial geometry."""
+    if not shutil.which("xwininfo"):
+        return True
+    res = subprocess.run(
+        ["xwininfo", "-id", hex(int(wid))],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=5,
+    )
+    if res.returncode != 0:
+        return False
+    viewable = False
+    width = 0
+    height = 0
+    for line in res.stdout.splitlines():
+        s = line.strip()
+        if s == "Map State: IsViewable":
+            viewable = True
+        elif s.startswith("Width:"):
+            tok = s.split(":", 1)[1].strip()
+            if tok.isdigit():
+                width = int(tok)
+        elif s.startswith("Height:"):
+            tok = s.split(":", 1)[1].strip()
+            if tok.isdigit():
+                height = int(tok)
+    return bool(viewable and width >= 100 and height >= 100)
+
+
 def _find_x11_window_for_pid(pid: int, *, timeout_s: float = 45.0, proc: subprocess.Popen[Any] | None = None) -> int:
-    """Poll `xdotool search` until an X11 window owned by `pid` appears, or return 0 on timeout."""
+    """Poll `xdotool search --onlyvisible --pid` until a viewable top-level X11 window owned by `pid` appears.
+
+    Skips hidden/unmapped GTK leader windows (e.g. 1x1 `IsUnMapped` windows) so `xdotool windowfocus`
+    and `import -window <wid>` always bind to the actual mapped Tauri/WebKitGTK top-level window.
+    """
     if not shutil.which("xdotool"):
         raise RuntimeError("xdotool_not_found")
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         if proc is not None and proc.poll() is not None:
             raise RuntimeError(f"tauri_app_exited_early (rc={proc.returncode})")
-        for extra in (["--onlyvisible", "--pid", str(pid)], ["--pid", str(pid)]):
-            res = subprocess.run(
-                ["xdotool", "search", *extra],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=5,
-            )
-            if res.returncode == 0:
-                wids = [int(tok) for tok in res.stdout.split() if tok.isdigit() and int(tok) > 0]
-                if wids:
-                    return wids[-1]
+        res = subprocess.run(
+            ["xdotool", "search", "--onlyvisible", "--pid", str(pid)],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+        if res.returncode == 0:
+            wids = [int(tok) for tok in res.stdout.split() if tok.isdigit() and int(tok) > 0]
+            for wid in reversed(wids):
+                if _is_viewable_x11_window(wid):
+                    return wid
         time.sleep(0.4)
     return 0
 
