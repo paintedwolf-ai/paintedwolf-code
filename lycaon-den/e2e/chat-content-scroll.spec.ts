@@ -1,4 +1,5 @@
 import { expect } from "@playwright/test";
+import { scrollSettled } from "./fixtures/settle.ts";
 import { apiSeedSessionTranscript, bootstrapChatSession, liveChatStage, modelIndependentWebE2e, settledChatSessionId, transcriptMessages } from "./helpers.ts";
 
 modelIndependentWebE2e("long activity cards use the enclosing viewport through the last action", async ({ page }) => {
@@ -142,18 +143,24 @@ modelIndependentWebE2e("plain arrows scroll a focused conversation row normally"
   ));
   const stream = liveChatStage(page).locator(".den-chat-stream");
   const rows = stream.locator(".transcript-viewport-row[data-msg-id]");
-  await expect(rows.first()).toBeAttached();
+  await expect(rows.filter({ hasText: "Message 30." })).toBeInViewport();
+  await scrollSettled(stream);
   await stream.hover();
   await page.mouse.wheel(0, -100_000);
   await expect.poll(() => stream.evaluate(element => element.scrollTop)).toBeLessThan(2);
-  await expect(rows.first()).toBeVisible();
+  const first = rows.filter({ hasText: "Message 1." });
+  await expect(first).toBeInViewport();
+  await scrollSettled(stream);
   // Message rows are accessibility focus targets. Exercise native keyboard
   // scrolling from that focus state in each browser.
-  await rows.first().focus();
+  await first.evaluate(row => (row as HTMLElement).focus({ preventScroll: true }));
+  await expect(first).toBeFocused();
+  await scrollSettled(stream);
   const start = await stream.evaluate(element => element.scrollTop);
   await page.keyboard.press("ArrowDown");
   await expect.poll(() => stream.evaluate(element => element.scrollTop)).toBeGreaterThan(start + 5);
-  await expect.poll(() => stream.evaluate(element => element.scrollTop)).toBeLessThan(start + 200);
+  await scrollSettled(stream);
+  expect(await stream.evaluate(element => element.scrollTop)).toBeLessThan(start + 200);
   await page.keyboard.press("ArrowUp");
   await expect.poll(() => stream.evaluate(element => element.scrollTop)).toBeLessThan(5);
 });
