@@ -24,7 +24,12 @@ from wait_watch.barriers import (  # noqa: E402
     ProcessBarrier,
     TimerGuard,
 )
-from wait_watch.driver import replay_bundle, run_case  # noqa: E402
+from wait_watch.driver import (  # noqa: E402
+    WaitWatchApplication,
+    _make_wait_watch_app_factory,
+    replay_bundle,
+    run_case,
+)
 from wait_watch.observers import StorageObserver  # noqa: E402
 
 
@@ -266,6 +271,22 @@ class TestBarriersAndReplay(unittest.TestCase):
             rec = git_fix.release(message="bump")
             self.assertNotEqual(first, rec["oid"])
             self.assertEqual(git_fix.source_facts()["commit_count"], 2)
+
+    def test_engine_bin_honored_for_wait_watch_application_subclass(self) -> None:
+        import smoke
+
+        seen_paths: list[pathlib.Path] = []
+
+        class _ProbeApp(WaitWatchApplication):
+            def __init__(self, directory: pathlib.Path) -> None:
+                seen_paths.append(pathlib.Path(smoke.engine_path(directory)))
+
+        with tempfile.TemporaryDirectory() as td:
+            custom_bin = pathlib.Path(td) / "custom-lycaon-dev"
+            custom_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            factory = _make_wait_watch_app_factory(custom_bin, _ProbeApp)
+            factory(pathlib.Path(td) / "app")
+            self.assertEqual(seen_paths, [custom_bin.resolve()])
 
     def test_sidecar_fast_exit_and_parked_exit_replay_round_trip(self) -> None:
         for case_id in ("c01-fast-exit", "c01-parked-exit"):

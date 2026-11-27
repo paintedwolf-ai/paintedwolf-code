@@ -30,7 +30,7 @@ from portable_command.harness import (  # noqa: E402
     create_isolated_session,
     wait_tool_result,
 )
-from portable_command.reporting import make_app_factory  # noqa: E402
+from portable_command.provenance import resolve_engine_binary  # noqa: E402
 from progress import save  # noqa: E402
 
 from wait_watch.barriers import BarrierTimeoutError, ProcessBarrier, TimerGuard  # noqa: E402
@@ -46,6 +46,26 @@ from wait_watch.observers import (  # noqa: E402
 )
 
 SUPPORTED_CASES = ("c01-fast-exit", "c01-parked-exit")
+
+
+def _make_wait_watch_app_factory(
+    engine_bin: pathlib.Path | str | None,
+    base_factory: Callable[..., Any],
+) -> Callable[[pathlib.Path], Any]:
+    """Honor --engine / PW_ENGINE_BIN for smoke.Application and its subclasses (e.g. WaitWatchApplication)."""
+    if not (isinstance(base_factory, type) and issubclass(base_factory, smoke.Application)):
+        return base_factory
+    binary, _ = resolve_engine_binary(REPO_ROOT, engine_bin)
+
+    def factory(directory: pathlib.Path) -> Any:
+        orig = smoke.engine_path
+        smoke.engine_path = lambda _root: binary
+        try:
+            return base_factory(directory)
+        finally:
+            smoke.engine_path = orig
+
+    return factory
 
 
 class WaitWatchApplication(smoke.Application):
@@ -553,7 +573,7 @@ def run_case(
     rendered_obs = RenderedInputObserver(clock_domain="system")
     den_obs = DenObserver(status="not_run", os_name=host["os"])
 
-    application = make_app_factory(engine_bin, app_factory)(app_dir)
+    application = _make_wait_watch_app_factory(engine_bin, app_factory)(app_dir)
     sse_path = raw_dir / "events.jsonl"
     sse = None
     session_id = ""
