@@ -390,12 +390,15 @@ def probe_store_db(
                 row[1]
                 for row in conn.execute("PRAGMA table_info(event_outbox)").fetchall()
             }
-            payload_col = next((c for c in ("payload_json", "payload", "data") if c in cols), None)
-            id_col = "id" if "id" in cols else "rowid"
+            payload_col = next((c for c in ("data_json", "payload_json", "payload", "data") if c in cols), None)
+            id_col = "event_id" if "event_id" in cols else ("id" if "id" in cols else "rowid")
+            has_sess_col = "session_id" in cols
             if payload_col:
-                for row in conn.execute(f"SELECT {id_col} AS eid, {payload_col} AS payload FROM event_outbox").fetchall():
+                sel = f"SELECT {id_col} AS eid, {payload_col} AS payload" + (", session_id AS sid" if has_sess_col else "") + " FROM event_outbox"
+                for row in conn.execute(sel).fetchall():
                     payload = str(row["payload"] or "")
-                    if session_id and session_id not in payload:
+                    row_sid = str(row["sid"] or "") if has_sess_col else ""
+                    if session_id and row_sid != session_id and session_id not in payload:
                         continue
                     for code in _extract_codes_from_json(payload):
                         if code in VALID_MID_TURN_NOTE_CODES:
@@ -404,15 +407,18 @@ def probe_store_db(
                             breaker_keys.add(f"event:{row['eid']}:{code}")
 
     for idx, ev in enumerate(sse_events):
-        ev_session = str(ev.get("session_id") or "")
+        ev_session = str(ev.get("session_id") or (ev.get("data") or {}).get("session_id") if isinstance(ev.get("data"), Mapping) else ev.get("session_id") or "")
         if ev_session and ev_session != session_id:
             continue
-        ev_id = str(ev.get("id") or ev.get("event_id") or f"sse-{idx}")
+        data_obj = ev.get("data") if isinstance(ev.get("data"), Mapping) else {}
+        ev_msg_id = str(ev.get("message_id") or data_obj.get("message_id") or "")
+        ev_id = str(ev.get("event_id") or ev.get("id") or f"sse-{idx}")
+        key_prefix = f"msg:{ev_msg_id}" if ev_msg_id else f"event:{ev_id}"
         for code in _extract_codes_from_json(json.dumps(ev)):
             if code in VALID_MID_TURN_NOTE_CODES:
-                withheld_keys.add(f"event:{ev_id}:{code}")
+                withheld_keys.add(f"{key_prefix}:{code}")
             if code in BREAKER_ADVISORY_CODES:
-                breaker_keys.add(f"event:{ev_id}:{code}")
+                breaker_keys.add(f"{key_prefix}:{code}")
 
     if trace_log_path is not None and pathlib.Path(trace_log_path).is_file():
         trace_text = pathlib.Path(trace_log_path).read_text(encoding="utf-8", errors="replace")
