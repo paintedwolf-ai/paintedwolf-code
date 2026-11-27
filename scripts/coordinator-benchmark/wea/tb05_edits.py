@@ -26,7 +26,10 @@ import argparse
 import contextlib
 import json
 import pathlib
+import secrets
+import socket
 import sqlite3
+import subprocess
 import sys
 import uuid
 from dataclasses import dataclass
@@ -39,12 +42,13 @@ if str(BENCHMARK_DIR) not in sys.path:
 from wea.canary import CanaryGenerator, scan_for_canaries
 from wea.checker import check_evidence
 from wea.observers import EditsObserver, hash_file, hash_tree, sha256_bytes
-from wea.provenance import REPO_ROOT, collect_provenance
+from wea.provenance import REPO_ROOT, collect_provenance, resolve_engine_binary
 from wea.runner import (
     _create_application,
     _extract_refusal_code,
     _init_git_repo,
     _open_session,
+    _resolve_engine_root,
     _save_json,
     _send_tool_call,
     _wait_pending,
@@ -625,6 +629,110 @@ def build_route_write_call(
 # Sidecar runner for TB05 E10 real-restart slot (and E01/E02/E03/E08 slots)
 # ============================================================================
 
+def _restart_application(
+    app_dir: pathlib.Path,
+    *,
+    engine_bin: str | pathlib.Path | None = None,
+    engine_manifest: str | pathlib.Path | None = None,
+    engine_root: str | pathlib.Path | None = None,
+) -> Any:
+    """Restart a real `lycaon-dev` sidecar on an EXISTING isolated profile directory (`app_dir`).
+
+    Preserves `app_dir/store.db` and `app_dir/config/`, appends to `app_dir/sidecar.log`,
+    binds a fresh ephemeral localhost port and bearer token, and launches the pinned binary.
+    """
+    import smoke
+
+    binary, _ = resolve_engine_binary(REPO_ROOT, engine_bin)
+    resolved_engine_root = _resolve_engine_root(engine_manifest=engine_manifest, engine_root=engine_root)
+    app = smoke.Application.__new__(smoke.Application)
+    app.directory = pathlib.Path(app_dir).resolve()
+    app.config = app.directory / "config"
+    app.config.mkdir(parents=True, exist_ok=True)
+    app.manual = True
+    app.projects = []
+    app.admissions = []
+    suite = json.loads((REPO_ROOT / "lycaon/test/fixtures/eval/coordinator-benchmark.json").read_text(encoding="utf-8"))
+    app.task_allowance = suite["task_allowance"]
+    app.approval_guidance = suite["unattended"]["approval_guidance"]
+    app.baseline_checks = []
+    app.flows = []
+    app.token = secrets.token_hex(24)
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        app.port = sock.getsockname()[1]
+    app.url = f"http://127.0.0.1:{app.port}"
+    app.log = (app.directory / "sidecar.log").open("a", encoding="utf-8")
+    env_overrides = {
+        "LYCAON_CONFIG_DIR": str(app.config),
+        "LYCAON_CONFIG_ROOT": str(REPO_ROOT / "lycaon"),
+        "LYCAON_ENGINE_ROOT": str(resolved_engine_root or (REPO_ROOT / "lycaon-den/src-tauri/engine-root")),
+        "LYCAON_ADDR": f"127.0.0.1:{app.port}",
+        "LYCAON_API_TOKEN": app.token,
+        "LYCAON_DEV": "1",
+        "LYCAON_HARNESS": "1",
+        "LYCAON_LOG_LEVEL": "debug",
+        "LYCAON_LLM_MOCK": "1",
+        "LYCAON_LLM_MANUAL": "1",
+    }
+    env = smoke.application_environment(env_overrides)
+    app.process = subprocess.Popen(
+        [str(binary), "serve", "--db", str(app.directory / "store.db")],
+        cwd=REPO_ROOT,
+        env=env,
+        stdout=app.log,
+        stderr=subprocess.STDOUT,
+    )
+    _save_json(app.directory / "ownership.json", {"pid": app.process.pid, "port": app.port})
+    return app
+
+
+def read_open_document_sha256_ro(
+    db_path: pathlib.Path,
+    *,
+    doc_id: str = "",
+    rel_path: str = "",
+    doc_resp: dict[str, Any] | None = None,
+) -> str:
+    """Compute the exact serialized SHA-256 of the open editor document from SQLite (`?mode=ro`) or DTO."""
+    if db_path.is_file() and (doc_id or rel_path):
+        with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+            conn.row_factory = sqlite3.Row
+            tables = {
+                r[0]
+                for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+                ).fetchall()
+            }
+            if "editor_documents" in tables:
+                if doc_id:
+                    row = conn.execute(
+                        "SELECT draft, eol, base_sha256, dirty FROM editor_documents WHERE id = ? LIMIT 1",
+                        (doc_id,),
+                    ).fetchone()
+                else:
+                    row = conn.execute(
+                        "SELECT draft, eol, base_sha256, dirty FROM editor_documents WHERE path = ? ORDER BY rowid DESC LIMIT 1",
+                        (rel_path,),
+                    ).fetchone()
+                if row:
+                    if not row["dirty"] and row["base_sha256"]:
+                        return str(row["base_sha256"])
+                    draft = row["draft"]
+                    if isinstance(draft, str):
+                        eol = str(row["eol"] or "lf").lower()
+                        serialized = draft.replace("\r\n", "\n").replace("\n", "\r\n") if eol == "crlf" else draft
+                        return sha256_bytes(serialized.encode("utf-8"))
+    if isinstance(doc_resp, dict):
+        if not doc_resp.get("dirty") and doc_resp.get("base_sha256"):
+            return str(doc_resp["base_sha256"])
+        if isinstance(doc_resp.get("draft"), str):
+            return sha256_bytes(doc_resp["draft"].encode("utf-8"))
+        if isinstance(doc_resp.get("base_content"), str):
+            return sha256_bytes(doc_resp["base_content"].encode("utf-8"))
+    return ""
+
+
 def run_e10_sidecar_restart_slot(
     out_dir: pathlib.Path,
     *,
@@ -653,6 +761,7 @@ def run_e10_sidecar_restart_slot(
     session_id = ""
     project_id = ""
     root_id = ""
+    write_res: dict[str, Any] = {}
     try:
         app1.ready()
         session_id, project_id, root_id = _open_session(app1, proj)
@@ -665,14 +774,15 @@ def run_e10_sidecar_restart_slot(
         _, write_res, _ = _send_tool_call(
             app1, session_id, "command",
             {"command": "edit --path restart_target.txt --old-string beta --new-string BETA"},
+            checkpoint_policy="approve_chat",
         )
         app1.request(f"/v1/sessions/{session_id}/abort", {})
     finally:
         app1.close(cleanup=False)
 
     # Phase 2: Real sidecar restart on the exact same profile directory (`app_dir`).
-    open_doc_sha = ""
-    app2 = _create_application(app_dir, engine_bin=engine_bin, engine_manifest=engine_manifest, engine_root=engine_root)
+    doc_resp: dict[str, Any] = {}
+    app2 = _restart_application(app_dir, engine_bin=engine_bin, engine_manifest=engine_manifest, engine_root=engine_root)
     try:
         app2.ready()
         with contextlib.suppress(Exception):
@@ -680,12 +790,16 @@ def run_e10_sidecar_restart_slot(
                 f"/v1/projects/{project_id}/editor-documents",
                 {"path": "restart_target.txt", "root_id": root_id, "client_id": "wea-tb05-restart-observer"},
             )
-            draft = doc_resp.get("draft") if isinstance(doc_resp, dict) else None
-            if isinstance(draft, str):
-                open_doc_sha = sha256_bytes(draft.encode("utf-8"))
     finally:
         app2.close(cleanup=False)
 
+    db_path = app_dir / "store.db"
+    open_doc_sha = read_open_document_sha256_ro(
+        db_path,
+        doc_id=str(doc_resp.get("id") or "") if isinstance(doc_resp, dict) else "",
+        rel_path="restart_target.txt",
+        doc_resp=doc_resp if isinstance(doc_resp, dict) else None,
+    )
     post_disk_sha = str(hash_file(proj / "restart_target.txt").get("sha256") or "")
     db_path = app_dir / "store.db"
     effect_count = 0

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import pathlib
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -28,9 +29,11 @@ from wea.tb05_edits import (
     evaluate_e03_slot,
     evaluate_e08_slot,
     evaluate_e10_slot,
+    read_open_document_sha256_ro,
 )
 from wea.tb05_sidecar_runner import (
     _build_receipt,
+    _extract_dispatcher_operation,
     _fixture_for_route,
     build_parser as build_sidecar_parser,
     select_slots,
@@ -467,6 +470,76 @@ class TestTB05InprocManifestAndSidecarRunner(unittest.TestCase):
             self.assertEqual(summary["total_slots"], 2)
             self.assertEqual(summary["counts"], {"pass": 1, "fail": 1, "unknown": 0})
             self.assertTrue((pathlib.Path(td) / "summary.json").is_file())
+
+    def test_extract_dispatcher_operation_and_open_document_sha_against_real_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            db_path = pathlib.Path(td) / "store.db"
+            conn = sqlite3.connect(str(db_path))
+            try:
+                conn.executescript(
+                    """
+                    CREATE TABLE invocation_receipts (
+                        id TEXT PRIMARY KEY,
+                        tool_call_id TEXT NOT NULL,
+                        tool_name TEXT NOT NULL
+                    );
+                    CREATE TABLE invocation_programs (
+                        id TEXT PRIMARY KEY,
+                        parent_receipt_id TEXT NOT NULL UNIQUE
+                    );
+                    CREATE TABLE invocation_program_executions (
+                        id TEXT PRIMARY KEY,
+                        program_id TEXT NOT NULL,
+                        ordinal INTEGER NOT NULL,
+                        operation_id TEXT NOT NULL
+                    );
+                    CREATE TABLE source_operations (
+                        id TEXT PRIMARY KEY,
+                        tool_call_id TEXT NOT NULL,
+                        tool_name TEXT NOT NULL
+                    );
+                    CREATE TABLE editor_documents (
+                        id TEXT PRIMARY KEY,
+                        path TEXT NOT NULL,
+                        draft TEXT NOT NULL,
+                        eol TEXT NOT NULL,
+                        base_sha256 TEXT NOT NULL,
+                        dirty INTEGER NOT NULL
+                    );
+                    INSERT INTO invocation_receipts VALUES ('rec-1', 'call-write-1', 'command');
+                    INSERT INTO invocation_programs VALUES ('prog-1', 'rec-1');
+                    INSERT INTO invocation_program_executions VALUES ('exec-1', 'prog-1', 1, 'write');
+                    INSERT INTO source_operations VALUES ('op-1', 'call-write-1', 'write');
+                    INSERT INTO editor_documents VALUES ('doc-clean', 'live.txt', 'hello\n', 'lf', 'deadbeef', 0);
+                    INSERT INTO editor_documents VALUES ('doc-dirty', 'crlf.txt', 'a\nb\n', 'crlf', 'oldsha', 1);
+                    """
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+            op = _extract_dispatcher_operation(
+                db_path,
+                call_id="call-write-1",
+                dispatched_tool="command",
+                expected_operation="write",
+            )
+            self.assertEqual(op["dispatched_operations"], ["write"])
+            self.assertEqual(op["source_operation_tool_name"], "write")
+
+            self.assertEqual(read_open_document_sha256_ro(db_path, doc_id="doc-clean"), "deadbeef")
+            self.assertEqual(
+                read_open_document_sha256_ro(db_path, doc_id="doc-dirty"),
+                sha256_bytes(b"a\r\nb\r\n"),
+            )
+            # DTO fallback when DB absent
+            self.assertEqual(
+                read_open_document_sha256_ro(
+                    pathlib.Path(td) / "missing.db",
+                    doc_resp={"dirty": False, "base_sha256": "cafebabe"},
+                ),
+                "cafebabe",
+            )
 
 
 if __name__ == "__main__":

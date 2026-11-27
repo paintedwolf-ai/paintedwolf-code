@@ -55,6 +55,7 @@ from wea.tb05_edits import (
     evaluate_e03_slot,
     evaluate_e08_slot,
     evaluate_e10_slot,
+    read_open_document_sha256_ro,
     run_e10_sidecar_restart_slot,
 )
 
@@ -232,12 +233,17 @@ def _extract_dispatcher_operation(
                     "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
                 ).fetchall()
             }
-            if "invocation_program_executions" in tables and "invocation_programs" in tables:
+            if (
+                "invocation_program_executions" in tables
+                and "invocation_programs" in tables
+                and "invocation_receipts" in tables
+            ):
                 rows = conn.execute(
                     "SELECT DISTINCT e.operation_id "
                     "FROM invocation_program_executions e "
                     "JOIN invocation_programs p ON p.id = e.program_id "
-                    "WHERE p.tool_call_id = ? ORDER BY e.ordinal ASC",
+                    "JOIN invocation_receipts r ON r.id = p.parent_receipt_id "
+                    "WHERE r.tool_call_id = ? ORDER BY e.ordinal ASC",
                     (call_id,),
                 ).fetchall()
                 dispatched_ops = [str(r[0]) for r in rows if r and r[0]]
@@ -527,12 +533,14 @@ def _run_e02_slot(
                 app, project_id, doc["id"], client_id="tb05-window-1", expected_revision=init_rev,
                 content="L1_alpha\nL2_beta\nL3_PERSON_CONFLICT\nL4_delta\nL5_epsilon\n",
             )
+            disk_before_overlap = str(hash_file(target).get("sha256") or "")
             _, write_res, _ = _send_tool_call(
                 app, session_id, "command",
                 {"command": f'edit --path {rel_path} --old-string "L3_gamma" --new-string "L3_AGENT_CONFLICT"'},
                 checkpoint_policy="approve_chat",
             )
             eval_rec.update({
+                "pre_disk_sha256": disk_before_overlap,
                 "post_disk_sha256": str(hash_file(target).get("sha256") or ""),
                 "write_outcome": str((write_res or {}).get("outcome") or ""),
             })
@@ -705,8 +713,12 @@ def _run_e03_slot(
             app.request(f"/v1/sessions/{session_id}/abort", {})
 
     post_disk_sha = str(hash_file(target).get("sha256") or "")
-    draft_text = doc_resp.get("draft") if isinstance(doc_resp, dict) else ""
-    open_doc_sha = sha256_bytes(draft_text.encode("utf-8")) if isinstance(draft_text, str) else ""
+    open_doc_sha = read_open_document_sha256_ro(
+        app_dir / "store.db",
+        doc_id=str(doc_resp.get("id") or "") if isinstance(doc_resp, dict) else "",
+        rel_path=rel_path,
+        doc_resp=doc_resp if isinstance(doc_resp, dict) else None,
+    )
     eval_rec.update({"post_disk_sha256": post_disk_sha, "open_document_sha256": open_doc_sha})
     verdict = evaluate_e03_slot(eval_rec)
     return _build_receipt(
