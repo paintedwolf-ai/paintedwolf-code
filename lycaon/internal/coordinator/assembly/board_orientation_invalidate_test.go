@@ -8,9 +8,28 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+func invalidateTestCoordReader(t *testing.T) prompts.Reader {
+	t.Helper()
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	reader, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Declared:  true,
+	})
+	testutil.FailErr(t, "NewReader coordinator", err)
+	return reader
+}
 
 type invalidateStubBuilder struct{}
 
@@ -27,17 +46,18 @@ func (invalidateStubFormatter) FormatBoardInject(_ api.BoardSnapshot, _ bool, _ 
 func TestBoardEngineInvalidateOrientationForcesReinject(t *testing.T) {
 	engine := assembly.NewBoardEngine(invalidateStubBuilder{}, invalidateStubFormatter{}, nil)
 	ctx := context.Background()
+	reader := invalidateTestCoordReader(t)
 	sess := &api.Session{ID: "s1", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: t.TempDir(), AgentType: "coordinator"}
-	block, ok := engine.PrependBoardIfChanged(ctx, sess, api.CoordinatorRunContext{CurrentPhase: "plan"})
+	block, ok := engine.PrependBoardIfChanged(ctx, sess, reader, api.CoordinatorRunContext{CurrentPhase: "plan"})
 	if !ok || !strings.Contains(block, "Repo: stub") {
 		t.Fatalf("first inject missing: ok=%v block=%q", ok, block)
 	}
-	block2, ok2 := engine.PrependBoardIfChanged(ctx, sess, api.CoordinatorRunContext{CurrentPhase: "plan"})
+	block2, ok2 := engine.PrependBoardIfChanged(ctx, sess, reader, api.CoordinatorRunContext{CurrentPhase: "plan"})
 	if ok2 {
 		t.Fatalf("expected no second inject, got %q", block2)
 	}
 	engine.InvalidateOrientation(sess.ID)
-	block3, ok3 := engine.PrependBoardIfChanged(ctx, sess, api.CoordinatorRunContext{CurrentPhase: "plan"})
+	block3, ok3 := engine.PrependBoardIfChanged(ctx, sess, reader, api.CoordinatorRunContext{CurrentPhase: "plan"})
 	if !ok3 || !strings.Contains(block3, "Repo: stub") {
 		t.Fatalf("expected reinject after invalidate: ok=%v block=%q", ok3, block3)
 	}
@@ -46,6 +66,7 @@ func TestBoardEngineInvalidateOrientationForcesReinject(t *testing.T) {
 func TestBoardEngineReinjectsForEachWorkflowRun(t *testing.T) {
 	engine := assembly.NewBoardEngine(invalidateStubBuilder{}, invalidateStubFormatter{}, nil)
 	ctx := t.Context()
+	reader := invalidateTestCoordReader(t)
 	sess := &api.Session{ID: "s1", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: t.TempDir(), AgentType: "coordinator"}
 	var previousHash string
 	for _, runID := range []string{"run-a", "run-b", ""} {
@@ -53,7 +74,7 @@ func TestBoardEngineReinjectsForEachWorkflowRun(t *testing.T) {
 		if !engine.BoardWillForceInject(ctx, sess, run) {
 			t.Fatalf("run %q did not predict orientation injection", runID)
 		}
-		block, ok := engine.PrependBoardIfChanged(ctx, sess, run)
+		block, ok := engine.PrependBoardIfChanged(ctx, sess, reader, run)
 		if !ok || !strings.Contains(block, "Repo: stub") {
 			t.Fatalf("run %q missing orientation: ok=%v block=%q", runID, ok, block)
 		}
@@ -65,7 +86,7 @@ func TestBoardEngineReinjectsForEachWorkflowRun(t *testing.T) {
 		if engine.BoardWillForceInject(ctx, sess, run) {
 			t.Fatalf("stable run %q predicted redundant injection", runID)
 		}
-		if block, ok := engine.PrependBoardIfChanged(ctx, sess, run); ok {
+		if block, ok := engine.PrependBoardIfChanged(ctx, sess, reader, run); ok {
 			t.Fatalf("stable run %q repeated orientation: %q", runID, block)
 		}
 	}

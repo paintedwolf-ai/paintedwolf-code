@@ -1,6 +1,7 @@
 package invariants_test
 
 import (
+	"github.com/lycaon/lycaon/test/contract/invariants/invariantstest"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -17,11 +18,11 @@ var goleakTree = map[string]string{
 	"lycaon/internal/app/app_test.go":       "package app\n\nimport \"testing\"\n\nfunc TestX(t *testing.T) {}\n",
 }
 
-// The family fails on each kind of drift, shown on real rows.
+// The family invariantstest.Fails on each kind of drift, shown on real rows.
 func TestForbiddenCallsFailClosed(t *testing.T) {
 	t.Parallel()
-	goleak := rule(t, forbiddencalls.Family, "goleak-through-testutil")
-	adapters := rule(t, forbiddencalls.Family, "agent-adapters-reach-files-through-the-door")
+	goleak := invariantstest.Rule(t, forbiddencalls.Family, "goleak-through-testutil")
+	adapters := invariantstest.Rule(t, forbiddencalls.Family, "agent-adapters-reach-files-through-the-door")
 	adapterTree := map[string]string{
 		"lycaon/internal/fseffect/door.go":            "package fseffect\n",
 		"lycaon/internal/tools/projectpaths/paths.go": "package projectpaths\n",
@@ -32,24 +33,24 @@ func TestForbiddenCallsFailClosed(t *testing.T) {
 	for name, tc := range map[string]struct {
 		rule  invariants.Invariant
 		files map[string]string
-		want  outcome
+		want  invariantstest.Outcome
 	}{
-		"clean": {rule: goleak, files: goleakTree, want: passes},
-		"seeded violation": {rule: goleak, files: with(goleakTree, map[string]string{
+		"clean": {rule: goleak, files: goleakTree, want: invariantstest.Passes},
+		"seeded violation": {rule: goleak, files: invariantstest.With(goleakTree, map[string]string{
 			"lycaon/internal/app/app_test.go": "package app\n\nimport leak \"go.uber.org/goleak\"\n\nfunc helper() { leak.VerifyNone(nil) }\n",
-		}), want: violates},
-		"renamed anchor": {rule: goleak, files: with(goleakTree, map[string]string{
+		}), want: invariantstest.Violates},
+		"renamed anchor": {rule: goleak, files: invariantstest.With(goleakTree, map[string]string{
 			"lycaon/internal/testutil/leakcheck.go": "package testutil\n\nfunc VerifyLeaks() {}\n",
-		}), want: missesAnchor},
-		"stale exemption": {rule: adapters, files: adapterTree, want: staleExemption},
-		"empty corpus":    {rule: goleak, files: nil, want: fails},
-		"unparsable file": {rule: goleak, files: with(goleakTree, map[string]string{
+		}), want: invariantstest.MissesAnchor},
+		"stale exemption": {rule: adapters, files: adapterTree, want: invariantstest.StaleExemption},
+		"empty corpus":    {rule: goleak, files: nil, want: invariantstest.Fails},
+		"unparsable file": {rule: goleak, files: invariantstest.With(goleakTree, map[string]string{
 			"lycaon/internal/app/broken.go": "package app\n\nfunc (\n",
-		}), want: fails},
+		}), want: invariantstest.Fails},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			expect(t, invariants.Evaluate(fixture(t, tc.files), tc.rule), tc.want, 0)
+			invariantstest.Expect(t, invariants.Evaluate(invariantstest.Fixture(t, tc.files), tc.rule), tc.want, 0)
 		})
 	}
 }
@@ -72,7 +73,7 @@ func TestProcessLaunchRejectsPreparedStartBypasses(t *testing.T) {
 			"\t_, _ = cleanup, err\n\tcmd.Start(); cmd.Run(); cmd.Output(); cmd.CombinedOutput(); cmd.Wait()\n" +
 			"\tprocess.StartPrepared(nil, cmd)\n}\n",
 	}
-	expect(t, invariants.Evaluate(fixture(t, files), rule(t, forbiddencalls.Family, "process-launches-use-the-typed-door")), violates, 4)
+	invariantstest.Expect(t, invariants.Evaluate(invariantstest.Fixture(t, files), invariantstest.Rule(t, forbiddencalls.Family, "process-launches-use-the-typed-door")), invariantstest.Violates, 4)
 }
 
 // A zero options value returned beside a non-nil error is not a launch
@@ -86,11 +87,11 @@ func TestProcessLaunchOptionsErrorReturnIsNotExempt(t *testing.T) {
 			"func success() (ExecOpts, error) { return ExecOpts{}, nil }\n\n" +
 			"func unattributed() (ExecOpts, error) { return ExecOpts{Dir: \".\"}, validate() }\n",
 	}
-	expect(t, invariants.Evaluate(fixture(t, files), rule(t, forbiddencalls.Family, "process-launches-use-the-typed-door")), violates, 2)
+	invariantstest.Expect(t, invariants.Evaluate(invariantstest.Fixture(t, files), invariantstest.Rule(t, forbiddencalls.Family, "process-launches-use-the-typed-door")), invariantstest.Violates, 2)
 }
 
-// An engine call made while depsMu is held fails; the snapshot-then-unlock
-// shape passes.
+// An engine call made while depsMu is held invariantstest.Fails; the snapshot-then-unlock
+// shape invariantstest.Passes.
 func TestRuntimeLockFiresOnlyWhileHeld(t *testing.T) {
 	t.Parallel()
 	files := map[string]string{
@@ -99,14 +100,14 @@ func TestRuntimeLockFiresOnlyWhileHeld(t *testing.T) {
 			"func (r *Runtime) Bad() {\n\tr.depsMu.Lock()\n\tdefer r.depsMu.Unlock()\n\tr.assembler.Call()\n}\n\n" +
 			"func (r *Runtime) Good() {\n\tr.depsMu.Lock()\n\ta := r.assembler\n\tr.depsMu.Unlock()\n\ta.Call()\n}\n",
 	}
-	res := invariants.Evaluate(fixture(t, files), rule(t, forbiddencalls.Family, "runtime-methods-release-deps-mu-before-engine-calls"))
-	expect(t, res, violates, 1)
+	res := invariants.Evaluate(invariantstest.Fixture(t, files), invariantstest.Rule(t, forbiddencalls.Family, "runtime-methods-release-deps-mu-before-engine-calls"))
+	invariantstest.Expect(t, res, invariantstest.Violates, 1)
 	if !strings.Contains(res.Violations[0], "Bad") {
 		t.Fatalf("flagged the wrong method: %v", res.Violations)
 	}
 }
 
-// A direct read of the guarded field fails; reads through the accessor pass.
+// A direct read of the guarded field invariantstest.Fails; reads through the accessor pass.
 func TestLoopAdmissionDepsReadThroughAccessor(t *testing.T) {
 	t.Parallel()
 	files := map[string]string{
@@ -117,7 +118,7 @@ func TestLoopAdmissionDepsReadThroughAccessor(t *testing.T) {
 			"func (l *Admission) Good() int     { return l.loopDeps() }\n" +
 			"func (l *Admission) Bad() int      { return l.deps }\n",
 	}
-	expect(t, invariants.Evaluate(fixture(t, files), rule(t, forbiddencalls.Family, "loop-admission-deps-read-through-accessor")), violates, 1)
+	invariantstest.Expect(t, invariants.Evaluate(invariantstest.Fixture(t, files), invariantstest.Rule(t, forbiddencalls.Family, "loop-admission-deps-read-through-accessor")), invariantstest.Violates, 1)
 }
 
 // Comparing an epoch with nil asks whether one exists; comparing two
@@ -138,11 +139,11 @@ func TestEpochComparisonDistinguishesPresenceFromFreshness(t *testing.T) {
 				"lycaon/internal/repochange/notify.go": "package repochange\n\nfunc EpochCurrent(root string, epoch any) bool { return false }\n",
 				"lycaon/internal/probe/probe.go":       "package probe\n\nfunc probe() {\n\tif " + expression + " {\n\t}\n}\n",
 			}
-			want := passes
+			want := invariantstest.Passes
 			if freshness {
-				want = violates
+				want = invariantstest.Violates
 			}
-			expect(t, invariants.Evaluate(fixture(t, files), bare(rule(t, forbiddencalls.Family, "epoch-fast-paths-consult-watch-coverage"))), want, 1)
+			invariantstest.Expect(t, invariants.Evaluate(invariantstest.Fixture(t, files), invariantstest.Bare(invariantstest.Rule(t, forbiddencalls.Family, "epoch-fast-paths-consult-watch-coverage"))), want, 1)
 		})
 	}
 }
@@ -162,7 +163,7 @@ var pongoStub = map[string]string{
 		"func RenderTemplateString(string, map[string]any) (string, error) { return \"\", nil }\n" +
 		"func ReplaceTag(string, any) error { return nil }\n" +
 		"func MustNewLocalFileSystemLoader(string) any { return nil }\n",
-	"lycaon/go.mod": fixtureModule + "\nrequire github.com/flosch/pongo2/v6 v6.0.0\n\nreplace github.com/flosch/pongo2/v6 => ./pongostub\n",
+	"lycaon/go.mod": invariantstest.FixtureModule + "\nrequire github.com/flosch/pongo2/v6 v6.0.0\n\nreplace github.com/flosch/pongo2/v6 => ./pongostub\n",
 	"lycaon/internal/pongoplain/plain.go": "package pongoplain\n\nimport \"github.com/flosch/pongo2/v6\"\n\n" +
 		"func Compile(string) (*pongo2.Template, error) { return nil, nil }\n" +
 		"func Execute(any, *pongo2.Template, map[string]any) (string, error) { return \"\", nil }\n",
@@ -177,28 +178,28 @@ func TestPongoCeilingCatchesEachRoute(t *testing.T) {
 	const mixedImport = "import (\n\t\"github.com/flosch/pongo2/v6\"\n\n\t\"github.com/lycaon/lycaon/internal/pongoplain\"\n)\n"
 	for name, tc := range map[string]struct {
 		path, src string
-		want      outcome
+		want      invariantstest.Outcome
 	}{
-		"set built outside pongoplain": {src: pongoImport + "func f(l any) { set := pongo2.NewSet(\"x\", l); _ = set }\n", want: violates},
-		"parsed on the default set":    {src: pongoImport + "func f(b string) { _, _ = pongo2.FromString(b) }\n", want: violates},
-		"autoescape reset elsewhere":   {src: pongoImport + "func f() { pongo2.SetAutoescape(true) }\n", want: violates},
-		"default-set render shortcut":  {src: pongoImport + "func f(b string) { _, _ = pongo2.RenderTemplateString(b, nil) }\n", want: violates},
-		"template executed directly":   {src: pongoImport + "func f(t *pongo2.Template) { _, _ = t.Execute(nil) }\n", want: violates},
-		"blocks executed directly":     {src: pongoImport + "func f(t *pongo2.Template) { _, _ = t.ExecuteBlocks(nil, nil) }\n", want: violates},
-		"tag replaced":                 {src: pongoImport + "func f() { _ = pongo2.ReplaceTag(\"include\", nil) }\n", want: violates},
-		"loader built outside":         {src: pongoImport + "func f() { _ = pongo2.MustNewLocalFileSystemLoader(\"/tmp\") }\n", want: violates},
-		"ceiling re-opened":            {src: pongoImport + "func f(set *pongo2.TemplateSet) { set.BanTag(\"include\") }\n", want: violates},
-		"aliased import":               {src: "import p2 \"github.com/flosch/pongo2/v6\"\n" + "func f(l any) { set := p2.NewSet(\"x\", l); _ = set }\n", want: violates},
-		"dot import":                   {src: "import . \"github.com/flosch/pongo2/v6\"\n" + "func f(l any) { set := NewSet(\"x\", l); _ = set }\n", want: violates},
-		"source concatenated":          {src: plainImport + "func f(when string) { _, _ = pongoplain.Compile(\"{% if \" + when + \" %}1{% endif %}\"); _ = fmt.Sprint() }\n", want: violates},
-		"source formatted":             {src: plainImport + "func f(when string) { _, _ = pongoplain.Compile(fmt.Sprintf(\"{%% if %s %%}1{%% endif %%}\", when)) }\n", want: violates},
+		"set built outside pongoplain": {src: pongoImport + "func f(l any) { set := pongo2.NewSet(\"x\", l); _ = set }\n", want: invariantstest.Violates},
+		"parsed on the default set":    {src: pongoImport + "func f(b string) { _, _ = pongo2.FromString(b) }\n", want: invariantstest.Violates},
+		"autoescape reset elsewhere":   {src: pongoImport + "func f() { pongo2.SetAutoescape(true) }\n", want: invariantstest.Violates},
+		"default-set render shortcut":  {src: pongoImport + "func f(b string) { _, _ = pongo2.RenderTemplateString(b, nil) }\n", want: invariantstest.Violates},
+		"template executed directly":   {src: pongoImport + "func f(t *pongo2.Template) { _, _ = t.Execute(nil) }\n", want: invariantstest.Violates},
+		"blocks executed directly":     {src: pongoImport + "func f(t *pongo2.Template) { _, _ = t.ExecuteBlocks(nil, nil) }\n", want: invariantstest.Violates},
+		"tag replaced":                 {src: pongoImport + "func f() { _ = pongo2.ReplaceTag(\"include\", nil) }\n", want: invariantstest.Violates},
+		"loader built outside":         {src: pongoImport + "func f() { _ = pongo2.MustNewLocalFileSystemLoader(\"/tmp\") }\n", want: invariantstest.Violates},
+		"ceiling re-opened":            {src: pongoImport + "func f(set *pongo2.TemplateSet) { set.BanTag(\"include\") }\n", want: invariantstest.Violates},
+		"aliased import":               {src: "import p2 \"github.com/flosch/pongo2/v6\"\n" + "func f(l any) { set := p2.NewSet(\"x\", l); _ = set }\n", want: invariantstest.Violates},
+		"dot import":                   {src: "import . \"github.com/flosch/pongo2/v6\"\n" + "func f(l any) { set := NewSet(\"x\", l); _ = set }\n", want: invariantstest.Violates},
+		"source concatenated":          {src: plainImport + "func f(when string) { _, _ = pongoplain.Compile(\"{% if \" + when + \" %}1{% endif %}\"); _ = fmt.Sprint() }\n", want: invariantstest.Violates},
+		"source formatted":             {src: plainImport + "func f(when string) { _, _ = pongoplain.Compile(fmt.Sprintf(\"{%% if %s %%}1{%% endif %%}\", when)) }\n", want: invariantstest.Violates},
 		"the ceiling builds sets": {
 			path: "lycaon/internal/pongoplain/sets.go",
-			src:  pongoImport + "func f(l any) { set := pongo2.NewSet(\"x\", l); _ = set }\n", want: passes,
+			src:  pongoImport + "func f(l any) { set := pongo2.NewSet(\"x\", l); _ = set }\n", want: invariantstest.Passes,
 		},
-		"authored body passed through": {src: plainImport + "func f(body string) { _, _ = pongoplain.Compile(body); _ = fmt.Sprint() }\n", want: passes},
-		"bounded execution":            {src: mixedImport + "func f(t *pongo2.Template) { _, _ = pongoplain.Execute(nil, t, nil) }\n", want: passes},
-		"set method":                   {src: pongoImport + "func f(set *pongo2.TemplateSet, ref string) { _, _ = set.FromCache(ref) }\n", want: passes},
+		"authored body passed through": {src: plainImport + "func f(body string) { _, _ = pongoplain.Compile(body); _ = fmt.Sprint() }\n", want: invariantstest.Passes},
+		"bounded execution":            {src: mixedImport + "func f(t *pongo2.Template) { _, _ = pongoplain.Execute(nil, t, nil) }\n", want: invariantstest.Passes},
+		"set method":                   {src: pongoImport + "func f(set *pongo2.TemplateSet, ref string) { _, _ = set.FromCache(ref) }\n", want: invariantstest.Passes},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -207,8 +208,8 @@ func TestPongoCeilingCatchesEachRoute(t *testing.T) {
 			if path == "" {
 				path, pkg = "lycaon/internal/p/p.go", "p"
 			}
-			files := with(pongoStub, map[string]string{path: "package " + pkg + "\n\n" + tc.src})
-			expect(t, invariants.Evaluate(fixture(t, files), rule(t, forbiddencalls.Family, "pongo-templates-carry-the-host-ceiling")), tc.want, 1)
+			files := invariantstest.With(pongoStub, map[string]string{path: "package " + pkg + "\n\n" + tc.src})
+			invariantstest.Expect(t, invariants.Evaluate(invariantstest.Fixture(t, files), invariantstest.Rule(t, forbiddencalls.Family, "pongo-templates-carry-the-host-ceiling")), tc.want, 1)
 		})
 	}
 }

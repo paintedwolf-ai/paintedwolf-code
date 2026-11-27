@@ -16,6 +16,17 @@ var ErrConflict = errors.New("file operation identity conflict")
 var ErrNotFound = errors.New("file operation not found")
 var ErrNotCancelable = errors.New("file operation has entered its commit phase")
 
+// FirstAnswerKind records which transport response kind was first written for
+// an admitted request, persisted on source_file_requests so retries return the
+// same kind regardless of timing or process restarts.
+type FirstAnswerKind string
+
+const (
+	FirstAnswerPending  FirstAnswerKind = ""
+	FirstAnswerResult   FirstAnswerKind = "result"
+	FirstAnswerAccepted FirstAnswerKind = "accepted"
+)
+
 type Request struct {
 	ID, ProjectID, PersonID, Operation, Method, URI, InputDigest, RootScope string
 	SessionID                                                               string
@@ -29,7 +40,8 @@ type Request struct {
 	CreatedAt, UpdatedAt                                                    time.Time
 	// CompletedAt is when the request reached its terminal state; nil while
 	// it is queued or running.
-	CompletedAt *time.Time
+	CompletedAt     *time.Time
+	FirstAnswerKind FirstAnswerKind
 }
 
 func (r Request) Terminal() bool {
@@ -46,7 +58,7 @@ func NewStore(database db.Handle) *Store {
 	return &Store{db: database, memory: make(map[string]Request)}
 }
 
-const columns = `id,project_id,person_id,operation,method,uri,body,input_digest,root_scope,state,phase,entries_processed,bytes_processed,cancelable,response_status,response_body,created_at,updated_at,session_id,turn,completed_at`
+const columns = `id,project_id,person_id,operation,method,uri,body,input_digest,root_scope,state,phase,entries_processed,bytes_processed,cancelable,response_status,response_body,created_at,updated_at,session_id,turn,completed_at,first_answer_kind`
 
 func (s *Store) Get(ctx context.Context, id string) (Request, error) {
 	if s.db == nil {
@@ -65,13 +77,15 @@ func scanRequest(row interface{ Scan(...any) error }) (Request, error) {
 	var r Request
 	var created, updated string
 	var completed sql.NullString
-	err := row.Scan(&r.ID, &r.ProjectID, &r.PersonID, &r.Operation, &r.Method, &r.URI, &r.Body, &r.InputDigest, &r.RootScope, &r.State, &r.Phase, &r.EntriesProcessed, &r.BytesProcessed, &r.Cancelable, &r.ResponseStatus, &r.ResponseBody, &created, &updated, &r.SessionID, &r.Turn, &completed)
+	var firstAnswer string
+	err := row.Scan(&r.ID, &r.ProjectID, &r.PersonID, &r.Operation, &r.Method, &r.URI, &r.Body, &r.InputDigest, &r.RootScope, &r.State, &r.Phase, &r.EntriesProcessed, &r.BytesProcessed, &r.Cancelable, &r.ResponseStatus, &r.ResponseBody, &created, &updated, &r.SessionID, &r.Turn, &completed, &firstAnswer)
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, ErrNotFound
 	}
 	if err != nil {
 		return r, err
 	}
+	r.FirstAnswerKind = FirstAnswerKind(firstAnswer)
 	r.CreatedAt, err = time.Parse(time.RFC3339Nano, created)
 	if err != nil {
 		return r, err
@@ -105,7 +119,7 @@ func (s *Store) Insert(ctx context.Context, r Request) error {
 	if r.Body == nil {
 		r.Body = []byte{}
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO source_file_requests (`+columns+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, r.ID, r.ProjectID, r.PersonID, r.Operation, r.Method, r.URI, r.Body, r.InputDigest, r.RootScope, r.State, r.Phase, r.EntriesProcessed, r.BytesProcessed, r.Cancelable, r.ResponseStatus, r.ResponseBody, r.CreatedAt.Format(time.RFC3339Nano), r.UpdatedAt.Format(time.RFC3339Nano), r.SessionID, r.Turn, completedAtValue(r))
+	_, err := s.db.ExecContext(ctx, `INSERT INTO source_file_requests (`+columns+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, r.ID, r.ProjectID, r.PersonID, r.Operation, r.Method, r.URI, r.Body, r.InputDigest, r.RootScope, r.State, r.Phase, r.EntriesProcessed, r.BytesProcessed, r.Cancelable, r.ResponseStatus, r.ResponseBody, r.CreatedAt.Format(time.RFC3339Nano), r.UpdatedAt.Format(time.RFC3339Nano), r.SessionID, r.Turn, completedAtValue(r), string(r.FirstAnswerKind))
 	return err
 }
 
@@ -113,14 +127,51 @@ func (s *Store) Update(ctx context.Context, r Request) error {
 	if s.db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		if _, exists := s.memory[r.ID]; !exists {
+		existing, exists := s.memory[r.ID]
+		if !exists {
 			return ErrNotFound
 		}
+		// first_answer_kind is write-once and never overwritten by state updates.
+		r.FirstAnswerKind = existing.FirstAnswerKind
 		s.memory[r.ID] = r
 		return nil
 	}
 	_, err := s.db.ExecContext(ctx, `UPDATE source_file_requests SET state=?,phase=?,entries_processed=?,bytes_processed=?,cancelable=?,response_status=?,response_body=?,updated_at=?,completed_at=? WHERE id=?`, r.State, r.Phase, r.EntriesProcessed, r.BytesProcessed, r.Cancelable, r.ResponseStatus, r.ResponseBody, r.UpdatedAt.Format(time.RFC3339Nano), completedAtValue(r), r.ID)
 	return err
+}
+
+// RecordFirstAnswer persists kind on request id if no first answer has been
+// recorded yet, and returns the stored kind. Once written, first_answer_kind
+// is never rewritten.
+func (s *Store) RecordFirstAnswer(ctx context.Context, id string, kind FirstAnswerKind) (FirstAnswerKind, error) {
+	if kind != FirstAnswerResult && kind != FirstAnswerAccepted {
+		return FirstAnswerPending, errors.New("invalid first answer kind")
+	}
+	if s.db == nil {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		r, exists := s.memory[id]
+		if !exists {
+			return FirstAnswerPending, ErrNotFound
+		}
+		if r.FirstAnswerKind == FirstAnswerPending {
+			r.FirstAnswerKind = kind
+			s.memory[id] = r
+		}
+		return r.FirstAnswerKind, nil
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE source_file_requests SET first_answer_kind=? WHERE id=? AND first_answer_kind=''`, string(kind), id); err != nil {
+		return FirstAnswerPending, err
+	}
+	var recorded string
+	err := s.db.QueryRowContext(ctx, `SELECT first_answer_kind FROM source_file_requests WHERE id=?`, id).Scan(&recorded)
+	if errors.Is(err, sql.ErrNoRows) {
+		return FirstAnswerPending, ErrNotFound
+	}
+	if err != nil {
+		return FirstAnswerPending, err
+	}
+	return FirstAnswerKind(recorded), nil
 }
 
 // listedAt orders requests within their group: active work by when it was

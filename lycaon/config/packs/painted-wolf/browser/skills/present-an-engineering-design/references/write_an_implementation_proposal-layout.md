@@ -74,7 +74,7 @@ The cover uses a 12-column grid with the title in columns 1–8 and one geometri
 
 - Every page has a running subject label and folio; the cover is page 01.
 - Use sentence-case headings. A page gets one claim-sized heading, not a banner plus a redundant heading.
-- A workstream card contains `outcome`, `owned surfaces`, `dependencies`, and `exit evidence`.
+- A workstream card contains outcome, owned surfaces, dependencies, and exit evidence.
 - The phase roadmap encodes dependencies with order and connectors; do not use equal boxes for dependency-ordered work without explaining the order.
 - Put `Not in scope` beside `In scope` with equal visual weight.
 - The final page repeats the decision ask and lists assumptions close enough to affect it.

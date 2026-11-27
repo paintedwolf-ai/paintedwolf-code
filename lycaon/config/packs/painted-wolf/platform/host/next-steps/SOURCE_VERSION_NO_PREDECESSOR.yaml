@@ -4,5 +4,5 @@ steps:
       mode: "effects"
       path: "{{ paintedwolf.path }}"
     complete: true
-    say: "Query {{ call }} to check recorded history."
+    say: "{% if load %}Call {{ load }}, then query{% else %}Query{% endif %} {{ call }} to check recorded history."
     otherwise: "Inspect the recorded source history for this file."

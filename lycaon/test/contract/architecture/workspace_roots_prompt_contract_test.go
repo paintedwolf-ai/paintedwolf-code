@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -144,11 +145,23 @@ func TestUnifiedFolderBlockGrammarAtEveryRootCount(t *testing.T) {
 			assertNoHostPaths(t, "command-surface", cmd, refs)
 
 			// The roots-changed kick names every change and row by @label.
+			profiles, err := sandbox.LoadToolProfiles()
+			contractcheck.FailErr(t, "LoadToolProfiles", err)
+			reader, err := prompts.NewReader(prompts.HostFacts{
+				Profiles:  profiles,
+				RootCount: len(refs),
+				HasGit:    len(refs) > 0,
+				WebSearch: true,
+			}, prompts.TurnProjection{
+				ProfileID: prompts.CoordinatorProfileID,
+				Declared:  true,
+			})
+			contractcheck.FailErr(t, "NewReader coordinator", err)
 			before := refs
 			added := projectroot.RootRef{ID: "extra", Label: "extra", Path: filepath.Join(t.TempDir(), "extra")}
 			after := append(append([]projectroot.RootRef{}, refs...), added)
 			change := projectroot.DiffRoots(before, after)
-			kick, err := engine.RenderKick(ctx, "coordinator-roots-changed", prompts.RootsChangedKickData(change, after, activeID))
+			kick, err := engine.RenderKick(ctx, reader, "coordinator-roots-changed", prompts.RootsChangedKickData(change, after, activeID))
 			contractcheck.FailErr(t, "render roots-changed kick", err)
 			assertNoHostPaths(t, "roots-changed kick", kick, append(refs, added))
 			if !strings.Contains(kick, "@extra") {
@@ -163,7 +176,7 @@ func TestUnifiedFolderBlockGrammarAtEveryRootCount(t *testing.T) {
 
 			// The detach-canceled kick names the folder by @label, and stays
 			// grammatical when the host cannot supply one (project delete).
-			detach, err := engine.RenderKick(ctx, "coordinator-root-detach-canceled", map[string]any{
+			detach, err := engine.RenderKick(ctx, reader, "coordinator-root-detach-canceled", map[string]any{
 				"root_id": "extra", "label": "extra", "workers": []any{}, "overlays": []any{}, "reason": "folder removed",
 			})
 			contractcheck.FailErr(t, "render detach-canceled kick", err)
@@ -171,7 +184,7 @@ func TestUnifiedFolderBlockGrammarAtEveryRootCount(t *testing.T) {
 			if !strings.Contains(detach, "@extra") {
 				t.Fatalf("detach kick does not name the folder by @label:\n%s", detach)
 			}
-			plain, err := engine.RenderKick(ctx, "coordinator-root-detach-canceled", map[string]any{})
+			plain, err := engine.RenderKick(ctx, reader, "coordinator-root-detach-canceled", map[string]any{})
 			contractcheck.FailErr(t, "render bare detach-canceled kick", err)
 			assertNoHostPaths(t, "bare detach-canceled kick", plain, refs)
 
@@ -182,7 +195,7 @@ func TestUnifiedFolderBlockGrammarAtEveryRootCount(t *testing.T) {
 				orientationRoots = append(orientationRoots, api.BoardOrientationRoot{Label: r.Label, IsPrimary: r.IsPrimary, Brief: api.RepoBrief{FileCount: 3}})
 			}
 			snap := api.BoardSnapshot{Repo: api.RepoBrief{FileCount: 3}, OrientationRoots: orientationRoots}
-			board, err := inject.RenderBoardOrientationInject(ctx, renderer, "sess-ac-wr03", snap, packboard.InjectScopeFull, false, false, time.Now().UTC())
+			board, err := inject.RenderBoardOrientationInject(ctx, renderer, reader, "sess-ac-wr03", snap, packboard.InjectScopeFull, false, false, time.Now().UTC())
 			contractcheck.FailErr(t, "render board orientation", err)
 			assertNoHostPaths(t, "board orientation", board, refs)
 			if tc.rootCount > 1 {

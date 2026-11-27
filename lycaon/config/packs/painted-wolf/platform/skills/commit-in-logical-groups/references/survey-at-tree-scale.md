@@ -1,6 +1,6 @@
 # Survey at the scale of the tree
 
-{% set can_git_commit = has_git and not on_worker_branch and profile_has_command and profile_command_mutation != false %}{% set can_git_read = has_git and not on_worker_branch and profile_has_command %}{% if can_git_commit %}Read repository state with native Git commands in `command`, and stage with `git add` and `git commit` for reviewed, path-scoped commits.{% else %}Without trunk commit access: survey the change record and prepare the groups for the coordinator to commit.{% endif %}
+{% if can_git_commit %}Read repository state with native Git commands in `command`, and stage with `git add` and `git commit` for reviewed, path-scoped commits.{% else %}Without trunk commit access: survey the change record and prepare the groups for the coordinator to commit.{% endif %}
 
 {% if can_git_read %}The inventory is `git status --short`, `git diff --stat`, and a bounded `git log`, never every hunk.{% else %}The inventory is this worker's own change record — the files it wrote or edited — never every hunk.{% endif %} Narrow large trees by explicit paths. Paths, insertion and deletion counts, and recent messages establish the initial commit groups without reading every changed line.
 

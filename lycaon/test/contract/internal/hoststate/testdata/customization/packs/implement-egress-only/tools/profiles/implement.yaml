@@ -1,0 +1,30 @@
+id: implement
+description: Implementer whose commands may only read and reach the network, with a terminal snapshot and no recall
+command_effects: [read_only, network_egress]
+tools:
+  survey_repo: sticky
+  summarize: sticky
+  scan_list: true
+  scan_summary: true
+  scan_query: true
+  pack_board: sticky
+  read_findings: sticky
+  read_review: sticky
+  request_decision: sticky
+  message_coordinator: sticky
+  web_search: true
+  fetch_url: true
+  source_history: sticky
+  command: sticky
+  complete_leg: sticky
+  skills_read: sticky
+  terminal_snapshot: sticky
+  command_output: sticky
+  command_stop: sticky
+  held_result: true
+  held_stop: true
+  wait: sticky
+deny_tools:
+  - plan_from_blueprint
+  - state_*
+wait_conditions: [process_done, http_ready, port_ready]

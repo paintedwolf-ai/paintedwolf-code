@@ -17,7 +17,7 @@ import (
 func renderTestActiveWorkflow(t *testing.T, runCtx api.CoordinatorRunContext, snap WorkflowRuntimeSnapshot, hints *guidance.HintConfig, codes []string) string {
 	t.Helper()
 	renderer := testInjectRenderer(t)
-	block, err := RenderActiveWorkflowInject(context.Background(), renderer, "sess-inject-test", CoordinatorTurnFrame{RunContext: runCtx, Runtime: snap}, hints, codes, nil)
+	block, err := RenderActiveWorkflowInject(context.Background(), renderer, testCoordReader(t), "sess-inject-test", CoordinatorTurnFrame{RunContext: runCtx, Runtime: snap}, hints, codes, nil)
 	testutil.FailErr(t, "RenderActiveWorkflowInject failed", err)
 	return block
 }
@@ -102,13 +102,13 @@ func TestActiveWorkflowInjectRendersFlowBrief(t *testing.T) {
 	}
 	block := renderTestActiveWorkflow(t, runCtx, snap, nil, nil)
 	for _, want := range []string{
-		"phase 2/3 — `review`",
+		"phase 2/3 — review",
 		"· terminal",
 		"Gates:",
 		"[ ] `evidence_passed:plan_review`",
 		"### Phase exit",
 		"call `workflow_advance`",
-		"Next: `approve`",
+		"Next: approve",
 	} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in:\n%s", want, block)
@@ -188,7 +188,7 @@ func TestActiveWorkflowInjectListsChoiceTransitions(t *testing.T) {
 }
 
 func TestRenderActiveWorkflowInject_NilRenderer(t *testing.T) {
-	_, err := RenderActiveWorkflowInject(context.Background(), nil, "sess-inject-test", CoordinatorTurnFrame{}, nil, nil, nil)
+	_, err := RenderActiveWorkflowInject(context.Background(), nil, testCoordReader(t), "sess-inject-test", CoordinatorTurnFrame{}, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "not configured") {
 		t.Fatalf("err = %v", err)
 	}
@@ -200,7 +200,7 @@ func TestRenderActiveWorkflowInject_MissingSentinel(t *testing.T) {
 		testutil.FailErr(t, "engine.Register failed", err)
 	}
 	renderer := prompts.NewInjectRenderer(engine)
-	_, err := RenderActiveWorkflowInject(context.Background(), renderer, "sess-inject-test", CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{WorkflowID: "wf"}}, nil, nil, nil)
+	_, err := RenderActiveWorkflowInject(context.Background(), renderer, testCoordReader(t), "sess-inject-test", CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{WorkflowID: "wf"}}, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), ActiveWorkflowInjectSentinel) {
 		t.Fatalf("err = %v", err)
 	}
@@ -217,7 +217,7 @@ func TestWorkflowInjectNeverAdvertisesExcludedAgents(t *testing.T) {
 	frame.RunContext.RunID = "run-1"
 	frame.RunContext.AllowedAgents = declared
 	renderer := testInjectRenderer(t)
-	block, err := RenderActiveWorkflowInject(context.Background(), renderer, "sess-inject-test", frame, nil, nil, nil)
+	block, err := RenderActiveWorkflowInject(context.Background(), renderer, testCoordReader(t), "sess-inject-test", frame, nil, nil, nil)
 	testutil.FailErr(t, "RenderActiveWorkflowInject failed", err)
 
 	var allowedLine string
@@ -245,13 +245,16 @@ func testSynthesisSpawnReader(t *testing.T) prompts.Reader {
 	testutil.FailErr(t, "LoadToolProfiles", err)
 	plan, err := prompts.CompileSurfacePlan(spawn.SurfaceImplementSynthesis, 1)
 	testutil.FailErr(t, "CompileSurfacePlan", err)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
+	reader, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:       profiles,
+		RootCount:      1,
+		WebSearch:      true,
+		SpawnAllowlist: spawn.AmbientAllowedAgents(),
+	}, prompts.TurnProjection{
 		ProfileID: prompts.CoordinatorProfileID,
 		SurfaceID: spawn.SurfaceImplementSynthesis,
-		Profiles:  profiles,
 		Plan:      plan,
-		RootCount: 1,
-		WebSearch: true,
+		Offered:   (plan).ImmediateNames(),
 	})
 	testutil.FailErr(t, "NewReader", err)
 	return reader

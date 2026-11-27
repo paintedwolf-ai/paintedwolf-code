@@ -1,0 +1,12 @@
+id: fixture-host-mode-on-user
+version: 1.0.0
+name: Fixture host mode on user
+trigger: /fixture-host-mode-on-user
+request:
+  question: What should this phase work on?
+phases:
+  - id: bound
+    activity_label: Working
+    coordinator_surface: await_user
+    surface_template: agents/coordinator-surface-vet.md
+    mode_refs: [await-host]

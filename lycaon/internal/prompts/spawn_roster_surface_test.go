@@ -28,12 +28,14 @@ func dispatchTestReader(t *testing.T) prompts.Reader {
 	if err != nil {
 		t.Fatalf("CompileSurfacePlan: %v", err)
 	}
-	reader, err := prompts.NewReader(prompts.ReaderInput{
+	reader, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+	}, prompts.TurnProjection{
 		ProfileID: prompts.CoordinatorProfileID,
 		SurfaceID: "implement_dispatch",
 		Plan:      plan,
-		Profiles:  profiles,
-		RootCount: 1,
+		Offered:   (plan).ImmediateNames(),
 	})
 	if err != nil {
 		t.Fatalf("NewReader: %v", err)

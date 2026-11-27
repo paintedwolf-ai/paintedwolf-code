@@ -1,6 +1,11 @@
 package command
 
-import "context"
+import (
+	"context"
+
+	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/isolation"
+)
 
 // SandboxWriteRootAsk is the structured pre-spawn input for write authority.
 type SandboxWriteRootAsk struct {
@@ -25,8 +30,14 @@ type SandboxWriteRootResult struct {
 	Raised bool
 	// Authorized reports whether the root was granted.
 	Authorized bool
-	// Denied reports a rejected or expired approval.
+	// Denied reports a rejected ask, deny rule, or control-plane block.
 	Denied bool
+	// DenialCause classifies why authority was refused.
+	DenialCause isolation.PathDenialCause
+	// ApprovalResolvedBy names who ended a rejected approval no person decided.
+	ApprovalResolvedBy string
+	// DeniedRules are the matched deny rules when DenialCause is isolation.PathDenialApprovalRule.
+	DeniedRules []hitl.ApprovalRuleMatch
 	// ProposedWriteRoot is the approved root.
 	ProposedWriteRoot string
 	// UserGuidance is explicit composer direction attached to a denial.
@@ -52,9 +63,13 @@ type SandboxReadPathAsk struct {
 
 // SandboxReadPathResult is the gate outcome after optional HITL.
 type SandboxReadPathResult struct {
-	Raised     bool
-	Authorized bool
-	Denied     bool
+	Raised      bool
+	Authorized  bool
+	Denied      bool
+	DenialCause isolation.PathDenialCause
+	// ApprovalResolvedBy names who ended a rejected approval no person decided.
+	ApprovalResolvedBy string
+	DeniedRules        []hitl.ApprovalRuleMatch
 	// ProposedReadPath is the approved path.
 	ProposedReadPath string
 	// UserGuidance is explicit composer direction attached to a denial.

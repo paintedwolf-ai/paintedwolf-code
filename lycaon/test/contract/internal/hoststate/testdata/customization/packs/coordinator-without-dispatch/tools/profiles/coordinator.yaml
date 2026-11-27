@@ -1,0 +1,53 @@
+id: coordinator
+description: Coordinator tools without worker dispatch, waiting, progress rows or mutating commands
+command_effects: [read_only, external_exec, network_egress]
+tools:
+  code_rewrite: true
+  survey_repo: sticky
+  inspect_source: sticky
+  read_review: sticky
+  plan_from_blueprint: sticky
+  promote_overlay: sticky
+  reject_overlay: sticky
+  shelve_overlay: sticky
+  preview_overlay: sticky
+  workflow_compose: sticky
+  workflow_compose_from_template: sticky
+  workflow_catalog_summaries: sticky
+  workflow_persist: sticky
+  workflow_user_feedback: sticky
+  ask_user: sticky
+  workflow_advance: sticky
+  workflow_transition: sticky
+  fanout_plan: sticky
+  submit_verdict: sticky
+  state_start: sticky
+  source_history: sticky
+  restore_version: true
+  scan_pack: sticky
+  scan_summary: true
+  scan_query: true
+  scan_compare: true
+  web_search: sticky
+  command: sticky
+  held_result: true
+  held_stop: true
+  verify: sticky
+  secret_generate: sticky
+  secret_list: sticky
+  secret_revoke: sticky
+  mcp_*: true
+  render_view: sticky
+  view_image: sticky
+  view_video: sticky
+  capture_page: sticky
+  page_open: sticky
+  page_act: sticky
+  page_snapshot: sticky
+  terminal_open: sticky
+  terminal_send: sticky
+  terminal_read: sticky
+  terminal_close: sticky
+deny_tools:
+read_scope: coordinator_product_read
+write_scope: coordinator_orchestration

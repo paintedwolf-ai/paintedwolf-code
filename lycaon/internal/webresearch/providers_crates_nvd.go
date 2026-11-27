@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"net/http"
 	"net/url"
 	"strings"
@@ -235,7 +236,7 @@ func slimSeedBudget(maxResults int) seedBudget {
 }
 
 func buildPickSeedsUserMessage(ctx context.Context, query string, period Period, taskHint string, budget seedBudget) (string, error) {
-	return guidance.RenderCatalog(ctx, guidance.UtilityPickSeedsUserRef, map[string]any{
+	return prompts.RenderUtilityPrompt(ctx, guidance.UtilityPickSeedsUserRef, map[string]any{
 		"query":      strings.TrimSpace(query),
 		"min_leads":  budget.minLeads,
 		"max_leads":  budget.maxLeads,

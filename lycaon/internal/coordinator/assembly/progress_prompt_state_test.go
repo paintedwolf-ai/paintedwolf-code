@@ -17,7 +17,7 @@ func TestProgressPromptTracksChecklistWithinTurn(t *testing.T) {
 	deps.ImplementSessionState = func(context.Context, *api.Session) surface.ImplementSessionState {
 		return surface.ImplementSessionState{WrapupGatesLoaded: true, ProgressMissing: missing}
 	}
-	eng.SetDeps(deps)
+	eng.SetDeps(withTestTurnReader(deps))
 	sess := &api.Session{ID: "progress-state", Posture: api.SessionPostureBuild, AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
 	eng.BeginPromptTurn(sess.ID, "")
 	var expectedKey string

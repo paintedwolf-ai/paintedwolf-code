@@ -13,21 +13,23 @@ import (
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
-func coordinatorSurfaceInput(t *testing.T, surfaceID string) prompts.ReaderInput {
+func coordinatorSurfaceInput(t *testing.T, surfaceID string) (prompts.HostFacts, prompts.TurnProjection) {
 	t.Helper()
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
 	plan, err := prompts.CompileSurfacePlan(surfaceID, 1)
 	testutil.FailErr(t, "CompileSurfacePlan", err)
-	return prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: surfaceID,
-		Profiles:  profiles,
-		Plan:      plan,
-		RootCount: 1,
-		HasGit:    true,
-		WebSearch: true,
-	}
+	return prompts.HostFacts{
+			Profiles:  profiles,
+			RootCount: 1,
+			HasGit:    true,
+			WebSearch: true,
+		}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: surfaceID,
+			Plan:      plan,
+			Offered:   plan.ImmediateNames(),
+		}
 }
 
 func TestCoordinatorSurfaceFactsHasCommandOnInvestigate(t *testing.T) {
@@ -51,9 +53,10 @@ func TestCoordinatorSurfaceFactsTeachesLoadedHTTPRequest(t *testing.T) {
 		t.Fatalf("investigate floor must not teach the unloaded fetch_url: has=%v loadable=%v",
 			vars["profile_has_fetch_url"], vars["more_tools_loadable"])
 	}
-	in := coordinatorSurfaceInput(t, toolcontract.SurfaceImplementInvestigate)
-	in.Loaded = map[string]bool{"fetch_url": true}
-	loadedReader, err := prompts.NewReader(in)
+	host, turn := coordinatorSurfaceInput(t, toolcontract.SurfaceImplementInvestigate)
+	turn.Plan = turn.Plan.Promote("fetch_url")
+	turn.Offered = turn.Plan.ImmediateNames()
+	loadedReader, err := prompts.NewReader(host, turn)
 	if err != nil {
 		t.Fatalf("NewReader: %v", err)
 	}
@@ -85,9 +88,9 @@ func TestCoordinatorSurfaceFactsListsRequestableToolsWithSummaries(t *testing.T)
 	root := configlayout.FindModuleRoot()
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	testutil.FailErr(t, "LoadSchemaDir", err)
-	in := coordinatorSurfaceInput(t, toolcontract.SurfaceImplementInvestigate)
-	in.Schemas = schemas
-	reader, err := prompts.NewReader(in)
+	host, turn := coordinatorSurfaceInput(t, toolcontract.SurfaceImplementInvestigate)
+	host.Schemas = schemas
+	reader, err := prompts.NewReader(host, turn)
 	testutil.FailErr(t, "NewReader", err)
 	rows, err := prompts.RequestableTools(reader.Requestable(), schemas)
 	testutil.FailErr(t, "RequestableTools", err)
@@ -101,8 +104,9 @@ func TestCoordinatorSurfaceFactsListsRequestableToolsWithSummaries(t *testing.T)
 	if _, ok := byName["command"]; ok {
 		t.Fatalf("a floor tool is offered, not requestable: %+v", rows)
 	}
-	in.Loaded = map[string]bool{"fetch_url": true}
-	loadedReader, err := prompts.NewReader(in)
+	turn.Plan = turn.Plan.Promote("fetch_url")
+	turn.Offered = turn.Plan.ImmediateNames()
+	loadedReader, err := prompts.NewReader(host, turn)
 	testutil.FailErr(t, "NewReader loaded", err)
 	loadedRows, err := prompts.RequestableTools(loadedReader.Requestable(), schemas)
 	testutil.FailErr(t, "RequestableTools loaded", err)

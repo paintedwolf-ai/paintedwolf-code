@@ -10,17 +10,6 @@ import (
 	"database/sql"
 )
 
-const countCallReservations = `-- name: CountCallReservations :one
-SELECT COUNT(*) FROM call_reservations WHERE session_id = ?
-`
-
-func (q *Queries) CountCallReservations(ctx context.Context, sessionID sql.NullString) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countCallReservations, sessionID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const deleteAgentCallReservations = `-- name: DeleteAgentCallReservations :exec
 DELETE FROM call_reservations WHERE session_id = ? AND agent = ?
 `

@@ -20,7 +20,9 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/fileops"
 
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/project/projecttest"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -178,5 +180,143 @@ func TestSourceRequestPublishesEveryPersistedState(t *testing.T) {
 	}
 	if !states["queued"] || !states["running"] {
 		t.Fatalf("states seen = %v", states)
+	}
+}
+
+func TestSourceRequestReplayMatchesAcceptedFirstAnswer(t *testing.T) {
+	database := testdbfixture.Open(t, "source-requests-replay.db")
+	withDB := func(d *hostapi.Dependencies) {
+		d.Core.Database = database
+		d.Core.Projects = project.NewSQLRegistry(database)
+	}
+	srv := contractfixture.NewTestServerWithWorkflows(t, withDB)
+	root := t.TempDir()
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
+	testutil.FailErr(t, "create project", err)
+
+	held, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(unblock)
+
+	id := uuid.NewString()
+	completed := make(chan struct{})
+	var completeOnce sync.Once
+	srv.Sources.Mutations.FileOperations.Observe(func(req fileops.Request) {
+		if req.ID == id && req.Terminal() {
+			completeOnce.Do(func() { close(completed) })
+		}
+	})
+	srv.Sources.Mutations.FileOperations.HoldBeforeWorkForTest(func(ctx context.Context, req fileops.Request) {
+		if req.ID != id {
+			return
+		}
+		close(held)
+		select {
+		case <-release:
+		case <-ctx.Done():
+		}
+	})
+	expired := make(chan struct{})
+	close(expired)
+	srv.Sources.Mutations.SyncWindow = func(context.Context) <-chan struct{} { return expired }
+
+	body, err := json.Marshal(wire.CreateProjectSourceEntryRequest{
+		OperationID: id,
+		RootID:      p.Roots[0].ID,
+		Path:        "created.txt",
+		Kind:        "file",
+	})
+	testutil.FailErr(t, "encode create request", err)
+	url := "/v1/projects/" + p.ID + "/source"
+
+	first := httptest.NewRecorder()
+	srv.ServeHTTP(first, contractfixture.NewAuthedRequest(http.MethodPost, url, bytes.NewReader(body)))
+	if first.Code != http.StatusAccepted {
+		t.Fatalf("first status = %d, want 202 (body=%s)", first.Code, first.Body.String())
+	}
+	var firstDTO wire.SourceOperationStatus
+	testutil.FailErr(t, "decode first 202 DTO", json.Unmarshal(first.Body.Bytes(), &firstDTO))
+	if firstDTO.OperationID != id {
+		t.Fatalf("first DTO operation_id = %q, want %q", firstDTO.OperationID, id)
+	}
+
+	// Wait until the worker is held, then verify an in-flight replay also answers 202.
+	select {
+	case <-held:
+	case <-t.Context().Done():
+		t.Fatal("operation did not enter hold")
+	}
+	inFlightReplay := httptest.NewRecorder()
+	srv.ServeHTTP(inFlightReplay, contractfixture.NewAuthedRequest(http.MethodPost, url, bytes.NewReader(body)))
+	if inFlightReplay.Code != http.StatusAccepted {
+		t.Fatalf("in-flight replay status = %d, want 202 (body=%s)", inFlightReplay.Code, inFlightReplay.Body.String())
+	}
+
+	// Let the operation complete and verify a post-completion replay still answers 202.
+	unblock()
+	select {
+	case <-completed:
+	case <-t.Context().Done():
+		t.Fatal("operation did not reach terminal state")
+	}
+	afterReplay := httptest.NewRecorder()
+	srv.ServeHTTP(afterReplay, contractfixture.NewAuthedRequest(http.MethodPost, url, bytes.NewReader(body)))
+	if afterReplay.Code != http.StatusAccepted {
+		t.Fatalf("post-completion replay status = %d, want 202 (body=%s)", afterReplay.Code, afterReplay.Body.String())
+	}
+	var afterDTO wire.SourceOperationStatus
+	testutil.FailErr(t, "decode post-completion 202 DTO", json.Unmarshal(afterReplay.Body.Bytes(), &afterDTO))
+	if afterDTO.OperationID != id || !afterDTO.Complete || afterDTO.State != "completed" {
+		t.Fatalf("post-completion DTO = %+v, want completed operation %q", afterDTO, id)
+	}
+
+	// Simulate a host restart against the same persisted database and verify a retry still answers 202.
+	restarted := contractfixture.NewTestServerWithWorkflows(t, withDB)
+	never := make(chan struct{})
+	restarted.Sources.Mutations.SyncWindow = func(context.Context) <-chan struct{} { return never }
+	restartReplay := httptest.NewRecorder()
+	restarted.ServeHTTP(restartReplay, contractfixture.NewAuthedRequest(http.MethodPost, url, bytes.NewReader(body)))
+	if restartReplay.Code != http.StatusAccepted {
+		t.Fatalf("post-restart replay status = %d, want 202 (body=%s)", restartReplay.Code, restartReplay.Body.String())
+	}
+	var restartDTO wire.SourceOperationStatus
+	testutil.FailErr(t, "decode post-restart 202 DTO", json.Unmarshal(restartReplay.Body.Bytes(), &restartDTO))
+	if restartDTO.OperationID != id || !restartDTO.Complete || restartDTO.State != "completed" {
+		t.Fatalf("post-restart DTO = %+v, want completed operation %q", restartDTO, id)
+	}
+}
+
+func TestSourceRequestReplayMatchesCompletedFirstAnswer(t *testing.T) {
+	srv := contractfixture.NewTestServerWithWorkflows(t)
+	root := t.TempDir()
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
+	testutil.FailErr(t, "create project", err)
+
+	never := make(chan struct{})
+	srv.Sources.Mutations.SyncWindow = func(context.Context) <-chan struct{} { return never }
+
+	id := uuid.NewString()
+	body, err := json.Marshal(wire.CreateProjectSourceEntryRequest{
+		OperationID: id,
+		RootID:      p.Roots[0].ID,
+		Path:        "inline.txt",
+		Kind:        "file",
+	})
+	testutil.FailErr(t, "encode create request", err)
+	url := "/v1/projects/" + p.ID + "/source"
+
+	first := httptest.NewRecorder()
+	srv.ServeHTTP(first, contractfixture.NewAuthedRequest(http.MethodPost, url, bytes.NewReader(body)))
+	if first.Code != http.StatusCreated {
+		t.Fatalf("first status = %d, want 201 (body=%s)", first.Code, first.Body.String())
+	}
+	replay := httptest.NewRecorder()
+	srv.ServeHTTP(replay, contractfixture.NewAuthedRequest(http.MethodPost, url, bytes.NewReader(body)))
+	if replay.Code != http.StatusCreated {
+		t.Fatalf("replay status = %d, want 201 (body=%s)", replay.Code, replay.Body.String())
+	}
+	if replay.Body.String() != first.Body.String() {
+		t.Fatalf("replay body = %s, want %s", replay.Body.String(), first.Body.String())
 	}
 }

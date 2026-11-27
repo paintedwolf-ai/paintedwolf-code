@@ -112,7 +112,9 @@ func TestImplementerLegToolsMatchImplementProfile(t *testing.T) {
 	testutil.FailErr(t, "BuildWorkerPromptContext", err)
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	renderer := prompts.NewInjectRenderer(engine)
-	block, err := inject.RenderWorkerLegInject(context.Background(), renderer, "sess-inject-test", inject.WorkerLegContext(leg))
+	reader, err := prompts.DeclaredReader(nil, fixture.ProfileID)
+	testutil.FailErr(t, "DeclaredReader implement", err)
+	block, err := inject.RenderWorkerLegInject(context.Background(), renderer, reader, "sess-inject-test", inject.WorkerLegContext(leg))
 	testutil.FailErr(t, "RenderWorkerLegInject", err)
 	for _, tool := range want {
 		if !strings.Contains(block, "- "+tool) {

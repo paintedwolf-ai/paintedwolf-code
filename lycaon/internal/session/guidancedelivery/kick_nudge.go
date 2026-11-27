@@ -2,7 +2,9 @@ package guidancedelivery
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -13,9 +15,12 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
+	"github.com/lycaon/lycaon/internal/session/store"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -97,7 +102,13 @@ func (m *Service) EmitEager(ctx context.Context, sessionID string, id anchor.ID,
 func (m *Service) DeliverPending(ctx context.Context, sessionID string) error {
 	kicks := m.kicks
 	cleared := m.cleared(ctx, sessionID)
-	renderCtx := m.renderContext(ctx, sessionID)
+	renderCtx, ok, err := m.renderContext(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("build coordinator kick render context: %w", err)
+	}
+	if !ok {
+		return nil
+	}
 	for range kick.MaxQueuedGuidance + 1 {
 		kickID := kicks.TakePendingKickIDUnless(sessionID, cleared)
 		if kickID == "" {
@@ -157,7 +168,14 @@ func (m *Service) TakePhase(ctx context.Context, sessionID string) ([]api.Messag
 	if !kicks.HasLatest(sessionID, key) {
 		return nil, nil
 	}
-	kickID, text, lease, ok, err := kicks.RenderLatest(ctx, sessionID, key, m.renderContext(ctx, sessionID))
+	renderCtx, ok, err := m.renderContext(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("build phase guidance render context: %w", err)
+	}
+	if !ok {
+		return nil, nil
+	}
+	kickID, text, lease, ok, err := kicks.RenderLatest(ctx, sessionID, key, renderCtx)
 	if err != nil {
 		return nil, fmt.Errorf("render phase guidance: %w", err)
 	}
@@ -172,27 +190,36 @@ func (m *Service) TakePhase(ctx context.Context, sessionID string) ([]api.Messag
 	return []api.Message{msg}, nil
 }
 
-func (m *Service) renderContext(ctx context.Context, sessionID string) kick.CoordinatorKickRenderContext {
+func (m *Service) renderContext(ctx context.Context, sessionID string) (kick.CoordinatorKickRenderContext, bool, error) {
 	var rc kick.CoordinatorKickRenderContext
 	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
-		return rc
+		return rc, true, nil
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
-		return rc
+		return rc, true, nil
 	}
 	sess, err := m.sessionStore.Get(ctx, sessionID)
-	if err != nil || sess == nil {
-		return rc
+	if err != nil {
+		if errors.Is(err, store.ErrSessionNotFound) {
+			return rc, false, nil
+		}
+		return kick.CoordinatorKickRenderContext{}, false, fmt.Errorf("load session: %w", err)
 	}
-	state := m.state.ForSession(ctx, sess)
-	rc.BatchPhase = state.BatchPhase
-	rc.BatchSeq = state.BatchSeq
-	rc.PendingOverlays = len(state.PendingOverlayIDs)
-	msgs, msgErr := m.transcriptStore.GetMessages(ctx, sessionID)
-	if msgErr == nil {
-		rc.PartialWorkers = len(surface.PartialWorkerSummaryJobIDs(msgs))
+	if sess == nil {
+		return rc, false, nil
 	}
+	if m.state != nil {
+		state := m.state.ForSession(ctx, sess)
+		rc.BatchPhase = state.BatchPhase
+		rc.BatchSeq = state.BatchSeq
+		rc.PendingOverlays = len(state.PendingOverlayIDs)
+	}
+	msgs, err := m.transcriptStore.GetMessages(ctx, sessionID)
+	if err != nil {
+		return kick.CoordinatorKickRenderContext{}, false, fmt.Errorf("load session transcript: %w", err)
+	}
+	rc.PartialWorkers = len(surface.PartialWorkerSummaryJobIDs(msgs))
 	if !sess.IsWorkerChild() {
 		paths := workeroutcomes.ParentSessionMergedWriteChangedPaths(ctx, m.workers, sess.ProjectID, sess.ID)
 		if len(paths) > 0 {
@@ -201,25 +228,35 @@ func (m *Service) renderContext(ctx context.Context, sessionID string) kick.Coor
 	}
 	frame := inject.CoordinatorTurnFrame{}
 	if m.frame != nil {
-		if built, err := m.frame.BuildCoordinatorTurnFrame(ctx, sessionID, sess); err == nil {
-			frame = built
-			rc.WorkflowID = strings.TrimSpace(frame.RunContext.WorkflowID)
-			rc.CurrentPhase = strings.TrimSpace(frame.RunContext.CurrentPhase)
-			rc.AdvanceWhenGateMet = frame.RunContext.AdvanceWhenGateMet
-			rc.FailedLeaves = append([]string(nil), frame.RunContext.FailedLeaves...)
+		built, err := m.frame.BuildCoordinatorTurnFrame(ctx, sessionID, sess)
+		if err != nil {
+			if _, notRunnable := runstate.IsNotRunnable(err); notRunnable {
+				return rc, false, nil
+			}
+			return kick.CoordinatorKickRenderContext{}, false, fmt.Errorf("build coordinator turn frame: %w", err)
 		}
+		frame = built
+		rc.WorkflowID = strings.TrimSpace(frame.RunContext.WorkflowID)
+		rc.CurrentPhase = strings.TrimSpace(frame.RunContext.CurrentPhase)
+		rc.AdvanceWhenGateMet = frame.RunContext.AdvanceWhenGateMet
+		rc.FailedLeaves = append([]string(nil), frame.RunContext.FailedLeaves...)
 	}
-	if !sess.IsWorkerChild() && msgErr == nil {
-		profile := surface.ResolveTurnProfile(frame.RunContext, sess, msgs, state)
-		rc.SurfaceID = profile.SurfaceID
-		rc.RootCount = frame.ProjectRootCount
-		if plan, err := surface.CompileToolPlan(profile, frame.ProjectRootCount); err == nil {
-			rc.ToolPlan = plan
+	if m.requestReader == nil {
+		slog.WarnContext(ctx, "kick request reader not configured", "session_id", sessionID)
+	} else {
+		reader, err := m.requestReader(ctx, sess, msgs)
+		if err != nil {
+			return kick.CoordinatorKickRenderContext{}, false, fmt.Errorf("build kick request reader: %w", err)
 		}
+		rc.Reader = reader
 	}
-	rc.GateObligations = m.GateObligations(ctx, sessionID, frame)
+	obs, err := m.GateObligations(ctx, sessionID, frame, rc.Reader)
+	if err != nil {
+		return kick.CoordinatorKickRenderContext{}, false, err
+	}
+	rc.GateObligations = obs
 	rc.ProgressOpenItems, rc.ProgressClosureArmed = m.closureState(ctx, sessionID)
-	return rc
+	return rc, true, nil
 }
 
 // A disarmed closure latch needs no progress count.
@@ -274,9 +311,13 @@ func unsatisfiedFrameGateLeaves(frame inject.CoordinatorTurnFrame) []string {
 }
 
 // GateObligations projects unmet gate obligations for the coordinator turn frame.
-func (m *Service) GateObligations(ctx context.Context, sessionID string, frame inject.CoordinatorTurnFrame) []kick.GateObligation {
+func (m *Service) GateObligations(ctx context.Context, sessionID string, frame inject.CoordinatorTurnFrame, reader prompts.Reader) ([]kick.GateObligation, error) {
 	if m == nil || m.gateFeedback == nil {
-		return nil
+		return nil, nil
+	}
+	readerVars, err := prompts.Vars(reader, nil)
+	if err != nil {
+		return nil, fmt.Errorf("gate obligations reader vars: %w", err)
 	}
 	fb := m.gateFeedback
 	if m.workflows != nil && m.workflows.Policy != nil {
@@ -290,9 +331,10 @@ func (m *Service) GateObligations(ctx context.Context, sessionID string, frame i
 	if frame.Runtime.PhaseExit != nil {
 		extras = feedback.WithReviewAgents(extras, frame.Runtime.PhaseExit.ReviewAgents)
 	}
+	extras = feedback.WithReaderFacts(extras, readerVars)
 	rows := fb.ProjectObligations(ctx, leaves, runCtx.AdvanceWhenGateMet, extras)
 	if len(rows) == 0 {
-		return nil
+		return nil, nil
 	}
 	out := make([]kick.GateObligation, len(rows))
 	for i, row := range rows {
@@ -304,5 +346,5 @@ func (m *Service) GateObligations(ctx context.Context, sessionID string, frame i
 			Required: append([]string(nil), row.Required...),
 		}
 	}
-	return out
+	return out, nil
 }

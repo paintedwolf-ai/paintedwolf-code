@@ -1,0 +1,15 @@
+id: fixture-build-with-read-roster
+version: 1.0.0
+name: Fixture build with read roster
+trigger: /fixture-build-with-read-roster
+request:
+  question: What should this phase work on?
+agents:
+  - { id: coordinator, tools: all }
+  - { id: path-explorer, tools: profile }
+phases:
+  - id: bound
+    activity_label: Working
+    coordinator_surface: implement_investigate
+    surface_template: agents/coordinator-surface-build.md
+    mode_refs: [implement-investigate]

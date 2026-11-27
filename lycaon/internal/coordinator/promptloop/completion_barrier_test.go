@@ -7,7 +7,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/toolreach"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -20,12 +19,12 @@ func TestNoToolTurnAndCompletionBarrierCarryFrozenCallReach(t *testing.T) {
 		Closeout: CloseoutDeps{
 			CloseoutTrackingDeps: CloseoutTrackingDeps{
 				BeforeFinishNoToolTurn: func(ctx context.Context, _ *api.Session, _ []api.Message, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
-					seenNoTool = tools.CallReach(ctx)
+					seenNoTool = toolreach.FromContext(ctx)
 					return nil, false
 				},
 			},
 			AssertCompletion: func(ctx context.Context, _ *api.Session) error {
-				seenCompletion = tools.CallReach(ctx)
+				seenCompletion = toolreach.FromContext(ctx)
 				return nil
 			},
 			AssembleLedgerCloseout: func(context.Context, string, string, []string, guidance.CloseoutDraft, int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
