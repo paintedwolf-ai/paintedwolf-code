@@ -24,7 +24,8 @@ func TestFullDebugMainSwitchEnablesAllCaptures(t *testing.T) {
 	if LLMDebugEnabled() || HTTPDebugEnabled() || SSEDebugEnabled() ||
 		ToolDebugEnabled() || WebSearchDebugEnabled() || SummarizeDebugEnabled() ||
 		DenPerfDebugEnabled() || PerformanceEnabled() ||
-		debugpaths.Enabled(debugpaths.KindCommandDiagnostics) {
+		debugpaths.Enabled(debugpaths.KindCommandDiagnostics) ||
+		debugpaths.Enabled(debugpaths.KindWatchDiagnostics) {
 		t.Fatal("expected all captures disabled with no env set")
 	}
 
@@ -42,6 +43,7 @@ func TestFullDebugMainSwitchEnablesAllCaptures(t *testing.T) {
 		"den-perf":            DenPerfDebugEnabled(),
 		"performance":         PerformanceEnabled(),
 		"command-diagnostics": debugpaths.Enabled(debugpaths.KindCommandDiagnostics),
+		"watch-diagnostics":   debugpaths.Enabled(debugpaths.KindWatchDiagnostics),
 	}
 	for name, enabled := range captures {
 		if !enabled {

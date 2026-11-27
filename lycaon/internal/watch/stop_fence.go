@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/observability/watchdiag"
 )
 
 // ErrSessionStopped reports an operation fenced by an active or durable session stop.
@@ -47,6 +49,26 @@ func (s *Store) FenceSessions(ctx context.Context, sessionIDs []string) error {
 	}
 	if err := tx.Commit(); err != nil {
 		return err
+	}
+	if watchdiag.Enabled() {
+		clk := diagClockDomain(s.clock)
+		stoppedAt := s.clock.Now().UTC()
+		for _, id := range ids {
+			watchdiag.Observe(watchdiag.Observation{
+				SessionID:   id,
+				ClockDomain: clk,
+				StopFence: &watchdiag.StopFenceFact{
+					SessionID:   id,
+					StoppedAt:   stoppedAt,
+					ClockDomain: clk,
+					OwningSource: watchdiag.OwningSource{
+						Component:   "watch_stop_fence",
+						Phase:       "stop_fence_commit",
+						ClockDomain: clk,
+					},
+				},
+			})
+		}
 	}
 	for _, id := range ids {
 		s.heap.Remove(KindTimerTick, "wake-retry:"+id)

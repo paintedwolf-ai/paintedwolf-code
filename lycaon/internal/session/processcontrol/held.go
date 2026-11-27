@@ -44,6 +44,7 @@ func (m *Service) HandleHeldCallSettled(sessionID, handle string) {
 		Outcome:    string(status.Settled.Outcome),
 		RecordedAt: publishedAt,
 	})
+	observeProcessReportDelivery(sessionID, strings.TrimSpace(handle), occID, "held:"+strings.TrimSpace(handle), publishedAt)
 	if m.watches != nil {
 		_, _ = m.watches.RecordProcessDone(context.Background(), sessionID, watch.ProcessCompletionFact{
 			OccurrenceID: occID,
