@@ -94,11 +94,13 @@ E01_READ_FORMS: tuple[dict[str, Any], ...] = (
     {"id": "full_summarize", "qualifies": True, "description": "Exact full-document `summarize` source window"},
 )
 
-# Typed read-basis refusal codes accepted for negative E01 variants.
+# Typed read-basis / stale-target refusal codes accepted for negative E01 variants.
 # Any schema failure, unsupported operation, posture gate, or untyped error MUST fail closed.
 E01_READ_BASIS_REFUSAL_CODES: frozenset[str] = frozenset({
     "EDITOR_DOCUMENT_READ_REQUIRED",
     "EDITOR_DOCUMENT_CHANGING",
+    "EDIT_TARGET_CHANGED_BY_OTHERS",
+    "TEXT_WRITE_CONFLICT",
     "WRITE_READ_REQUIRED",
     "READ_REQUIRED",
     "STALE_READ_BASIS",
@@ -574,9 +576,9 @@ def build_read_call(read_form: str, target_file: str) -> tuple[str, dict[str, An
     if read_form in {"full_read", "stale_disk"}:
         return ("command", {"command": f"cat {target_file}"})
     if read_form == "partial_window":
-        return ("command", {"command": f"head -n 1 {target_file}"})
+        return ("command", {"command": f"head -n 5 {target_file}"})
     if read_form == "outline":
-        return ("command", {"command": f"outline {target_file}"})
+        return ("command", {"command": f"outline --path {target_file}"})
     if read_form == "full_summarize":
         return ("summarize", {"task": f"Read full contents of {target_file}", "paths": [target_file]})
     if read_form == "inline_input":
@@ -588,16 +590,20 @@ def build_route_write_call(
     route: EditRoute,
     *,
     restore_version_id: str = "",
+    target_line: int = 2,
+    after_text: str = "alpha\nBETA\ngamma\n",
+    patch_body: str = "",
 ) -> tuple[str, dict[str, Any]]:
     """Build the `(tool_name, args)` call for each of the ten D14 edit routes."""
     if route.route_id == "write":
         # Compiled native `write` operation via `tee` heredoc (dispositions.json: tool="write",
         # command_forms=["tee", "ln"], no printf pipeline stage).
-        return ("command", {"command": f"tee {route.target_file} <<'EOF'\nalpha\nBETA\ngamma\nEOF"})
+        body = after_text.rstrip("\n")
+        return ("command", {"command": f"tee {route.target_file} <<'EOF'\n{body}\nEOF"})
     if route.route_id == "edit":
         return ("command", {"command": f'edit --path {route.target_file} --old-string "beta" --new-string "BETA"'})
     if route.route_id == "replace_lines":
-        return ("command", {"command": f'replace-lines --path {route.target_file} --start 2 --end 2 --content "BETA"'})
+        return ("command", {"command": f'replace-lines --path {route.target_file} --start {target_line} --end {target_line} --content "BETA"'})
     if route.route_id == "jq_edit":
         return ("command", {"command": f'jq-edit --path {route.target_file} --query \'.value = "BETA"\''})
     if route.route_id == "code_rewrite":
@@ -614,10 +620,12 @@ def build_route_write_call(
     if route.route_id == "shell_sed":
         return ("command", {"command": f"sed -i 's/beta/BETA/' {route.target_file}"})
     if route.route_id == "shell_patch":
-        patch_body = "--- a/target.txt\\n+++ b/target.txt\\n@@ -1,3 +1,3 @@\\n alpha\\n-beta\\n+BETA\\n gamma\\n"
-        return ("command", {"command": f'printf "{patch_body}" | patch -p1'})
+        if not patch_body:
+            patch_body = "--- a/target.txt\n+++ b/target.txt\n@@ -1,3 +1,3 @@\n alpha\n-beta\n+BETA\n gamma\n"
+        return ("command", {"command": f"patch -p1 <<'EOF'\n{patch_body.rstrip()}\nEOF"})
     if route.route_id == "shell_redirect":
-        return ("command", {"command": f'printf "alpha\\nBETA\\ngamma\\n" > {route.target_file}'})
+        body = after_text.rstrip("\n")
+        return ("command", {"command": f"cat <<'EOF' > {route.target_file}\n{body}\nEOF"})
     if route.route_id == "shell_program":
         return ("command", {
             "command": f'python3 -c \'from pathlib import Path; p = Path("{route.target_file}"); p.write_text(p.read_text().replace("beta", "BETA"))\''
@@ -733,6 +741,33 @@ def read_open_document_sha256_ro(
     return ""
 
 
+def query_file_durability_ro(db_path: pathlib.Path, rel_path: str) -> tuple[int, int, str]:
+    """Query `(effect_count, version_count, tip_sha256)` for `rel_path` via `?mode=ro` using the real schema."""
+    effect_count = 0
+    version_count = 0
+    tip_sha = ""
+    if not db_path.is_file():
+        return effect_count, version_count, tip_sha
+    with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+        conn.row_factory = sqlite3.Row
+        v_row = conn.execute(
+            "SELECT file_id, content_sha256 FROM source_versions "
+            "WHERE path = ? AND branch_id = '' ORDER BY seq DESC LIMIT 1",
+            (rel_path,),
+        ).fetchone()
+        if v_row:
+            fid = str(v_row["file_id"])
+            if v_row["content_sha256"]:
+                tip_sha = str(v_row["content_sha256"])
+            effect_count = int(
+                conn.execute("SELECT COUNT(1) FROM source_effects WHERE file_id=?", (fid,)).fetchone()[0]
+            )
+            version_count = int(
+                conn.execute("SELECT COUNT(1) FROM source_versions WHERE file_id=?", (fid,)).fetchone()[0]
+            )
+    return effect_count, version_count, tip_sha
+
+
 def run_e10_sidecar_restart_slot(
     out_dir: pathlib.Path,
     *,
@@ -802,25 +837,7 @@ def run_e10_sidecar_restart_slot(
     )
     post_disk_sha = str(hash_file(proj / "restart_target.txt").get("sha256") or "")
     db_path = app_dir / "store.db"
-    effect_count = 0
-    version_count = 0
-    tip_sha = ""
-    with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
-        conn.row_factory = sqlite3.Row
-        f_row = conn.execute(
-            "SELECT id FROM source_files WHERE path = ? ORDER BY rowid DESC LIMIT 1",
-            ("restart_target.txt",),
-        ).fetchone()
-        if f_row:
-            fid = f_row["id"]
-            effect_count = int(conn.execute("SELECT COUNT(1) FROM source_effects WHERE file_id=?", (fid,)).fetchone()[0])
-            version_count = int(conn.execute("SELECT COUNT(1) FROM source_versions WHERE file_id=?", (fid,)).fetchone()[0])
-            v_row = conn.execute(
-                "SELECT content_sha256 FROM source_versions WHERE file_id=? ORDER BY ordinal DESC LIMIT 1",
-                (fid,),
-            ).fetchone()
-            if v_row and v_row["content_sha256"]:
-                tip_sha = str(v_row["content_sha256"])
+    effect_count, version_count, tip_sha = query_file_durability_ro(db_path, "restart_target.txt")
 
     record = {
         "slot_id": "E10-sidecar-real-restart-edit-durability",

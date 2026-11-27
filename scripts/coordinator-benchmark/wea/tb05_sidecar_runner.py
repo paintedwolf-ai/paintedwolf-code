@@ -63,19 +63,37 @@ ROUTE_BY_ID: dict[str, EditRoute] = {r.route_id: r for r in D14_EDIT_ROUTES}
 ALL_FAMILIES: tuple[str, ...] = ("E01", "E02", "E03", "E08", "E10")
 
 
-def _fixture_for_route(route: EditRoute) -> tuple[str, bytes, bytes, bytes]:
-    """Return `(filename, initial_bytes, expected_after_bytes, outside_segment_bytes)`."""
+def _fixture_for_route(route: EditRoute) -> tuple[str, bytes, bytes, bytes, int, str]:
+    """Return `(filename, initial_bytes, expected_after_bytes, outside_segment_bytes, target_line, patch_body)`.
+
+    All fixtures are 60+ lines with the edited target near the bottom so `partial_window`
+    (`head -n 5`) strictly covers only a small prefix and never sees the target line.
+    """
     if route.route_id == "jq_edit":
-        initial = b'{\n  "keep": "unchanged",\n  "value": "beta"\n}\n'
-        after = b'{\n  "keep": "unchanged",\n  "value": "BETA"\n}\n'
-        return route.target_file, initial, after, b'  "keep": "unchanged",'
+        pad = "".join(f'  "pad_{i:02d}": "v{i:02d}",\n' for i in range(1, 56))
+        initial = ('{\n  "keep": "unchanged",\n' + pad + '  "value": "beta"\n}\n').encode("utf-8")
+        after = ('{\n  "keep": "unchanged",\n' + pad + '  "value": "BETA"\n}\n').encode("utf-8")
+        return route.target_file, initial, after, b'  "keep": "unchanged",', 58, ""
     if route.route_id == "code_rewrite":
-        initial = b"package main\n\nfunc calc() int {\n\treturn 1 + 2\n}\n"
-        after = b"package main\n\nfunc calc() int {\n\treturn 3\n}\n"
-        return route.target_file, initial, after, b"package main\n"
-    initial = b"alpha\nbeta\ngamma\n"
-    after = b"alpha\nBETA\ngamma\n"
-    return route.target_file, initial, after, b"alpha\n"
+        pad = "".join(f"// pad line {i:02d}\n" for i in range(1, 56))
+        initial = ("package main\n\n" + pad + "func calc() int {\n\treturn 1 + 2\n}\n").encode("utf-8")
+        after = ("package main\n\n" + pad + "func calc() int {\n\treturn 3\n}\n").encode("utf-8")
+        return route.target_file, initial, after, b"package main\n", 59, ""
+    prefix_lines = ["alpha\n"] + [f"pad_line_{i:02d}\n" for i in range(2, 60)]
+    suffix_lines = [f"tail_line_{i:02d}\n" for i in range(61, 82)]
+    initial = ("".join(prefix_lines) + "beta\n" + "".join(suffix_lines)).encode("utf-8")
+    after = ("".join(prefix_lines) + "BETA\n" + "".join(suffix_lines)).encode("utf-8")
+    target_line = len(prefix_lines) + 1  # line 60
+    patch_body = (
+        f"--- a/{route.target_file}\n"
+        f"+++ b/{route.target_file}\n"
+        f"@@ -{target_line - 1},3 +{target_line - 1},3 @@\n"
+        f" pad_line_59\n"
+        f"-beta\n"
+        f"+BETA\n"
+        f" tail_line_61\n"
+    )
+    return route.target_file, initial, after, b"alpha\n", target_line, patch_body
 
 
 def _send_batch_tool_calls(
@@ -307,7 +325,8 @@ def _run_e01_slot(
     t0 = time.monotonic()
     route = ROUTE_BY_ID[slot["route_id"]]
     read_form = str(slot["read_form"])
-    rel_path, initial_bytes, expected_after, outside_seg = _fixture_for_route(route)
+    rel_path, initial_bytes, expected_after, outside_seg, target_line, patch_body = _fixture_for_route(route)
+    after_text = expected_after.decode("utf-8", errors="replace")
     proj = slot_dir / "project"
     proj.mkdir(parents=True, exist_ok=True)
     target = proj / rel_path
@@ -355,7 +374,7 @@ def _run_e01_slot(
 
         if read_form == "combined_same_response_unseen":
             # Read + write in ONE model response -> write cannot use text first seen in that response.
-            w_tool, w_args = build_route_write_call(route)
+            w_tool, w_args = build_route_write_call(route, target_line=target_line, after_text=after_text, patch_body=patch_body)
             write_tool_name = w_tool
             disk_sha_before_write = str(hash_file(target).get("sha256") or "")
             batch = _send_batch_tool_calls(app, session_id, [("command", {"command": f"cat {rel_path}"}), (w_tool, w_args)])
@@ -389,7 +408,13 @@ def _run_e01_slot(
                 # Mutate disk externally after the read so the read basis is stale.
                 target.write_bytes(initial_bytes.replace(b"beta", b"STALE_EXT"))
             disk_sha_before_write = str(hash_file(target).get("sha256") or "")
-            w_tool, w_args = build_route_write_call(route, restore_version_id=restore_ver_id)
+            w_tool, w_args = build_route_write_call(
+                route,
+                restore_version_id=restore_ver_id,
+                target_line=target_line,
+                after_text=after_text,
+                patch_body=patch_body,
+            )
             write_tool_name = w_tool
             write_call_id, write_res, _ = _send_tool_call(app, session_id, w_tool, w_args, checkpoint_policy="approve_chat")
     finally:

@@ -29,6 +29,7 @@ from wea.tb05_edits import (
     evaluate_e03_slot,
     evaluate_e08_slot,
     evaluate_e10_slot,
+    query_file_durability_ro,
     read_open_document_sha256_ro,
 )
 from wea.tb05_sidecar_runner import (
@@ -428,11 +429,15 @@ class TestTB05InprocManifestAndSidecarRunner(unittest.TestCase):
         self.assertEqual(len(only_two), 2)
 
         for route in D14_EDIT_ROUTES:
-            rel, initial, after, outside = _fixture_for_route(route)
+            rel, initial, after, outside, target_line, _patch = _fixture_for_route(route)
             self.assertEqual(rel, route.target_file)
             self.assertNotEqual(initial, after)
             self.assertIn(outside, initial)
             self.assertIn(outside, after)
+            self.assertGreaterEqual(target_line, 50)
+            self.assertGreaterEqual(len(initial.splitlines()), 55)
+        self.assertEqual(build_read_call("outline", "target.txt"), ("command", {"command": "outline --path target.txt"}))
+        self.assertEqual(build_read_call("partial_window", "target.txt"), ("command", {"command": "head -n 5 target.txt"}))
 
     def test_sidecar_runner_cli_receipt_and_summary_fail_closed(self) -> None:
         parser = build_sidecar_parser()
@@ -506,12 +511,28 @@ class TestTB05InprocManifestAndSidecarRunner(unittest.TestCase):
                         base_sha256 TEXT NOT NULL,
                         dirty INTEGER NOT NULL
                     );
+                    CREATE TABLE source_versions (
+                        id TEXT PRIMARY KEY,
+                        file_id TEXT NOT NULL,
+                        branch_id TEXT NOT NULL DEFAULT '',
+                        path TEXT NOT NULL,
+                        seq INTEGER NOT NULL,
+                        content_sha256 TEXT NOT NULL
+                    );
+                    CREATE TABLE source_effects (
+                        id TEXT PRIMARY KEY,
+                        file_id TEXT NOT NULL,
+                        ordinal INTEGER NOT NULL
+                    );
                     INSERT INTO invocation_receipts VALUES ('rec-1', 'call-write-1', 'command');
                     INSERT INTO invocation_programs VALUES ('prog-1', 'rec-1');
                     INSERT INTO invocation_program_executions VALUES ('exec-1', 'prog-1', 1, 'write');
                     INSERT INTO source_operations VALUES ('op-1', 'call-write-1', 'write');
                     INSERT INTO editor_documents VALUES ('doc-clean', 'live.txt', 'hello\n', 'lf', 'deadbeef', 0);
                     INSERT INTO editor_documents VALUES ('doc-dirty', 'crlf.txt', 'a\nb\n', 'crlf', 'oldsha', 1);
+                    INSERT INTO source_versions VALUES ('v1', 'file-1', '', 'restart_target.txt', 1, 'sha_v1');
+                    INSERT INTO source_versions VALUES ('v2', 'file-1', '', 'restart_target.txt', 2, 'sha_v2');
+                    INSERT INTO source_effects VALUES ('e1', 'file-1', 1);
                     """
                 )
                 conn.commit()
@@ -532,6 +553,21 @@ class TestTB05InprocManifestAndSidecarRunner(unittest.TestCase):
                 read_open_document_sha256_ro(db_path, doc_id="doc-dirty"),
                 sha256_bytes(b"a\r\nb\r\n"),
             )
+            self.assertEqual(query_file_durability_ro(db_path, "restart_target.txt"), (1, 2, "sha_v2"))
+            # EDIT_TARGET_CHANGED_BY_OTHERS is accepted as a typed read-basis/stale-target refusal
+            stale_ref = evaluate_e01_slot({
+                "route_id": "edit",
+                "read_form": "stale_disk",
+                "expected_authorized": False,
+                "expected_operation": "edit",
+                "dispatched_operations": ["edit"],
+                "read_outcome": "completed",
+                "pre_disk_sha256": "a" * 64,
+                "post_disk_sha256": "a" * 64,
+                "write_outcome": "rejected",
+                "refusal_code": "EDIT_TARGET_CHANGED_BY_OTHERS",
+            })
+            self.assertEqual(stale_ref["verdict"], "pass")
             # DTO fallback when DB absent
             self.assertEqual(
                 read_open_document_sha256_ro(
