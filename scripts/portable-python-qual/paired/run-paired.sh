@@ -27,7 +27,7 @@ usage: run-paired.sh --mode <baseline|compare> --repo-root <dir> --out-dir <dir>
        [--baseline-product-rev <sha>] [--candidate-product-rev <sha>]
        [--baseline-image-archive <tar.gz>] [--baseline-engine-archive <tar.gz>]
        [--candidate-image-archive <tar.gz>] [--candidate-engine-archive <tar.gz>]
-       [--test-bin <path>] [--swap-warm-order]
+       [--test-bin <path>] [--baseline-test-bin <path>] [--candidate-test-bin <path>] [--swap-warm-order]
        [--allow-same-image] [--check-identities-only]
        [--samples <N>] [--min-idle <pct>] [--precheck-seconds <S>]
        [--max-attempts <K>] [--retry-wait <S>] [--stage-now]
@@ -44,6 +44,8 @@ CANDIDATE_DIR=""
 BASELINE_MANIFEST=""
 CANDIDATE_MANIFEST=""
 TEST_BIN_ARG=""
+BASELINE_TEST_BIN_ARG=""
+CANDIDATE_TEST_BIN_ARG=""
 PRODUCT_REV=""
 BASELINE_PRODUCT_REV=""
 CANDIDATE_PRODUCT_REV=""
@@ -74,6 +76,8 @@ while [[ $# -gt 0 ]]; do
     --baseline-manifest) BASELINE_MANIFEST="$2"; shift 2 ;;
     --candidate-manifest) CANDIDATE_MANIFEST="$2"; shift 2 ;;
     --test-bin) TEST_BIN_ARG="$2"; shift 2 ;;
+    --baseline-test-bin) BASELINE_TEST_BIN_ARG="$2"; shift 2 ;;
+    --candidate-test-bin) CANDIDATE_TEST_BIN_ARG="$2"; shift 2 ;;
     --product-rev) PRODUCT_REV="$2"; shift 2 ;;
     --baseline-product-rev) BASELINE_PRODUCT_REV="$2"; shift 2 ;;
     --candidate-product-rev) CANDIDATE_PRODUCT_REV="$2"; shift 2 ;;
@@ -405,13 +409,14 @@ run_one_compare_attempt() {
 
   run_side() {
     local side="$1" workloads="$2" modes="$3" n_samples="$4" out_json="$5" label="$6"
-    local root_dir="${BASELINE_DIR}" prod_rev="${BASELINE_PRODUCT_REV}" img_arc="${BASELINE_IMAGE_ARCHIVE}" eng_arc="${BASELINE_ENGINE_ARCHIVE}" mf_path="${BASELINE_MANIFEST}"
+    local root_dir="${BASELINE_DIR}" prod_rev="${BASELINE_PRODUCT_REV}" img_arc="${BASELINE_IMAGE_ARCHIVE}" eng_arc="${BASELINE_ENGINE_ARCHIVE}" mf_path="${BASELINE_MANIFEST}" side_bin="${BASELINE_TEST_BIN_ARG:-${TEST_BIN}}"
     if [[ "${side}" == "candidate" ]]; then
       root_dir="${CANDIDATE_DIR}"
       prod_rev="${CANDIDATE_PRODUCT_REV}"
       img_arc="${CANDIDATE_IMAGE_ARCHIVE}"
       eng_arc="${CANDIDATE_ENGINE_ARCHIVE}"
       mf_path="${CANDIDATE_MANIFEST}"
+      side_bin="${CANDIDATE_TEST_BIN_ARG:-${TEST_BIN}}"
     fi
     (
       cd "${REPO_ROOT}/lycaon/internal/portablepython"
@@ -429,7 +434,7 @@ run_one_compare_attempt() {
         PW_PAIRED_IMAGE_ARCHIVE="${img_arc}" \
         PW_PAIRED_ENGINE_ARCHIVE="${eng_arc}" \
         PW_PAIRED_OUT_JSON="${out_json}" \
-        "${TEST_BIN}" -test.v -test.count=1 -test.timeout=300s -test.run '^TestPY10_PairedBaseline$' \
+        "${side_bin}" -test.v -test.count=1 -test.timeout=300s -test.run '^TestPY10_PairedBaseline$' \
         >> "${attempt_dir}/compare-test.log" 2>&1
     )
   }

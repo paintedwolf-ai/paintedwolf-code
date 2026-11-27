@@ -135,15 +135,17 @@ jobs:
             CGO_ENABLED=1 go test -c -o "${TEST_BIN}" ./internal/portablepython
           ) 2>&1 | tee "${RUNNER_TEMP}/paired-out/compile-harness.log"
 
-          # Stage every pair defined in compare-plan.json (with exact manifest & SHA-256 verification) BEFORE timing
-          python3 - "${PDIR}" "${RUNNER_TEMP}/stages" "${GITHUB_WORKSPACE}" "${RUNNER_TEMP}/paired-out" <<'PY'
-          import hashlib, json, subprocess, sys
+          # Stage every pair defined in compare-plan.json (and compile per-side test binary if compile_rev is specified) BEFORE timing
+          python3 - "${PDIR}" "${RUNNER_TEMP}/stages" "${GITHUB_WORKSPACE}" "${RUNNER_TEMP}/paired-out" "${RUNNER_TEMP}/bins" <<'PY'
+          import hashlib, json, os, subprocess, sys
           from pathlib import Path
 
           pdir = Path(sys.argv[1])
           stage_base = Path(sys.argv[2])
           repo = Path(sys.argv[3])
           out_dir = Path(sys.argv[4])
+          bin_dir = Path(sys.argv[5])
+          bin_dir.mkdir(parents=True, exist_ok=True)
           plan = json.loads((pdir / "compare-plan.json").read_text())
 
           def sha256_file(p: Path) -> str:
@@ -163,10 +165,31 @@ jobs:
                   raise SystemExit(f"SHA256 mismatch for {name} engine: got {got_e}, want {spec['engine_archive_sha256']}")
               if got_i != spec["image_archive_sha256"]:
                   raise SystemExit(f"SHA256 mismatch for {name} image: got {got_i}, want {spec['image_archive_sha256']}")
+              src_repo = repo
+              if spec.get("compile_rev"):
+                  rev = spec["compile_rev"]
+                  wt = bin_dir / f"src-{name}"
+                  subprocess.run(["git", "-C", str(repo), "fetch", "--depth=1", "origin", rev], check=True)
+                  subprocess.run(["git", "-C", str(repo), "worktree", "add", "--detach", str(wt), rev], check=True)
+                  src_repo = wt
+                  side_bin = bin_dir / f"paired_baseline-{name}.test"
+                  env = dict(os.environ, CGO_ENABLED="1")
+                  print(f"Compiling per-side test binary for {name} at {rev} -> {side_bin}", flush=True)
+                  cres = subprocess.run(
+                      ["go", "test", "-c", "-o", str(side_bin), "./internal/portablepython"],
+                      cwd=str(wt / "lycaon"),
+                      env=env,
+                      capture_output=True,
+                      text=True,
+                  )
+                  (out_dir / f"compile-{name}.log").write_text(cres.stdout + cres.stderr)
+                  if cres.returncode != 0:
+                      print(cres.stdout, cres.stderr)
+                      raise SystemExit(f"go test -c failed for {name} ({rev}): rc={cres.returncode}")
               sroot = stage_base / name
               sroot.mkdir(parents=True, exist_ok=True)
               cmd = [
-                  "bash", str(repo / "scripts/portable-python/stage-bundled.sh"),
+                  "bash", str(src_repo / "scripts/portable-python/stage-bundled.sh"),
                   "--manifest", str(mf),
                   "--root", str(sroot),
                   "--target", "aarch64-apple-darwin",
@@ -174,7 +197,7 @@ jobs:
                   "--image-source", str(img_arc),
                   "--require-engine", "--require-image",
               ]
-              print(f"Staging pair {name} -> {sroot}")
+              print(f"Staging pair {name} -> {sroot}", flush=True)
               res = subprocess.run(cmd, capture_output=True, text=True)
               (out_dir / f"stage-{name}.log").write_text(res.stdout + res.stderr)
               if res.returncode != 0:
@@ -227,6 +250,12 @@ jobs:
                   "--max-attempts", "6",
                   "--retry-wait", "20",
               ]
+              b_bin = Path(test_bin).parent / "bins" / f"paired_baseline-{cmp['baseline']}.test"
+              c_bin = Path(test_bin).parent / "bins" / f"paired_baseline-{cmp['candidate']}.test"
+              if b_bin.is_file():
+                  cmd += ["--baseline-test-bin", str(b_bin)]
+              if c_bin.is_file():
+                  cmd += ["--candidate-test-bin", str(c_bin)]
               if cmp.get("swap_warm_order"):
                   cmd.append("--swap-warm-order")
               print(f"=== Running comparison {cname}: {cmp['baseline']} vs {cmp['candidate']} ===", flush=True)
