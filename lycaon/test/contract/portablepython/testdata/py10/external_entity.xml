@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE doc [
+  <!ENTITY ext_http SYSTEM "http://127.0.0.1:__PORT__/xxe.dtd">
+  <!ENTITY ext_file SYSTEM "file:///workspace/secret_xxe.txt">
+]>
+<doc><a_http>&ext_http;</a_http><a_file>&ext_file;</a_file></doc>

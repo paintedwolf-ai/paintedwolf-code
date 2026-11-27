@@ -26,8 +26,22 @@ type ImageManifest struct {
 	Interpreter        InterpreterInfo      `json:"interpreter"`
 	PackagesRoot       string               `json:"packages_root"`
 	Distributions      []DistributionRecord `json:"distributions"`
+	BundledFonts       []BundledFontRecord  `json:"bundled_fonts,omitempty"`
+	NoticesPath        string               `json:"notices_path,omitempty"`
 	StdlibCapabilities []string             `json:"stdlib_capabilities"`
 	WasmImports        []WasmImportRecord   `json:"wasm_imports"`
+}
+
+// BundledFontRecord describes a pinned redistributable font asset in the image.
+type BundledFontRecord struct {
+	Family      string `json:"family"`
+	Style       string `json:"style"`
+	ImagePath   string `json:"image_path"`
+	GuestPath   string `json:"guest_path"`
+	SHA256      string `json:"sha256"`
+	License     string `json:"license"`
+	LicensePath string `json:"license_path,omitempty"`
+	SourceURL   string `json:"source_url,omitempty"`
 }
 
 // InterpreterInfo identifies the pinned CPython WASI interpreter and build inputs.

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inv:catalog xmlns:inv="urn:pw:inventory" xmlns:meta="urn:pw:meta">
+  <inv:item id="i1" meta:tier="gold">
+    <inv:name>Widget Alpha</inv:name>
+    <inv:qty>12</inv:qty>
+  </inv:item>
+  <inv:item id="i2" meta:tier="silver">
+    <inv:name>Widget Beta</inv:name>
+    <inv:qty>5</inv:qty>
+  </inv:item>
+  <inv:item id="i3" meta:tier="gold">
+    <inv:name>Widget Gamma</inv:name>
+    <inv:qty>27</inv:qty>
+  </inv:item>
+</inv:catalog>
