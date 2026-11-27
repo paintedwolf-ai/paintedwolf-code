@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/pythonnative"
 )
 
 // BackendKind identifies the execution backend hosting CPython/WASI.
@@ -72,17 +73,36 @@ func (e *NativeEngineVerificationError) Unwrap() error {
 	return e.Err
 }
 
-// NewConfiguredRuntime constructs the explicitly requested backend (or the
-// build-configured DefaultBackendKind when cfg.Backend is empty). It NEVER
-// silently falls back between backends.
+// DefaultBackendKind returns BackendNativeAOT unconditionally. When a build
+// lacks native AOT capability (e.g. CGO_ENABLED=0 or an unsupported OS/arch),
+// NewConfiguredRuntime fails explicitly rather than silently falling back to
+// wazero. Benchmark and regression controls select wazero explicitly via
+// RuntimeConfig.Backend.
+func DefaultBackendKind() BackendKind {
+	return BackendNativeAOT
+}
+
+func resolveWazeroBackend(requested BackendKind) (BackendKind, error) {
+	switch requested {
+	case "":
+		if pythonnative.ReferenceWazeroUsesInterpreter() {
+			return BackendWazeroInterpreter, nil
+		}
+		return BackendWazeroCompiler, nil
+	case BackendWazeroCompiler, BackendWazeroInterpreter:
+		return requested, nil
+	default:
+		return "", fmt.Errorf("wazero runtime does not support backend %q", requested)
+	}
+}
+
+// NewConfiguredRuntime constructs the explicitly requested backend (or
+// DefaultBackendKind when cfg.Backend is empty). It NEVER silently falls back
+// between backends.
 func NewConfiguredRuntime(ctx context.Context, cfg RuntimeConfig) (Runtime, error) {
 	backend := cfg.Backend
 	if backend == "" {
-		if strings.TrimSpace(cfg.EngineDir) != "" {
-			backend = BackendNativeAOT
-		} else {
-			backend = DefaultBackendKind()
-		}
+		backend = DefaultBackendKind()
 	}
 	switch backend {
 	case BackendNativeAOT:
@@ -95,15 +115,25 @@ func NewConfiguredRuntime(ctx context.Context, cfg RuntimeConfig) (Runtime, erro
 }
 
 // DiscoverEngineDir locates the staged native engine directory containing
-// libpw_cpython_wasi.{dylib,so} and artifact-manifest.json.
+// the platform's verified native shared library and artifact-manifest.json.
 func DiscoverEngineDir(engineRoot string) (string, error) {
+	goos, goarch := pythonnative.HostPlatform()
+	libName, err := LibraryNameForPlatform(goos, goarch)
+	if err != nil {
+		return "", &NativeEngineVerificationError{
+			Stage:   "platform",
+			Message: fmt.Sprintf("unsupported host platform %s/%s for native python engine", goos, goarch),
+			Err:     err,
+		}
+	}
+
 	if envDir := strings.TrimSpace(os.Getenv(EnvEngineDir)); envDir != "" {
-		if hasEngineArtifacts(envDir) {
+		if hasEngineArtifacts(envDir, libName) {
 			return filepath.Abs(envDir)
 		}
 		return "", &NativeEngineVerificationError{
 			Stage:   "discover",
-			Message: fmt.Sprintf("%s=%q does not contain %s and artifact-manifest.json", EnvEngineDir, envDir, DefaultLibraryName(runtime.GOOS)),
+			Message: fmt.Sprintf("%s=%q does not contain %s and artifact-manifest.json", EnvEngineDir, envDir, libName),
 		}
 	}
 
@@ -120,7 +150,7 @@ func DiscoverEngineDir(engineRoot string) (string, error) {
 		)
 	}
 	for _, cand := range candidates {
-		if hasEngineArtifacts(cand) {
+		if hasEngineArtifacts(cand, libName) {
 			return filepath.Abs(cand)
 		}
 	}
@@ -130,11 +160,11 @@ func DiscoverEngineDir(engineRoot string) (string, error) {
 	}
 }
 
-func hasEngineArtifacts(dir string) bool {
-	if strings.TrimSpace(dir) == "" {
+func hasEngineArtifacts(dir, libName string) bool {
+	if strings.TrimSpace(dir) == "" || strings.TrimSpace(libName) == "" {
 		return false
 	}
-	libInfo, err := os.Stat(filepath.Join(dir, DefaultLibraryName(runtime.GOOS)))
+	libInfo, err := os.Stat(filepath.Join(dir, libName))
 	if err != nil || libInfo.IsDir() {
 		return false
 	}

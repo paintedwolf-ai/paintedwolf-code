@@ -9,10 +9,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 
 	portablepythonconfig "github.com/lycaon/lycaon/config/runtime/portable-python"
+	"github.com/lycaon/lycaon/internal/pythonnative"
 	"gopkg.in/yaml.v3"
 )
 
@@ -210,16 +210,22 @@ type EngineReleaseDescriptorArtifact struct {
 
 var engineVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?$`)
 
-// DefaultLibraryName returns the expected shared library filename for goos.
-func DefaultLibraryName(goos string) string {
-	switch goos {
-	case "darwin":
-		return "libpw_cpython_wasi.dylib"
-	case "windows":
-		return "pw_cpython_wasi.dll"
-	default:
-		return "libpw_cpython_wasi.so"
+var supportedNativeEngineLibraries = map[string]string{
+	"darwin/arm64": "libpw_cpython_wasi.dylib",
+	"linux/amd64":  "libpw_cpython_wasi.so",
+}
+
+// LibraryNameForPlatform returns the canonical shared library filename for an
+// explicitly supported (goos, goarch) target, independent of the running host.
+// Unknown operating systems or architectures are rejected explicitly instead of
+// defaulting to a Linux-style filename.
+func LibraryNameForPlatform(goos, goarch string) (string, error) {
+	key := strings.TrimSpace(goos) + "/" + strings.TrimSpace(goarch)
+	name, ok := supportedNativeEngineLibraries[key]
+	if !ok {
+		return "", fmt.Errorf("unsupported portable python native engine platform %q", key)
 	}
+	return name, nil
 }
 
 // EnginePlatformForTarget maps a packaging target triple to GOOS/GOARCH.
@@ -317,8 +323,8 @@ func ValidateBundledEngineManifest(m *BundledEngineManifest) error {
 	seen := make(map[string]struct{}, len(e.Artifacts))
 	for _, art := range e.Artifacts {
 		key := art.GOOS + "/" + art.GOARCH
-		if key != "darwin/arm64" && key != "linux/amd64" {
-			return fmt.Errorf("unsupported portable python engine platform %q", key)
+		if _, err := LibraryNameForPlatform(art.GOOS, art.GOARCH); err != nil {
+			return err
 		}
 		if _, dup := seen[key]; dup {
 			return fmt.Errorf("duplicate portable python engine artifact for %s", key)
@@ -418,9 +424,10 @@ func (m *BundledEngineManifest) ArtifactForPlatform(goos, goarch string) (*Engin
 	return nil, fmt.Errorf("no portable python native engine artifact pinned for %s/%s", goos, goarch)
 }
 
-// ArtifactForCurrentPlatform returns the pinned artifact for runtime.GOOS/GOARCH.
+// ArtifactForCurrentPlatform returns the pinned artifact for the running host platform.
 func (m *BundledEngineManifest) ArtifactForCurrentPlatform() (*EngineReleaseArtifact, error) {
-	return m.ArtifactForPlatform(runtime.GOOS, runtime.GOARCH)
+	goos, goarch := pythonnative.HostPlatform()
+	return m.ArtifactForPlatform(goos, goarch)
 }
 
 // EncodedBuildIdentity encodes the platform's build identity as base64 JSON

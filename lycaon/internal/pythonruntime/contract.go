@@ -11,7 +11,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -439,6 +438,7 @@ type RuntimeConfig struct {
 // WazeroRuntime hosts an immutable compiled WASI module and instantiates a
 // fresh guest per Execute call.
 type WazeroRuntime struct {
+	backend             BackendKind
 	rt                  wazero.Runtime
 	wasmBytes           []byte
 	compiled            wazero.CompiledModule
@@ -464,9 +464,12 @@ func NewWazeroRuntime(ctx context.Context, cfg RuntimeConfig) (*WazeroRuntime, e
 		return nil, errors.New("wazero runtime requires non-empty WasmBytes")
 	}
 
-	rtCfg := wazero.NewRuntimeConfig()
-	if runtime.GOOS == "darwin" {
-		// The hardened engine cannot execute runtime-generated native code.
+	backend, err := resolveWazeroBackend(cfg.Backend)
+	if err != nil {
+		return nil, err
+	}
+	rtCfg := wazero.NewRuntimeConfigCompiler()
+	if backend == BackendWazeroInterpreter {
 		rtCfg = wazero.NewRuntimeConfigInterpreter()
 	}
 	rtCfg = rtCfg.WithCloseOnContextDone(true)
@@ -522,6 +525,7 @@ func NewWazeroRuntime(ctx context.Context, cfg RuntimeConfig) (*WazeroRuntime, e
 	}
 
 	return &WazeroRuntime{
+		backend:             backend,
 		rt:                  rt,
 		wasmBytes:           append([]byte(nil), cfg.WasmBytes...),
 		compiled:            compiled,
@@ -583,13 +587,9 @@ func CleanOrphanedScratchDirs(scratchRoot string) (int, error) {
 	return removed, firstErr
 }
 
-// Info reports the active wazero backend kind.
+// Info reports the actual instantiated wazero backend kind.
 func (r *WazeroRuntime) Info() RuntimeInfo {
-	kind := BackendWazeroCompiler
-	if runtime.GOOS == "darwin" {
-		kind = BackendWazeroInterpreter
-	}
-	return RuntimeInfo{Backend: kind}
+	return RuntimeInfo{Backend: r.backend}
 }
 
 // Manifest returns the image manifest associated with this runtime.

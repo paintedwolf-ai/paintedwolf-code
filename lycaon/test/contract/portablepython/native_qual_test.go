@@ -631,7 +631,9 @@ func TestNativeQual_FailClosedSkewSwaps(t *testing.T) {
 	t.Run("1_tampered_native_library", func(t *testing.T) {
 		dst := filepath.Join(t.TempDir(), "engine-root")
 		contractcheck.FailErr(t, "copy engine-root", copyDirRecursive(engineRoot, dst))
-		libPath := filepath.Join(dst, "portable-python", "engine", pythonruntime.DefaultLibraryName(runtime.GOOS))
+		libName, err := pythonruntime.LibraryNameForPlatform(runtime.GOOS, runtime.GOARCH)
+		contractcheck.FailErr(t, "resolve platform library name", err)
+		libPath := filepath.Join(dst, "portable-python", "engine", libName)
 		contractcheck.FailErr(t, "tamper native library", os.WriteFile(libPath, []byte("TAMPERED_NATIVE_ENGINE_BYTES"), 0o755))
 		assertFailClosed(t, dst)
 	})

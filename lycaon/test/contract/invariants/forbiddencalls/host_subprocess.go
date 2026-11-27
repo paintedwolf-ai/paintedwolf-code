@@ -136,10 +136,10 @@ var approvedHostLaunches = []invariants.Exemption{
 
 // platformAdapters own platform differences under internal/ and report them
 // as typed facts, unsupported included.
-var platformAdapters = []string{"confine", "exec", "fseffect", "fspath", "hostos", "hostprocess", "lineage", "osprocess"}
+var platformAdapters = []string{"confine", "exec", "fseffect", "fspath", "hostos", "hostprocess", "lineage", "osprocess", "pythonnative"}
 
 // platformConsumers consume adapter facts and never branch on the platform.
-var platformConsumers = []string{"commandsurface", "commandprogram", "tools", "toolhost"}
+var platformConsumers = []string{"commandsurface", "commandprogram", "portablepython", "pythonruntime", "tools", "toolhost"}
 
 var (
 	platformOSNames = []string{
