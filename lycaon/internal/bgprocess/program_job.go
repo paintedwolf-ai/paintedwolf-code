@@ -27,7 +27,10 @@ type ProgramJobSpec struct {
 	OriginTool    string
 	ToolCallID    string
 	StartedAt     time.Time
-	Run           func(ctx context.Context, stdout, stderr io.Writer) (ProgramJobResult, error)
+	// OnStop runs synchronously before an explicit Stop acknowledgment returns,
+	// outside registry locks, and is not invoked on ordinary exit.
+	OnStop func(reason TerminationReason)
+	Run    func(ctx context.Context, stdout, stderr io.Writer) (ProgramJobResult, error)
 }
 
 // ProgramStop carries the evaluator's terminal decision and its rendered feedback.
@@ -62,11 +65,11 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 		startedAt = time.Now().UTC()
 	}
 	handle := uuid.NewString()
-	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	runCtx, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
 	proc := &Process{
 		Handle: handle, SessionID: sessionID, ProjectID: strings.TrimSpace(spec.ProjectID), RootSessionID: strings.TrimSpace(spec.RootSessionID),
 		running: true, mode: JobModeBackground, kind: processKindProgram,
-		processRuntimeState:     processRuntimeState{done: make(chan struct{}), cancel: cancel, startedAt: startedAt},
+		processRuntimeState:     processRuntimeState{done: make(chan struct{}), cancelCause: cancel, onStop: spec.OnStop, startedAt: startedAt},
 		processIOState:          processIOState{buffer: NewRingBuffer(r.ringBufferBytes), originTool: strings.TrimSpace(spec.OriginTool), toolCallID: strings.TrimSpace(spec.ToolCallID)},
 		processConfinementState: processConfinementState{cwd: spec.Cwd},
 		Stages:                  []hostcmd.StageResult{{Command: spec.CommandLine}},
@@ -77,19 +80,19 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 	r.jobs.mu.Lock()
 	if r.jobs.closed || r.jobs.drains[sessionID] != nil {
 		r.jobs.mu.Unlock()
-		cancel()
+		cancel(nil)
 		return "", ErrRegistryClosed
 	}
 	if _, ok := r.jobs.checkAdmissionLocked(proc.ProjectID, sessionID, proc.RootSessionID, spec.Cwd); !ok {
 		r.jobs.mu.Unlock()
-		cancel()
+		cancel(nil)
 		return "", ErrTeardownInProgress
 	}
 	r.jobs.pruneCompletedLocked(sessionID)
 	if r.jobs.countRunningBackgroundLocked(sessionID) >= r.jobs.maxBackground {
 		err := r.jobs.backgroundCapacityErrorLocked(sessionID)
 		r.jobs.mu.Unlock()
-		cancel()
+		cancel(nil)
 		return "", err
 	}
 	if r.jobs.sessions[sessionID] == nil {
@@ -108,7 +111,7 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 	go func() {
 		settled, err := spec.Run(runCtx, stdout, stderr)
 		exitCode := settled.ExitCode
-		cancel()
+		cancel(nil)
 		r.jobs.mu.Lock()
 		proc.running, proc.hasExit, proc.exitCode = false, true, exitCode
 		proc.programStopCode = settled.ProgramStop.Code

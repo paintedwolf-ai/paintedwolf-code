@@ -236,24 +236,37 @@ func (s *ProgramSupervisor) Interrupt(programID string) bool {
 	return running
 }
 
-// StopProgram ends a program's foreground at the statement it waits at and
-// ends its & jobs, for an explicit stop of the program's handle. Each external
-// command leads its own session, which ends with its job.
-func (s *ProgramSupervisor) StopProgram(programID string) {
+// StopProgram closes a program's admission, cancels its foreground if still
+// running, and stops its held & jobs, for an explicit stop of the program's
+// handle. Each external command leads its own session, which ends with its job.
+func (s *ProgramSupervisor) StopProgram(programID string, reason bgprocess.TerminationReason) {
 	if s == nil {
 		return
 	}
+	if reason == "" {
+		reason = bgprocess.TerminationStoppedByAgent
+	}
 	s.mu.Lock()
 	program, ok := s.programs[programID]
-	var jobs []*supervisedJob
-	if ok {
-		for _, job := range program.jobs {
-			jobs = append(jobs, job)
-		}
-		program.jobsStopped = len(jobs)
+	if !ok || program.closed {
+		s.mu.Unlock()
+		return
 	}
+	program.closed = true
+	interruptForeground := !program.foreground
+	if interruptForeground {
+		program.interrupted = true
+	}
+	cancel := program.cancel
+	jobs := make([]*supervisedJob, 0, len(program.jobs))
+	for _, job := range program.jobs {
+		jobs = append(jobs, job)
+	}
+	program.jobsStopped = len(jobs)
 	s.mu.Unlock()
-	s.Interrupt(programID)
+	if interruptForeground {
+		cancel(bgprocess.WithCauseReason(ErrProgramInterrupted, reason))
+	}
 	for _, job := range jobs {
 		job.end(ErrProgramStopped)
 	}

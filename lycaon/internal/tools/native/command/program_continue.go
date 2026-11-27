@@ -25,9 +25,10 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 		SessionID: run.tc.Identity.SessionID, RootSessionID: run.tc.ChatSessionID(),
 		ProjectID: run.tc.Identity.ProjectID, Cwd: e.paths.Cwd().DisplayPath,
 		CommandLine: run.source, OriginTool: run.tool, ToolCallID: run.tc.Identity.ToolCallID, StartedAt: startedAt,
-		Run: func(jobCtx context.Context, stdout, stderr io.Writer) (bgprocess.ProgramJobResult, error) {
-			stop := context.AfterFunc(jobCtx, func() { r.Supervisor.StopProgram(run.root.Identity.ProgramID) })
-			defer stop()
+		OnStop: func(reason bgprocess.TerminationReason) {
+			r.Supervisor.StopProgram(run.root.Identity.ProgramID, reason)
+		},
+		Run: func(_ context.Context, stdout, stderr io.Writer) (bgprocess.ProgramJobResult, error) {
 			attachErr := errors.Join(e.stdout.follow(stdout), e.stderr.follow(stderr))
 			attached <- attachErr
 			if attachErr != nil {
