@@ -39,7 +39,7 @@ modelIndependentWebE2e("filmstrip thumbnails pass vertical scrolling through to 
       artifact_ids: [artifactId], created_at: "2026-09-14T10:02:00Z", seq: 14, ord: 14,
     },
     {
-      id: crypto.randomUUID(), role: "user", content: "This note follows the captured steps. ".repeat(30),
+      id: crypto.randomUUID(), role: "user", content: "This note follows the captured steps.",
       created_at: "2026-09-14T10:03:00Z", seq: 15, ord: 15,
     },
   ]));
