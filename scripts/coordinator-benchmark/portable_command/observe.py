@@ -264,7 +264,7 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
             and progress[0]['detail_ref'] == last_details.get('program_progress_detail_ref')
             and progress[0]['execution_id'] != last_details.get('execution_id')
         )
-    extra_facts, recovery, deliveries = extra_case_facts(case, session_id=session_id, identity=identity, project_dir=project_dir, git_setup=git_setup, receipts=receipts, effects=effects, audit=audit, recovery=recovery, last_payload=last_payload, final_hashes=final_hashes, baseline_hashes=baseline_hashes, sidecar=sidecar, session_surface=session_surface, last_raw=last_raw, no_external_launch=no_external_launch, first_rejected=first_rejected, turn_records=turn_records)
+    extra_facts, recovery, deliveries = extra_case_facts(case, session_id=session_id, identity=identity, project_dir=project_dir, git_setup=git_setup, receipts=receipts, effects=effects, audit=audit, recovery=recovery, last_payload=last_payload, final_hashes=final_hashes, baseline_hashes=baseline_hashes, sidecar=sidecar, session_surface=session_surface, last_raw=last_raw, no_external_launch=no_external_launch, first_rejected=first_rejected, turn_records=turn_records, invocations=cmd_invocations)
     facts.update(extra_facts)
     facts['structural_wrappers_valid'] = wrappers_valid
     for req_fact in case.get('required_evidence') or ():

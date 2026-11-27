@@ -165,7 +165,7 @@ class PortableCommandQSliceTests(unittest.TestCase):
             self.assertEqual([r['operation'] for r in obs['receipts']], ['git_add', 'git_commit'])
             self.assertEqual([e.get('paths') for e in obs['effects']], [['authored.txt'], ['authored.txt']])
             self.assertTrue(obs['facts']['foreign_index_preserved'] and obs['facts']['session_authored_paths'] and obs['facts']['immutable_ref_evidence'])
-            self.assertIn('missing_observation:invocation_fsmonitor_policy:git_owner', audit['observation_gaps'])
+            self.assertFalse(obs['facts']['invocation_fsmonitor_policy'])
             subprocess.run(['git', '-C', str(proj), '-c', 'core.fsmonitor=false', 'commit', '-m', 'Accidental foreign commit'], check=True)
             obs_bad, _ = observe.build_observation(
                 case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path,
@@ -314,7 +314,7 @@ class PortableCommandQSliceTests(unittest.TestCase):
             db16 = root / 'q16.db'
             create_audit_db(db16)
             log16 = root / 'q16.log'
-            log16.write_text('level=INFO msg="server listening"\nlevel=INFO msg="process boundary selected" host_execution=false process_control=seatbelt component=sandbox tool=command session_id=sess1234\nlevel=INFO msg="shutdown signal received"\n')
+            log16.write_text('level=INFO msg="server listening"\nlevel=INFO msg="process boundary selected" host_execution=false process_control=false component=sandbox tool=command session_id=sess1234\nlevel=INFO msg="shutdown signal received"\n')
             db = sqlite3.connect(db16)
             db.execute("ALTER TABLE invocation_program_executions ADD COLUMN job_handle TEXT DEFAULT ''")
             db.execute("ALTER TABLE invocation_program_executions ADD COLUMN status_code INTEGER DEFAULT 0")

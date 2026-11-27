@@ -17,6 +17,7 @@ from portable_command.case_oracles import materialize_git_setup, materialize_hos
 from portable_command.contracts import DIRECTORY, ROOT, load_suite, materialize
 from portable_command.grading import grade_case
 from portable_command.handle_await import await_running_handle
+from portable_command.lifecycle_oracles import probe_background_job_handles
 from portable_command.observe import build_observation, file_sha256, source_identity
 from portable_command.profile_session import DECLARED_READONLY_PROFILES, create_declared_profile_session
 from portable_command.provenance import materialize_denied_progress_scope, materialize_helpers
@@ -214,8 +215,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
     identity = source_identity(ROOT, profile=case['profile'], engine_bin=engine_bin, engine_manifest=engine_manifest)
     save(out_dir / 'attempt.json', {'status': 'running', 'case_id': case['id'], 'identity': identity, 'revision_aliases': revision_aliases})
     helpers_dir = materialize_helpers(case['setup'].get('helpers'), out_dir / 'helpers', case_id=case['id'])
-    config_root = out_dir / 'config-root'
-    host_binding = materialize_denied_progress_scope(case, config_root) if app_factory is smoke.Application else None
+    config_root, host_binding = out_dir / 'config-root', (materialize_denied_progress_scope(case, out_dir / 'config-root') if app_factory is smoke.Application else None)
     application = make_app_factory(engine_bin, app_factory, helpers_dir=helpers_dir, config_root=config_root if host_binding else None)(app_dir)
     sidecar_path = app_dir / 'sidecar.log'
     sse, prelude_records, turn_records, draft_bindings = None, [], [], {}
@@ -248,10 +248,11 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
             results = send_tool_calls(application, session_id, batch, surface=session_surface)
             call_ids = [cid for cid, _ in results]
             await_meta = await_running_handle(application, session_id, results[-1][1], send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface))
-            await_ids = (await_meta['wait_call_ids'] + await_meta['output_call_ids']) if await_meta else []
+            job_probe = probe_background_job_handles(application, session_id, app_dir / 'store.db', send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface)) if case['id'] == 'owned-background-state' and app_factory is smoke.Application else None
+            await_ids = ((await_meta['wait_call_ids'] + await_meta['output_call_ids']) if await_meta else []) + (job_probe['call_ids'] if job_probe else [])
             turn_records.append({
                 'program': turn['program'], 'command_call_id': call_ids[-1], 'call_ids': call_ids, 'await_call_ids': await_ids,
-                'handle_await': await_meta, 'batch_plan': [c['name'] for c in batch], 'envelope_mode': envelope_mode,
+                'handle_await': await_meta, 'job_probe': job_probe, 'batch_plan': [c['name'] for c in batch], 'envelope_mode': envelope_mode,
                 'batch_outcomes': [{'call_id': cid, 'tool': c['name'], 'outcome': res.get('outcome')} for c, (cid, res) in zip(batch, results)],
             })
         save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases, 'draft_bindings': draft_bindings, 'session_surface': session_surface, 'host_scope_binding': host_binding, 'git_setup': git_setup})

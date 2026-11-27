@@ -1660,7 +1660,12 @@
       },
       "turns": [
         {
-          "program": "git add -- ./authored.txt; git commit -m 'Fixture change'",
+          "program": "git -c core.fsmonitor=fixture-unmediated-helper status",
+          "expected_rejection": "COMMAND_OPTION_UNSUPPORTED",
+          "expected_outcome": "rejected"
+        },
+        {
+          "program": "git add -- ./authored.txt; git commit -m 'Fixture change' >/dev/null",
           "expected_outcome": "completed"
         }
       ],

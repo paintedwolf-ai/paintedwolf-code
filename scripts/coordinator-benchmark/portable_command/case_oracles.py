@@ -71,18 +71,31 @@ def materialize_git_setup(git_spec, project_dir, setup_files=None):
     staged = [str(p).lstrip('./') for p in (git_spec.get('staged') or ())]
     if staged and _run_git(root, 'add', '--', *staged).returncode != 0:
         raise RuntimeError('git add failed for pre-staged fixture paths')
-    if git_spec.get('fsmonitor'):
-        _run_git(root, 'config', 'core.fsmonitor', str(git_spec['fsmonitor']))
-    if git_spec.get('external_diff'):
-        _run_git(root, 'config', 'diff.external', str(git_spec['external_diff']))
+    marker_file = ''
+    helper_path = ''
+    if git_spec.get('fsmonitor') or git_spec.get('external_diff'):
+        marker_dir = root.parent / 'git-markers'
+        marker_dir.mkdir(parents=True, exist_ok=True)
+        marker_file = str(marker_dir / 'fsmonitor.invoked')
+        helper = marker_dir / str(git_spec.get('fsmonitor') or 'fixture-unmediated-helper')
+        helper.write_text(f"#!/bin/sh\nprintf 'invoked\\n' > '{marker_file}'\nexit 0\n")
+        helper.chmod(0o755)
+        helper_path = str(helper)
+        if git_spec.get('fsmonitor'):
+            _run_git(root, 'config', 'core.fsmonitor', helper_path)
+        if git_spec.get('external_diff'):
+            _run_git(root, 'config', 'diff.external', helper_path)
+    cfg = root / '.git' / 'config'
+    config_sha = hashlib.sha256(cfg.read_bytes()).hexdigest() if cfg.is_file() else ''
     return {
         'initialized': True, 'initial_head': initial_head, 'staged': staged,
         'session_authored': [str(p).lstrip('./') for p in (git_spec.get('session_authored') or ())],
+        'marker_file': marker_file, 'helper_path': helper_path, 'config_sha256': config_sha,
     }
 
 
-def inspect_git_facts(case, project_dir, git_setup, effects):
-    """Verify Q18 Git facts directly against the repository HEAD, tree diff, and index."""
+def inspect_git_facts(case, project_dir, git_setup, effects, audit=None, invocations=None):
+    """Verify Q18 Git facts directly against repository HEAD, tree diff, index, and behavioral fsmonitor policy."""
     git_spec = (case.get('setup') or {}).get('git')
     if not isinstance(git_spec, dict) or not git_spec:
         return {}
@@ -118,11 +131,27 @@ def inspect_git_facts(case, project_dir, git_setup, effects):
         for eff in effects:
             if eff.get('operation') in {'git_add', 'git_commit'} and eff.get('outcome') == 'completed' and 'paths' not in eff:
                 eff['paths'] = list(committed)
-    return {
+    facts = {
         'foreign_index_preserved': foreign_preserved,
         'session_authored_paths': authored_only,
         'immutable_ref_evidence': head_advanced,
     }
+    marker_file = (git_setup or {}).get('marker_file') or ''
+    config_sha = (git_setup or {}).get('config_sha256') or ''
+    if marker_file and config_sha:
+        cfg = root / '.git' / 'config'
+        marker_uninvoked = not pathlib.Path(marker_file).exists()
+        config_unchanged = cfg.is_file() and hashlib.sha256(cfg.read_bytes()).hexdigest() == config_sha
+        override_refused = any(
+            inv.get('outcome') == 'rejected' and inv.get('rejection_code') == 'COMMAND_OPTION_UNSUPPORTED'
+            and 'core.fsmonitor' in (inv.get('program') or '')
+            for inv in (invocations or ())
+        )
+        execs = (audit or {}).get('invocation_program_executions') or []
+        git_pids = {e.get('program_id') for e in execs if e.get('owner') == 'git' and e.get('state') == 'completed'}
+        git_bound = len(git_pids) == 1 and head_advanced
+        facts['invocation_fsmonitor_policy'] = bool(marker_uninvoked and config_unchanged and override_refused and git_bound)
+    return facts
 
 
 def verify_tar_bz2(project_dir, receipts, effects, publications, final_hashes):
@@ -186,7 +215,7 @@ def verify_paired_manifest_contract(case, identity):
     }
 
 
-def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, receipts, effects, audit, recovery, last_payload, final_hashes, baseline_hashes, sidecar=None, session_surface=None, last_raw=None, no_external_launch=False, first_rejected=None, turn_records=None):
+def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, receipts, effects, audit, recovery, last_payload, final_hashes, baseline_hashes, sidecar=None, session_surface=None, last_raw=None, no_external_launch=False, first_rejected=None, turn_records=None, invocations=None):
     """Collect Q05, Q06, Q11, Q18, Q19, Q20, Q21, and Q22 facts from SQLite audit rows, sidecar log, and repo state."""
     execs = audit['invocation_program_executions']
     pins = audit['invocation_program_revision_pins']
@@ -238,7 +267,7 @@ def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, rece
         if any(tok in recovery['owner_code'].lower() for tok in ('zip', 'traversal', 'escape', 'archive', 'path')):
             facts['zip_slip_refused'] = True
     facts.update(verify_tar_bz2(project_dir, receipts, effects, audit['invocation_program_publications'], final_hashes))
-    facts.update(inspect_temp_handoff_and_jobs(case, session_id=session_id, audit=audit, receipts=receipts, sidecar=sidecar, last_payload=last_payload))
+    facts.update(inspect_temp_handoff_and_jobs(case, session_id=session_id, audit=audit, receipts=receipts, sidecar=sidecar, last_payload=last_payload, turn_records=turn_records))
     ro_facts, recovery = inspect_readonly_authority(
         case, session_surface=session_surface, project_dir=project_dir, audit=audit, recovery=recovery,
         last_payload=last_payload, last_raw=last_raw, baseline_hashes=baseline_hashes,
@@ -246,6 +275,6 @@ def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, rece
     )
     facts.update(ro_facts)
     facts.update(inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar, baseline_hashes, final_hashes))
-    facts.update(inspect_git_facts(case, project_dir, git_setup, effects))
+    facts.update(inspect_git_facts(case, project_dir, git_setup, effects, audit=audit, invocations=invocations))
     facts.update(verify_paired_manifest_contract(case, identity))
     return facts, recovery, deliveries
