@@ -119,8 +119,15 @@ def explicit_effect_certainty(audit, payload, *, program_id=None, expected_ops=N
     execs = [e for e in all_execs if pid is None or e.get('program_id') == pid]
     if require_nonempty and not execs:
         return False
-    if isinstance(payload.get('executed_children'), int) and len(execs) != payload['executed_children']:
-        return False
+    if isinstance(payload.get('executed_children'), int):
+        exp_started = payload['executed_children']
+        if any('owner_started' in e for e in execs):
+            if sum(1 for e in execs if e.get('owner_started') == 1) != exp_started:
+                return False
+        else:
+            non_refused = sum(1 for e in execs if e.get('state') != 'refused')
+            if exp_started > len(execs) or exp_started not in {len(execs), non_refused}:
+                return False
     if expected_ops is not None and len(execs) != len(expected_ops):
         return False
     return all(e.get('effect_certainty') == 'none' for e in execs)

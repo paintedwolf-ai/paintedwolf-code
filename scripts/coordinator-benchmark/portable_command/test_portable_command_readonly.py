@@ -188,7 +188,7 @@ class PortableCommandReadonlyAuthorityTests(unittest.TestCase):
             root = pathlib.Path(tmp)
             db_d, log_d, proj_d, base_d = self._env(root, 'read-only-dynamic-refusal')
             payload = {
-                'program_id': 'p1', 'state': 'rejected', 'status': 1, 'executed_children': 2,
+                'program_id': 'p1', 'state': 'rejected', 'status': 1, 'executed_children': 1,
                 'completed_effects': 0, 'uncertain_effects': 0,
                 'refusal': {'code': 'COMMAND_OPERATION_NOT_ALLOWED', 'feedback': 'explore_readonly cannot delete.', 'details': {'operation_source_line': 1}},
             }
@@ -198,10 +198,11 @@ class PortableCommandReadonlyAuthorityTests(unittest.TestCase):
                     db_d.unlink()
                 create_audit_db(db_d)
                 db = sqlite3.connect(db_d)
+                db.execute("ALTER TABLE invocation_program_executions ADD COLUMN owner_started INTEGER DEFAULT 0")
                 db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','rejected',1)")
                 db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','rejected',1,'COMMAND_OPERATION_NOT_ALLOWED')")
                 for row in rows:
-                    db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES (?,?,?,?,?,?,?,?)", row)
+                    db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,owner_started) VALUES (?,?,?,?,?,?,?,?,?)", row)
                 db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (msg,))
                 db.commit(); db.close()
                 obs, _ = observe.build_observation(
@@ -211,17 +212,17 @@ class PortableCommandReadonlyAuthorityTests(unittest.TestCase):
                     prelude_records=[],
                 )
                 return obs
-            # Positive control: complete matching 2-row receipt set with explicit 'none' certainty.
-            obs_ok = run_with_execs([('e1', 'p1', 1, 'read', 'cat', 'filesystem', 'completed', 'none'), ('e2', 'p1', 2, 'delete', 'rm', 'filesystem', 'refused', 'none')])
+            # Positive control: complete matching 2-row receipt set (1 started + 1 refused, both explicit 'none').
+            obs_ok = run_with_execs([('e1', 'p1', 1, 'read', 'cat', 'filesystem', 'completed', 'none', 1), ('e2', 'p1', 2, 'delete', 'rm', 'filesystem', 'refused', 'none', 0)])
             self.assertTrue(obs_ok['recovery']['effect_certainty_required'])
-            # 1) Missing receipt (only 1 of 2 executed_children).
-            obs_missing = run_with_execs([('e1', 'p1', 1, 'read', 'cat', 'filesystem', 'completed', 'none')])
+            # 1) Missing receipt (only 1 of 2 expected receipts).
+            obs_missing = run_with_execs([('e1', 'p1', 1, 'read', 'cat', 'filesystem', 'completed', 'none', 1)])
             self.assertFalse(obs_missing['recovery']['effect_certainty_required'])
             # 2) Mismatched receipt (wrong program_id 'p-other').
-            obs_mismatch = run_with_execs([('e1', 'p1', 1, 'read', 'cat', 'filesystem', 'completed', 'none'), ('e2', 'p-other', 2, 'delete', 'rm', 'filesystem', 'refused', 'none')])
+            obs_mismatch = run_with_execs([('e1', 'p1', 1, 'read', 'cat', 'filesystem', 'completed', 'none', 1), ('e2', 'p-other', 2, 'delete', 'rm', 'filesystem', 'refused', 'none', 0)])
             self.assertFalse(obs_mismatch['recovery']['effect_certainty_required'])
             # 3) Unknown / blank / missing effect_certainty.
             for bad_cert in ('unknown', '', None):
-                obs_bad = run_with_execs([('e1', 'p1', 1, 'read', 'cat', 'filesystem', 'completed', 'none'), ('e2', 'p1', 2, 'delete', 'rm', 'filesystem', 'refused', bad_cert)])
+                obs_bad = run_with_execs([('e1', 'p1', 1, 'read', 'cat', 'filesystem', 'completed', 'none', 1), ('e2', 'p1', 2, 'delete', 'rm', 'filesystem', 'refused', bad_cert, 0)])
                 self.assertFalse(obs_bad['recovery']['effect_certainty_required'], f'bad_cert={bad_cert!r}')
                 self.assertFalse(obs_bad['facts'].get('zero_program_effects'), f'bad_cert={bad_cert!r}')

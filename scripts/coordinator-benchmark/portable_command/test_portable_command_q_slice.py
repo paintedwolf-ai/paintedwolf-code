@@ -35,15 +35,15 @@ class PortableCommandQSliceTests(unittest.TestCase):
             db.execute("ALTER TABLE invocation_program_executions ADD COLUMN status_code INTEGER DEFAULT 0")
             db.execute("CREATE TABLE invocation_program_sources (program_id TEXT, source_unit_id TEXT, source_id TEXT, revision TEXT, sha256 TEXT)")
             db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','rejected',1), ('r2','sess1234','c2','update_progress','progress','completed',1), ('r3','sess1234','c3','command','processes','completed',1)")
-            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','rejected',1,'PROGRESS_MISSING'), ('p2','r3','completed',0,'')")
-            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,status_code,effect_certainty) VALUES ('e1','p1',1,'touch','touch','filesystem','refused',1,'none'), ('e2','p2',1,'touch','touch','filesystem','completed',0,'completed')")
+            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','rejected',2,'PROGRESS_MISSING'), ('p2','r3','completed',0,'')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,status_code,effect_certainty) VALUES ('e1','p1',1,'touch','touch','filesystem','refused',2,'none'), ('e2','p2',1,'touch','touch','filesystem','completed',0,'completed')")
             db.execute("INSERT INTO invocation_program_sources VALUES ('p1','u1','inline','1',?)", (prog_sha,))
             db.execute("INSERT INTO invocation_program_outputs VALUES ('o1','p1','e1','source','output:program-source:p1',1,0,'touch ./never',0,1,?,'')", (prog_sha,))
             payload1 = {
-                'program_id': 'p1', 'detail_ref': 'output:program-source:p1', 'state': 'rejected', 'status': 1, 'executed_children': 1,
+                'program_id': 'p1', 'detail_ref': 'output:program-source:p1', 'state': 'rejected', 'status': 2, 'executed_children': 0,
                 'stderr': 'touch: PROGRESS_MISSING [PROGRESS_MISSING]\n', 'stop_code': 'PROGRESS_MISSING',
                 'completed_effects': 0, 'uncertain_effects': 0, 'replay_available': False,
-                'refusal': {'code': 'PROGRESS_MISSING', 'details': {'expected_form': 'update_progress'}},
+                'refusal': {'code': 'PROGRESS_MISSING', 'feedback': 'Call update_progress before mutating.', 'details': {}},
             }
             payload3 = {'program_id': 'p2', 'state': 'completed', 'status': 0, 'stdout': '', 'stderr': ''}
             db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?), ('m2','sess1234',2,'tool','c2',?), ('m3','sess1234',3,'tool','c3',?)", (

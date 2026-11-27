@@ -1224,12 +1224,15 @@
         "receipts": [
           {
             "operation": "printf",
-            "outcome": "completed",
+            "outcome": "failed",
+            "status": 1,
+            "publication_eligible": false,
             "closure": "expected-consumer"
           },
           {
             "operation": "read",
-            "outcome": "completed"
+            "outcome": "completed",
+            "status": 0
           }
         ],
         "effects": [],
@@ -1831,7 +1834,7 @@
       "expected": {
         "stdout": "Archive:  ./hostile.zip\n",
         "stderr": "unzip: EXTRACT_ZIP_SLIP [EXTRACT_ZIP_SLIP]\n",
-        "status": 1,
+        "status": 2,
         "host_stop": "rejected",
         "complete": false,
         "files": {
@@ -1840,14 +1843,13 @@
           }
         },
         "absent": [
-          "escape.txt",
-          "out"
+          "escape.txt"
         ],
         "receipts": [
           {
             "operation": "unzip",
             "outcome": "rejected",
-            "status": 1
+            "status": 2
           }
         ],
         "effects": [],
@@ -2602,7 +2604,7 @@
           {
             "operation": "touch",
             "outcome": "refused",
-            "status": 1
+            "status": 2
           },
           {
             "operation": "update_progress",
@@ -2610,7 +2612,8 @@
           },
           {
             "operation": "touch",
-            "outcome": "completed"
+            "outcome": "completed",
+            "status": 0
           }
         ],
         "effects": [

@@ -198,10 +198,10 @@ def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, rece
         rej_execs = [e for e in execs if not rej_pid or e.get('program_id') == rej_pid]
         zero_ok = bool(explicit_effect_certainty(audit, rej_payload or {}, program_id=rej_pid, require_nonempty=True)
                        and all(e.get('state') in {'refused', 'rejected'} for e in rej_execs))
-        ref_details = ((rej_payload or {}).get('refusal') or {}).get('details') if isinstance((rej_payload or {}).get('refusal'), dict) else {}
-        remedy = 'update_progress' if (
-            isinstance(ref_details, dict) and 'progress' in str(ref_details.get('expected_form') or '').lower()
-        ) else recovery.get('remedy', '')
+        ref_obj = (rej_payload or {}).get('refusal') if isinstance((rej_payload or {}).get('refusal'), dict) else {}
+        ref_details = ref_obj.get('details') if isinstance(ref_obj.get('details'), dict) else {}
+        ref_text = ' '.join(str(x or '') for x in (ref_details.get('expected_form'), ref_obj.get('feedback'), (first_rejected[1] if first_rejected else last_raw or {}).get('message'))).lower()
+        remedy = 'update_progress' if ('update_progress' in ref_text or 'progress' in str(ref_details.get('expected_form') or '').lower()) else recovery.get('remedy', '')
         turn0_prog = (turn_records[0].get('program') if turn_records else '') or ''
         prog_sha = hashlib.sha256(turn0_prog.encode('utf-8')).hexdigest() if turn0_prog else ''
         sources = audit.get('invocation_program_sources') or []
@@ -228,7 +228,9 @@ def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, rece
         facts['disk_provenance'] = True
     if recovery and recovery.get('owner_code'):
         root_p = pathlib.Path(project_dir)
-        no_escape = not (root_p.parent / 'escape.txt').exists() and not (root_p / 'escape.txt').exists() and not (root_p / 'out').exists()
+        out_dir = root_p / 'out'
+        out_empty = (not out_dir.exists()) or (out_dir.is_dir() and not any(out_dir.rglob('*')))
+        no_escape = not (root_p.parent / 'escape.txt').exists() and not (root_p / 'escape.txt').exists() and out_empty
         zero_ok = bool(recovery.get('zero_program_effects') or explicit_effect_certainty(audit, last_payload or {}, require_nonempty=bool(execs)))
         facts['no_outside_effect'] = bool(zero_ok and no_escape and (baseline_hashes is None or final_hashes == baseline_hashes))
         if any(tok in recovery['owner_code'].lower() for tok in ('zip', 'traversal', 'escape', 'archive', 'path')):
