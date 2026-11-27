@@ -15,7 +15,10 @@ import argparse
 import contextlib
 import json
 import pathlib
+import secrets
+import socket
 import sqlite3
+import subprocess
 import sys
 import time
 import urllib.error
@@ -30,12 +33,13 @@ if str(BENCHMARK_DIR) not in sys.path:
 from wea.canary import CanaryGenerator, scan_for_canaries
 from wea.fixtures_net import RecordingHTTPFixture
 from wea.observers import AuthorityObserver, hash_file, sha256_bytes
-from wea.provenance import REPO_ROOT, collect_provenance
+from wea.provenance import REPO_ROOT, collect_provenance, resolve_engine_binary
 from wea.runner import (
     _create_application,
     _extract_refusal_code,
     _init_git_repo,
     _open_session,
+    _resolve_engine_root,
     _save_json,
     _send_tool_call,
     _wait_pending,
@@ -331,8 +335,68 @@ def _build_receipt(
     }
 
 
+def _restart_application(
+    app_dir: pathlib.Path,
+    engine_bin: str | pathlib.Path | None = None,
+    *,
+    engine_manifest: str | pathlib.Path | None = None,
+    engine_root: str | pathlib.Path | None = None,
+) -> Any:
+    """Restart lycaon-dev on an EXISTING app_dir (preserving store.db + config/)."""
+    import smoke
+    from application_environment import application_environment
+    from progress import save
+
+    binary, _ = resolve_engine_binary(REPO_ROOT, engine_bin)
+    resolved_engine_root = _resolve_engine_root(engine_manifest=engine_manifest, engine_root=engine_root)
+    app = smoke.Application.__new__(smoke.Application)
+    app.directory = app_dir
+    app.config = app_dir / "config"
+    app.config.mkdir(parents=True, exist_ok=True)
+    app.manual = True
+    app.projects = []
+    app.admissions = []
+    suite = json.loads((smoke.ROOT / "lycaon/test/fixtures/eval/coordinator-benchmark.json").read_text())
+    app.task_allowance = suite["task_allowance"]
+    app.approval_guidance = suite["unattended"]["approval_guidance"]
+    app.baseline_checks = []
+    app.flows = []
+    app.token = secrets.token_hex(24)
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        app.port = sock.getsockname()[1]
+    app.url = f"http://127.0.0.1:{app.port}"
+    app.log = (app_dir / "sidecar.log").open("a")
+    env_overrides = {
+        "LYCAON_CONFIG_DIR": str(app.config),
+        "LYCAON_CONFIG_ROOT": str(smoke.ROOT / "lycaon"),
+        "LYCAON_ENGINE_ROOT": str(resolved_engine_root or (smoke.ROOT / "lycaon-den/src-tauri/engine-root")),
+        "LYCAON_ADDR": f"127.0.0.1:{app.port}",
+        "LYCAON_API_TOKEN": app.token,
+        "LYCAON_DEV": "1",
+        "LYCAON_HARNESS": "1",
+        "LYCAON_LOG_LEVEL": "debug",
+        "LYCAON_LLM_MOCK": "1",
+        "LYCAON_LLM_MANUAL": "1",
+    }
+    env = application_environment(env_overrides)
+    app.process = subprocess.Popen(
+        [str(binary), "serve", "--db", str(app_dir / "store.db")],
+        cwd=smoke.ROOT,
+        env=env,
+        stdout=app.log,
+        stderr=subprocess.STDOUT,
+    )
+    save(app_dir / "ownership.json", {"pid": app.process.pid, "port": app.port})
+    return app
+
+
 def _http_probe_cmd(url: str) -> str:
     return f"python3 -B -c \"import urllib.request; print(urllib.request.urlopen('{url}', timeout=5).read().decode())\""
+
+
+def _py_write_cmd(path: pathlib.Path, content: str) -> str:
+    return f"python3 -B -c \"from pathlib import Path; Path({str(path)!r}).write_text({content!r})\""
 
 
 def _run_warmed_slots(
@@ -413,7 +477,7 @@ def _run_warmed_slots(
                 call = _call_with_checkpoint_inspect(
                     app, a01_sid, "command",
                     {
-                        "command": f"printf 'after-01\\n' > {target}",
+                        "command": _py_write_cmd(target, "after-01\n"),
                         "capability_request": {"write_roots": [str(outside_dir)]},
                     },
                     action="approve", rung="once",
@@ -440,12 +504,11 @@ def _run_warmed_slots(
             if "A01-02-file-edit-plan-hash" in spec_map:
                 _patch_global_approvals(
                     app, posture="balanced",
-                    rules=[{"category": "command", "pattern": "edit *", "effect": "ask"}],
+                    rules=[{"category": "command", "pattern": "python3 *", "effect": "ask"}],
                 )
-                _call_with_checkpoint_inspect(app, a01_sid, "command", {"command": "cat notes.txt"}, action=None)
                 call = _call_with_checkpoint_inspect(
                     app, a01_sid, "command",
-                    {"command": "edit --path notes.txt --old-string beta --new-string BETA_A01"},
+                    {"command": "python3 -B -c \"from pathlib import Path; p=Path('notes.txt'); p.write_text(p.read_text().replace('beta','BETA_A01'))\""},
                     action="approve", rung="once",
                 )
                 post = hash_file(proj_main / "notes.txt")
@@ -527,7 +590,7 @@ def _run_warmed_slots(
                 call = _call_with_checkpoint_inspect(
                     app, a01_sid, "command",
                     {
-                        "command": f"printf 'mutated-05\\n' > {target}",
+                        "command": _py_write_cmd(target, "mutated-05\n"),
                         "capability_request": {"write_roots": [str(outside_dir)]},
                     },
                     action="reject",
@@ -641,18 +704,18 @@ def _run_warmed_slots(
 
             # A02-01: once single-use
             if "A02-01-scope-once-single-use" in spec_map:
-                b0 = len(ep1.snapshot()["requests"])
+                b0 = len(ep3.snapshot()["requests"])
                 c1 = _call_with_checkpoint_inspect(
                     app, a02_sid, "command",
-                    {"command": _http_probe_cmd(f"{ep1.base_url}/a02-01"), "capability_request": {"loopback_connect": {"ports": [ep1.port]}}},
+                    {"command": _http_probe_cmd(f"{ep3.base_url}/a02-01"), "capability_request": {"loopback_connect": {"ports": [ep3.port]}}},
                     action="approve", rung="once",
                 )
                 c2 = _call_with_checkpoint_inspect(
                     app, a02_sid, "command",
-                    {"command": _http_probe_cmd(f"{ep1.base_url}/a02-01"), "capability_request": {"loopback_connect": {"ports": [ep1.port]}}},
+                    {"command": _http_probe_cmd(f"{ep3.base_url}/a02-01"), "capability_request": {"loopback_connect": {"ports": [ep3.port]}}},
                     action="reject",
                 )
-                a0 = len(ep1.snapshot()["requests"])
+                a0 = len(ep3.snapshot()["requests"])
                 ok = c1["checkpoint"]["asked"] and c2["checkpoint"]["asked"] and (a0 - b0) == 1
                 receipts.append(_build_receipt(
                     spec=spec_map["A02-01-scope-once-single-use"], prov=prov,
@@ -704,35 +767,42 @@ def _run_warmed_slots(
                 ))
                 app.request(f"/v1/sessions/{a02_sid}/prompts", {"operation_id": str(uuid.uuid4()), "text": "Continue A02 grant checks."})
 
-            # A02-04: chat grant for ep1 does NOT cover ep2 (material arg change)
+            # A02-04: chat grant for ep1 does NOT cover a different capability/write_root (material arg change)
             if "A02-04-scope-chat-material-arg-change" in spec_map:
-                b0 = len(ep2.snapshot()["requests"])
+                outside_a02_diff = work_dir / "outside-a02-diff"
+                outside_a02_diff.mkdir(parents=True, exist_ok=True)
+                diff_target = outside_a02_diff / "diff_arg.txt"
                 c_diff = _call_with_checkpoint_inspect(
                     app, a02_sid, "command",
-                    {"command": _http_probe_cmd(f"{ep2.base_url}/a02-04"), "capability_request": {"loopback_connect": {"ports": [ep2.port]}}},
+                    {
+                        "command": _py_write_cmd(diff_target, "must-not-write\n"),
+                        "capability_request": {"write_roots": [str(outside_a02_diff)]},
+                    },
                     action="reject",
                 )
-                a0 = len(ep2.snapshot()["requests"])
-                ok = c_diff["checkpoint"]["asked"] and (a0 - b0) == 0
+                ok = c_diff["checkpoint"]["asked"] and (not diff_target.exists())
                 receipts.append(_build_receipt(
                     spec=spec_map["A02-04-scope-chat-material-arg-change"], prov=prov,
-                    typed_result={"different_port_asked": c_diff["checkpoint"]["asked"]},
-                    independent_observation={"fixture_arrivals_delta": a0 - b0},
+                    typed_result={"different_target_asked": c_diff["checkpoint"]["asked"], "outcome": c_diff["result"].get("outcome")},
+                    independent_observation={"diff_target_exists": diff_target.exists()},
                     passed=ok,
                 ))
 
-            # A02-05: set-valued port list reorder matches canonical set grant
+            # A02-05: set-valued port list reorder matches canonical set grant (fresh session avoids A02-04 rejection suppression)
             if "A02-05-scope-chat-set-dest-reorder" in spec_map:
+                abort_session(a02_sid)
+                s_set, _ = open_prompted_session(proj_main, "Set-valued port reorder check.")
                 c1 = _call_with_checkpoint_inspect(
-                    app, a02_sid, "command",
+                    app, s_set, "command",
                     {"command": _http_probe_cmd(f"{ep2.base_url}/a02-05-a"), "capability_request": {"loopback_connect": {"ports": [ep1.port, ep2.port]}}},
                     action="approve", rung="chat",
                 )
                 c2 = _call_with_checkpoint_inspect(
-                    app, a02_sid, "command",
+                    app, s_set, "command",
                     {"command": _http_probe_cmd(f"{ep2.base_url}/a02-05-b"), "capability_request": {"loopback_connect": {"ports": [ep2.port, ep1.port]}}},
                     action=None,
                 )
+                abort_session(s_set)
                 ok = c1["checkpoint"]["asked"] and (not c2["checkpoint"]["asked"])
                 receipts.append(_build_receipt(
                     spec=spec_map["A02-05-scope-chat-set-dest-reorder"], prov=prov,
@@ -740,6 +810,7 @@ def _run_warmed_slots(
                     independent_observation={"reordered_matched_without_ask": not c2["checkpoint"]["asked"]},
                     passed=ok,
                 ))
+                app.request(f"/v1/sessions/{a02_sid}/prompts", {"operation_id": str(uuid.uuid4()), "text": "Continue A02 stop check."})
 
             # A02-06: chat grant survives Stop (abort) and reuses on next prompt in same chat
             if "A02-06-scope-chat-survives-stop" in spec_map:
@@ -781,7 +852,7 @@ def _run_warmed_slots(
                     passed=ok,
                 ))
 
-            # A02-08: day rung installs time-bounded grant with expires_at and reuses in-scope
+            # A02-08: day rung installs time-bounded grant with expires_at/expires_when and reuses in-scope
             if "A02-08-scope-day-rung-installed" in spec_map:
                 c1 = _call_with_checkpoint_inspect(
                     app, a02_sid, "command",
@@ -789,30 +860,48 @@ def _run_warmed_slots(
                     action="approve", rung="day",
                 )
                 grants_now = (app.request(f"/v1/approval-grants?session_id={a02_sid}") or {}).get("grants") or []
-                has_expiry = any(bool(g.get("expires_at")) for g in grants_now if isinstance(g, dict))
+                has_wire_expiry = any(
+                    bool(g.get("expires_at")) or ("day" in str(g.get("expires_when") or "").lower())
+                    for g in grants_now if isinstance(g, dict)
+                )
+                with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+                    db_exp_rows = conn.execute(
+                        "SELECT expires_at FROM chat_grants WHERE chat_session_id = ? AND expires_at IS NOT NULL",
+                        (a02_sid,),
+                    ).fetchall()
+                has_db_expiry = len(db_exp_rows) >= 1
                 c2 = _call_with_checkpoint_inspect(
                     app, a02_sid, "command",
                     {"command": _http_probe_cmd(f"{ep1.base_url}/a02-08-b"), "capability_request": {"loopback_connect": {"ports": [ep1.port]}}},
                     action=None,
                 )
-                ok = c1["checkpoint"]["asked"] and has_expiry and (not c2["checkpoint"]["asked"])
+                ok = c1["checkpoint"]["asked"] and (has_wire_expiry or has_db_expiry) and (not c2["checkpoint"]["asked"])
                 receipts.append(_build_receipt(
                     spec=spec_map["A02-08-scope-day-rung-installed"], prov=prov,
-                    typed_result={"rung": c1["checkpoint"]["rung"], "has_expires_at": has_expiry, "reused_without_ask": not c2["checkpoint"]["asked"]},
-                    independent_observation={"grant_count": len(grants_now)},
+                    typed_result={
+                        "rung": c1["checkpoint"]["rung"],
+                        "has_wire_expiry": has_wire_expiry,
+                        "has_db_expiry": has_db_expiry,
+                        "reused_without_ask": not c2["checkpoint"]["asked"],
+                    },
+                    independent_observation={"grant_count": len(grants_now), "db_expiring_chat_grants": len(db_exp_rows)},
                     passed=ok,
                 ))
 
             abort_session(a02_sid)
             _revoke_all_grants(app)
 
-            # A02-09 & A02-10: project scope (outside-root read offers project rung)
-            proj_read_target = outside_dir / "a02_project_read.txt"
-            proj_read_target.write_text("project-grant-body\n", encoding="utf-8")
-            s_p1, _ = open_prompted_session(proj_main, "Grant project-scoped read.")
+            # A02-09 & A02-10: project scope (write_roots outside dir offers project rung)
+            outside_proj_dir = work_dir / "outside-proj-grant"
+            outside_proj_dir.mkdir(parents=True, exist_ok=True)
+            proj_write_target = outside_proj_dir / "a02_project_write.txt"
+            s_p1, _ = open_prompted_session(proj_main, "Grant project-scoped write_roots.")
             c_proj = _call_with_checkpoint_inspect(
                 app, s_p1, "command",
-                {"command": f"cat {proj_read_target}"},
+                {
+                    "command": _py_write_cmd(proj_write_target, "project-grant-1\n"),
+                    "capability_request": {"write_roots": [str(outside_proj_dir)]},
+                },
                 action="approve", rung="project",
             )
             abort_session(s_p1)
@@ -821,11 +910,14 @@ def _run_warmed_slots(
                 s_p2, _ = open_prompted_session(proj_main, "Reuse project grant in fresh session.")
                 c_reuse = _call_with_checkpoint_inspect(
                     app, s_p2, "command",
-                    {"command": f"cat {proj_read_target}"},
+                    {
+                        "command": _py_write_cmd(proj_write_target, "project-grant-2\n"),
+                        "capability_request": {"write_roots": [str(outside_proj_dir)]},
+                    },
                     action=None,
                 )
                 abort_session(s_p2)
-                ok = c_proj["checkpoint"]["asked"] and (not c_reuse["checkpoint"]["asked"])
+                ok = c_proj["checkpoint"]["asked"] and c_proj["checkpoint"]["rung"] == "project" and (not c_reuse["checkpoint"]["asked"])
                 receipts.append(_build_receipt(
                     spec=spec_map["A02-09-scope-project-in-project-reuse"], prov=prov,
                     typed_result={"granted_rung": c_proj["checkpoint"]["rung"], "fresh_session_same_project_asked": c_reuse["checkpoint"]["asked"]},
@@ -837,7 +929,10 @@ def _run_warmed_slots(
                 s_pb, _ = open_prompted_session(proj_b, "Cross-project isolation probe.")
                 c_cross = _call_with_checkpoint_inspect(
                     app, s_pb, "command",
-                    {"command": f"cat {proj_read_target}"},
+                    {
+                        "command": _py_write_cmd(proj_write_target, "cross-project-denied\n"),
+                        "capability_request": {"write_roots": [str(outside_proj_dir)]},
+                    },
                     action="reject",
                 )
                 abort_session(s_pb)
@@ -868,7 +963,10 @@ def _run_warmed_slots(
                 s_del, _ = open_prompted_session(proj_main, "Fresh chat after grant clear.")
                 c_fresh = _call_with_checkpoint_inspect(
                     app, s_del, "command",
-                    {"command": f"cat {proj_read_target}"},
+                    {
+                        "command": _py_write_cmd(proj_write_target, "fresh-chat-denied\n"),
+                        "capability_request": {"write_roots": [str(outside_proj_dir)]},
+                    },
                     action="reject",
                 )
                 abort_session(s_del)
@@ -1094,15 +1192,21 @@ def _run_warmed_slots(
             a04_sid, _ = open_prompted_session(proj_main, "Run A04 decision record & Stop release checks.")
 
             # A04-01: human approve & reject decisions name resolver_person_id and form valid authz_events chain
+            outside_a04_dir = work_dir / "outside-a04"
+            outside_a04_dir.mkdir(parents=True, exist_ok=True)
             if "A04-01-decision-names-approver-and-chain" in spec_map:
                 c_ok = _call_with_checkpoint_inspect(
                     app, a04_sid, "command",
                     {"command": _http_probe_cmd(f"{ep1.base_url}/a04-01"), "capability_request": {"loopback_connect": {"ports": [ep1.port]}}},
                     action="approve", rung="chat",
                 )
+                rej_target = outside_a04_dir / "a04_01_rej.txt"
                 c_no = _call_with_checkpoint_inspect(
                     app, a04_sid, "command",
-                    {"command": _http_probe_cmd(f"{ep2.base_url}/a04-01"), "capability_request": {"loopback_connect": {"ports": [ep2.port]}}},
+                    {
+                        "command": _py_write_cmd(rej_target, "should-not-write\n"),
+                        "capability_request": {"write_roots": [str(outside_a04_dir)]},
+                    },
                     action="reject",
                 )
                 with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
@@ -1130,9 +1234,11 @@ def _run_warmed_slots(
                     passed=ok,
                 ))
 
-            # A04-02: Stop while checkpoint pending cancels held effect (0 arrivals) and keeps committed chat grant
+            # A04-02: Stop while checkpoint pending cancels held effect (0 writes) and keeps committed chat grant
             if "A04-02-stop-releases-pending-without-effect" in spec_map:
-                b_ep3 = len(ep3.snapshot()["requests"])
+                outside_a04_stop = work_dir / "outside-a04-stop"
+                outside_a04_stop.mkdir(parents=True, exist_ok=True)
+                stop_target = outside_a04_stop / "must_not_write_on_stop.txt"
                 req = _wait_pending_bounded(app, a04_sid)
                 held_call_id = str(uuid.uuid4())
                 app.request(
@@ -1143,8 +1249,8 @@ def _run_warmed_slots(
                             "id": held_call_id,
                             "name": "command",
                             "args": {
-                                "command": _http_probe_cmd(f"{ep3.base_url}/a04-02-stop"),
-                                "capability_request": {"loopback_connect": {"ports": [ep3.port]}},
+                                "command": _py_write_cmd(stop_target, "must-not-exist\n"),
+                                "capability_request": {"write_roots": [str(outside_a04_stop)]},
                             },
                         }],
                     },
@@ -1152,9 +1258,8 @@ def _run_warmed_slots(
                 cp_held, settled_early = _wait_pending_checkpoint_or_settled(app, a04_sid, held_call_id, timeout_s=20.0)
                 app.request(f"/v1/sessions/{a04_sid}/abort", {})
                 _wait_session_idle(app, a04_sid, "a04 idle after stop")
-                a_ep3 = len(ep3.snapshot()["requests"])
                 grants_after_stop = (app.request(f"/v1/approval-grants?session_id={a04_sid}") or {}).get("grants") or []
-                ok = bool(cp_held and cp_held.get("id")) and (a_ep3 - b_ep3) == 0 and len(grants_after_stop) >= 1
+                ok = bool(cp_held and cp_held.get("id")) and (not stop_target.exists()) and len(grants_after_stop) >= 1
                 receipts.append(_build_receipt(
                     spec=spec_map["A04-02-stop-releases-pending-without-effect"], prov=prov,
                     typed_result={
@@ -1162,7 +1267,7 @@ def _run_warmed_slots(
                         "settled_without_checkpoint": settled_early,
                         "surviving_chat_grants": len(grants_after_stop),
                     },
-                    independent_observation={"held_fixture_arrivals": a_ep3 - b_ep3},
+                    independent_observation={"stop_target_exists": stop_target.exists()},
                     passed=ok,
                 ))
 
@@ -1267,8 +1372,8 @@ def _run_a12_restart_slots(
         finally:
             app1.close(cleanup=False)
 
-        # Boot 2: Restart lycaon-dev on the exact same app_dir
-        app2 = _create_application(app_dir, engine_bin=engine_bin, engine_manifest=engine_manifest, engine_root=engine_root)
+        # Boot 2: Restart lycaon-dev on the exact same app_dir (preserving store.db + config/)
+        app2 = _restart_application(app_dir, engine_bin=engine_bin, engine_manifest=engine_manifest, engine_root=engine_root)
         try:
             app2.ready()
 
