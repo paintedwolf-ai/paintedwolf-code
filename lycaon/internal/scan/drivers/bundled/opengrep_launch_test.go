@@ -34,7 +34,22 @@ func TestOpengrepLaunchesAsConfinedBundledScanner(t *testing.T) {
 	if slices.Contains(box.Roots, projectDir) || len(box.ReadRoots) == 0 {
 		t.Fatalf("confinement roots = %v read roots = %v, want the project read-only", box.Roots, box.ReadRoots)
 	}
-	if cacheDir := runFiles.cache(); cacheDir != runFiles.dir() && !slices.Contains(box.GrantedWriteRoots, cacheDir) {
-		t.Fatalf("confinement granted write roots = %v, want persistent cache %q", box.GrantedWriteRoots, cacheDir)
+	if len(box.GrantedWriteRoots) != 0 {
+		t.Fatalf("confinement granted write roots = %v, want none", box.GrantedWriteRoots)
+	}
+
+	runtimeDir := t.TempDir()
+	runFiles.runtimeCacheDir = runtimeDir
+	planWithRuntime, err := opengrepLaunch(projectDir, runFiles)
+	testutil.FailErr(t, "build launch with prepared runtime", err)
+	boxWithRuntime := planWithRuntime.Confinement
+	if boxWithRuntime == nil {
+		return
+	}
+	if len(boxWithRuntime.GrantedWriteRoots) != 0 || slices.Contains(boxWithRuntime.Roots, runtimeDir) {
+		t.Fatalf("prepared runtime must never be writable: roots=%v granted=%v", boxWithRuntime.Roots, boxWithRuntime.GrantedWriteRoots)
+	}
+	if !slices.Contains(boxWithRuntime.ReadRoots, runtimeDir) {
+		t.Fatalf("confinement read roots = %v, want prepared runtime %q", boxWithRuntime.ReadRoots, runtimeDir)
 	}
 }

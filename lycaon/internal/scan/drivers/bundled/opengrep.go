@@ -109,6 +109,11 @@ func (o *OpenGrepScanner) Run(ctx context.Context, req scan.ScanRequest) (*scano
 		return nil, err
 	}
 	defer cleanup()
+	runtimeCacheDir, err := prepareOpengrepRuntime(ctx, bin)
+	if err != nil {
+		return nil, fmt.Errorf("opengrep runtime: %w", err)
+	}
+	runFiles.runtimeCacheDir = runtimeCacheDir
 	// Execution reads the same configuration source the contract hashes.
 	rulePaths, err := rules.MaterializeGateRules(gates, "", runFiles.dir())
 	if err != nil {
@@ -229,10 +234,9 @@ func (o *OpenGrepScanner) consoleTail(console []byte) string {
 }
 
 // CLI state stays inside the jail output root while XDG_CACHE_HOME points at
-// the persistent engine runtime cache.
+// the host-prepared read-only engine runtime when present.
 func opengrepSubprocessEnv(files opengrepRunFiles) []string {
-	out := append([]string(nil), os.Environ()...)
-	pins := map[string]string{
+	return overrideEnv(os.Environ(), map[string]string{
 		"XDG_CACHE_HOME":             files.cache(),
 		"TMPDIR":                     files.dir(),
 		"TMP":                        files.dir(),
@@ -246,22 +250,7 @@ func opengrepSubprocessEnv(files opengrepRunFiles) []string {
 		"SEMGREP_SETTINGS_FILE":      files.settingsPath,
 		"SEMGREP_VERSION_CACHE_PATH": files.versionCachePath,
 		"SEMGREP_SEND_METRICS":       "off",
-	}
-	for k, v := range pins {
-		prefix := k + "="
-		replaced := false
-		for i, kv := range out {
-			if strings.HasPrefix(kv, prefix) {
-				out[i] = prefix + v
-				replaced = true
-				break
-			}
-		}
-		if !replaced {
-			out = append(out, prefix+v)
-		}
-	}
-	return out
+	})
 }
 
 func filterNonCode(ctx context.Context, result *scanoutput.Result, project string, bundle []byte) error {
@@ -306,14 +295,14 @@ func filterNonCode(ctx context.Context, result *scanoutput.Result, project strin
 	return nil
 }
 
-// opengrepLaunch confines OpenGrep to reading the project and writing its run files
-// and persistent runtime cache.
+// opengrepLaunch confines OpenGrep to reading the project and any host-prepared
+// read-only engine runtime, and writing only its ephemeral run workspace.
 func opengrepLaunch(projectDir string, runFiles opengrepRunFiles) (exec.LaunchPlan, error) {
-	var extraWriteRoots []string
-	if cacheDir := runFiles.cache(); cacheDir != "" && cacheDir != runFiles.dir() {
-		extraWriteRoots = []string{cacheDir}
+	var extraReadRoots []string
+	if runFiles.runtimeCacheDir != "" {
+		extraReadRoots = []string{runFiles.runtimeCacheDir}
 	}
-	confinement, err := scan.BundledScannerConfinement(projectDir, runFiles.workspace, extraWriteRoots...)
+	confinement, err := scan.BundledScannerConfinement(projectDir, runFiles.workspace, extraReadRoots...)
 	if err != nil {
 		return exec.LaunchPlan{}, err
 	}

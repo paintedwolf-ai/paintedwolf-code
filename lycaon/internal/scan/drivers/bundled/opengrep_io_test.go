@@ -126,8 +126,7 @@ func TestOpengrepTempCleanupRemovesFile(t *testing.T) {
 }
 
 func TestOpengrepSubprocessEnvKeepsCLIStateInRunFiles(t *testing.T) {
-	xdgCache := t.TempDir()
-	t.Setenv("XDG_CACHE_HOME", xdgCache)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(string(filepath.Separator), "custom", "cache"))
 	for _, key := range []string{"TMPDIR", "TMP", "TEMP"} {
 		t.Setenv(key, t.TempDir())
 	}
@@ -135,10 +134,6 @@ func TestOpengrepSubprocessEnvKeepsCLIStateInRunFiles(t *testing.T) {
 	testutil.FailErr(t, "newOpengrepRunFiles", err)
 	defer cleanup()
 
-	wantCache := filepath.Join(xdgCache, "paintedwolf")
-	if files.cache() != wantCache || files.cache() == files.dir() {
-		t.Fatalf("cache = %q (dir = %q), want persistent cache %q", files.cache(), files.dir(), wantCache)
-	}
 	got := make(map[string]string)
 	for _, assignment := range opengrepSubprocessEnv(files) {
 		key, value, ok := strings.Cut(assignment, "=")
@@ -147,7 +142,7 @@ func TestOpengrepSubprocessEnvKeepsCLIStateInRunFiles(t *testing.T) {
 		}
 	}
 	want := map[string]string{
-		"XDG_CACHE_HOME":             wantCache,
+		"XDG_CACHE_HOME":             files.dir(),
 		"TMPDIR":                     files.dir(),
 		"TMP":                        files.dir(),
 		"TEMP":                       files.dir(),
@@ -161,21 +156,22 @@ func TestOpengrepSubprocessEnvKeepsCLIStateInRunFiles(t *testing.T) {
 			t.Fatalf("%s = %q, want %q", key, got[key], value)
 		}
 	}
-	cleanup()
-	if _, err := os.Stat(wantCache); err != nil {
-		t.Fatalf("persistent cache removed by per-run cleanup: %v", err)
+
+	runtimeDir := filepath.Join(t.TempDir(), "prepared-runtime")
+	files.runtimeCacheDir = runtimeDir
+	got = make(map[string]string)
+	for _, assignment := range opengrepSubprocessEnv(files) {
+		key, value, ok := strings.Cut(assignment, "=")
+		if ok {
+			got[key] = value
+		}
 	}
-}
-
-func TestOpengrepCacheDirFallsBackWhenCacheRootInvalid(t *testing.T) {
-	cfgDir, err := configdir.UserConfigDir()
-	testutil.FailErr(t, "resolve user config dir", err)
-	t.Setenv("XDG_CACHE_HOME", cfgDir)
-	files, cleanup, err := newOpengrepRunFiles()
-	testutil.FailErr(t, "newOpengrepRunFiles", err)
-	defer cleanup()
-
-	if files.cache() != files.dir() {
-		t.Fatalf("control-plane XDG_CACHE_HOME resolved to %q, want fallback %q", files.cache(), files.dir())
+	if got["XDG_CACHE_HOME"] != runtimeDir {
+		t.Fatalf("XDG_CACHE_HOME = %q, want prepared runtime %q", got["XDG_CACHE_HOME"], runtimeDir)
+	}
+	for _, key := range []string{"TMPDIR", "TMP", "TEMP"} {
+		if got[key] != files.dir() {
+			t.Fatalf("%s = %q, want action workspace %q", key, got[key], files.dir())
+		}
 	}
 }

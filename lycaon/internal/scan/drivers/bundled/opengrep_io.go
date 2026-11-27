@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/exec"
@@ -12,7 +11,7 @@ import (
 
 type opengrepRunFiles struct {
 	workspace        confine.ActionWorkspace
-	cacheDir         string
+	runtimeCacheDir  string
 	jsonPath         string
 	logPath          string
 	settingsPath     string
@@ -22,8 +21,8 @@ type opengrepRunFiles struct {
 func (f opengrepRunFiles) dir() string { return f.workspace.Path() }
 
 func (f opengrepRunFiles) cache() string {
-	if f.cacheDir != "" {
-		return f.cacheDir
+	if f.runtimeCacheDir != "" {
+		return f.runtimeCacheDir
 	}
 	return f.dir()
 }
@@ -37,7 +36,6 @@ func newOpengrepRunFiles() (files opengrepRunFiles, cleanup func(), err error) {
 	dir := workspace.Path()
 	// The reaper removes the run directory if the host exits before this cleanup.
 	cleanup = exec.TrackScratchDir(dir)
-	files.cacheDir = resolveOpengrepCacheDir(dir)
 
 	files.jsonPath = filepath.Join(dir, "report.json")
 	f, err := os.OpenFile(files.jsonPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
@@ -53,32 +51,6 @@ func newOpengrepRunFiles() (files opengrepRunFiles, cleanup func(), err error) {
 	files.settingsPath = filepath.Join(dir, "settings.yml")
 	files.versionCachePath = filepath.Join(dir, "version-cache")
 	return files, cleanup, nil
-}
-
-// resolveOpengrepCacheDir returns a persistent, content-addressed cache root
-// for OpenGrep's onefile runtime extraction so scans reuse the unpacked engine
-// instead of re-extracting it into every ephemeral per-scan action workspace.
-// Falls back to the per-scan workspace when no valid writable cache root exists.
-func resolveOpengrepCacheDir(fallback string) string {
-	base := strings.TrimSpace(os.Getenv("XDG_CACHE_HOME"))
-	if base == "" || !filepath.IsAbs(base) {
-		userCache, err := os.UserCacheDir()
-		if err != nil {
-			return fallback
-		}
-		base = strings.TrimSpace(userCache)
-	}
-	if base == "" || !filepath.IsAbs(base) {
-		return fallback
-	}
-	candidate := filepath.Join(filepath.Clean(base), "paintedwolf")
-	if err := confine.ValidateGrantedWriteRoots([]string{candidate}); err != nil {
-		return fallback
-	}
-	if err := os.MkdirAll(candidate, 0o700); err != nil {
-		return fallback
-	}
-	return candidate
 }
 
 func openOpenGrepJSONOutput(path string) (*os.File, error) {
