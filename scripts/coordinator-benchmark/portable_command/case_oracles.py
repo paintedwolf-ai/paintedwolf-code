@@ -4,6 +4,7 @@ import subprocess
 import tarfile
 import zipfile
 from portable_command.contracts import bytes_value, fixture_path
+from portable_command.delivery_oracles import extract_deliveries, inspect_edit_and_bounds
 from portable_command.live import MODEL_FIELDS, SOURCE_FIELDS, freeze_plan, load_live_manifest, summarize_slots
 
 
@@ -182,11 +183,12 @@ def verify_paired_manifest_contract(case, identity):
     }
 
 
-def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, receipts, effects, audit, recovery, last_payload, final_hashes, baseline_hashes):
-    """Collect Q11, Q18, Q19, Q20, Q21, and Q22 facts from SQLite audit rows and repository/filesystem state."""
+def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, receipts, effects, audit, recovery, last_payload, final_hashes, baseline_hashes, sidecar=None):
+    """Collect Q05, Q06, Q11, Q18, Q19, Q20, Q21, and Q22 facts from SQLite audit rows, sidecar log, and repo state."""
     execs = audit['invocation_program_executions']
     pins = audit['invocation_program_revision_pins']
-    facts = {}
+    deliveries, delivery_facts = extract_deliveries(case, audit, baseline_hashes)
+    facts = dict(delivery_facts)
     if recovery and recovery.get('owner_code') == 'PROGRESS_MISSING':
         all_refused = bool(execs) and all(e.get('state') in {'refused', 'rejected'} and e.get('effect_certainty') in {None, '', 'none'} for e in execs)
         zero_ok = bool(all_refused and last_payload.get('completed_effects', 0) == 0 and last_payload.get('uncertain_effects', 0) == 0)
@@ -221,6 +223,7 @@ def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, rece
     if temp_pins:
         facts['temp_path_owned'] = True
         facts['same_physical_identity'] = len(set(temp_pins)) == 1
+    facts.update(inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar, baseline_hashes, final_hashes))
     facts.update(inspect_git_facts(case, project_dir, git_setup, effects))
     facts.update(verify_paired_manifest_contract(case, identity))
-    return facts, recovery
+    return facts, recovery, deliveries

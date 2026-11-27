@@ -104,19 +104,22 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
 
     outcome, host_stop, last_code = normalize_outcome(last_raw, last_prog, last_payload)
     _, last_details = _structured_rejection(last_raw, last_payload)
+    last_structured_ok = bool(turn_records and turn_records[-1].get('envelope_mode') == 'structured_tool' and outcome == 'completed' and host_stop is None)
     status_code = last_payload.get('status') if isinstance(last_payload.get('status'), int) else (
         last_prog['status_code'] if last_prog and isinstance(last_prog.get('status_code'), int) else (
             last_details.get('status') if isinstance(last_details.get('status'), int) else (
-                2 if (outcome == 'rejected' and last_code == 'COMMAND_SYNTAX_INVALID'
-                      and last_details.get('diagnostic_pre_evaluation') is True
-                      and last_details.get('command_execution') == 'not_started'
-                      and (last_raw.get('invocation') or {}).get('invoked') is False) else None
+                0 if last_structured_ok else (
+                    2 if (outcome == 'rejected' and last_code == 'COMMAND_SYNTAX_INVALID'
+                          and last_details.get('diagnostic_pre_evaluation') is True
+                          and last_details.get('command_execution') == 'not_started'
+                          and (last_raw.get('invocation') or {}).get('invoked') is False) else None
+                )
             )
         )
     )
     if status_code is None:
         gaps.append('missing_program_status_code')
-    complete = bool(outcome == 'completed' and host_stop is None and last_prog is not None and last_prog.get('state') == 'completed')
+    complete = bool(outcome == 'completed' and host_stop is None and ((last_prog is not None and last_prog.get('state') == 'completed') or last_structured_ok))
     receipts, effects, wrappers = _receipt_rows(audit, progress_receipts, draft_bindings=draft_bindings)
     prog_ids = {p['id'] for p in audit['invocation_programs']}
     wrappers_valid = all(
@@ -261,7 +264,7 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
             and progress[0]['detail_ref'] == last_details.get('program_progress_detail_ref')
             and progress[0]['execution_id'] != last_details.get('execution_id')
         )
-    extra_facts, recovery = extra_case_facts(case, session_id=session_id, identity=identity, project_dir=project_dir, git_setup=git_setup, receipts=receipts, effects=effects, audit=audit, recovery=recovery, last_payload=last_payload, final_hashes=final_hashes, baseline_hashes=baseline_hashes)
+    extra_facts, recovery, deliveries = extra_case_facts(case, session_id=session_id, identity=identity, project_dir=project_dir, git_setup=git_setup, receipts=receipts, effects=effects, audit=audit, recovery=recovery, last_payload=last_payload, final_hashes=final_hashes, baseline_hashes=baseline_hashes, sidecar=sidecar)
     facts.update(extra_facts)
     facts['structural_wrappers_valid'] = wrappers_valid
     for req_fact in case.get('required_evidence') or ():
@@ -275,7 +278,7 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         'version': 1, 'case_id': case['id'], 'capture_kind': 'native-runtime', 'identity': identity,
         'program': {'stdout': last_payload.get('stdout', ''), 'stderr': program_stderr,
                     'status': status_code, 'host_stop': host_stop, 'complete': complete},
-        'receipts': receipts, 'effects': effects, 'facts': facts, 'deliveries': [], 'obligations': [],
+        'receipts': receipts, 'effects': effects, 'facts': facts, 'deliveries': deliveries, 'obligations': [],
         'closeout': 'complete' if outcome == 'completed' else 'blocked', 'forbidden_replay': forbidden_replay,
         'recovery': recovery, 'invocations': cmd_invocations,
     }

@@ -39,7 +39,8 @@ def query_db_audit(db_path, session_id, prelude_call_ids=()):
         session_progress = _rows(db, 'SELECT * FROM session_progress WHERE session_id=?', (session_id,)) if _table_exists(db, 'session_progress') else []
         o_ids = [o['id'] for o in outputs]
         o_ph = ','.join('?' for _ in o_ids) or "''"
-        deliveries = _rows(db, f'SELECT id,output_id,start_byte,end_byte,source_owner_ref FROM invocation_program_deliveries WHERE output_id IN ({o_ph})', o_ids) if o_ids and _table_exists(db, 'invocation_program_deliveries') else []
+        deliveries = _rows(db, f'SELECT * FROM invocation_program_deliveries WHERE output_id IN ({o_ph}) ORDER BY rowid', o_ids) if o_ids and _table_exists(db, 'invocation_program_deliveries') else []
+        pin_segments = _rows(db, f'SELECT program_id,execution_id,first_ordinal,pin_count,body_sha256 FROM invocation_program_revision_pin_segments WHERE program_id IN ({p_ph}) ORDER BY execution_id, first_ordinal', p_ids) if p_ids and _table_exists(db, 'invocation_program_revision_pin_segments') else []
         windows = [w for w in _rows(db, 'SELECT id,session_id,tool_call_id,state FROM source_command_windows WHERE session_id=?', (session_id,))
                    if w['tool_call_id'] not in prelude_set]
         messages = [m for m in _rows(db, 'SELECT id,ord,role,tool_result_call_id,tool_result_json FROM messages WHERE session_id=? AND tool_result_call_id IS NOT NULL AND tool_result_call_id != "" ORDER BY ord', (session_id,))
@@ -50,6 +51,7 @@ def query_db_audit(db_path, session_id, prelude_call_ids=()):
         'invocation_program_outputs': outputs, 'invocation_program_publications': publications,
         'invocation_program_progress': program_progress, 'invocation_program_sources': program_sources,
         'session_progress': session_progress, 'invocation_program_deliveries': deliveries,
+        'invocation_program_revision_pin_segments': pin_segments,
         'source_command_windows': windows, 'tool_result_messages': messages,
     }
 
