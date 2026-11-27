@@ -40,8 +40,7 @@ type ExternalStages struct {
 
 var _ commandprogram.ExternalLauncher = ExternalStages{}
 
-// Launch runs argv (after an optional "external --") with the request's
-// streams and settles with the process's actual status.
+// Launch runs argv (after optional "external --") and settles with its status.
 func (l ExternalStages) Launch(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	fields := externalFields(request.Argv)
 	argv := fields.Values()
