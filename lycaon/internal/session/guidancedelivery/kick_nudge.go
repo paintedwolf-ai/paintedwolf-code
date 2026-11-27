@@ -190,8 +190,8 @@ func (m *Service) renderContext(ctx context.Context, sessionID string) (kick.Coo
 	if sessionID == "" {
 		return rc, nil
 	}
-	sess, err := m.sessionStore.Get(ctx, sessionID)
-	if err != nil || sess == nil {
+	sess, _ := m.sessionStore.Get(ctx, sessionID)
+	if sess == nil {
 		return rc, nil
 	}
 	state := m.state.ForSession(ctx, sess)
