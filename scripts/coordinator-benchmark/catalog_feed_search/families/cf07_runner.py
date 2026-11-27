@@ -59,6 +59,9 @@ def run_cf07_sidecar_suite(
     families: tuple[str, ...] = ("G01", "G02", "G03", "G04"),
     counts: dict[str, int] | None = None,
     rg_bin: str = "rg",
+    d1_commit: str = "3bb1464d22dd0a38a149d37610810e7a0324e8cf",
+    d1_tree: str = "",
+    config_root: Path | None = None,
 ) -> dict[str, object]:
     """Execute CF07 sidecar families against pinned D1 binary and write retained evidence."""
     out_dir = Path(out_dir).resolve()
@@ -67,7 +70,8 @@ def run_cf07_sidecar_suite(
     if counts:
         effective_counts.update(counts)
 
-    boundary_yaml = repo_root / "lycaon/config/runtime/source/directory-priority.yaml"
+    cfg_root = Path(config_root).resolve() if config_root is not None else (Path(repo_root).resolve() / "lycaon")
+    boundary_yaml = cfg_root / "config/runtime/source/directory-priority.yaml"
     boundary_cfg = BoundaryConfig.from_yaml_file(boundary_yaml) if boundary_yaml.is_file() else None
 
     family_reports: dict[str, dict[str, object]] = {}
@@ -82,6 +86,9 @@ def run_cf07_sidecar_suite(
                 binary_path=binary_path,
                 repo_root=repo_root,
                 work_dir=Path(sidecar_tmp),
+                d1_commit=d1_commit,
+                d1_tree=d1_tree,
+                config_root=cfg_root,
                 rg_bin=rg_bin,
             ) as sidecar:
                 assert sidecar.provenance is not None
@@ -176,6 +183,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--g03-count", type=int, default=DEFAULT_COUNTS["G03"])
     parser.add_argument("--g04-count", type=int, default=DEFAULT_COUNTS["G04"])
     parser.add_argument("--rg-bin", default="rg")
+    parser.add_argument("--d1-commit", default="3bb1464d22dd0a38a149d37610810e7a0324e8cf")
+    parser.add_argument("--d1-tree", default="")
+    parser.add_argument("--config-root", default="")
     args = parser.parse_args(argv)
 
     fams = tuple(f.strip().upper() for f in args.families.split(",") if f.strip())
@@ -192,6 +202,9 @@ def main(argv: list[str] | None = None) -> int:
             "G04": args.g04_count,
         },
         rg_bin=args.rg_bin,
+        d1_commit=args.d1_commit,
+        d1_tree=args.d1_tree,
+        config_root=Path(args.config_root) if args.config_root else None,
     )
     print(json.dumps(summary, indent=2))
     return 0

@@ -88,7 +88,7 @@ class _MovingTreeWriter:
             target.write_text(content, encoding="utf-8")
             self.writes.append({"step": step, "op": "write", "path": rel, "ts_ns": time.monotonic_ns()})
             step += 1
-            self._stop.wait(0.015)
+            self._stop.wait(0.08)
 
 
 def evaluate_g01_observation(

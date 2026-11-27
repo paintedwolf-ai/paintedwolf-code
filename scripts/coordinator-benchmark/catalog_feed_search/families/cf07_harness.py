@@ -220,6 +220,7 @@ class D1SidecarProcess:
         *,
         d1_commit: str = "3bb1464d22dd0a38a149d37610810e7a0324e8cf",
         d1_tree: str = "",
+        config_root: Path | None = None,
         rg_bin: str = "rg",
     ) -> None:
         self.binary_path = Path(binary_path).resolve()
@@ -227,6 +228,7 @@ class D1SidecarProcess:
         self.work_dir = Path(work_dir).resolve()
         self.d1_commit = d1_commit
         self.d1_tree = d1_tree
+        self.config_root = Path(config_root).resolve() if config_root is not None else (self.repo_root / "lycaon")
         self.rg_bin = rg_bin
         self.token = secrets.token_hex(24)
         self.port = _probe_free_port()
@@ -256,7 +258,7 @@ class D1SidecarProcess:
         env.update(
             {
                 "LYCAON_CONFIG_DIR": str(self.config_dir),
-                "LYCAON_CONFIG_ROOT": str(self.repo_root / "lycaon"),
+                "LYCAON_CONFIG_ROOT": str(self.config_root),
                 "LYCAON_ADDR": f"127.0.0.1:{self.port}",
                 "LYCAON_API_TOKEN": self.token,
                 "LYCAON_DEV": "1",
