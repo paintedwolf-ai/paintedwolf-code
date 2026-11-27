@@ -6,18 +6,27 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func writeFakeOnefileBinary(t *testing.T, dir, name, version, counterPath string) string {
+func installPrepCounter(t *testing.T) *atomic.Int32 {
+	t.Helper()
+	var count atomic.Int32
+	prev := runtimePrepHook
+	runtimePrepHook = func(string) { count.Add(1) }
+	t.Cleanup(func() { runtimePrepHook = prev })
+	return &count
+}
+
+func writeFakeOnefileBinary(t *testing.T, dir, name, version string) string {
 	t.Helper()
 	script := fmt.Sprintf(`#!/bin/sh
 set -e
-printf 'x\n' >> %q
 target="$XDG_CACHE_HOME/opengrep/paintedwolf-%s"
 mkdir -p "$target/semgrep/bin"
 printf 'engine-%s' > "$target/semgrep/bin/opengrep-core"
@@ -25,37 +34,34 @@ chmod 755 "$target/semgrep/bin/opengrep-core"
 printf 'schema-%s' > "$target/schema.yaml"
 chmod 644 "$target/schema.yaml"
 printf '%s\n'
-`, counterPath, version, version, version, version)
+`, version, version, version, version)
 	bin := filepath.Join(dir, name)
 	testutil.FailErr(t, "write fake onefile binary", os.WriteFile(bin, []byte(script), 0o700))
 	return bin
 }
 
-func countLines(t *testing.T, path string) int {
+func writeFakePlainBinary(t *testing.T, dir, name, version string) string {
 	t.Helper()
-	raw, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return 0
-	}
-	testutil.FailErr(t, "read invocation counter", err)
-	trimmed := strings.TrimSpace(string(raw))
-	if trimmed == "" {
-		return 0
-	}
-	return len(strings.Split(trimmed, "\n"))
+	script := fmt.Sprintf("#!/bin/sh\nprintf '%s\\n'\n", version)
+	bin := filepath.Join(dir, name)
+	testutil.FailErr(t, "write fake plain binary", os.WriteFile(bin, []byte(script), 0o700))
+	return bin
 }
 
 func TestPrepareOpengrepRuntimeColdWarmAndConcurrent(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell onefile fixture requires macOS or Linux")
 	}
+	admissiontest.Enable(t)
+	invocations := installPrepCounter(t)
 	root := t.TempDir()
 	store := filepath.Join(root, "runtime-store")
-	counter := filepath.Join(root, "invocations")
-	bin := writeFakeOnefileBinary(t, root, "opengrep", "1.30.0", counter)
+	bin := writeFakeOnefileBinary(t, root, "opengrep", "1.30.0")
+	t.Cleanup(func() { _ = removeReadOnlyTree(store) })
 
 	const workers = 6
 	results := make([]string, workers)
+	releases := make([]func(), workers)
 	errs := make([]error, workers)
 	var wg sync.WaitGroup
 	start := make(chan struct{})
@@ -64,7 +70,7 @@ func TestPrepareOpengrepRuntimeColdWarmAndConcurrent(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			<-start
-			results[idx], errs[idx] = prepareOpengrepRuntimeInStore(t.Context(), bin, store)
+			results[idx], releases[idx], errs[idx] = prepareOpengrepRuntimeInStore(t.Context(), bin, "", store)
 		}(i)
 	}
 	close(start)
@@ -72,21 +78,25 @@ func TestPrepareOpengrepRuntimeColdWarmAndConcurrent(t *testing.T) {
 
 	for i := range workers {
 		testutil.FailErr(t, fmt.Sprintf("concurrent prepare %d", i), errs[i])
+		if releases[i] != nil {
+			defer releases[i]()
+		}
 		if results[i] == "" || results[i] != results[0] {
 			t.Fatalf("worker %d got %q, want %q", i, results[i], results[0])
 		}
 	}
-	if got := countLines(t, counter); got != 1 {
+	if got := invocations.Load(); got != 1 {
 		t.Fatalf("cold concurrent preparation invoked binary %d times, want 1", got)
 	}
 
 	// Warm reuse must hit the verified read-only store without re-invoking bin.
-	warm, err := prepareOpengrepRuntimeInStore(t.Context(), bin, store)
+	warm, releaseWarm, err := prepareOpengrepRuntimeInStore(t.Context(), bin, "", store)
 	testutil.FailErr(t, "warm prepare", err)
+	defer releaseWarm()
 	if warm != results[0] {
 		t.Fatalf("warm runtime = %q, want %q", warm, results[0])
 	}
-	if got := countLines(t, counter); got != 1 {
+	if got := invocations.Load(); got != 1 {
 		t.Fatalf("warm reuse invoked binary %d times, want 1", got)
 	}
 
@@ -106,38 +116,41 @@ func TestPrepareOpengrepRuntimeColdWarmAndConcurrent(t *testing.T) {
 		return nil
 	})
 	testutil.FailErr(t, "walk sealed runtime", err)
-	t.Cleanup(func() { _ = removeReadOnlyTree(store) })
 }
 
 func TestPrepareOpengrepRuntimeDetectsTamperingAndRebuilds(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell onefile fixture requires macOS or Linux")
 	}
+	admissiontest.Enable(t)
+	invocations := installPrepCounter(t)
 	root := t.TempDir()
 	store := filepath.Join(root, "runtime-store")
-	counter := filepath.Join(root, "invocations")
-	bin := writeFakeOnefileBinary(t, root, "opengrep", "1.30.0", counter)
+	bin := writeFakeOnefileBinary(t, root, "opengrep", "1.30.0")
 	t.Cleanup(func() { _ = removeReadOnlyTree(store) })
 
-	cacheDir, err := prepareOpengrepRuntimeInStore(t.Context(), bin, store)
+	cacheDir, release1, err := prepareOpengrepRuntimeInStore(t.Context(), bin, "", store)
 	testutil.FailErr(t, "initial prepare", err)
-	if got := countLines(t, counter); got != 1 {
+	release1()
+	if got := invocations.Load(); got != 1 {
 		t.Fatalf("initial invocations = %d, want 1", got)
 	}
 
-	// Tamper with a cached executable byte and re-seal it; digest check must
-	// reject reuse and rebuild cleanly from the trusted binary.
+	// Tamper with a cached executable byte and re-seal it; simulating a fresh
+	// process (full SHA-256 verification) must reject reuse and rebuild cleanly.
 	corePath := filepath.Join(cacheDir, "opengrep", "paintedwolf-1.30.0", "semgrep", "bin", "opengrep-core")
 	testutil.FailErr(t, "unseal core for tamper test", os.Chmod(corePath, 0o600))
 	testutil.FailErr(t, "tamper cached engine", os.WriteFile(corePath, []byte("tampered"), 0o600))
 	testutil.FailErr(t, "reseal tampered engine", os.Chmod(corePath, 0o555))
+	forgetVerifiedInProcess(filepath.Dir(cacheDir))
 
-	rebuilt, err := prepareOpengrepRuntimeInStore(t.Context(), bin, store)
+	rebuilt, release2, err := prepareOpengrepRuntimeInStore(t.Context(), bin, "", store)
 	testutil.FailErr(t, "rebuild after tamper", err)
+	release2()
 	if rebuilt != cacheDir {
 		t.Fatalf("rebuilt cacheDir = %q, want %q", rebuilt, cacheDir)
 	}
-	if got := countLines(t, counter); got != 2 {
+	if got := invocations.Load(); got != 2 {
 		t.Fatalf("invocations after tamper = %d, want 2", got)
 	}
 	restored, err := os.ReadFile(corePath)
@@ -146,16 +159,18 @@ func TestPrepareOpengrepRuntimeDetectsTamperingAndRebuilds(t *testing.T) {
 		t.Fatalf("restored engine bytes = %q, want %q", restored, "engine-1.30.0")
 	}
 
-	// An unexpected extra file inside the cache must also force a clean rebuild.
+	// An unexpected extra file inside the cache must also force a clean rebuild
+	// even on the fast in-process metadata path.
 	unpackedDir := filepath.Join(cacheDir, "opengrep", "paintedwolf-1.30.0")
 	testutil.FailErr(t, "unseal unpacked dir", os.Chmod(unpackedDir, 0o700))
 	extraPath := filepath.Join(unpackedDir, "injected.so")
 	testutil.FailErr(t, "inject extra file", os.WriteFile(extraPath, []byte("evil"), 0o444))
 	testutil.FailErr(t, "reseal unpacked dir", os.Chmod(unpackedDir, 0o555))
 
-	_, err = prepareOpengrepRuntimeInStore(t.Context(), bin, store)
+	_, release3, err := prepareOpengrepRuntimeInStore(t.Context(), bin, "", store)
 	testutil.FailErr(t, "rebuild after injection", err)
-	if got := countLines(t, counter); got != 3 {
+	release3()
+	if got := invocations.Load(); got != 3 {
 		t.Fatalf("invocations after injection = %d, want 3", got)
 	}
 	if _, err := os.Stat(extraPath); !os.IsNotExist(err) {
@@ -163,32 +178,72 @@ func TestPrepareOpengrepRuntimeDetectsTamperingAndRebuilds(t *testing.T) {
 	}
 }
 
-func TestPrepareOpengrepRuntimePrunesStaleVersionDirs(t *testing.T) {
+func TestPrepareOpengrepRuntimeLeaseProtectsOverlappingVersion(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell onefile fixture requires macOS or Linux")
 	}
+	admissiontest.Enable(t)
 	root := t.TempDir()
 	store := filepath.Join(root, "runtime-store")
-	counter := filepath.Join(root, "invocations")
-	binV1 := writeFakeOnefileBinary(t, root, "opengrep-v1", "1.30.0", counter)
-	binV2 := writeFakeOnefileBinary(t, root, "opengrep-v2", "1.31.0", counter)
+	binV1 := writeFakeOnefileBinary(t, root, "opengrep-v1", "1.30.0")
+	binV2 := writeFakeOnefileBinary(t, root, "opengrep-v2", "1.31.0")
+	binV3 := writeFakeOnefileBinary(t, root, "opengrep-v3", "1.32.0")
 	t.Cleanup(func() { _ = removeReadOnlyTree(store) })
 
-	cacheV1, err := prepareOpengrepRuntimeInStore(t.Context(), binV1, store)
+	cacheV1, releaseV1, err := prepareOpengrepRuntimeInStore(t.Context(), binV1, "", store)
 	testutil.FailErr(t, "prepare v1", err)
 	dirV1 := filepath.Dir(cacheV1)
 
-	cacheV2, err := prepareOpengrepRuntimeInStore(t.Context(), binV2, store)
-	testutil.FailErr(t, "prepare v2", err)
+	// While v1's scan lease is still held, preparing v2 must NOT prune v1.
+	cacheV2, releaseV2, err := prepareOpengrepRuntimeInStore(t.Context(), binV2, "", store)
+	testutil.FailErr(t, "prepare v2 while v1 leased", err)
 	dirV2 := filepath.Dir(cacheV2)
-
-	if dirV1 == dirV2 {
-		t.Fatalf("distinct binaries shared runtime dir %q", dirV1)
-	}
-	if _, err := os.Stat(dirV1); !os.IsNotExist(err) {
-		t.Fatalf("stale runtime dir %q was not pruned after version change: err=%v", dirV1, err)
+	if _, err := os.Stat(dirV1); err != nil {
+		t.Fatalf("actively leased runtime %q was pruned prematurely: %v", dirV1, err)
 	}
 	if _, err := os.Stat(dirV2); err != nil {
 		t.Fatalf("new runtime dir %q missing: %v", dirV2, err)
+	}
+
+	// Release v1 and v2 leases; preparing v3 must now prune both unleased versions.
+	releaseV1()
+	releaseV2()
+	cacheV3, releaseV3, err := prepareOpengrepRuntimeInStore(t.Context(), binV3, "", store)
+	testutil.FailErr(t, "prepare v3 after leases released", err)
+	defer releaseV3()
+	dirV3 := filepath.Dir(cacheV3)
+
+	if _, err := os.Stat(dirV1); !os.IsNotExist(err) {
+		t.Fatalf("unleased stale runtime %q was not pruned: err=%v", dirV1, err)
+	}
+	if _, err := os.Stat(dirV2); !os.IsNotExist(err) {
+		t.Fatalf("unleased stale runtime %q was not pruned: err=%v", dirV2, err)
+	}
+	if _, err := os.Stat(dirV3); err != nil {
+		t.Fatalf("active runtime dir %q missing: %v", dirV3, err)
+	}
+}
+
+func TestPrepareOpengrepRuntimePlainBinarySkipsRepeatedProbes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fixture requires macOS or Linux")
+	}
+	admissiontest.Enable(t)
+	invocations := installPrepCounter(t)
+	root := t.TempDir()
+	store := filepath.Join(root, "runtime-store")
+	bin := writeFakePlainBinary(t, root, "opengrep-plain", "1.30.0")
+	t.Cleanup(func() { _ = removeReadOnlyTree(store) })
+
+	for i := range 3 {
+		cacheDir, release, err := prepareOpengrepRuntimeInStore(t.Context(), bin, "", store)
+		testutil.FailErr(t, fmt.Sprintf("prepare plain binary %d", i), err)
+		release()
+		if cacheDir != "" {
+			t.Fatalf("call %d returned runtime cache %q for plain binary, want empty", i, cacheDir)
+		}
+	}
+	if got := invocations.Load(); got != 1 {
+		t.Fatalf("plain binary probed %d times across 3 calls, want 1", got)
 	}
 }

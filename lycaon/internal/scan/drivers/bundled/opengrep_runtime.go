@@ -18,9 +18,11 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/filelock"
+	"github.com/lycaon/lycaon/internal/scan"
 )
 
 const (
@@ -28,91 +30,145 @@ const (
 	opengrepRuntimeDirPrefix     = "v1-"
 	opengrepRuntimeStagePrefix   = ".stage-"
 	opengrepRuntimeLockName      = ".prepare.lock"
+	opengrepRuntimeLeaseSuffix   = ".lease"
 	opengrepRuntimeManifestName  = "manifest.json"
 	opengrepRuntimeCacheSubdir   = "xdg-cache"
 	opengrepRuntimePrepTimeout   = 60 * time.Second
 )
 
-var opengrepRuntimeMu sync.RWMutex
+var (
+	opengrepRuntimeMu  sync.RWMutex
+	verifiedRuntimesMu sync.RWMutex
+	verifiedRuntimes   = map[string]verifiedRuntimeRecord{}
+	// runtimePrepHook allows tests to observe real confined preparation calls
+	// without weakening confinement.
+	runtimePrepHook func(bin string)
+)
+
+type verifiedRuntimeRecord struct {
+	binarySHA256 string
+	manifestSize int64
+	manifestMod  int64
+}
 
 type opengrepRuntimeManifest struct {
 	Version      int                        `json:"version"`
 	BinarySHA256 string                     `json:"binary_sha256"`
-	Files        []opengrepRuntimeFileEntry `json:"files"`
+	NoExtract    bool                       `json:"no_extract,omitempty"`
+	Files        []opengrepRuntimeFileEntry `json:"files,omitempty"`
 }
 
 type opengrepRuntimeFileEntry struct {
 	RelPath    string `json:"rel_path"`
 	Size       int64  `json:"size"`
+	ModTimeNS  int64  `json:"mod_time_ns"`
 	Executable bool   `json:"executable,omitempty"`
 	SHA256     string `json:"sha256"`
 }
 
-// prepareOpengrepRuntime unpacks and seals the verified bundled OpenGrep
-// onefile runtime into the host-owned, read-only runtime store under the user
-// config tree. Scan workers receive read-only access to the prepared runtime
-// while keeping all mutable scan output inside their ephemeral ActionWorkspace.
-func prepareOpengrepRuntime(ctx context.Context, bin string) (string, error) {
+func noopRelease() {}
+
+// prepareOpengrepRuntime unpacks (under confinement, with no repository input)
+// and seals the verified bundled OpenGrep onefile runtime into the host-owned,
+// read-only runtime store under the user config tree. It returns a read-only
+// XDG_CACHE_HOME path (empty for plain executables that extract nothing) and a
+// lease release function that must be called after the scan finishes so stale
+// version pruning never removes a runtime while an overlapping scan uses it.
+func prepareOpengrepRuntime(ctx context.Context, bin, verifiedSHA256 string) (string, func(), error) {
 	cfgDir, err := configdir.UserConfigDir()
 	if err != nil {
-		return "", fmt.Errorf("resolve runtime store root: %w", err)
+		return "", nil, fmt.Errorf("resolve runtime store root: %w", err)
 	}
-	return prepareOpengrepRuntimeInStore(ctx, bin, enginepaths.OpengrepRuntimeRootUnder(cfgDir))
+	return prepareOpengrepRuntimeInStore(ctx, bin, verifiedSHA256, enginepaths.OpengrepRuntimeRootUnder(cfgDir))
 }
 
-func prepareOpengrepRuntimeInStore(ctx context.Context, bin, storeRoot string) (string, error) {
-	binarySHA256, err := sha256RegularFile(bin)
-	if err != nil {
-		return "", fmt.Errorf("hash bundled binary: %w", err)
+func prepareOpengrepRuntimeInStore(ctx context.Context, bin, verifiedSHA256, storeRoot string) (string, func(), error) {
+	binarySHA256 := strings.TrimSpace(verifiedSHA256)
+	if binarySHA256 == "" {
+		var err error
+		binarySHA256, err = sha256RegularFile(bin)
+		if err != nil {
+			return "", nil, fmt.Errorf("hash bundled binary: %w", err)
+		}
 	}
 	if err := os.MkdirAll(storeRoot, 0o700); err != nil {
-		return "", fmt.Errorf("create runtime store: %w", err)
+		return "", nil, fmt.Errorf("create runtime store: %w", err)
 	}
-	targetDir := filepath.Join(storeRoot, opengrepRuntimeDirPrefix+binarySHA256)
+	targetBase := opengrepRuntimeDirPrefix + binarySHA256
+	targetDir := filepath.Join(storeRoot, targetBase)
 	lockPath := filepath.Join(storeRoot, opengrepRuntimeLockName)
+	leasePath := filepath.Join(storeRoot, targetBase+opengrepRuntimeLeaseSuffix)
 
-	if cacheDir, ok := tryReusePreparedRuntime(ctx, targetDir, binarySHA256, lockPath); ok {
-		return cacheDir, nil
+	if cacheDir, release, ok := tryReusePreparedRuntime(ctx, targetDir, binarySHA256, lockPath, leasePath); ok {
+		return cacheDir, release, nil
 	}
 
 	opengrepRuntimeMu.Lock()
 	defer opengrepRuntimeMu.Unlock()
 
-	release, err := acquireRuntimeLock(ctx, lockPath, true)
+	releasePrep, err := acquireRuntimeLock(ctx, lockPath, true)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	defer release()
+	defer releasePrep()
 
-	if verifyPreparedRuntime(targetDir, binarySHA256) == nil {
-		return filepath.Join(targetDir, opengrepRuntimeCacheSubdir), nil
+	if manifest, err := verifyPreparedRuntime(targetDir, binarySHA256, false); err == nil {
+		return leaseVerifiedRuntime(ctx, targetDir, binarySHA256, leasePath, manifest)
 	}
-	return buildAndPublishRuntime(ctx, bin, binarySHA256, storeRoot, targetDir)
+	return buildAndPublishRuntime(ctx, bin, binarySHA256, storeRoot, targetDir, leasePath)
 }
 
-func tryReusePreparedRuntime(ctx context.Context, targetDir, binarySHA256, lockPath string) (string, bool) {
+func tryReusePreparedRuntime(ctx context.Context, targetDir, binarySHA256, lockPath, leasePath string) (string, func(), bool) {
 	opengrepRuntimeMu.RLock()
 	defer opengrepRuntimeMu.RUnlock()
 
-	release, err := acquireRuntimeLock(ctx, lockPath, false)
+	releasePrep, err := acquireRuntimeLock(ctx, lockPath, false)
 	if err != nil {
-		return "", false
+		return "", nil, false
 	}
-	defer release()
+	defer releasePrep()
 
-	if verifyPreparedRuntime(targetDir, binarySHA256) != nil {
-		return "", false
+	fastAllowed := isVerifiedInProcess(targetDir, binarySHA256)
+	manifest, err := verifyPreparedRuntime(targetDir, binarySHA256, fastAllowed)
+	if err != nil {
+		forgetVerifiedInProcess(targetDir)
+		return "", nil, false
 	}
-	return filepath.Join(targetDir, opengrepRuntimeCacheSubdir), true
+	cacheDir, releaseLease, err := leaseVerifiedRuntime(ctx, targetDir, binarySHA256, leasePath, manifest)
+	if err != nil {
+		return "", nil, false
+	}
+	return cacheDir, releaseLease, true
 }
 
-func buildAndPublishRuntime(ctx context.Context, bin, binarySHA256, storeRoot, targetDir string) (string, error) {
-	if err := removeReadOnlyTree(targetDir); err != nil {
-		return "", fmt.Errorf("clear stale runtime: %w", err)
+func leaseVerifiedRuntime(ctx context.Context, targetDir, binarySHA256, leasePath string, manifest opengrepRuntimeManifest) (string, func(), error) {
+	recordVerifiedInProcess(targetDir, binarySHA256)
+	if manifest.NoExtract {
+		return "", noopRelease, nil
 	}
-	stagingDir, err := os.MkdirTemp(storeRoot, opengrepRuntimeStagePrefix+binarySHA256[:12]+"-")
+	releaseLease, err := acquireRuntimeLock(ctx, leasePath, false)
 	if err != nil {
-		return "", fmt.Errorf("create runtime staging dir: %w", err)
+		return "", nil, fmt.Errorf("acquire runtime lease: %w", err)
+	}
+	return filepath.Join(targetDir, opengrepRuntimeCacheSubdir), releaseLease, nil
+}
+
+func buildAndPublishRuntime(ctx context.Context, bin, binarySHA256, storeRoot, targetDir, leasePath string) (string, func(), error) {
+	// Wait for exclusive lease on targetDir before replacing a damaged entry.
+	releaseTargetLease, err := acquireRuntimeLock(ctx, leasePath, true)
+	if err != nil {
+		return "", nil, fmt.Errorf("lock runtime replacement: %w", err)
+	}
+	if err := removeReadOnlyTree(targetDir); err != nil {
+		releaseTargetLease()
+		return "", nil, fmt.Errorf("clear stale runtime: %w", err)
+	}
+	forgetVerifiedInProcess(targetDir)
+
+	stagingDir, err := os.MkdirTemp(storeRoot, opengrepRuntimeStagePrefix+binarySHA256[:min(12, len(binarySHA256))]+"-")
+	if err != nil {
+		releaseTargetLease()
+		return "", nil, fmt.Errorf("create runtime staging dir: %w", err)
 	}
 	published := false
 	defer func() {
@@ -121,85 +177,121 @@ func buildAndPublishRuntime(ctx context.Context, bin, binarySHA256, storeRoot, t
 		}
 	}()
 
-	stagingCache := filepath.Join(stagingDir, opengrepRuntimeCacheSubdir)
-	stagingTmp := filepath.Join(stagingDir, "tmp")
-	if err := os.MkdirAll(stagingCache, 0o700); err != nil {
-		return "", fmt.Errorf("create runtime cache dir: %w", err)
+	// Run --version inside a confined ActionWorkspace (no egress, no project
+	// access, only the ephemeral prep workspace writable) so qualification and
+	// scanning both retain applied command confinement.
+	unpackedDir, cleanupPrep, err := runConfinedRuntimePreparation(ctx, bin)
+	if err != nil {
+		releaseTargetLease()
+		return "", nil, err
 	}
-	if err := os.MkdirAll(stagingTmp, 0o700); err != nil {
-		return "", fmt.Errorf("create runtime temp dir: %w", err)
-	}
+	defer cleanupPrep()
 
-	// Trusted host preparation: invoke the manifest-verified binary with
-	// --version and no repository input so Nuitka unpacks its static runtime.
-	if err := runRuntimePreparation(ctx, bin, stagingDir, stagingCache, stagingTmp); err != nil {
-		return "", err
-	}
-	if err := os.RemoveAll(stagingTmp); err != nil {
-		return "", fmt.Errorf("remove runtime staging temp: %w", err)
+	stagingCache := filepath.Join(stagingDir, opengrepRuntimeCacheSubdir)
+	if err := moveOrCopyDir(unpackedDir, stagingCache); err != nil {
+		releaseTargetLease()
+		return "", nil, fmt.Errorf("stage prepared runtime: %w", err)
 	}
 
 	entries, err := collectRuntimeEntries(stagingCache)
 	if err != nil {
-		return "", fmt.Errorf("inventory prepared runtime: %w", err)
-	}
-	if len(entries) == 0 {
-		// Non-onefile binary (e.g. a plain executable or test fixture) unpacked
-		// nothing into XDG_CACHE_HOME; no separate read-only runtime is needed.
-		return "", nil
+		releaseTargetLease()
+		return "", nil, fmt.Errorf("inventory prepared runtime: %w", err)
 	}
 
 	manifest := opengrepRuntimeManifest{
 		Version:      opengrepRuntimeFormatVersion,
 		BinarySHA256: binarySHA256,
+		NoExtract:    len(entries) == 0,
 		Files:        entries,
+	}
+	if err := sealTreeReadOnly(stagingCache); err != nil {
+		releaseTargetLease()
+		return "", nil, fmt.Errorf("seal runtime read-only: %w", err)
 	}
 	rawManifest, err := json.Marshal(manifest)
 	if err != nil {
-		return "", fmt.Errorf("encode runtime manifest: %w", err)
+		releaseTargetLease()
+		return "", nil, fmt.Errorf("encode runtime manifest: %w", err)
 	}
 	manifestPath := filepath.Join(stagingDir, opengrepRuntimeManifestName)
 	if err := os.WriteFile(manifestPath, rawManifest, 0o444); err != nil {
-		return "", fmt.Errorf("write runtime manifest: %w", err)
-	}
-	if err := sealTreeReadOnly(stagingCache); err != nil {
-		return "", fmt.Errorf("seal runtime read-only: %w", err)
+		releaseTargetLease()
+		return "", nil, fmt.Errorf("write runtime manifest: %w", err)
 	}
 	if err := os.Chmod(manifestPath, 0o444); err != nil {
-		return "", fmt.Errorf("seal runtime manifest: %w", err)
+		releaseTargetLease()
+		return "", nil, fmt.Errorf("seal runtime manifest: %w", err)
 	}
 	if err := os.Rename(stagingDir, targetDir); err != nil {
-		return "", fmt.Errorf("publish prepared runtime: %w", err)
+		releaseTargetLease()
+		return "", nil, fmt.Errorf("publish prepared runtime: %w", err)
 	}
 	published = true
 	if err := os.Chmod(targetDir, 0o555); err != nil {
-		return "", fmt.Errorf("seal published runtime root: %w", err)
+		releaseTargetLease()
+		return "", nil, fmt.Errorf("seal published runtime root: %w", err)
 	}
-	if err := verifyPreparedRuntime(targetDir, binarySHA256); err != nil {
+	releaseTargetLease()
+
+	verified, err := verifyPreparedRuntime(targetDir, binarySHA256, false)
+	if err != nil {
 		_ = removeReadOnlyTree(targetDir)
-		return "", fmt.Errorf("verify published runtime: %w", err)
+		return "", nil, fmt.Errorf("verify published runtime: %w", err)
+	}
+	cacheDir, releaseLease, err := leaseVerifiedRuntime(ctx, targetDir, binarySHA256, leasePath, verified)
+	if err != nil {
+		return "", nil, err
 	}
 	pruneStaleRuntimeDirs(storeRoot, filepath.Base(targetDir))
-	return filepath.Join(targetDir, opengrepRuntimeCacheSubdir), nil
+	return cacheDir, releaseLease, nil
 }
 
-func runRuntimePreparation(ctx context.Context, bin, workDir, cacheDir, tmpDir string) error {
-	env := opengrepPreparationEnv(cacheDir, tmpDir)
+func runConfinedRuntimePreparation(ctx context.Context, bin string) (string, func(), error) {
+	if runtimePrepHook != nil {
+		runtimePrepHook(bin)
+	}
+	prepWorkspace, err := confine.NewActionWorkspace()
+	if err != nil {
+		return "", nil, fmt.Errorf("create runtime prep workspace: %w", err)
+	}
+	cleanup := exec.TrackScratchDir(prepWorkspace.Path())
+	ok := false
+	defer func() {
+		if !ok {
+			cleanup()
+		}
+	}()
+
+	prepCache := filepath.Join(prepWorkspace.Path(), opengrepRuntimeCacheSubdir)
+	prepTmp := filepath.Join(prepWorkspace.Path(), "tmp")
+	if err := os.MkdirAll(prepCache, 0o700); err != nil {
+		return "", nil, fmt.Errorf("create runtime prep cache: %w", err)
+	}
+	if err := os.MkdirAll(prepTmp, 0o700); err != nil {
+		return "", nil, fmt.Errorf("create runtime prep temp: %w", err)
+	}
+
+	confinement, err := scan.BundledScannerConfinement(filepath.Dir(bin), prepWorkspace)
+	if err != nil {
+		return "", nil, fmt.Errorf("confine runtime prep: %w", err)
+	}
 	stdout, stderr, exitCode, err := exec.RunSeparate(ctx, bin, []string{"--version"}, exec.ExecOpts{
-		Launch:         exec.HostLaunch("opengrep-runtime-prepare"),
-		Dir:            workDir,
+		Launch:         exec.BundledScannerLaunch("opengrep", confinement),
+		Dir:            prepWorkspace.Path(),
 		Timeout:        opengrepRuntimePrepTimeout,
 		MaxOutputBytes: 64 << 10,
-		Env:            env,
+		Env:            opengrepPreparationEnv(prepCache, prepTmp),
 	})
 	if err != nil {
 		detail := strings.TrimSpace(string(append(stdout, stderr...)))
 		if detail != "" {
-			return fmt.Errorf("prepare opengrep runtime (exit %d): %w (%s)", exitCode, err, detail)
+			return "", nil, fmt.Errorf("prepare opengrep runtime (exit %d): %w (%s)", exitCode, err, detail)
 		}
-		return fmt.Errorf("prepare opengrep runtime (exit %d): %w", exitCode, err)
+		return "", nil, fmt.Errorf("prepare opengrep runtime (exit %d): %w", exitCode, err)
 	}
-	return nil
+	ok = true
+	return prepCache, cleanup, nil
 }
 
 func opengrepPreparationEnv(cacheDir, tmpDir string) []string {
@@ -239,6 +331,61 @@ func overrideEnv(base []string, pins map[string]string) []string {
 	return out
 }
 
+func moveOrCopyDir(src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+	return filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("unexpected symlink in prepared runtime: %s", path)
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := dst
+		if rel != "." {
+			target = filepath.Join(dst, rel)
+		}
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o700)
+		}
+		if !d.Type().IsRegular() {
+			return fmt.Errorf("unexpected non-regular entry in prepared runtime: %s", path)
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		mode := os.FileMode(0o600)
+		if info.Mode().Perm()&0o111 != 0 {
+			mode = 0o700
+		}
+		in, err := os.Open(path) // #nosec G304 -- validated staging file
+		if err != nil {
+			return err
+		}
+		out, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode) // #nosec G304 -- validated target path
+		if err != nil {
+			_ = in.Close()
+			return err
+		}
+		_, copyErr := io.Copy(out, in)
+		closeOutErr := out.Close()
+		closeInErr := in.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeOutErr != nil {
+			return closeOutErr
+		}
+		return closeInErr
+	})
+}
+
 func collectRuntimeEntries(cacheDir string) ([]opengrepRuntimeFileEntry, error) {
 	var entries []opengrepRuntimeFileEntry
 	err := filepath.WalkDir(cacheDir, func(path string, d fs.DirEntry, walkErr error) error {
@@ -272,6 +419,7 @@ func collectRuntimeEntries(cacheDir string) ([]opengrepRuntimeFileEntry, error) 
 		entries = append(entries, opengrepRuntimeFileEntry{
 			RelPath:    filepath.ToSlash(rel),
 			Size:       info.Size(),
+			ModTimeNS:  info.ModTime().UnixNano(),
 			Executable: info.Mode().Perm()&0o111 != 0,
 			SHA256:     digest,
 		})
@@ -286,48 +434,62 @@ func collectRuntimeEntries(cacheDir string) ([]opengrepRuntimeFileEntry, error) 
 	return entries, nil
 }
 
-func verifyPreparedRuntime(targetDir, expectedBinarySHA256 string) error {
+// verifyPreparedRuntime validates the sealed runtime root, manifest provenance,
+// and directory tree. When metadataOnly is true (warm reuse after this process
+// has already verified the cryptographic digests), it verifies permissions,
+// structure, sizes, and mtimes without re-reading hundreds of MiB of payload.
+func verifyPreparedRuntime(targetDir, expectedBinarySHA256 string, metadataOnly bool) (opengrepRuntimeManifest, error) {
+	var empty opengrepRuntimeManifest
 	rootInfo, err := os.Lstat(targetDir)
 	if err != nil {
-		return err
+		return empty, err
 	}
 	if !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("runtime root is not a real directory")
+		return empty, fmt.Errorf("runtime root is not a real directory")
 	}
 	if runtime.GOOS != "windows" && rootInfo.Mode().Perm()&0o222 != 0 {
-		return fmt.Errorf("runtime root is writable (%o)", rootInfo.Mode().Perm())
+		return empty, fmt.Errorf("runtime root is writable (%o)", rootInfo.Mode().Perm())
 	}
 
 	manifestPath := filepath.Join(targetDir, opengrepRuntimeManifestName)
 	manifestInfo, err := os.Lstat(manifestPath)
 	if err != nil {
-		return err
+		return empty, err
 	}
 	if !manifestInfo.Mode().IsRegular() || manifestInfo.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("runtime manifest is not a regular file")
+		return empty, fmt.Errorf("runtime manifest is not a regular file")
 	}
 	if runtime.GOOS != "windows" && manifestInfo.Mode().Perm()&0o222 != 0 {
-		return fmt.Errorf("runtime manifest is writable (%o)", manifestInfo.Mode().Perm())
+		return empty, fmt.Errorf("runtime manifest is writable (%o)", manifestInfo.Mode().Perm())
 	}
 	raw, err := os.ReadFile(manifestPath) // #nosec G304 -- validated host-owned runtime manifest
 	if err != nil {
-		return err
+		return empty, err
 	}
 	var manifest opengrepRuntimeManifest
 	if err := json.Unmarshal(raw, &manifest); err != nil {
-		return fmt.Errorf("parse runtime manifest: %w", err)
+		return empty, fmt.Errorf("parse runtime manifest: %w", err)
 	}
-	if manifest.Version != opengrepRuntimeFormatVersion || manifest.BinarySHA256 != expectedBinarySHA256 || len(manifest.Files) == 0 {
-		return fmt.Errorf("runtime manifest provenance mismatch")
+	if manifest.Version != opengrepRuntimeFormatVersion || manifest.BinarySHA256 != expectedBinarySHA256 {
+		return empty, fmt.Errorf("runtime manifest provenance mismatch")
+	}
+	if manifest.NoExtract {
+		if len(manifest.Files) != 0 {
+			return empty, fmt.Errorf("no-extract runtime manifest unexpectedly lists files")
+		}
+		return manifest, nil
+	}
+	if len(manifest.Files) == 0 {
+		return empty, fmt.Errorf("runtime manifest lists no files")
 	}
 
 	expected := make(map[string]opengrepRuntimeFileEntry, len(manifest.Files))
 	for _, entry := range manifest.Files {
 		if entry.RelPath == "" || !filepath.IsLocal(filepath.FromSlash(entry.RelPath)) {
-			return fmt.Errorf("invalid runtime manifest path %q", entry.RelPath)
+			return empty, fmt.Errorf("invalid runtime manifest path %q", entry.RelPath)
 		}
 		if _, dup := expected[entry.RelPath]; dup {
-			return fmt.Errorf("duplicate runtime manifest path %q", entry.RelPath)
+			return empty, fmt.Errorf("duplicate runtime manifest path %q", entry.RelPath)
 		}
 		expected[entry.RelPath] = entry
 	}
@@ -366,23 +528,63 @@ func verifyPreparedRuntime(targetDir, expectedBinarySHA256 string) error {
 		if info.Size() != want.Size {
 			return fmt.Errorf("runtime file size mismatch for %s: got %d want %d", key, info.Size(), want.Size)
 		}
-		digest, err := sha256RegularFile(path)
-		if err != nil {
-			return err
-		}
-		if digest != want.SHA256 {
-			return fmt.Errorf("runtime file digest mismatch for %s", key)
+		if metadataOnly {
+			if info.ModTime().UnixNano() != want.ModTimeNS {
+				return fmt.Errorf("runtime file mtime mismatch for %s", key)
+			}
+		} else {
+			digest, err := sha256RegularFile(path)
+			if err != nil {
+				return err
+			}
+			if digest != want.SHA256 {
+				return fmt.Errorf("runtime file digest mismatch for %s", key)
+			}
 		}
 		seen++
 		return nil
 	})
 	if err != nil {
-		return err
+		return empty, err
 	}
 	if seen != len(expected) {
-		return fmt.Errorf("runtime missing %d of %d expected files", len(expected)-seen, len(expected))
+		return empty, fmt.Errorf("runtime missing %d of %d expected files", len(expected)-seen, len(expected))
 	}
-	return nil
+	return manifest, nil
+}
+
+func isVerifiedInProcess(targetDir, binarySHA256 string) bool {
+	verifiedRuntimesMu.RLock()
+	rec, ok := verifiedRuntimes[targetDir]
+	verifiedRuntimesMu.RUnlock()
+	if !ok || rec.binarySHA256 != binarySHA256 {
+		return false
+	}
+	info, err := os.Lstat(filepath.Join(targetDir, opengrepRuntimeManifestName))
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	return info.Size() == rec.manifestSize && info.ModTime().UnixNano() == rec.manifestMod
+}
+
+func recordVerifiedInProcess(targetDir, binarySHA256 string) {
+	info, err := os.Lstat(filepath.Join(targetDir, opengrepRuntimeManifestName))
+	if err != nil {
+		return
+	}
+	verifiedRuntimesMu.Lock()
+	verifiedRuntimes[targetDir] = verifiedRuntimeRecord{
+		binarySHA256: binarySHA256,
+		manifestSize: info.Size(),
+		manifestMod:  info.ModTime().UnixNano(),
+	}
+	verifiedRuntimesMu.Unlock()
+}
+
+func forgetVerifiedInProcess(targetDir string) {
+	verifiedRuntimesMu.Lock()
+	delete(verifiedRuntimes, targetDir)
+	verifiedRuntimesMu.Unlock()
 }
 
 func sealTreeReadOnly(root string) error {
@@ -435,19 +637,42 @@ func removeReadOnlyTree(root string) error {
 	return os.RemoveAll(root)
 }
 
+// pruneStaleRuntimeDirs removes older runtime directories only when no active
+// scanner holds a shared lease on that version.
 func pruneStaleRuntimeDirs(storeRoot, keepBase string) {
 	entries, err := os.ReadDir(storeRoot)
 	if err != nil {
 		return
 	}
+	keepLease := keepBase + opengrepRuntimeLeaseSuffix
 	for _, entry := range entries {
 		name := entry.Name()
-		if name == keepBase || name == opengrepRuntimeLockName {
+		if name == keepBase || name == keepLease || name == opengrepRuntimeLockName {
 			continue
 		}
-		if strings.HasPrefix(name, opengrepRuntimeDirPrefix) || strings.HasPrefix(name, opengrepRuntimeStagePrefix) {
+		if strings.HasPrefix(name, opengrepRuntimeStagePrefix) {
 			_ = removeReadOnlyTree(filepath.Join(storeRoot, name))
+			continue
 		}
+		if !strings.HasPrefix(name, opengrepRuntimeDirPrefix) || strings.HasSuffix(name, opengrepRuntimeLeaseSuffix) {
+			continue
+		}
+		leasePath := filepath.Join(storeRoot, name+opengrepRuntimeLeaseSuffix)
+		f, err := filelock.Open(leasePath)
+		if err != nil {
+			continue
+		}
+		locked, err := filelock.TryExclusive(f)
+		if err != nil || !locked {
+			_ = f.Close()
+			continue
+		}
+		target := filepath.Join(storeRoot, name)
+		_ = removeReadOnlyTree(target)
+		forgetVerifiedInProcess(target)
+		_ = filelock.Unlock(f)
+		_ = f.Close()
+		_ = os.Remove(leasePath)
 	}
 }
 

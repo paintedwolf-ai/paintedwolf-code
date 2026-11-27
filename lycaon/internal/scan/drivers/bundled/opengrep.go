@@ -109,10 +109,15 @@ func (o *OpenGrepScanner) Run(ctx context.Context, req scan.ScanRequest) (*scano
 		return nil, err
 	}
 	defer cleanup()
-	runtimeCacheDir, err := prepareOpengrepRuntime(ctx, bin)
+	var binarySHA256 string
+	if art, artErr := o.manifest.ArtifactForCurrentPlatform(); artErr == nil {
+		binarySHA256 = art.SHA256
+	}
+	runtimeCacheDir, releaseRuntime, err := prepareOpengrepRuntime(ctx, bin, binarySHA256)
 	if err != nil {
 		return nil, fmt.Errorf("opengrep runtime: %w", err)
 	}
+	defer releaseRuntime()
 	runFiles.runtimeCacheDir = runtimeCacheDir
 	// Execution reads the same configuration source the contract hashes.
 	rulePaths, err := rules.MaterializeGateRules(gates, "", runFiles.dir())
