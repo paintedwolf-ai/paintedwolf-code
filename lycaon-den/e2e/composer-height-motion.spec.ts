@@ -187,7 +187,7 @@ webE2e.describe("composer height motion", () => {
 
     await composer.fill("");
     await expect.poll(height, { timeout: 30_000 }).toBeCloseTo(restingHeight, 0);
-    const typed = `${"Quick typing wraps across several lines of the composer. ".repeat(6)}done`;
+    const typed = `${"Quick typing wraps across several lines of the composer. ".repeat(10)}done`;
     await startComposerTrace(stage);
     await composer.pressSequentially(typed, { delay: 8 });
     await waitForComposerMotion(page);

@@ -74,6 +74,9 @@ webE2e("home doors divider aligns in macOS custom chrome", async ({ page }) => {
   await expect(page.getByTestId("home-view")).toBeVisible();
   await page.evaluate(() => {
     document.documentElement.classList.add("den-custom-chrome", "den-tauri-macos");
+    const aside = document.querySelector<HTMLElement>(".den-shell-aside");
+    aside?.setAttribute("data-window-edge", "left");
+    aside?.setAttribute("data-window-edge-chrome", "native");
   });
 
   await expectHomeDividerAligned(page);

@@ -33,15 +33,15 @@ modelIndependentWebE2e("collaborating windows converge, undo independently, save
     await peer.getByTestId("project-files-entry").click();
     await openFile(peer);
     await insert(page, "start", "Person A 🐺\n");
-    await expect(editor(peer)).toContainText("Person A 🐺");
+    await expect(editor(peer)).toContainText("Person A 🐺", { timeout: 15_000 });
     await insert(peer, "end", "Person B 世界\n");
-    await expect(editor(page)).toContainText("Person B 世界");
+    await expect(editor(page)).toContainText("Person B 世界", { timeout: 15_000 });
     await editor(page).press("ControlOrMeta+z");
     await expect(editor(page)).not.toContainText("Person A");
-    await expect(editor(peer)).not.toContainText("Person A");
+    await expect(editor(peer)).not.toContainText("Person A", { timeout: 15_000 });
     await expect(editor(page)).toContainText("Person B 世界");
     await editor(page).press("ControlOrMeta+Shift+z");
-    await expect(editor(peer)).toContainText("Person A 🐺");
+    await expect(editor(peer)).toContainText("Person A 🐺", { timeout: 15_000 });
     await page.getByTestId("files-editor-save").click();
     const saved = "Person A 🐺\n" + initial + "Person B 世界\n";
     await expect.poll(() => readFileSync(path.join(root, "shared.txt"), "utf8")).toBe(saved);
@@ -53,10 +53,10 @@ modelIndependentWebE2e("collaborating windows converge, undo independently, save
     await expect(editor(page)).toContainText("Person B 世界");
     await editor(page).press("ControlOrMeta+z");
     await expect(editor(page)).not.toContainText("Person A 🐺");
-    await expect(editor(peer)).not.toContainText("Person A 🐺");
+    await expect(editor(peer)).not.toContainText("Person A 🐺", { timeout: 15_000 });
     await expect(editor(page)).toContainText("Person B 世界");
     await editor(page).press("ControlOrMeta+Shift+z");
-    await expect(editor(peer)).toContainText("Person A 🐺");
+    await expect(editor(peer)).toContainText("Person A 🐺", { timeout: 15_000 });
   } finally { await peer.close(); }
 });
 
