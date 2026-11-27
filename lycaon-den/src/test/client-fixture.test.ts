@@ -22,4 +22,26 @@ describe("stubClient", () => {
       "Test client did not stub getAttention",
     );
   });
+
+  it("loads without Vitest module mocking when VITEST is absent", async () => {
+    vi.stubEnv("VITEST", "");
+    vi.resetModules();
+    const importActual = vi.spyOn(vi, "importActual");
+    try {
+      const browserFixture = await import("./client-fixture.ts");
+      const getAttention = vi.fn().mockResolvedValue({ items: [] });
+      const client = browserFixture.stubClient({ getAttention });
+
+      expect(importActual).not.toHaveBeenCalled();
+      expect(browserFixture.stubbedFunction(client.getAttention)).toBe(getAttention);
+      await expect(client.getAttention()).resolves.toEqual({ items: [] });
+      expect(() => client.listProjects).toThrow(
+        "Test client did not stub listProjects",
+      );
+    } finally {
+      importActual.mockRestore();
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
+  });
 });
