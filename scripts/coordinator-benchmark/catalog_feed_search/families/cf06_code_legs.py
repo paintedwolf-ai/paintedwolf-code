@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
+import subprocess
 import threading
 import time
 import uuid
@@ -28,6 +30,50 @@ def _dedup_ref_hits_by_line(hits: tuple[ScopedSearchHit, ...]) -> tuple[ScopedSe
             seen.add(k)
             out.append(h)
     return tuple(out)
+
+
+def _find_shipped_yjs() -> Path | None:
+    """Locate the shipped Yjs package in this checkout or a sibling worktree."""
+    repo_root = Path(__file__).resolve().parents[4]
+    candidates = [repo_root / "lycaon-den" / "node_modules" / "yjs"]
+    parent = repo_root.parent
+    if parent.is_dir():
+        for sibling in sorted(parent.iterdir()):
+            cand = sibling / "lycaon-den" / "node_modules" / "yjs"
+            if cand not in candidates:
+                candidates.append(cand)
+    for cand in candidates:
+        if cand.exists():
+            return cand
+    return None
+
+
+def _decode_editor_crdt_text(crdt_update_b64: str) -> tuple[str | None, str | None, str | None]:
+    """Decode base64 Yjs `crdt_update` into UTF-8 draft text using the shipped Yjs codec.
+
+    Returns (decoded_text, decoder_origin, error).
+    """
+    if not crdt_update_b64:
+        return None, None, "missing crdt_update"
+    yjs_path = _find_shipped_yjs()
+    if yjs_path is None:
+        return None, None, "shipped yjs package not found"
+    script = (
+        'const Y = require(process.argv[1]);'
+        'const doc = new Y.Doc();'
+        'Y.applyUpdate(doc, new Uint8Array(Buffer.from(process.argv[2], "base64")));'
+        'process.stdout.write(doc.getText("text").toString());'
+        'doc.destroy();'
+    )
+    proc = subprocess.run(
+        ["node", "-e", script, str(yjs_path), crdt_update_b64],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    if proc.returncode != 0:
+        return None, f"yjs:{yjs_path}", (proc.stderr or proc.stdout or f"node exit {proc.returncode}").strip()
+    return proc.stdout, f"yjs:{yjs_path}", None
 
 
 def _filter_code_hits(answer: ProductSearchAnswer) -> ProductSearchAnswer:
@@ -291,13 +337,14 @@ def run_s02_sidecar(
             method="POST",
         )
         doc_id = str(opened_resp.get("id") or "")
+        expected_draft_text = "unsaved_draft_s02_token\n"
         updated_resp = driver._transport.request(  # noqa: SLF001
             f"/v1/projects/{pid}/editor-documents/{doc_id}",
             {
                 "operation_id": str(uuid.uuid4()),
                 "client_id": "cfs-driver",
                 "expected_revision": opened_resp.get("revision"),
-                "content": "unsaved_draft_s02_token\n",
+                "content": expected_draft_text,
                 "eol": "lf",
                 "mixed_eol": False,
                 "history_vector": None,
@@ -311,6 +358,10 @@ def run_s02_sidecar(
             {"path": "draft_target.txt", "root_id": roots[0], "client_id": "cfs-driver-reader"},
             method="POST",
         )
+        upd_crdt = str(updated_resp.get("crdt_update") or "")
+        upd_text, upd_origin, upd_err = _decode_editor_crdt_text(upd_crdt)
+        reread_crdt = str(reread_resp.get("crdt_update") or "")
+        reread_text, reread_origin, reread_err = _decode_editor_crdt_text(reread_crdt)
         disk_after_bytes = draft_file.read_bytes()
         saved_pos = _filter_code_hits(
             driver.search("project:current kind:code saved_s02_positive_control", default_root_id=roots[0], origin_project_id=pid, budget="complete")
@@ -324,16 +375,36 @@ def run_s02_sidecar(
                 "hits": len(ans2.hits),
                 "request_scope": {"origin_project_id": pid, "root_id": roots[0], "dsl": draft_dsl},
                 "draft_open": {"id": doc_id, "revision": opened_resp.get("revision")},
-                "draft_update": {"id": updated_resp.get("id"), "revision": updated_resp.get("revision"), "dirty": updated_resp.get("dirty")},
+                "draft_update": {
+                    "id": updated_resp.get("id"),
+                    "revision": updated_resp.get("revision"),
+                    "dirty": updated_resp.get("dirty"),
+                    "crdt_update_len": len(upd_crdt),
+                    "decoded_text": upd_text,
+                    "decoded_sha256": hashlib.sha256(upd_text.encode("utf-8")).hexdigest() if upd_text is not None else None,
+                    "decoded_matches_expected": upd_text == expected_draft_text,
+                    "decoder_origin": upd_origin,
+                    "decode_error": upd_err,
+                },
                 "draft_reread": {
                     "id": reread_resp.get("id"),
+                    "project_id": reread_resp.get("project_id"),
+                    "root_id": reread_resp.get("root_id"),
+                    "path": reread_resp.get("path"),
                     "revision": reread_resp.get("revision"),
                     "dirty": reread_resp.get("dirty"),
-                    "content": reread_resp.get("content"),
-                    "reread_error": reread_resp.get("reread_error"),
+                    "base_sha256": reread_resp.get("base_sha256"),
+                    "base_content": reread_resp.get("base_content"),
+                    "crdt_update_len": len(reread_crdt),
+                    "decoded_text": reread_text,
+                    "decoded_sha256": hashlib.sha256(reread_text.encode("utf-8")).hexdigest() if reread_text is not None else None,
+                    "decoded_matches_expected": reread_text == expected_draft_text,
+                    "decoder_origin": reread_origin,
+                    "decode_error": reread_err,
                 },
                 "disk_unchanged": disk_before_bytes == disk_after_bytes,
                 "disk_bytes_len": len(disk_after_bytes),
+                "disk_sha256": hashlib.sha256(disk_after_bytes).hexdigest(),
                 "saved_control_hits": len(saved_pos.hits),
             },
         )
