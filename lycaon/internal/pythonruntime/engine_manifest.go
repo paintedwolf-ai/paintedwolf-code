@@ -210,34 +210,25 @@ type EngineReleaseDescriptorArtifact struct {
 
 var engineVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?$`)
 
-var supportedNativeEngineLibraries = map[string]string{
-	"darwin/arm64": "libpw_cpython_wasi.dylib",
-	"linux/amd64":  "libpw_cpython_wasi.so",
-}
-
 // LibraryNameForPlatform returns the canonical shared library filename for an
-// explicitly supported (goos, goarch) target, independent of the running host.
-// Unknown operating systems or architectures are rejected explicitly instead of
-// defaulting to a Linux-style filename.
+// explicitly supported (goos, goarch) target via the declared pythonnative
+// target table, independent of the running host.
 func LibraryNameForPlatform(goos, goarch string) (string, error) {
-	key := strings.TrimSpace(goos) + "/" + strings.TrimSpace(goarch)
-	name, ok := supportedNativeEngineLibraries[key]
-	if !ok {
-		return "", fmt.Errorf("unsupported portable python native engine platform %q", key)
+	spec, err := pythonnative.ResolveTarget(goos, goarch)
+	if err != nil {
+		return "", err
 	}
-	return name, nil
+	return spec.LibraryName, nil
 }
 
-// EnginePlatformForTarget maps a packaging target triple to GOOS/GOARCH.
+// EnginePlatformForTarget maps a packaging target triple to GOOS/GOARCH via
+// the declared pythonnative target table.
 func EnginePlatformForTarget(target string) (string, string, error) {
-	switch strings.TrimSpace(target) {
-	case "aarch64-apple-darwin", "darwin-arm64", "darwin/arm64":
-		return "darwin", "arm64", nil
-	case "x86_64-unknown-linux-gnu", "linux-amd64", "linux/amd64":
-		return "linux", "amd64", nil
-	default:
-		return "", "", fmt.Errorf("unsupported portable python native engine target %q", target)
+	spec, err := pythonnative.ResolveTargetTriple(target)
+	if err != nil {
+		return "", "", err
 	}
+	return spec.GOOS, spec.GOARCH, nil
 }
 
 // LoadBundledEngineManifest loads the build-embedded bundled-manifest.yaml (or

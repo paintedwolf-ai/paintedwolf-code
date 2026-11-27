@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"go/ast"
 	"go/build/constraint"
+	"go/token"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/test/contract/invariants"
@@ -208,8 +210,47 @@ func platformFindings(r *invariants.Run, roots []string) []string {
 				findings = append(findings, fmt.Sprintf("%s: runtime.%s check", r.Go().Position(sel.Pos()), name))
 			}
 		})
+		ast.Inspect(f.AST, func(n ast.Node) bool {
+			switch node := n.(type) {
+			case *ast.BinaryExpr:
+				if node.Op == token.EQL || node.Op == token.NEQ {
+					if osLit, ok := platformOSStringLiteral(node.X); ok {
+						findings = append(findings, fmt.Sprintf("%s: hardcoded target OS comparison %q", r.Go().Position(node.Pos()), osLit))
+					} else if osLit, ok := platformOSStringLiteral(node.Y); ok {
+						findings = append(findings, fmt.Sprintf("%s: hardcoded target OS comparison %q", r.Go().Position(node.Pos()), osLit))
+					}
+				}
+			case *ast.CaseClause:
+				for _, expr := range node.List {
+					if osLit, ok := platformOSStringLiteral(expr); ok {
+						findings = append(findings, fmt.Sprintf("%s: hardcoded target OS case %q", r.Go().Position(expr.Pos()), osLit))
+					}
+				}
+			}
+			return true
+		})
 	}
 	return findings
+}
+
+func platformOSStringLiteral(expr ast.Expr) (string, bool) {
+	lit, ok := expr.(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return "", false
+	}
+	val, err := strconv.Unquote(lit.Value)
+	if err != nil {
+		return "", false
+	}
+	// Exclude synthetic build-tag group names "unix" and "other" so only real
+	// GOOS target names trigger hardcoded OS branching checks.
+	if val == "unix" || val == "other" {
+		return "", false
+	}
+	if slices.Contains(platformOSNames, val) {
+		return val, true
+	}
+	return "", false
 }
 
 func platformFileSuffix(name string) bool {

@@ -2,7 +2,11 @@ package pythonruntime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/pythonnative"
@@ -155,5 +159,125 @@ func TestWazeroExplicitBackendSelectionReportsInstantiatedBackend(t *testing.T) 
 		if compRes.Backend != BackendWazeroCompiler {
 			t.Fatalf("compRT ExecutionResult.Backend = %q, want %q", compRes.Backend, BackendWazeroCompiler)
 		}
+	}
+}
+
+func TestCrossTargetSelectionSigningAndUnknownTriples(t *testing.T) {
+	t.Parallel()
+
+	// 1. Direct adapter target triple resolution independent of running host.
+	darwinSpec, err := pythonnative.ResolveTargetTriple("aarch64-apple-darwin")
+	if err != nil {
+		t.Fatalf("ResolveTargetTriple(aarch64-apple-darwin): %v", err)
+	}
+	if darwinSpec.GOOS != "darwin" || darwinSpec.GOARCH != "arm64" || darwinSpec.LibraryName != "libpw_cpython_wasi.dylib" || !darwinSpec.RequiresHardenedSigning {
+		t.Fatalf("unexpected darwin target spec: %+v", darwinSpec)
+	}
+
+	linuxSpec, err := pythonnative.ResolveTargetTriple("x86_64-unknown-linux-gnu")
+	if err != nil {
+		t.Fatalf("ResolveTargetTriple(x86_64-unknown-linux-gnu): %v", err)
+	}
+	if linuxSpec.GOOS != "linux" || linuxSpec.GOARCH != "amd64" || linuxSpec.LibraryName != "libpw_cpython_wasi.so" || linuxSpec.RequiresHardenedSigning {
+		t.Fatalf("unexpected linux target spec: %+v", linuxSpec)
+	}
+
+	for _, badTriple := range []string{"aarch64-unknown-linux-gnu", "x86_64-pc-windows-msvc", "freebsd/amd64", ""} {
+		if got, err := pythonnative.ResolveTargetTriple(badTriple); err == nil {
+			t.Errorf("ResolveTargetTriple(%q) = %+v, nil; want explicit error", badTriple, got)
+		}
+	}
+
+	// 2. End-to-end SelectEngineRelease consumes adapter signing & library facts.
+	commitSHA := strings.Repeat("a", 40)
+	validSHA := strings.Repeat("b", 64)
+	makeDesc := func(artifacts map[string]EngineReleaseDescriptorArtifact) string {
+		var desc EngineReleaseDescriptor
+		desc.SchemaVersion = EngineReleaseDescriptorSchemaVersion
+		desc.EngineTag = "pw-cpython-wasi-engine-v0.1.0"
+		desc.SourceCommit = commitSHA
+		desc.ABIVersion = ExpectedNativeEngineABIVersion
+		desc.ABIHeaderSHA256 = ExpectedNativeEngineABIHeaderSHA256
+		desc.CPython.Version = "3.12.0"
+		desc.CPython.WasmSHA256 = validSHA
+		desc.Metering.MeteredWasmSHA256 = validSHA
+		desc.ImportInventory.Count = ExpectedNativeEngineImportCount
+		desc.ImportInventory.SHA256 = ExpectedNativeEngineImportInventorySHA256
+		desc.Artifacts = artifacts
+		raw, err := json.Marshal(desc)
+		if err != nil {
+			t.Fatalf("marshal descriptor: %v", err)
+		}
+		p := filepath.Join(t.TempDir(), "release-manifest.json")
+		if err := os.WriteFile(p, raw, 0o644); err != nil {
+			t.Fatalf("write descriptor: %v", err)
+		}
+		return p
+	}
+
+	// 2a. Valid cross-target descriptor: darwin hardened=true, linux hardened=false,
+	// library_name omitted so adapter fills canonical filenames for both targets.
+	okDesc := makeDesc(map[string]EngineReleaseDescriptorArtifact{
+		"aarch64-apple-darwin": {
+			Platform:         "aarch64-apple-darwin",
+			ArchiveName:      "engine-darwin-arm64.tar.gz",
+			LibrarySHA256:    validSHA,
+			CodesignHardened: true,
+		},
+		"x86_64-unknown-linux-gnu": {
+			Platform:         "x86_64-unknown-linux-gnu",
+			ArchiveName:      "engine-linux-amd64.tar.gz",
+			LibrarySHA256:    validSHA,
+			CodesignHardened: false,
+		},
+	})
+	manifest, err := SelectEngineRelease(context.Background(), SelectEngineReleaseRequest{
+		DescriptorSource: okDesc,
+		Tag:              "pw-cpython-wasi-engine-v0.1.0",
+		ExpectedCommit:   commitSHA,
+	})
+	if err != nil {
+		t.Fatalf("SelectEngineRelease(valid cross-target): %v", err)
+	}
+	dArt, err := manifest.ArtifactForPlatform("darwin", "arm64")
+	if err != nil || dArt.LibraryName != "libpw_cpython_wasi.dylib" {
+		t.Fatalf("darwin/arm64 artifact = (%+v, %v), want libpw_cpython_wasi.dylib", dArt, err)
+	}
+	lArt, err := manifest.ArtifactForPlatform("linux", "amd64")
+	if err != nil || lArt.LibraryName != "libpw_cpython_wasi.so" {
+		t.Fatalf("linux/amd64 artifact = (%+v, %v), want libpw_cpython_wasi.so", lArt, err)
+	}
+
+	// 2b. Unsigned darwin/arm64 artifact must be rejected on every host.
+	unsignedDarwinDesc := makeDesc(map[string]EngineReleaseDescriptorArtifact{
+		"aarch64-apple-darwin": {
+			Platform:         "aarch64-apple-darwin",
+			ArchiveName:      "engine-darwin-arm64.tar.gz",
+			LibrarySHA256:    validSHA,
+			CodesignHardened: false,
+		},
+	})
+	if _, err := SelectEngineRelease(context.Background(), SelectEngineReleaseRequest{
+		DescriptorSource: unsignedDarwinDesc,
+		Tag:              "pw-cpython-wasi-engine-v0.1.0",
+		ExpectedCommit:   commitSHA,
+	}); err == nil || !strings.Contains(err.Error(), "hardened-runtime signing") {
+		t.Fatalf("expected hardened-runtime signing rejection for unsigned darwin/arm64, got %v", err)
+	}
+
+	// 2c. Unknown target triple must be rejected explicitly.
+	unknownTripleDesc := makeDesc(map[string]EngineReleaseDescriptorArtifact{
+		"x86_64-pc-windows-msvc": {
+			Platform:      "x86_64-pc-windows-msvc",
+			ArchiveName:   "engine-windows-amd64.tar.gz",
+			LibrarySHA256: validSHA,
+		},
+	})
+	if _, err := SelectEngineRelease(context.Background(), SelectEngineReleaseRequest{
+		DescriptorSource: unknownTripleDesc,
+		Tag:              "pw-cpython-wasi-engine-v0.1.0",
+		ExpectedCommit:   commitSHA,
+	}); err == nil || !strings.Contains(err.Error(), "unsupported portable python native engine target") {
+		t.Fatalf("expected unsupported target error for x86_64-pc-windows-msvc, got %v", err)
 	}
 }

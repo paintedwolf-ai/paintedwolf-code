@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/pythonnative"
 	"gopkg.in/yaml.v3"
 )
 
@@ -126,23 +127,19 @@ func SelectEngineRelease(ctx context.Context, req SelectEngineReleaseRequest) (*
 		if len(da.JITEntitlements) > 0 {
 			return nil, fmt.Errorf("release descriptor artifact %s declares forbidden jit_entitlements %v", k, da.JITEntitlements)
 		}
-		goos, goarch, err := EnginePlatformForTarget(da.Platform)
+		spec, err := pythonnative.ResolveTargetTriple(da.Platform)
 		if err != nil {
-			goos, goarch, err = EnginePlatformForTarget(k)
+			spec, err = pythonnative.ResolveTargetTriple(k)
 			if err != nil {
 				return nil, fmt.Errorf("release descriptor artifact %q: %w", k, err)
 			}
 		}
-		if goos == "darwin" && !da.CodesignHardened {
-			return nil, fmt.Errorf("release descriptor artifact %s must be hardened-runtime signed on darwin", k)
+		if spec.RequiresHardenedSigning && !da.CodesignHardened {
+			return nil, fmt.Errorf("release descriptor artifact %s (%s/%s) requires hardened-runtime signing", k, spec.GOOS, spec.GOARCH)
 		}
 		libName := strings.TrimSpace(da.LibraryName)
 		if libName == "" {
-			var libErr error
-			libName, libErr = LibraryNameForPlatform(goos, goarch)
-			if libErr != nil {
-				return nil, fmt.Errorf("release descriptor artifact %q: %w", k, libErr)
-			}
+			libName = spec.LibraryName
 		}
 		artURL := strings.TrimSpace(da.URL)
 		if artURL == "" {
@@ -162,8 +159,8 @@ func SelectEngineRelease(ctx context.Context, req SelectEngineReleaseRequest) (*
 			artURL = filepath.Clean(filepath.Join(baseDir, artURL))
 		}
 		arts = append(arts, EngineReleaseArtifact{
-			GOOS:             goos,
-			GOARCH:           goarch,
+			GOOS:             spec.GOOS,
+			GOARCH:           spec.GOARCH,
 			LibraryName:      libName,
 			ArchiveName:      strings.TrimSpace(da.ArchiveName),
 			URL:              artURL,
