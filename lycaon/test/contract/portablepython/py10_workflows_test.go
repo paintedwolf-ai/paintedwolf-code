@@ -638,6 +638,55 @@ print("FPDF2_OK", font_path.name)
 			t.Fatalf("report.pdf expected at least 2 /Type /Page markers")
 		}
 	})
+
+	t.Run("09b_fpdf2_url_refusal_and_zero_outgoing_requests", func(t *testing.T) {
+		ws := t.TempDir()
+		copyPY10Fixture(t, ws, "sample.png")
+
+		var hits atomic.Int64
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(py10FixtureBytes(t, "sample.png"))
+		}))
+		defer srv.Close()
+
+		code := fmt.Sprintf(`
+import io
+from pathlib import Path
+from PIL import Image
+from fpdf import FPDF
+
+pdf = FPDF()
+pdf.add_page()
+
+for bad_url in (%q, "https://example.com/x.png"):
+    try:
+        pdf.image(bad_url, x=10, y=10, w=20)
+        raise AssertionError(f"URL image load must be refused: {bad_url}")
+    except AssertionError:
+        raise
+    except Exception as exc:
+        assert str(exc).strip(), f"refusal error must be non-silent for {bad_url}"
+
+# Verify local BytesIO and PIL.Image loading still work cleanly
+raw = Path("sample.png").read_bytes()
+pdf.image(io.BytesIO(raw), x=10, y=10, w=20)
+with Image.open(io.BytesIO(raw)) as im:
+    pdf.image(im, x=40, y=10, w=20)
+pdf.output("local_images.pdf")
+assert Path("local_images.pdf").stat().st_size > 100
+print("FPDF2_URL_REFUSAL_OK")
+`, srv.URL+"/x.png")
+
+		resp := runPY10Code(t, svc, ws, "py10-fpdf2-url-refusal", code)
+		if !strings.Contains(resp.Stdout, "FPDF2_URL_REFUSAL_OK") {
+			t.Fatalf("unexpected stdout: %q", resp.Stdout)
+		}
+		if hits.Load() != 0 {
+			t.Fatalf("fpdf2 URL image attempt sent %d outgoing HTTP requests, want 0", hits.Load())
+		}
+	})
 }
 
 // TestPY10_BaselinePackageExamples exercises the 4 already-installed baseline
