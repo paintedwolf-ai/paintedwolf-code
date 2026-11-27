@@ -72,7 +72,7 @@ func newRenderContextErrorHarness(t *testing.T, sessions Sessions, transcripts T
 		Subject: "job-1", CommandCompletionDigest: "handle=job-1",
 	})
 	svc.Emit(t.Context(), "sess-1", anchor.PhaseEntered, anchor.Envelope{
-		PhaseID: "review",
+		Subject: "review",
 	})
 	return svc, &signals
 }
