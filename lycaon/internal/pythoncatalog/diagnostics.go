@@ -187,6 +187,16 @@ func DiagnoseImport(manifest ImageManifest, requested string) Diagnostic {
 			ExternalRoute: ExternalPythonRoute,
 		}
 	}
+	if lower == "scapy" {
+		return Diagnostic{
+			Kind:          DiagnosticMissingDistribution,
+			Requested:     trimmed,
+			Message:       fmt.Sprintf("Package or module %q is not installed in the fixed Portable Python image.", trimmed),
+			Available:     []string{"dpkt"},
+			Suggestion:    "For offline pcap/pcapng capture reading, use `dpkt` (Scapy is not included in the fixed Portable Python image).",
+			ExternalRoute: ExternalPythonRoute,
+		}
+	}
 	if lower == "yamllint" {
 		return Diagnostic{
 			Kind:          DiagnosticMissingDistribution,

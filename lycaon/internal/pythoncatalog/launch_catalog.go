@@ -6,11 +6,11 @@ const ToolDescription = "Run helper scripts here with the standard library and f
 // ExternalPythonRoute is the documented command route for system or project Python environments.
 const ExternalPythonRoute = "external -- python3"
 
-// LaunchPublicDistributionCount is the exact number of public distributions in the PY11 contract
-// (13 baseline + 9 PY10 + 34 PY11-Pure + 2 PY11-Native: regex, python-hcl2).
-const LaunchPublicDistributionCount = 58
+// LaunchPublicDistributionCount is the exact number of public distributions in the PY11+PY12 contract
+// (13 baseline + 9 PY10 + 34 PY11-Pure + 2 PY11-Native + 7 PY12 troubleshooting distributions).
+const LaunchPublicDistributionCount = 65
 
-// LaunchDistributions returns the fifty-eight public distributions defined by the PY11 package contract.
+// LaunchDistributions returns the sixty-five public distributions defined by the PY11+PY12 package contract.
 func LaunchDistributions() []DistributionRecord {
 	base := []DistributionRecord{
 		{
@@ -366,7 +366,8 @@ func LaunchDistributions() []DistributionRecord {
 			TreeSHA256:     "unbuilt-launch-contract",
 		},
 	}
-	return append(base, launchPY11PureDistributions()...)
+	out := append(base, launchPY11PureDistributions()...)
+	return append(out, launchPY12Distributions()...)
 }
 
 // LaunchStdlibCapabilities returns the qualified standard-library modules in the launch image.

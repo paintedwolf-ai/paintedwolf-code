@@ -1,0 +1,8 @@
+[2026-11-27T12:00:01Z] req=r001 status=200 elapsed_ms=12.5 route=/health
+[2026-11-27T12:00:02Z] req=r002 status=201 elapsed_ms=45.25 route=/orders
+[2026-11-27T12:00:03Z] req=r003 status=404 elapsed_ms=3.1 route=/missing
+MALFORMED LINE WITHOUT FIELDS
+[2026-11-27T12:00:05Z] req=r004 status=502 elapsed_ms=301.75 route=/upstream
+[2026-11-27T12:00:06Z] req=r005 status=200 elapsed_ms=8.0 route=/health
+[2026-11-27T12:00:07Z] req=r006 status=NOT_AN_INT elapsed_ms=1.0 route=/broken
+[2026-11-27T12:00:08Z] req=r007 status=200 elapsed_ms=19.4 route=/orders

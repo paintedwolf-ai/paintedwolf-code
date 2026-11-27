@@ -1,0 +1,19 @@
+; <<>> DiG 9.18.24 <<>> api.example.test A
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 16962
+;; flags: qr rd ra; QUERY: 1, ANSWER: 2, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;api.example.test.		IN	A
+
+;; ANSWER SECTION:
+api.example.test.	300	IN	A	203.0.113.10
+api.example.test.	300	IN	A	203.0.113.11
+
+;; Query time: 14 msec
+;; SERVER: 198.51.100.53#53(198.51.100.53) (UDP)
+;; WHEN: Fri Nov 27 12:00:00 UTC 2026
+;; MSG SIZE  rcvd: 77

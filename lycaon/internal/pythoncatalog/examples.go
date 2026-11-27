@@ -71,7 +71,10 @@ func TaskSummaryForDistribution(normalizedName string) string {
 	case "charset-normalizer":
 		return "detect legacy text encoding candidates"
 	default:
-		return taskSummaryForPY11Distribution(normalizedName)
+		if s := taskSummaryForPY11Distribution(normalizedName); s != "" {
+			return s
+		}
+		return taskSummaryForPY12Distribution(normalizedName)
 	}
 }
 
@@ -171,7 +174,8 @@ func OnDemandExamples() []CapabilityExample {
 			Snippet:      "from openpyxl import Workbook\nfrom openpyxl.chart import BarChart, Reference\nwb = Workbook(); ws = wb.active\nfor row in [('Month', 'Sales'), ('Jan', 10), ('Feb', 15)]: ws.append(row)\nchart = BarChart()\nchart.add_data(Reference(ws, min_col=2, min_row=1, max_row=3), titles_from_data=True)\nchart.set_categories(Reference(ws, min_col=1, min_row=2, max_row=3))\nws.add_chart(chart, 'D2'); wb.save('chart.xlsx')",
 		},
 	}
-	return append(base, py11OnDemandExamples()...)
+	out := append(base, py11OnDemandExamples()...)
+	return append(out, py12OnDemandExamples()...)
 }
 
 // RenderPackageExamples renders concise on-demand usage examples filtered to

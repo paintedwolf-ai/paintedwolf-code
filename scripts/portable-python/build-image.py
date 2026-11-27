@@ -330,6 +330,7 @@ def install_sdist_pure_python(
         "Pillow": ("src/PIL/", "PIL", "LICENSE"),
         "lxml": ("src/lxml/", "lxml", "LICENSES.txt"),
         "regex": ("regex_3/", "regex", "LICENSE.txt"),
+        "drain3": ("drain3/", "drain3", "LICENSE"),
     }
     if name not in sdist_cfg:
         raise RuntimeError(f"No sdist_pure_python mapping for {name}")
