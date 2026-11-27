@@ -331,14 +331,23 @@ def install_sdist_pure_python(
         "lxml": ("src/lxml/", "lxml", "LICENSES.txt"),
         "regex": ("regex_3/", "regex", "LICENSE.txt"),
         "drain3": ("drain3/", "drain3", "LICENSE"),
+        "numpy": ("numpy/", "numpy", "LICENSE.txt"),
+        "pandas": ("pandas/", "pandas", "LICENSE"),
     }
     if name not in sdist_cfg:
         raise RuntimeError(f"No sdist_pure_python mapping for {name}")
     src_prefix, pkg_name, license_name = sdist_cfg[name]
+    strip_build_sources = name in ("numpy", "pandas")
+    build_source_suffixes = (
+        ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".hh",
+        ".pyx", ".pxd", ".pxi", ".pyi", ".src", ".f", ".f90",
+        ".tp", ".in", ".meson",
+    )
 
     installed: list[str] = []
     pkg_info_bytes: bytes | None = None
     license_bytes: bytes | None = None
+    pandas_version_meson: bytes | None = None
 
     with tarfile.open(sdist_path, "r:gz") as tf:
         for member in tf.getmembers():
@@ -356,10 +365,20 @@ def install_sdist_pure_python(
                 f = tf.extractfile(member)
                 assert f is not None
                 license_bytes = f.read()
+            elif name == "pandas" and inner == "_version_meson.py":
+                f = tf.extractfile(member)
+                assert f is not None
+                pandas_version_meson = f.read()
             elif inner.startswith(src_prefix):
                 sub = inner[len(src_prefix) :]
                 if sub.endswith(FORBIDDEN_SUFFIXES):
                     continue
+                if strip_build_sources:
+                    sub_parts = Path(sub).parts
+                    if "tests" in sub_parts or "testing" in sub_parts and name == "pandas" and "tests" in sub_parts:
+                        continue
+                    if "tests" in sub_parts or Path(sub).name == "meson.build" or sub.endswith(build_source_suffixes):
+                        continue
                 rel = f"{pkg_name}/{sub}"
                 out = packages_root / rel
                 out.parent.mkdir(parents=True, exist_ok=True)
@@ -367,6 +386,46 @@ def install_sdist_pure_python(
                 assert f is not None
                 out.write_bytes(f.read())
                 installed.append(rel)
+
+    if name == "numpy":
+        cfg_rel = "numpy/__config__.py"
+        cfg_path = packages_root / cfg_rel
+        cfg_path.write_text(
+            "# Deterministic WASI build config for Painted Wolf Portable Python\n"
+            "from enum import Enum\n"
+            "from numpy.core._multiarray_umath import (\n"
+            "    __cpu_features__,\n"
+            "    __cpu_baseline__,\n"
+            "    __cpu_dispatch__,\n"
+            ")\n\n"
+            "__all__ = ['show']\n"
+            "_built_with_meson = True\n\n"
+            "class DisplayModes(Enum):\n"
+            "    stdout = 'stdout'\n"
+            "    dicts = 'dicts'\n\n"
+            "CONFIG = {\n"
+            "    'Compilers': {'c': {'name': 'clang', 'version': '16.0.0', 'linker': 'ld.lld'}},\n"
+            "    'Machine Information': {'host': {'cpu': 'wasm32', 'family': 'wasm32', 'endian': 'little', 'system': 'wasi'}, 'cross-compiled': True},\n"
+            "    'Build Dependencies': {\n"
+            "        'blas': {'name': 'none', 'found': False},\n"
+            "        'lapack': {'name': 'lapack_lite', 'found': True, 'version': '1.26.4', 'detection method': 'internal'},\n"
+            "    },\n"
+            "}\n\n"
+            "def show(mode=DisplayModes.stdout.value):\n"
+            "    if mode == DisplayModes.stdout.value:\n"
+            "        print(CONFIG)\n"
+            "    elif mode == DisplayModes.dicts.value:\n"
+            "        return CONFIG\n"
+            "    else:\n"
+            "        raise AttributeError(f'Invalid mode: {mode!r}')\n",
+            encoding="utf-8",
+        )
+        installed.append(cfg_rel)
+    elif name == "pandas" and pandas_version_meson is not None:
+        vm_rel = "pandas/_version_meson.py"
+        vm_path = packages_root / vm_rel
+        vm_path.write_bytes(pandas_version_meson)
+        installed.append(vm_rel)
 
     if pkg_info_bytes is None:
         raise RuntimeError(f"sdist {sdist_path.name} missing PKG-INFO")

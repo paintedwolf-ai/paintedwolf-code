@@ -18,7 +18,9 @@
       "libjpeg": "9f",
       "libxml2": "2.12.9",
       "libxslt": "1.1.42",
-      "regex": "2024.11.6"
+      "regex": "2024.11.6",
+      "numpy": "1.26.4",
+      "pandas": "2.2.3"
     }
   },
   "distributions": [
@@ -2051,6 +2053,54 @@
       "filename": "pyelftools-0.33-py3-none-any.whl",
       "source_url": "https://files.pythonhosted.org/packages/46/2a/f9697576603dae937727827505a6126a066affb227034e77e6f9068910da/pyelftools-0.33-py3-none-any.whl",
       "source_sha256": "f215ad5f47d3f1373a21496a6c9e0707c622840d0622f23ff7ce08678b020036"
+    },
+    {
+      "name": "numpy",
+      "normalized_name": "numpy",
+      "version": "1.26.4",
+      "public": true,
+      "imports": [
+        "numpy"
+      ],
+      "backend": "builtin-wasi-extension",
+      "features": [
+        "arrays",
+        "broadcasting",
+        "matmul",
+        "lapack_lite",
+        "fft",
+        "random"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "sdist_pure_python",
+      "filename": "numpy-1.26.4.tar.gz",
+      "source_url": "https://files.pythonhosted.org/packages/source/n/numpy/numpy-1.26.4.tar.gz",
+      "source_sha256": "2a02aba9ed12e4ac4eb3ea9421c420301a0c6460d9830d74a9df87efa4912010"
+    },
+    {
+      "name": "pandas",
+      "normalized_name": "pandas",
+      "version": "2.2.3",
+      "public": true,
+      "imports": [
+        "pandas"
+      ],
+      "backend": "builtin-wasi-extension",
+      "features": [
+        "dataframe",
+        "read_csv",
+        "merge",
+        "groupby"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "sdist_pure_python",
+      "filename": "pandas-2.2.3.tar.gz",
+      "source_url": "https://files.pythonhosted.org/packages/source/p/pandas/pandas-2.2.3.tar.gz",
+      "source_sha256": "4f18ba62b61d7e192368b84517265a99b4d7ee8912f8708660fb4a366cc82667"
     }
   ],
   "bundled_fonts": [
