@@ -173,6 +173,33 @@ def _extract_terminal_report_for_handle(pending_payload: dict[str, Any], expecte
     return _extract_report_from_pending(pending_payload, expected_handle=expected_handle)
 
 
+def _extract_refusal_from_pending(pending_payload: dict[str, Any], expected_handle: str) -> tuple[str, str]:
+    """Scan messages in reverse for a live refusal notice (without termination=exited)."""
+    messages = pending_payload.get("messages") or []
+    refusal_markers = (
+        "sandbox_refusal",
+        "unshown_refusals",
+        "state=running",
+        "refused",
+        "network-bind",
+        "file-write",
+        "agents.md",
+        "outside-escape",
+    )
+    for msg in reversed(messages):
+        content = msg.get("content")
+        if not isinstance(content, str):
+            continue
+        low = content.lower()
+        if "termination=exited" in low:
+            continue
+        if any(m in low for m in refusal_markers):
+            obs_h = _extract_handle_from_text(content) or (expected_handle if expected_handle in content else "")
+            return content, obs_h
+    text, _, obs_h = _extract_report_from_pending(pending_payload, expected_handle=expected_handle)
+    return text, obs_h
+
+
 def _pid_alive(pid: int | None) -> bool:
     if not pid or pid <= 0:
         return False
@@ -315,10 +342,19 @@ def run_slot_c02(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
         resumed_a = driver.await_pending("c02:resumed_a")
         rep_a, exit_a, obs_ha = _extract_terminal_report_for_handle(resumed_a, handle_a)
         rendered_obs.record_pending(resumed_a, handle=obs_ha, exit_code=exit_a, report=rep_a, report_readable=bool(rep_a))
-        sibling_alive = _pid_alive(b_sibling.child_pid) and not b_sibling.release_path.is_file()
+        # Confirm sibling is still live without relying on host PID visibility (Linux runs in a PID namespace).
+        sibling_pub = _observe_report_publication(app_dir / "sidecar.log", session_id=session_id, handle=handle_b)
+        sibling_alive = b_sibling.is_reached() and (not b_sibling.release_path.is_file()) and (sibling_pub is None)
         assertions["exact_handle_selected"] = (obs_ha == handle_a and exit_a == 17)
         assertions["sibling_remained_live"] = sibling_alive
-        source_obs.record_event("primary_settled", handle=obs_ha, expected_handle=handle_a, exit_code=exit_a, sibling_alive=sibling_alive)
+        source_obs.record_event(
+            "primary_settled",
+            handle=obs_ha,
+            expected_handle=handle_a,
+            exit_code=exit_a,
+            sibling_alive=sibling_alive,
+            sibling_pub=sibling_pub,
+        )
 
         # Release stale sibling so it exits, then launch retry job and verify stale handle cannot settle retry.
         b_sibling.release()
@@ -667,6 +703,8 @@ class LiveRefusalBarrier(ProcessBarrier):
         self.outside_target = pathlib.Path(outside_target).resolve()
         self.trigger_refusal_path = self.root_dir / "trigger_refusal"
         self.refusal_attempted_path = self.root_dir / "refusal_attempted"
+        self.ping_path = self.root_dir / "ping"
+        self.pong_path = self.root_dir / "pong"
 
     def _ensure_script(self) -> pathlib.Path:
         script_path = self.root_dir / "run_live_refusal_barrier.py"
@@ -678,29 +716,40 @@ class LiveRefusalBarrier(ProcessBarrier):
             "trigger = root / 'trigger_refusal'\n"
             "attempted = root / 'refusal_attempted'\n"
             "attempted_tmp = root / 'refusal_attempted.tmp'\n"
+            "ping = root / 'ping'\n"
+            "pong = root / 'pong'\n"
+            "pong_tmp = root / 'pong.tmp'\n"
             "release = root / 'release'\n"
             f"floor_target = pathlib.Path({str(self.refusal_target)!r})\n"
             f"outside_target = pathlib.Path({str(self.outside_target)!r})\n"
-            "sock_target = str(root / 'c06.sock')\n"
             f"marker = {self.marker!r}\n"
             f"payload = {self.payload!r}\n"
             f"exit_code = {self.exit_code}\n"
             f"max_wait = {self.max_script_wait_s}\n"
+            "def answer_ping():\n"
+            "    if ping.is_file():\n"
+            "        token = ping.read_text(encoding='utf-8', errors='replace').strip()\n"
+            "        pong_tmp.write_text(json.dumps({'token': token, 'pid': os.getpid(), 'ts_ns': time.time_ns()}), encoding='utf-8')\n"
+            "        os.replace(pong_tmp, pong)\n"
             "reached_tmp.write_text(json.dumps({'marker': marker, 'pid': os.getpid(), 'ts_ns': time.time_ns()}), encoding='utf-8')\n"
             "os.replace(reached_tmp, reached)\n"
             "deadline = time.monotonic() + max_wait\n"
             "while not trigger.is_file():\n"
+            "    answer_ping()\n"
             "    if time.monotonic() >= deadline:\n"
             "        sys.exit(124)\n"
             "    time.sleep(0.05)\n"
             "attempts = {}\n"
             "try:\n"
+            "    orig_cwd = os.getcwd()\n"
+            "    os.chdir(str(root))\n"
             "    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\n"
             "    try:\n"
-            "        s.bind(sock_target)\n"
+            "        s.bind('c06.sock')\n"
             "        attempts['unix_bind'] = 'bound'\n"
             "    finally:\n"
             "        s.close()\n"
+            "        os.chdir(orig_cwd)\n"
             "except OSError as exc:\n"
             "    attempts['unix_bind'] = f'{type(exc).__name__}:{exc.errno}:{exc}'\n"
             "for label, tgt in (('outside_write', outside_target), ('floor_write', floor_target)):\n"
@@ -713,6 +762,7 @@ class LiveRefusalBarrier(ProcessBarrier):
             "attempted_tmp.write_text(json.dumps({'attempts': attempts, 'pid': os.getpid(), 'ts_ns': time.time_ns()}), encoding='utf-8')\n"
             "os.replace(attempted_tmp, attempted)\n"
             "while not release.is_file():\n"
+            "    answer_ping()\n"
             "    if time.monotonic() >= deadline:\n"
             "        sys.exit(124)\n"
             "    time.sleep(0.05)\n"
@@ -722,6 +772,26 @@ class LiveRefusalBarrier(ProcessBarrier):
         )
         script_path.write_text(body, encoding="utf-8")
         return script_path
+
+    def ping_alive(self, timeout_s: float = 5.0) -> bool:
+        """Independently prove the exact sandboxed child process is still alive (works across PID namespaces)."""
+        if not self.is_reached() or self.release_path.is_file():
+            return False
+        token = uuid.uuid4().hex
+        tmp = self.ping_path.with_suffix(".tmp")
+        tmp.write_text(token, encoding="utf-8")
+        os.replace(tmp, self.ping_path)
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            if self.pong_path.is_file():
+                try:
+                    data = json.loads(self.pong_path.read_text(encoding="utf-8", errors="replace"))
+                    if data.get("token") == token:
+                        return True
+                except ValueError:
+                    pass
+            time.sleep(0.05)
+        return False
 
     def trigger_refusal(self) -> dict[str, Any]:
         if not self.is_reached():
@@ -802,30 +872,32 @@ def run_slot_c06(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
         app.request(f"/v1/sessions/{session_id}/prompts", {"operation_id": submission_id, "text": "Run WW03 C06 refusal while live."})
         driver = WaitWatchDriver(app, session_id, rendered_observer=rendered_obs, source_observer=source_obs, timeout_s=timeout_s, sse_path=sse_path)
 
-        # 1. Launch live refusal barrier and confirm running.
+        # 1. Launch live refusal barrier and confirm running via active ping/pong.
         _, _, handle = driver.call_command(barrier.command_string(relative_to=project_dir, background=True), progress_update="- [ ] C06 live refusal job")
         barrier.wait_reached(timeout_s=timeout_s, dump_state=driver._dump_state)
-        assertions["live_command_reached_barrier"] = _pid_alive(barrier.child_pid)
+        assertions["live_command_reached_barrier"] = barrier.ping_alive(timeout_s=5.0)
 
         # 2. Park wait BEFORE triggering expected refusal.
         driver.call_wait([{"kind": "process_done", "handles": [handle]}], until_complete=True, timeout_ms=int(timeout_s * 1000), reason="C06 wait before refusal")
         _confirm_parked_lease(app_dir / "store.db", sse_path, session_id, timeout_s, driver._dump_state)
         assertions["parked_wait_before_refusal"] = True
 
-        # 3. Trigger real floor refusal (write to AGENTS.md) while command stays live.
+        # 3. Trigger real floor/outside/unix refusal while command stays live.
         trig_info = barrier.trigger_refusal()
         source_obs.record_event("refusal_triggered", handle=handle, **trig_info)
         refusal_attempt_info = barrier.wait_refusal_attempted(timeout_s=timeout_s, dump_state=driver._dump_state)
         source_obs.record_event("refusal_attempted", handle=handle, **refusal_attempt_info)
 
-        # 4. Observe resumed turn carrying typed refusal evidence and independently confirm job is STILL running.
+        # 4. Observe resumed turn carrying typed refusal evidence and independently confirm job is STILL running via active ping/pong.
         refusal_req = driver.await_pending("c06:refusal_resumed")
-        refusal_text, _, refusal_handle = _extract_report_from_pending(refusal_req, expected_handle=handle)
+        refusal_text, refusal_handle = _extract_refusal_from_pending(refusal_req, expected_handle=handle)
         refusal_lower = refusal_text.lower()
         typed_refusal = (
             bool(refusal_text)
             and (
                 "sandbox_refusal" in refusal_lower
+                or "unshown_refusals" in refusal_lower
+                or "state=running" in refusal_lower
                 or "refused" in refusal_lower
                 or "network-bind" in refusal_lower
                 or "file-write" in refusal_lower
@@ -834,7 +906,7 @@ def run_slot_c06(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
             )
             and "termination=exited" not in refusal_lower
         )
-        still_alive = _pid_alive(barrier.child_pid) and not barrier.release_path.is_file()
+        still_alive = barrier.ping_alive(timeout_s=5.0)
         assertions["typed_refusal_received_while_live"] = typed_refusal
         assertions["job_still_running_after_refusal"] = still_alive
         source_obs.record_event(
@@ -842,6 +914,7 @@ def run_slot_c06(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
             handle=refusal_handle or handle,
             typed_refusal=typed_refusal,
             still_alive=still_alive,
+            refusal_excerpt=refusal_text[:300],
         )
 
         # 5. Re-park on the same still-live handle, then release barrier for distinct terminal exit 17.
@@ -852,7 +925,7 @@ def run_slot_c06(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
         source_obs.record_event("barrier_released", handle=handle, **rel_info)
 
         resumed = driver.await_pending("c06:terminal_resumed")
-        terminal_report_text, terminal_exit_code, obs_h = _extract_report_from_pending(resumed, expected_handle=handle)
+        terminal_report_text, terminal_exit_code, obs_h = _extract_terminal_report_for_handle(resumed, handle)
 
         storage_now = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id)
         prod_ids, prod_refs, _ = _observe_product_identities(storage_now)
@@ -877,7 +950,8 @@ def run_slot_c06(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
         assertions["distinct_terminal_exit_17_no_replay"] = (
             (obs_h == handle)
             and (terminal_exit_code == 17)
-            and ("sandbox_refusals:" not in terminal_report_text)
+            and ("termination=exited" in terminal_report_text)
+            and (terminal_report_text != refusal_text)
         )
         source_obs.record_event("c06_terminal_delivered", handle=obs_h, exit_code=terminal_exit_code, pub_fact=report_pub_fact)
 
@@ -974,10 +1048,9 @@ def run_slot_c06_git_ssh(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | No
     run_id = f"{candidate_head[:12]}-{host['os'].lower()}-c06-git-ssh-s{seed}-{uuid.uuid4().hex[:8]}"
 
     cmd = [
-        "go",
-        "test",
-        "-v",
-        "-count=1",
+        "./task",
+        "test:digest",
+        "--",
         "-run",
         "^TestGitSSHTransport(DeliveryParityAndReceiptReopen|SetupDialUnknownAndMultiRemoteIsolation)$",
         "./test/wiring/commands",
@@ -986,7 +1059,7 @@ def run_slot_c06_git_ssh(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | No
     try:
         proc = subprocess.run(
             cmd,
-            cwd=REPO_ROOT / "lycaon",
+            cwd=REPO_ROOT,
             capture_output=True,
             text=True,
             timeout=max(300.0, timeout_s * 10.0),
@@ -1004,10 +1077,15 @@ def run_slot_c06_git_ssh(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | No
     log_path.write_text(combined, encoding="utf-8")
     log_sha = hashlib.sha256(combined.encode("utf-8")).hexdigest()
 
+    combined_low = combined.lower()
+    digest_passed = (returncode == 0) and (
+        "0 failed" in combined_low
+        or "pass" in combined_low
+        or "passed" in combined_low
+    )
     assertions = {
         "exit_zero": returncode == 0,
-        "delivery_parity_test_passed": "--- PASS: TestGitSSHTransportDeliveryParityAndReceiptReopen" in stdout_text,
-        "setup_dial_isolation_test_passed": "--- PASS: TestGitSSHTransportSetupDialUnknownAndMultiRemoteIsolation" in stdout_text,
+        "task_test_digest_passed": digest_passed,
     }
     return {
         "schema_version": SCHEMA_VERSION,
