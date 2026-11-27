@@ -129,7 +129,7 @@ func readJSONResult(t *testing.T, path string, dst any) {
 	contractcheck.FailErr(t, "unmarshal json "+path, json.Unmarshal(raw, dst))
 }
 
-func sha256Hex(b []byte) string {
+func py12SHA256Hex(b []byte) string {
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
 }
@@ -416,9 +416,9 @@ Path("dns_result.json").write_text(json.dumps(out), encoding="utf-8")
 		goSpoof, err := x509.ParseCertificate(spoofBlock.Bytes)
 		contractcheck.FailErr(t, "go x509 parse spoofed_leaf.pem", err)
 
-		wantLeafSPKI := sha256Hex(goLeaf.RawSubjectPublicKeyInfo)
-		wantIssuerSPKI := sha256Hex(goIssuer.RawSubjectPublicKeyInfo)
-		wantSpoofSPKI := sha256Hex(goSpoof.RawSubjectPublicKeyInfo)
+		wantLeafSPKI := py12SHA256Hex(goLeaf.RawSubjectPublicKeyInfo)
+		wantIssuerSPKI := py12SHA256Hex(goIssuer.RawSubjectPublicKeyInfo)
+		wantSpoofSPKI := py12SHA256Hex(goSpoof.RawSubjectPublicKeyInfo)
 		if wantSpoofSPKI == wantIssuerSPKI {
 			t.Fatal("spoofed fixture must have a distinct key from issuer")
 		}
@@ -716,7 +716,7 @@ Path("elf_result.json").write_text(json.dumps(out), encoding="utf-8")
 		}
 
 		// Record SQLite SHA-256 before guest query
-		dbBeforeHash := sha256Hex(py12FixtureBytes(t, "saved_events.sqlite"))
+		dbBeforeHash := py12SHA256Hex(py12FixtureBytes(t, "saved_events.sqlite"))
 
 		// Independent Go gzip & bzip2 oracles
 		gzR, err := gzip.NewReader(bytes.NewReader(py12FixtureBytes(t, "app.log.1.gz")))
@@ -828,7 +828,7 @@ Path("existing_result.json").write_text(json.dumps(out), encoding="utf-8")
 		// Verify SQLite source file hash unchanged before & after read-only query.
 		dbAfterBytes, err := os.ReadFile(filepath.Join(ws, "saved_events.sqlite"))
 		contractcheck.FailErr(t, "read saved_events.sqlite after query", err)
-		if got := sha256Hex(dbAfterBytes); got != dbBeforeHash {
+		if got := py12SHA256Hex(dbAfterBytes); got != dbBeforeHash {
 			t.Fatalf("saved_events.sqlite mutated during read-only query: before=%s after=%s", dbBeforeHash, got)
 		}
 
