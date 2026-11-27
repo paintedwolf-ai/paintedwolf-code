@@ -250,7 +250,9 @@ def run_g01_sidecar(
         try:
             sample_files = [e.path for e in spec0.entries if e.kind == "file"]
             fallback_file = sample_files[0] if sample_files else "moving/churn_0.txt"
-            batch_size = 20
+            # Keep G01 session batches small (4 calls = 1 full find/grep/wc/summarize cycle)
+            # so summarize packs never bloat the transcript or trigger background process caps.
+            batch_size = 4
             for batch_start in range(0, instances, batch_size):
                 batch_end = min(instances, batch_start + batch_size)
                 session = AgentToolSession(sidecar, project_id)
