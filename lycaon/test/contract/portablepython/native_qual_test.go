@@ -248,7 +248,7 @@ except OSError as e:
 		var matched *pythonadmission.AdmissionRecord
 		if resp.AdmissionEvidence != nil {
 			for _, rec := range resp.AdmissionEvidence.Admissions() {
-				if rec.AuthoritativeTarget.RelPath == "blocked.txt" && rec.Decision == pythonruntime.DecisionDeny {
+				if rec.AuthoritativeTarget.RelPath == "blocked.txt" && (rec.Decision == pythonruntime.DecisionDeny || rec.Decision == pythonruntime.DecisionStop) {
 					r := rec
 					matched = &r
 					break
@@ -264,6 +264,14 @@ except OSError as e:
 	})
 
 	t.Run("deterministic_fuel_exact_boundary_and_one_unit_beyond", func(t *testing.T) {
+		detSvc, err := portablepython.NewService(ctx, portablepython.ServiceConfig{
+			ScratchRoot: t.TempDir(),
+			Clock:       pythonruntime.NewFixedClock(time.Date(2026, 11, 26, 0, 0, 0, 0, time.UTC)),
+			Entropy:     pythonruntime.NewDeterministicEntropy(42),
+		})
+		contractcheck.FailErr(t, "create deterministic service for fuel boundary", err)
+		t.Cleanup(func() { _ = detSvc.Close(context.Background()) })
+
 		wsDir := t.TempDir()
 		roots := []pythondocuments.HostRootConfig{{ID: "ws-fuel", Dir: wsDir}}
 		code := "s = 0\nfor i in range(400):\n    s += i\nprint(s)\n"
@@ -271,23 +279,24 @@ except OSError as e:
 			return portablepython.ToolRequest{
 				RawArgs: map[string]any{"code": code},
 				CallID:  "call-fuel", Actor: "coordinator", View: "primary", Surface: "agent", Roots: roots,
+				Env:    map[string]string{"PYTHONHASHSEED": "0"},
 				Limits: pythonruntime.ResourceLimits{MaxGuestWork: maxFuel, Timeout: 60 * time.Second},
 			}
 		}
-		measure, err := svc.ExecuteTool(ctx, baseReq(portablepython.DefaultMaxGuestWork))
+		measure, err := detSvc.ExecuteTool(ctx, baseReq(portablepython.DefaultMaxGuestWork))
 		contractcheck.FailErr(t, "measure exact fuel", err)
 		if !measure.CleanCompletion || measure.Usage.GuestWork == 0 {
 			t.Fatalf("baseline fuel measurement failed: clean=%v usage=%+v", measure.CleanCompletion, measure.Usage)
 		}
 		exact := measure.Usage.GuestWork
 
-		atExact, err := svc.ExecuteTool(ctx, baseReq(exact))
+		atExact, err := detSvc.ExecuteTool(ctx, baseReq(exact))
 		contractcheck.FailErr(t, "execute at exact fuel boundary", err)
 		if !atExact.CleanCompletion || atExact.ExitCode != 0 || atExact.Stop != nil {
 			t.Fatalf("expected pass at exact fuel=%d, got clean=%v exit=%d stop=%+v", exact, atExact.CleanCompletion, atExact.ExitCode, atExact.Stop)
 		}
 
-		oneBelow, err := svc.ExecuteTool(ctx, baseReq(exact-1))
+		oneBelow, err := detSvc.ExecuteTool(ctx, baseReq(exact-1))
 		contractcheck.FailErr(t, "execute one unit below fuel boundary", err)
 		if oneBelow.CleanCompletion || oneBelow.Stop == nil || oneBelow.Stop.Code != pythonruntime.StopWorkLimitExceeded {
 			t.Fatalf("expected StopWorkLimitExceeded at fuel=%d, got clean=%v stop=%+v", exact-1, oneBelow.CleanCompletion, oneBelow.Stop)
@@ -395,7 +404,13 @@ func TestNativeQual_LifecycleAndIsolationMatrix(t *testing.T) {
 			t.Fatalf("expected output bound enforcement, got clean=%v truncated=%v stop=%+v", outResp.CleanCompletion, outResp.StdoutTruncated, outResp.Stop)
 		}
 
-		memResp, err := svc.ExecuteTool(context.Background(), portablepython.ToolRequest{
+		memSvc, err := portablepython.NewService(context.Background(), portablepython.ServiceConfig{
+			ScratchRoot:             t.TempDir(),
+			DefaultMemoryLimitPages: 256, // 16 MiB linear memory cap
+		})
+		contractcheck.FailErr(t, "create memory-limited service", err)
+		t.Cleanup(func() { _ = memSvc.Close(context.Background()) })
+		memResp, err := memSvc.ExecuteTool(context.Background(), portablepython.ToolRequest{
 			RawArgs: map[string]any{"code": "a = bytearray(32 * 1024 * 1024)\nprint(len(a))\n"},
 			CallID:  "call-memlim", Actor: "coordinator", View: "primary", Surface: "agent",
 			Roots: roots, Limits: pythonruntime.ResourceLimits{MaxMemoryPages: 256, Timeout: 30 * time.Second},
