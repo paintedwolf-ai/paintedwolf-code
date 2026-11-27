@@ -41,8 +41,10 @@ from grounding.sidecar_driver import (
 class _SSECollector:
     """Background SSE reader for `/v1/events` capturing real product-emitted events."""
 
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, headers: dict[str, str] | None = None) -> None:
         self.url = url
+        self.headers = dict(headers or {})
+        self.headers["Accept"] = "text/event-stream"
         self.events: list[dict[str, Any]] = []
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -56,7 +58,7 @@ class _SSECollector:
         self._thread.join(timeout=2.0)
 
     def _run(self) -> None:
-        req = urllib.request.Request(self.url, headers={"Accept": "text/event-stream"})
+        req = urllib.request.Request(self.url, headers=self.headers)
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 cur_id = ""
@@ -135,8 +137,8 @@ def run_d10_worker_and_event_validation(
         pid = client.create_project(workspace)["id"]
         trace_log = sidecar.log_path
 
-        # Start real SSE collector on /v1/events
-        sse = _SSECollector(f"{sidecar.base_url}/v1/events")
+        # Start real SSE collector on /v1/events (with sidecar auth headers)
+        sse = _SSECollector(f"{sidecar.base_url}/v1/events", headers=client._headers())
         sse.start()
 
         # --- Part 1: Real product-emitted event deduplication (MID_TURN_NOTE_HANDLE_UNGROUND) ---
@@ -232,12 +234,12 @@ def run_d10_worker_and_event_validation(
             def _answer_tool(sess: str, tool_name: str, tool_args: dict[str, Any]) -> None:
                 req = client.wait_pending(sess, timeout=180.0)
                 if tool_name not in (req.get("tools") or []):
-                    client.respond_llm(
+                    client.respond(
                         req["id"],
                         tool_calls=[{"id": str(uuid.uuid4()), "name": "request_tools", "args": {"need": tool_name}}],
                     )
                     req = client.wait_pending(sess, timeout=180.0)
-                client.respond_llm(
+                client.respond(
                     req["id"],
                     tool_calls=[{"id": str(uuid.uuid4()), "name": tool_name, "args": tool_args}],
                 )
@@ -257,11 +259,11 @@ def run_d10_worker_and_event_validation(
             deadline = time.monotonic() + 180.0
             child_req = None
             while time.monotonic() < deadline:
-                pend = client.get_pending()
-                if pend.get("pending"):
+                pend = client.request("GET", "/harness/llm/pending")
+                if isinstance(pend, dict) and pend.get("pending"):
                     psid = str(pend.get("session_id") or "")
                     if psid == root_sid:
-                        client.respond_llm(
+                        client.respond(
                             pend["id"],
                             tool_calls=[{"id": str(uuid.uuid4()), "name": "wait", "args": {"timeout_ms": 15000, "conditions": [{"kind": "next_worker_done"}]}}],
                         )
@@ -274,15 +276,15 @@ def run_d10_worker_and_event_validation(
                 raise RuntimeError("Worker child session never became pending")
 
             # Child reads app.go, then incurs a grounding reject on [read#99:99] and repairs to [read#1:3]
-            client.respond_llm(
+            client.respond(
                 child_req["id"],
                 tool_calls=[{"id": str(uuid.uuid4()), "name": "command", "args": {"command": "cat -n app.go"}}],
             )
             child_req2 = client.wait_pending(child_sid, timeout=180.0)
-            client.respond_llm(child_req2["id"], content="Worker claimed [read#99:99].")
+            client.respond(child_req2["id"], content="Worker claimed [read#99:99].")
             # Wait for repair prompt on child_sid and repair
             child_rep = client.wait_pending(child_sid, timeout=180.0)
-            client.respond_llm(child_rep["id"], content="[cite: c1 => read#1:3]")
+            client.respond(child_rep["id"], content="[cite: c1 => read#1:3]")
 
             art_sib = sib_fut.result()
             (out_dir / "sibling-session.json").write_text(
