@@ -169,12 +169,16 @@ def _wait_session_idle(
     phase: str,
     timeout_s: float,
     dump_state: Any,
+    drain_followups: bool = False,
 ) -> None:
-    """Wait until every prompt_submission row for session_id in SQLite has settled before cold-restarting."""
+    """Wait until zero prompt_submissions rows for session_id are queued/running/pending."""
     guard = TimerGuard(timeout_s, phase=phase, verdict="incomplete", dump_state=dump_state)
-    terminal_statuses = {"complete", "completed", "failed", "interrupted", "canceled"}
+    active_statuses = {"queued", "running", "pending"}
+    drained = 0
+    seen_req_ids: set[str] = set()
 
     def _settled() -> bool:
+        nonlocal drained
         snap = StorageObserver(app.directory / "store.db", clock_domain="system").snapshot(session_id)
         subs = snap.get("tables", {}).get("prompt_submissions") or []
         if not subs:
@@ -182,11 +186,19 @@ def _wait_session_idle(
         active = [
             s
             for s in subs
-            if not s.get("completed_at") and str(s.get("status") or "").lower() not in terminal_statuses
+            if not s.get("completed_at") and str(s.get("status") or "").lower() in active_statuses
         ]
-        return len(active) == 0
+        if not active:
+            return True
+        if drain_followups and drained < 3:
+            extra = smoke_workers.pending(app, session_id)
+            if isinstance(extra, dict) and extra.get("id") and extra["id"] not in seen_req_ids:
+                seen_req_ids.add(str(extra["id"]))
+                drained += 1
+                app.request("/harness/llm/respond", {"id": extra["id"], "content": "Acknowledged."})
+        return False
 
-    guard.poll(_settled, detail=f"prompt_submissions for session {session_id} did not settle before cold restart")
+    guard.poll(_settled, detail=f"prompt_submissions for session {session_id} did not settle before next step")
 
 
 def _pid_alive(pid: int | None) -> bool | None:
@@ -660,6 +672,7 @@ def _run_c20_stop_fence_sessions(engine_bin: pathlib.Path, slot_dir: pathlib.Pat
             phase="c20.wait_idle_after_next_user",
             timeout_s=timeout_s,
             dump_state=driver._dump_state,
+            drain_followups=True,
         )
 
         snap_after_user = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id)
