@@ -62,6 +62,8 @@ def extract_deliveries(case, audit, baseline_hashes, project_dir=None):
     grouped = {}
     all_owner_refs = True
     all_ranges_exact = True
+    outputs = audit.get('invocation_program_outputs') or []
+    truncated_oids = {o['id'] for o in outputs if o.get('stream') == 'stdout' and o.get('preview_truncated') == 1}
     max_source_end_by_path = {}
     for row in rows:
         owner_ref = row.get('source_owner_ref') or ''
@@ -75,6 +77,7 @@ def extract_deliveries(case, audit, baseline_hashes, project_dir=None):
         if not isinstance(mappings, list) or not mappings:
             all_ranges_exact = False
             continue
+        row_oid = row.get('output_id') or ''
         for m in mappings:
             if not isinstance(m, dict):
                 all_ranges_exact = False
@@ -92,7 +95,8 @@ def extract_deliveries(case, audit, baseline_hashes, project_dir=None):
             if not path:
                 all_ranges_exact = False
                 continue
-            max_source_end_by_path[path] = max(max_source_end_by_path.get(path, 0), s_end)
+            if not truncated_oids or row_oid in truncated_oids:
+                max_source_end_by_path[path] = max(max_source_end_by_path.get(path, 0), s_end)
             printed = m.get('PrintedLine', m.get('printed_line', 0))
             if isinstance(printed, int) and printed > 0:
                 span = [printed, printed]
@@ -103,7 +107,7 @@ def extract_deliveries(case, audit, baseline_hashes, project_dir=None):
             rev = revisions.get(path) if (path in revisions and (not baseline_hashes or not sha or sha == baseline_hashes.get(path))) else (sha or '')
             raw_rep = str(src.get('Representation') or src.get('representation') or '')
             rep = 'numbered-reversible' if (printed and printed > 0) or 'numbered' in raw_rep else 'literal'
-            key = (path, rev, rep)
+            key = (row_oid, path, rev, rep)
             entry = grouped.setdefault(key, {'path': path, 'revision': rev, 'lines': None, 'representation': rep, 'delivered': bool(owner_ref)})
             entry['delivered'] = entry['delivered'] and bool(owner_ref)
             if span:
@@ -113,8 +117,7 @@ def extract_deliveries(case, audit, baseline_hashes, project_dir=None):
     if deliveries:
         facts['delivery_owner_identity'] = all_owner_refs
         facts['exact_mapped_ranges'] = all_ranges_exact
-        outputs = audit.get('invocation_program_outputs') or []
-        if any(o.get('stream') == 'stdout' and o.get('preview_truncated') == 1 for o in outputs):
+        if truncated_oids:
             unseen_ok = all(
                 max_source_end_by_path[p] < len(bytes_value(setup_files[p]))
                 for p in max_source_end_by_path if p in setup_files
@@ -123,14 +126,37 @@ def extract_deliveries(case, audit, baseline_hashes, project_dir=None):
     return deliveries, facts
 
 
-def inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar, baseline_hashes, final_hashes):
-    """Verify edit anchoring (Q05), live catalog generation & bounded find visits (Q01/Q20), and confined launch (Q21)."""
+def _pin_digest(pin):
+    c_sha, d_sha = str(pin.get('content_sha256') or ''), str(pin.get('disk_sha256') or '')
+    return c_sha if len(c_sha) == 64 else (d_sha if len(d_sha) == 64 else '')
+
+
+def _pins_match(read_pin, edit_pin):
+    r_dig, e_dig = _pin_digest(read_pin), _pin_digest(edit_pin)
+    if not r_dig or r_dig != e_dig:
+        return False
+    r_disk, e_disk = str(read_pin.get('disk_sha256') or ''), str(edit_pin.get('disk_sha256') or '')
+    if r_disk and e_disk and r_disk != e_disk:
+        return False
+    r_cnt, e_cnt = str(read_pin.get('content_sha256') or ''), str(edit_pin.get('content_sha256') or '')
+    return not (r_cnt and e_cnt and r_cnt != e_cnt)
+
+
+def _anchored_by_matching_pins(execs, pins, write_exec_id, rel_path):
+    read_ids = {e['id'] for e in execs if e.get('operation_id') == 'read' and e.get('state') == 'completed'}
+    read_pins = [p for p in pins if p.get('execution_id') in read_ids and p.get('role') == 'source' and str(p.get('path') or '').lstrip('./') == rel_path and _pin_digest(p)]
+    edit_pins = [p for p in pins if p.get('execution_id') == write_exec_id and p.get('role') == 'source' and str(p.get('path') or '').lstrip('./') == rel_path and _pin_digest(p)]
+    return any(_pins_match(rp, ep) for rp in read_pins for ep in edit_pins)
+
+
+def inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar, baseline_hashes, final_hashes, invocations=None):
+    """Verify edit anchoring (Q05), Q06 unseen-span refusal, catalog generation & bounded visits (Q01/Q20), and confined launch (Q21)."""
     facts = {}
     execs = audit['invocation_program_executions']
     pins = audit['invocation_program_revision_pins']
     segments = audit.get('invocation_program_revision_pin_segments') or []
     delivered_paths = {d['path'] for d in deliveries if d.get('delivered') is True}
-    # 1) Q05 anchored_edit: top-level edit OR native command edit backed by delivered path + changed bytes.
+    # 1) Q05 anchored_edit: require matching read and edit source revision pins + delivered path + changed bytes.
     edit_receipts = [r for r in audit.get('invocation_receipts') or () if r.get('tool_name') == 'edit' and r.get('status') == 'completed']
     if edit_receipts:
         turn_paths = [
@@ -144,7 +170,7 @@ def inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar,
             if not any(r.get('execution_id') == er['id'] for r in receipts):
                 receipts.append(row)
                 effects.append({k: v for k, v in row.items() if k != 'execution_id'})
-            if rel_path in delivered_paths and changed:
+            if rel_path in delivered_paths and changed and _anchored_by_matching_pins(execs, pins, er['id'], rel_path):
                 anchored = True
         facts['anchored_edit'] = anchored
     elif delivered_paths:
@@ -153,8 +179,13 @@ def inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar,
             facts['anchored_edit'] = any(
                 str(r.get('path') or '').lstrip('./') in delivered_paths
                 and (baseline_hashes is None or final_hashes.get(str(r.get('path') or '').lstrip('./')) != baseline_hashes.get(str(r.get('path') or '').lstrip('./')))
+                and _anchored_by_matching_pins(execs, pins, r.get('execution_id'), str(r.get('path') or '').lstrip('./'))
                 for r in write_rows
             )
+    if case['id'] == 'unseen-output-no-edit-base' and invocations and len(invocations) >= 2:
+        turn2 = invocations[1]
+        if not (turn2.get('outcome') == 'rejected' and turn2.get('rejection_code') == 'EDITOR_DOCUMENT_READ_REQUIRED'):
+            facts['unseen_ranges_not_read_bases'] = False
     # 2) Q01/Q20 catalog_generation_matches_live & bounded_visits.
     inv_rows = audit.get('source_inventory_state') or []
     if inv_rows:

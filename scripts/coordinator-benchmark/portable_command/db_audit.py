@@ -66,6 +66,8 @@ def _canonical_op(ex):
     owner, canonical = ex.get('owner') or '', ex.get('canonical') or ''
     if op_id == 'write' or (op_id == 'edit' and owner == 'filesystem'):
         return 'write'
+    if op_id == 'code_rewrite' or native_cmd == 'code-rewrite':
+        return 'code_rewrite'
     if op_id == 'read' and native_cmd in {'', 'cat', 'head', 'read'}:
         return 'read'
     if op_id == 'command' and native_cmd == 'external' and owner == 'processes':
@@ -131,14 +133,14 @@ def receipt_rows(audit, progress_receipts, draft_bindings=None):
                         and b.get('revision') == src_pin.get('document_revision')
                         and (not src_pin.get('document_id') or b.get('document_id') == src_pin.get('document_id'))):
                     row['input_revision'] = b['alias']
-        if op_id in {'write', 'edit'} or ex.get('accepted_revision') or ex.get('published_revision'):
+        if op_id in {'write', 'edit', 'code_rewrite'} or ex.get('accepted_revision') or ex.get('published_revision'):
             pin = next((p for p in audit['invocation_program_revision_pins']
                         if p['execution_id'] == ex['id'] and p['role'] == 'destination'), None)
             if pin:
                 row['path'] = effect['path'] = pin['path']
             pub = pubs_by_prog.get(ex['program_id'])
             pub_committed = bool(pub and pub.get('state') == 'committed' and pub.get('materialized') == 1)
-            direct_edit_ok = bool(op_id == 'edit' and ex.get('owner') == 'filesystem' and ex.get('state') == 'completed' and ex.get('effect_certainty') == 'completed')
+            direct_edit_ok = bool(op_id in {'edit', 'code_rewrite'} and ex.get('owner') == 'filesystem' and ex.get('state') == 'completed' and ex.get('effect_certainty') == 'completed')
             published = (bool(ex.get('published_revision')) and pub_committed) or direct_edit_ok
             accepted = bool(ex.get('accepted_revision')) or (published and ex.get('effect_certainty') == 'completed')
             row['accepted'] = effect['accepted'] = accepted

@@ -211,10 +211,12 @@ class PortableCommandQSliceTests(unittest.TestCase):
             (proj / 'input.txt').write_text('alpha\ngamma\n')
             db = sqlite3.connect(db_path)
             db.execute("CREATE TABLE invocation_program_deliveries (id TEXT PRIMARY KEY, output_id TEXT, response_id TEXT, delivery_id TEXT, start_byte INTEGER, end_byte INTEGER, source_owner_ref TEXT, mappings_json TEXT)")
+            db.execute("ALTER TABLE invocation_program_revision_pins ADD COLUMN disk_sha256 TEXT DEFAULT ''")
+            db.execute("ALTER TABLE invocation_program_revision_pins ADD COLUMN content_sha256 TEXT DEFAULT ''")
             db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','completed',1), ('r2','sess1234','c2','command','processes','completed',1)")
             db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,''), ('p2','r2','completed',0,'')")
             db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,accepted_revision,published_revision) VALUES ('e1','p1',1,'read','cat','filesystem','completed','none','',''), ('e2','p2',1,'edit','edit','filesystem','completed','completed','rev1','rev2')")
-            db.execute("INSERT INTO invocation_program_revision_pins VALUES ('p2','e2',0,'destination','published_disk','input.txt')")
+            db.execute("INSERT INTO invocation_program_revision_pins VALUES ('p1','e1',0,'source','published_disk','input.txt',?,?), ('p2','e2',0,'source','published_disk','input.txt',?,?), ('p2','e2',1,'destination','published_disk','input.txt',?,?)", (base['input.txt'], base['input.txt'], base['input.txt'], base['input.txt'], base['input.txt'], base['input.txt']))
             db.execute("INSERT INTO invocation_program_publications VALUES ('p2','sess1234','committed',1)")
             db.execute("INSERT INTO invocation_program_outputs VALUES ('o1','p1','e1','stdout','ref:o1',1,0,'1\\talpha\\n2\\tbeta\\n',0,2,'','b'*64)")
             src_id = 'root-uuid-1234/input.txt'
@@ -227,33 +229,49 @@ class PortableCommandQSliceTests(unittest.TestCase):
             ))
             db.commit(); db.close()
             ident = {'git_head': 'a' * 40}
-            obs, audit = observe.build_observation(
-                CASES['literal-delivery-edit'], session_id='sess1234', identity=ident, project_dir=proj,
-                db_path=db_path, sidecar_log=log_path, baseline_hashes=base,
-                turn_records=[
-                    {'program': CASES['literal-delivery-edit']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1'], 'envelope_mode': 'command_only'},
-                    {'program': CASES['literal-delivery-edit']['turns'][1]['program'], 'command_call_id': 'c2', 'call_ids': ['c2'], 'envelope_mode': 'command_only'},
-                ],
-                prelude_records=[],
-            )
+            q5_turns = [
+                {'program': CASES['literal-delivery-edit']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1'], 'envelope_mode': 'command_only'},
+                {'program': CASES['literal-delivery-edit']['turns'][1]['program'], 'command_call_id': 'c2', 'call_ids': ['c2'], 'envelope_mode': 'command_only'},
+            ]
+            obs, audit = observe.build_observation(CASES['literal-delivery-edit'], session_id='sess1234', identity=ident, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes=base, turn_records=q5_turns, prelude_records=[])
             self.assertEqual(audit['observation_gaps'], [])
             grade = grading.grade_case(CASES['literal-delivery-edit'], obs, proj, ident)
             self.assertTrue(grade['passed'], grade['dimensions'])
-            # Q06 unseen-output-no-edit-base: line 1 delivered -> unseen_ranges_not_read_bases=True; full file delivered -> False.
+            # Q05 negative controls: mismatched edit source pin digest or absent source pin MUST fail anchored_edit.
+            for sql in (
+                f"UPDATE invocation_program_revision_pins SET disk_sha256='{'f' * 64}', content_sha256='{'f' * 64}' WHERE execution_id='e2' AND role='source'",
+                "DELETE FROM invocation_program_revision_pins WHERE execution_id='e2' AND role='source'",
+            ):
+                db = sqlite3.connect(db_path); db.execute(sql); db.commit(); db.close()
+                obs_bad, _ = observe.build_observation(CASES['literal-delivery-edit'], session_id='sess1234', identity=ident, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes=base, turn_records=q5_turns, prelude_records=[])
+                self.assertFalse(obs_bad['facts']['anchored_edit'])
+                self.assertFalse(grading.grade_case(CASES['literal-delivery-edit'], obs_bad, proj, ident)['passed'])
+            # Q06 unseen-output-no-edit-base: truncated line-1 delivery + Turn 2 EDITOR_DOCUMENT_READ_REQUIRED refusal vs accepted unseen span.
             db_q6 = root / 'q6.db'
             create_audit_db(db_q6)
             db = sqlite3.connect(db_q6)
             db.execute("CREATE TABLE invocation_program_deliveries (id TEXT PRIMARY KEY, output_id TEXT, response_id TEXT, delivery_id TEXT, start_byte INTEGER, end_byte INTEGER, source_owner_ref TEXT, mappings_json TEXT)")
-            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','completed',1)")
-            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,'')")
+            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','completed',1), ('r2','sess1234','c2','code_rewrite','filesystem','rejected',1)")
+            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,''), ('p2','r2','rejected',2,'EDITOR_DOCUMENT_READ_REQUIRED')")
             db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e1','p1',1,'read','cat','filesystem','completed','none')")
             db.execute("INSERT INTO invocation_program_outputs VALUES ('o1','p1','e1','stdout','ref:o1',1,0,'alpha\\n',1,2,'',?)", ('b' * 64,))
             m_line1 = json.dumps([{'Source': {'SourceID': src_id, 'SHA256': base['input.txt'], 'Representation': 'utf8-no-bom'}, 'SourceStartByte': 0, 'SourceEndByte': 6, 'OutputStartByte': 0, 'OutputEndByte': 6}])
             db.execute("INSERT INTO invocation_program_deliveries VALUES ('d1','o1','resp1','del1',0,6,'owner:1',?)", (m_line1,))
+            db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?), ('m2','sess1234',2,'tool','c2',?)", (
+                json.dumps({'outcome': 'completed', 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'completed', 'status': 0, 'stdout': 'alpha\n', 'stderr': ''})}),
+                json.dumps({'outcome': 'rejected', 'codes': ['EDITOR_DOCUMENT_READ_REQUIRED'], 'content': '[code_rewrite#2]\n' + json.dumps({'program_id': 'p2', 'state': 'rejected', 'status': 2, 'refusal': {'code': 'EDITOR_DOCUMENT_READ_REQUIRED'}})}),
+            ))
             db.commit(); db.close()
-            obs_q6, _ = observe.build_observation(CASES['unseen-output-no-edit-base'], session_id='sess1234', identity=ident, project_dir=proj, db_path=db_q6, sidecar_log=log_path, baseline_hashes=base, turn_records=[{'program': 'cat ./input.txt', 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
+            q6_turns = [{'program': 'cat ./input.txt', 'command_call_id': 'c1', 'call_ids': ['c1']}, {'program': 'code-rewrite', 'command_call_id': 'c2', 'call_ids': ['c2']}]
+            obs_q6, _ = observe.build_observation(CASES['unseen-output-no-edit-base'], session_id='sess1234', identity=ident, project_dir=proj, db_path=db_q6, sidecar_log=log_path, baseline_hashes=base, turn_records=q6_turns, prelude_records=[])
             self.assertEqual(obs_q6['deliveries'], [{'path': 'input.txt', 'revision': 'baseline:input.txt', 'lines': [1, 1], 'representation': 'literal', 'delivered': True}])
             self.assertTrue(obs_q6['facts']['unseen_ranges_not_read_bases'])
+            db = sqlite3.connect(db_q6)
+            db.execute("UPDATE invocation_programs SET state='completed', status_code=0, stop_code='' WHERE id='p2'")
+            db.execute("UPDATE messages SET tool_result_json=? WHERE id='m2'", (json.dumps({'outcome': 'completed', 'content': '[code_rewrite#2]\n' + json.dumps({'program_id': 'p2', 'state': 'completed', 'status': 0})}),))
+            db.commit(); db.close()
+            obs_q6_acc, _ = observe.build_observation(CASES['unseen-output-no-edit-base'], session_id='sess1234', identity=ident, project_dir=proj, db_path=db_q6, sidecar_log=log_path, baseline_hashes=base, turn_records=q6_turns, prelude_records=[])
+            self.assertFalse(obs_q6_acc['facts']['unseen_ranges_not_read_bases'])
             db = sqlite3.connect(db_q6)
             full_len = len(CASES['unseen-output-no-edit-base']['setup']['files']['input.txt'].encode('utf-8'))
             m_full = json.dumps([{'Source': {'SourceID': src_id, 'SHA256': base['input.txt'], 'Representation': 'utf8-no-bom'}, 'SourceStartByte': 0, 'SourceEndByte': full_len, 'OutputStartByte': 0, 'OutputEndByte': full_len}])
