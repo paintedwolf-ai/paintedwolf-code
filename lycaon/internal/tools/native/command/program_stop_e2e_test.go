@@ -442,7 +442,7 @@ func TestProgramInterruptKeepsBackgroundJobAndStopCancelsApproval(t *testing.T) 
 
 		done := make(chan callResult, 1)
 		go func() {
-			s, e := f.Call(t, t.Context(), "sleep 30 & sleep 30")
+			s, e := f.Call(t, t.Context(), "sleep 300 & sleep 300")
 			done <- callResult{s, e}
 		}()
 
