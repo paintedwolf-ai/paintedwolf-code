@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
@@ -129,4 +130,48 @@ func TestAssertScanPathWithinProjectRejectsSymlinkEscape(t *testing.T) {
 	if err := scansourceview.AssertScanPathWithinProject(root, link); err == nil {
 		t.Fatal("symlink escape must be rejected")
 	}
+}
+
+func TestRuntimePolicyContextDistinguishesHardLimitFromCaller(t *testing.T) {
+	policy := (scancatalog.RuntimePolicy{SoftLimitSec: 1, HardLimitSec: 1}).Normalized()
+
+	t.Run("caller cancellation", func(t *testing.T) {
+		parent, cancelParent := context.WithCancel(t.Context())
+		ctx, cancel := policy.Context(parent)
+		defer cancel()
+		cancelParent()
+		<-ctx.Done()
+		if !errors.Is(ctx.Err(), context.Canceled) {
+			t.Fatalf("ctx.Err() = %v, want context.Canceled", ctx.Err())
+		}
+		if errors.Is(context.Cause(ctx), scancatalog.ErrHardLimitExceeded) {
+			t.Fatalf("caller cancellation misclassified as hard limit: %v", context.Cause(ctx))
+		}
+	})
+
+	t.Run("caller deadline shorter than hard limit", func(t *testing.T) {
+		parent, cancelParent := context.WithTimeout(t.Context(), 50*time.Millisecond)
+		defer cancelParent()
+		ctx, cancel := policy.Context(parent)
+		defer cancel()
+		<-ctx.Done()
+		if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			t.Fatalf("ctx.Err() = %v, want context.DeadlineExceeded", ctx.Err())
+		}
+		if errors.Is(context.Cause(ctx), scancatalog.ErrHardLimitExceeded) {
+			t.Fatalf("shorter caller deadline misclassified as hard limit: %v", context.Cause(ctx))
+		}
+	})
+
+	t.Run("policy hard limit", func(t *testing.T) {
+		ctx, cancel := policy.Context(t.Context())
+		defer cancel()
+		<-ctx.Done()
+		if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			t.Fatalf("ctx.Err() = %v, want context.DeadlineExceeded", ctx.Err())
+		}
+		if !errors.Is(context.Cause(ctx), scancatalog.ErrHardLimitExceeded) {
+			t.Fatalf("context.Cause(ctx) = %v, want ErrHardLimitExceeded", context.Cause(ctx))
+		}
+	})
 }
