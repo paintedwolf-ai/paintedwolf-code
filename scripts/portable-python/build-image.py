@@ -750,21 +750,19 @@ def main() -> None:
 
     # 2b. Apply minimal WASI compatibility patches (e.g. pytest get_user_id on wasi)
     applied_patches = apply_wasi_package_patches(packages_dir, record_hash)
+    patched_rels = {p["target"].removeprefix("packages/") for p in applied_patches}
     for p in applied_patches:
         print(f"[patch] {p['target']}: {p['reason']}")
-        # Recompute tree_sha256 for any patched distribution using its RECORD file
+    if patched_rels:
+        # Recompute tree_sha256 for every distribution whose RECORD contains a patched file
         for md in manifest_dists:
-            if (
-                (md["normalized_name"] == "pytest" and p["target"].startswith("packages/_pytest/"))
-                or (md["normalized_name"] == "sympy" and p["target"].startswith("packages/sympy/"))
-                or (md["normalized_name"] == "fpdf2" and p["target"].startswith("packages/fpdf/"))
-            ):
-                rec_path = packages_dir / md["dist_info_path"].removeprefix("packages/") / "RECORD"
-                rel_files = [
-                    line.split(",", 1)[0]
-                    for line in rec_path.read_text(encoding="utf-8").splitlines()
-                    if line.strip()
-                ]
+            rec_path = packages_dir / md["dist_info_path"].removeprefix("packages/") / "RECORD"
+            rel_files = [
+                line.split(",", 1)[0]
+                for line in rec_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            if any(rf in patched_rels for rf in rel_files):
                 md["tree_sha256"] = sha256_tree(packages_dir, rel_files)
 
     # 2c. Install pinned redistributable Unicode fonts (e.g. DejaVuSans for fpdf2)

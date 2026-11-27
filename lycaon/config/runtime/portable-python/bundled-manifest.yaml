@@ -48,9 +48,9 @@ portable_python_engine:
 portable_python_image:
   image_id: pp-cpython-3.12.0-wasi-b4090d6865df1f73
   archive_name: portable-python-image-pyc.tar.gz
-  archive_sha256: 9ad77c7765da225fec24246fac997b3de9619d70090da70c000871af3b1e0840
-  archive_bytes: 66499767
-  manifest_sha256: 56d73c0cf0cea3ac1ba939f17032cff659b5076bfc7e59a9cd3b574e15a3e096
+  archive_sha256: 647cc374e70a319beeb72af97ecd8af9c626926e7e7f14a1f140646031e63776
+  archive_bytes: 66499770
+  manifest_sha256: 15408a4c215801e192e5e4232c1df07e30e91ef4866e932dfb61b1d0d722ad54
   packages_tree_sha256: 6fc05637707f66b3fe9fefc97d38174c505bddd61d366fcf9b53062e70e9ad75
   cpython_wasm_sha256: bea5b8f2cb633212d4be85a668ad13246dc0c1b65c29796cf5d990ec1956b052
   metered_wasm_sha256: 92755437dfb30aa41a5868f06d585dac55990474e07ebca53d9e5b1f009758f4
