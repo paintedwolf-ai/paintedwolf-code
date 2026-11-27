@@ -117,8 +117,8 @@ func (s *stubEditorDocs) PreviewAgentEdits(_ context.Context, _ string, edits []
 					Before:      *doc,
 					After:       edit.Content,
 					AfterSHA256: textfile.SHA256([]byte(edit.Content)),
-					BeforeBytes: len(doc.Text),
-					AfterBytes:  len(edit.Content),
+					BeforeBytes: int64(len(doc.Text)),
+					AfterBytes:  int64(len(edit.Content)),
 				})
 			}
 		}
