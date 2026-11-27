@@ -100,6 +100,15 @@ class CF08SidecarRunner:
         )
         return True
 
+    @staticmethod
+    def _wire_query(spec: ReplaceSpec) -> str:
+        # Search DSL parses unquoted '(' / ')' as boolean grouping operators even in regex mode;
+        # quote regex patterns as phrases per replacement_test.go so CompileQuery preserves them verbatim.
+        if spec.regex:
+            escaped = spec.pattern.replace("\\", "\\\\").replace('"', '\\"')
+            return f'"{escaped}"'
+        return spec.pattern
+
     def _preview_until_not_preparing(
         self,
         spec: ReplaceSpec,
@@ -108,9 +117,10 @@ class CF08SidecarRunner:
         max_attempts: int = 30,
     ) -> dict[str, object]:
         resp: dict[str, object] = {}
+        wire_q = self._wire_query(spec)
         for _ in range(max_attempts):
             resp = self._driver.replace_preview(
-                spec.pattern,
+                wire_q,
                 spec.replacement,
                 origin_project_id=origin_project_id,
                 regex=spec.regex,
@@ -530,7 +540,7 @@ class CF08SidecarRunner:
             preview = self._preview_until_not_preparing(spec, pid)
             answer = self._driver.replace_apply(
                 preview,
-                query=spec.pattern,
+                query=self._wire_query(spec),
                 replacement=spec.replacement,
                 origin_project_id=pid,
                 root_dirs_by_id={rid: case_dir},
@@ -670,7 +680,7 @@ class CF08SidecarRunner:
 
             answer = self._driver.replace_apply(
                 preview,
-                query=spec.pattern,
+                query=self._wire_query(spec),
                 replacement=spec.replacement,
                 origin_project_id=pid,
                 root_dirs_by_id={rid: case_dir},

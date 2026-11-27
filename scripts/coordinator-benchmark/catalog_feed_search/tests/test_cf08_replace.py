@@ -66,8 +66,11 @@ class _FakeSidecarTransport:
         if path == "/v1/search/replace/preview" and method == "POST":
             pid = str(body["origin_project_id"])
             rid, root_dir = self.projects[pid]
+            raw_q = str(body["query"])
+            if bool(body.get("regex")) and len(raw_q) >= 2 and raw_q[0] == '"' and raw_q[-1] == '"':
+                raw_q = raw_q[1:-1]
             spec = ReplaceSpec(
-                pattern=str(body["query"]),
+                pattern=raw_q,
                 replacement=str(body["replacement"]),
                 regex=bool(body.get("regex")),
                 case_sensitive=bool(body.get("case_sensitive")),
@@ -116,8 +119,11 @@ class _FakeSidecarTransport:
         if path == "/v1/search/replace/apply" and method == "POST":
             pid = str(body["origin_project_id"])
             rid, root_dir = self.projects[pid]
+            raw_q = str(body["query"])
+            if bool(body.get("regex")) and len(raw_q) >= 2 and raw_q[0] == '"' and raw_q[-1] == '"':
+                raw_q = raw_q[1:-1]
             spec = ReplaceSpec(
-                pattern=str(body["query"]),
+                pattern=raw_q,
                 replacement=str(body["replacement"]),
                 regex=bool(body.get("regex")),
                 case_sensitive=bool(body.get("case_sensitive")),
