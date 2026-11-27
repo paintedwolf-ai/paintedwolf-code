@@ -300,9 +300,7 @@ class MemoryBudgetTests(unittest.TestCase):
                     patch.object(evidence, "pages", side_effect=fake_pages), \
                     patch.object(evidence.subprocess, "check_output", side_effect=lambda cmd: zips[cmd[-1]]), \
                     patch.object(mb, "ROOT", repo), \
-                    patch.object(evidence, "_merge_hosted_memory_artifacts",
-                                 wraps=lambda r, t, a, arts: evidence._merge_hosted_memory_artifacts(
-                                     r, t, a, arts, repo_root=repo, reviews_dir=reviews)), \
+                    patch.object(mb, "REVIEWS_DIR", reviews), \
                     patch.object(tracker, "merged_pulls", return_value=[{"number": 2806}]), \
                     patch.object(tracker, "api", return_value={"tree": {"sha": tree}}), \
                     patch.object(tracker, "checkpoint", return_value=None), \

@@ -32,7 +32,7 @@ def _read_zip_memory_observations(raw, tree, policy):
     return observations
 
 
-def _merge_hosted_memory_artifacts(run, tree, all_artifacts, artifacts, repo_root=None, reviews_dir=memory_budgets.REVIEWS_DIR):
+def _merge_hosted_memory_artifacts(run, tree, all_artifacts, artifacts, repo_root=None, reviews_dir=None):
     suffix = f"-{run['run_attempt']}"
     prefix = 'receipt-verification-nightly-'
     build_name = f"{prefix}build{suffix}"
@@ -55,7 +55,8 @@ def _merge_hosted_memory_artifacts(run, tree, all_artifacts, artifacts, repo_roo
     if not measured:
         return
     root = repo_root or memory_budgets.ROOT
-    for row in memory_budgets.tracking_artifacts_from_measured(root, measured, reviews_dir=reviews_dir):
+    reviews = reviews_dir if reviews_dir is not None else memory_budgets.REVIEWS_DIR
+    for row in memory_budgets.tracking_artifacts_from_measured(root, measured, reviews_dir=reviews):
         identity = key(row['category'], row['id'])
         existing = artifacts.get(identity)
         if existing is None or row['measured'] > existing['measured']:
