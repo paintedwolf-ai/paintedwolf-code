@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import threading
+import time
 from typing import Callable
 
 from .change_runner import ChangeOp, ChangeRunner, ChangeScript, WriteLog, WriteLogEntry
@@ -63,6 +65,50 @@ class LiveControlsReport:
         }
 
 
+def _is_root_settled(summary: dict[str, object], root_id: str) -> bool:
+    coverage = summary.get("coverage")
+    if isinstance(coverage, list) and coverage:
+        for item in coverage:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("root_id") or "") == root_id:
+                return (
+                    str(item.get("state") or "").lower() == "ready"
+                    and item.get("discovery_complete") is True
+                    and item.get("refreshing") is False
+                )
+        return False
+    return (
+        str(summary.get("state") or "").lower() == "ready"
+        and summary.get("refreshing") is False
+    )
+
+
+def wait_catalog_settled(
+    driver: SidecarDriver,
+    project_id: str,
+    root_id: str,
+    *,
+    max_wait_s: float = 15.0,
+    poll_interval_s: float = 0.1,
+) -> tuple[bool, int, dict[str, object]]:
+    """Poll GET /v1/projects/{id}/source/index until root discovery settles or deadline expires."""
+    deadline = time.monotonic() + max_wait_s
+    waiter = threading.Event()
+    polls = 0
+    last_summary: dict[str, object] = {}
+
+    while True:
+        polls += 1
+        last_summary = driver.get_source_index(project_id)
+        if _is_root_settled(last_summary, root_id):
+            return True, polls, last_summary
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False, polls, last_summary
+        waiter.wait(min(poll_interval_s, remaining))
+
+
 def run_live_control_catalog(
     driver: SidecarDriver,
     root_dir: Path,
@@ -70,8 +116,34 @@ def run_live_control_catalog(
     root_id: str,
     *,
     boundary_config: BoundaryConfig | None = None,
+    settle_wait_s: float = 15.0,
+    settle_poll_s: float = 0.1,
 ) -> LiveControlResult:
-    """Control 1: settled catalog-backed file index equals file projection of reference_walk."""
+    """Control 1: wait for catalog settlement, then verify catalog index equals reference_walk."""
+    settled, settle_polls, last_summary = wait_catalog_settled(
+        driver,
+        project_id,
+        root_id,
+        max_wait_s=settle_wait_s,
+        poll_interval_s=settle_poll_s,
+    )
+    if not settled:
+        return LiveControlResult(
+            name="settled_catalog_equals_reference_walk",
+            passed=False,
+            check=CheckResult(
+                Verdict.UNKNOWN,
+                "catalog",
+                reason="catalog settlement deadline expired before control 1",
+            ),
+            evidence={
+                "settled": False,
+                "settle_polls": settle_polls,
+                "last_coverage": last_summary.get("coverage", []),
+                "last_state": last_summary.get("state"),
+            },
+        )
+
     ref_entries = [
         e
         for e in reference_walk(root_dir, boundary_config=boundary_config, include_hidden=True)
@@ -85,6 +157,8 @@ def run_live_control_catalog(
         passed=(res.verdict == Verdict.PASS),
         check=res,
         evidence={
+            "settled": True,
+            "settle_polls": settle_polls,
             "projection": answer.projection,
             "generation_revision": answer.generation_revision,
             "reference_count": len(ref_items),
@@ -300,12 +374,13 @@ def run_three_live_controls(
     *,
     provenance: RunProvenance | None = None,
     out_dir: Path | None = None,
+    extra_artifacts: dict[str, Path] | None = None,
     boundary_config: BoundaryConfig | None = None,
     rg_bin: str = "rg",
     clock_fn: Callable[[], int] | None = None,
     clock_domain: str = "monotonic_ns",
 ) -> LiveControlsReport:
-    """Run all 3 runbook live controls with a project-scoped SSE stream and SHA-256 manifest."""
+    """Run all 3 runbook live controls after catalog settlement, writing SHA-256 manifest."""
     build_live_control_fixture(root_dir)
     project_id, root_ids = driver.attach_project([root_dir])
     root_id = root_ids[0] if root_ids else "root-0"
@@ -331,10 +406,14 @@ def run_three_live_controls(
             json.dumps([c.to_dict() for c in controls], indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+        artifacts: dict[str, Path] = {"live_controls": report_path}
+        for name, apath in (extra_artifacts or {}).items():
+            if Path(apath).is_file():
+                artifacts[name] = Path(apath)
         manifest_path = write_evidence_manifest(
             out,
             provenance,
-            {"live_controls": report_path},
+            artifacts,
             extra={"all_passed": all(c.passed for c in controls)},
         )
 

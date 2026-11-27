@@ -37,6 +37,24 @@ def probe_case_sensitive(directory: Path) -> bool:
         return not upper.exists()
 
 
+def parse_proc_mounts_fs(target: Path, mounts_text: str) -> str:
+    """Return the filesystem type for the longest matching mountpoint prefix in /proc/mounts."""
+    resolved = str(target)
+    best_mount = ""
+    best_fs = ""
+    for line in mounts_text.splitlines():
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        mount_point = parts[1].replace("\\040", " ")
+        fs_type = parts[2]
+        if resolved == mount_point or resolved.startswith(mount_point.rstrip("/") + "/"):
+            if len(mount_point) > len(best_mount):
+                best_mount = mount_point
+                best_fs = fs_type
+    return best_fs
+
+
 def detect_filesystem_type(directory: Path) -> str:
     """Best-effort filesystem type label for host evidence (APFS, ext4, etc.)."""
     sys_name = platform.system().lower()
@@ -50,6 +68,14 @@ def detect_filesystem_type(directory: Path) -> str:
                     return parts[1]
         return "apfs_or_darwin"
     if sys_name == "linux":
+        proc_mounts = Path("/proc/mounts")
+        if proc_mounts.is_file():
+            try:
+                fs = parse_proc_mounts_fs(Path(directory).resolve(), proc_mounts.read_text(encoding="utf-8"))
+                if fs:
+                    return fs
+            except OSError:
+                pass
         out = _run_text(["stat", "-f", "-c", "%T", str(directory)])
         return out or "linux_unknown"
     return sys_name or "unknown"

@@ -23,13 +23,15 @@ from catalog_feed_search.driver_adapters import (
     map_sse_source_changed_to_answer,
 )
 from catalog_feed_search.driver_inprocess import build_task_digest_argv, parse_digest_output, run_inprocess_suite
-from catalog_feed_search.driver_provenance import collect_run_provenance, file_sha256
+from catalog_feed_search.driver_provenance import collect_run_provenance, file_sha256, parse_proc_mounts_fs
 from catalog_feed_search.driver_sidecar import SidecarDriver
 from catalog_feed_search.driver_sse import LiveSSESubscriber
 from catalog_feed_search.live_controls import (
     DRAIN_SENTINEL_REL_PATH,
+    run_live_control_catalog,
     run_live_control_change_feed,
     run_three_live_controls,
+    wait_catalog_settled,
 )
 from catalog_feed_search.references import ReplaceFileResult, SearchHit
 
@@ -583,6 +585,91 @@ class SidecarLiveSSESubscriberAndControlsTests(unittest.TestCase):
             # Verify D1 editor-document PUT includes mixed_eol, history_vector, session_id.
             draft = driver.inject_editor_draft("proj-1", "root-1", "src/alpha.txt", "draft\n")
             self.assertEqual(draft["revision"], 2)
+
+    def test_wait_catalog_settled_transitions_and_deadline_unknown(self) -> None:
+        polls = {"n": 0}
+
+        def warming_then_ready(method: str, path: str, body):
+            polls["n"] += 1
+            if polls["n"] == 1:
+                return {
+                    "state": "warming",
+                    "revision": 0,
+                    "refreshing": True,
+                    "coverage": [
+                        {
+                            "root_id": "root-1",
+                            "state": "warming",
+                            "discovery_complete": False,
+                            "refreshing": True,
+                            "bounded_directories": 0,
+                            "failed_directories": 0,
+                        }
+                    ],
+                }
+            return {
+                "state": "ready",
+                "revision": 3,
+                "refreshing": False,
+                "coverage": [
+                    {
+                        "root_id": "root-1",
+                        "state": "ready",
+                        "discovery_complete": True,
+                        "refreshing": False,
+                        "bounded_directories": 0,
+                        "failed_directories": 0,
+                    }
+                ],
+            }
+
+        driver = SidecarDriver(StubTransport(warming_then_ready))
+        settled, count, summary = wait_catalog_settled(driver, "proj-1", "root-1", max_wait_s=2.0, poll_interval_s=0.01)
+        self.assertTrue(settled)
+        self.assertEqual(count, 2)
+        self.assertEqual(summary["revision"], 3)
+
+        # Always-warming root hits deadline -> Control 1 returns Verdict.UNKNOWN.
+        stuck_driver = SidecarDriver(
+            StubTransport(
+                lambda _m, _p, _b: {
+                    "state": "warming",
+                    "revision": 0,
+                    "refreshing": True,
+                    "coverage": [
+                        {
+                            "root_id": "root-1",
+                            "state": "warming",
+                            "discovery_complete": False,
+                            "refreshing": True,
+                            "bounded_directories": 0,
+                            "failed_directories": 0,
+                        }
+                    ],
+                }
+            )
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            res = run_live_control_catalog(
+                stuck_driver,
+                Path(tmp),
+                "proj-1",
+                "root-1",
+                settle_wait_s=0.03,
+                settle_poll_s=0.01,
+            )
+            self.assertFalse(res.passed)
+            self.assertEqual(res.check.verdict, Verdict.UNKNOWN)
+            self.assertFalse(res.evidence["settled"])
+
+    def test_proc_mounts_linux_ext4_detection(self) -> None:
+        sample = (
+            "/dev/sda1 / ext4 rw,relatime 0 0\n"
+            "tmpfs /tmp tmpfs rw,nosuid 0 0\n"
+            "/dev/nvme0n1p2 /home ext4 rw,relatime 0 0\n"
+        )
+        self.assertEqual(parse_proc_mounts_fs(Path("/home/user/work/repo"), sample), "ext4")
+        self.assertEqual(parse_proc_mounts_fs(Path("/tmp/cfs_pilot"), sample), "tmpfs")
 
 
 class InProcessAndCLITests(unittest.TestCase):

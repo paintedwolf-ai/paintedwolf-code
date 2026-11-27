@@ -95,6 +95,7 @@ def _cmd_live_controls(args: argparse.Namespace) -> int:
             d1_tree=args.d1_tree,
             rg_bin=args.rg_bin,
         )
+        sse_path = out_dir / "sse_events.jsonl"
         report = run_three_live_controls(
             driver,
             work_root,
@@ -102,10 +103,11 @@ def _cmd_live_controls(args: argparse.Namespace) -> int:
                 args.url,
                 args.token,
                 project_id=pid,
-                out_jsonl=out_dir / "sse_events.jsonl",
+                out_jsonl=sse_path,
             ),
             provenance=provenance,
             out_dir=out_dir,
+            extra_artifacts={"sse_events": sse_path},
             rg_bin=args.rg_bin,
         )
     print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
