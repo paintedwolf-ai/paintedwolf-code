@@ -12,6 +12,7 @@ import re
 import secrets
 import shutil
 import signal
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -185,6 +186,76 @@ def parse_strace_fixture_ops(
         "known_directory_metadata_reads": known_dir_stats,
         "unsuccessful_or_unknown_lookups": unsuccessful_or_unknown,
     }
+
+
+def _read_sidecar_index_db_counters(cfg_dir: Path, expected_files: int) -> dict[str, object]:
+    """Read exact admissions & published revisions directly from the sidecar's own index SQLite DB (Decision 069)."""
+    best: dict[str, object] | None = None
+    for db_file in sorted(Path(cfg_dir).rglob("*.db")):
+        if db_file.name == "store.db":
+            continue
+        conn = None
+        try:
+            conn = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True, timeout=5.0)
+            tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if not {"meta", "nodes", "faults", "frontier"}.issubset(tables):
+                continue
+            rev, comp = conn.execute("SELECT revision, complete FROM meta WHERE id=1").fetchone()
+            dir_nodes = conn.execute("SELECT COUNT(*) FROM nodes WHERE is_dir=1 AND indexed=1").fetchone()[0]
+            file_nodes = conn.execute("SELECT COUNT(*) FROM nodes WHERE regular=1 AND indexed=1").fetchone()[0]
+            faults = conn.execute("SELECT COUNT(*) FROM faults").fetchone()[0]
+            frontier = conn.execute("SELECT COUNT(*) FROM frontier").fetchone()[0]
+            rec: dict[str, object] = {
+                "status": "ok",
+                "db_name": db_file.name,
+                "published_revisions": int(rev),
+                "meta_complete": int(comp),
+                "admitted_dir_nodes": int(dir_nodes),
+                "admitted_file_nodes": int(file_nodes),
+                "fault_count": int(faults),
+                "frontier_remaining": int(frontier),
+            }
+            if int(file_nodes) == expected_files:
+                return rec
+            if best is None or int(file_nodes) > int(best.get("admitted_file_nodes", -1)):
+                best = rec
+        except sqlite3.Error:
+            continue
+        finally:
+            if conn is not None:
+                conn.close()
+    return best or {"status": "unknown", "reason": "no matching sourcecatalog index sqlite db found under config_dir"}
+
+
+def _full_trace_replay_command(
+    *,
+    engine_bin: Path,
+    d1_worktree: Path,
+    d1_commit: str,
+    d1_tree: str,
+    rg_bin: str,
+    sizes: tuple[int, ...] | None = None,
+) -> list[str]:
+    cmd = [
+        "python3",
+        "-m",
+        "catalog_feed_search.families.cf04_k05_trace",
+        "--engine-bin",
+        str(engine_bin),
+        "--d1-worktree",
+        str(d1_worktree),
+        "--d1-commit",
+        d1_commit,
+        "--d1-tree",
+        d1_tree,
+        "--rg-bin",
+        rg_bin,
+        "--out-dir",
+        ".",
+    ]
+    if sizes:
+        cmd.extend(["--scale-sizes", ",".join(str(s) for s in sizes)])
+    return cmd
 
 
 def _collect_inventory_rels(root: Path) -> tuple[set[str], set[str]]:
@@ -408,15 +479,113 @@ def _run_darwin_fs_usage_controls(
         ctrl_c_pass = obs_c["status"] == "unknown"
         ctrl_d_pass = obs_d["status"] == "unknown"
 
+        # Real D1 sidecar small-fixture fs_usage trace (Decision 060: started BEFORE attach, stopped AFTER settled!)
+        sidecar_tree = tmp / "sidecar-tree"
+        sidecar_shape = write_scalefixture_tree(sidecar_tree, 50)
+        sidecar_dirs, sidecar_files = _collect_inventory_rels(sidecar_tree)
+        cfg_dir = tmp / "sidecar-cfg"
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        db_path = cfg_dir / "store.db"
+        port = free_tcp_port()
+        token = secrets.token_hex(16)
+        addr = f"127.0.0.1:{port}"
+        url = f"http://{addr}"
+        env = dict(os.environ)
+        env.update(
+            {
+                "LYCAON_ADDR": addr,
+                "LYCAON_API_TOKEN": token,
+                "LYCAON_CONFIG_DIR": str(cfg_dir),
+                "LYCAON_LLM_MOCK": "1",
+                "LYCAON_LOG_LEVEL": "info",
+            }
+        )
+        stderr_log = tmp / "d1_stderr.log"
+        stderr_fh = stderr_log.open("wb")
+        sidecar_proc = subprocess.Popen(
+            [str(engine_bin), "serve", "--db", str(db_path)],
+            cwd=str(d1_worktree),
+            env=env,
+            stdout=stderr_fh,
+            stderr=stderr_fh,
+        )
+        stderr_fh.close()
+        fsu_out = tmp / "d1_sidecar.fs_usage"
+        fsu_proc: subprocess.Popen[bytes] | None = None
+        settled_file_count = -1
+        capture_spanned_index = False
+        try:
+            deadline = time.monotonic() + 25.0
+            waiter = threading.Event()
+            healthy = False
+            while time.monotonic() < deadline:
+                try:
+                    with urllib.request.urlopen(f"{url}/health", timeout=1.0) as resp:
+                        if resp.status == 200:
+                            healthy = True
+                            break
+                except Exception:
+                    pass
+                waiter.wait(0.1)
+            if not healthy:
+                raise RuntimeError("macOS D1 sidecar did not become healthy")
+
+            fsu_fh = fsu_out.open("wb")
+            fsu_proc = subprocess.Popen(
+                ["sudo", "-n", "fs_usage", "-w", "-f", "filesys", str(sidecar_proc.pid)],
+                stdout=fsu_fh,
+                stderr=subprocess.DEVNULL,
+            )
+            fsu_fh.close()
+            time.sleep(1.5)  # allow fs_usage ktrace attach before project creation
+
+            client = CF04SidecarClient(url, token)
+            proj = client.create_project([{"path": str(sidecar_tree.resolve()), "label": "k05-fsu", "is_primary": True}])
+            pid = str(proj["id"])
+            rid = str(proj["roots"][0]["id"])  # type: ignore[index]
+            settled, _, summary = wait_catalog_settled(client.driver, pid, rid, max_wait_s=30.0, poll_interval_s=0.1)
+            settled_file_count = int(summary.get("file_count", -1))
+            time.sleep(0.5)
+            capture_spanned_index = settled and (fsu_proc.poll() is None)
+        finally:
+            if fsu_proc is not None:
+                # Signal the owned fs_usage child of this sudo PID (never broad pkill)
+                subprocess.run(["sudo", "-n", "pkill", "-INT", "-P", str(fsu_proc.pid)], check=False, capture_output=True)
+                with contextlib.suppress(subprocess.TimeoutExpired):
+                    fsu_proc.wait(timeout=5.0)
+            with contextlib.suppress(OSError):
+                sidecar_proc.send_signal(signal.SIGINT)
+            try:
+                sidecar_proc.wait(timeout=10.0)
+            except subprocess.TimeoutExpired:
+                sidecar_proc.terminate()
+                sidecar_proc.wait(timeout=3.0)
+
+        obs_d1 = parse_darwin_fs_usage_ops(
+            fsu_out.read_text(encoding="utf-8", errors="replace") if fsu_out.is_file() else "",
+            sidecar_tree,
+            known_dir_rels=sidecar_dirs,
+            known_file_rels=sidecar_files,
+        )
+        index_db_counters = _read_sidecar_index_db_counters(cfg_dir, sidecar_shape.files)
+
         report = {
             "platform": "Darwin",
-            "observer": "sudo -n fs_usage -w -f filesys -t <sec> <pid>",
+            "observer": "sudo -n fs_usage -w -f filesys <pid>",
             "controls": {
                 "control_a_dir_reads_only": {"passed": ctrl_a_pass, "expected_dirs": ctrl_shape.total_directories, "expected_file_stats": 0, "observed": obs_a},
                 "control_b_dir_plus_file_stats": {"passed": ctrl_b_pass, "expected_dirs": ctrl_shape.total_directories, "expected_file_stats": 20, "observed": obs_b},
                 "control_c_empty_trace_unknown": {"passed": ctrl_c_pass, "observed": obs_c},
                 "control_d_unrelated_trace_unknown": {"passed": ctrl_d_pass, "observed": obs_d},
                 "all_controls_passed": ctrl_a_pass and ctrl_b_pass and ctrl_c_pass and ctrl_d_pass,
+            },
+            "d1_small_fixture_trace": {
+                "files_target": sidecar_shape.files,
+                "expected_total_dirs": sidecar_shape.total_directories,
+                "settled_file_count": settled_file_count,
+                "capture_spanned_index": capture_spanned_index,
+                "observed": obs_d1,
+                "index_db_counters": index_db_counters,
             },
         }
         res_path = out / "k05_trace_controls.json"
@@ -434,8 +603,20 @@ def _run_darwin_fs_usage_controls(
             out,
             prov,
             {"k05_trace_controls": res_path},
-            {"family": "K05-trace-controls-darwin", "all_controls_passed": report["controls"]["all_controls_passed"]},
-            replay_command=["python3", "-m", "catalog_feed_search.families.cf04_k05_trace", "--out-dir", "."],
+            {
+                "family": "K05-trace-controls-darwin",
+                "all_controls_passed": report["controls"]["all_controls_passed"],
+                "capture_spanned_index": capture_spanned_index,
+                "d1_observed": obs_d1,
+                "index_db_counters": index_db_counters,
+            },
+            replay_command=_full_trace_replay_command(
+                engine_bin=engine_bin,
+                d1_worktree=d1_worktree,
+                d1_commit=d1_commit,
+                d1_tree=d1_tree,
+                rg_bin=rg_bin,
+            ),
         )
         return report
 
@@ -640,6 +821,7 @@ def run_small_fixture_strace_controls(
             known_dir_rels=sidecar_dirs,
             known_file_rels=sidecar_files,
         )
+        index_db_counters = _read_sidecar_index_db_counters(config_dir, sidecar_shape.files)
 
         report = {
             "platform": platform.system(),
@@ -656,6 +838,7 @@ def run_small_fixture_strace_controls(
                 "expected_total_dirs": sidecar_shape.total_directories,
                 "settled_file_count": settled_file_count,
                 "observed": obs_d1,
+                "index_db_counters": index_db_counters,
             },
         }
         res_path = out / "k05_trace_controls.json"
@@ -677,8 +860,15 @@ def run_small_fixture_strace_controls(
                 "family": "K05-trace-controls",
                 "all_controls_passed": ctrl_a_pass and ctrl_b_pass and ctrl_c_pass and ctrl_d_pass,
                 "d1_observed": obs_d1,
+                "index_db_counters": index_db_counters,
             },
-            replay_command=["python3", "-m", "catalog_feed_search.families.cf04_k05_trace", "--out-dir", "."],
+            replay_command=_full_trace_replay_command(
+                engine_bin=engine_bin,
+                d1_worktree=d1_worktree,
+                d1_commit=d1_commit,
+                d1_tree=d1_tree,
+                rg_bin=rg_bin,
+            ),
         )
         return report
 
@@ -984,6 +1174,7 @@ def run_linux_straced_scale_suite(
                 known_dir_rels=known_dirs,
                 known_file_rels=known_files,
             )
+            index_db_counters = _read_sidecar_index_db_counters(cfg_dir, shape.files)
             # Remove large trace & tree immediately to keep disk clean
             with contextlib.suppress(OSError):
                 trace_file.unlink()
@@ -1019,6 +1210,7 @@ def run_linux_straced_scale_suite(
                     "foreground_browse": fg_probe,
                     "other_project_probe": other_probe,
                     "strace_observation": trace_obs,
+                    "index_db_counters": index_db_counters,
                 }
             )
 
@@ -1049,7 +1241,14 @@ def run_linux_straced_scale_suite(
         prov,
         {"k05_strace_scale_results": res_path},
         {"family": "K05-strace-scale", "sizes": list(sizes), "passed": passed, "failed": len(results) - passed},
-        replay_command=["python3", "-m", "catalog_feed_search.families.cf04_k05_trace", "--scale-sizes", ",".join(str(s) for s in sizes), "--out-dir", "."],
+        replay_command=_full_trace_replay_command(
+            engine_bin=engine_bin,
+            d1_worktree=d1_worktree,
+            d1_commit=d1_commit,
+            d1_tree=d1_tree,
+            rg_bin=rg_bin,
+            sizes=sizes,
+        ),
     )
     return report
 
