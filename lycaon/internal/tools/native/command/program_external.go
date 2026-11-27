@@ -116,16 +116,9 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		}
 		return externalLaunchFailure(err, refusedResult("TOOL_OWNER_FAILED")), err
 	}
-	if l.DeclareLaunch != nil {
-		if err := l.DeclareLaunch(ctx, tctx, request.Invocation.Identity.ExecutionID, cwd, launchArgv); err != nil {
-			if ctx.Err() != nil {
-				return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
-			}
-			return externalLaunchFailure(err, refusedResult("COMMAND_REVISION_CONFLICT")), err
-		}
+	if res, err := l.declareLaunchInputs(ctx, tctx, request.Invocation.Identity.ExecutionID, cwd, launchArgv); err != nil {
+		return res, err
 	}
-	// Open before the process starts, so earlier drift is not attributed to it,
-	// and stay held until it has exited, on every path out of this launch.
 	release, err := l.window.enter(ctx, tctx, boundary)
 	if err != nil {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, err
@@ -144,8 +137,6 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return externalLaunchFailure(err, toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}), err
 	}
 	if bound.directIPApplied {
-		// Every return below follows the reap, including a program handed back
-		// as running whose launch settles later.
 		tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleStarted)
 		defer tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleCompleted)
 	}
