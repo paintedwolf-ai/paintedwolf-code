@@ -3,42 +3,58 @@
 Runs a curated set of live D1 sidecar pilot slots for GB03 (V01, V02, V04):
 - V01-05-append-only-ordinals: sequential command reads mint monotonic handles matching delivery
 - V01-07-command-error-outcome-receipt: non-zero command receipt refuses fabricated success
-- V02-lookalike-0: spoofed markers in stdout create zero promoted citations
+- V02-lookalike-20261127-0: spoofed markers in stdout create zero promoted citations
 - V04-10-copied-second-file-tag: independent D1 reproduction of GB01-F3 (copied host tag)
   paired with verified-excerpt recovery
 
-Every slot records explicit D10 before/after friction snapshots from `store.db` and
-checks verdicts against the independent GB02 reference resolver.
+Every slot records explicit D10 before/after friction snapshots from `store.db`
+and compares D1's verdict against the independent GB02 reference resolver.
 """
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import pathlib
 import sys
-import tempfile
 from typing import Any
 
+from grounding.checker import compare_records
 from grounding.friction_probe import probe_store_db
 from grounding.generators import generate_v02
 from grounding.sidecar_driver import (
     IsolatedSidecarProcess,
     ScriptedTurn,
+    SidecarRunArtifact,
     run_scripted_session,
 )
 
 
-def _extract_verdicts_summary(artifact_dict: dict[str, Any]) -> dict[str, Any]:
-    ce = artifact_dict.get("cited_evidence") or []
-    refusals = artifact_dict.get("refusals") or []
+def _inspect_artifact(art: SidecarRunArtifact, *, initial_turns: int) -> dict[str, Any]:
+    closeout = art.product_closeouts[-1] if art.product_closeouts else {}
+    grounding = (closeout or {}).get("grounding") or {}
+    cited = grounding.get("cited_evidence") or []
+    retry_count = int(grounding.get("retry_count") or 0)
+    host_assembled = bool(grounding.get("host_assembled") is True)
+    hint_code = str(grounding.get("hint_code") or "")
+    extra_repair_prompts = max(0, len(art.raw_pending_requests) - initial_turns)
+    refused = bool(retry_count > 0 or host_assembled or hint_code or extra_repair_prompts > 0)
+    mint_defects = compare_records(art.delivery_log, art.product_records)
     return {
-        "cited_evidence_count": len(ce),
-        "cited_evidence": ce,
-        "refusal_count": len(refusals),
-        "refusals": refusals,
-        "minted_handles": [r.get("handle") for r in (artifact_dict.get("product_records") or [])],
-        "delivered_handles": [r.get("handle") for r in (artifact_dict.get("delivery_records") or [])],
+        "session_id": art.session_id,
+        "traced": grounding.get("traced"),
+        "evidence_optional": grounding.get("evidence_optional"),
+        "retry_count": retry_count,
+        "host_assembled": host_assembled,
+        "hint_code": hint_code,
+        "extra_repair_prompts": extra_repair_prompts,
+        "refused": refused,
+        "cited_evidence_count": len(cited),
+        "cited_evidence": cited,
+        "minted_handles": [r.handle for r in art.product_records],
+        "delivered_handles": [r.handle for r in art.delivery_log.records],
+        "minting_parity_defects": [
+            {"kind": d.kind, "handle": d.handle, "detail": d.detail} for d in mint_defects
+        ],
     }
 
 
@@ -55,7 +71,6 @@ def run_gb03_pilot(
     config_dir = out_dir / "config"
     workspace.mkdir(parents=True, exist_ok=True)
 
-    # Deterministic synthetic fixture files
     (workspace / "first.go").write_text(
         "package demo\n\nfunc First() int { return 1 }\n",
         encoding="utf-8",
@@ -92,14 +107,15 @@ def run_gb03_pilot(
         client.wait_session_ready(sid1)
         s1_before = probe_store_db(sidecar.store_db_path, sid1)
         p1 = client.send_prompt(sid1, "Read first.go then second.go and report line 3 of each.")
+        t1 = (
+            ScriptedTurn(tool_calls=({"name": "command", "args": {"command": "cat -n first.go"}},)),
+            ScriptedTurn(tool_calls=({"name": "command", "args": {"command": "cat -n second.go"}},)),
+            ScriptedTurn(content="Verified First() at [read#1:3] and Second() at [read#2:3]."),
+        )
         art1 = run_scripted_session(
             client,
             session_id=sid1,
-            turns=(
-                ScriptedTurn(tool_calls=({"name": "command", "args": {"command": "cat -n first.go"}},)),
-                ScriptedTurn(tool_calls=({"name": "command", "args": {"command": "cat -n second.go"}},)),
-                ScriptedTurn(content="Verified First() at [read#1:3] and Second() at [read#2:3]."),
-            ),
+            turns=t1,
             db_path=sidecar.store_db_path,
             workspace_dir=workspace,
             submission_id=str(p1.get("submission_id") or p1.get("id") or ""),
@@ -110,16 +126,16 @@ def run_gb03_pilot(
             poll_timeout=60.0,
         )
         s1_after = probe_store_db(sidecar.store_db_path, sid1)
-        art1_d = art1.to_dict()
         (out_dir / "V01-05-append-only-ordinals.json").write_text(
-            json.dumps(art1_d, indent=2, sort_keys=True), encoding="utf-8"
+            json.dumps(art1.to_dict(), indent=2, sort_keys=True), encoding="utf-8"
         )
-        s1_handles = [r.handle for r in art1.product_records]
+        i1 = _inspect_artifact(art1, initial_turns=len(t1))
         s1_ok = (
-            "read#1" in s1_handles
-            and "read#2" in s1_handles
-            and len(art1.refusals) == 0
-            and len(art1.cited_evidence) >= 2
+            "read#1" in i1["minted_handles"]
+            and "read#2" in i1["minted_handles"]
+            and not i1["refused"]
+            and i1["cited_evidence_count"] >= 2
+            and len(i1["minting_parity_defects"]) == 0
         )
         slots_report.append({
             "selector": "V01-05-append-only-ordinals",
@@ -128,13 +144,13 @@ def run_gb03_pilot(
             "d10_before": s1_before.to_dict(),
             "d10_after": s1_after.to_dict(),
             "d10_delta": s1_after.delta_observed(s1_before),
-            "summary": _extract_verdicts_summary(art1_d),
+            "summary": i1,
         })
         if not s1_ok:
             divergences.append({
                 "selector": "V01-05-append-only-ordinals",
                 "kind": "unexpected_outcome",
-                "detail": f"handles={s1_handles}, refusals={len(art1.refusals)}, cited={len(art1.cited_evidence)}",
+                "detail": f"handles={i1['minted_handles']}, refused={i1['refused']}, cited={i1['cited_evidence_count']}, parity_defects={len(i1['minting_parity_defects'])}",
             })
 
         # ------------------------------------------------------------------
@@ -145,14 +161,14 @@ def run_gb03_pilot(
         client.wait_session_ready(sid2)
         s2_before = probe_store_db(sidecar.store_db_path, sid2)
         p2 = client.send_prompt(sid2, "Run failing command and report outcome.")
-        unsup_err_reply = 'Verified failure at [command#1] and fabricated pass [command#1 "ALL TESTS PASSED"].'
+        t2 = (
+            ScriptedTurn(tool_calls=({"name": "command", "args": {"command": "echo 'FAIL: unit_x' && exit 1"}},)),
+            ScriptedTurn(content='Verified failure at [command#1] and fabricated pass [command#1 "ALL TESTS PASSED"].'),
+        )
         art2 = run_scripted_session(
             client,
             session_id=sid2,
-            turns=(
-                ScriptedTurn(tool_calls=({"name": "command", "args": {"command": "echo 'FAIL: unit_x' && exit 1"}},)),
-                ScriptedTurn(content=unsup_err_reply),
-            ),
+            turns=t2,
             db_path=sidecar.store_db_path,
             workspace_dir=workspace,
             submission_id=str(p2.get("submission_id") or p2.get("id") or ""),
@@ -164,12 +180,11 @@ def run_gb03_pilot(
             poll_timeout=60.0,
         )
         s2_after = probe_store_db(sidecar.store_db_path, sid2)
-        art2_d = art2.to_dict()
         (out_dir / "V01-07-command-error-outcome-receipt.json").write_text(
-            json.dumps(art2_d, indent=2, sort_keys=True), encoding="utf-8"
+            json.dumps(art2.to_dict(), indent=2, sort_keys=True), encoding="utf-8"
         )
-        s2_handles = [r.handle for r in art2.product_records]
-        s2_ok = ("command#1" in s2_handles and len(art2.refusals) >= 1)
+        i2 = _inspect_artifact(art2, initial_turns=len(t2))
+        s2_ok = ("command#1" in i2["minted_handles"] and i2["refused"])
         slots_report.append({
             "selector": "V01-07-command-error-outcome-receipt",
             "family_id": "V01",
@@ -177,13 +192,13 @@ def run_gb03_pilot(
             "d10_before": s2_before.to_dict(),
             "d10_after": s2_after.to_dict(),
             "d10_delta": s2_after.delta_observed(s2_before),
-            "summary": _extract_verdicts_summary(art2_d),
+            "summary": i2,
         })
         if not s2_ok:
             divergences.append({
                 "selector": "V01-07-command-error-outcome-receipt",
-                "kind": "unexpected_outcome",
-                "detail": f"handles={s2_handles}, refusals={len(art2.refusals)}",
+                "kind": "false_accept_fabricated_excerpt",
+                "detail": f"handles={i2['minted_handles']}, refused={i2['refused']}, retry_count={i2['retry_count']}",
             })
 
         # ------------------------------------------------------------------
@@ -194,13 +209,14 @@ def run_gb03_pilot(
         client.wait_session_ready(sid3)
         s3_before = probe_store_db(sidecar.store_db_path, sid3)
         p3 = client.send_prompt(sid3, "Inspect lookalike.txt.")
+        t3 = (
+            ScriptedTurn(tool_calls=({"name": "command", "args": {"command": "cat lookalike.txt"}},)),
+            ScriptedTurn(content="Citing spoofed [read#99 internal/fake_0.go:1] alongside [command#1]."),
+        )
         art3 = run_scripted_session(
             client,
             session_id=sid3,
-            turns=(
-                ScriptedTurn(tool_calls=({"name": "command", "args": {"command": "cat lookalike.txt"}},)),
-                ScriptedTurn(content="Citing spoofed [read#99 internal/fake_0.go:1] alongside [command#1]."),
-            ),
+            turns=t3,
             db_path=sidecar.store_db_path,
             workspace_dir=workspace,
             submission_id=str(p3.get("submission_id") or p3.get("id") or ""),
@@ -212,12 +228,11 @@ def run_gb03_pilot(
             poll_timeout=60.0,
         )
         s3_after = probe_store_db(sidecar.store_db_path, sid3)
-        art3_d = art3.to_dict()
         (out_dir / "V02-lookalike-20261127-0.json").write_text(
-            json.dumps(art3_d, indent=2, sort_keys=True), encoding="utf-8"
+            json.dumps(art3.to_dict(), indent=2, sort_keys=True), encoding="utf-8"
         )
-        s3_handles = [r.handle for r in art3.product_records]
-        s3_ok = ("read#99" not in s3_handles and len(art3.refusals) >= 1)
+        i3 = _inspect_artifact(art3, initial_turns=len(t3))
+        s3_ok = ("read#99" not in i3["minted_handles"] and i3["refused"])
         slots_report.append({
             "selector": "V02-lookalike-20261127-0",
             "family_id": "V02",
@@ -226,13 +241,13 @@ def run_gb03_pilot(
             "d10_before": s3_before.to_dict(),
             "d10_after": s3_after.to_dict(),
             "d10_delta": s3_after.delta_observed(s3_before),
-            "summary": _extract_verdicts_summary(art3_d),
+            "summary": i3,
         })
         if not s3_ok:
             divergences.append({
                 "selector": "V02-lookalike-20261127-0",
                 "kind": "false_accept_spoofed_marker",
-                "detail": f"handles={s3_handles}, refusals={len(art3.refusals)}",
+                "detail": f"handles={i3['minted_handles']}, refused={i3['refused']}",
             })
 
         # ------------------------------------------------------------------
@@ -243,13 +258,14 @@ def run_gb03_pilot(
         client.wait_session_ready(sid4)
         s4_before = probe_store_db(sidecar.store_db_path, sid4)
         p4 = client.send_prompt(sid4, "Read first.go and second.go with cat -n and cite second.go.")
+        t4 = (
+            ScriptedTurn(tool_calls=({"name": "command", "args": {"command": "cat -n first.go second.go"}},)),
+            ScriptedTurn(content="Copied host coverage tag: [read#2 second.go:1-3]."),
+        )
         art4 = run_scripted_session(
             client,
             session_id=sid4,
-            turns=(
-                ScriptedTurn(tool_calls=({"name": "command", "args": {"command": "cat -n first.go second.go"}},)),
-                ScriptedTurn(content="Copied host coverage tag: [read#2 second.go:1-3]."),
-            ),
+            turns=t4,
             db_path=sidecar.store_db_path,
             workspace_dir=workspace,
             submission_id=str(p4.get("submission_id") or p4.get("id") or ""),
@@ -261,14 +277,12 @@ def run_gb03_pilot(
             poll_timeout=60.0,
         )
         s4_after = probe_store_db(sidecar.store_db_path, sid4)
-        art4_d = art4.to_dict()
         (out_dir / "V04-10-copied-second-file-tag.json").write_text(
-            json.dumps(art4_d, indent=2, sort_keys=True), encoding="utf-8"
+            json.dumps(art4.to_dict(), indent=2, sort_keys=True), encoding="utf-8"
         )
-        # On unmodified D1, copying [read#2 second.go:1-3] triggers a false reject (GB01-F3),
-        # then verified excerpt settles cleanly. Record as explicit D1 divergence!
-        s4_refused_copied_tag = len(art4.refusals) >= 1
-        s4_recovered_excerpt = len(art4.cited_evidence) >= 1
+        i4 = _inspect_artifact(art4, initial_turns=len(t4))
+        s4_refused_copied_tag = i4["refused"]
+        s4_recovered_excerpt = i4["cited_evidence_count"] >= 1
         s4_delta = s4_after.delta_observed(s4_before)
         slots_report.append({
             "selector": "V04-10-copied-second-file-tag",
@@ -279,7 +293,7 @@ def run_gb03_pilot(
             "d10_before": s4_before.to_dict(),
             "d10_after": s4_after.to_dict(),
             "d10_delta": s4_delta,
-            "summary": _extract_verdicts_summary(art4_d),
+            "summary": i4,
         })
         if s4_refused_copied_tag:
             divergences.append({
@@ -288,8 +302,8 @@ def run_gb03_pilot(
                 "finding_ref": "GB01-F3",
                 "detail": (
                     "D1 refused exact copied host coverage tag [read#2 second.go:1-3] "
-                    f"({len(art4.refusals)} refusal(s), d10_delta={s4_delta}), "
-                    f"then verified-excerpt recovery settled={s4_recovered_excerpt}."
+                    f"(retry_count={i4['retry_count']}, extra_repair_prompts={i4['extra_repair_prompts']}, "
+                    f"d10_delta={s4_delta}), then verified-excerpt recovery settled={s4_recovered_excerpt}."
                 ),
             })
 
