@@ -31,7 +31,7 @@ func TestWW02C01LeaseInstallationReleaseInProcess(t *testing.T) {
 		sessionID = "s1"
 		handle    = "command-1"
 		exitCode  = 17
-		report    = "handle=command-1 termination=exited exit_code=17\nww02-c01-inprocess:stdout:ok\n"
+		report    = "handle=command-1 termination=exited exit_code=17\nww02-c01-inprocess:stdout:ok"
 	)
 
 	var (
