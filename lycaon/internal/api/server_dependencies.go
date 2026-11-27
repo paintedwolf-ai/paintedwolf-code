@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/briefingadmin"
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
 	"github.com/lycaon/lycaon/internal/api/extensionadmin"
+	"github.com/lycaon/lycaon/internal/api/sessionadmin"
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
 	"github.com/lycaon/lycaon/internal/attention"
 	"github.com/lycaon/lycaon/internal/blueprint"
@@ -88,9 +89,10 @@ type CoreDependencies struct {
 	Projects      project.Registry
 	Sessions      *session.Host
 	Settings      *settings.Service
-	UserNotices   *usernotice.Catalog
-	Invocations   invocation.Recorder
-	MutationGate  *project.MutationGate
+	UserNotices    *usernotice.Catalog
+	Invocations    invocation.Recorder
+	MutationGate   *project.MutationGate
+	PythonEvidence sessionadmin.PythonEvidenceReader
 }
 
 type ProvidersDependencies struct {

@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
+	"github.com/lycaon/lycaon/internal/portablepython"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/summarize"
@@ -30,8 +31,9 @@ type buildDeps struct {
 	command       *hostcmd.Runner
 	nativeConfig  nativemanifest.Config
 	toolSchemas   *toolschema.Config
-	surveyCatalog *survey.Catalog
-	rerank        decide.Reranker
+	surveyCatalog  *survey.Catalog
+	rerank         decide.Reranker
+	portablePython *portablepython.Service
 }
 
 type nativeToolServices struct {
@@ -76,6 +78,7 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeToolSer
 	var verifyTool *native.VerifyTool
 	var commandOutputTool *command.CommandOutputTool
 	var commandStopTool *command.CommandStopTool
+	var pythonRunner *portablePythonRunner
 
 	if err := registerCommandOperations(reg, deps.nativeConfig); err != nil {
 		return nil, nil, err
@@ -85,7 +88,7 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeToolSer
 	}
 
 	if deps.command != nil {
-		if err := registerCommandTools(reg, deps.command, boundary, &commandTool, &verifyTool, &commandOutputTool, &commandStopTool); err != nil {
+		if err := registerCommandToolsWithPython(reg, deps.command, boundary, deps.portablePython, &commandTool, &verifyTool, &commandOutputTool, &commandStopTool, &pythonRunner); err != nil {
 			return nil, nil, err
 		}
 		for _, form := range formTools {
@@ -115,7 +118,7 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeToolSer
 	}
 	return reg, &nativeToolServices{
 		Mutations: &MutationServices{writeTool: write, restoreVersionTool: restoreVersion},
-		Commands: &CommandServices{commandTool: commandTool, verifyTool: verifyTool, commandOutputTool: commandOutputTool, commandStopTool: commandStopTool,
+		Commands: &CommandServices{commandTool: commandTool, verifyTool: verifyTool, commandOutputTool: commandOutputTool, commandStopTool: commandStopTool, pythonRunner: pythonRunner,
 			owners: programOwnerTools{boundary: boundary, summarize: summarizeTool, repo: surveyRepo, catalog: catalog, git: deps.git, privateGit: deps.privateGit, registry: reg,
 				operations: mutation.Operations{Write: write, Delete: deleteTool, Move: moveTool, Copy: copyTool, Mkdir: mkdirTool, Chmod: chmod,
 					Chown: chownTool, Times: &native.TimesTool{Boundary: boundary}, Extract: extractArchiveTool}}},

@@ -1,0 +1,17 @@
+tags: [process]
+description: >-
+  Run helper scripts here with the standard library and fixed packages. Run
+  project code and tests in the project environment.
+schema:
+  type: object
+  properties:
+    code: {type: string, minLength: 1, description: Inline Python source.}
+    script: {type: string, minLength: 1, description: Workspace script path.}
+    module: {type: string, minLength: 1, description: Module name.}
+    cwd: {type: string, description: "Folder. Empty = session folder; `@label` or `@label/sub` = attached folder; `@scratch`/`@output` = session scratch/output; absolute paths accepted."}
+    args: {type: array, description: "Positional arguments for sys.argv[1:].", items: {type: string}}
+  oneOf:
+    - required: [code]
+    - required: [script]
+    - required: [module]
+  additionalProperties: false

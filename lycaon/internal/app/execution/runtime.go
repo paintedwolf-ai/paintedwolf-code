@@ -1,13 +1,23 @@
 package execution
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/lycaon/lycaon/internal/blobstore"
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
+	"github.com/lycaon/lycaon/internal/portablepython"
+	"github.com/lycaon/lycaon/internal/pythonadmission"
+	"github.com/lycaon/lycaon/internal/pythonevidence"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -62,11 +72,65 @@ func loadToolRuntime(settingsSvc *settings.Service, configRoot string, catalog *
 	if cfg.ConfigRoot == "" {
 		cfg.ConfigRoot = configlayout.FindModuleRoot()
 	}
+	if pySvc, pyErr := buildPortablePythonService(context.Background()); pyErr == nil {
+		cfg.PortablePython = pySvc
+	}
 	rt, err := toolhost.NewRuntime(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("native tool runtime: %w", err)
 	}
 	return rt, nil
+}
+
+// buildPortablePythonService constructs the production Portable Python service
+// with Painted Wolf's real secretmatch.Matcher screener and disk-backed
+// blobstore RetainedArtifactStore (never test defaults).
+func buildPortablePythonService(ctx context.Context) (*portablepython.Service, error) {
+	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
+	if err != nil {
+		return nil, fmt.Errorf("build secretmatch matcher: %w", err)
+	}
+	screener, err := pythonevidence.NewHostSecretScreener(matcher)
+	if err != nil {
+		return nil, fmt.Errorf("create host secret screener: %w", err)
+	}
+	retainedRoot, err := configdir.Root()
+	if err != nil || retainedRoot == "" {
+		retainedRoot = os.TempDir()
+	}
+	blobStore := blobstore.Store{
+		Root: retainedRoot,
+		Dir:  filepath.Join("portable-python", "retained"),
+	}
+	streamPort := portablepython.NewBlobRetainedStreamPort(blobStore)
+	retainedStore, err := pythonevidence.NewProductionRetainedArtifactStore(pythonevidence.RetainedArtifactConfig{
+		Screener:   screener,
+		StreamPort: streamPort,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create production retained artifact store: %w", err)
+	}
+	contStore, err := pythonadmission.NewFileContinuationStore(filepath.Join(retainedRoot, "portable-python", "approvals"), "continuation.json")
+	if err != nil {
+		return nil, fmt.Errorf("create durable continuation store: %w", err)
+	}
+	broker := pythonadmission.NewApprovalBroker(pythonadmission.ApprovalBrokerConfig{
+		Store: contStore,
+	})
+	_, _ = broker.ReconcileOnStartup(ctx, "host restarted while guest was parked")
+
+	receiptStore, err := portablepython.NewFileReceiptStore(filepath.Join(retainedRoot, "portable-python", "receipts"))
+	if err != nil {
+		return nil, fmt.Errorf("create durable receipt store: %w", err)
+	}
+	return portablepython.NewService(ctx, portablepython.ServiceConfig{
+		ScratchRoot:    filepath.Join(retainedRoot, "portable-python", "scratch"),
+		Broker:         broker,
+		SecretScreener: screener,
+		RetainedStore:  retainedStore,
+		StreamPort:     streamPort,
+		ReceiptSink:    receiptStore,
+	})
 }
 
 func loadToolSchemas() (*toolschema.Config, error) {

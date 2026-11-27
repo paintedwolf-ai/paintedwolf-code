@@ -272,3 +272,54 @@ func TestRuntimeEvidenceRecordClassification(t *testing.T) {
 		}
 	}
 }
+
+// Negative control: shared Portable Python packages (pythonruntime,
+// portablepython) are platform consumers; direct runtime.GOOS/GOARCH checks,
+// platform build constraints, or platform-suffixed files inside them must be
+// caught by command-environment-platform-code-lives-in-adapters.
+func TestPortablePythonPlatformAdapterBoundaryNegativeControl(t *testing.T) {
+	t.Parallel()
+	r := rule(t, forbiddencalls.Family, "command-environment-platform-code-lives-in-adapters")
+	cleanTree := map[string]string{
+		"lycaon/internal/commandsurface/surface.go": "package commandsurface\n",
+		"lycaon/internal/commandprogram/program.go": "package commandprogram\n",
+		"lycaon/internal/portablepython/service.go": "package portablepython\n",
+		"lycaon/internal/pythonruntime/runtime.go":  "package pythonruntime\n",
+		"lycaon/internal/tools/tool.go":             "package tools\n",
+		"lycaon/internal/toolhost/host.go":          "package toolhost\n",
+		"lycaon/internal/pythonnative/facts_darwin.go": "//go:build darwin\n\npackage pythonnative\n\nimport \"runtime\"\n\nfunc OS() string { return runtime.GOOS }\n",
+	}
+
+	expect(t, invariants.Evaluate(fixture(t, cleanTree), r), passes, 0)
+
+	cases := map[string]map[string]string{
+		"runtime.GOOS in pythonruntime": {
+			"lycaon/internal/pythonruntime/bad.go": "package pythonruntime\n\nimport \"runtime\"\n\nfunc bad() string { return runtime.GOOS }\n",
+		},
+		"runtime.GOOS in portablepython": {
+			"lycaon/internal/portablepython/bad.go": "package portablepython\n\nimport \"runtime\"\n\nfunc bad() string { return runtime.GOOS }\n",
+		},
+		"platform build tag in pythonruntime": {
+			"lycaon/internal/pythonruntime/bad_tag.go": "//go:build darwin\n\npackage pythonruntime\n",
+		},
+		"platform filename suffix in portablepython": {
+			"lycaon/internal/portablepython/bad_linux.go": "package portablepython\n",
+		},
+		"hardcoded target OS comparison in pythonruntime": {
+			"lycaon/internal/pythonruntime/bad_target.go": "package pythonruntime\n\nfunc requiresSigning(goos string) bool { return goos == \"darwin\" }\n",
+		},
+		"hardcoded target OS switch in pythonruntime": {
+			"lycaon/internal/pythonruntime/bad_switch.go": "package pythonruntime\n\nfunc libExt(goos string) string {\n\tswitch goos {\n\tcase \"darwin\":\n\t\treturn \".dylib\"\n\tdefault:\n\t\treturn \".so\"\n\t}\n}\n",
+		},
+		"hardcoded target OS comparison in portablepython": {
+			"lycaon/internal/portablepython/bad_target.go": "package portablepython\n\nfunc isLinux(osName string) bool { return osName == \"linux\" }\n",
+		},
+	}
+	for name, override := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			res := invariants.Evaluate(fixture(t, with(cleanTree, override)), r)
+			expect(t, res, violates, 1)
+		})
+	}
+}

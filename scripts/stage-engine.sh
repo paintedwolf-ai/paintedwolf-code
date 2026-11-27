@@ -85,6 +85,7 @@ mkdir -p "${ENGINE_ROOT}/schemas"
 cp -R "${ROOT}/schemas/." "${ENGINE_ROOT}/schemas/"
 
 bash "${ROOT}/scripts/stage-bundled-opengrep.sh" "${ENGINE_ROOT}" "${TARGET}" "${OPENGREP_ARTIFACT}"
+bash "${ROOT}/scripts/portable-python/stage-bundled.sh" --root "${ENGINE_ROOT}" --target "${TARGET}" --require-engine --require-image
 if [[ "${MODE}" == "full" ]]; then
   bash "${ROOT}/scripts/gitengine-fetch.sh"
   if [[ "${HOST_KIND}" == "linux" ]]; then
@@ -140,7 +141,11 @@ assert_static() {
 }
 
 VERSION_PKG="github.com/lycaon/lycaon/internal/version"
+PYTHON_ENGINE_IDENTITY="$(cd "${GO_DIR}" && go run ./cmd/portable-python-artifact -mode identity -target "${TARGET}" 2>/dev/null || true)"
 LDFLAGS="-s -w -X ${VERSION_PKG}.Version=${APP_VERSION} -X github.com/lycaon/lycaon/internal/scan/bundled.buildIdentityBase64=${OPENGREP_IDENTITY}"
+if [[ -n "${PYTHON_ENGINE_IDENTITY}" ]]; then
+  LDFLAGS="${LDFLAGS} -X github.com/lycaon/lycaon/internal/pythonruntime.engineBuildIdentityBase64=${PYTHON_ENGINE_IDENTITY}"
+fi
 
 echo "stage-engine — building Go sidecar + logs sibling for ${TARGET} (version ${APP_VERSION}, mode ${MODE})" >&2
 (
@@ -150,7 +155,9 @@ echo "stage-engine — building Go sidecar + logs sibling for ${TARGET} (version
   if [[ "${RELEASE_BUILD}" == "1" ]]; then
     BUILD_ARGS+=(-tags=paintedwolf_release)
   fi
-  go build "${BUILD_ARGS[@]}" -o "${SIDECAR_BIN}" ./cmd/lycaon
+  # Both macOS arm64 and Linux amd64 ship the packaged native Portable Python
+  # AOT engine (loaded via dlopen after SHA-256 + ABI handshake verification).
+  CGO_ENABLED=1 go build "${BUILD_ARGS[@]}" -o "${SIDECAR_BIN}" ./cmd/lycaon
   go build "${BUILD_ARGS[@]}" -o "${LOGS_BIN}" ./cmd/pw-logs
   if [[ "${HOST_KIND}" == "linux" ]]; then
     go build "${BUILD_ARGS[@]}" -o "${VAULT_IDENTITY_BIN}" ./cmd/pw-vault-identity
@@ -162,7 +169,6 @@ echo "stage-engine — building Go sidecar + logs sibling for ${TARGET} (version
   fi
 )
 chmod +x "${SIDECAR_BIN}" "${LOGS_BIN}"
-assert_static "${SIDECAR_BIN}"
 assert_static "${LOGS_BIN}"
 if [[ "${HOST_KIND}" == "linux" ]]; then
   chmod +x "${VAULT_IDENTITY_BIN}" "${LAUNCH_BIN}" "${LAUNCH_ENTRY_BIN}" "${GENERATIONS_BIN}"

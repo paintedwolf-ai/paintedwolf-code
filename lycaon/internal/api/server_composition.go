@@ -88,6 +88,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 		ProgressStore: deps.Source.ProgressStore, Projects: deps.Core.Projects, ProjectRules: deps.Source.ProjectRules, Store: deps.Core.Store,
 		Sessions: deps.Core.Sessions, Workers: deps.Workflow.Workers, Workflows: deps.Workflow.Workflows, Settings: deps.Core.Settings,
 		Sources: &s.Sources, SessionView: &s.Admin.SessionView, Git: &s.Admin.Git, Prompt: &s.Admin.Prompt,
+		PythonEvidence: deps.Core.PythonEvidence,
 	})
 	s.Admin.Workflow = workflowadmin.New(&s.responses, &s.background, workflowadmin.Deps{
 		Workflows: deps.Workflow.Workflows, Catalog: deps.Workflow.WorkflowCatalog, Runs: deps.Workflow.WorkflowRuns,

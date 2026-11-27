@@ -1,0 +1,4 @@
+steps:
+  - tool: "python"
+    say: "Run this step with {{ call }} using `code`, `script`, or `module`."
+    otherwise: "Use an explicit project interpreter when project Python is permitted on this surface."

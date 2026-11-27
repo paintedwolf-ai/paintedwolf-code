@@ -1,0 +1,905 @@
+// Package portablepython composes the Portable Python vertical production
+// path: verified WASI image discovery and compilation (PY02), manifest-backed
+// catalog and read-only pip inventory (PY01), per-invocation workspace overlay
+// and clean-success settlement (PY03), and admission, host-mediated HTTP, and
+// static preview dispatch (PY04).
+package portablepython
+
+import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/pythonadmission"
+	"github.com/lycaon/lycaon/internal/pythoncatalog"
+	"github.com/lycaon/lycaon/internal/pythondocuments"
+	"github.com/lycaon/lycaon/internal/pythonevidence"
+	"github.com/lycaon/lycaon/internal/pythonnative"
+	"github.com/lycaon/lycaon/internal/pythonruntime"
+	experimentalsys "github.com/tetratelabs/wazero/experimental/sys"
+)
+
+const (
+	// EnvImageDir overrides the Portable Python image directory location.
+	EnvImageDir = "PW_PORTABLE_PYTHON_IMAGE_DIR"
+
+	// Production default resource limits applied whenever ToolRequest.Limits
+	// leaves a field unset (zero).
+	DefaultMaxMemoryPages    uint32 = 4096             // 256 MiB Wasm linear memory
+	DefaultMaxGuestWork      uint64 = 2_000_000_000    // deterministic Wasm loop-fuel cap (allows stdlib + bundled package imports)
+	DefaultMaxHostWork       uint64 = 100_000          // host work unit cap
+	DefaultMaxOutputBytes    int64  = 1024 * 1024      // 1 MiB WASI stream capture bound
+	DefaultMaxStagedBytes    int64  = 16 * 1024 * 1024 // 16 MiB staged overlay bound
+	DefaultInlineBudgetBytes int    = 65536            // 64 KiB inline tool output budget
+
+	defaultExecutionTimeout = 120 * time.Second
+)
+
+// DefaultProtectedPaths are workspace paths always protected against guest
+// reads/writes by default (git hooks/config/refs and credential directories).
+var DefaultProtectedPaths = []string{
+	".git/hooks",
+	".git/config",
+	".git/HEAD",
+	".git/refs",
+	".ssh",
+	".gnupg",
+	".aws",
+	".kube",
+}
+
+// DiscoverImageDir resolves the Portable Python image directory from
+// PW_PORTABLE_PYTHON_IMAGE_DIR or standard Painted Wolf app data locations.
+func DiscoverImageDir() (string, error) {
+	if envDir := strings.TrimSpace(os.Getenv(EnvImageDir)); envDir != "" {
+		if hasImageManifest(envDir) {
+			return filepath.Abs(envDir)
+		}
+		return "", fmt.Errorf("%s=%q does not contain image-manifest.json", EnvImageDir, envDir)
+	}
+
+	candidates := standardImageDirCandidates()
+	for _, cand := range candidates {
+		if hasImageManifest(cand) {
+			return filepath.Abs(cand)
+		}
+	}
+	return "", fmt.Errorf("portable python image not found (checked %s and %d standard locations)", EnvImageDir, len(candidates))
+}
+
+func standardImageDirCandidates() []string {
+	var out []string
+	// 1. Official Painted Wolf bundled engine root (macOS .app/Contents/Resources/engine-root,
+	// Linux packaged engine-root, Nix generation engine-root, or LYCAON_ENGINE_ROOT).
+	if engineRoot := strings.TrimSpace(configlayout.EngineRoot()); engineRoot != "" {
+		out = append(out,
+			filepath.Join(engineRoot, "portable-python", "image"),
+			filepath.Join(engineRoot, "portable-python"),
+		)
+	}
+	// 2. Beside the running binary (installed bundle / packaged release layouts).
+	if exe, err := os.Executable(); err == nil && exe != "" {
+		exeDir := filepath.Dir(exe)
+		out = append(out,
+			filepath.Join(exeDir, "portable-python", "image"),
+			filepath.Join(exeDir, "..", "share", "paintedwolf", "portable-python", "image"),
+			filepath.Join(exeDir, "..", "Resources", "portable-python", "image"),
+			filepath.Join(exeDir, "..", "Resources", "engine-root", "portable-python", "image"),
+		)
+	}
+	// 3. Active Painted Wolf configdir root.
+	if cfgRoot, err := configdir.Root(); err == nil && cfgRoot != "" {
+		out = append(out, filepath.Join(cfgRoot, "portable-python", "image"))
+	}
+	// 4. Standard user data directories (declared via pythonnative platform adapter).
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		channel := configdir.ChannelDirName()
+		for _, dir := range pythonnative.UserDataDirs(home, channel) {
+			out = append(out, filepath.Join(dir, "image"))
+		}
+	}
+	return out
+}
+
+func hasImageManifest(dir string) bool {
+	if strings.TrimSpace(dir) == "" {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(dir, "image-manifest.json"))
+	return err == nil && !info.IsDir()
+}
+
+// ServiceConfig configures a reusable Portable Python Service.
+type ServiceConfig struct {
+	// ImageDir overrides DiscoverImageDir when non-empty.
+	ImageDir string
+	// Backend explicitly selects the execution backend (wazero-compiler,
+	// wazero-interpreter, or native-aot). When empty, uses the build-configured
+	// default (or native-aot when EngineDir is explicitly provided). Never
+	// silently falls back between backends.
+	Backend pythonruntime.BackendKind
+	// EngineDir overrides staged native engine discovery when non-empty.
+	EngineDir string
+	// EngineManifestPath optionally overrides bundled-manifest.yaml.
+	EngineManifestPath string
+	// EngineManifest optionally supplies a pre-parsed BundledEngineManifest.
+	EngineManifest *pythonruntime.BundledEngineManifest
+	// ScratchRoot is the host directory mounted at /tmp inside WASI guests.
+	// If empty, a temporary directory is created and removed on Close.
+	ScratchRoot string
+	// DefaultMemoryLimitPages optionally caps Wasm linear memory pages.
+	DefaultMemoryLimitPages uint32
+	// Clock supplies wall/monotonic time to WASI guests and admission records.
+	Clock pythonruntime.Clock
+	// Entropy supplies randomness to WASI guests.
+	Entropy pythonruntime.Entropy
+	// ParkedBudget caps aggregate parked-guest resources awaiting approval.
+	ParkedBudget pythonruntime.ParkedGuestBudget
+	// Broker is the default ApprovalBroker used when ToolRequest.Broker is nil.
+	Broker *pythonadmission.ApprovalBroker
+	// JobRegistry is the default SessionJobRegistry for preview listeners.
+	JobRegistry pythonadmission.SessionJobRegistry
+	// SecretScreener screens stdout/stderr/HTTP/evidence before returning or storing.
+	// Defaults to pythonevidence.TestSecretScreener{} when nil.
+	SecretScreener pythonevidence.SecretScreener
+	// RetainedStore holds bounded overflow stdout/stderr artifacts.
+	// Defaults to an in-memory RetainedArtifactStore backed by SecretScreener.
+	RetainedStore *pythonevidence.RetainedArtifactStore
+	// StreamPort optionally exposes the disk-backed RetainedStreamPort for reopen reads.
+	StreamPort pythonevidence.RetainedStreamPort
+	// ReceiptSink optionally persists durable execution/admission/publication receipts.
+	ReceiptSink pythonevidence.ReceiptSink
+	// InlineBudgetBytes caps inline stdout/stderr returned to the caller (default 65536).
+	InlineBudgetBytes int
+	// DefaultHTTPClient optionally supplies the base *http.Client for host-mediated
+	// requests.Session traffic when ToolRequest.HTTPClient is nil.
+	DefaultHTTPClient *http.Client
+}
+
+// Service owns a verified, compiled Portable Python WASI runtime and
+// constructs per-invocation document overlays, admission observers, host HTTP
+// transports, and preview listeners.
+type Service struct {
+	imageDir        string
+	ownedScratch    string
+	runtime         pythonruntime.Runtime
+	runtimeManifest *pythonruntime.ImageManifest
+	catalogManifest pythoncatalog.ImageManifest
+	clock           pythonruntime.Clock
+	broker          *pythonadmission.ApprovalBroker
+	jobRegistry     pythonadmission.SessionJobRegistry
+	screener        pythonevidence.SecretScreener
+	retainedStore   *pythonevidence.RetainedArtifactStore
+	streamPort      pythonevidence.RetainedStreamPort
+	receiptSink     pythonevidence.ReceiptSink
+	inlineBudget    int
+	httpClient      *http.Client
+	previewMu       sync.Mutex
+	activePreviews  map[string]*pythonadmission.PreviewListener
+	execSeq         atomic.Uint64
+}
+
+// NewService discovers, loads, and verifies the Portable Python image, compiles
+// python.wasm once with EnforceImportAudit=true and UseTrustedBootstrap=true,
+// and returns a reusable Service.
+func NewService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
+	imageDir := strings.TrimSpace(cfg.ImageDir)
+	if imageDir == "" {
+		var err error
+		imageDir, err = DiscoverImageDir()
+		if err != nil {
+			return nil, err
+		}
+	}
+	absImageDir, err := filepath.Abs(imageDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve image dir: %w", err)
+	}
+
+	manifestPath := filepath.Join(absImageDir, "image-manifest.json")
+	rtManifest, err := pythonruntime.LoadImageManifest(manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("load runtime image manifest: %w", err)
+	}
+	if err := pythonruntime.VerifyImage(absImageDir, rtManifest); err != nil {
+		return nil, fmt.Errorf("verify portable python image: %w", err)
+	}
+
+	catManifest, err := pythoncatalog.LoadImageManifest(manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("load catalog image manifest: %w", err)
+	}
+
+	wasmPath, _, _, err := pythonruntime.ResolveImagePaths(absImageDir, rtManifest)
+	if err != nil {
+		return nil, fmt.Errorf("resolve image wasm path: %w", err)
+	}
+	// #nosec G304 -- wasmPath is verified inside absImageDir via ResolveImagePaths and SHA-256 checked by VerifyImage.
+	wasmBytes, err := os.ReadFile(wasmPath)
+	if err != nil {
+		return nil, fmt.Errorf("read python.wasm: %w", err)
+	}
+
+	scratchRoot := strings.TrimSpace(cfg.ScratchRoot)
+	var ownedScratch string
+	if scratchRoot == "" {
+		dir, err := os.MkdirTemp("", "pw-portable-python-scratch-*")
+		if err != nil {
+			return nil, fmt.Errorf("create scratch dir: %w", err)
+		}
+		scratchRoot = dir
+		ownedScratch = dir
+	}
+
+	clk := cfg.Clock
+	if clk == nil {
+		clk = pythonruntime.NewSystemClock()
+	}
+	ent := cfg.Entropy
+	if ent == nil {
+		ent = pythonruntime.CryptoEntropy{}
+	}
+
+	defaultMemPages := cfg.DefaultMemoryLimitPages
+	if defaultMemPages == 0 {
+		defaultMemPages = DefaultMaxMemoryPages
+	}
+	engineDir := strings.TrimSpace(cfg.EngineDir)
+	if engineDir == "" && (cfg.Backend == "" || cfg.Backend == pythonruntime.BackendNativeAOT) {
+		if root := strings.TrimSpace(configlayout.EngineRoot()); root != "" {
+			if found, dErr := pythonruntime.DiscoverEngineDir(root); dErr == nil {
+				engineDir = found
+			}
+		}
+		if engineDir == "" {
+			sibling := filepath.Join(filepath.Dir(absImageDir), "engine")
+			if info, sErr := os.Stat(filepath.Join(sibling, "artifact-manifest.json")); sErr == nil && !info.IsDir() {
+				engineDir = sibling
+			}
+		}
+	}
+	rt, err := pythonruntime.NewConfiguredRuntime(ctx, pythonruntime.RuntimeConfig{
+		Backend:                 cfg.Backend,
+		EngineDir:               engineDir,
+		EngineManifestPath:      cfg.EngineManifestPath,
+		EngineManifest:          cfg.EngineManifest,
+		WasmBytes:               wasmBytes,
+		ImageDir:                absImageDir,
+		Manifest:                rtManifest,
+		EnforceImportAudit:      true,
+		UseTrustedBootstrap:     true,
+		ScratchRoot:             scratchRoot,
+		DefaultMemoryLimitPages: defaultMemPages,
+		Clock:                   clk,
+		Entropy:                 ent,
+		ParkedBudget:            cfg.ParkedBudget,
+	})
+	if err != nil {
+		if ownedScratch != "" {
+			_ = os.RemoveAll(ownedScratch)
+		}
+		return nil, fmt.Errorf("initialize portable python runtime: %w", err)
+	}
+
+	jobReg := cfg.JobRegistry
+	if jobReg == nil {
+		jobReg = pythonadmission.NewMemorySessionJobRegistry()
+	}
+	screener := cfg.SecretScreener
+	if screener == nil {
+		screener = pythonevidence.TestSecretScreener{}
+	}
+	retained := cfg.RetainedStore
+	if retained == nil {
+		retained = pythonevidence.NewTestRetainedArtifactStore(pythonevidence.RetainedArtifactConfig{
+			Screener: screener,
+			Now:      clk.Now,
+		})
+	}
+	inlineBudget := cfg.InlineBudgetBytes
+	if inlineBudget <= 0 {
+		inlineBudget = DefaultInlineBudgetBytes
+	}
+
+	return &Service{
+		imageDir:        absImageDir,
+		ownedScratch:    ownedScratch,
+		runtime:         rt,
+		runtimeManifest: rtManifest,
+		catalogManifest: catManifest,
+		clock:           clk,
+		broker:          cfg.Broker,
+		jobRegistry:     jobReg,
+		screener:        screener,
+		retainedStore:   retained,
+		streamPort:      cfg.StreamPort,
+		receiptSink:     cfg.ReceiptSink,
+		inlineBudget:    inlineBudget,
+		httpClient:      cfg.DefaultHTTPClient,
+		activePreviews:  make(map[string]*pythonadmission.PreviewListener),
+	}, nil
+}
+
+// ImageDir returns the verified image directory path.
+func (s *Service) ImageDir() string { return s.imageDir }
+
+// CatalogManifest returns the verified pythoncatalog.ImageManifest loaded from
+// the image's shared image-manifest.json.
+func (s *Service) CatalogManifest() pythoncatalog.ImageManifest { return s.catalogManifest }
+
+// RuntimeManifest returns the verified pythonruntime.ImageManifest.
+func (s *Service) RuntimeManifest() *pythonruntime.ImageManifest { return s.runtimeManifest }
+
+// Runtime returns the underlying Portable Python execution runtime.
+func (s *Service) Runtime() pythonruntime.Runtime { return s.runtime }
+
+// RuntimeInfo reports the active execution backend and verified native engine
+// identity (when running on the native AOT backend).
+func (s *Service) RuntimeInfo() pythonruntime.RuntimeInfo {
+	if s == nil || s.runtime == nil {
+		return pythonruntime.RuntimeInfo{}
+	}
+	return s.runtime.Info()
+}
+
+// RetainedStore returns the bounded, secret-screened RetainedArtifactStore
+// holding overflow stdout/stderr artifacts.
+func (s *Service) RetainedStore() *pythonevidence.RetainedArtifactStore { return s.retainedStore }
+
+// StreamPort returns the durable RetainedStreamPort, if configured.
+func (s *Service) StreamPort() pythonevidence.RetainedStreamPort { return s.streamPort }
+
+// Broker returns the durable ApprovalBroker configured on this Service.
+func (s *Service) Broker() *pythonadmission.ApprovalBroker { return s.broker }
+
+// ReceiptSink returns the durable ReceiptSink configured on this Service.
+func (s *Service) ReceiptSink() pythonevidence.ReceiptSink { return s.receiptSink }
+
+// SecretScreener returns the active secret screener used by this Service.
+func (s *Service) SecretScreener() pythonevidence.SecretScreener { return s.screener }
+
+// SetDefaultHTTPClient overrides the default *http.Client used when
+// ToolRequest.HTTPClient is nil (e.g., to trust a test TLS server CA).
+func (s *Service) SetDefaultHTTPClient(c *http.Client) { s.httpClient = c }
+
+// PackageHelp renders on-demand package discovery help from the verified manifest.
+func (s *Service) PackageHelp() string {
+	return pythoncatalog.RenderPackageHelp(s.catalogManifest)
+}
+
+// Close shuts down the compiled Wasm runtime, stops any active supervised
+// preview listeners, and cleans up owned scratch state.
+func (s *Service) Close(ctx context.Context) error {
+	s.previewMu.Lock()
+	previews := make([]*pythonadmission.PreviewListener, 0, len(s.activePreviews))
+	for id, pl := range s.activePreviews {
+		previews = append(previews, pl)
+		delete(s.activePreviews, id)
+	}
+	s.previewMu.Unlock()
+	for _, pl := range previews {
+		_ = pl.Stop(ctx)
+	}
+	var err error
+	if s.runtime != nil {
+		err = s.runtime.Close(ctx)
+	}
+	if s.ownedScratch != "" {
+		_ = os.RemoveAll(s.ownedScratch)
+	}
+	return err
+}
+
+// ActivePreviewJobs returns snapshots of all currently active supervised
+// preview listeners owned by this Service.
+func (s *Service) ActivePreviewJobs() []pythonadmission.PreviewListenerRecord {
+	if s == nil {
+		return nil
+	}
+	s.previewMu.Lock()
+	defer s.previewMu.Unlock()
+	out := make([]pythonadmission.PreviewListenerRecord, 0, len(s.activePreviews))
+	for id, pl := range s.activePreviews {
+		if !pl.Active() {
+			delete(s.activePreviews, id)
+			continue
+		}
+		out = append(out, pl.Record())
+	}
+	return out
+}
+
+// StopPreviewJob stops a supervised preview listener by its JobID and
+// unregisters it from the session job registry.
+func (s *Service) StopPreviewJob(ctx context.Context, jobID string) error {
+	if s == nil {
+		return errors.New("portable python service is not initialized")
+	}
+	s.previewMu.Lock()
+	pl, ok := s.activePreviews[jobID]
+	if ok {
+		delete(s.activePreviews, jobID)
+	}
+	s.previewMu.Unlock()
+	if !ok || pl == nil {
+		return fmt.Errorf("preview job %q not found", jobID)
+	}
+	return pl.Stop(ctx)
+}
+
+// HTTPRequestOptions configures host-mediated HTTP overrides for one ToolRequest.
+type HTTPRequestOptions struct {
+	Client             *http.Client
+	AllowPlainHTTP     bool
+	AllowLoopbackHTTP  bool
+	CredentialScreener pythonadmission.CredentialScreener
+}
+
+// AdmissionOptions configures optional per-invocation admission and evidence
+// overrides for one ToolRequest.
+type AdmissionOptions struct {
+	AllowedRoots      []string
+	ProtectedPaths    []string
+	Recheck           pythonadmission.RecheckFunc
+	JobRegistry       pythonadmission.SessionJobRegistry
+	AdmissionEvidence pythonadmission.EvidenceSink
+	DocumentEvidence  pythondocuments.EvidenceSink
+}
+
+// ToolRequest configures one invocation of Service.ExecuteTool.
+type ToolRequest struct {
+	// RawArgs, when non-nil, is validated via pythoncatalog.ValidateDirectToolArgs
+	// and populates Mode, Code, Script, Module, CWD, and Args.
+	RawArgs map[string]any
+
+	ExecutionID    string
+	CallID         string
+	SessionID      string
+	CheckoutID     string
+	Actor          string
+	View           string
+	Surface        string
+	InitiatingTool string
+	ReadOnly       bool
+
+	Mode   pythonruntime.ExecutionMode
+	Code   string
+	Script string
+	Module string
+	CLI    string
+	CWD    string
+	Args   []string
+	Env    map[string]string
+	Stdin  io.Reader
+
+	// Workspace backing: supply either Store (+ RootSpecs) or Roots (+ optional Editor / MutationDoor).
+	Store        pythondocuments.DocumentStore
+	RootSpecs    []pythondocuments.RootSpec
+	Roots        []pythondocuments.HostRootConfig
+	Editor       pythondocuments.EditorBridge
+	MutationDoor pythondocuments.MutationDoor
+
+	// Admission & authority configuration.
+	AllowedEffects *pythonadmission.AllowedEffects
+	Policy         pythonadmission.PolicyEvaluator
+	Broker         *pythonadmission.ApprovalBroker
+	Admission      AdmissionOptions
+
+	// Host-mediated HTTP configuration for requests.Session.
+	HTTP HTTPRequestOptions
+
+	Limits            pythonruntime.ResourceLimits
+	InlineBudgetBytes int
+}
+
+// ToolResponse carries the complete trusted host outcome of ExecuteTool.
+type ToolResponse struct {
+	ExecutionID              string                                   `json:"execution_id"`
+	Backend                  pythonruntime.BackendKind                `json:"backend,omitempty"`
+	EngineTag                string                                   `json:"engine_tag,omitempty"`
+	ExitCode                 int                                      `json:"exit_code"`
+	CleanCompletion          bool                                     `json:"clean_completion"`
+	Stdout                   string                                   `json:"stdout,omitempty"`
+	Stderr                   string                                   `json:"stderr,omitempty"`
+	InlineBudgetBytes        int                                      `json:"inline_budget_bytes,omitempty"`
+	StdoutTruncated          bool                                     `json:"stdout_truncated,omitempty"`
+	StderrTruncated          bool                                     `json:"stderr_truncated,omitempty"`
+	RetainedStdoutArtifactID string                                   `json:"retained_stdout_artifact_id,omitempty"`
+	RetainedStderrArtifactID string                                   `json:"retained_stderr_artifact_id,omitempty"`
+	RedactedCount            int                                      `json:"redacted_count,omitempty"`
+	Stop                     *pythonruntime.TerminalStop              `json:"stop,omitempty"`
+	Settlement               *pythonruntime.SettlementReport          `json:"settlement,omitempty"`
+	PreviewRecord            *pythonadmission.PreviewListenerRecord   `json:"preview,omitempty"`
+	Diagnostic               *pythoncatalog.Diagnostic                `json:"diagnostic,omitempty"`
+	RuntimeDiagnostics       []string                                 `json:"runtime_diagnostics,omitempty"`
+	Usage                    pythonruntime.ResourceUsage              `json:"usage"`
+	EvidenceSummary          *pythonevidence.PythonActivityProjection `json:"evidence_summary,omitempty"`
+	Preview                  *pythonadmission.PreviewListener         `json:"-"`
+	AdmissionEvidence        *pythonadmission.MemoryEvidenceStore     `json:"-"`
+	DocumentEvidence         *pythondocuments.EvidenceLog             `json:"-"`
+}
+
+// ExecuteTool validates direct tool arguments (when RawArgs is supplied),
+// handles manifest-backed read-only pip inventory and on-demand help,
+// dispatches unshadowed `python -m http.server` to StartPreviewListener, and
+// executes code/script/module/cli/stdin inside real CPython/WASI with full
+// overlay settlement, admission observation, and host-mediated requests.Session.
+func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolResponse, error) {
+	if s == nil || s.runtime == nil {
+		return nil, errors.New("portable python service is not initialized")
+	}
+
+	if req.RawArgs != nil {
+		validated, err := pythoncatalog.ValidateDirectToolArgs(req.RawArgs)
+		if err != nil {
+			return nil, err
+		}
+		req.Mode = catalogModeToRuntimeMode(validated.Mode)
+		req.Code = validated.Code
+		req.Script = validated.Script
+		req.Module = validated.Module
+		req.CWD = validated.Cwd
+		req.Args = validated.Args
+	}
+
+	execID := strings.TrimSpace(req.ExecutionID)
+	if execID == "" {
+		execID = s.newDurableExecutionID()
+	}
+
+	// 1. Read-only pip inventory and on-demand package help directly from the
+	// verified manifest (no WASI startup required).
+	if req.Mode == pythonruntime.ModeModule && strings.TrimSpace(req.Module) == "pip" {
+		return s.executePipModule(execID, req.Args)
+	}
+	if req.Mode == pythonruntime.ModeModule && strings.TrimSpace(req.Module) == "portablepython.help" {
+		return &ToolResponse{
+			ExecutionID:     execID,
+			ExitCode:        0,
+			CleanCompletion: true,
+			Stdout:          s.PackageHelp(),
+		}, nil
+	}
+
+	// Build per-invocation evidence sinks.
+	var memAdm *pythonadmission.MemoryEvidenceStore
+	admEvidence := req.Admission.AdmissionEvidence
+	if admEvidence == nil {
+		memAdm = pythonadmission.NewMemoryEvidenceStore()
+		admEvidence = memAdm
+	}
+	var memDoc *pythondocuments.EvidenceLog
+	docEvidence := req.Admission.DocumentEvidence
+	if docEvidence == nil {
+		memDoc = pythondocuments.NewEvidenceLog()
+		docEvidence = memDoc
+	}
+
+	// Apply production default limits whenever any limit field is unset.
+	limits := applyDefaultLimits(req.Limits)
+
+	// Build per-invocation WorkspaceAdapter (PY03 OverlayAdapter).
+	store, rootSpecs := buildDocumentStore(req)
+	overlay := pythondocuments.NewOverlayAdapter(pythondocuments.OverlayConfig{
+		ExecutionID: execID,
+		Store:       store,
+		Roots:       rootSpecs,
+		CWD:         req.CWD,
+		Evidence:    docEvidence,
+		Now:         s.clock.Now,
+	})
+
+	execCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stopLatch := pythonruntime.NewStopLatch(cancel)
+
+	broker := req.Broker
+	if broker == nil {
+		broker = s.broker
+	}
+	protectedPaths := mergeProtectedPaths(DefaultProtectedPaths, req.Admission.ProtectedPaths)
+	observer := pythonadmission.NewAdmissionObserver(pythonadmission.ObserverConfig{
+		ExecutionID:    execID,
+		CallID:         req.CallID,
+		Actor:          req.Actor,
+		View:           req.View,
+		Surface:        req.Surface,
+		ReadOnly:       req.ReadOnly,
+		AllowedEffects: req.AllowedEffects,
+		AllowedRoots:   req.Admission.AllowedRoots,
+		ProtectedPaths: protectedPaths,
+		MaxHostWork:    limits.MaxHostWork,
+		StopLatch:      stopLatch,
+		Broker:         broker,
+		Clock:          s.clock,
+		Policy:         req.Policy,
+		Recheck:        req.Admission.Recheck,
+		Evidence:       admEvidence,
+	})
+
+	// 2. Dispatch `python -m http.server` to host-managed StartPreviewListener
+	// unless shadowed by a workspace module (http/server.py or http.py).
+	if req.Mode == pythonruntime.ModeModule && strings.TrimSpace(req.Module) == "http.server" {
+		selected, _ := pythonadmission.CheckStdlibHTTPServerSelected(execCtx, overlay, req.CWD)
+		if selected {
+			jobReg := req.Admission.JobRegistry
+			if jobReg == nil {
+				jobReg = s.jobRegistry
+			}
+			pl, err := pythonadmission.StartPreviewListener(execCtx, pythonadmission.PreviewConfig{
+				ExecutionID: execID,
+				CallID:      req.CallID,
+				CWD:         req.CWD,
+				Args:        req.Args,
+				Workspace:   overlay,
+				Observer:    observer,
+				JobRegistry: jobReg,
+				StopLatch:   stopLatch,
+				Clock:       s.clock,
+				Evidence:    admEvidence,
+			})
+			if err != nil {
+				return &ToolResponse{
+					ExecutionID:       execID,
+					ExitCode:          1,
+					CleanCompletion:   false,
+					Stderr:            err.Error() + "\n",
+					Stop:              stopLatch.Stop(),
+					AdmissionEvidence: memAdm,
+					DocumentEvidence:  memDoc,
+				}, err
+			}
+			rec := pl.Record()
+			s.previewMu.Lock()
+			if s.activePreviews == nil {
+				s.activePreviews = make(map[string]*pythonadmission.PreviewListener)
+			}
+			s.activePreviews[rec.JobID] = pl
+			s.previewMu.Unlock()
+			resp := &ToolResponse{
+				ExecutionID:       execID,
+				ExitCode:          0,
+				CleanCompletion:   true,
+				Stdout:            fmt.Sprintf("Serving preview %s on http://%s (directory: %s)\n", rec.JobID, rec.Address, rec.Directory),
+				Preview:           pl,
+				PreviewRecord:     &rec,
+				AdmissionEvidence: memAdm,
+				DocumentEvidence:  memDoc,
+			}
+			s.finalizeResponse(ctx, req, resp, memAdm, memDoc)
+			return resp, nil
+		}
+	}
+
+	// 3. Build per-invocation fail-closed HTTPTransport + GuestHTTPAdapter + WASI bridge.
+	credScreener := req.HTTP.CredentialScreener
+	if credScreener == nil {
+		credScreener = pythonadmission.StrictCredentialScreener()
+	}
+	httpClient := req.HTTP.Client
+	if httpClient == nil {
+		httpClient = s.httpClient
+	}
+	httpTransport := pythonadmission.NewHTTPTransport(pythonadmission.HTTPTransportConfig{
+		ExecutionID:        execID,
+		CallID:             req.CallID,
+		Observer:           observer,
+		Client:             httpClient,
+		AllowPlainHTTP:     req.HTTP.AllowPlainHTTP,
+		AllowLoopbackHTTP:  req.HTTP.AllowLoopbackHTTP,
+		CredentialScreener: credScreener,
+		Clock:              s.clock,
+		Evidence:           admEvidence,
+	})
+	guestHTTPAdapter := pythonadmission.NewGuestHTTPAdapter(httpTransport)
+	httpBridgeFS := NewGuestHTTPBridgeFS(execCtx, guestHTTPAdapter, stopLatch)
+
+	guestCWD := pythonruntime.DefaultGuestWorkspaceMount
+	if relCWD := strings.Trim(strings.TrimSpace(req.CWD), "/"); relCWD != "" && relCWD != "." {
+		guestCWD = pythonruntime.DefaultGuestWorkspaceMount + "/" + relCWD
+	}
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	res, err := s.runtime.Execute(execCtx, pythonruntime.Invocation{
+		ExecutionID: execID,
+		Actor:       req.Actor,
+		View:        req.View,
+		Surface:     req.Surface,
+		Mode:        req.Mode,
+		Code:        req.Code,
+		Script:      req.Script,
+		Module:      req.Module,
+		CLI:         req.CLI,
+		CWD:         guestCWD,
+		Args:        req.Args,
+		Env:         req.Env,
+		Stdin:       req.Stdin,
+		Stdout:      &stdoutBuf,
+		Stderr:      &stderrBuf,
+		Limits:      limits,
+		Workspace:   overlay,
+		Observer:    observer,
+		StopLatch:   stopLatch,
+		ExtraSysMounts: map[string]experimentalsys.FS{
+			GuestHTTPBridgeMount: httpBridgeFS,
+		},
+		HTTPBridgePath: GuestHTTPBridgePath,
+	})
+	if err != nil {
+		guestHTTPAdapter.CloseAll(execCtx.Err())
+		return nil, err
+	}
+	guestHTTPAdapter.CloseAll(execCtx.Err())
+
+	stderrOut := stderrBuf.String()
+	if stderrOut == "" && res.GuestStderr != "" {
+		stderrOut = res.GuestStderr
+	}
+
+	resp := &ToolResponse{
+		ExecutionID:       res.ExecutionID,
+		Backend:           res.Backend,
+		EngineTag:         res.EngineTag,
+		ExitCode:          res.ExitCode,
+		CleanCompletion:   res.CleanCompletion,
+		Stdout:            stdoutBuf.String(),
+		Stderr:            stderrOut,
+		Stop:               res.Stop,
+		Settlement:         res.Settlement,
+		RuntimeDiagnostics: res.Diagnostics,
+		Usage:              res.Usage,
+		AdmissionEvidence: memAdm,
+		DocumentEvidence:  memDoc,
+	}
+	s.finalizeResponse(ctx, req, resp, memAdm, memDoc)
+	return resp, nil
+}
+
+func (s *Service) newDurableExecutionID() string {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err == nil {
+		return "py-exec-" + hex.EncodeToString(raw[:])
+	}
+	return fmt.Sprintf("py-exec-%d-%d", s.clock.Now().UnixNano(), s.execSeq.Add(1))
+}
+
+func applyDefaultLimits(in pythonruntime.ResourceLimits) pythonruntime.ResourceLimits {
+	out := in
+	if out.Timeout <= 0 {
+		out.Timeout = defaultExecutionTimeout
+	}
+	if out.MaxMemoryPages == 0 {
+		out.MaxMemoryPages = DefaultMaxMemoryPages
+	}
+	if out.MaxGuestWork == 0 {
+		out.MaxGuestWork = DefaultMaxGuestWork
+	}
+	if out.MaxHostWork == 0 {
+		out.MaxHostWork = DefaultMaxHostWork
+	}
+	if out.MaxOutputBytes <= 0 {
+		out.MaxOutputBytes = DefaultMaxOutputBytes
+	}
+	if out.MaxStagedBytes <= 0 {
+		out.MaxStagedBytes = DefaultMaxStagedBytes
+	}
+	return out
+}
+
+func mergeProtectedPaths(defaults, extra []string) []string {
+	seen := make(map[string]struct{}, len(defaults)+len(extra))
+	out := make([]string, 0, len(defaults)+len(extra))
+	for _, p := range defaults {
+		if p == "" {
+			continue
+		}
+		if _, ok := seen[p]; !ok {
+			seen[p] = struct{}{}
+			out = append(out, p)
+		}
+	}
+	for _, p := range extra {
+		if p == "" {
+			continue
+		}
+		if _, ok := seen[p]; !ok {
+			seen[p] = struct{}{}
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func (s *Service) executePipModule(execID string, args []string) (*ToolResponse, error) {
+	if len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
+		return &ToolResponse{
+			ExecutionID:     execID,
+			ExitCode:        0,
+			CleanCompletion: true,
+			Stdout:          s.PackageHelp(),
+		}, nil
+	}
+	pipRes, err := pythoncatalog.ExecuteReadOnlyPip(s.catalogManifest, args)
+	if err != nil {
+		return nil, err
+	}
+	return &ToolResponse{
+		ExecutionID:     execID,
+		ExitCode:        pipRes.ExitStatus,
+		CleanCompletion: pipRes.ExitStatus == 0,
+		Stdout:          pipRes.Stdout,
+		Stderr:          pipRes.Stderr,
+		Diagnostic:      pipRes.Diagnostic,
+	}, nil
+}
+
+func buildDocumentStore(req ToolRequest) (pythondocuments.DocumentStore, []pythondocuments.RootSpec) {
+	if req.Store != nil {
+		return req.Store, req.RootSpecs
+	}
+	if len(req.Roots) == 0 {
+		mem := pythondocuments.NewMemoryDocumentStore()
+		specs := req.RootSpecs
+		if len(specs) == 0 {
+			specs = []pythondocuments.RootSpec{{
+				ID:       "default",
+				Label:    "workspace",
+				Default:  true,
+				ReadOnly: req.ReadOnly,
+			}}
+		}
+		return mem, specs
+	}
+	// Fail closed: never construct a parallel disk/fseffect write path here.
+	// Callers must inject Painted Wolf's single apply-and-record MutationDoor
+	// (e.g. native.NewPythonMutationDoor). When MutationDoor is nil,
+	// HostDocumentStore allows reads and rejects any workspace write with
+	// pythondocuments.ErrMutationDoorUnavailable.
+	store := pythondocuments.NewHostDocumentStore(req.Roots, req.Editor, req.MutationDoor)
+	specs := req.RootSpecs
+	if len(specs) == 0 {
+		specs = make([]pythondocuments.RootSpec, 0, len(req.Roots))
+		for i, r := range req.Roots {
+			id := r.ID
+			if id == "" {
+				id = "default"
+			}
+			specs = append(specs, pythondocuments.RootSpec{
+				ID:       id,
+				Label:    id,
+				Branch:   r.Branch,
+				Default:  i == 0,
+				ReadOnly: r.ReadOnly,
+			})
+		}
+	}
+	return store, specs
+}
+
+func catalogModeToRuntimeMode(m pythoncatalog.ExecutionMode) pythonruntime.ExecutionMode {
+	switch m {
+	case pythoncatalog.ModeCode:
+		return pythonruntime.ModeCode
+	case pythoncatalog.ModeScript:
+		return pythonruntime.ModeScript
+	case pythoncatalog.ModeModule:
+		return pythonruntime.ModeModule
+	case pythoncatalog.ModeStdin:
+		return pythonruntime.ModeStdin
+	default:
+		return pythonruntime.ExecutionMode(m)
+	}
+}

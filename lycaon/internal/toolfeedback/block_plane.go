@@ -130,6 +130,7 @@ func (bp *BlockPlane) rejectFromObservation(ctx context.Context, anchor, tool, p
 		oar.ObserveMCPStructuralPre(gc, tool, bp.MCPCatalog)
 	}
 	ApplyToolRejectObservations(gc, tr)
+	publishPythonOARFacts(gc, tr)
 	if observe != nil {
 		if err := observe(gc); err != nil {
 			return err

@@ -12,6 +12,14 @@ type egressResolverRegistration struct {
 	work workscope.Group
 }
 
+// HasEgressResolver reports whether a process-level egress approval resolver is
+// currently installed.
+func HasEgressResolver() bool {
+	egressBroker.mu.Lock()
+	defer egressBroker.mu.Unlock()
+	return egressBroker.resolver != nil
+}
+
 // SetEgressResolver installs the approval hook and returns its owner's drain.
 func SetEgressResolver(fn EgressResolver) func(context.Context) error {
 	registration := &egressResolverRegistration{fn: fn}

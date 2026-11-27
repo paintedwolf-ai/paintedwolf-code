@@ -30,7 +30,7 @@ func TestProcessOperationsAreNotCallableTools(t *testing.T) {
 }
 
 func TestCommandRegistrationRefusesUndeclaredToolAtCatalogBoundary(t *testing.T) {
-	names := []string{"command", "verify", "command_output", "command_stop"}
+	names := []string{"command", "python", "verify", "command_output", "command_stop"}
 	for missing, name := range names {
 		t.Run(name, func(t *testing.T) {
 			entries := map[string]toolschema.Entry{}

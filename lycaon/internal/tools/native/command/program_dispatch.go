@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/pythoncatalog"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/tooloutput"
@@ -208,6 +209,9 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 	}
 	if err := d.run.supervisor.AdmitChild(ctx); err != nil {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.NoEffect}, err
+	}
+	if dec := pythoncatalog.CheckBareInterpreterRouting(request.Argv.Values(), d.run.directPythonOffered); dec.Blocked {
+		return refusePythonToolRequired(ctx, d, request, streams, dec)
 	}
 	if resolved, ok, err := commandprogram.ResolveCommand(request.Argv); err == nil && ok && resolved.Name != "external" {
 		if bound, err := d.binder.Bind(resolved, request.Argv); err == nil && bound.Help {
