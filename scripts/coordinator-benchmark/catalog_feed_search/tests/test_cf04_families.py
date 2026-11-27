@@ -198,6 +198,7 @@ class TestCF04GeneratorsAndHelpers(unittest.TestCase):
                 '101 getdents64(6</tmp/fixroot/sub>, 0x1, 8192) = 64',
                 '101 getdents64(7</etc>, 0x1, 8192) = 512',
                 '101 newfstatat(6</tmp/fixroot/sub>, "a.go", {st_mode=S_IFREG}, 0) = 0',
+                '101 newfstatat(AT_FDCWD</home/user>, "/tmp/fixroot/sub/b.go", {st_mode=S_IFREG}, AT_SYMLINK_NOFOLLOW) = 0',
                 '101 newfstatat(AT_FDCWD, "/tmp/fixroot/sub", {st_mode=S_IFDIR}, 0) = 0',
             ]
         )
@@ -205,7 +206,7 @@ class TestCF04GeneratorsAndHelpers(unittest.TestCase):
         self.assertEqual(obs["status"], "ok")
         self.assertEqual(obs["distinct_directories_read"], 2)
         self.assertEqual(obs["directory_read_calls"], 2)
-        self.assertEqual(obs["per_file_metadata_reads"], 1)
+        self.assertEqual(obs["per_file_metadata_reads"], 2)
         self.assertEqual(obs["directory_metadata_reads"], 1)
 
         empty = parse_strace_fixture_ops("", root, known_dir_rels={"."})

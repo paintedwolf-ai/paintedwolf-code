@@ -30,7 +30,7 @@ from .cf04_k05 import write_scalefixture_tree
 # 12345 statx(14</tmp/fix/g000/d000>, "f000.go", ...) = 0
 _GETDENTS_RE = re.compile(r"getdents64\(\d+<([^>]+)>,.*=\s*(-?\d+)")
 _FSTATAT_FD_RE = re.compile(r"(?:newfstatat|fstatat64|statx)\(\d+<([^>]+)>,\s*\"([^\"]*)\"")
-_FSTATAT_CWD_RE = re.compile(r"(?:newfstatat|fstatat64|statx)\(AT_FDCWD,\s*\"([^\"]+)\"")
+_FSTATAT_CWD_RE = re.compile(r"(?:newfstatat|fstatat64|statx)\(AT_FDCWD(?:<[^>]*>)?,\s*\"([^\"]+)\"")
 
 
 def _under_root(path_str: str, root_str: str) -> str | None:
