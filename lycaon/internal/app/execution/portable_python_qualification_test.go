@@ -778,9 +778,9 @@ func TestPortablePythonCombinedCommandAndOAR(t *testing.T) {
 			testutil.FailErr(t, "poll parked managed pytest via command_output", pollErr)
 			outPytest = polled
 			var nextState struct {
-				State string `json:"state"`
+				Running bool `json:"running"`
 			}
-			if json.Unmarshal([]byte(polled), &nextState) != nil || nextState.State != "running" {
+			if json.Unmarshal([]byte(polled), &nextState) != nil || !nextState.Running {
 				break
 			}
 		}
