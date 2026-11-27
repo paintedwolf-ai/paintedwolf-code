@@ -664,7 +664,8 @@ def _ctrl_workers(
             },
         )
         job_id = str(
-            ((task_res.get("invocation") or {}).get("evidence") or {}).get("ref")
+            (task_res.get("dispatch") or {}).get("worker_id")
+            or ((task_res.get("invocation") or {}).get("evidence") or {}).get("owner_ref")
             or (task_res.get("dispatch") or {}).get("job_id")
             or task_res.get("job_id")
             or ""
