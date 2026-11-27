@@ -19,6 +19,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+import urllib.parse
 import uuid
 from typing import Any
 
@@ -146,8 +147,14 @@ def _open_session(app: Any, project_dir: pathlib.Path, *, posture: str = "build"
 
 
 def _wait_pending(app: Any, session_id: str | None = None) -> dict[str, Any]:
+    path = (
+        f"/harness/llm/pending?session_id={urllib.parse.quote(session_id)}"
+        if session_id
+        else "/harness/llm/pending"
+    )
+
     def poll() -> dict[str, Any] | None:
-        val = app.request("/harness/llm/pending")
+        val = app.request(path)
         if not val.get("pending"):
             return None
         if session_id is not None and val.get("session_id") != session_id:
