@@ -258,20 +258,16 @@ with open("timeline.pcap", "rb") as f:
 with open("timeline.pcapng", "rb") as f:
     pcapng_sum = summarize_reader(dpkt.pcapng.Reader(f))
 
-# Truncated capture: read complete packets before truncation / detect insufficient evidence
+# Truncated capture: parse each packet; truncated trailing frame raises NeedData
 trunc_pkts = 0
 trunc_detected = False
 try:
     with open("truncated.pcap", "rb") as f:
         r = dpkt.pcap.Reader(f)
         for _ts, _buf in r:
+            dpkt.ethernet.Ethernet(_buf)
             trunc_pkts += 1
-        # dpkt silently stops on short trailing packet; verify file had leftover unread bytes
-        if f.tell() < Path("truncated.pcap").stat().st_size:
-            trunc_detected = True
-except (dpkt.NeedData, ValueError, EOFError):
-    trunc_detected = True
-if trunc_pkts == 1 and Path("truncated.pcap").stat().st_size > 100:
+except (dpkt.NeedData, dpkt.UnpackError, ValueError, EOFError):
     trunc_detected = True
 
 # Unsupported linktype (147 = DLT_USER0 != DLT_EN10MB)
