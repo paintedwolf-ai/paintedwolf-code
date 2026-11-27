@@ -14,6 +14,7 @@ from bootstrap_policy import open_request
 from capture_storage import checkpoint_closed_store
 from portable_command.artifacts import project_hashes
 from portable_command.contracts import DIRECTORY, ROOT, load_suite, materialize
+from portable_command.git_oracle import materialize_git_setup
 from portable_command.grading import grade_case
 from portable_command.handle_await import await_running_handle
 from portable_command.observe import build_observation, file_sha256, source_identity
@@ -211,6 +212,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
     raw_dir.mkdir(parents=True, exist_ok=True)
     baseline_hashes = materialize(case, project_dir)
     host_facts_ok, host_fact_bindings = materialize_host_facts(case['setup'].get('host_facts'), project_dir)
+    git_setup = materialize_git_setup(case['setup'].get('git'), project_dir, case['setup'].get('files'))
     expected_baseline = case.get('_expected_baseline_hashes')
     if expected_baseline is not None and expected_baseline != baseline_hashes:
         raise ValueError('replay bundle baseline_hashes do not match materialized fixture')
@@ -252,7 +254,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
                 'handle_await': await_meta, 'batch_plan': [c['name'] for c in batch], 'envelope_mode': envelope_mode,
                 'batch_outcomes': [{'call_id': cid, 'tool': c['name'], 'outcome': res.get('outcome')} for c, (cid, res) in zip(batch, results)],
             })
-        save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases, 'draft_bindings': draft_bindings, 'session_surface': session_surface})
+        save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases, 'draft_bindings': draft_bindings, 'session_surface': session_surface, 'git_setup': git_setup})
         application.request(f'/v1/sessions/{session_id}/abort', {})
         with contextlib.closing(sqlite3.connect(app_dir / 'store.db')) as db:
             pids = [r[0] for r in db.execute('SELECT p.id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE r.session_id=?', (session_id,)).fetchall()]
@@ -281,7 +283,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
             case, session_id=session_id, identity=identity, project_dir=project_dir, db_path=app_dir / 'store.db',
             sidecar_log=sidecar_path, turn_records=turn_records, prelude_records=prelude_records,
             sidecar_window=window, extra_gaps=extra_gaps, baseline_hashes=baseline_hashes,
-            session_surface=session_surface, draft_bindings=draft_bindings,
+            session_surface=session_surface, draft_bindings=draft_bindings, git_setup=git_setup,
         )
         grade = grade_case(case, observation, project_dir, identity)
     except Exception as exc:

@@ -2,14 +2,16 @@
 import hashlib
 import io
 import json
+import os
 import pathlib
 import sqlite3
+import subprocess
 import tarfile
 import tempfile
 import unittest
 import zipfile
-from portable_command import observe, provenance
-from portable_command.contracts import load_suite
+from portable_command import artifacts, git_oracle, observe, provenance
+from portable_command.contracts import load_suite, materialize
 from portable_command.test_portable_command_harness import create_audit_db
 
 CASES = {c['id']: c for c in load_suite()['cases']}
@@ -131,3 +133,72 @@ class PortableCommandQSliceTests(unittest.TestCase):
             }
             rows, effs, wrappers = observe._receipt_rows(audit_tmp, [])
             self.assertEqual((len(wrappers), rows[0]['operation'], effs[0]['namespace']), (1, 'mktemp', 'session-temp'))
+
+    def test_q18_git_concurrent_index_positive_and_negative_controls(self):
+        case = CASES['git-concurrent-index']
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            db_path, log_path, _ = self._base_env(root)
+            proj = root / 'git-proj'
+            materialize(case, proj)
+            git_setup = git_oracle.materialize_git_setup(case['setup']['git'], proj, case['setup']['files'])
+            self.assertTrue(git_setup['initialized'] and len(git_setup['initial_head']) == 40)
+            self.assertTrue(artifacts.grade_artifacts(proj, case))
+            # Positive control: isolated-index commit of ONLY authored.txt preserves foreign.txt in real index.
+            iso_env = {**os.environ, 'GIT_INDEX_FILE': str(root / 'isolated.index')}
+            subprocess.run(['git', '-C', str(proj), '-c', 'core.fsmonitor=false', 'read-tree', 'HEAD'], env=iso_env, check=True)
+            subprocess.run(['git', '-C', str(proj), '-c', 'core.fsmonitor=false', 'add', '--', 'authored.txt'], env=iso_env, check=True)
+            subprocess.run(['git', '-C', str(proj), '-c', 'core.fsmonitor=false', 'commit', '-m', 'Fixture change'], env=iso_env, check=True)
+            db = sqlite3.connect(db_path)
+            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','completed',1)")
+            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,'')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e1','p1',1,'git add','git add','git','completed','completed'), ('e2','p1',2,'git_commit','git commit','git','completed','completed')")
+            db.commit(); db.close()
+            obs, audit = observe.build_observation(
+                case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path,
+                sidecar_log=log_path, baseline_hashes={}, git_setup=git_setup,
+                turn_records=[{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}],
+                prelude_records=[],
+            )
+            self.assertEqual([r['operation'] for r in obs['receipts']], ['git_add', 'git_commit'])
+            self.assertEqual([e.get('paths') for e in obs['effects']], [['authored.txt'], ['authored.txt']])
+            self.assertTrue(obs['facts']['foreign_index_preserved'])
+            self.assertTrue(obs['facts']['session_authored_paths'])
+            self.assertTrue(obs['facts']['immutable_ref_evidence'])
+            self.assertIn('missing_observation:invocation_fsmonitor_policy:git_owner', audit['observation_gaps'])
+            # Negative control: committing foreign.txt from the shared index MUST fail both facts.
+            subprocess.run(['git', '-C', str(proj), '-c', 'core.fsmonitor=false', 'commit', '-m', 'Accidental foreign commit'], check=True)
+            obs_bad, _ = observe.build_observation(
+                case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path,
+                sidecar_log=log_path, baseline_hashes={}, git_setup=git_setup,
+                turn_records=[{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}],
+                prelude_records=[],
+            )
+            self.assertFalse(obs_bad['facts']['foreign_index_preserved'])
+            self.assertFalse(obs_bad['facts']['session_authored_paths'])
+
+    def test_q22_paired_manifest_contract_zero_model_controls(self):
+        case = CASES['paired-manifest-contract']
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path, log_path, proj = self._base_env(pathlib.Path(tmp))
+            db = sqlite3.connect(db_path)
+            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','completed',1)")
+            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,'')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e1','p1',1,'true','true','processes','completed','none')")
+            db.commit(); db.close()
+            good_id = {'git_head': 'a' * 40, 'git_tree': 'b' * 40, 'suite_sha256': 'c' * 64, 'engine_provenance': {'provenance_verified': True}}
+            obs, audit = observe.build_observation(
+                case, session_id='sess1234', identity=good_id, project_dir=proj, db_path=db_path,
+                sidecar_log=log_path, baseline_hashes={},
+                turn_records=[{'program': 'true', 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[],
+            )
+            self.assertEqual(audit['observation_gaps'], [])
+            for fact in case['required_evidence']:
+                self.assertTrue(obs['facts'][fact], fact)
+            bad_id = {**good_id, 'engine_provenance': {'provenance_verified': False}}
+            obs_bad, _ = observe.build_observation(
+                case, session_id='sess1234', identity=bad_id, project_dir=proj, db_path=db_path,
+                sidecar_log=log_path, baseline_hashes={},
+                turn_records=[{'program': 'true', 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[],
+            )
+            self.assertFalse(obs_bad['facts']['immutable_identity'])

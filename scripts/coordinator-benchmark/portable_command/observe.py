@@ -3,6 +3,7 @@ import json
 import pathlib
 from portable_command.artifacts import project_hashes
 from portable_command.db_audit import ELIGIBLE_WRAPPER_OPS, query_db_audit, receipt_rows as _receipt_rows, verify_tar_bz2
+from portable_command.git_oracle import inspect_git_facts, verify_paired_manifest_contract
 from portable_command.reporting import (
     FACT_OWNERS,
     extract_recovery as _extract_recovery,
@@ -44,7 +45,7 @@ def normalize_outcome(raw_result, program_row, payload):
     return state, stop, code
 
 
-def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=(), baseline_hashes=None, session_surface=None, draft_bindings=None):
+def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=(), baseline_hashes=None, session_surface=None, draft_bindings=None, git_setup=None):
     """Construct a version-1 native-runtime observation from the whole isolated session."""
     prelude_calls = {r['call_id'] for r in prelude_records if r.get('call_id')}
     expected_calls = {cid for rec in turn_records for cid in (list(rec['call_ids']) + list(rec.get('await_call_ids') or ()))}
@@ -250,6 +251,8 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         if any(tok in recovery['owner_code'].lower() for tok in ('zip', 'traversal', 'escape', 'archive', 'path')):
             facts['zip_slip_refused'] = True
     facts.update(verify_tar_bz2(project_dir, receipts, effects, audit['invocation_program_publications'], final_hashes))
+    facts.update(inspect_git_facts(case, project_dir, git_setup, receipts, effects, audit))
+    facts.update(verify_paired_manifest_contract(case, identity))
     temp_pins = [str(p.get('path') or '') for p in pins if p.get('role') == 'destination' and f'/scratch/{session_id}/' in str(p.get('path') or '')]
     if temp_pins:
         facts['temp_path_owned'] = True

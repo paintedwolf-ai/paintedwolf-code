@@ -69,6 +69,10 @@ def _canonical_op(ex):
             return 'tar_create'
         if '-xjf' in canonical or ' -x' in f' {canonical}':
             return 'tar_extract'
+    if owner == 'git' and (op_id == 'git add' or native_cmd == 'git add'):
+        return 'git_add'
+    if owner == 'git' and (op_id in {'git commit', 'git_commit'} or native_cmd == 'git commit'):
+        return 'git_commit'
     return native_cmd or op_id
 
 
