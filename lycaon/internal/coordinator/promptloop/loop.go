@@ -3,9 +3,10 @@ package promptloop
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"math"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolreach"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -140,14 +141,15 @@ loop:
 		if err := l.Inbox.takePhaseGuidance(ctx, id, st); err != nil {
 			return nil, err
 		}
-		if sentBeforeCall || !firstModelTurn || previous != authority.Mode {
+		modeUpgraded := l.Context.observeModeUpgrade(sess, id, previous, authority.Mode, st.history)
+		if sentBeforeCall || !firstModelTurn || previous != authority.Mode || modeUpgraded {
 			surfaceID, err = l.Context.refreshCoordinatorSurface(ctx, sess, id, profileID, st, surfaceID)
 			if err != nil {
 				return nil, err
 			}
 		}
-		if previous == api.SessionModeAsk && authority.Mode == api.SessionModeAgent {
-			st.history, err = l.appendAgentEnabledNudge(ctx, id, st)
+		if modeUpgraded {
+			st.history, err = l.appendAgentEnabledNudge(ctx, sess, id, profileID, st)
 			if err != nil {
 				return nil, err
 			}

@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/llm/policytest"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/llm/policytest"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/cost"

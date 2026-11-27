@@ -25,7 +25,7 @@ func HintNextSteps(ctx context.Context, rules *oar.RuleSet, code string, data ma
 		gc.Invocation.Tool = tool
 	}
 	gc.ObservationData = data
-	return oar.ResolveNextSteps(rule, gc).Text
+	return oar.ResolveNextSteps(ctx, rule, gc).Text
 }
 
 // HintNextStepsResolver binds a RuleSet into the guidance resolver signature.

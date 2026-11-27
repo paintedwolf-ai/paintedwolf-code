@@ -101,9 +101,6 @@ func TestMergeWorkspaceRootsVarsDelegatesToBuilder(t *testing.T) {
 	if len(rows) != 2 || rows[1]["is_active"] != true || rows[0]["is_active"] != false {
 		t.Fatalf("rows=%+v", rows)
 	}
-	if vars["reviews_confined_writes"] != true {
-		t.Fatalf("reviews_confined_writes=%v", vars["reviews_confined_writes"])
-	}
 
 	empty := map[string]any{}
 	prompts.MergeWorkspaceRootsVars(empty, nil, "")

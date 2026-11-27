@@ -294,6 +294,12 @@ func checkToolVocabulary(
 	agentProfiles []agentdef.Profile,
 	rules *oar.RuleSet,
 ) ([]string, error) {
+	// Malformed skills already surface as catalog diagnostics; this reads the
+	// ones that loaded.
+	loaded, _ := extpacks.LoadEffectiveSkills(eff)
+	if err := toolvocab.RetiredNames(toolProfiles, rules, loaded); err != nil {
+		return nil, err
+	}
 	schemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
 	if err != nil {
 		return nil, err
@@ -318,9 +324,6 @@ func checkToolVocabulary(
 		return nil, err
 	}
 	notes = append(notes, templateNotes...)
-	// Malformed skills already surface as catalog diagnostics; this reads the
-	// ones that loaded.
-	loaded, _ := extpacks.LoadEffectiveSkills(eff)
 	return notes, toolvocab.ValidateSkills(catalog, agents, loaded)
 }
 

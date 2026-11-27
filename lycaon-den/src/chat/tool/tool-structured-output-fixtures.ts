@@ -13,10 +13,7 @@ export const GIT_UNAVAILABLE_OUTPUT_FIXTURE = JSON.stringify({
 });
 
 const CATALOG_OK_TOOLS = [
-  "state_update",
-  "state_close",
   "state_start",
-  "state_query",
   "scan_pack",
   "scan_list",
   "scan_summary",
@@ -26,7 +23,6 @@ const CATALOG_OK_TOOLS = [
   "workflow_compose_from_template",
   "workflow_catalog_summaries",
   "workflow_persist",
-  "workflow_user_feedback",
   "workflow_advance",
   "workflow_transition",
   "fanout_plan",
@@ -35,10 +31,6 @@ const CATALOG_OK_TOOLS = [
   "read_review",
   "submit_verdict",
   "skills_read",
-  "plan_append_review_evidence",
-  "parse_extract_json",
-  "parse_validate",
-  "parse_evaluation",
   "wait",
   "worker_cancel",
   "answer_decision",
@@ -388,11 +380,9 @@ export const TOOL_STRUCTURED_OUTPUT_FIXTURES: Record<string, string> = {
       state: "revoked",
     },
   }),
-  handoff_init: OK,
   handoff_reserve: JSON.stringify({ paths: ["internal/foo.go"], reserved: 1 }),
   handoff_release: JSON.stringify({ paths: ["internal/foo.go"], released: 1 }),
   handoff_release_all: JSON.stringify({ released: 2 }),
-  handoff_health: JSON.stringify({ healthy: true, conflicts: [] }),
   promote_overlay: JSON.stringify({
     result_handle: "result-1",
     merge_status: "merged",

@@ -128,12 +128,14 @@ var (
 	contentAuthorityErr       error
 )
 
+// ContentAuthorityNoticeSource marks the content part that carries the authority notice.
+const ContentAuthorityNoticeSource = "content_authority_notice"
+
 const (
-	contentAuthorityNoticeSource = "content_authority_notice"
-	checkpointDenialSource       = "checkpoint_denial"
-	checkpointGuidanceSource     = "checkpoint_guidance"
-	checkpointDecisionSource     = "checkpoint_decision"
-	checkpointApprovalSource     = "checkpoint_approval"
+	checkpointDenialSource   = "checkpoint_denial"
+	checkpointGuidanceSource = "checkpoint_guidance"
+	checkpointDecisionSource = "checkpoint_decision"
+	checkpointApprovalSource = "checkpoint_approval"
 )
 
 // Project returns detached, model-ready messages with one utility authority
@@ -209,7 +211,7 @@ func HasAuthorityNotice(msg api.Message) bool {
 	}
 	for _, part := range msg.ContentParts {
 		if part.Origin == api.MessageOriginHost && part.Authority == api.ContentAuthoritySystem &&
-			part.Source == contentAuthorityNoticeSource && isContentAuthorityNotice(part.Content) {
+			part.Source == ContentAuthorityNoticeSource && isContentAuthorityNotice(part.Content) {
 			return true
 		}
 	}
@@ -219,7 +221,7 @@ func HasAuthorityNotice(msg api.Message) bool {
 func mergeContentAuthorityNotice(audience ContentAudience, msg api.Message) api.Message {
 	parts := []api.MessageContentPart{{
 		Content: ContentAuthorityNotice(audience), Origin: api.MessageOriginHost,
-		Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted, Source: contentAuthorityNoticeSource,
+		Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted, Source: ContentAuthorityNoticeSource,
 	}}
 	parts = append(parts, api.MessageTextParts(msg)...)
 	msg.ContentParts = parts

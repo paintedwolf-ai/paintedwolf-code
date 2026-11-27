@@ -131,12 +131,16 @@ func boardWorkerSessionID(sess *api.Session) string {
 func (b *BoardEngine) PrependBoardIfChanged(
 	ctx context.Context,
 	sess *api.Session,
+	reader prompts.Reader,
 	run api.CoordinatorRunContext,
 ) (string, bool) {
 	if b == nil || sess == nil || b.builder == nil {
 		return "", false
 	}
 	if b.injects.Load() == nil && b.formatter == nil {
+		return "", false
+	}
+	if b.injects.Load() != nil && !reader.Valid() {
 		return "", false
 	}
 	if !surface.IsCoordinatorSession(sess) {
@@ -174,7 +178,7 @@ func (b *BoardEngine) PrependBoardIfChanged(
 	if b.includeScanLegend != nil {
 		includeLegend = b.includeScanLegend()
 	}
-	block, ok := b.renderInjectBlock(ctx, sess.ID, *snap, decision.Scope, omitDelegation, includeLegend, now)
+	block, ok := b.renderInjectBlock(ctx, reader, sess.ID, *snap, decision.Scope, omitDelegation, includeLegend, now)
 	if !ok || strings.TrimSpace(block) == "" {
 		return "", false
 	}
@@ -192,11 +196,15 @@ func (b *BoardEngine) PrependBoardIfChanged(
 func (b *BoardEngine) WorkerBoard(
 	ctx context.Context,
 	sess *api.Session,
+	reader prompts.Reader,
 ) (string, bool) {
 	if b == nil || sess == nil || b.builder == nil {
 		return "", false
 	}
 	if b.injects.Load() == nil && b.formatter == nil {
+		return "", false
+	}
+	if b.injects.Load() != nil && !reader.Valid() {
 		return "", false
 	}
 	if !sess.IsWorkerChild() {
@@ -234,7 +242,7 @@ func (b *BoardEngine) WorkerBoard(
 	orientationFP := packboard.OrientationFingerprint(*snap)
 	pulseFP := packboard.PulseFingerprint(*snap, now)
 	st, _ := b.state.Load(sess.ID)
-	block, ok := b.renderWorkerBoardBlock(ctx, sess.ID, *snap, packboard.InjectScopeFull, true, false, now)
+	block, ok := b.renderWorkerBoardBlock(ctx, reader, sess.ID, *snap, packboard.InjectScopeFull, true, false, now)
 	if !ok || strings.TrimSpace(block) == "" {
 		return "", false
 	}
@@ -248,6 +256,7 @@ func (b *BoardEngine) WorkerBoard(
 
 func (b *BoardEngine) renderInjectBlock(
 	ctx context.Context,
+	reader prompts.Reader,
 	sessionID string,
 	snap api.BoardSnapshot,
 	scope packboard.InjectScope,
@@ -256,7 +265,7 @@ func (b *BoardEngine) renderInjectBlock(
 	now time.Time,
 ) (string, bool) {
 	if inj := b.injects.Load(); inj != nil {
-		rendered, err := inject.RenderBoardOrientationInject(ctx, inj, sessionID, snap, scope, omitDelegation, includeScanLegend, now)
+		rendered, err := inject.RenderBoardOrientationInject(ctx, inj, reader, sessionID, snap, scope, omitDelegation, includeScanLegend, now)
 		if err != nil {
 			return "", false
 		}
@@ -274,6 +283,7 @@ func (b *BoardEngine) renderInjectBlock(
 
 func (b *BoardEngine) renderWorkerBoardBlock(
 	ctx context.Context,
+	reader prompts.Reader,
 	sessionID string,
 	snap api.BoardSnapshot,
 	scope packboard.InjectScope,
@@ -282,13 +292,13 @@ func (b *BoardEngine) renderWorkerBoardBlock(
 	now time.Time,
 ) (string, bool) {
 	if inj := b.injects.Load(); inj != nil {
-		rendered, err := inject.RenderWorkerBoardInject(ctx, inj, sessionID, snap, scope, omitDelegation, includeScanLegend, now)
+		rendered, err := inject.RenderWorkerBoardInject(ctx, inj, reader, sessionID, snap, scope, omitDelegation, includeScanLegend, now)
 		if err != nil {
 			return "", false
 		}
 		return rendered, rendered != ""
 	}
-	return b.renderInjectBlock(ctx, sessionID, snap, scope, omitDelegation, includeScanLegend, now)
+	return b.renderInjectBlock(ctx, reader, sessionID, snap, scope, omitDelegation, includeScanLegend, now)
 }
 
 func (b *BoardEngine) BoardInjectHash(sessionID string) string {

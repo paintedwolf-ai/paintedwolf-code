@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/turnreadertest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -265,10 +266,11 @@ func TestFindingsAndMessagesStreamsNeverStarveOrCrossAcknowledge(t *testing.T) {
 
 	eng := &assembly.AssemblyEngine{}
 	eng.SetDeps(assembly.AssemblyDeps{
-		Prompts: pe,
-		Injects: inj,
-		Limits:  func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
-		Workers: assembly.Workers{Leg: staticWorkerLegCtx{leg: inject.WorkerLegContext{LegID: "job-alpha-1", Checklist: []string{"step"}}}},
+		Prompts:    pe,
+		Injects:    inj,
+		TurnReader: turnreadertest.Fixture{}.TurnReader,
+		Limits:     func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+		Workers:    assembly.Workers{Leg: staticWorkerLegCtx{leg: inject.WorkerLegContext{LegID: "job-alpha-1", Checklist: []string{"step"}}}},
 		Deliveries: assembly.Deliveries{
 			SiblingNotes: findings,
 			Messages:     delivery,

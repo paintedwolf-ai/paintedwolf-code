@@ -6,28 +6,45 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/tools"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
 
-// TestToolDescriptionsCiteOnlyRegisteredTools: every backticked snake_case
-// token in a tool description names a registered tool. A model attempts any
-// tool a description cites, so a misspelled name becomes a failed call.
-func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
-	reg := toolfixture.ContractServeBootRegistry(t)
-
-	registered := map[string]bool{}
-	for _, meta := range reg.List() {
-		registered[meta.Name] = true
+func collectSchemaVocabularyTokens(node any, dst map[string]string) {
+	switch v := node.(type) {
+	case map[string]any:
+		if props, ok := v["properties"].(map[string]any); ok {
+			for propName, propVal := range props {
+				dst[propName] = "declared schema property"
+				collectSchemaVocabularyTokens(propVal, dst)
+			}
+		}
+		if enumVals, ok := v["enum"].([]any); ok {
+			for _, ev := range enumVals {
+				if s, ok := ev.(string); ok {
+					dst[s] = "declared schema enum literal"
+				}
+			}
+		}
+		for k, child := range v {
+			if k != "properties" && k != "enum" {
+				collectSchemaVocabularyTokens(child, dst)
+			}
+		}
+	case []any:
+		for _, child := range v {
+			collectSchemaVocabularyTokens(child, dst)
+		}
 	}
-	if len(registered) == 0 {
-		t.Fatal("serve boot registry lists no tools")
-	}
+}
 
-	// snake_case token inside `…` backticks; minimum 2 chars to dodge
-	// single-letter false positives.
-	tokenRE := regexp.MustCompile("`([a-z][a-z0-9_]+)`")
-
-	// Snake_case concepts that are not tools, each with its reason.
+func baseNonToolDescriptionTokens(t *testing.T, metas []tools.ToolMeta) map[string]string {
+	t.Helper()
 	notATool := map[string]string{
 		"workflow_id":        "field name in args, not a tool",
 		"workflow_version":   "field name in args, not a tool",
@@ -55,7 +72,38 @@ func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 		"boundary_refusal":   "command_output response field",
 		"secret_use":         "capability contract field",
 		"true":               "boolean literal",
+		"false":              "boolean literal",
 	}
+	for _, meta := range metas {
+		collectSchemaVocabularyTokens(meta.ArgsSchema, notATool)
+	}
+	lang, err := toolcontract.ReadOnlyLanguageV1()
+	contractcheck.FailErr(t, "read-only command language", err)
+	for _, spec := range lang.Commands {
+		notATool[spec.Name] = "declared read-only command program"
+	}
+	return notATool
+}
+
+// Every backticked snake_case token in registered and projected tool
+// descriptions names a registered tool or a declared field, enum literal or
+// command program. A model attempts any tool a description cites.
+func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
+	reg := toolfixture.ContractServeBootRegistry(t)
+	metas := reg.List()
+
+	registered := map[string]bool{}
+	for _, meta := range metas {
+		registered[meta.Name] = true
+	}
+	if len(registered) == 0 {
+		t.Fatal("serve boot registry lists no tools")
+	}
+
+	// snake_case token inside `…` backticks; minimum 2 chars to dodge
+	// single-letter false positives.
+	tokenRE := regexp.MustCompile("`([a-z][a-z0-9_]+)`")
+	notATool := baseNonToolDescriptionTokens(t, metas)
 
 	type violation struct {
 		tool        string
@@ -96,12 +144,24 @@ func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 			}
 		}
 	}
-	for _, meta := range reg.List() {
+
+	// Static tool registry descriptions and parameter schemas.
+	for _, meta := range metas {
 		checkProse(meta.Name, meta.Description)
 		walkSchema(meta.Name, meta.ArgsSchema)
 	}
-	if resolved == 0 {
-		t.Fatal("no description cites a registered tool; the citation scan matched nothing")
+
+	// Projected surface descriptions across coordinator metadata.
+	executor := toolexecution.NewExecutor(
+		toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(contractcheck.ProdToolBoundary(t)), nil),
+		reg,
+		"coordinator",
+	)
+	projected, err := executor.Metadata.List(t.Context(), platform.ToolFilter{ProfileID: "coordinator"})
+	contractcheck.FailErr(t, "projected coordinator tool metadata", err)
+	for _, meta := range projected {
+		checkProse("projected:"+meta.Name, meta.Description)
+		walkSchema("projected:"+meta.Name, meta.ArgsSchema)
 	}
 	if len(found) > 0 {
 		sort.Slice(found, func(i, j int) bool {

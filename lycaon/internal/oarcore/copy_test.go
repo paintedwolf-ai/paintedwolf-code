@@ -78,6 +78,30 @@ func TestParseCopyRejectsTokens(t *testing.T) {
 	}
 }
 
+func TestCountCopyBranchesLocatesBindingsAgainstGuard(t *testing.T) {
+	cases := []struct {
+		source  string
+		binding string
+		want    CopyBranches
+	}{
+		{"{% if load %}{{ load }}, then {% endif %}{{ call }}", "load", CopyBranches{WhenSet: 1}},
+		{"{% if load %}{{ load }}, then {% endif %}{{ call }}", "call", CopyBranches{Either: 1}},
+		{"{% if not load %}{{ call }}{% else %}{{ load }} and {{ call }}{% endif %}", "call", CopyBranches{WhenSet: 1, WhenEmpty: 1}},
+		{"{{ load }}{% if other %}{% if load %}{{ load }}{% endif %}{% endif %}", "load", CopyBranches{WhenSet: 1, Either: 1}},
+		{"{% if load %}{% if not load %}{{ load }}{% endif %}{% endif %}", "load", CopyBranches{WhenSet: 1}},
+	}
+	for _, tc := range cases {
+		got, err := CountCopyBranches(tc.source, "load")
+		testutil.FailErr(t, "count branches", err)
+		if got[tc.binding] != tc.want {
+			t.Fatalf("CountCopyBranches(%q)[%s] = %+v, want %+v", tc.source, tc.binding, got[tc.binding], tc.want)
+		}
+	}
+	if _, err := CountCopyBranches("{% if load %}x", "load"); err == nil {
+		t.Fatal("unterminated conditional counted, want a parse error")
+	}
+}
+
 func TestRenderCopySubstitutesListsAndOmitsZeroIfs(t *testing.T) {
 	lookup := func(name string) value {
 		switch name {

@@ -11,7 +11,7 @@ Schemas define arguments, capabilities and limits.
 {% if agent_tools %}
 ### Tools
 
-{% for t in agent_tools %}- `{{ t.name }}`{% if t.required_args %}: {% for a in t.required_args %}`{{ a }}`{% if not forloop.Last %}, {% endif %}{% endfor %}{% endif %}
+{% for t in agent_tools %}- `{{ t.name }}`{% if t.required_args %}: {{ t.required_args|join:", " }}{% endif %}
 {% endfor %}
 {% endif %}
 

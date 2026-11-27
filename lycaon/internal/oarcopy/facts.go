@@ -101,9 +101,19 @@ var reasonFlags = map[string]string{
 // derives the boolean flags copy can test.
 func FactsFromData(data map[string]any) map[string]any {
 	out := map[string]any{}
-	for key, value := range data {
+	keys := sortedKeys(data)
+	for _, key := range keys {
 		if key != CapabilitySnapshotKey {
-			out[publishKey(key)] = value
+			if _, isAlias := publishedFactNames[strings.TrimSpace(key)]; isAlias {
+				out[publishKey(key)] = data[key]
+			}
+		}
+	}
+	for _, key := range keys {
+		if key != CapabilitySnapshotKey {
+			if _, isAlias := publishedFactNames[strings.TrimSpace(key)]; !isAlias {
+				out[publishKey(key)] = data[key]
+			}
 		}
 	}
 	publishParserFacts(out)

@@ -19,12 +19,12 @@ import (
 )
 
 func TestExecutionStateRefreshesForCurrentIntent(t *testing.T) {
-	_, assembler := newAssemblyDomains(AssemblyDeps{
+	_, assembler := newAssemblyDomains(withTestTurnReader(AssemblyDeps{
 		Injects: promptstest.InjectRenderer(t),
 		ImplementSessionState: func(context.Context, *api.Session) surface.ImplementSessionState {
 			return surface.ImplementSessionState{VerifyCommand: "project-check"}
 		},
-	}, nil)
+	}), nil)
 	sess := &api.Session{ID: "sess-inject-test", AgentType: "coordinator"}
 	history := []api.Message{{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
 		Tool: "command", ToolCallID: "call", ToolArgs: map[string]any{"command": "missing-check", "cwd": "."},
@@ -76,7 +76,7 @@ func TestExecutionStateReadsCanonicalRowsNotRetainedHistory_ACEXEC04(t *testing.
 			canonical = append(canonical, toolRow(int64(len(canonical)+1), id, id, "read", api.InvocationStatusCompleted, ""))
 		}
 		// A new assembler each pass: nothing carries over in process.
-		_, assembler := newAssemblyDomains(AssemblyDeps{Injects: promptstest.InjectRenderer(t), ReadMessageWindow: reader}, nil)
+		_, assembler := newAssemblyDomains(withTestTurnReader(AssemblyDeps{Injects: promptstest.InjectRenderer(t), ReadMessageWindow: reader}), nil)
 		blocks := assembler.appendExecutionState(t.Context(), sess, true, inject.CoordinatorTurnFrame{}, compacted, &TurnAssemblyScratch{}, nil)
 		if live := age < inject.MaxRejectedOperationStepAge; (len(blocks) == 1) != live {
 			t.Fatalf("age %d: blocks=%d", age, len(blocks))
@@ -94,7 +94,7 @@ func TestPendingJobOutlivesAnExpiredReminder_ACEXEC04(t *testing.T) {
 		id := fmt.Sprintf("later-%d", age)
 		canonical = append(canonical, toolRow(int64(len(canonical)+1), id, id, "read", api.InvocationStatusCompleted, ""))
 	}
-	_, assembler := newAssemblyDomains(AssemblyDeps{
+	_, assembler := newAssemblyDomains(withTestTurnReader(AssemblyDeps{
 		Injects: promptstest.InjectRenderer(t),
 		ReadMessageWindow: func(_ context.Context, _ string, window messageview.MessageWindow) ([]api.Message, error) {
 			end := len(canonical)
@@ -106,7 +106,7 @@ func TestPendingJobOutlivesAnExpiredReminder_ACEXEC04(t *testing.T) {
 		CommandJobs: func(string) []bgprocess.JobSnapshot {
 			return []bgprocess.JobSnapshot{{Handle: "pending-check", Mode: bgprocess.JobModeAwaited, OriginTool: "command", StartedAt: time.Now()}}
 		},
-	}, nil)
+	}), nil)
 	sess := &api.Session{ID: "sess-inject-test", AgentType: "coordinator"}
 	if blocks := assembler.appendExecutionState(t.Context(), sess, true, inject.CoordinatorTurnFrame{}, canonical, &TurnAssemblyScratch{}, nil); len(blocks) != 0 {
 		t.Fatalf("reminder survived its expiry: %+v", blocks)
@@ -119,12 +119,12 @@ func TestPendingJobOutlivesAnExpiredReminder_ACEXEC04(t *testing.T) {
 }
 
 func TestExecutionStateOmitsBlockWhenWindowUnreadable(t *testing.T) {
-	_, assembler := newAssemblyDomains(AssemblyDeps{
+	_, assembler := newAssemblyDomains(withTestTurnReader(AssemblyDeps{
 		Injects: promptstest.InjectRenderer(t),
 		ReadMessageWindow: func(context.Context, string, messageview.MessageWindow) ([]api.Message, error) {
 			return nil, errors.New("store offline")
 		},
-	}, nil)
+	}), nil)
 	history := []api.Message{toolRow(1, "batch", "failed", "write", api.InvocationStatusRejected, "MUTATION_BROKE_PARSE")}
 	sess := &api.Session{ID: "sess-inject-test", AgentType: "coordinator"}
 	if blocks := assembler.appendExecutionState(t.Context(), sess, true, inject.CoordinatorTurnFrame{}, history, &TurnAssemblyScratch{}, nil); len(blocks) != 0 {

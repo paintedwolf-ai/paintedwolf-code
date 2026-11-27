@@ -6,14 +6,19 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 // Every ledger state carries exactly the facts its sentences need, and every
 // state renders.
 func TestCommandJobsFactsFollowEachLedgerState(t *testing.T) {
 	now := time.Now().UTC()
+	coordReader := testCoordReader(t)
+	workerReader := testWorkerReader(t)
 	running := bgprocess.JobSnapshot{Handle: "server", Mode: bgprocess.JobModeBackground, OriginTool: "command", StartedAt: now.Add(-time.Minute)}
 	exited := bgprocess.JobSnapshot{Handle: "crashed", OriginTool: "command", StartedAt: now.Add(-time.Minute), Exited: true, ExitCode: 1}
 	refused := exited
@@ -33,8 +38,8 @@ func TestCommandJobsFactsFollowEachLedgerState(t *testing.T) {
 		{"held and exited", []bgprocess.JobSnapshot{exited}, []heldcall.Running{held}, false, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			vars := commandJobsVars(tc.jobs, tc.held, now)
-			if vars["has_running"] != tc.running || vars["has_exited"] != tc.exits || vars["can_wait"] != tc.waitable || vars["has_held"] != (len(tc.held) > 0) {
+			vars := commandJobsVars(tc.jobs, tc.held, now, true)
+			if vars["has_running"] != tc.running || vars["has_exited"] != tc.exits || vars["wait_process_done_allowed"] != true || vars["has_held"] != (len(tc.held) > 0) {
 				t.Fatalf("facts = %+v", vars)
 			}
 			rows := vars["jobs"].([]map[string]any)
@@ -51,10 +56,20 @@ func TestCommandJobsFactsFollowEachLedgerState(t *testing.T) {
 					t.Fatalf("running row %d = %+v", i, row)
 				}
 			}
-			for _, surface := range []string{"coordinator", "worker"} {
-				if RenderCommandJobsBlock(context.Background(), promptstest.InjectRenderer(t), "session", tc.jobs, tc.held, now, surface) == "" {
-					t.Fatalf("%s ledger did not render", surface)
-				}
+			eff, err := extpacks.CatalogForConsumers()
+			testutil.FailErr(t, "CatalogForConsumers", err)
+			schemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
+			testutil.FailErr(t, "LoadEffectiveToolSchemas", err)
+			waitMeta, _ := schemas.ToolMeta("wait")
+			waitSchema := toolschema.ProjectToolArgsSchema("wait", waitMeta.ArgsSchema, toolschema.ProjectOptions{
+				PruneWaitConditions: true,
+				WaitConditions:      []string{"process_done"},
+			})
+			if RenderCommandJobsBlock(context.Background(), promptstest.InjectRenderer(t), coordReader, waitSchema, "session", tc.jobs, tc.held, now, "coordinator") == "" {
+				t.Fatal("coordinator ledger did not render")
+			}
+			if RenderCommandJobsBlock(context.Background(), promptstest.InjectRenderer(t), workerReader, waitSchema, "session", tc.jobs, tc.held, now, "worker") == "" {
+				t.Fatal("worker ledger did not render")
 			}
 		})
 	}

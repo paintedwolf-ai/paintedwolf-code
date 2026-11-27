@@ -1,0 +1,20 @@
+id: explore_readonly
+description: Readonly reviewer without command or inspect_source
+command_effects: [read_only]
+tools:
+  recall: sticky
+  record_finding: sticky
+  pack_board: sticky
+  read_findings: sticky
+  read_review: sticky
+  request_decision: sticky
+  message_coordinator: sticky
+  complete_leg: sticky
+  summarize: sticky
+  survey_repo: sticky
+  skills_read: sticky
+  wait: sticky
+deny_tools:
+  - command
+  - inspect_source
+wait_conditions: [http_ready, port_ready]
