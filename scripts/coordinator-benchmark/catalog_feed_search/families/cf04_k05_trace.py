@@ -198,6 +198,247 @@ def _collect_inventory_rels(root: Path) -> tuple[set[str], set[str]]:
     return dirs, files
 
 
+_FSU_OPEN_RE = re.compile(r"\b(?:open|open_nocancel|openat|openat_nocancel)\b.*\bF=(\d+)\b")
+_FSU_CLOSE_RE = re.compile(r"\b(?:close|close_nocancel)\b.*\bF=(\d+)\b")
+_FSU_GETDIR_RE = re.compile(r"\bgetdirentries64\b.*\bF=(\d+)\b.*\bB=0x([0-9a-fA-F]+)\b")
+_FSU_STAT_RE = re.compile(r"\b(lstat64|stat64|fstatat64|getattrlist|getattrlistat)\b")
+_FSU_ERR_RE = re.compile(r"\[\s*(\d+)\s*\]")
+
+
+def parse_darwin_fs_usage_ops(
+    fs_usage_text: str,
+    fixture_root: Path,
+    *,
+    known_dir_rels: set[str] | None = None,
+    known_file_rels: set[str] | None = None,
+) -> dict[str, object]:
+    """Parse macOS `sudo -n fs_usage -w -f filesys` output scoped strictly to fixture_root (Decision 055)."""
+    lines = [ln for ln in fs_usage_text.splitlines() if ln.strip()]
+    if not lines:
+        return {
+            "status": "unknown",
+            "reason": "empty fs_usage output",
+            "productive_dir_read_calls": "unknown",
+            "eof_dir_read_calls": "unknown",
+            "failed_dir_read_calls": "unknown",
+            "distinct_directories_read": "unknown",
+            "per_file_metadata_reads": "unknown",
+            "distinct_known_files_statted": "unknown",
+            "known_directory_metadata_reads": "unknown",
+            "unsuccessful_or_unknown_lookups": "unknown",
+        }
+
+    root_path = Path(fixture_root)
+    root_abs = str(root_path.resolve()) if root_path.exists() else os.path.normpath(str(root_path))
+    root_no_lead = root_abs.lstrip("/")
+    dirs_known = set(known_dir_rels) if known_dir_rels is not None else set()
+    dirs_known.add(".")
+    files_known = set(known_file_rels) if known_file_rels is not None else None
+
+    def _extract_rel(line: str) -> str | None:
+        idx = line.find(root_no_lead)
+        if idx < 0:
+            return None
+        tail = line[idx:].strip()
+        # fs_usage wide lines end with `<timestamp> <proc.tid>` or whitespace padding; split on 2+ spaces
+        path_part = re.split(r"\s{2,}", tail, maxsplit=1)[0].strip()
+        return _under_root("/" + path_part.lstrip("/"), root_abs)
+
+    fd_to_rel: dict[str, str] = {}
+    fixture_scoped_events = 0
+    productive_dir_reads = 0
+    eof_dir_reads = 0
+    failed_dir_reads = 0
+    distinct_dirs: set[str] = set()
+    known_file_stats = 0
+    distinct_known_files: set[str] = set()
+    known_dir_stats = 0
+    unsuccessful_or_unknown = 0
+
+    for line in lines:
+        m_close = _FSU_CLOSE_RE.search(line)
+        if m_close:
+            fd_to_rel.pop(m_close.group(1), None)
+            continue
+
+        m_open = _FSU_OPEN_RE.search(line)
+        if m_open:
+            rel = _extract_rel(line)
+            if rel is not None:
+                fd_to_rel[m_open.group(1)] = rel
+            else:
+                fd_to_rel.pop(m_open.group(1), None)
+            continue
+
+        m_gd = _FSU_GETDIR_RE.search(line)
+        if m_gd:
+            fd, bytes_hex = m_gd.group(1), m_gd.group(2)
+            rel = fd_to_rel.get(fd)
+            if rel is not None:
+                fixture_scoped_events += 1
+                err_m = _FSU_ERR_RE.search(line)
+                nbytes = int(bytes_hex, 16)
+                if err_m:
+                    failed_dir_reads += 1
+                elif nbytes > 0:
+                    productive_dir_reads += 1
+                    distinct_dirs.add(rel)
+                else:
+                    eof_dir_reads += 1
+            continue
+
+        if _FSU_STAT_RE.search(line):
+            rel = _extract_rel(line)
+            if rel is not None:
+                fixture_scoped_events += 1
+                if _FSU_ERR_RE.search(line):
+                    unsuccessful_or_unknown += 1
+                elif rel in dirs_known:
+                    known_dir_stats += 1
+                elif files_known is None or rel in files_known:
+                    known_file_stats += 1
+                    distinct_known_files.add(rel)
+                else:
+                    unsuccessful_or_unknown += 1
+
+    if fixture_scoped_events == 0:
+        return {
+            "status": "unknown",
+            "reason": "no fixture-scoped fs_usage events observed",
+            "trace_lines": len(lines),
+            "productive_dir_read_calls": "unknown",
+            "eof_dir_read_calls": "unknown",
+            "failed_dir_read_calls": "unknown",
+            "distinct_directories_read": "unknown",
+            "per_file_metadata_reads": "unknown",
+            "distinct_known_files_statted": "unknown",
+            "known_directory_metadata_reads": "unknown",
+            "unsuccessful_or_unknown_lookups": "unknown",
+        }
+
+    return {
+        "status": "ok",
+        "trace_lines": len(lines),
+        "fixture_scoped_events": fixture_scoped_events,
+        "productive_dir_read_calls": productive_dir_reads,
+        "eof_dir_read_calls": eof_dir_reads,
+        "failed_dir_read_calls": failed_dir_reads,
+        "distinct_directories_read": len(distinct_dirs),
+        "per_file_metadata_reads": known_file_stats,
+        "distinct_known_files_statted": len(distinct_known_files),
+        "known_directory_metadata_reads": known_dir_stats,
+        "unsuccessful_or_unknown_lookups": unsuccessful_or_unknown,
+    }
+
+
+def _run_darwin_fs_usage_controls(
+    *,
+    engine_bin: Path,
+    d1_worktree: Path,
+    d1_commit: str,
+    d1_tree: str,
+    out_dir: Path,
+    rg_bin: str,
+    harness_root: Path,
+) -> dict[str, object]:
+    """Run macOS `sudo -n fs_usage -w -f filesys` small-fixture positive/negative controls (Decision 055)."""
+    out = Path(out_dir).resolve()
+    out.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix="cf04-fsu-") as tmp_s:
+        tmp = Path(tmp_s)
+        ctrl_tree = tmp / "ctrl-tree"
+        ctrl_shape = write_scalefixture_tree(ctrl_tree, 20)
+        ctrl_dirs, ctrl_files = _collect_inventory_rels(ctrl_tree)
+
+        def _trace_py(code: str, duration_s: int = 3) -> str:
+            p = subprocess.Popen([sys.executable, "-c", code, str(ctrl_tree)])
+            fu = subprocess.run(
+                ["sudo", "-n", "fs_usage", "-w", "-f", "filesys", "-t", str(duration_s), str(p.pid)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            p.wait(timeout=10)
+            return fu.stdout
+
+        # Control A: scandir-only (directory reads, 0 per-file stats)
+        code_a = (
+            "import os, sys, time; time.sleep(0.8)\n"
+            "def walk(d):\n"
+            "  with os.scandir(d) as it:\n"
+            "    for e in it:\n"
+            "      if e.is_dir(follow_symlinks=False): walk(e.path)\n"
+            "walk(sys.argv[1]); time.sleep(0.5)\n"
+        )
+        obs_a = parse_darwin_fs_usage_ops(_trace_py(code_a), ctrl_tree, known_dir_rels=ctrl_dirs, known_file_rels=ctrl_files)
+        ctrl_a_pass = (
+            obs_a["status"] == "ok"
+            and obs_a["distinct_directories_read"] == ctrl_shape.total_directories
+            and obs_a["per_file_metadata_reads"] == 0
+        )
+
+        # Control B: scandir + lstat on every file (directory reads + 20 per-file stats)
+        code_b = (
+            "import os, sys, time; time.sleep(0.8)\n"
+            "def walk(d):\n"
+            "  with os.scandir(d) as it:\n"
+            "    for e in it:\n"
+            "      if e.is_dir(follow_symlinks=False): walk(e.path)\n"
+            "      else: os.lstat(e.path)\n"
+            "walk(sys.argv[1]); time.sleep(0.5)\n"
+        )
+        obs_b = parse_darwin_fs_usage_ops(_trace_py(code_b), ctrl_tree, known_dir_rels=ctrl_dirs, known_file_rels=ctrl_files)
+        ctrl_b_pass = (
+            obs_b["status"] == "ok"
+            and obs_b["distinct_directories_read"] == ctrl_shape.total_directories
+            and obs_b["per_file_metadata_reads"] == 20
+            and obs_b["distinct_known_files_statted"] == 20
+        )
+
+        # Control C & D: negative controls (empty & unrelated lines -> unknown)
+        obs_c = parse_darwin_fs_usage_ops("", ctrl_tree, known_dir_rels=ctrl_dirs, known_file_rels=ctrl_files)
+        obs_d = parse_darwin_fs_usage_ops(
+            "23:15:46.182 lstat64   private/etc/hosts   0.000010 python3.1\n",
+            ctrl_tree,
+            known_dir_rels=ctrl_dirs,
+            known_file_rels=ctrl_files,
+        )
+        ctrl_c_pass = obs_c["status"] == "unknown"
+        ctrl_d_pass = obs_d["status"] == "unknown"
+
+        report = {
+            "platform": "Darwin",
+            "observer": "sudo -n fs_usage -w -f filesys -t <sec> <pid>",
+            "controls": {
+                "control_a_dir_reads_only": {"passed": ctrl_a_pass, "expected_dirs": ctrl_shape.total_directories, "expected_file_stats": 0, "observed": obs_a},
+                "control_b_dir_plus_file_stats": {"passed": ctrl_b_pass, "expected_dirs": ctrl_shape.total_directories, "expected_file_stats": 20, "observed": obs_b},
+                "control_c_empty_trace_unknown": {"passed": ctrl_c_pass, "observed": obs_c},
+                "control_d_unrelated_trace_unknown": {"passed": ctrl_d_pass, "observed": obs_d},
+                "all_controls_passed": ctrl_a_pass and ctrl_b_pass and ctrl_c_pass and ctrl_d_pass,
+            },
+        }
+        res_path = out / "k05_trace_controls.json"
+        res_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+        prov = collect_run_provenance(
+            harness_repo=harness_root,
+            work_dir=tmp,
+            binary_path=engine_bin,
+            d1_commit=d1_commit,
+            d1_tree=d1_tree,
+            rg_bin=rg_bin,
+        )
+        finalize_family_evidence(
+            out,
+            prov,
+            {"k05_trace_controls": res_path},
+            {"family": "K05-trace-controls-darwin", "all_controls_passed": report["controls"]["all_controls_passed"]},
+            replay_command=["python3", "-m", "catalog_feed_search.families.cf04_k05_trace", "--out-dir", "."],
+        )
+        return report
+
+
 def run_small_fixture_strace_controls(
     *,
     engine_bin: Path,
@@ -213,6 +454,16 @@ def run_small_fixture_strace_controls(
     out.mkdir(parents=True, exist_ok=True)
     harness_root = Path(repo_root).resolve() if repo_root else Path(__file__).resolve().parents[4]
 
+    if platform.system().lower() == "darwin":
+        return _run_darwin_fs_usage_controls(
+            engine_bin=engine_bin,
+            d1_worktree=d1_worktree,
+            d1_commit=d1_commit,
+            d1_tree=d1_tree,
+            out_dir=out,
+            rg_bin=rg_bin,
+            harness_root=harness_root,
+        )
     if platform.system().lower() != "linux":
         res = {
             "platform": platform.system(),

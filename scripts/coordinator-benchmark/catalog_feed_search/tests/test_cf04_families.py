@@ -21,7 +21,7 @@ from catalog_feed_search.families.cf04_k05 import (
     write_scalefixture_tree,
 )
 from catalog_feed_search.families.cf04_k06 import classify_retired_worker_response, generate_k06_spec
-from catalog_feed_search.families.cf04_k05_trace import parse_strace_fixture_ops
+from catalog_feed_search.families.cf04_k05_trace import parse_darwin_fs_usage_ops, parse_strace_fixture_ops
 from catalog_feed_search.seeds import BASE_SEED_PRIMARY
 
 
@@ -248,6 +248,31 @@ class TestCF04GeneratorsAndHelpers(unittest.TestCase):
             known_file_rels=set(),
         )
         self.assertEqual(unrelated["status"], "unknown")
+
+    def test_parse_darwin_fs_usage_ops_positive_and_negative_controls(self) -> None:
+        root = Path("/private/tmp/fsu-test")
+        sample = "\n".join(
+            [
+                "23:15:46.181  open             F=3  (R__X)  private/tmp/fsu-test   0.000010 python3.1",
+                "23:15:46.182  getdirentries64  F=3  B=0x60                         0.000010 python3.1",
+                "23:15:46.183  getdirentries64  F=3  B=0x0                          0.000010 python3.1",
+                "23:15:46.184  lstat64                       private/tmp/fsu-test/a.txt   0.000010 python3.1",
+                "23:15:46.185  lstat64         [  2]         private/tmp/fsu-test/.git    0.000010 python3.1",
+            ]
+        )
+        obs = parse_darwin_fs_usage_ops(sample, root, known_dir_rels={"."}, known_file_rels={"a.txt"})
+        self.assertEqual(obs["status"], "ok")
+        self.assertEqual(obs["distinct_directories_read"], 1)
+        self.assertEqual(obs["productive_dir_read_calls"], 1)
+        self.assertEqual(obs["eof_dir_read_calls"], 1)
+        self.assertEqual(obs["per_file_metadata_reads"], 1)
+        self.assertEqual(obs["unsuccessful_or_unknown_lookups"], 1)
+
+        self.assertEqual(parse_darwin_fs_usage_ops("", root, known_dir_rels={"."})["status"], "unknown")
+        self.assertEqual(
+            parse_darwin_fs_usage_ops("23:15:46.184 lstat64 private/etc/hosts 0.000010 python3.1\n", root, known_dir_rels={"."})["status"],
+            "unknown",
+        )
 
 
 if __name__ == "__main__":
