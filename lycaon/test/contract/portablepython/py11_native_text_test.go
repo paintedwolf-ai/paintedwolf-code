@@ -34,8 +34,8 @@ func TestPY11_NativeTextAndHCL(t *testing.T) {
 
 	t.Run("engine_pairing_and_targeted_discovery", func(t *testing.T) {
 		info := svc.RuntimeInfo()
-		if info.NativeEngine == nil || info.NativeEngine.EngineTag != "pw-cpython-wasi-engine-v0.3.0" {
-			t.Fatalf("expected v0.3.0 native engine tag, got %+v", info.NativeEngine)
+		if info.NativeEngine == nil || info.NativeEngine.EngineTag != "pw-cpython-wasi-engine-v0.5.0" {
+			t.Fatalf("expected v0.5.0 native engine tag, got %+v", info.NativeEngine)
 		}
 		m := pythoncatalog.DefaultLaunchManifest()
 		if got := pythoncatalog.RenderTargetedHelp(m, "Unicode text boundaries"); !strings.Contains(got, "regex") {

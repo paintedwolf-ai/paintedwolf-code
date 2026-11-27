@@ -69,8 +69,8 @@ func newPY13Service(t *testing.T, receiptDir string) *portablepython.Service {
 	if info.Backend != pythonruntime.BackendNativeAOT {
 		t.Fatalf("PY13 default RuntimeInfo.Backend=%q want %q on %s/%s", info.Backend, pythonruntime.BackendNativeAOT, runtime.GOOS, runtime.GOARCH)
 	}
-	if info.NativeEngine == nil || info.NativeEngine.EngineTag != "pw-cpython-wasi-engine-v0.4.0" {
-		t.Fatalf("PY13 RuntimeInfo.NativeEngine=%+v want engine_tag=pw-cpython-wasi-engine-v0.4.0", info.NativeEngine)
+	if info.NativeEngine == nil || info.NativeEngine.EngineTag != "pw-cpython-wasi-engine-v0.5.0" {
+		t.Fatalf("PY13 RuntimeInfo.NativeEngine=%+v want engine_tag=pw-cpython-wasi-engine-v0.5.0", info.NativeEngine)
 	}
 	return svc
 }
