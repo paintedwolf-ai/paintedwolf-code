@@ -256,6 +256,9 @@ class D1SidecarProcess:
         self.transport = HTTPTransport(self.base_url, self.token)
         self.driver = SidecarDriver(self.transport)
         self._wait_healthy(timeout_s=30.0)
+        # NewManualProvider starts with autoEnabled=true; disable auto-reply so
+        # coordinator turns pause at /harness/llm/pending for deterministic tool calls.
+        self.transport.request("/harness/llm/auto", {"enabled": False}, method="POST")
         self.launch_receipt = {
             "pid": self._proc.pid,
             "port": self.port,
@@ -342,13 +345,13 @@ class AgentToolSession:
     def _wait_pending(self, timeout_s: float = 30.0) -> dict[str, object]:
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
+            remaining_ms = max(100, min(1000, int((deadline - time.monotonic()) * 1000)))
             val = self._transport.request(
-                f"/harness/llm/pending?session_id={self.session_id}",
+                f"/harness/llm/pending?session_id={self.session_id}&wait={remaining_ms}",
                 method="GET",
             )
             if val.get("pending") and val.get("session_id") == self.session_id:
                 return val
-            time.sleep(0.05)
         raise RuntimeError(f"session {self.session_id} did not reach /harness/llm/pending within {timeout_s}s")
 
     def _read_tool_result_row(self, call_id: str, timeout_s: float = 30.0) -> dict[str, object]:
