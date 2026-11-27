@@ -455,153 +455,322 @@ func TestWEATB03_W06_04_CancelDuringParkedWait(t *testing.T) {
 	}
 }
 
-// Slot 5: Race cancel vs completion (single terminal outcome, no double result).
+// Slot 5: Race cancel vs completion (both deterministic critical orders + concurrent race).
 func TestWEATB03_W06_05_RaceCancelVsCompletion(t *testing.T) {
-	const iterations = 8
-	for iter := range iterations {
-		t.Run(fmt.Sprintf("iter_%02d", iter), func(t *testing.T) {
-			database, q := tb03OpenQueue(t, 1)
-			ready := make(chan struct{})
-			goBarrier := make(chan struct{})
+	t.Run("cancel_wins_first", func(t *testing.T) {
+		database, q := tb03OpenQueue(t, 1)
+		ready := make(chan struct{})
+		var claimedTask api.WorkerTask
+		var claimedMu sync.Mutex
 
-			exec := &tb03BarrierExecutor{
-				executeFn: func(ctx context.Context, task api.WorkerTask, _ WorkerRunContext) (api.WorkerResult, error) {
-					close(ready)
+		exec := &tb03BarrierExecutor{
+			executeFn: func(ctx context.Context, task api.WorkerTask, _ WorkerRunContext) (api.WorkerResult, error) {
+				claimedMu.Lock()
+				claimedTask = task
+				claimedMu.Unlock()
+				close(ready)
+				// Wait until cancellation fences and interrupts execution, then return a late completion.
+				<-ctx.Done()
+				return api.WorkerResult{Status: "complete", Summary: "late completion after cancel"}, nil
+			},
+		}
+		poller := NewLocalWorkerPoller(q, exec, DefaultWorkersConfig(), discardOutcomeRecorder{})
+		q.SetRunningCancel(poller.Abort)
+
+		jobID := tb03EnqueueTask(t, q, api.WorkerTask{})
+		poller.claimAvailable(t.Context())
+		<-ready
+
+		svc := &CancelService{Queue: q}
+		cancelRes, cancelErr := svc.CancelJob(t.Context(), jobID, "cancel wins before completion")
+		testutil.FailErr(t, "CancelJob when cancel wins first", cancelErr)
+		poller.inflight.Wait()
+
+		if cancelRes.Status != api.WorkerStatusCanceled {
+			t.Fatalf("cancel result status = %q, want canceled", cancelRes.Status)
+		}
+		got, ok := q.Get(jobID)
+		if !ok || got.Status != api.WorkerStatusCanceled {
+			t.Fatalf("job after cancel_wins_first = %+v, want canceled", got)
+		}
+
+		// A late direct Complete with the original claim token must not defeat cancellation.
+		claimedMu.Lock()
+		staleClaim := claimedTask
+		claimedMu.Unlock()
+		won, err := q.Complete(t.Context(), &staleClaim, api.WorkerResult{Status: "complete", Summary: "late direct complete"})
+		testutil.FailErr(t, "late direct complete", err)
+		if won {
+			t.Fatal("late Complete overwrote canceled job")
+		}
+
+		resCount, resStatuses := tb03CountResults(t, database, jobID)
+		attCount, attStatuses := tb03CountAttempts(t, database, jobID)
+		if resCount != 1 || resStatuses[0] != "canceled" || attCount != 1 || attStatuses[0] != "canceled" {
+			t.Fatalf("cancel_wins_first mismatch: results=%v attempts=%v", resStatuses, attStatuses)
+		}
+	})
+
+	t.Run("completion_wins_first", func(t *testing.T) {
+		database, q := tb03OpenQueue(t, 1)
+		exec := &tb03BarrierExecutor{
+			executeFn: func(ctx context.Context, task api.WorkerTask, _ WorkerRunContext) (api.WorkerResult, error) {
+				return api.WorkerResult{Status: "complete", Summary: "completion won first"}, nil
+			},
+		}
+		poller := NewLocalWorkerPoller(q, exec, DefaultWorkersConfig(), discardOutcomeRecorder{})
+		q.SetRunningCancel(poller.Abort)
+
+		jobID := tb03EnqueueTask(t, q, api.WorkerTask{})
+		poller.claimAvailable(t.Context())
+		poller.inflight.Wait()
+
+		svc := &CancelService{Queue: q}
+		_, cancelErr := svc.CancelJob(t.Context(), jobID, "late cancel after completion")
+		tb03AssertRejectCode(t, cancelErr, WorkerCancelTerminalCode)
+
+		got, ok := q.Get(jobID)
+		if !ok || got.Status != api.WorkerStatusComplete {
+			t.Fatalf("job after completion_wins_first = %+v, want complete", got)
+		}
+		resCount, resStatuses := tb03CountResults(t, database, jobID)
+		attCount, attStatuses := tb03CountAttempts(t, database, jobID)
+		if resCount != 1 || resStatuses[0] != "complete" || attCount != 1 || attStatuses[0] != "succeeded" {
+			t.Fatalf("completion_wins_first mismatch: results=%v attempts=%v", resStatuses, attStatuses)
+		}
+	})
+
+	t.Run("concurrent_race", func(t *testing.T) {
+		const iterations = 8
+		for iter := range iterations {
+			t.Run(fmt.Sprintf("iter_%02d", iter), func(t *testing.T) {
+				database, q := tb03OpenQueue(t, 1)
+				ready := make(chan struct{})
+				goBarrier := make(chan struct{})
+
+				exec := &tb03BarrierExecutor{
+					executeFn: func(ctx context.Context, task api.WorkerTask, _ WorkerRunContext) (api.WorkerResult, error) {
+						close(ready)
+						<-goBarrier
+						return api.WorkerResult{Status: "complete", Summary: "raced completion"}, nil
+					},
+				}
+				poller := NewLocalWorkerPoller(q, exec, DefaultWorkersConfig(), discardOutcomeRecorder{})
+				q.SetRunningCancel(poller.Abort)
+
+				jobID := tb03EnqueueTask(t, q, api.WorkerTask{})
+				poller.claimAvailable(t.Context())
+				<-ready
+
+				svc := &CancelService{Queue: q}
+				var cancelErr error
+				var cancelRes api.WorkerCancelResult
+				var wg sync.WaitGroup
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
 					<-goBarrier
-					return api.WorkerResult{Status: "complete", Summary: "raced completion"}, nil
-				},
-			}
-			poller := NewLocalWorkerPoller(q, exec, DefaultWorkersConfig(), discardOutcomeRecorder{})
-			q.SetRunningCancel(poller.Abort)
+					cancelRes, cancelErr = svc.CancelJob(t.Context(), jobID, "raced stop")
+				}()
 
-			jobID := tb03EnqueueTask(t, q, api.WorkerTask{})
-			poller.claimAvailable(t.Context())
-			<-ready
+				close(goBarrier)
+				wg.Wait()
+				poller.inflight.Wait()
 
-			svc := &CancelService{Queue: q}
-			var cancelErr error
-			var cancelRes api.WorkerCancelResult
-			var wg sync.WaitGroup
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				<-goBarrier
-				cancelRes, cancelErr = svc.CancelJob(t.Context(), jobID, "raced stop")
-			}()
-
-			close(goBarrier)
-			wg.Wait()
-			poller.inflight.Wait()
-
-			got, ok := q.Get(jobID)
-			if !ok {
-				t.Fatalf("job %s missing after race", jobID)
-			}
-			resCount, resStatuses := tb03CountResults(t, database, jobID)
-			attCount, attStatuses := tb03CountAttempts(t, database, jobID)
-			if resCount != 1 {
-				t.Fatalf("worker_results count = %d (%v), want exactly 1", resCount, resStatuses)
-			}
-			if attCount != 1 {
-				t.Fatalf("worker_attempts count = %d (%v), want exactly 1", attCount, attStatuses)
-			}
-
-			switch got.Status {
-			case api.WorkerStatusComplete:
-				tb03AssertRejectCode(t, cancelErr, WorkerCancelTerminalCode)
-				if resStatuses[0] != "complete" || attStatuses[0] != "succeeded" {
-					t.Fatalf("complete winner mismatch: results=%v attempts=%v", resStatuses, attStatuses)
+				got, ok := q.Get(jobID)
+				if !ok {
+					t.Fatalf("job %s missing after race", jobID)
 				}
-			case api.WorkerStatusCanceled:
-				testutil.FailErr(t, "CancelJob when cancel won", cancelErr)
-				if cancelRes.Status != api.WorkerStatusCanceled {
-					t.Fatalf("cancel result status = %q, want canceled", cancelRes.Status)
+				resCount, resStatuses := tb03CountResults(t, database, jobID)
+				attCount, attStatuses := tb03CountAttempts(t, database, jobID)
+				if resCount != 1 {
+					t.Fatalf("worker_results count = %d (%v), want exactly 1", resCount, resStatuses)
 				}
-				if resStatuses[0] != "canceled" || attStatuses[0] != "canceled" {
-					t.Fatalf("canceled winner mismatch: results=%v attempts=%v", resStatuses, attStatuses)
+				if attCount != 1 {
+					t.Fatalf("worker_attempts count = %d (%v), want exactly 1", attCount, attStatuses)
 				}
-			default:
-				t.Fatalf("unexpected terminal status %q", got.Status)
-			}
-		})
-	}
+
+				switch got.Status {
+				case api.WorkerStatusComplete:
+					tb03AssertRejectCode(t, cancelErr, WorkerCancelTerminalCode)
+					if resStatuses[0] != "complete" || attStatuses[0] != "succeeded" {
+						t.Fatalf("complete winner mismatch: results=%v attempts=%v", resStatuses, attStatuses)
+					}
+				case api.WorkerStatusCanceled:
+					testutil.FailErr(t, "CancelJob when cancel won", cancelErr)
+					if cancelRes.Status != api.WorkerStatusCanceled {
+						t.Fatalf("cancel result status = %q, want canceled", cancelRes.Status)
+					}
+					if resStatuses[0] != "canceled" || attStatuses[0] != "canceled" {
+						t.Fatalf("canceled winner mismatch: results=%v attempts=%v", resStatuses, attStatuses)
+					}
+				default:
+					t.Fatalf("unexpected terminal status %q", got.Status)
+				}
+			})
+		}
+	})
 }
 
-// Slot 6: Race cancel vs failure.
+// Slot 6: Race cancel vs failure (both deterministic critical orders + concurrent race).
 func TestWEATB03_W06_06_RaceCancelVsFailure(t *testing.T) {
-	const iterations = 8
 	nonRetryable := &failure.ProviderEmptyCompletionError{Retryable: false, Attempts: 2}
 
-	for iter := range iterations {
-		t.Run(fmt.Sprintf("iter_%02d", iter), func(t *testing.T) {
-			database, q := tb03OpenQueue(t, 1)
-			ready := make(chan struct{})
-			goBarrier := make(chan struct{})
+	t.Run("cancel_wins_first", func(t *testing.T) {
+		database, q := tb03OpenQueue(t, 1)
+		ready := make(chan struct{})
+		var claimedTask api.WorkerTask
+		var claimedMu sync.Mutex
 
-			exec := &tb03BarrierExecutor{
-				executeFn: func(ctx context.Context, task api.WorkerTask, _ WorkerRunContext) (api.WorkerResult, error) {
-					close(ready)
+		exec := &tb03BarrierExecutor{
+			executeFn: func(ctx context.Context, task api.WorkerTask, _ WorkerRunContext) (api.WorkerResult, error) {
+				claimedMu.Lock()
+				claimedTask = task
+				claimedMu.Unlock()
+				close(ready)
+				<-ctx.Done()
+				return api.WorkerResult{}, nonRetryable
+			},
+		}
+		poller := NewLocalWorkerPoller(q, exec, DefaultWorkersConfig(), discardOutcomeRecorder{})
+		q.SetRunningCancel(poller.Abort)
+
+		jobID := tb03EnqueueTask(t, q, api.WorkerTask{})
+		poller.claimAvailable(t.Context())
+		<-ready
+
+		svc := &CancelService{Queue: q}
+		cancelRes, cancelErr := svc.CancelJob(t.Context(), jobID, "cancel wins before failure")
+		testutil.FailErr(t, "CancelJob when cancel wins first", cancelErr)
+		poller.inflight.Wait()
+
+		if cancelRes.Status != api.WorkerStatusCanceled {
+			t.Fatalf("cancel result status = %q, want canceled", cancelRes.Status)
+		}
+		got, ok := q.Get(jobID)
+		if !ok || got.Status != api.WorkerStatusCanceled || got.Error != "" {
+			t.Fatalf("job after cancel_wins_first = %+v, want canceled with empty error", got)
+		}
+
+		// A late direct Fail with the original claim token must not defeat cancellation.
+		claimedMu.Lock()
+		staleClaim := claimedTask
+		claimedMu.Unlock()
+		won, err := q.Fail(t.Context(), &staleClaim, nonRetryable)
+		testutil.FailErr(t, "late direct fail", err)
+		if won {
+			t.Fatal("late Fail overwrote canceled job")
+		}
+
+		resCount, resStatuses := tb03CountResults(t, database, jobID)
+		attCount, attStatuses := tb03CountAttempts(t, database, jobID)
+		if resCount != 1 || resStatuses[0] != "canceled" || attCount != 1 || attStatuses[0] != "canceled" {
+			t.Fatalf("cancel_wins_first mismatch: results=%v attempts=%v", resStatuses, attStatuses)
+		}
+	})
+
+	t.Run("failure_wins_first", func(t *testing.T) {
+		database, q := tb03OpenQueue(t, 1)
+		exec := &tb03BarrierExecutor{
+			executeFn: func(ctx context.Context, task api.WorkerTask, _ WorkerRunContext) (api.WorkerResult, error) {
+				return api.WorkerResult{}, nonRetryable
+			},
+		}
+		poller := NewLocalWorkerPoller(q, exec, DefaultWorkersConfig(), discardOutcomeRecorder{})
+		q.SetRunningCancel(poller.Abort)
+
+		jobID := tb03EnqueueTask(t, q, api.WorkerTask{})
+		poller.claimAvailable(t.Context())
+		poller.inflight.Wait()
+
+		svc := &CancelService{Queue: q}
+		_, cancelErr := svc.CancelJob(t.Context(), jobID, "late cancel after failure")
+		tb03AssertRejectCode(t, cancelErr, WorkerCancelTerminalCode)
+
+		got, ok := q.Get(jobID)
+		if !ok || got.Status != api.WorkerStatusFailed {
+			t.Fatalf("job after failure_wins_first = %+v, want failed", got)
+		}
+		resCount, resStatuses := tb03CountResults(t, database, jobID)
+		attCount, attStatuses := tb03CountAttempts(t, database, jobID)
+		if resCount != 1 || resStatuses[0] != "failed" || attCount != 1 || attStatuses[0] != "terminal_failed" {
+			t.Fatalf("failure_wins_first mismatch: results=%v attempts=%v", resStatuses, attStatuses)
+		}
+	})
+
+	t.Run("concurrent_race", func(t *testing.T) {
+		const iterations = 8
+		for iter := range iterations {
+			t.Run(fmt.Sprintf("iter_%02d", iter), func(t *testing.T) {
+				database, q := tb03OpenQueue(t, 1)
+				ready := make(chan struct{})
+				goBarrier := make(chan struct{})
+
+				exec := &tb03BarrierExecutor{
+					executeFn: func(ctx context.Context, task api.WorkerTask, _ WorkerRunContext) (api.WorkerResult, error) {
+						close(ready)
+						<-goBarrier
+						return api.WorkerResult{}, nonRetryable
+					},
+				}
+				poller := NewLocalWorkerPoller(q, exec, DefaultWorkersConfig(), discardOutcomeRecorder{})
+				q.SetRunningCancel(poller.Abort)
+
+				jobID := tb03EnqueueTask(t, q, api.WorkerTask{})
+				poller.claimAvailable(t.Context())
+				<-ready
+
+				svc := &CancelService{Queue: q}
+				var cancelErr error
+				var cancelRes api.WorkerCancelResult
+				var wg sync.WaitGroup
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
 					<-goBarrier
-					return api.WorkerResult{}, nonRetryable
-				},
-			}
-			poller := NewLocalWorkerPoller(q, exec, DefaultWorkersConfig(), discardOutcomeRecorder{})
-			q.SetRunningCancel(poller.Abort)
+					cancelRes, cancelErr = svc.CancelJob(t.Context(), jobID, "raced stop vs failure")
+				}()
 
-			jobID := tb03EnqueueTask(t, q, api.WorkerTask{})
-			poller.claimAvailable(t.Context())
-			<-ready
+				close(goBarrier)
+				wg.Wait()
+				poller.inflight.Wait()
 
-			svc := &CancelService{Queue: q}
-			var cancelErr error
-			var cancelRes api.WorkerCancelResult
-			var wg sync.WaitGroup
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				<-goBarrier
-				cancelRes, cancelErr = svc.CancelJob(t.Context(), jobID, "raced stop vs failure")
-			}()
-
-			close(goBarrier)
-			wg.Wait()
-			poller.inflight.Wait()
-
-			got, ok := q.Get(jobID)
-			if !ok {
-				t.Fatalf("job %s missing after race", jobID)
-			}
-			resCount, resStatuses := tb03CountResults(t, database, jobID)
-			attCount, attStatuses := tb03CountAttempts(t, database, jobID)
-			if resCount != 1 {
-				t.Fatalf("worker_results count = %d (%v), want exactly 1", resCount, resStatuses)
-			}
-			if attCount != 1 {
-				t.Fatalf("worker_attempts count = %d (%v), want exactly 1", attCount, attStatuses)
-			}
-
-			switch got.Status {
-			case api.WorkerStatusFailed:
-				tb03AssertRejectCode(t, cancelErr, WorkerCancelTerminalCode)
-				if resStatuses[0] != "failed" || attStatuses[0] != "terminal_failed" {
-					t.Fatalf("failed winner mismatch: results=%v attempts=%v", resStatuses, attStatuses)
+				got, ok := q.Get(jobID)
+				if !ok {
+					t.Fatalf("job %s missing after race", jobID)
 				}
-			case api.WorkerStatusCanceled:
-				testutil.FailErr(t, "CancelJob when cancel won", cancelErr)
-				if cancelRes.Status != api.WorkerStatusCanceled {
-					t.Fatalf("cancel result status = %q, want canceled", cancelRes.Status)
+				resCount, resStatuses := tb03CountResults(t, database, jobID)
+				attCount, attStatuses := tb03CountAttempts(t, database, jobID)
+				if resCount != 1 {
+					t.Fatalf("worker_results count = %d (%v), want exactly 1", resCount, resStatuses)
 				}
-				if got.Error != "" {
-					t.Fatalf("canceled job retained failure error %q", got.Error)
+				if attCount != 1 {
+					t.Fatalf("worker_attempts count = %d (%v), want exactly 1", attCount, attStatuses)
 				}
-				if resStatuses[0] != "canceled" || attStatuses[0] != "canceled" {
-					t.Fatalf("canceled winner mismatch: results=%v attempts=%v", resStatuses, attStatuses)
+
+				switch got.Status {
+				case api.WorkerStatusFailed:
+					tb03AssertRejectCode(t, cancelErr, WorkerCancelTerminalCode)
+					if resStatuses[0] != "failed" || attStatuses[0] != "terminal_failed" {
+						t.Fatalf("failed winner mismatch: results=%v attempts=%v", resStatuses, attStatuses)
+					}
+				case api.WorkerStatusCanceled:
+					testutil.FailErr(t, "CancelJob when cancel won", cancelErr)
+					if cancelRes.Status != api.WorkerStatusCanceled {
+						t.Fatalf("cancel result status = %q, want canceled", cancelRes.Status)
+					}
+					if got.Error != "" {
+						t.Fatalf("canceled job retained failure error %q", got.Error)
+					}
+					if resStatuses[0] != "canceled" || attStatuses[0] != "canceled" {
+						t.Fatalf("canceled winner mismatch: results=%v attempts=%v", resStatuses, attStatuses)
+					}
+				default:
+					t.Fatalf("unexpected terminal status %q", got.Status)
 				}
-			default:
-				t.Fatalf("unexpected terminal status %q", got.Status)
-			}
-		})
-	}
+			})
+		}
+	})
 }
 
 // Slot 7: Race cancel vs provider response (cancellation outranks late provider completion/error).
