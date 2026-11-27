@@ -79,6 +79,22 @@ class TestCF07HarnessParsing(unittest.TestCase):
         self.assertEqual(parsed.rejection_code, "GREP_MATCH_BUDGET")
         self.assertIn("GREP_MATCH_BUDGET", parsed.declared_gaps)
 
+    def test_parse_captured_tool_call_unwraps_d1_command_envelope(self) -> None:
+        inner = json.dumps(
+            {
+                "state": "completed",
+                "status": 2,
+                "stdout": "01_first.txt:alpha first\n",
+                "stderr": "rg: unreadable.txt: Permission denied\n",
+            }
+        )
+        raw = {"outcome": "completed", "content": f"[read#2 01_first.txt:2]\n[command#6]\n{inner}"}
+        parsed = parse_captured_tool_call("command", {"command": "rg alpha 01_first.txt unreadable.txt"}, "c4", raw, "")
+        self.assertEqual(parsed.status_code, 2)
+        self.assertIn("alpha first", parsed.stdout)
+        self.assertIn("Permission denied", parsed.stderr)
+        self.assertIsNone(parsed.stop_code)
+
     def test_parse_captured_tool_call_extracts_inventory_fresh_false(self) -> None:
         msg = json.dumps({"inventory": {"fresh": False, "revision": 7}})
         parsed = parse_captured_tool_call("command", {}, "c3", {"outcome": "completed", "stdout": msg}, msg)

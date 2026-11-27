@@ -32,11 +32,17 @@ def parse_rg_path_lines(stdout: str) -> set[tuple[str, int]]:
     return pairs
 
 
-def extract_search_stage_path_lines(search_resp: dict[str, object]) -> set[tuple[str, int]]:
+def extract_search_stage_path_lines(
+    search_resp: dict[str, object],
+    *,
+    project_id: str | None = None,
+) -> set[tuple[str, int]]:
     """Extract normalized (path, line) pairs for code hits from D1 POST /v1/search."""
     pairs: set[tuple[str, int]] = set()
     for hit in search_resp.get("hits") or []:
         if not isinstance(hit, dict):
+            continue
+        if project_id and str(hit.get("project_id") or "") not in ("", project_id):
             continue
         kind = str(hit.get("hit_kind") or "code").lower()
         if kind not in ("code", "source_code", ""):
@@ -63,10 +69,12 @@ def evaluate_g04_agreement(
     agent_call: CapturedToolCall,
     search_resp: dict[str, object],
     ref_pairs: set[tuple[str, int]],
+    *,
+    project_id: str | None = None,
 ) -> dict[str, object]:
     """Compare agent command route and /v1/search stage against each other and rg reference."""
     agent_raw = parse_rg_path_lines(agent_call.stdout)
-    stage_raw = extract_search_stage_path_lines(search_resp)
+    stage_raw = extract_search_stage_path_lines(search_resp, project_id=project_id)
 
     agent_proj = _apply_agent_exclusions(agent_raw)
     stage_proj = _apply_agent_exclusions(stage_raw)
@@ -131,73 +139,84 @@ def run_g04_sidecar(
 
     with tempfile.TemporaryDirectory(prefix="cf07-g04-") as tmp:
         tmp_path = Path(tmp)
-        for idx in range(instances):
-            selector = ReplaySelector(base_seed=base_seed, family_id="G04", instance_index=idx)
-            rng = seed_rng(base_seed, "G04", idx)
-            spec = generate_tree_spec(
-                base_seed,
-                "G04",
-                idx,
-                TreeGenOptions(
-                    entry_count=10 + (idx % 16),
-                    max_depth=4,
-                    include_hidden=True,
-                    include_boundaries=False,
-                    include_nested_checkouts=False,
-                    include_paintedwolf=(idx % 4 == 0),
-                ),
-            )
-            tree_dir = tmp_path / f"g04_{idx:03d}"
-            materialize_tree(spec, tree_dir)
-            literal = DEFAULT_TEXT_TOKENS[rng.randint(0, len(DEFAULT_TEXT_TOKENS) - 1)]
+        batch_size = 20
+        for batch_start in range(0, instances, batch_size):
+            batch_end = min(instances, batch_start + batch_size)
+            batch_dir = tmp_path / f"batch_{batch_start:03d}"
+            batch_dir.mkdir(parents=True, exist_ok=True)
+            batch_meta: list[tuple[int, ReplaySelector, str, Path, str]] = []
+            for idx in range(batch_start, batch_end):
+                selector = ReplaySelector(base_seed=base_seed, family_id="G04", instance_index=idx)
+                rng = seed_rng(base_seed, "G04", idx)
+                spec = generate_tree_spec(
+                    base_seed,
+                    "G04",
+                    idx,
+                    TreeGenOptions(
+                        entry_count=10 + (idx % 12),
+                        max_depth=4,
+                        include_hidden=True,
+                        include_ignored=False,
+                        include_vcs=False,
+                        include_boundaries=False,
+                        include_nested_checkouts=False,
+                        include_paintedwolf=(idx % 4 == 0),
+                    ),
+                )
+                sub_name = f"corp_{idx:03d}"
+                tree_dir = batch_dir / sub_name
+                materialize_tree(spec, tree_dir)
+                literal = DEFAULT_TEXT_TOKENS[rng.randint(0, len(DEFAULT_TEXT_TOKENS) - 1)]
+                batch_meta.append((idx, selector, sub_name, tree_dir, literal))
 
-            pid, rids = sidecar.driver.attach_project([tree_dir])
-            wait_catalog_settled(sidecar.driver, pid, rids[0], max_wait_s=15.0)
+            pid, rids = sidecar.driver.attach_project([batch_dir])
+            wait_catalog_settled(sidecar.driver, pid, rids[0], max_wait_s=25.0)
             session = AgentToolSession(sidecar, pid)
             try:
-                cmd = f"rg --no-heading -n -H -F -- {shlex.quote(literal)} ."
-                agent_call = session.invoke_tool("command", {"command": cmd})
-                search_resp = sidecar.driver.search_raw(
-                    literal,
-                    origin_project_id=pid,
-                    regex=False,
-                    case_sensitive=True,
-                    limit=500,
-                )
+                for idx, selector, sub_name, tree_dir, literal in batch_meta:
+                    cmd = f"rg --no-heading -n -H -F -- {shlex.quote(literal)} {sub_name}"
+                    agent_call = session.invoke_tool("command", {"command": cmd})
+                    search_resp = sidecar.driver.search_raw(
+                        literal,
+                        origin_project_id=pid,
+                        regex=False,
+                        case_sensitive=True,
+                        include=(f"{sub_name}/**",),
+                        limit=500,
+                    )
+                    ref_res = reference_search(
+                        tree_dir,
+                        CodeQuerySpec(pattern=literal, form="literal", case_sensitive=True),
+                        include_hidden=False,
+                        rg_bin=rg_bin,
+                    )
+                    ref_pairs = {(f"{sub_name}/{h.path.removeprefix('./')}", h.line_number) for h in ref_res.hits}
+                    ev = evaluate_g04_agreement(agent_call, search_resp, ref_pairs, project_id=pid)
+                    verdict_counts[str(ev["verdict"])] += 1
+                    for g in ev["declared_gaps"]:
+                        gap_counts[str(g)] += 1
+                    if ev["declared_gaps"] and len(gap_samples) < 10:
+                        gap_samples.append(
+                            {
+                                "instance": idx,
+                                "literal": literal,
+                                "agent_call": agent_call.to_dict(),
+                                "search_resp": search_resp,
+                            }
+                        )
+                    if ev["verdict"] == "DEFECT" and len(defects) < 10:
+                        defects.append(
+                            {
+                                "instance": idx,
+                                "selector": selector.to_dict(),
+                                "literal": literal,
+                                "evaluation": ev,
+                                "agent_call": agent_call.to_dict(),
+                                "search_resp": search_resp,
+                            }
+                        )
             finally:
                 session.close()
-
-            ref_res = reference_search(
-                tree_dir,
-                CodeQuerySpec(pattern=literal, form="literal", case_sensitive=True),
-                include_hidden=False,
-                rg_bin=rg_bin,
-            )
-            ref_pairs = {(h.path.removeprefix("./"), h.line_number) for h in ref_res.hits}
-            ev = evaluate_g04_agreement(agent_call, search_resp, ref_pairs)
-            verdict_counts[str(ev["verdict"])] += 1
-            for g in ev["declared_gaps"]:
-                gap_counts[str(g)] += 1
-            if ev["declared_gaps"] and len(gap_samples) < 10:
-                gap_samples.append(
-                    {
-                        "instance": idx,
-                        "literal": literal,
-                        "agent_call": agent_call.to_dict(),
-                        "search_resp": search_resp,
-                    }
-                )
-            if ev["verdict"] == "DEFECT" and len(defects) < 10:
-                defects.append(
-                    {
-                        "instance": idx,
-                        "selector": selector.to_dict(),
-                        "literal": literal,
-                        "evaluation": ev,
-                        "agent_call": agent_call.to_dict(),
-                        "search_resp": search_resp,
-                    }
-                )
 
         # 2 hand-written edges: hidden file exclusion & .paintedwolf exclusion.
         edge_specs = [
@@ -245,7 +264,7 @@ def run_g04_sidecar(
                 rg_bin=rg_bin,
             )
             ref_pairs = {(h.path.removeprefix("./"), h.line_number) for h in ref_res.hits}
-            ev = evaluate_g04_agreement(agent_call, search_resp, ref_pairs)
+            ev = evaluate_g04_agreement(agent_call, search_resp, ref_pairs, project_id=pid)
             edge_results.append(
                 {
                     "edge": edge_name,

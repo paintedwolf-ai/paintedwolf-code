@@ -60,13 +60,25 @@ class CapturedToolCall:
 
 def _extract_json_object(text: str) -> dict[str, object] | None:
     stripped = text.strip()
-    if not stripped or not stripped.startswith("{"):
+    if not stripped:
         return None
-    try:
-        parsed = json.loads(stripped)
-        return parsed if isinstance(parsed, dict) else None
-    except ValueError:
-        return None
+    if stripped.startswith("{"):
+        try:
+            parsed = json.loads(stripped)
+            return parsed if isinstance(parsed, dict) else None
+        except ValueError:
+            pass
+    # D1 command results wrap JSON after `[read#...]` / `[command#N]` header lines.
+    for idx, ch in enumerate(stripped):
+        if ch == "{":
+            candidate = stripped[idx:]
+            try:
+                parsed, _ = json.JSONDecoder().raw_decode(candidate)
+                if isinstance(parsed, dict):
+                    return parsed
+            except ValueError:
+                continue
+    return None
 
 
 def parse_captured_tool_call(
@@ -78,38 +90,50 @@ def parse_captured_tool_call(
 ) -> CapturedToolCall:
     """Parse structured host tool_result_json and serialized model-facing message."""
     outcome = str(tool_result_json.get("outcome") or "unknown")
-    rejection_code: str | None = None
-    for key in ("rejection_code", "code", "error_code"):
-        val = tool_result_json.get(key)
-        if val:
-            rejection_code = str(val)
-            break
-    if rejection_code is None:
-        rej = tool_result_json.get("rejection")
-        if isinstance(rej, dict) and rej.get("code"):
-            rejection_code = str(rej["code"])
-    if rejection_code is None:
-        err = tool_result_json.get("error")
-        if isinstance(err, dict) and err.get("code"):
-            rejection_code = str(err["code"])
+    content_str = str(tool_result_json.get("content") or "")
+    envelope = _extract_json_object(content_str) or {}
 
-    stdout = str(tool_result_json.get("stdout") or "")
-    stderr = str(tool_result_json.get("stderr") or "")
+    rejection_code: str | None = None
+    for src in (tool_result_json, envelope):
+        if rejection_code is not None:
+            break
+        for key in ("rejection_code", "code", "error_code"):
+            val = src.get(key)
+            if val:
+                rejection_code = str(val)
+                break
+        if rejection_code is None:
+            rej = src.get("rejection")
+            if isinstance(rej, dict) and rej.get("code"):
+                rejection_code = str(rej["code"])
+        if rejection_code is None:
+            err = src.get("error")
+            if isinstance(err, dict) and err.get("code"):
+                rejection_code = str(err["code"])
+
+    stdout = str(tool_result_json.get("stdout") or envelope.get("stdout") or "")
+    stderr = str(tool_result_json.get("stderr") or envelope.get("stderr") or "")
     if not stdout and isinstance(tool_result_json.get("output"), str):
         stdout = str(tool_result_json["output"])
     if not stdout and isinstance(tool_result_json.get("result"), str):
         stdout = str(tool_result_json["result"])
+    if not stdout and content_str and not envelope:
+        stdout = content_str
 
     raw_status = tool_result_json.get("status_code")
     if raw_status is None:
         raw_status = tool_result_json.get("exit_code")
+    if raw_status is None:
+        raw_status = envelope.get("status")
+    if raw_status is None:
+        raw_status = envelope.get("status_code")
     status_code = int(raw_status) if isinstance(raw_status, (int, float)) else None
 
-    raw_stop = tool_result_json.get("stop_code")
+    raw_stop = tool_result_json.get("stop_code") or envelope.get("stop_code")
     stop_code = str(raw_stop) if raw_stop else None
 
-    # Inspect structured JSON inside stdout or model_facing_message for inventory/coverage facts.
-    embedded = _extract_json_object(stdout) or _extract_json_object(model_facing_message) or {}
+    # Inspect structured JSON inside stdout, envelope, or model_facing_message for inventory/coverage facts.
+    embedded = _extract_json_object(stdout) or envelope or _extract_json_object(model_facing_message) or {}
     if rejection_code is None and embedded.get("code"):
         rejection_code = str(embedded["code"])
     if rejection_code is None and "SURVEY_INVENTORY_WARMING" in model_facing_message:

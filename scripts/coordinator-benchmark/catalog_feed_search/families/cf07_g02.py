@@ -143,63 +143,72 @@ def run_g02_sidecar(
 
     with tempfile.TemporaryDirectory(prefix="cf07-g02-") as tmp:
         tmp_path = Path(tmp)
-        for idx in range(instances):
-            selector = ReplaySelector(base_seed=base_seed, family_id="G02", instance_index=idx)
-            spec = generate_tree_spec(
-                base_seed,
-                "G02",
-                idx,
-                TreeGenOptions(
-                    entry_count=12 + (idx % 20),
-                    max_depth=5,
-                    include_boundaries=True,
-                    include_nested_checkouts=(idx % 5 == 0),
-                    include_paintedwolf=(idx % 3 == 0),
-                ),
-            )
-            tree_dir = tmp_path / f"g02_{idx:03d}"
-            materialize_tree(spec, tree_dir)
-            ref_files = [
-                e
-                for e in reference_walk(
-                    tree_dir,
-                    boundary_config=boundary_config,
-                    include_hidden=False,
-                    agent_exclusions=(".paintedwolf", ".paintedwolf/**"),
+        batch_size = 20
+        for batch_start in range(0, instances, batch_size):
+            batch_end = min(instances, batch_start + batch_size)
+            batch_dir = tmp_path / f"batch_{batch_start:03d}"
+            batch_dir.mkdir(parents=True, exist_ok=True)
+            batch_meta: list[tuple[int, ReplaySelector, str, int]] = []
+            for idx in range(batch_start, batch_end):
+                selector = ReplaySelector(base_seed=base_seed, family_id="G02", instance_index=idx)
+                spec = generate_tree_spec(
+                    base_seed,
+                    "G02",
+                    idx,
+                    TreeGenOptions(
+                        entry_count=10 + (idx % 16),
+                        max_depth=5,
+                        include_boundaries=True,
+                        include_nested_checkouts=(idx % 5 == 0),
+                        include_paintedwolf=(idx % 3 == 0),
+                    ),
                 )
-                if e.kind == "file"
-            ]
-            pid, rids = sidecar.driver.attach_project([tree_dir])
-            wait_catalog_settled(sidecar.driver, pid, rids[0], max_wait_s=15.0)
+                sub_name = f"tree_{idx:03d}"
+                tree_dir = batch_dir / sub_name
+                materialize_tree(spec, tree_dir)
+                ref_files = [
+                    e
+                    for e in reference_walk(
+                        tree_dir,
+                        boundary_config=boundary_config,
+                        include_hidden=False,
+                        agent_exclusions=(".paintedwolf", ".paintedwolf/**"),
+                    )
+                    if e.kind == "file"
+                ]
+                batch_meta.append((idx, selector, sub_name, len(ref_files)))
+
+            pid, rids = sidecar.driver.attach_project([batch_dir])
+            wait_catalog_settled(sidecar.driver, pid, rids[0], max_wait_s=25.0)
             session = AgentToolSession(sidecar, pid)
             try:
-                s_call = session.invoke_tool("survey_repo", {"bundle": "layout_overview", "path": "."})
-                r_call = session.invoke_tool("command", {"command": "repo-map"})
+                for idx, selector, sub_name, ref_count in batch_meta:
+                    s_call = session.invoke_tool("survey_repo", {"bundle": "layout_overview", "path": sub_name})
+                    r_call = session.invoke_tool("command", {"command": f"repo-map --path {sub_name}"})
+                    ev = evaluate_g02_pair(s_call, r_call, ref_file_count=ref_count)
+                    verdict_counts[str(ev["verdict"])] += 1
+                    for g in ev["declared_gaps"]:
+                        gap_counts[str(g)] += 1
+                    if ev["declared_gaps"] and len(gap_samples) < 10:
+                        gap_samples.append(
+                            {
+                                "instance": idx,
+                                "survey_call": s_call.to_dict(),
+                                "repomap_call": r_call.to_dict(),
+                            }
+                        )
+                    if ev["verdict"] == "DEFECT" and len(defects) < 10:
+                        defects.append(
+                            {
+                                "instance": idx,
+                                "selector": selector.to_dict(),
+                                "evaluation": ev,
+                                "survey_call": s_call.to_dict(),
+                                "repomap_call": r_call.to_dict(),
+                            }
+                        )
             finally:
                 session.close()
-
-            ev = evaluate_g02_pair(s_call, r_call, ref_file_count=len(ref_files))
-            verdict_counts[str(ev["verdict"])] += 1
-            for g in ev["declared_gaps"]:
-                gap_counts[str(g)] += 1
-            if ev["declared_gaps"] and len(gap_samples) < 10:
-                gap_samples.append(
-                    {
-                        "instance": idx,
-                        "survey_call": s_call.to_dict(),
-                        "repomap_call": r_call.to_dict(),
-                    }
-                )
-            if ev["verdict"] == "DEFECT" and len(defects) < 10:
-                defects.append(
-                    {
-                        "instance": idx,
-                        "selector": selector.to_dict(),
-                        "evaluation": ev,
-                        "survey_call": s_call.to_dict(),
-                        "repomap_call": r_call.to_dict(),
-                    }
-                )
 
         # 4 hand-written edges: boundaries, nested checkout, .paintedwolf exclusion, bounded --depth 1.
         edge_specs = [
