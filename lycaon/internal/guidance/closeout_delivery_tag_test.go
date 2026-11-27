@@ -37,6 +37,7 @@ func TestCopiedDeliveryTagWithOtherPrintedNumbers(t *testing.T) {
 		{"verified excerpt supplies the coordinate", `[read#2:3 "line 3 of the file"]`, CitationGrounded, evidence.VerdictMatched},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got := lineNumberOutcome(t, tc.citation, ev)
 			if got.Outcome != tc.want || got.Resolution.Verdict != tc.verdict {
 				t.Fatalf("%s outcome = %+v, want %s %s", tc.citation, got, tc.want, tc.verdict)
