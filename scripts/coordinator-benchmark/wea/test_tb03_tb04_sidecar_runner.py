@@ -131,17 +131,23 @@ class TB03TB04SidecarRunnerTests(unittest.TestCase):
             "harness_source": {"git_head": "1c202f1725"},
         }
         created_apps: list[FakeApp] = []
+        restarted_apps: list[FakeApp] = []
 
         def fake_create(app_dir: pathlib.Path, **_kwargs):
             app = FakeApp(app_dir)
             created_apps.append(app)
             return app
 
+        def fake_restart(app_dir: pathlib.Path, **_kwargs):
+            app = FakeApp(app_dir)
+            restarted_apps.append(app)
+            return app
+
         def restart_fn(ctx: mod.SlotContext):
             assert ctx.app is None
             a1, _ = ctx.start_dedicated_app("r1")
             a1.close(cleanup=False)
-            a2, _ = ctx.start_dedicated_app("r1")
+            a2, _ = ctx.restart_dedicated_app("r1")
             a2.close(cleanup=False)
             return {
                 "typed_result": {"restarted": True},
@@ -160,13 +166,69 @@ class TB03TB04SidecarRunnerTests(unittest.TestCase):
             with (
                 mock.patch.object(mod, "SLOT_SPECS", patched_specs),
                 mock.patch.object(mod, "_create_application", side_effect=fake_create),
+                mock.patch.object(mod, "_restart_application", side_effect=fake_restart),
                 mock.patch.object(mod, "collect_provenance", return_value=fake_prov),
             ):
                 summary = mod.run_sidecar_slots(out_dir, card="tb04", family="W10", run_id="test-restart")
 
-            self.assertEqual(len(created_apps), 2)
+            self.assertEqual(len(created_apps), 1)
+            self.assertEqual(len(restarted_apps), 1)
             self.assertEqual(summary["passed_count"], 1)
             self.assertEqual(summary["failed_count"], 0)
+
+    def test_call_tool_returns_refusal_code_string_never_pending_request_dict(self) -> None:
+        fake_req = {"id": "manual-33", "messages": [{"role": "user", "content": "hi"}]}
+        ok_res = {"outcome": "completed", "content": "ok"}
+        rej_res = {"outcome": "rejected", "rejection": {"code": "OVERLAY_PROMOTE_CONFLICT"}}
+
+        with mock.patch.object(mod, "_send_tool_call", return_value=("call-1", ok_res, fake_req)):
+            call_id, res, code = mod._call_tool(object(), "sid-1", "promote_overlay", {})
+            self.assertEqual(call_id, "call-1")
+            self.assertEqual(res, ok_res)
+            self.assertIsInstance(code, str)
+            self.assertEqual(code, "")
+
+        with mock.patch.object(mod, "_send_tool_call", return_value=("call-2", rej_res, fake_req)):
+            _, _, code = mod._call_tool(object(), "sid-1", "promote_overlay", {})
+            self.assertEqual(code, "OVERLAY_PROMOTE_CONFLICT")
+
+    def test_no_raw_send_tool_call_in_slots_and_no_retired_handoff_tools(self) -> None:
+        src = pathlib.Path(mod.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("handoff_init", src)
+        self.assertNotIn("handoff_health", src)
+        # Only import + inside _call_tool may reference _send_tool_call.
+        marker = "# Read-only SQLite"
+        after_helpers = src.split(marker, 1)[1]
+        self.assertNotIn("_send_tool_call(", after_helpers)
+
+    def test_restart_application_preserves_existing_dir_and_appends_log(self) -> None:
+        import tempfile
+
+        class _DummyProc:
+            pid = 42424
+
+        with tempfile.TemporaryDirectory() as td:
+            app_dir = pathlib.Path(td) / "restart-app"
+            (app_dir / "config").mkdir(parents=True)
+            (app_dir / "store.db").write_bytes(b"sqlite-marker")
+            (app_dir / "sidecar.log").write_text("before-restart\n", encoding="utf-8")
+
+            with (
+                mock.patch.object(mod, "resolve_engine_binary", return_value=(pathlib.Path("/bin/true"), "test")),
+                mock.patch.object(mod, "_resolve_engine_root", return_value=pathlib.Path(td)),
+                mock.patch.object(mod.subprocess, "Popen", return_value=_DummyProc()),
+            ):
+                app = mod._restart_application(app_dir)
+                try:
+                    app.log.write("after-restart\n")
+                    app.log.flush()
+                finally:
+                    app.log.close()
+
+            self.assertEqual((app_dir / "store.db").read_bytes(), b"sqlite-marker")
+            log_text = (app_dir / "sidecar.log").read_text(encoding="utf-8")
+            self.assertIn("before-restart\n", log_text)
+            self.assertIn("after-restart\n", log_text)
 
     def test_cli_list_exits_zero(self) -> None:
         rc = mod.main(["--card", "all", "--list"])

@@ -17,7 +17,10 @@ import contextlib
 import dataclasses
 import json
 import pathlib
+import secrets
+import socket
 import sqlite3
+import subprocess
 import sys
 import time
 import traceback
@@ -37,13 +40,14 @@ from wea.observers import (
     outside_diff_dirs,
     sha256_bytes,
 )
-from wea.provenance import REPO_ROOT, collect_provenance
+from wea.provenance import REPO_ROOT, collect_provenance, resolve_engine_binary
 from wea.runner import (
     _create_application,
     _extract_refusal_code,
     _extract_worker_landing_from_db,
     _init_git_repo,
     _open_session,
+    _resolve_engine_root,
     _save_json,
     _send_tool_call,
     _wait_pending,
@@ -116,6 +120,95 @@ class SlotContext:
         app.ready()
         return app, app_dir
 
+    def restart_dedicated_app(self, subdir: str = "restart-app") -> tuple[Any, pathlib.Path]:
+        """Restart `lycaon-dev` on an existing `app_dir` (`store.db` + `config/`) without FileExistsError."""
+        app_dir = self.out_dir / subdir
+        app = _restart_application(
+            app_dir,
+            engine_bin=self.engine_bin,
+            engine_manifest=self.engine_manifest,
+            engine_root=self.engine_root,
+        )
+        app.ready()
+        return app, app_dir
+
+
+def _restart_application(
+    app_dir: pathlib.Path,
+    engine_bin: str | pathlib.Path | None = None,
+    *,
+    engine_manifest: str | pathlib.Path | None = None,
+    engine_root: str | pathlib.Path | None = None,
+) -> Any:
+    """Re-launch a fresh `smoke.Application` process against an existing `app_dir/store.db` + `app_dir/config/`.
+
+    Uses `smoke.Application.__new__(smoke.Application)` and opens `sidecar.log` in append (`"a"`) mode
+    so the pre-restart SQLite database, config, and earlier log lines are preserved without `FileExistsError`.
+    """
+    import smoke
+
+    binary, _ = resolve_engine_binary(REPO_ROOT, engine_bin)
+    resolved_engine_root = _resolve_engine_root(engine_manifest=engine_manifest, engine_root=engine_root)
+    app = smoke.Application.__new__(smoke.Application)
+    app.directory = app_dir
+    app.config = app_dir / "config"
+    app.config.mkdir(parents=True, exist_ok=True)
+    app.manual = True
+    app.projects = []
+    app.admissions = []
+    suite = json.loads((smoke.ROOT / "lycaon/test/fixtures/eval/coordinator-benchmark.json").read_text(encoding="utf-8"))
+    app.task_allowance = suite["task_allowance"]
+    app.approval_guidance = suite["unattended"]["approval_guidance"]
+    app.baseline_checks = []
+    app.flows = []
+    app.token = secrets.token_hex(24)
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        app.port = sock.getsockname()[1]
+    app.url = f"http://127.0.0.1:{app.port}"
+    app.log = (app_dir / "sidecar.log").open("a", encoding="utf-8")
+    env_overrides = {
+        "LYCAON_CONFIG_DIR": str(app.config),
+        "LYCAON_CONFIG_ROOT": str(smoke.ROOT / "lycaon"),
+        "LYCAON_ENGINE_ROOT": str(resolved_engine_root or (smoke.ROOT / "lycaon-den/src-tauri/engine-root")),
+        "LYCAON_ADDR": f"127.0.0.1:{app.port}",
+        "LYCAON_API_TOKEN": app.token,
+        "LYCAON_DEV": "1",
+        "LYCAON_HARNESS": "1",
+        "LYCAON_LOG_LEVEL": "debug",
+        "LYCAON_LLM_MOCK": "1",
+        "LYCAON_LLM_MANUAL": "1",
+    }
+    env = smoke.application_environment(env_overrides)
+    app.process = subprocess.Popen(
+        [str(binary), "serve", "--db", str(app_dir / "store.db")],
+        cwd=smoke.ROOT,
+        env=env,
+        stdout=app.log,
+        stderr=subprocess.STDOUT,
+    )
+    smoke.save(app_dir / "ownership.json", {"pid": app.process.pid, "port": app.port})
+    return app
+
+
+def _call_tool(
+    app: Any,
+    session_id: str,
+    name: str,
+    args: dict[str, Any],
+    *,
+    checkpoint_policy: str | None = None,
+) -> tuple[str, dict[str, Any], str]:
+    """Call `_send_tool_call` and return `(call_id, tool_result, refusal_code)`."""
+    call_id, res, _req = _send_tool_call(
+        app,
+        session_id,
+        name,
+        args,
+        checkpoint_policy=checkpoint_policy,
+    )
+    return call_id, res, _extract_refusal_code(res)
+
 
 # ---------------------------------------------------------------------------
 # Read-only SQLite & sidecar protocol helpers
@@ -146,7 +239,7 @@ def _open_coordinator(
     sid, pid, rid = _open_session(app, proj, posture=posture)
     app.request(f"/v1/sessions/{sid}/prompts", {"operation_id": str(uuid.uuid4()), "text": prompt_text})
     if with_progress:
-        _send_tool_call(
+        _call_tool(
             app,
             sid,
             "update_progress",
@@ -202,7 +295,7 @@ def _dispatch_task(
         args["review_of"] = review_of
     if extra:
         args.update(extra)
-    _, res, _ = _send_tool_call(app, sid, "task", args)
+    _, res, _ = _call_tool(app, sid, "task", args)
     return _extract_job_id(res), res, _extract_refusal_code(res)
 
 
@@ -264,7 +357,7 @@ def _settle_child_leg(
         }
         if extra_args:
             args.update(extra_args)
-        _, leg_res, _ = _send_tool_call(app, child_sid, "complete_leg", args)
+        _, leg_res, _ = _call_tool(app, child_sid, "complete_leg", args)
     else:
         app.request("/harness/llm/respond", {"id": pend["id"], "content": brief})
 
@@ -314,7 +407,7 @@ def _run_write_worker_edit(
     child_sid = _wait_child_sid(app, db_path, job_id, parent_sid)
     cmd_results: list[dict[str, Any]] = []
     for cmd in commands:
-        _, cres, _ = _send_tool_call(app, child_sid, "command", {"command": cmd})
+        _, cres, _ = _call_tool(app, child_sid, "command", {"command": cmd})
         cmd_results.append({"command": cmd, "outcome": cres.get("outcome"), "code": _extract_refusal_code(cres), "result": cres})
     leg_res = _settle_child_leg(
         app,
@@ -345,7 +438,7 @@ def _lookup_result_handle(db_path: pathlib.Path, job_id: str) -> str:
 
 
 def _read_pack_board(app: Any, sid: str) -> dict[str, Any]:
-    _, res, _ = _send_tool_call(app, sid, "pack_board", {})
+    _, res, _ = _call_tool(app, sid, "pack_board", {})
     try:
         parsed = json.loads(str(res.get("content") or "{}"))
         return parsed if isinstance(parsed, dict) else {"raw": res}
@@ -430,11 +523,11 @@ def _slot_w01_03_sibling_worker_isolation(ctx: SlotContext) -> dict[str, Any]:
         wait_id = _park_wait(ctx.app, sid, kind="all_workers_done")
         csid_a = _wait_child_sid(ctx.app, ctx.db_path, job_a, sid)
         csid_b = _wait_child_sid(ctx.app, ctx.db_path, job_b, sid)
-        _send_tool_call(ctx.app, csid_a, "command", {"command": "cat shared.txt"})
-        _send_tool_call(ctx.app, csid_a, "command", {"command": 'edit --path shared.txt --old-string "base-shared" --new-string "sib-a-only"'})
-        _, cat_b, _ = _send_tool_call(ctx.app, csid_b, "command", {"command": "cat shared.txt"})
+        _call_tool(ctx.app, csid_a, "command", {"command": "cat shared.txt"})
+        _call_tool(ctx.app, csid_a, "command", {"command": 'edit --path shared.txt --old-string "base-shared" --new-string "sib-a-only"'})
+        _, cat_b, _ = _call_tool(ctx.app, csid_b, "command", {"command": "cat shared.txt"})
         b_saw_base = "base-shared" in str(cat_b.get("content") or "") and "sib-a-only" not in str(cat_b.get("content") or "")
-        _send_tool_call(ctx.app, csid_b, "command", {"command": 'edit --path shared.txt --old-string "base-shared" --new-string "sib-b-only"'})
+        _call_tool(ctx.app, csid_b, "command", {"command": 'edit --path shared.txt --old-string "base-shared" --new-string "sib-b-only"'})
         _settle_child_leg(ctx.app, ctx.db_path, csid_a, job_a, sid, brief="Updated shared.txt in sib-a.")
         _settle_child_leg(ctx.app, ctx.db_path, csid_b, job_b, sid, brief="Updated shared.txt in sib-b.")
         _wait_tool_result(ctx.app, sid, wait_id)
@@ -462,7 +555,7 @@ def _slot_w01_04_instruct_worker_reuses_identity(ctx: SlotContext) -> dict[str, 
             worker_name="w01-multi",
             commands=['cat round.txt', 'edit --path round.txt --old-string "r0" --new-string "r1"'],
         )
-        _, inst_res, inst_code = _send_tool_call(
+        _, inst_res, inst_code = _call_tool(
             ctx.app, sid, "instruct_worker",
             {"worker": "w01-multi", "instructions": "Update round.txt to r2."},
         )
@@ -470,8 +563,8 @@ def _slot_w01_04_instruct_worker_reuses_identity(ctx: SlotContext) -> dict[str, 
         if job2:
             wait_id = _park_wait(ctx.app, sid)
             csid2 = _wait_child_sid(ctx.app, ctx.db_path, job2, sid)
-            _send_tool_call(ctx.app, csid2, "command", {"command": "cat round.txt"})
-            _send_tool_call(ctx.app, csid2, "command", {"command": 'edit --path round.txt --old-string "r1" --new-string "r2"'})
+            _call_tool(ctx.app, csid2, "command", {"command": "cat round.txt"})
+            _call_tool(ctx.app, csid2, "command", {"command": 'edit --path round.txt --old-string "r1" --new-string "r2"'})
             _settle_child_leg(ctx.app, ctx.db_path, csid2, job2, sid, brief="Round 2 complete.")
             _wait_tool_result(ctx.app, sid, wait_id)
         else:
@@ -524,7 +617,7 @@ def _slot_w01_06_non_git_workspace_view(ctx: SlotContext) -> dict[str, Any]:
             commands=["cat plain.txt", 'edit --path plain.txt --old-string "plain-1" --new-string "plain-2"'],
         )
         pre_promote = hash_tree(proj)
-        _, prom_res, prom_code = _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
+        _, prom_res, prom_code = _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
         post = hash_tree(proj)
         _check(checks, "isolated_before_promote", pre == pre_promote, diff_tree_hashes(pre, pre_promote))
         _check(checks, "promoted_in_non_git_project", prom_code == "" and (proj / "plain.txt").read_text(encoding="utf-8") == "plain-2\n", {"code": prom_code, "body": (proj / "plain.txt").read_text(encoding="utf-8")})
@@ -582,7 +675,7 @@ def _slot_w05_02_forged_host_fields_discarded(ctx: SlotContext) -> dict[str, Any
             commands=['cat real.txt', 'edit --path real.txt --old-string "old" --new-string "new"'],
             extra_complete_args={"changed_paths": ["forged_phantom.txt"], "receipt_count": 999},
         )
-        _, prev_res, _ = _send_tool_call(ctx.app, sid, "preview_overlay", {"overlay_id": run["result_handle"]})
+        _, prev_res, _ = _call_tool(ctx.app, sid, "preview_overlay", {"overlay_id": run["result_handle"]})
         prev_content = str(prev_res.get("content") or "")
         _check(checks, "real_path_observed", "real.txt" in prev_content, prev_content[:300])
         _check(checks, "forged_path_discarded", "forged_phantom.txt" not in prev_content, "forged_phantom.txt" not in prev_content)
@@ -603,8 +696,8 @@ def _slot_w05_03_committed_handle_independent_of_wake(ctx: SlotContext) -> dict[
         job_id, _, _ = _dispatch_task(ctx.app, sid, goal="Edit wake.txt", scope={"mode": "write", "paths": ["wake.txt"]})
         wait_id = _park_wait(ctx.app, sid)
         csid = _wait_child_sid(ctx.app, ctx.db_path, job_id, sid)
-        _send_tool_call(ctx.app, csid, "command", {"command": "cat wake.txt"})
-        _send_tool_call(ctx.app, csid, "command", {"command": 'edit --path wake.txt --old-string "w0" --new-string "w1"'})
+        _call_tool(ctx.app, csid, "command", {"command": "cat wake.txt"})
+        _call_tool(ctx.app, csid, "command", {"command": 'edit --path wake.txt --old-string "w0" --new-string "w1"'})
         _settle_child_leg(ctx.app, ctx.db_path, csid, job_id, sid, brief="Settled before wake.")
         handle_before_wake = _lookup_result_handle(ctx.db_path, job_id)
         _wait_tool_result(ctx.app, sid, wait_id)
@@ -633,7 +726,7 @@ def _slot_w05_04_worker_history_recovery(ctx: SlotContext) -> dict[str, Any]:
             commands=['cat hist.txt', 'edit --path hist.txt --old-string "h0" --new-string "h1"'],
             brief="Distinctive history marker W05-HIST-OK.",
         )
-        _, hist_res, hist_code = _send_tool_call(ctx.app, sid, "worker_history", {"worker": run["worker_name"]})
+        _, hist_res, hist_code = _call_tool(ctx.app, sid, "worker_history", {"worker": run["worker_name"]})
         content = str(hist_res.get("content") or "")
         _check(checks, "worker_history_succeeded", hist_code == "" and hist_res.get("outcome") == "completed", {"code": hist_code, "outcome": hist_res.get("outcome")})
         _check(checks, "history_contains_handle_or_marker", (run["result_handle"] in content) or ("W05-HIST-OK" in content), content[:300])
@@ -659,7 +752,7 @@ def _slot_w05_05_recall_with_worker_attribution(ctx: SlotContext) -> dict[str, A
             commands=['cat rec.txt', 'edit --path rec.txt --old-string "r0" --new-string "r1"'],
             brief="Unique recall token W05-RECALL-TOKEN-7741.",
         )
-        _, rec_res, rec_code = _send_tool_call(ctx.app, sid, "recall", {"query": "W05-RECALL-TOKEN-7741"})
+        _, rec_res, rec_code = _call_tool(ctx.app, sid, "recall", {"query": "W05-RECALL-TOKEN-7741"})
         content = str(rec_res.get("content") or "")
         _check(checks, "recall_succeeded", rec_code == "" and rec_res.get("outcome") == "completed", {"code": rec_code, "outcome": rec_res.get("outcome")})
         _check(checks, "recall_returned_content", len(content.strip()) > 0, content[:300])
@@ -680,10 +773,10 @@ def _slot_w05_06_over_budget_summary_rejected_then_recovered(ctx: SlotContext) -
         job_id, _, _ = _dispatch_task(ctx.app, sid, goal="Edit sum.txt", scope={"mode": "write", "paths": ["sum.txt"]})
         wait_id = _park_wait(ctx.app, sid)
         csid = _wait_child_sid(ctx.app, ctx.db_path, job_id, sid)
-        _send_tool_call(ctx.app, csid, "command", {"command": "cat sum.txt"})
-        _send_tool_call(ctx.app, csid, "command", {"command": 'edit --path sum.txt --old-string "s0" --new-string "s1"'})
+        _call_tool(ctx.app, csid, "command", {"command": "cat sum.txt"})
+        _call_tool(ctx.app, csid, "command", {"command": 'edit --path sum.txt --old-string "s0" --new-string "s1"'})
         huge_brief = "OVERBUDGET " * 2000
-        _, bad_leg, _ = _send_tool_call(
+        _, bad_leg, _ = _call_tool(
             ctx.app, csid, "complete_leg",
             {"leg_status": "complete", "brief": huge_brief, "objectives_met": ["Updated sum.txt."]},
         )
@@ -723,8 +816,8 @@ def _slot_w06_01_cancel_mid_round(ctx: SlotContext) -> dict[str, Any]:
         # Child starts and edits c1.txt, then pauses at next model turn while coordinator cancels it.
         wait_id = _park_wait(ctx.app, sid)
         csid = _wait_child_sid(ctx.app, ctx.db_path, job_id, sid)
-        _send_tool_call(ctx.app, csid, "command", {"command": "cat c1.txt"})
-        _send_tool_call(ctx.app, csid, "command", {"command": 'edit --path c1.txt --old-string "base" --new-string "partial"'})
+        _call_tool(ctx.app, csid, "command", {"command": "cat c1.txt"})
+        _call_tool(ctx.app, csid, "command", {"command": 'edit --path c1.txt --old-string "base" --new-string "partial"'})
         _wait_pending(ctx.app, csid)
         # Abort wait by issuing a prompt/stop? Better: open cancel before parking wait!
         # Wait — parent is parked on wait. Let's abort child via API? No, cancel must go through worker_cancel!
@@ -733,7 +826,7 @@ def _slot_w06_01_cancel_mid_round(ctx: SlotContext) -> dict[str, Any]:
         _wait_tool_result(ctx.app, sid, wait_id)
         # Now dispatch a fresh worker and call worker_cancel directly from coordinator while it is running.
         job2, _, _ = _dispatch_task(ctx.app, sid, goal="Long task to cancel", scope={"mode": "write", "paths": ["c1.txt"]}, worker_name="w06-live")
-        _, cancel_res, cancel_code = _send_tool_call(ctx.app, sid, "worker_cancel", {"worker": "w06-live", "reason": "stop mid-round"})
+        _, cancel_res, cancel_code = _call_tool(ctx.app, sid, "worker_cancel", {"worker": "w06-live", "reason": "stop mid-round"})
         jrow = _ro_one(ctx.db_path, "SELECT status FROM worker_jobs WHERE id=?", (job2,))
         rrows = _ro_query(ctx.db_path, "SELECT id, status FROM worker_results WHERE worker_job_id=?", (job2,))
         _check(checks, "worker_cancel_succeeded", cancel_code == "" and cancel_res.get("outcome") == "completed", {"code": cancel_code, "outcome": cancel_res.get("outcome")})
@@ -756,10 +849,10 @@ def _slot_w06_02_cancel_during_decision_hold(ctx: SlotContext) -> dict[str, Any]
         job_id, _, _ = _dispatch_task(ctx.app, sid, goal="Ask decision then wait", scope={"mode": "write", "paths": ["c2.txt"]}, worker_name="w06-dec")
         wait_id = _park_wait(ctx.app, sid)
         csid = _wait_child_sid(ctx.app, ctx.db_path, job_id, sid)
-        _send_tool_call(ctx.app, csid, "request_decision", {"question": "Proceed with option A or B?", "options": ["A", "B"]})
+        _call_tool(ctx.app, csid, "request_decision", {"question": "Proceed with option A or B?", "options": ["A", "B"]})
         _settle_child_leg(ctx.app, ctx.db_path, csid, job_id, sid, brief="Waiting on decision.", expected_statuses={"held", "complete"})
         _wait_tool_result(ctx.app, sid, wait_id)
-        _, cancel_res, cancel_code = _send_tool_call(ctx.app, sid, "worker_cancel", {"worker": "w06-dec", "reason": "cancel held decision"})
+        _, cancel_res, cancel_code = _call_tool(ctx.app, sid, "worker_cancel", {"worker": "w06-dec", "reason": "cancel held decision"})
         jrow = _ro_one(ctx.db_path, "SELECT status FROM worker_jobs WHERE id=?", (job_id,))
         _check(checks, "cancel_during_decision_succeeded", cancel_code == "", {"code": cancel_code, "res": cancel_res.get("outcome")})
         _check(checks, "job_canceled_from_hold", bool(jrow and jrow["status"] == "canceled"), jrow)
@@ -784,7 +877,7 @@ def _slot_w06_03_cancel_terminal_refusal(ctx: SlotContext) -> dict[str, Any]:
             worker_name="w06-done",
             commands=['cat c3.txt', 'edit --path c3.txt --old-string "base" --new-string "done"'],
         )
-        _, cancel_res, cancel_code = _send_tool_call(ctx.app, sid, "worker_cancel", {"worker": run["worker_name"], "reason": "too late"})
+        _, cancel_res, cancel_code = _call_tool(ctx.app, sid, "worker_cancel", {"worker": run["worker_name"], "reason": "too late"})
         _check(checks, "terminal_cancel_refused", cancel_code in {"WORKER_CANCEL_TERMINAL", "WORKER_CANCEL_NOT_RUNNING"}, {"code": cancel_code, "content": str(cancel_res.get("content") or "")[:200]})
         return {
             "typed_result": {"worker": run["worker_name"], "refusal_code": cancel_code},
@@ -808,14 +901,14 @@ def _slot_w07_01_request_and_answer_decision(ctx: SlotContext) -> dict[str, Any]
         job_id, _, _ = _dispatch_task(ctx.app, sid, goal="Ask decision then update dec.txt", scope={"mode": "write", "paths": ["dec.txt"]}, worker_name="w07-dec")
         wait_id = _park_wait(ctx.app, sid)
         csid = _wait_child_sid(ctx.app, ctx.db_path, job_id, sid)
-        _send_tool_call(ctx.app, csid, "request_decision", {"question": "Use value d1?", "options": ["yes", "no"]})
+        _call_tool(ctx.app, csid, "request_decision", {"question": "Use value d1?", "options": ["yes", "no"]})
         _settle_child_leg(ctx.app, ctx.db_path, csid, job_id, sid, brief="Holding for decision.", expected_statuses={"held", "complete"})
         _wait_tool_result(ctx.app, sid, wait_id)
 
-        _, ans_res, ans_code = _send_tool_call(ctx.app, sid, "answer_decision", {"worker": "w07-dec", "answer": "yes, use d1"})
+        _, ans_res, ans_code = _call_tool(ctx.app, sid, "answer_decision", {"worker": "w07-dec", "answer": "yes, use d1"})
         wait2 = _park_wait(ctx.app, sid)
-        _send_tool_call(ctx.app, csid, "command", {"command": "cat dec.txt"})
-        _send_tool_call(ctx.app, csid, "command", {"command": 'edit --path dec.txt --old-string "d0" --new-string "d1"'})
+        _call_tool(ctx.app, csid, "command", {"command": "cat dec.txt"})
+        _call_tool(ctx.app, csid, "command", {"command": 'edit --path dec.txt --old-string "d0" --new-string "d1"'})
         _settle_child_leg(ctx.app, ctx.db_path, csid, job_id, sid, brief="Applied d1 after decision.")
         _wait_tool_result(ctx.app, sid, wait2)
         handle = _lookup_result_handle(ctx.db_path, job_id)
@@ -838,9 +931,9 @@ def _slot_w07_02_message_coordinator_non_blocking(ctx: SlotContext) -> dict[str,
         job_id, _, _ = _dispatch_task(ctx.app, sid, goal="Send progress message and edit msg.txt", scope={"mode": "write", "paths": ["msg.txt"]}, worker_name="w07-msg")
         wait_id = _park_wait(ctx.app, sid)
         csid = _wait_child_sid(ctx.app, ctx.db_path, job_id, sid)
-        _, mres, mcode = _send_tool_call(ctx.app, csid, "message_coordinator", {"message": "Halfway through msg.txt."})
-        _send_tool_call(ctx.app, csid, "command", {"command": "cat msg.txt"})
-        _send_tool_call(ctx.app, csid, "command", {"command": 'edit --path msg.txt --old-string "m0" --new-string "m1"'})
+        _, mres, mcode = _call_tool(ctx.app, csid, "message_coordinator", {"message": "Halfway through msg.txt."})
+        _call_tool(ctx.app, csid, "command", {"command": "cat msg.txt"})
+        _call_tool(ctx.app, csid, "command", {"command": 'edit --path msg.txt --old-string "m0" --new-string "m1"'})
         _settle_child_leg(ctx.app, ctx.db_path, csid, job_id, sid, brief="Done after status message.")
         _wait_tool_result(ctx.app, sid, wait_id)
         _check(checks, "message_coordinator_succeeded", mcode == "" and mres.get("outcome") == "completed", {"code": mcode, "outcome": mres.get("outcome")})
@@ -862,10 +955,10 @@ def _slot_w07_03_instruct_worker_asking(ctx: SlotContext) -> dict[str, Any]:
         job_id, _, _ = _dispatch_task(ctx.app, sid, goal="Ask decision", scope={"mode": "write", "paths": ["ask.txt"]}, worker_name="w07-ask")
         wait_id = _park_wait(ctx.app, sid)
         csid = _wait_child_sid(ctx.app, ctx.db_path, job_id, sid)
-        _send_tool_call(ctx.app, csid, "request_decision", {"question": "Need guidance", "options": ["go"]})
+        _call_tool(ctx.app, csid, "request_decision", {"question": "Need guidance", "options": ["go"]})
         _settle_child_leg(ctx.app, ctx.db_path, csid, job_id, sid, brief="Asking.", expected_statuses={"held", "complete"})
         _wait_tool_result(ctx.app, sid, wait_id)
-        _, res, code = _send_tool_call(ctx.app, sid, "instruct_worker", {"worker": "w07-ask", "instructions": "Keep going"})
+        _, res, code = _call_tool(ctx.app, sid, "instruct_worker", {"worker": "w07-ask", "instructions": "Keep going"})
         _check(checks, "instruct_worker_asking_refusal", code == "INSTRUCT_WORKER_ASKING", {"code": code, "content": str(res.get("content") or "")[:200]})
         return {"typed_result": {"refusal_code": code}, "independent_observation": {"job_id": job_id}, "checks": checks}
     finally:
@@ -878,9 +971,9 @@ def _slot_w07_04_instruct_worker_waiting(ctx: SlotContext) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     try:
         job_id, _, _ = _dispatch_task(ctx.app, sid, goal="Stay running", scope={"mode": "write", "paths": ["w.txt"]}, worker_name="w07-wait")
-        _, res, code = _send_tool_call(ctx.app, sid, "instruct_worker", {"worker": "w07-wait", "instructions": "Too early"})
+        _, res, code = _call_tool(ctx.app, sid, "instruct_worker", {"worker": "w07-wait", "instructions": "Too early"})
         _check(checks, "instruct_worker_waiting_refusal", code == "INSTRUCT_WORKER_WAITING", {"code": code, "content": str(res.get("content") or "")[:200]})
-        _send_tool_call(ctx.app, sid, "worker_cancel", {"worker": "w07-wait", "reason": "cleanup"})
+        _call_tool(ctx.app, sid, "worker_cancel", {"worker": "w07-wait", "reason": "cleanup"})
         return {"typed_result": {"refusal_code": code}, "independent_observation": {"job_id": job_id}, "checks": checks}
     finally:
         _finish_session(ctx.app, sid)
@@ -892,8 +985,8 @@ def _slot_w07_05_instruct_worker_closed(ctx: SlotContext) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     try:
         job_id, _, _ = _dispatch_task(ctx.app, sid, goal="Cancel me", scope={"mode": "write", "paths": ["cl.txt"]}, worker_name="w07-closed")
-        _send_tool_call(ctx.app, sid, "worker_cancel", {"worker": "w07-closed", "reason": "close worker"})
-        _, res, code = _send_tool_call(ctx.app, sid, "instruct_worker", {"worker": "w07-closed", "instructions": "After cancel"})
+        _call_tool(ctx.app, sid, "worker_cancel", {"worker": "w07-closed", "reason": "close worker"})
+        _, res, code = _call_tool(ctx.app, sid, "instruct_worker", {"worker": "w07-closed", "instructions": "After cancel"})
         _check(checks, "instruct_worker_closed_refusal", code == "INSTRUCT_WORKER_CLOSED", {"code": code, "content": str(res.get("content") or "")[:200]})
         return {"typed_result": {"refusal_code": code}, "independent_observation": {"job_id": job_id}, "checks": checks}
     finally:
@@ -905,7 +998,7 @@ def _slot_w07_06_instruct_worker_planned(ctx: SlotContext) -> dict[str, Any]:
     sid, _, _ = _open_coordinator(ctx.app, proj, "Reach INSTRUCT_WORKER_PLANNED on a planned worker.")
     checks: list[dict[str, Any]] = []
     try:
-        _, fp_res, fp_code = _send_tool_call(
+        _, fp_res, fp_code = _call_tool(
             ctx.app, sid, "fanout_plan",
             {
                 "workers": [
@@ -913,7 +1006,7 @@ def _slot_w07_06_instruct_worker_planned(ctx: SlotContext) -> dict[str, Any]:
                 ]
             },
         )
-        _, res, code = _send_tool_call(ctx.app, sid, "instruct_worker", {"worker": "w07-planned", "instructions": "Before dispatch"})
+        _, res, code = _call_tool(ctx.app, sid, "instruct_worker", {"worker": "w07-planned", "instructions": "Before dispatch"})
         _check(checks, "instruct_worker_planned_or_unknown", code in {"INSTRUCT_WORKER_PLANNED", "WORKER_NAME_UNKNOWN"}, {"fanout_code": fp_code, "code": code, "content": str(res.get("content") or "")[:200]})
         return {"typed_result": {"fanout_code": fp_code, "refusal_code": code}, "independent_observation": {"fanout_outcome": fp_res.get("outcome")}, "checks": checks}
     finally:
@@ -932,8 +1025,8 @@ def _slot_w07_07_instruct_worker_agent_sealed(ctx: SlotContext) -> dict[str, Any
             worker_name="w07-sealed",
             commands=['cat seal.txt', 'edit --path seal.txt --old-string "s0" --new-string "s1"'],
         )
-        _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
-        _, res, code = _send_tool_call(
+        _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
+        _, res, code = _call_tool(
             ctx.app, sid, "instruct_worker",
             {"worker": "w07-sealed", "instructions": "Switch to reviewer", "agent_type": "repo-researcher"},
         )
@@ -955,7 +1048,7 @@ def _slot_w07_08_instruct_worker_agent_changes_open(ctx: SlotContext) -> dict[st
             worker_name="w07-open",
             commands=['cat open.txt', 'edit --path open.txt --old-string "o0" --new-string "o1"'],
         )
-        _, res, code = _send_tool_call(
+        _, res, code = _call_tool(
             ctx.app, sid, "instruct_worker",
             {"worker": "w07-open", "instructions": "Switch agent while open", "agent_type": "repo-researcher"},
         )
@@ -970,7 +1063,7 @@ def _slot_w07_09_worker_name_unknown(ctx: SlotContext) -> dict[str, Any]:
     sid, _, _ = _open_coordinator(ctx.app, proj, "Reach WORKER_NAME_UNKNOWN on instruct_worker.")
     checks: list[dict[str, Any]] = []
     try:
-        _, res, code = _send_tool_call(ctx.app, sid, "instruct_worker", {"worker": "no-such-worker-xyz", "instructions": "noop"})
+        _, res, code = _call_tool(ctx.app, sid, "instruct_worker", {"worker": "no-such-worker-xyz", "instructions": "noop"})
         _check(checks, "worker_name_unknown_refusal", code == "WORKER_NAME_UNKNOWN", {"code": code, "content": str(res.get("content") or "")[:200]})
         return {"typed_result": {"refusal_code": code}, "independent_observation": {}, "checks": checks}
     finally:
@@ -986,7 +1079,7 @@ def _slot_w07_10_task_worker_name_taken(ctx: SlotContext) -> dict[str, Any]:
         _, res2, code2 = _dispatch_task(ctx.app, sid, goal="Duplicate name", scope={"mode": "write", "paths": ["dup.txt"]}, worker_name="w07-dup")
         _check(checks, "first_dispatch_ok", code1 == "" and bool(job1), {"code1": code1, "job1": job1})
         _check(checks, "duplicate_name_refused", code2 == "TASK_WORKER_NAME_TAKEN", {"code2": code2, "content": str(res2.get("content") or "")[:200]})
-        _send_tool_call(ctx.app, sid, "worker_cancel", {"worker": "w07-dup", "reason": "cleanup"})
+        _call_tool(ctx.app, sid, "worker_cancel", {"worker": "w07-dup", "reason": "cleanup"})
         return {"typed_result": {"job1": job1, "refusal_code": code2}, "independent_observation": {}, "checks": checks}
     finally:
         _finish_session(ctx.app, sid)
@@ -997,7 +1090,7 @@ def _slot_w07_11_message_coordinator_no_worker(ctx: SlotContext) -> dict[str, An
     sid, _, _ = _open_coordinator(ctx.app, proj, "Reach MESSAGE_COORDINATOR_NO_WORKER when coordinator calls message_coordinator.")
     checks: list[dict[str, Any]] = []
     try:
-        _, res, code = _send_tool_call(ctx.app, sid, "message_coordinator", {"message": "Not a worker"})
+        _, res, code = _call_tool(ctx.app, sid, "message_coordinator", {"message": "Not a worker"})
         _check(checks, "no_worker_refusal_or_unavailable", code in {"MESSAGE_COORDINATOR_NO_WORKER", "TOOL_NOT_AVAILABLE", "TOOL_UNKNOWN"} or res.get("outcome") != "completed", {"code": code, "outcome": res.get("outcome")})
         return {"typed_result": {"refusal_code": code, "outcome": res.get("outcome")}, "independent_observation": {}, "checks": checks}
     finally:
@@ -1014,17 +1107,17 @@ def _slot_w07_12_decision_stays_with_raising_worker(ctx: SlotContext) -> dict[st
         wait_id = _park_wait(ctx.app, sid, kind="all_workers_done")
         csid_a = _wait_child_sid(ctx.app, ctx.db_path, job_a, sid)
         csid_b = _wait_child_sid(ctx.app, ctx.db_path, job_b, sid)
-        _send_tool_call(ctx.app, csid_a, "request_decision", {"question": "Approve A?", "options": ["yes"]})
+        _call_tool(ctx.app, csid_a, "request_decision", {"question": "Approve A?", "options": ["yes"]})
         _settle_child_leg(ctx.app, ctx.db_path, csid_a, job_a, sid, brief="A waiting on decision.", expected_statuses={"held", "complete"})
-        _send_tool_call(ctx.app, csid_b, "command", {"command": "cat b.txt"})
-        _send_tool_call(ctx.app, csid_b, "command", {"command": 'edit --path b.txt --old-string "b0" --new-string "b1"'})
+        _call_tool(ctx.app, csid_b, "command", {"command": "cat b.txt"})
+        _call_tool(ctx.app, csid_b, "command", {"command": 'edit --path b.txt --old-string "b0" --new-string "b1"'})
         _settle_child_leg(ctx.app, ctx.db_path, csid_b, job_b, sid, brief="B done independently.")
         _wait_tool_result(ctx.app, sid, wait_id)
 
         dec_rows = _ro_query(ctx.db_path, "SELECT worker_job_id FROM worker_decisions WHERE worker_job_id IN (?, ?)", (job_a, job_b))
         _check(checks, "decision_bound_only_to_a", len(dec_rows) == 1 and dec_rows[0]["worker_job_id"] == job_a, dec_rows)
         _check(checks, "sibling_b_settled", bool(_lookup_result_handle(ctx.db_path, job_b)), _lookup_result_handle(ctx.db_path, job_b))
-        _send_tool_call(ctx.app, sid, "worker_cancel", {"worker": "w07-dec-a", "reason": "cleanup"})
+        _call_tool(ctx.app, sid, "worker_cancel", {"worker": "w07-dec-a", "reason": "cleanup"})
         return {"typed_result": {"decisions": dec_rows, "job_a": job_a, "job_b": job_b}, "independent_observation": {}, "checks": checks}
     finally:
         _finish_session(ctx.app, sid)
@@ -1057,7 +1150,7 @@ def _slot_w08_01_reviewer_reads_exact_delivered_snapshot(ctx: SlotContext) -> di
         )
         wait_id = _park_wait(ctx.app, sid)
         rev_csid = _wait_child_sid(ctx.app, ctx.db_path, rev_job, sid)
-        _, cat_res, _ = _send_tool_call(ctx.app, rev_csid, "command", {"command": "cat rev.txt"})
+        _, cat_res, _ = _call_tool(ctx.app, rev_csid, "command", {"command": "cat rev.txt"})
         saw_snapshot = "delivered-snapshot-v1" in str(cat_res.get("content") or "")
         _settle_child_leg(ctx.app, ctx.db_path, rev_csid, rev_job, sid, brief="Reviewed rev.txt snapshot.", leg_status="partial")
         _wait_tool_result(ctx.app, sid, wait_id)
@@ -1093,15 +1186,15 @@ def _slot_w08_02_reviewer_isolated_from_later_producer_round(ctx: SlotContext) -
             worker_name="w08-rev2",
             review_of=prod["result_handle"],
         )
-        _, inst_res, _ = _send_tool_call(ctx.app, sid, "instruct_worker", {"worker": "w08-prod2", "instructions": "Update snap.txt to r2."})
+        _, inst_res, _ = _call_tool(ctx.app, sid, "instruct_worker", {"worker": "w08-prod2", "instructions": "Update snap.txt to r2."})
         prod_job2 = _extract_job_id(inst_res)
         wait_id = _park_wait(ctx.app, sid, kind="all_workers_done")
         prod_csid2 = _wait_child_sid(ctx.app, ctx.db_path, prod_job2, sid)
         rev_csid = _wait_child_sid(ctx.app, ctx.db_path, rev_job, sid)
         # Producer edits to r2 FIRST, then reviewer reads snap.txt.
-        _send_tool_call(ctx.app, prod_csid2, "command", {"command": "cat snap.txt"})
-        _send_tool_call(ctx.app, prod_csid2, "command", {"command": 'edit --path snap.txt --old-string "snapshot-r1" --new-string "mutated-r2"'})
-        _, rev_cat, _ = _send_tool_call(ctx.app, rev_csid, "command", {"command": "cat snap.txt"})
+        _call_tool(ctx.app, prod_csid2, "command", {"command": "cat snap.txt"})
+        _call_tool(ctx.app, prod_csid2, "command", {"command": 'edit --path snap.txt --old-string "snapshot-r1" --new-string "mutated-r2"'})
+        _, rev_cat, _ = _call_tool(ctx.app, rev_csid, "command", {"command": "cat snap.txt"})
         rev_body = str(rev_cat.get("content") or "")
         _settle_child_leg(ctx.app, ctx.db_path, prod_csid2, prod_job2, sid, brief="Producer round 2 done.")
         _settle_child_leg(ctx.app, ctx.db_path, rev_csid, rev_job, sid, brief="Reviewer read r1 snapshot.", leg_status="partial")
@@ -1129,13 +1222,13 @@ def _slot_w11_01_disjoint_fanout_wave(ctx: SlotContext) -> dict[str, Any]:
         wait_id = _park_wait(ctx.app, sid, kind="all_workers_done")
         for idx, (jid, fname) in enumerate(jobs, 1):
             csid = _wait_child_sid(ctx.app, ctx.db_path, jid, sid)
-            _send_tool_call(ctx.app, csid, "command", {"command": f"cat {fname}"})
-            _send_tool_call(ctx.app, csid, "command", {"command": f'edit --path {fname} --old-string "{idx}" --new-string "landed-{idx}"'})
+            _call_tool(ctx.app, csid, "command", {"command": f"cat {fname}"})
+            _call_tool(ctx.app, csid, "command", {"command": f'edit --path {fname} --old-string "{idx}" --new-string "landed-{idx}"'})
             _settle_child_leg(ctx.app, ctx.db_path, csid, jid, sid, brief=f"Updated {fname}.")
         _wait_tool_result(ctx.app, sid, wait_id)
         handles = [_lookup_result_handle(ctx.db_path, jid) for jid, _ in jobs]
         for h in handles:
-            _, _, pcode = _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": h})
+            _, _, pcode = _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": h})
             _check(checks, f"promote_{h[:8]}", pcode == "", pcode)
         all_landed = all((proj / f"f{i}.txt").read_text(encoding="utf-8") == f"landed-{i}\n" for i in (1, 2, 3))
         _check(checks, "all_3_handles_issued", len([h for h in handles if h]) == 3, handles)
@@ -1155,16 +1248,16 @@ def _slot_w11_02_overlapping_reservations_promotion_authority(ctx: SlotContext) 
         wait_id = _park_wait(ctx.app, sid, kind="all_workers_done")
         c1 = _wait_child_sid(ctx.app, ctx.db_path, j1, sid)
         c2 = _wait_child_sid(ctx.app, ctx.db_path, j2, sid)
-        _send_tool_call(ctx.app, c1, "command", {"command": "cat ov.txt"})
-        _send_tool_call(ctx.app, c1, "command", {"command": 'edit --path ov.txt --old-string "base" --new-string "one"'})
-        _send_tool_call(ctx.app, c2, "command", {"command": "cat ov.txt"})
-        _send_tool_call(ctx.app, c2, "command", {"command": 'edit --path ov.txt --old-string "base" --new-string "two"'})
+        _call_tool(ctx.app, c1, "command", {"command": "cat ov.txt"})
+        _call_tool(ctx.app, c1, "command", {"command": 'edit --path ov.txt --old-string "base" --new-string "one"'})
+        _call_tool(ctx.app, c2, "command", {"command": "cat ov.txt"})
+        _call_tool(ctx.app, c2, "command", {"command": 'edit --path ov.txt --old-string "base" --new-string "two"'})
         _settle_child_leg(ctx.app, ctx.db_path, c1, j1, sid, brief="ov1 done")
         _settle_child_leg(ctx.app, ctx.db_path, c2, j2, sid, brief="ov2 done")
         _wait_tool_result(ctx.app, sid, wait_id)
         h1, h2 = _lookup_result_handle(ctx.db_path, j1), _lookup_result_handle(ctx.db_path, j2)
-        _, _, c1_code = _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": h1})
-        _, _, c2_code = _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": h2})
+        _, _, c1_code = _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": h1})
+        _, _, c2_code = _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": h2})
         _check(checks, "first_promoted_cleanly", c1_code == "", c1_code)
         _check(checks, "second_blocked_by_promotion_conflict", c2_code == "OVERLAY_PROMOTE_CONFLICT", c2_code)
         _check(checks, "first_bytes_preserved", (proj / "ov.txt").read_text(encoding="utf-8") == "one\n", (proj / "ov.txt").read_text(encoding="utf-8"))
@@ -1182,10 +1275,10 @@ def _slot_w11_03_other_session_works_during_wave(ctx: SlotContext) -> dict[str, 
     try:
         j1, _, _ = _dispatch_task(ctx.app, sid1, goal="Edit w1.txt", scope={"mode": "write", "paths": ["w1.txt"]}, worker_name="w11-s1")
         # While session 1 has a worker in flight, session 2 performs a direct edit on proj2.
-        _send_tool_call(ctx.app, sid2, "command", {"command": "cat other.txt"})
-        _, ed_res, ed_code = _send_tool_call(ctx.app, sid2, "command", {"command": 'edit --path other.txt --old-string "o0" --new-string "o1"'})
+        _call_tool(ctx.app, sid2, "command", {"command": "cat other.txt"})
+        _, ed_res, ed_code = _call_tool(ctx.app, sid2, "command", {"command": 'edit --path other.txt --old-string "o0" --new-string "o1"'})
         _check(checks, "other_session_edited_during_wave", ed_code == "" and (proj2 / "other.txt").read_text(encoding="utf-8") == "o1\n", {"code": ed_code, "body": (proj2 / "other.txt").read_text(encoding="utf-8")})
-        _send_tool_call(ctx.app, sid1, "worker_cancel", {"worker": "w11-s1", "reason": "cleanup"})
+        _call_tool(ctx.app, sid1, "worker_cancel", {"worker": "w11-s1", "reason": "cleanup"})
         return {"typed_result": {"job1": j1, "sid2_edit_outcome": ed_res.get("outcome")}, "independent_observation": {"proj2_other": (proj2 / "other.txt").read_text(encoding="utf-8")}, "checks": checks}
     finally:
         _finish_session(ctx.app, sid2)
@@ -1217,9 +1310,9 @@ def _w02_mutation_slot(
             commands=commands,
             extra_complete_args=extra_complete_args,
         )
-        _, prev_res, prev_code = _send_tool_call(ctx.app, sid, "preview_overlay", {"overlay_id": run["result_handle"]})
+        _, prev_res, prev_code = _call_tool(ctx.app, sid, "preview_overlay", {"overlay_id": run["result_handle"]})
         prev_content = str(prev_res.get("content") or "")
-        _, prom_res, prom_code = _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
+        _, prom_res, prom_code = _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
         diff = diff_tree_hashes(hash_tree(snap), hash_tree(proj))
         actual_changed = set(diff["added"]) | set(diff["removed"]) | set(diff["modified"])
         _check(checks, "preview_succeeded", prev_code == "", {"code": prev_code, "excerpt": prev_content[:200]})
@@ -1267,9 +1360,9 @@ def _slot_w02_06_binary_nontext(ctx: SlotContext) -> dict[str, Any]:
             scope_paths=["."],
             commands=[r"python3 -c 'open(\"blob.bin\", \"wb\").write(b\"\x89PNG\x00\x01\x02\xff\")'"],
         )
-        _, prev_res, _ = _send_tool_call(ctx.app, sid, "preview_overlay", {"overlay_id": run["result_handle"]})
+        _, prev_res, _ = _call_tool(ctx.app, sid, "preview_overlay", {"overlay_id": run["result_handle"]})
         prev_content = str(prev_res.get("content") or "")
-        _, _, prom_code = _send_tool_call(
+        _, _, prom_code = _call_tool(
             ctx.app, sid, "promote_overlay",
             {"overlay_id": run["result_handle"], "resolutions": [{"path": "blob.bin", "action": "keep_theirs"}]},
         )
@@ -1299,7 +1392,7 @@ def _slot_w02_08_readonly_no_changed_paths(ctx: SlotContext) -> dict[str, Any]:
         job_id, _, _ = _dispatch_task(ctx.app, sid, goal="Read ro.txt", agent_type="repo-researcher", scope={"mode": "read"})
         wait_id = _park_wait(ctx.app, sid)
         csid = _wait_child_sid(ctx.app, ctx.db_path, job_id, sid)
-        _send_tool_call(ctx.app, csid, "command", {"command": "cat ro.txt"})
+        _call_tool(ctx.app, csid, "command", {"command": "cat ro.txt"})
         _settle_child_leg(ctx.app, ctx.db_path, csid, job_id, sid, brief="Read ro.txt cleanly.", leg_status="partial")
         _wait_tool_result(ctx.app, sid, wait_id)
         handle = _lookup_result_handle(ctx.db_path, job_id)
@@ -1363,7 +1456,7 @@ def _slot_w03_01_landed_disposition(ctx: SlotContext) -> dict[str, Any]:
         obs = WorkersObserver(proj, ctx.db_path)
         obs.capture_pre()
         run = _run_write_worker_edit(ctx.app, ctx.db_path, sid, goal="Edit d1.txt", scope_paths=["d1.txt"], commands=['cat d1.txt', 'edit --path d1.txt --old-string "v0" --new-string "v1"'])
-        _, prom_res, prom_code = _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
+        _, prom_res, prom_code = _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
         wobs = obs.capture_post(session_id=sid)
         landing = _extract_worker_landing_from_db(wobs, job_id=run["job_id"], promote_result=prom_res, expected_post_hashes={"d1.txt": sha256_bytes(b"v1\n")})
         _check(checks, "promoted_cleanly", prom_code == "" and (proj / "d1.txt").read_text(encoding="utf-8") == "v1\n", prom_code)
@@ -1379,7 +1472,7 @@ def _slot_w03_02_rejected_disposition_keeps_conversation(ctx: SlotContext) -> di
     checks: list[dict[str, Any]] = []
     try:
         run = _run_write_worker_edit(ctx.app, ctx.db_path, sid, goal="Edit d2.txt", scope_paths=["d2.txt"], commands=['cat d2.txt', 'edit --path d2.txt --old-string "keep" --new-string "discard"'])
-        _, rej_res, rej_code = _send_tool_call(ctx.app, sid, "reject_overlay", {"overlay_id": run["result_handle"], "reason": "unwanted"})
+        _, rej_res, rej_code = _call_tool(ctx.app, sid, "reject_overlay", {"overlay_id": run["result_handle"], "reason": "unwanted"})
         disp = _ro_one(ctx.db_path, "SELECT change_state FROM worker_result_dispositions WHERE result_id=?", (run["result_handle"],))
         child = _ro_one(ctx.db_path, "SELECT id FROM sessions WHERE id=?", (run["child_sid"],))
         _check(checks, "reject_succeeded", rej_code == "", rej_code)
@@ -1397,7 +1490,7 @@ def _slot_w03_03_shelved_disposition(ctx: SlotContext) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     try:
         run = _run_write_worker_edit(ctx.app, ctx.db_path, sid, goal="Edit d3.txt", scope_paths=["d3.txt"], commands=['cat d3.txt', 'edit --path d3.txt --old-string "keep" --new-string "shelved"'])
-        _, sh_res, sh_code = _send_tool_call(ctx.app, sid, "shelve_overlay", {"overlay_id": run["result_handle"], "reason": "defer"})
+        _, sh_res, sh_code = _call_tool(ctx.app, sid, "shelve_overlay", {"overlay_id": run["result_handle"], "reason": "defer"})
         _check(checks, "shelve_succeeded", sh_code == "" and "shelved" in str(sh_res.get("content") or ""), {"code": sh_code, "content": str(sh_res.get("content") or "")[:200]})
         _check(checks, "primary_unchanged", outside_diff_dirs(snap, proj)["identical"], outside_diff_dirs(snap, proj)["returncode"])
         return {"typed_result": {"handle": run["result_handle"], "shelve_code": sh_code}, "independent_observation": {"outside_diff": outside_diff_dirs(snap, proj)}, "checks": checks}
@@ -1411,18 +1504,18 @@ def _slot_w03_04_later_round_ends_shelved(ctx: SlotContext) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     try:
         run = _run_write_worker_edit(ctx.app, ctx.db_path, sid, goal="Edit d4.txt", scope_paths=["d4.txt"], worker_name="w03-sh", commands=['cat d4.txt', 'edit --path d4.txt --old-string "v0" --new-string "v1"'])
-        _send_tool_call(ctx.app, sid, "shelve_overlay", {"overlay_id": run["result_handle"], "reason": "defer"})
-        _, inst_res, inst_code = _send_tool_call(ctx.app, sid, "instruct_worker", {"worker": "w03-sh", "instructions": "Update d4.txt to v2."})
+        _call_tool(ctx.app, sid, "shelve_overlay", {"overlay_id": run["result_handle"], "reason": "defer"})
+        _, inst_res, inst_code = _call_tool(ctx.app, sid, "instruct_worker", {"worker": "w03-sh", "instructions": "Update d4.txt to v2."})
         job2 = _extract_job_id(inst_res)
         if job2:
             wait_id = _park_wait(ctx.app, sid)
             csid2 = _wait_child_sid(ctx.app, ctx.db_path, job2, sid)
-            _send_tool_call(ctx.app, csid2, "command", {"command": "cat d4.txt"})
-            _send_tool_call(ctx.app, csid2, "command", {"command": 'edit --path d4.txt --old-string "v1" --new-string "v2"'})
+            _call_tool(ctx.app, csid2, "command", {"command": "cat d4.txt"})
+            _call_tool(ctx.app, csid2, "command", {"command": 'edit --path d4.txt --old-string "v1" --new-string "v2"'})
             _settle_child_leg(ctx.app, ctx.db_path, csid2, job2, sid, brief="Updated to v2.")
             _wait_tool_result(ctx.app, sid, wait_id)
         h2 = _lookup_result_handle(ctx.db_path, job2) if job2 else ""
-        _, _, prom_code = _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": h2}) if h2 else ("", {}, "NO_HANDLE")
+        _, _, prom_code = _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": h2}) if h2 else ("", {}, "NO_HANDLE")
         _check(checks, "instruct_ended_shelve", inst_code == "" and bool(job2), {"inst_code": inst_code, "job2": job2})
         _check(checks, "round2_landed", prom_code == "" and (proj / "d4.txt").read_text(encoding="utf-8") == "v2\n", prom_code)
         return {"typed_result": {"h1": run["result_handle"], "h2": h2, "prom_code": prom_code}, "independent_observation": {"d4_txt": (proj / "d4.txt").read_text(encoding="utf-8")}, "checks": checks}
@@ -1439,10 +1532,10 @@ def _slot_w03_05_sequenced_promotion_via_pack_board(ctx: SlotContext) -> dict[st
         j2, _, _ = _dispatch_task(ctx.app, sid, goal="Edit s2.txt", scope={"mode": "write", "paths": ["s2.txt"]}, worker_name="w03-seq2")
         wait_id = _park_wait(ctx.app, sid, kind="all_workers_done")
         c1, c2 = _wait_child_sid(ctx.app, ctx.db_path, j1, sid), _wait_child_sid(ctx.app, ctx.db_path, j2, sid)
-        _send_tool_call(ctx.app, c1, "command", {"command": "cat s1.txt"})
-        _send_tool_call(ctx.app, c1, "command", {"command": 'edit --path s1.txt --old-string "1" --new-string "11"'})
-        _send_tool_call(ctx.app, c2, "command", {"command": "cat s2.txt"})
-        _send_tool_call(ctx.app, c2, "command", {"command": 'edit --path s2.txt --old-string "2" --new-string "22"'})
+        _call_tool(ctx.app, c1, "command", {"command": "cat s1.txt"})
+        _call_tool(ctx.app, c1, "command", {"command": 'edit --path s1.txt --old-string "1" --new-string "11"'})
+        _call_tool(ctx.app, c2, "command", {"command": "cat s2.txt"})
+        _call_tool(ctx.app, c2, "command", {"command": 'edit --path s2.txt --old-string "2" --new-string "22"'})
         _settle_child_leg(ctx.app, ctx.db_path, c1, j1, sid, brief="s1 done")
         _settle_child_leg(ctx.app, ctx.db_path, c2, j2, sid, brief="s2 done")
         _wait_tool_result(ctx.app, sid, wait_id)
@@ -1450,7 +1543,7 @@ def _slot_w03_05_sequenced_promotion_via_pack_board(ctx: SlotContext) -> dict[st
         seq = (board.get("overlay_merge_plan") or {}).get("promote_sequence") or []
         _check(checks, "promote_sequence_has_2", len(seq) == 2, seq)
         for h in seq:
-            _, _, pcode = _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": h})
+            _, _, pcode = _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": h})
             _check(checks, f"promote_{h[:8]}", pcode == "", pcode)
         _check(checks, "both_files_landed", (proj / "s1.txt").read_text(encoding="utf-8") == "11\n" and (proj / "s2.txt").read_text(encoding="utf-8") == "22\n", outside_diff_dirs(snap, proj)["returncode"])
         return {"typed_result": {"promote_sequence": seq}, "independent_observation": {"outside_diff": outside_diff_dirs(snap, proj)}, "checks": checks}
@@ -1464,8 +1557,8 @@ def _slot_w03_06_promote_not_pending(ctx: SlotContext) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     try:
         run = _run_write_worker_edit(ctx.app, ctx.db_path, sid, goal="Edit np.txt", scope_paths=["np.txt"], commands=['cat np.txt', 'edit --path np.txt --old-string "0" --new-string "1"'])
-        _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
-        _, res2, code2 = _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
+        _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
+        _, res2, code2 = _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
         _check(checks, "duplicate_promote_refused", code2 in {"OVERLAY_PROMOTE_NOT_PENDING", "RESULT_CHANGES_NOT_ADMITTED"}, {"code": code2, "content": str(res2.get("content") or "")[:200]})
         return {"typed_result": {"refusal_code": code2}, "independent_observation": {}, "checks": checks}
     finally:
@@ -1478,7 +1571,7 @@ def _slot_w03_07_promote_no_paths(ctx: SlotContext) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     try:
         run = _run_write_worker_edit(ctx.app, ctx.db_path, sid, goal="Edit p.txt", scope_paths=["p.txt"], commands=['cat p.txt', 'edit --path p.txt --old-string "0" --new-string "1"'])
-        _, res, code = _send_tool_call(ctx.app, sid, "preview_overlay", {"overlay_id": run["result_handle"], "path": "unmatched_file.txt"})
+        _, res, code = _call_tool(ctx.app, sid, "preview_overlay", {"overlay_id": run["result_handle"], "path": "unmatched_file.txt"})
         _check(checks, "no_paths_refusal", code == "OVERLAY_PROMOTE_NO_PATHS", {"code": code, "content": str(res.get("content") or "")[:200]})
         return {"typed_result": {"refusal_code": code}, "independent_observation": {}, "checks": checks}
     finally:
@@ -1491,11 +1584,11 @@ def _slot_w03_08_reject_worker_working(ctx: SlotContext) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     try:
         run = _run_write_worker_edit(ctx.app, ctx.db_path, sid, goal="Edit rw.txt", scope_paths=["rw.txt"], worker_name="w03-rw", commands=['cat rw.txt', 'edit --path rw.txt --old-string "0" --new-string "1"'])
-        _send_tool_call(ctx.app, sid, "shelve_overlay", {"overlay_id": run["result_handle"], "reason": "defer"})
-        _send_tool_call(ctx.app, sid, "instruct_worker", {"worker": "w03-rw", "instructions": "Keep working"})
-        _, res, code = _send_tool_call(ctx.app, sid, "reject_overlay", {"overlay_id": run["result_handle"], "reason": "reject while working"})
+        _call_tool(ctx.app, sid, "shelve_overlay", {"overlay_id": run["result_handle"], "reason": "defer"})
+        _call_tool(ctx.app, sid, "instruct_worker", {"worker": "w03-rw", "instructions": "Keep working"})
+        _, res, code = _call_tool(ctx.app, sid, "reject_overlay", {"overlay_id": run["result_handle"], "reason": "reject while working"})
         _check(checks, "reject_while_working_refused", code in {"OVERLAY_REJECT_WORKER_WORKING", "RESULT_CHANGES_NOT_ADMITTED"}, {"code": code, "content": str(res.get("content") or "")[:200]})
-        _send_tool_call(ctx.app, sid, "worker_cancel", {"worker": "w03-rw", "reason": "cleanup"})
+        _call_tool(ctx.app, sid, "worker_cancel", {"worker": "w03-rw", "reason": "cleanup"})
         return {"typed_result": {"refusal_code": code}, "independent_observation": {}, "checks": checks}
     finally:
         _finish_session(ctx.app, sid)
@@ -1507,7 +1600,7 @@ def _slot_w03_09_shelve_no_changes(ctx: SlotContext) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     try:
         run = _run_write_worker_edit(ctx.app, ctx.db_path, sid, goal="Read sn.txt only", scope_paths=["sn.txt"], commands=["cat sn.txt"])
-        _, res, code = _send_tool_call(ctx.app, sid, "shelve_overlay", {"overlay_id": run["result_handle"], "reason": "empty"})
+        _, res, code = _call_tool(ctx.app, sid, "shelve_overlay", {"overlay_id": run["result_handle"], "reason": "empty"})
         _check(checks, "shelve_no_changes_refused", code in {"SHELVE_OVERLAY_NO_CHANGES", "RESULT_CHANGES_NOT_ADMITTED"}, {"code": code, "content": str(res.get("content") or "")[:200]})
         return {"typed_result": {"refusal_code": code}, "independent_observation": {}, "checks": checks}
     finally:
@@ -1539,11 +1632,11 @@ def _slot_w03_11_result_changes_not_admitted(ctx: SlotContext) -> dict[str, Any]
         job_id, _, _ = _dispatch_task(ctx.app, sid, goal="Read ro.txt", agent_type="repo-researcher", scope={"mode": "read"})
         wait_id = _park_wait(ctx.app, sid)
         csid = _wait_child_sid(ctx.app, ctx.db_path, job_id, sid)
-        _send_tool_call(ctx.app, csid, "command", {"command": "cat ro.txt"})
+        _call_tool(ctx.app, csid, "command", {"command": "cat ro.txt"})
         _settle_child_leg(ctx.app, ctx.db_path, csid, job_id, sid, brief="Read only done.", leg_status="partial")
         _wait_tool_result(ctx.app, sid, wait_id)
         handle = _lookup_result_handle(ctx.db_path, job_id)
-        _, res, code = _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": handle})
+        _, res, code = _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": handle})
         _check(checks, "changes_not_admitted_refusal", code == "RESULT_CHANGES_NOT_ADMITTED", {"code": code, "content": str(res.get("content") or "")[:200]})
         return {"typed_result": {"handle": handle, "refusal_code": code}, "independent_observation": {}, "checks": checks}
     finally:
@@ -1557,7 +1650,7 @@ def _slot_w03_12_result_handle_unknown(ctx: SlotContext) -> dict[str, Any]:
     try:
         codes: dict[str, str] = {}
         for tool in ("promote_overlay", "reject_overlay", "shelve_overlay"):
-            _, _, code = _send_tool_call(ctx.app, sid, tool, {"overlay_id": "result-nonexistent-tb04", "reason": "stale"})
+            _, _, code = _call_tool(ctx.app, sid, tool, {"overlay_id": "result-nonexistent-tb04", "reason": "stale"})
             codes[tool] = code
             _check(checks, f"{tool}_unknown_handle", code == "RESULT_HANDLE_UNKNOWN", code)
         return {"typed_result": {"codes": codes}, "independent_observation": {}, "checks": checks}
@@ -1579,7 +1672,7 @@ def _slot_w04_01_compatible_three_way_merge(ctx: SlotContext) -> dict[str, Any]:
         run = _run_write_worker_edit(ctx.app, ctx.db_path, sid, goal="Edit line8", scope_paths=["merge.txt"], commands=['cat merge.txt', 'edit --path merge.txt --old-string "line8" --new-string "line8-worker"'])
         # Person edits line1 on primary tree during review.
         (proj / "merge.txt").write_text(base.replace("line1", "line1-person"), encoding="utf-8")
-        _, _, prom_code = _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
+        _, _, prom_code = _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
         final_body = (proj / "merge.txt").read_text(encoding="utf-8")
         _check(checks, "clean_3way_promoted", prom_code == "", prom_code)
         _check(checks, "both_edits_present", "line1-person" in final_body and "line8-worker" in final_body, final_body)
@@ -1604,7 +1697,7 @@ def _slot_w04_02_overlapping_text_conflict_person(ctx: SlotContext) -> dict[str,
         )
         (proj / "c.txt").write_text("val = person\n", encoding="utf-8")
         before_hash = hash_tree(proj)
-        _, _, code = _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
+        _, _, code = _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
         after_hash = hash_tree(proj)
         _check(checks, "conflict_detected", code == "OVERLAY_PROMOTE_CONFLICT", code)
         _check(checks, "primary_tree_atomic_untouched", before_hash == after_hash, diff_tree_hashes(before_hash, after_hash))
@@ -1622,20 +1715,20 @@ def _w04_two_overlapping_workers(ctx: SlotContext, order: tuple[str, str]) -> di
         jb, _, _ = _dispatch_task(ctx.app, sid, goal="Set owner=b", scope={"mode": "write", "paths": ["shared.txt"]}, worker_name="w04-b")
         wait_id = _park_wait(ctx.app, sid, kind="all_workers_done")
         ca, cb = _wait_child_sid(ctx.app, ctx.db_path, ja, sid), _wait_child_sid(ctx.app, ctx.db_path, jb, sid)
-        _send_tool_call(ctx.app, ca, "command", {"command": "cat shared.txt"})
-        _send_tool_call(ctx.app, ca, "command", {"command": 'edit --path shared.txt --old-string "owner = base" --new-string "owner = a"'})
-        _send_tool_call(ctx.app, cb, "command", {"command": "cat shared.txt"})
-        _send_tool_call(ctx.app, cb, "command", {"command": 'edit --path shared.txt --old-string "owner = base" --new-string "owner = b"'})
+        _call_tool(ctx.app, ca, "command", {"command": "cat shared.txt"})
+        _call_tool(ctx.app, ca, "command", {"command": 'edit --path shared.txt --old-string "owner = base" --new-string "owner = a"'})
+        _call_tool(ctx.app, cb, "command", {"command": "cat shared.txt"})
+        _call_tool(ctx.app, cb, "command", {"command": 'edit --path shared.txt --old-string "owner = base" --new-string "owner = b"'})
         _settle_child_leg(ctx.app, ctx.db_path, ca, ja, sid, brief="a done")
         _settle_child_leg(ctx.app, ctx.db_path, cb, jb, sid, brief="b done")
         _wait_tool_result(ctx.app, sid, wait_id)
         handles = {"a": _lookup_result_handle(ctx.db_path, ja), "b": _lookup_result_handle(ctx.db_path, jb)}
         first, second = order
-        _, _, c1 = _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": handles[first]})
+        _, _, c1 = _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": handles[first]})
         after_first = hash_tree(proj)
-        _, _, c2 = _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": handles[second]})
+        _, _, c2 = _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": handles[second]})
         after_conflict = hash_tree(proj)
-        _, _, c2_res = _send_tool_call(
+        _, _, c2_res = _call_tool(
             ctx.app, sid, "promote_overlay",
             {"overlay_id": handles[second], "resolutions": [{"path": "shared.txt", "content": f"owner = {first}+{second}\n"}]},
         )
@@ -1676,9 +1769,9 @@ def _slot_w04_05_opaque_binary_conflict_and_invalid_resolution(ctx: SlotContext)
         )
         (proj / "asset.bin").write_bytes(prim_bin)
         before_hash = hash_tree(proj)
-        _, _, conf_code = _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
+        _, _, conf_code = _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
         after_conf = hash_tree(proj)
-        _, _, res_code = _send_tool_call(
+        _, _, res_code = _call_tool(
             ctx.app, sid, "promote_overlay",
             {"overlay_id": run["result_handle"], "resolutions": [{"path": "asset.bin", "action": "keep_theirs"}]},
         )
@@ -1706,7 +1799,7 @@ def _slot_w09_01_worker_verify_receipt_current(ctx: SlotContext) -> dict[str, An
             scope_paths=["ok.txt"],
             commands=["cat ok.txt", 'edit --path ok.txt --old-string "0" --new-string "1"', "true"],
         )
-        _, prev_res, prev_code = _send_tool_call(ctx.app, sid, "preview_overlay", {"overlay_id": run["result_handle"]})
+        _, prev_res, prev_code = _call_tool(ctx.app, sid, "preview_overlay", {"overlay_id": run["result_handle"]})
         receipts = _ro_query(ctx.db_path, "SELECT id, tool, status, source_revision, source_root_digest FROM invocation_receipts WHERE session_id=?", (run["child_sid"],))
         _check(checks, "preview_succeeded", prev_code == "", prev_code)
         _check(checks, "worker_receipts_recorded_with_revision", any(r.get("source_revision") and r.get("source_root_digest") for r in receipts), len(receipts))
@@ -1720,7 +1813,7 @@ def _slot_w09_02_primary_verify_receipt(ctx: SlotContext) -> dict[str, Any]:
     sid, _, _ = _open_coordinator(ctx.app, proj, "Record verification command receipt on primary tree.", with_progress=False)
     checks: list[dict[str, Any]] = []
     try:
-        _, cmd_res, cmd_code = _send_tool_call(ctx.app, sid, "command", {"command": "true"})
+        _, cmd_res, cmd_code = _call_tool(ctx.app, sid, "command", {"command": "true"})
         receipts = _ro_query(ctx.db_path, "SELECT id, tool, status, source_revision, source_root_digest FROM invocation_receipts WHERE session_id=?", (sid,))
         _check(checks, "primary_command_completed", cmd_code == "" and cmd_res.get("outcome") == "completed", cmd_code)
         _check(checks, "receipt_names_revision_and_digest", any(r.get("source_revision") and r.get("source_root_digest") for r in receipts), receipts[:2])
@@ -1734,12 +1827,12 @@ def _slot_w09_03_receipt_stale_after_person_edit(ctx: SlotContext) -> dict[str, 
     sid, _, _ = _open_coordinator(ctx.app, proj, "Verify receipt revision changes after person edits primary file.", with_progress=False)
     checks: list[dict[str, Any]] = []
     try:
-        _send_tool_call(ctx.app, sid, "command", {"command": "true"})
+        _call_tool(ctx.app, sid, "command", {"command": "true"})
         r1 = _ro_query(ctx.db_path, "SELECT source_revision, source_root_digest FROM invocation_receipts WHERE session_id=? ORDER BY created_at ASC", (sid,))
         (proj / "v.txt").write_text("v2-person-edit\n", encoding="utf-8")
-        _send_tool_call(ctx.app, sid, "command", {"command": "cat v.txt"})
-        _send_tool_call(ctx.app, sid, "command", {"command": 'edit --path v.txt --old-string "v2-person-edit" --new-string "v3"'})
-        _send_tool_call(ctx.app, sid, "command", {"command": "true"})
+        _call_tool(ctx.app, sid, "command", {"command": "cat v.txt"})
+        _call_tool(ctx.app, sid, "command", {"command": 'edit --path v.txt --old-string "v2-person-edit" --new-string "v3"'})
+        _call_tool(ctx.app, sid, "command", {"command": "true"})
         r2 = _ro_query(ctx.db_path, "SELECT source_revision, source_root_digest FROM invocation_receipts WHERE session_id=? ORDER BY created_at ASC", (sid,))
         rev_changed = bool(r1 and r2 and r1[0].get("source_revision") != r2[-1].get("source_revision"))
         _check(checks, "receipt_revision_advanced_after_edit", rev_changed, {"first": r1[0] if r1 else None, "last": r2[-1] if r2 else None})
@@ -1753,11 +1846,11 @@ def _slot_w09_04_receipt_stale_after_landing(ctx: SlotContext) -> dict[str, Any]
     sid, _, _ = _open_coordinator(ctx.app, proj, "Verify primary receipt revision advances after worker landing.")
     checks: list[dict[str, Any]] = []
     try:
-        _send_tool_call(ctx.app, sid, "command", {"command": "true"})
+        _call_tool(ctx.app, sid, "command", {"command": "true"})
         before = _ro_query(ctx.db_path, "SELECT source_revision FROM invocation_receipts WHERE session_id=? ORDER BY created_at ASC", (sid,))
         run = _run_write_worker_edit(ctx.app, ctx.db_path, sid, goal="Edit l.txt", scope_paths=["l.txt"], commands=['cat l.txt', 'edit --path l.txt --old-string "l0" --new-string "l1"'])
-        _send_tool_call(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
-        _send_tool_call(ctx.app, sid, "command", {"command": "true"})
+        _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
+        _call_tool(ctx.app, sid, "command", {"command": "true"})
         after = _ro_query(ctx.db_path, "SELECT source_revision FROM invocation_receipts WHERE session_id=? ORDER BY created_at ASC", (sid,))
         _check(checks, "revision_advanced_after_landing", bool(before and after and before[0]["source_revision"] != after[-1]["source_revision"]), {"before": before[:1], "after": after[-1:]})
         return {"typed_result": {"before": before[:1], "after": after[-1:]}, "independent_observation": {"l_txt": (proj / "l.txt").read_text(encoding="utf-8")}, "checks": checks}
@@ -1792,26 +1885,26 @@ def _w10_restart_helper(ctx: SlotContext, action: str) -> dict[str, Any]:
         app1.close(cleanup=False)
 
     # Real OS process restart on the exact same app_dir / store.db!
-    app2, _ = ctx.start_dedicated_app("restart-app")
+    app2, _ = ctx.restart_dedicated_app("restart-app")
     pid2 = getattr(getattr(app2, "process", None), "pid", None)
     try:
         app2.request(f"/v1/sessions/{sid}/prompts", {"operation_id": str(uuid.uuid4()), "text": f"Resume after restart and {action} overlay {handle}."})
         if action == "promote":
-            _, res, code = _send_tool_call(app2, sid, "promote_overlay", {"overlay_id": handle})
-            _, dup_res, dup_code = _send_tool_call(app2, sid, "promote_overlay", {"overlay_id": handle})
+            _, res, code = _call_tool(app2, sid, "promote_overlay", {"overlay_id": handle})
+            _, dup_res, dup_code = _call_tool(app2, sid, "promote_overlay", {"overlay_id": handle})
             _check(checks, "distinct_sidecar_pids", pid1 != pid2 or pid1 is None, {"pid1": pid1, "pid2": pid2})
             _check(checks, "promote_succeeded_after_restart", code == "" and (proj / "restart.txt").read_text(encoding="utf-8") == "after-restart\n", {"code": code, "body": (proj / "restart.txt").read_text(encoding="utf-8")})
             _check(checks, "no_duplicate_landing", dup_code in {"OVERLAY_PROMOTE_NOT_PENDING", "RESULT_CHANGES_NOT_ADMITTED"}, {"dup_code": dup_code, "res": dup_res.get("outcome")})
         elif action == "reject":
-            _, res, code = _send_tool_call(app2, sid, "reject_overlay", {"overlay_id": handle, "reason": "reject after restart"})
+            _, res, code = _call_tool(app2, sid, "reject_overlay", {"overlay_id": handle, "reason": "reject after restart"})
             child = _ro_one(db_path, "SELECT id FROM sessions WHERE id=?", (child_sid,))
             _check(checks, "distinct_sidecar_pids", pid1 != pid2 or pid1 is None, {"pid1": pid1, "pid2": pid2})
             _check(checks, "reject_succeeded_after_restart", code == "", code)
             _check(checks, "primary_unchanged_after_reject", outside_diff_dirs(snap, proj)["identical"], outside_diff_dirs(snap, proj)["returncode"])
             _check(checks, "child_session_survived_restart_reject", bool(child), child)
         else:
-            _, prev_res, prev_code = _send_tool_call(app2, sid, "preview_overlay", {"overlay_id": handle})
-            _, res, code = _send_tool_call(app2, sid, "promote_overlay", {"overlay_id": handle})
+            _, prev_res, prev_code = _call_tool(app2, sid, "preview_overlay", {"overlay_id": handle})
+            _, res, code = _call_tool(app2, sid, "promote_overlay", {"overlay_id": handle})
             _check(checks, "distinct_sidecar_pids", pid1 != pid2 or pid1 is None, {"pid1": pid1, "pid2": pid2})
             _check(checks, "preview_succeeded_after_restart", prev_code == "" and "restart.txt" in str(prev_res.get("content") or ""), prev_code)
             _check(checks, "promote_succeeded_after_restart", code == "" and (proj / "restart.txt").read_text(encoding="utf-8") == "after-restart\n", code)
