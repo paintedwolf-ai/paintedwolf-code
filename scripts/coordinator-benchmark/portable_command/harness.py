@@ -17,7 +17,7 @@ from portable_command.contracts import DIRECTORY, ROOT, load_suite, materialize
 from portable_command.grading import grade_case
 from portable_command.handle_await import await_running_handle
 from portable_command.observe import build_observation, file_sha256, source_identity
-from portable_command.provenance import materialize_helpers
+from portable_command.provenance import materialize_helpers, materialize_host_facts
 from portable_command.reporting import inject_drafts, make_app_factory
 from progress import save
 
@@ -210,6 +210,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
     app_dir, project_dir, raw_dir = out_dir / 'app', out_dir / 'project', out_dir / 'raw'
     raw_dir.mkdir(parents=True, exist_ok=True)
     baseline_hashes = materialize(case, project_dir)
+    host_facts_ok, host_fact_bindings = materialize_host_facts(case['setup'].get('host_facts'), project_dir)
     expected_baseline = case.get('_expected_baseline_hashes')
     if expected_baseline is not None and expected_baseline != baseline_hashes:
         raise ValueError('replay bundle baseline_hashes do not match materialized fixture')
@@ -271,7 +272,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
         ('profile_binding_approximate', case.get('profile', 'implement') != 'implement'),
         ('profile_binding_mismatch', bool(eff_posture) and eff_posture != session_surface['requested_posture']),
         ('uninjected_drafts', bool(case['setup'].get('drafts')) and not drafts_ok),
-        ('uninjected_host_facts', bool(case['setup'].get('host_facts'))),
+        ('uninjected_host_facts', bool(case['setup'].get('host_facts')) and not host_facts_ok),
     ) if cond] + [g for rec in turn_records for g in ((rec.get('handle_await') or {}).get('gaps') or ())]
 
     try:

@@ -7,6 +7,7 @@ import platform
 import shlex
 import subprocess
 import uuid
+import zipfile
 import smoke
 from built_runtime import engine_path
 from portable_command.contracts import DIRECTORY, ROOT, bytes_value
@@ -56,6 +57,24 @@ def materialize_helpers(helpers, helpers_dir):
             script.write_text(f"#!/bin/sh\nprintf '%s' {out}\nprintf '%s' {err} >&2\nexit {code}\n")
         script.chmod(0o755)
     return dest
+
+
+def materialize_host_facts(host_facts, project_dir):
+    """Materialize supported file-based host_facts (e.g. archive_fixture) into project_dir."""
+    if not host_facts:
+        return True, {}
+    bindings, unhandled = {}, []
+    for key, spec in host_facts.items():
+        if key == 'archive_fixture' and isinstance(spec, dict) and spec.get('kind') == 'zip':
+            zpath = pathlib.Path(project_dir) / 'hostile.zip'
+            with zipfile.ZipFile(zpath, 'w') as zf:
+                for entry in spec.get('entries') or ():
+                    zf.writestr(entry['path'], bytes_value(entry['bytes']))
+            bindings[key] = {'injected': True, 'path': 'hostile.zip', 'entries': len(spec.get('entries') or ())}
+        else:
+            bindings[key] = {'injected': False}
+            unhandled.append(key)
+    return not unhandled, bindings
 
 
 def make_app_factory(engine_bin=None, base_factory=smoke.Application, helpers_dir=None):

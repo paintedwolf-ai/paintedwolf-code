@@ -1,7 +1,8 @@
 """Independent observation and audit builder for native Portable Command runs."""
 import json
+import pathlib
 from portable_command.artifacts import project_hashes
-from portable_command.db_audit import ELIGIBLE_WRAPPER_OPS, query_db_audit, receipt_rows as _receipt_rows
+from portable_command.db_audit import ELIGIBLE_WRAPPER_OPS, query_db_audit, receipt_rows as _receipt_rows, verify_tar_bz2
 from portable_command.reporting import (
     FACT_OWNERS,
     extract_recovery as _extract_recovery,
@@ -244,9 +245,15 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         facts['complete_tree'] = True
     if recovery and recovery.get('owner_code'):
         facts['owner_refusal'] = True
-        facts['no_outside_effect'] = bool(recovery['zero_program_effects'] and (baseline_hashes is None or final_hashes == baseline_hashes))
-        if any(tok in recovery['owner_code'].lower() for tok in ('zip', 'traversal', 'escape', 'archive')):
+        no_escape = not (pathlib.Path(project_dir).parent / 'escape.txt').exists()
+        facts['no_outside_effect'] = bool(recovery['zero_program_effects'] and no_escape and (baseline_hashes is None or final_hashes == baseline_hashes))
+        if any(tok in recovery['owner_code'].lower() for tok in ('zip', 'traversal', 'escape', 'archive', 'path')):
             facts['zip_slip_refused'] = True
+    facts.update(verify_tar_bz2(project_dir, receipts, effects, audit['invocation_program_publications'], final_hashes))
+    temp_pins = [str(p.get('path') or '') for p in pins if p.get('role') == 'destination' and f'/scratch/{session_id}/' in str(p.get('path') or '')]
+    if temp_pins:
+        facts['temp_path_owned'] = True
+        facts['same_physical_identity'] = len(set(temp_pins)) == 1
     facts['structural_wrappers_valid'] = wrappers_valid
     for req_fact in case.get('required_evidence') or ():
         if req_fact not in facts:

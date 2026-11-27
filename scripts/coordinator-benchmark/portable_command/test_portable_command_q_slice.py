@@ -1,11 +1,14 @@
 """Focused unit controls for Q04, Q20, and Q21 owner-backed observations."""
 import hashlib
+import io
 import json
 import pathlib
 import sqlite3
+import tarfile
 import tempfile
 import unittest
-from portable_command import observe
+import zipfile
+from portable_command import observe, provenance
 from portable_command.contracts import load_suite
 from portable_command.test_portable_command_harness import create_audit_db
 
@@ -89,3 +92,42 @@ class PortableCommandQSliceTests(unittest.TestCase):
             self.assertTrue(obs['facts']['disk_provenance'])
             # confined_launch stays an explicit named missing_observation when not emitted by owner.
             self.assertIn('missing_observation:confined_launch:process_owner', audit['observation_gaps'])
+
+    def test_q19_archive_cross_decoder_hostile_zip_and_temp_namespace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            db_path, log_path, proj = self._base_env(root)
+            # 1) archive-create-extract: real bzip2 cross-decoder + confined entries + tar_extract path.
+            (proj / 'out').mkdir()
+            (proj / 'out' / 'input.txt').write_text('hello\n')
+            with tarfile.open(proj / 'bundle.tar.bz2', 'w:bz2') as tf:
+                info = tarfile.TarInfo('input.txt')
+                info.size = 6
+                tf.addfile(info, io.BytesIO(b'hello\n'))
+            db = sqlite3.connect(db_path)
+            db.execute("ALTER TABLE invocation_program_executions ADD COLUMN canonical TEXT DEFAULT ''")
+            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','completed',1)")
+            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,'')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,canonical) VALUES ('e1','p1',1,'extract_archive','tar','filesystem','completed','completed','tar -cjf ./bundle.tar.bz2 ./input.txt'), ('e2','p1',2,'mkdir','mkdir','filesystem','completed','completed','mkdir -p ./out'), ('e3','p1',3,'extract_archive','tar','filesystem','completed','completed','tar -xjf ./bundle.tar.bz2 -C ./out')")
+            db.execute("INSERT INTO invocation_program_revision_pins VALUES ('p1','e1',0,'destination','absent','bundle.tar.bz2')")
+            db.execute("INSERT INTO invocation_program_publications VALUES ('p1','sess1234','committed',1)")
+            db.commit(); db.close()
+            obs, audit = observe.build_observation(CASES['archive-create-extract'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=[{'program': CASES['archive-create-extract']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
+            self.assertTrue(obs['facts']['real_bzip2_cross_decoder'] and obs['facts']['confined_archive_entries'] and obs['facts']['recoverable_publication'])
+            self.assertEqual([e.get('path') for e in obs['effects']], ['bundle.tar.bz2', 'out', 'out/input.txt'])
+            # 2) hostile-archive: materialize_host_facts writes hostile.zip with '../escape.txt'.
+            ok, bindings = provenance.materialize_host_facts(CASES['hostile-archive']['setup']['host_facts'], proj)
+            self.assertTrue(ok and bindings['archive_fixture']['injected'])
+            with zipfile.ZipFile(proj / 'hostile.zip') as zf:
+                self.assertEqual(zf.namelist(), ['../escape.txt'])
+            # 3) temp-native-process-handoff: program $() wrapper + session-temp namespace.
+            audit_tmp = {
+                'invocation_program_executions': [
+                    {'id': 'w1', 'program_id': 'p1', 'operation_id': 'program $()', 'native_command': '', 'owner': 'processes', 'state': 'completed', 'effect_certainty': 'none'},
+                    {'id': 'e1', 'program_id': 'p1', 'operation_id': 'mktemp', 'native_command': 'mktemp', 'owner': 'filesystem', 'state': 'completed', 'effect_certainty': 'completed'},
+                ],
+                'invocation_program_publications': [],
+                'invocation_program_revision_pins': [{'execution_id': 'e1', 'role': 'destination', 'mode': 'absent', 'path': '/tmp/app/scratch/sess1234/tmp.abc'}],
+            }
+            rows, effs, wrappers = observe._receipt_rows(audit_tmp, [])
+            self.assertEqual((len(wrappers), rows[0]['operation'], effs[0]['namespace']), (1, 'mktemp', 'session-temp'))

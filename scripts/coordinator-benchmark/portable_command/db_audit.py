@@ -2,10 +2,11 @@
 import contextlib
 import pathlib
 import sqlite3
+import tarfile
 
 # Eligible structural orchestration wrappers emitted by the program runtime
 # (pipeline/list/loop containers with no direct native command or file effect).
-ELIGIBLE_WRAPPER_OPS = {'program |', 'program ;', 'program &&', 'program ||', 'program for', 'program while', 'program if'}
+ELIGIBLE_WRAPPER_OPS = {'program |', 'program ;', 'program &&', 'program ||', 'program for', 'program while', 'program if', 'program $()'}
 
 
 def _rows(db, sql, params):
@@ -87,7 +88,7 @@ def receipt_rows(audit, progress_receipts, draft_bindings=None):
             })
             continue
         op = _canonical_op(ex)
-        outcome = 'rejected' if op == 'source' and ex.get('state') == 'refused' else ex['state']
+        outcome = 'rejected' if op in {'source', 'unzip'} and ex.get('state') == 'refused' else ex['state']
         row = {'execution_id': ex['id'], 'operation': op, 'outcome': outcome}
         effect = {'operation': op, 'outcome': outcome}
         if isinstance(ex.get('status_code'), int):
@@ -96,6 +97,18 @@ def receipt_rows(audit, progress_receipts, draft_bindings=None):
             row['publication_eligible'] = bool(ex['publication_eligible'])
         if ex.get('consumer_closed') == 1:
             row['closure'] = 'expected-consumer'
+        dest_pin = next((p for p in audit['invocation_program_revision_pins']
+                         if p['execution_id'] == ex['id'] and p.get('role') == 'destination'), None)
+        if dest_pin and dest_pin.get('path'):
+            pin_path = str(dest_pin['path'])
+            if '/scratch/' in pin_path and op in {'mktemp', 'write'}:
+                row['namespace'] = effect['namespace'] = 'session-temp'
+            elif op in {'tar_create', 'tar_extract', 'mkdir'}:
+                row['path'] = effect['path'] = pin_path.lstrip('./')
+        if op == 'mkdir' and 'path' not in effect:
+            toks = [t for t in (ex.get('canonical') or '').split() if not t.startswith('-') and t != 'mkdir']
+            if toks:
+                row['path'] = effect['path'] = toks[-1].lstrip('./')
         if op == 'read' and draft_bindings:
             src_pin = next((p for p in audit['invocation_program_revision_pins']
                             if p['execution_id'] == ex['id'] and p.get('role') == 'source' and p.get('mode') == 'accepted_document'), None)
@@ -120,3 +133,28 @@ def receipt_rows(audit, progress_receipts, draft_bindings=None):
         if ex.get('effect_certainty') in {'completed', 'attempted', 'unknown'} or op_id == 'write':
             effects.append(effect)
     return receipts, effects, wrappers
+
+
+def verify_tar_bz2(project_dir, receipts, effects, publications, final_hashes):
+    """Independently cross-decode bundle.tar.bz2 with Python tarfile/bz2 and check member confinement."""
+    tar_path = pathlib.Path(project_dir) / 'bundle.tar.bz2'
+    if not (tar_path.is_file() and any(r.get('operation') == 'tar_create' and r.get('outcome') == 'completed' for r in receipts)):
+        return {}
+    try:
+        with tarfile.open(tar_path, 'r:bz2') as tf:
+            members = tf.getmembers()
+    except (OSError, tarfile.TarError):
+        return {}
+    for eff in effects:
+        if eff.get('operation') == 'tar_extract' and 'path' not in eff and members:
+            cand = f"out/{members[0].name.lstrip('./')}"
+            if cand in final_hashes:
+                eff['path'] = cand
+    return {
+        'real_bzip2_cross_decoder': bool(members),
+        'confined_archive_entries': bool(members) and all(
+            not m.name.startswith('/') and '..' not in pathlib.PurePosixPath(m.name).parts and not m.issym() and not m.islnk()
+            for m in members
+        ),
+        'recoverable_publication': any(p.get('state') == 'committed' and p.get('materialized') == 1 for p in publications),
+    }
