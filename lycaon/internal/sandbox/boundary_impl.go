@@ -107,6 +107,12 @@ func (b *Boundary) WithToolProfileSnapshot(ctx context.Context, profileID string
 	return withToolProfileSnapshot(ctx, toolProfileSnapshot{boundary: b, profile: prof}), nil
 }
 
+// NamedWriteGlobs returns the configured allow globs for a named scope.
+func (b *Boundary) NamedWriteGlobs(scopeName string) []string {
+	_, write, _ := ResolveScopeGlobs(b.pathScopes, scopeName)
+	return write
+}
+
 // AssertNamedWriteScope enforces a named path scope.
 func (b *Boundary) AssertNamedWriteScope(ctx context.Context, projectDir, relPath, scopeName string) error {
 	if err := b.AssertPathAllowed(ctx, projectDir, relPath, PathOpWrite); err != nil {
