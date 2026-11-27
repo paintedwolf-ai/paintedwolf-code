@@ -231,7 +231,7 @@ func TestCF07G01InProcessFreshnessAndColdWarming(t *testing.T) {
 		grepTool := &GrepTool{Boundary: boundary, Catalog: sourcecatalog.New()}
 		gotMatched := map[string]bool{}
 		err = grepTool.forEachGrepCatalogJob(ctx, tctx, grepTarget{root: rootRef, fullRoot: dir, displayRoot: "."}, false, sandbox.SurveyOptions{}, nil, func(job grepFileJob) bool {
-			gotMatched[job.displayPath] = true
+			gotMatched[job.rel] = true
 			return true
 		})
 		testutil.FailErr(t, "GrepTool.forEachGrepCatalogJob", err)
