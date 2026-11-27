@@ -63,8 +63,10 @@ To run your modified LGPL library in your own product build:
 1. Update the `portable_python_image` fields in `lycaon/config/runtime/portable-python/bundled-manifest.yaml` with the new digests from Step 2 (keeping the `portable_python_engine` `v0.2.0` section unchanged).
 2. Stage the paired engine and rebuilt image:
    ```bash
-   PW_PORTABLE_PYTHON_IMAGE_ARCHIVE=/tmp/custom-image-out/portable-python-image-pyc.tar.gz \
-     scripts/portable-python/stage-bundled.sh --root /tmp/custom-stage
+   scripts/portable-python/stage-bundled.sh \
+     --manifest lycaon/config/runtime/portable-python/bundled-manifest.yaml \
+     --image-source /tmp/custom-image-out/portable-python-image-pyc.tar.gz \
+     --root /tmp/custom-stage
    ```
 3. Build and run your product binary (`CGO_ENABLED=1`) pointing at `/tmp/custom-stage/portable-python`.
 
