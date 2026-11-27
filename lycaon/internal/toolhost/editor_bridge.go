@@ -121,8 +121,8 @@ func (b *editorDocumentsBridge) PublishDraft(
 		}
 		return pythondocuments.DocumentRevision{}, true, err
 	}
-	if strings.TrimSpace(res.PublicationError) != "" {
-		return pythondocuments.DocumentRevision{}, true, errors.New(res.PublicationError)
+	if res.PublicationError != nil {
+		return pythondocuments.DocumentRevision{}, true, res.PublicationError
 	}
 
 	return pythondocuments.DocumentRevision{
