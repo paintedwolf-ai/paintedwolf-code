@@ -82,7 +82,7 @@ FIXED_FAMILIES: tuple[FamilySelector, ...] = (
     # Writes and verdicts track (GB06, D5 tripled)
     FamilySelector("W01", "writes", "GB06", "sidecar", False, True, 6, 0, "Findings"),
     FamilySelector("W02", "writes", "GB06", "sidecar", False, True, 9, 0, "Review verdicts"),
-    FamilySelector("W03", "writes", "GB06", "sidecar", False, True, 9, 0, "Worker completion"),
+    FamilySelector("W03", "writes", "GB06", "sidecar", False, True, 10, 0, "Worker completion (+1 Decision 031 undelivered worker coordinate)"),
     FamilySelector("W04", "writes", "GB06", "sidecar", False, True, 7, 0, "Surface claims"),
     # Freshness and gates track (GB07, D5 tripled)
     FamilySelector("G01", "freshness", "GB07", "sidecar", False, True, 7, 0, "Verification freshness"),
@@ -237,6 +237,12 @@ DECISION_008_S06_ASSERTIONS: tuple[str, ...] = (
 )
 
 
+# Decision 031 explicit W03 sidecar assertion for undelivered worker coordinate
+DECISION_031_W03_ASSERTIONS: tuple[str, ...] = (
+    "W03-10-worker-undelivered-line-false-accept-contrast",
+)
+
+
 def manifest_summary() -> dict[str, int]:
     """Compute exact ledger counts across all 30 families."""
     fixed_sidecar = sum(f.sidecar_count for f in FIXED_FAMILIES)
@@ -275,11 +281,11 @@ def validate_manifest() -> dict[str, int]:
         "total_families": 30,
         "fixed_families": 26,
         "generated_families": 4,
-        "fixed_sidecar_slots": 173,
+        "fixed_sidecar_slots": 174,
         "fixed_in_process_slots": 30,
-        "fixed_base_slots": 203,
-        "fixed_tripled_per_platform": 435,
-        "fixed_both_platforms": 870,
+        "fixed_base_slots": 204,
+        "fixed_tripled_per_platform": 438,
+        "fixed_both_platforms": 876,
         "generated_in_process_per_platform_per_seed": 23000,
         "generated_sidecar_per_platform_per_seed": 700,
         "generated_per_platform_per_seed": 23700,
