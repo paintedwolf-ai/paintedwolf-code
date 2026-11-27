@@ -40,6 +40,11 @@ const (
 
 	// EnvEngineManifest overrides the bundled-manifest.yaml path for tooling/tests.
 	EnvEngineManifest = "PW_PORTABLE_PYTHON_ENGINE_MANIFEST"
+
+	// EnvArtifactDir optionally points staging at a local directory containing
+	// verified retained producer artifacts (PY07 native engine archives and
+	// PY08 checked-hash .pyc image tarballs).
+	EnvArtifactDir = "PW_PORTABLE_PYTHON_ARTIFACT_DIR"
 )
 
 // engineBuildIdentityBase64 may be stamped at link time via -ldflags
@@ -47,11 +52,32 @@ const (
 var engineBuildIdentityBase64 string
 
 // BundledEngineManifest pins a maintained PY07 native CPython/WASI AOT engine
-// release following the OpenGrep bundled-manifest.yaml convention.
+// release and its paired checked-hash CPython 3.12 package image following the
+// OpenGrep bundled-manifest.yaml convention.
 type BundledEngineManifest struct {
 	Engine    EngineReleaseSpec         `yaml:"portable_python_engine" json:"portable_python_engine"`
+	Image     *BundledImageSpec         `yaml:"portable_python_image,omitempty" json:"portable_python_image,omitempty"`
 	Selection *EngineSelectionReference `yaml:"portable_python_engine_selection,omitempty" json:"portable_python_engine_selection,omitempty"`
 	identity  *EngineBuildIdentity
+}
+
+// BundledImageSpec pins the verified deterministic checked-hash CPython 3.12
+// package image paired with the native engine release.
+type BundledImageSpec struct {
+	ImageID                  string `yaml:"image_id" json:"image_id"`
+	ArchiveName              string `yaml:"archive_name" json:"archive_name"`
+	ArchiveSHA256            string `yaml:"archive_sha256" json:"archive_sha256"`
+	ArchiveBytes             int64  `yaml:"archive_bytes,omitempty" json:"archive_bytes,omitempty"`
+	ManifestSHA256           string `yaml:"manifest_sha256" json:"manifest_sha256"`
+	PackagesTreeSHA256       string `yaml:"packages_tree_sha256,omitempty" json:"packages_tree_sha256,omitempty"`
+	CPythonWasmSHA256        string `yaml:"cpython_wasm_sha256" json:"cpython_wasm_sha256"`
+	MeteredWasmSHA256        string `yaml:"metered_wasm_sha256" json:"metered_wasm_sha256"`
+	ImportInventorySHA256    string `yaml:"import_inventory_sha256" json:"import_inventory_sha256"`
+	BytecodeInvalidationMode string `yaml:"bytecode_invalidation_mode" json:"bytecode_invalidation_mode"`
+	BytecodeMagicHex         string `yaml:"bytecode_magic_hex" json:"bytecode_magic_hex"`
+	PycCount                 int    `yaml:"pyc_count" json:"pyc_count"`
+	PycTreeSHA256            string `yaml:"pyc_tree_sha256" json:"pyc_tree_sha256"`
+	URL                      string `yaml:"url" json:"url"`
 }
 
 // EngineReleaseSpec describes one pinned PY07 native engine release.
@@ -316,6 +342,55 @@ func ValidateBundledEngineManifest(m *BundledEngineManifest) error {
 			return fmt.Errorf("portable python engine selection descriptor_sha256 must be a 64-char lowercase sha256")
 		}
 	}
+	if m.Image != nil {
+		if err := ValidateBundledImageSpec(m.Image, &m.Engine); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ValidateBundledImageSpec validates the pinned checked-hash .pyc image spec
+// and confirms its CPython/metered/import digests match the paired native engine.
+func ValidateBundledImageSpec(img *BundledImageSpec, eng *EngineReleaseSpec) error {
+	if img == nil {
+		return errors.New("portable python bundled image spec is nil")
+	}
+	if strings.TrimSpace(img.ImageID) == "" {
+		return errors.New("portable python bundled image missing image_id")
+	}
+	if strings.TrimSpace(img.ArchiveName) == "" {
+		return errors.New("portable python bundled image missing archive_name")
+	}
+	if !isLowerHexLen(img.ArchiveSHA256, 64) || isAllZerosHex(img.ArchiveSHA256) {
+		return errors.New("portable python bundled image missing pinned non-zero archive_sha256")
+	}
+	if !isLowerHexLen(img.ManifestSHA256, 64) || isAllZerosHex(img.ManifestSHA256) {
+		return errors.New("portable python bundled image missing pinned non-zero manifest_sha256")
+	}
+	if img.BytecodeInvalidationMode != "checked-hash" {
+		return fmt.Errorf("portable python bundled image bytecode_invalidation_mode %q must be checked-hash", img.BytecodeInvalidationMode)
+	}
+	if !strings.EqualFold(img.BytecodeMagicHex, CPython312BytecodeMagicHex) {
+		return fmt.Errorf("portable python bundled image bytecode_magic_hex %q must be %s", img.BytecodeMagicHex, CPython312BytecodeMagicHex)
+	}
+	if img.PycCount <= 0 {
+		return fmt.Errorf("portable python bundled image pyc_count must be positive (got %d)", img.PycCount)
+	}
+	if !isLowerHexLen(img.PycTreeSHA256, 64) || isAllZerosHex(img.PycTreeSHA256) {
+		return errors.New("portable python bundled image missing pinned non-zero pyc_tree_sha256")
+	}
+	if eng != nil {
+		if !strings.EqualFold(img.CPythonWasmSHA256, eng.CPythonWasmSHA256) {
+			return fmt.Errorf("bundled image cpython_wasm_sha256 %s != engine %s", img.CPythonWasmSHA256, eng.CPythonWasmSHA256)
+		}
+		if !strings.EqualFold(img.MeteredWasmSHA256, eng.MeteredWasmSHA256) {
+			return fmt.Errorf("bundled image metered_wasm_sha256 %s != engine %s", img.MeteredWasmSHA256, eng.MeteredWasmSHA256)
+		}
+		if !strings.EqualFold(img.ImportInventorySHA256, eng.ImportInventorySHA256) {
+			return fmt.Errorf("bundled image import_inventory_sha256 %s != engine %s", img.ImportInventorySHA256, eng.ImportInventorySHA256)
+		}
+	}
 	return nil
 }
 
@@ -419,6 +494,11 @@ func LoadEngineArtifactManifest(path string) (*EngineArtifactManifest, error) {
 // StagedEngineDir returns the canonical staged engine directory under stageRoot.
 func StagedEngineDir(stageRoot string) string {
 	return filepath.Join(stageRoot, "portable-python", "engine")
+}
+
+// StagedImageDir returns the canonical staged image directory under stageRoot.
+func StagedImageDir(stageRoot string) string {
+	return filepath.Join(stageRoot, "portable-python", "image")
 }
 
 func isLowerHexLen(s string, n int) bool {

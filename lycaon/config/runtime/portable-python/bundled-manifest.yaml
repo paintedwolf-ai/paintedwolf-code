@@ -1,5 +1,14 @@
-# Bundled Portable Python native AOT engine release manifest.
-# Selected from verified PY07 release pw-cpython-wasi-engine-v0.1.0 (tag v0.1.0).
+# Bundled Portable Python native AOT engine & checked-hash CPython 3.12 image manifest.
+#
+# Artifact provenance & development vs. release publication:
+#   - Selected from verified PY07 native engine release pw-cpython-wasi-engine-v0.1.0
+#     (tag v0.1.0, producer commit c8dc215cbd465623592b996f56c394124053d3b2) and paired
+#     PY08 deterministic checked-hash .pyc image pp-cpython-3.12.0-wasi-82ab6eac12146157.
+#   - Production HTTPS release URLs below document the future published release locations
+#     (release publication dependency). During development, staging resolves the exact
+#     SHA-256-verified retained producer artifacts from PW_PORTABLE_PYTHON_ARTIFACT_DIR or
+#     ~/.local/share/paintedwolf-portable-python/results/{PY07,PY08/image}/ before falling
+#     back to HTTPS fetch, and fails closed if neither verified source is obtainable.
 portable_python_engine:
   version: 3.12.0+paintedwolf.1
   origin: downstream
@@ -30,6 +39,21 @@ portable_python_engine:
       sha256: 94fb1994107f9fa0396e740cdc5cc3cdaaf73f3807df41de000df4eba9cd80b4
       archive_sha256: 2582eea157ae2b11fab943a5d014a8047724993d447ca406ee11b7738672e7ff
       codesign_hardened: false
+portable_python_image:
+  image_id: pp-cpython-3.12.0-wasi-82ab6eac12146157
+  archive_name: portable-python-image-pyc.tar.gz
+  archive_sha256: f999efcacb4257fc3ab0f493c580d4584fe2d4756c2a67f0e412da550433d67e
+  archive_bytes: 20088778
+  manifest_sha256: d8f9857bd32550251d0d45bcbb43bea3ba153948770b0d06c4cdbbbc95c5ffce
+  packages_tree_sha256: 918ad73cf9756a1435208dd1f7a306a06acee8f80f6eaecc15c4e6a59536299e
+  cpython_wasm_sha256: 5ce0cbeb843e6e5abf2d50c7158002e8333c26a40fbe27a7a52e66ee48cf64a8
+  metered_wasm_sha256: 774a08a7863c1dee1b2f21bb80fb9964f0dd5dc27bdf2294bdd8a11934e893c6
+  import_inventory_sha256: d4dca3e9def0586bdc7c43af04340073fcbd99b28a87f26f33341b30f00d623b
+  bytecode_invalidation_mode: checked-hash
+  bytecode_magic_hex: cb0d0d0a
+  pyc_count: 1043
+  pyc_tree_sha256: 2ade99599e380dfb61d7984d728e5a9df8ad6b03794a8e5d67d31c2c563ee2e7
+  url: https://github.com/paintedwolf-ai/paintedwolf-python-engine/releases/download/v0.1.0/portable-python-image-pyc.tar.gz
 portable_python_engine_selection:
   tag: pw-cpython-wasi-engine-v0.1.0
   producer_commit: c8dc215cbd465623592b996f56c394124053d3b2
