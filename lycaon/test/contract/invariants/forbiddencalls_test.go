@@ -294,10 +294,10 @@ func TestPortablePythonPlatformAdapterBoundaryNegativeControl(t *testing.T) {
 
 	cases := map[string]map[string]string{
 		"runtime.GOOS in pythonruntime": {
-			"lycaon/internal/pythonruntime/bad.go": "package pythonruntime\n\nimport \"runtime\"\n\nfunc bad() bool { return runtime.GOOS == \"darwin\" }\n",
+			"lycaon/internal/pythonruntime/bad.go": "package pythonruntime\n\nimport \"runtime\"\n\nfunc bad() string { return runtime.GOOS }\n",
 		},
 		"runtime.GOOS in portablepython": {
-			"lycaon/internal/portablepython/bad.go": "package portablepython\n\nimport \"runtime\"\n\nfunc bad() bool { return runtime.GOOS == \"darwin\" }\n",
+			"lycaon/internal/portablepython/bad.go": "package portablepython\n\nimport \"runtime\"\n\nfunc bad() string { return runtime.GOOS }\n",
 		},
 		"platform build tag in pythonruntime": {
 			"lycaon/internal/pythonruntime/bad_tag.go": "//go:build darwin\n\npackage pythonruntime\n",
