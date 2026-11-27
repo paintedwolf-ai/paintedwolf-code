@@ -18,17 +18,32 @@ import (
 // symbolProjectWorkers bounds projects searched at once on one symbol leg.
 const symbolProjectWorkers = 4
 
+// SymbolLegBudget binds the context deadline and per-phase time allocations
+// for one symbol leg. Nil in production, where SymbolExecutor enforces
+// budget.Wall() and budget.SymbolAllocation(). Tests inject a controlled
+// budget so assertions never depend on host speed.
+type SymbolLegBudget func(ctx context.Context, budget search.SearchBudget) (context.Context, context.CancelFunc, search.SymbolAllocation)
+
 // SymbolExecutor is search federation's symbol leg. In each project, content
 // discovery nominates files, their cached outlines confirm declarations, and
 // names rank by how they match, the pipeline Go to definition shares.
 type SymbolExecutor struct {
-	registry project.Registry
-	progress symbolProgressCache
+	registry  project.Registry
+	progress  symbolProgressCache
+	legBudget SymbolLegBudget
 }
 
 // NewSymbolExecutor returns the symbol leg over the project registry.
 func NewSymbolExecutor(registry project.Registry) *SymbolExecutor {
 	return &SymbolExecutor{registry: registry}
+}
+
+func (e *SymbolExecutor) bindLegBudget(ctx context.Context, budget search.SearchBudget) (context.Context, context.CancelFunc, search.SymbolAllocation) {
+	if e.legBudget != nil {
+		return e.legBudget(ctx, budget)
+	}
+	legCtx, cancel := context.WithTimeout(ctx, budget.Wall())
+	return legCtx, cancel, budget.SymbolAllocation()
 }
 
 func (e *SymbolExecutor) Source() string { return search.ExecutorSymbol }
@@ -63,7 +78,7 @@ func (e *SymbolExecutor) Run(ctx context.Context, leg search.PlanLeg) (search.Ex
 		return search.ExecutorReport{}, err
 	}
 	projects := symbolProjects(leg.Symbol.Roots)
-	legCtx, cancel := context.WithTimeout(ctx, leg.Symbol.Budget.Wall())
+	legCtx, cancel, allocation := e.bindLegBudget(ctx, leg.Symbol.Budget)
 	defer cancel()
 
 	results := make([]symbolProjectResult, len(projects))
@@ -80,7 +95,7 @@ func (e *SymbolExecutor) Run(ctx context.Context, leg search.PlanLeg) (search.Ex
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[i] = e.searchProject(legCtx, leg.Symbol, filter, p)
+			results[i] = e.searchProject(legCtx, leg.Symbol, filter, p, allocation)
 		}()
 	}
 	wg.Wait()
@@ -125,7 +140,7 @@ func (e *SymbolExecutor) Run(ctx context.Context, leg search.PlanLeg) (search.Ex
 	return report, nil
 }
 
-func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPlanLeg, filter search.SymbolFilter, target symbolProject) symbolProjectResult {
+func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPlanLeg, filter search.SymbolFilter, target symbolProject, allocation search.SymbolAllocation) symbolProjectResult {
 	p, err := e.registry.Get(ctx, target.id)
 	if err != nil {
 		return symbolProjectResult{err: err}
@@ -143,7 +158,6 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 		rootFilter, known := rootFilters[rootID]
 		return known && rootFilter.Admits(path, name)
 	}
-	allocation := leg.Budget.SymbolAllocation()
 	started := time.Now()
 	result, err := symbolsearch.Run(ctx, p, symbolsearch.Request{
 		Query:            leg.Name,
