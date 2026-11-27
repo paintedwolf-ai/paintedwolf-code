@@ -101,8 +101,102 @@ func (c *codeSet) merge(other *codeSet) {
 	}
 }
 
-// load builds the SSA program from the type-checked corpus.
+// load builds the SSA program from the type-checked packages reachable from
+// tree.httpLayer (within tree.scope) that can reference tree.codeType or live
+// in tree.httpLayer.
 func (tree handlerErrorTree) load(typed *invariants.Program, moduleDir string) *handlerErrorProgram {
+	reachable := map[string]bool{}
+	var markImports func(*types.Package)
+	markImports = func(tp *types.Package) {
+		if tp == nil || reachable[tp.Path()] {
+			return
+		}
+		reachable[tp.Path()] = true
+		for _, imp := range tp.Imports() {
+			markImports(imp)
+		}
+	}
+	for _, path := range typed.Order {
+		if strings.HasPrefix(path, tree.httpLayer) {
+			if pkg := typed.Packages[path]; pkg != nil {
+				markImports(pkg.Types)
+			}
+		}
+	}
+
+	codePkg := ""
+	if dot := strings.LastIndex(tree.codeType, "."); dot > 0 {
+		codePkg = tree.codeType[:dot]
+	}
+	hasCodePkg := map[string]bool{}
+	var importsCode func(*types.Package) bool
+	importsCode = func(tp *types.Package) bool {
+		if tp == nil {
+			return false
+		}
+		if v, ok := hasCodePkg[tp.Path()]; ok {
+			return v
+		}
+		hasCodePkg[tp.Path()] = false
+		if tp.Path() == codePkg {
+			hasCodePkg[tp.Path()] = true
+			return true
+		}
+		for _, imp := range tp.Imports() {
+			if importsCode(imp) {
+				hasCodePkg[tp.Path()] = true
+				return true
+			}
+		}
+		return false
+	}
+	// Packages outside httpLayer whose functions are directly called from
+	// httpLayer and return map[string]any can supply ErrorResponse.Details keys.
+	detailsHelperPkgs := map[string]bool{}
+	for _, path := range typed.Order {
+		if !strings.HasPrefix(path, tree.httpLayer) {
+			continue
+		}
+		pkg := typed.Packages[path]
+		if pkg == nil || pkg.Info == nil {
+			continue
+		}
+		for _, obj := range pkg.Info.Uses {
+			fn, ok := obj.(*types.Func)
+			if !ok || fn.Pkg() == nil || !tree.inScope(fn.Pkg().Path()) {
+				continue
+			}
+			if returnsStringAnyMap(fn.Type()) {
+				detailsHelperPkgs[fn.Pkg().Path()] = true
+			}
+		}
+		for _, sel := range pkg.Info.Selections {
+			fn, ok := sel.Obj().(*types.Func)
+			if !ok || fn.Pkg() == nil || !tree.inScope(fn.Pkg().Path()) {
+				continue
+			}
+			if returnsStringAnyMap(fn.Type()) {
+				detailsHelperPkgs[fn.Pkg().Path()] = true
+			}
+		}
+	}
+
+	hasErrorType := func(pkg *invariants.TypedPackage) bool {
+		if pkg == nil || pkg.Types == nil || !tree.inScope(pkg.Path) || !reachable[pkg.Path] {
+			return false
+		}
+		if strings.HasPrefix(pkg.Path, tree.httpLayer) || detailsHelperPkgs[pkg.Path] {
+			return true
+		}
+		if tree.codeType == "" && tree.errorBody == "" {
+			return true
+		}
+		if codePkg != "" && !importsCode(pkg.Types) {
+			return false
+		}
+		return packageMentionsType(pkg, tree.codeType, tree.errorBody)
+	}
+
 	prog := ssa.NewProgram(typed.Fset, ssa.InstantiateGenerics)
 	created := map[*types.Package]bool{}
 	var create func(*types.Package)
@@ -114,7 +208,7 @@ func (tree handlerErrorTree) load(typed *invariants.Program, moduleDir string) *
 		for _, imp := range tp.Imports() {
 			create(imp)
 		}
-		if pkg, ok := typed.Packages[tp.Path()]; ok && tree.inScope(tp.Path()) {
+		if pkg, ok := typed.Packages[tp.Path()]; ok && hasErrorType(pkg) {
 			files, info := ssaSyntax(pkg)
 			prog.CreatePackage(tp, files, info, true)
 			return
@@ -123,10 +217,10 @@ func (tree handlerErrorTree) load(typed *invariants.Program, moduleDir string) *
 	}
 	var ssaPkgs []*ssa.Package
 	for _, path := range typed.Order {
-		if !tree.inScope(path) {
+		pkg := typed.Packages[path]
+		if !hasErrorType(pkg) {
 			continue
 		}
-		pkg := typed.Packages[path]
 		create(pkg.Types)
 		ssaPkgs = append(ssaPkgs, prog.Package(pkg.Types))
 		// Export data reaches packages no import lists, such as the package
@@ -214,6 +308,87 @@ func reachesC(node ast.Node) bool {
 func (tree handlerErrorTree) inScope(path string) bool {
 	for _, prefix := range tree.scope {
 		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// packageMentionsType reports whether any typed expression, definition, or use
+// in pkg references a named type matching codeType or errorBody.
+func packageMentionsType(pkg *invariants.TypedPackage, codeType, errorBody string) bool {
+	seen := map[types.Type]bool{}
+	var matches func(types.Type) bool
+	matches = func(t types.Type) bool {
+		if t == nil || seen[t] {
+			return false
+		}
+		seen[t] = true
+		switch tt := t.(type) {
+		case *types.Named:
+			if obj := tt.Obj(); obj != nil && obj.Pkg() != nil {
+				full := obj.Pkg().Path() + "." + obj.Name()
+				if full == codeType || full == errorBody {
+					return true
+				}
+			}
+			return matches(tt.Underlying())
+		case *types.Alias:
+			return matches(types.Unalias(tt))
+		case *types.Pointer:
+			return matches(tt.Elem())
+		case *types.Slice:
+			return matches(tt.Elem())
+		case *types.Array:
+			return matches(tt.Elem())
+		case *types.Chan:
+			return matches(tt.Elem())
+		case *types.Map:
+			return matches(tt.Key()) || matches(tt.Elem())
+		case *types.Tuple:
+			for i := 0; i < tt.Len(); i++ {
+				if matches(tt.At(i).Type()) {
+					return true
+				}
+			}
+		case *types.Signature:
+			return matches(tt.Params()) || matches(tt.Results())
+		case *types.Struct:
+			for i := 0; i < tt.NumFields(); i++ {
+				if matches(tt.Field(i).Type()) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	for _, tv := range pkg.Info.Types {
+		if matches(tv.Type) {
+			return true
+		}
+	}
+	for _, obj := range pkg.Info.Defs {
+		if obj != nil && matches(obj.Type()) {
+			return true
+		}
+	}
+	return false
+}
+
+// returnsStringAnyMap reports whether sig returns a map with string keys
+// (such as map[string]any used for ErrorResponse.Details).
+func returnsStringAnyMap(t types.Type) bool {
+	sig, ok := t.(*types.Signature)
+	if !ok {
+		return false
+	}
+	res := sig.Results()
+	for i := 0; i < res.Len(); i++ {
+		m, ok := res.At(i).Type().Underlying().(*types.Map)
+		if !ok {
+			continue
+		}
+		if b, ok := m.Key().Underlying().(*types.Basic); ok && b.Kind() == types.String {
 			return true
 		}
 	}

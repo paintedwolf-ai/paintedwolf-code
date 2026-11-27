@@ -3,6 +3,7 @@ package invariants_test
 import (
 	"context"
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -35,13 +36,14 @@ func TestMain(m *testing.M) {
 }
 
 // TestInvariants evaluates every rule of every family against the repository.
+// Running typed families before untyped families sequentially avoids a 450-way
+// goroutine fanout under -race and releases go/types tables before prompt-render
+// and later package tests run.
 func TestInvariants(t *testing.T) {
-	t.Parallel()
 	corpus, err := invariants.Shared()
 	contractcheck.FailErr(t, "invariants.Shared failed", err)
-	for _, family := range families {
+	runFamily := func(family invariants.Family) {
 		t.Run(family.Name, func(t *testing.T) {
-			t.Parallel()
 			if len(family.Invariants) == 0 {
 				t.Fatal("family has no rules")
 			}
@@ -53,12 +55,31 @@ func TestInvariants(t *testing.T) {
 				}
 				seen[rule.Name] = true
 				t.Run(rule.Name, func(t *testing.T) {
-					t.Parallel()
 					if res := invariants.Evaluate(corpus, rule); res.Failed() {
 						t.Error(res.String())
 					}
 				})
 			}
 		})
+	}
+	typedFamilies := map[string]bool{
+		"closure":         true,
+		"enum-closure":    true,
+		"forbidden-calls": true,
+		"outbox-closure":  true,
+		"spec-sync":       true,
+		"sql-schema":      true,
+	}
+	for _, family := range families {
+		if typedFamilies[family.Name] {
+			runFamily(family)
+		}
+	}
+	corpus.ReleaseTypes()
+	runtime.GC()
+	for _, family := range families {
+		if !typedFamilies[family.Name] {
+			runFamily(family)
+		}
 	}
 }

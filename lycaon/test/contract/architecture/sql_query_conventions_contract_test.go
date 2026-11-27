@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"bytes"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -10,11 +11,8 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// reMattnImport / reSqlite3Driver enforce the single repo-wide SQLite driver.
-var (
-	reMattnImport   = regexp.MustCompile(`github\.com/mattn/go-sqlite3`)
-	reSqlite3Driver = regexp.MustCompile(`sql\.Open\(\s*"sqlite3"`)
-)
+// reSqlite3Driver enforces the single repo-wide SQLite driver.
+var reSqlite3Driver = regexp.MustCompile(`sql\.Open\(\s*"sqlite3"`)
 
 // TestSingleSQLiteDriver keeps the whole repo on the pure-Go modernc.org/sqlite
 // driver ("sqlite"). No file may import mattn/go-sqlite3 or open the CGO
@@ -25,6 +23,9 @@ func TestSingleSQLiteDriver(t *testing.T) {
 	lycaonDir := filepath.Join(root, "lycaon")
 	var violations []string
 	err := contractcheck.WalkFiles(lycaonDir, map[string]struct{}{".go": {}}, false, func(path string, data []byte) error {
+		if !bytes.Contains(data, []byte("sqlite3")) {
+			return nil
+		}
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
@@ -37,7 +38,10 @@ func TestSingleSQLiteDriver(t *testing.T) {
 		}
 		lines := strings.Split(string(data), "\n")
 		for i, line := range lines {
-			if reMattnImport.MatchString(line) {
+			if !strings.Contains(line, "sqlite3") {
+				continue
+			}
+			if strings.Contains(line, "github.com/mattn/go-sqlite3") {
 				violations = append(violations, rel+":"+strconv.Itoa(i+1)+": imports mattn/go-sqlite3 — use modernc.org/sqlite")
 			}
 			if reSqlite3Driver.MatchString(line) {

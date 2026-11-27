@@ -3,6 +3,7 @@ package specsync
 import (
 	"fmt"
 	"net/http"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -36,29 +37,35 @@ var handlerErrorRules = []invariants.Invariant{{
 	Check:   handlersEmitOnlyDeclaredErrors,
 }}
 
-// handlerScan is the SSA program of the module with its registered handlers,
-// built once per corpus.
-func handlerScan(r *invariants.Run, tree handlerErrorTree) (*handlerErrorProgram, []*handlerErrors) {
+// handlerScan resolves registered handler error codes and detail emissions
+// once per corpus, releasing the temporary SSA program immediately afterward.
+func handlerScan(r *invariants.Run, tree handlerErrorTree) ([]*handlerErrors, detailEmissions) {
 	type scan struct {
-		prog     *handlerErrorProgram
 		handlers []*handlerErrors
+		details  detailEmissions
 		problems []string
 	}
 	s := invariants.Part(r.Corpus, "handler errors", func() (scan, error) {
 		prog := tree.load(r.Types(), r.Go().ModuleDir)
 		handlers, problems := prog.scan()
-		return scan{prog, handlers, problems}, nil
+		details := prog.detailsOf(handlers)
+		for _, h := range handlers {
+			h.roots = nil
+		}
+		prog = nil
+		runtime.GC()
+		return scan{handlers: handlers, details: details, problems: problems}, nil
 	})
 	for _, problem := range s.problems {
 		r.Report("registration %s", problem)
 	}
-	return s.prog, s.handlers
+	return s.handlers, s.details
 }
 
 // Each code a handler can answer has a status its operation declares, and
 // each details key it answers with is declared by the code's notice.
 func handlersEmitOnlyDeclaredErrors(r *invariants.Run) {
-	prog, handlers := handlerScan(r, lycaonHandlers)
+	handlers, emitted := handlerScan(r, lycaonHandlers)
 	r.Expect(len(handlers), "registered handlers")
 	operations := operationsByVariable(r)
 	declared := map[string][]string{}
@@ -82,7 +89,6 @@ func handlersEmitOnlyDeclaredErrors(r *invariants.Run) {
 	}
 	cfg, err := usernotice.LoadNoticeDir(r.Path(userNoticesDir))
 	must(r, "load the platform notice catalog", err)
-	emitted := prog.detailsOf(handlers)
 	reportAll(r, undeclaredDetailViolations(emitted, noticeContextSchema(cfg)))
 	reportAll(r, unansweredContextViolations(emitted, cfg))
 }

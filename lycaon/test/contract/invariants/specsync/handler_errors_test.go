@@ -229,12 +229,12 @@ func TestHandlerErrorScanResolvesEachPattern(t *testing.T) {
 	}
 	tree := lycaonHandlers
 	tree.register = map[string]bool{"(*" + lycaonModule + "/internal/api.Server).registerV1Operation": true}
-	var prog *handlerErrorProgram
 	var handlers []*handlerErrors
+	var details detailEmissions
 	res := invariants.Evaluate(invariants.LoadFixture(dir), invariants.Invariant{
 		Name:    "scan",
 		Anchors: []invariants.Anchor{invariants.Dir("lycaon/internal/api")},
-		Check:   func(r *invariants.Run) { prog, handlers = handlerScan(r, tree) },
+		Check:   func(r *invariants.Run) { handlers, details = handlerScan(r, tree) },
 	})
 	if res.Failed() {
 		t.Fatalf("scan the fixture module:\n%s", res)
@@ -262,7 +262,6 @@ func TestHandlerErrorScanResolvesEachPattern(t *testing.T) {
 			[]string{"listWidgets: " + h.handler + " emits rate_limited (429) but declares 200 400 default"}, violations)
 	}
 
-	details := prog.detailsOf(handlers)
 	for code, keys := range map[string][]string{"invalid_request": {"reason"}, "widget_conflict": {"field", "hint"}} {
 		var gotKeys []string
 		for key := range details.keys[code] {
