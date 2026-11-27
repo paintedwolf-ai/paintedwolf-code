@@ -178,12 +178,15 @@ class ProjectSSEClient:
         while True:
             rem = deadline - time.monotonic()
             if rem <= 0:
-                raise TimeoutError(f"timed out waiting for watch_updated SSE event (seen={len(self.events)})")
+                topics = [e.get("topic") for e in self.events]
+                raise TimeoutError(
+                    f"timed out waiting for watch.updated SSE event (seen={len(self.events)}, topics={topics})"
+                )
             try:
                 env = self._queue.get(timeout=min(0.25, rem))
             except queue.Empty:
                 continue
-            if env.get("topic") == "watch_updated":
+            if env.get("topic") == "watch.updated":
                 return env
 
     def close(self) -> None:
@@ -810,6 +813,9 @@ def run_slot_c31_guidance_parity(
         )
         details["observed_watch_control_props"] = sorted(wc_props.keys())
         details["observed_watch_control_operations"] = sorted(wc_op_enum)
+        post_watch_props = ((post_schemas.get("watch") or {}).get("schema") or {}).get("properties") or {}
+        post_cond_kinds = (((post_watch_props.get("conditions") or {}).get("items") or {}).get("properties") or {}).get("kind", {}).get("enum") or []
+        details["post_watch_condition_kinds"] = sorted(post_cond_kinds)
 
         details["idle_tools_count"] = len(idle_tools)
         details["post_watch_tools_count"] = len(post_tools)
