@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -98,12 +99,18 @@ func defaultConnectionSupport(platform string, connection Connection) bool {
 		ConnectionBaselineLoopback, ConnectionDynamic, ConnectionCredentialStore:
 		return true
 	case ConnectionLocalService:
-		return platform == "macos" && connection.Transport == LocalServiceUnixSocket
+		return confinesSockets(platform) && connection.Transport == LocalServiceUnixSocket
 	case ConnectionDirectIP:
-		return platform == "macos"
+		return confinesSockets(platform)
 	default:
 		return false
 	}
+}
+
+// confinesSockets reports platforms whose confinement admits exact Unix socket
+// grants and direct IP; Windows builds have no subprocess confinement.
+func confinesSockets(platform string) bool {
+	return platform == "macos" || platform == "linux"
 }
 
 // SetPolicyBinder sets the effective access policy binder.
@@ -374,13 +381,17 @@ func stateFromVerdict(
 	if hostSupport == HostUnsupported {
 		reason = "host_boundary_unsupported"
 	}
+	var uses []Use
+	if realization != nil {
+		uses = slices.Clone(realization.Uses)
+	}
 	return State{
 		ID: def.ID, Family: def.Family, Label: def.Label, Category: def.Category,
 		Description: def.Description, DocsURL: def.DocsURL, Origin: def.origin,
 		Status: got.status, HostSupport: hostSupport, Access: AccessAllow, AccessSetting: AccessSettingInherit,
 		Prompt: prompt,
 		Reason: reason, Surfaces: append([]ExecutionSurface(nil), def.Surfaces...), Connections: connections,
-		CheckedAt: checkedAt,
+		Uses: uses, CheckedAt: checkedAt,
 	}
 }
 
@@ -716,6 +727,7 @@ func cloneSnapshot(in Snapshot) Snapshot {
 		out.Resources[i] = state
 		out.Resources[i].Surfaces = append([]ExecutionSurface(nil), state.Surfaces...)
 		out.Resources[i].Connections = append([]Connection(nil), state.Connections...)
+		out.Resources[i].Uses = slices.Clone(state.Uses)
 	}
 	return out
 }

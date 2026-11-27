@@ -79,6 +79,56 @@
           "type": "array",
           "maxItems": 16,
           "items": { "$ref": "#/$defs/connection" }
+        },
+        "write_roots": {
+          "description": "Daemon state directories a resolved action may write. Templates: {home}, {config_dir}, {runtime_dir}.",
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 4096 }
+        },
+        "uses": {
+          "description": "Ways of using the resource that need more than declaring its id. Only built-in and device catalogs may declare them.",
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/use" }
+        }
+      }
+    },
+    "use": {
+      "type": "object",
+      "required": ["id", "label", "requires"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "maxLength": 64 },
+        "label": { "type": "string", "minLength": 1, "maxLength": 40, "pattern": "^[^`{}\\x00-\\x1f]+$" },
+        "roles": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["coordinator", "worker"] }
+        },
+        "requires": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "capabilities": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "enum": ["host_resources", "socket_paths", "direct_ip", "process_control", "credential_store", "host_execution", "local_listen", "loopback_connect", "write_root", "read_path"] }
+            },
+            "alone": { "type": "boolean" },
+            "ports": {
+              "type": "array",
+              "maxItems": 4,
+              "items": { "type": "integer", "minimum": 1, "maximum": 65535 }
+            },
+            "any_resource": {
+              "type": "array",
+              "maxItems": 4,
+              "items": { "type": "string", "pattern": "^[a-z0-9]+([.-][a-z0-9]+)*$" }
+            }
+          }
         }
       }
     },
@@ -186,7 +236,7 @@
           "items": {
             "type": "string",
             "maxLength": 1024,
-            "pattern": "^\\\\\\\\\\.\\\\pipe\\\\[^\\u0000]+$"
+            "pattern": "^\\\\\\\\\\.\\\\pipe\\\\[^\\x00]+$"
           }
         },
         "capture": { "$ref": "#/$defs/capture" }

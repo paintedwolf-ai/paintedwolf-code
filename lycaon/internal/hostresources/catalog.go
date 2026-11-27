@@ -42,6 +42,8 @@ type Realization struct {
 	// WriteRoots are catalogued daemon state directories. Templates:
 	// {home}, {config_dir}, {runtime_dir}.
 	WriteRoots []string `yaml:"write_roots,omitempty"`
+	// Uses name what some uses of the resource need beyond its id.
+	Uses []Use `yaml:"uses,omitempty"`
 }
 
 type ConnectionTemplate struct {
@@ -239,6 +241,9 @@ func validateRealizations(def Definition) error {
 			return fmt.Errorf("realization %d: %w", i+1, err)
 		}
 		if err := validateWriteRoots(def.ID, realization.WriteRoots); err != nil {
+			return fmt.Errorf("realization %d: %w", i+1, err)
+		}
+		if err := validateUses(def.ID, realization.Uses); err != nil {
 			return fmt.Errorf("realization %d: %w", i+1, err)
 		}
 	}

@@ -181,7 +181,7 @@ func TestPromptCacheStableKeyChangesWithEffectiveCapabilitySurface(t *testing.T)
 		t.Fatalf("build ask surface: %v", err)
 	}
 	first := eng.Cache().LoadTurn(sess.ID)
-	if !strings.Contains(first.StablePrompt, "`local-db`") || !strings.Contains(first.StablePrompt, "`local-db` ask") {
+	if !strings.Contains(first.StablePrompt, "`local-db`") || !strings.Contains(first.StablePrompt, "`local-db` (ask)") {
 		t.Fatalf("capability projection missing from stable prompt: %q", first.StablePrompt)
 	}
 	firstKey := first.StablePromptKey
@@ -193,7 +193,7 @@ func TestPromptCacheStableKeyChangesWithEffectiveCapabilitySurface(t *testing.T)
 		t.Fatalf("build deny surface: %v", err)
 	}
 	second := eng.Cache().LoadTurn(sess.ID)
-	if second.StablePromptKey == firstKey || !strings.Contains(second.StablePrompt, "`local-db` deny") {
+	if second.StablePromptKey == firstKey || !strings.Contains(second.StablePrompt, "`local-db` (blocked)") {
 		t.Fatalf("effective policy change left a stale stable prompt: first=%q second=%q", firstKey, second.StablePromptKey)
 	}
 }

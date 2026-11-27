@@ -122,7 +122,9 @@ type State struct {
 	Reason        string             `json:"reason,omitempty"`
 	Surfaces      []ExecutionSurface `json:"surfaces"`
 	Connections   []Connection       `json:"connections"`
-	CheckedAt     time.Time          `json:"checked_at"`
+	// Uses come from the selected realization.
+	Uses      []Use     `json:"uses,omitempty"`
+	CheckedAt time.Time `json:"checked_at"`
 }
 
 // Diagnostic reports an ignored user catalog problem without destabilizing startup.

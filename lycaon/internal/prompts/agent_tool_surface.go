@@ -42,15 +42,27 @@ type AgentHostResourceView struct {
 	Status   string
 	Access   string
 	Guidance string
+	Uses     []AgentHostResourceUse
+}
+
+// AgentHostResourceUse is one use of a resource and what it needs beyond the id.
+type AgentHostResourceUse struct {
+	Label        string
+	Capabilities []string
+	Alone        bool
+	Ports        []int
+	Through      []string
 }
 
 // AgentPromptSurface holds skill availability and host resources for prompts.
 type AgentPromptSurface struct {
 	// Skills are the applicable catalog; bodies remain on demand.
-	Skills                []AgentSkillView
-	FullCatalog           bool
-	HostResources         []AgentHostResourceView
-	HostResourcesOmitted  int // rows the ambient budget dropped
+	Skills               []AgentSkillView
+	FullCatalog          bool
+	HostResources        []AgentHostResourceView
+	HostResourcesOmitted int // rows the ambient budget dropped
+	// HostUnconfined reports a platform where commands run only with host_execution.
+	HostUnconfined        bool
 	Fingerprint           string
 	SessionScratchDir     string
 	SharedTempLocations   []string
@@ -91,6 +103,8 @@ func AgentPromptSurfaceTemplateVars(surface AgentPromptSurface) map[string]any {
 		"full_skill_catalog":           surface.FullCatalog,
 		"agent_host_resources":         groupHostResources(surface.HostResources),
 		"agent_host_resources_omitted": surface.HostResourcesOmitted,
+		"agent_host_resource_uses":     hostResourceUseVars(surface.HostResources),
+		"host_unconfined":              surface.HostUnconfined,
 		"prompt_surface_fingerprint":   surface.Fingerprint,
 		"shared_temp_writable":         len(surface.SharedTempLocations) > 0,
 		"shared_temp_locations":        surface.SharedTempLocations,
@@ -130,6 +144,20 @@ func groupHostResources(resources []AgentHostResourceView) []map[string]any {
 	}
 	flush()
 	return groups
+}
+
+// hostResourceUseVars lists every rendered use with the resource it belongs to.
+func hostResourceUseVars(resources []AgentHostResourceView) []map[string]any {
+	var out []map[string]any
+	for _, resource := range resources {
+		for _, use := range resource.Uses {
+			out = append(out, map[string]any{
+				"resource": resource.ID, "label": use.Label, "capabilities": use.Capabilities,
+				"alone": use.Alone, "ports": use.Ports, "through": use.Through,
+			})
+		}
+	}
+	return out
 }
 
 // LoadAgentToolSurface builds one profile's prompt surface. in.Loaded names

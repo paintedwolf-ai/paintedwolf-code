@@ -40,40 +40,63 @@ resources:
             kind: file
             paths: ["/definitely/not/present"]
 `)
-	configtest.Only(t, map[config.Rel]string{config.HostResources: string(catalog)})
+	configtest.Overlay(t, map[config.Rel]string{config.HostResources: string(catalog)})
 	service, err := hostresources.NewService(t.TempDir())
 	testutil.FailErr(t, "new host resources service", err)
 	snapshot := service.SnapshotFor(context.Background(), false, hostresources.ProjectContext{}, nil)
-	surfaces := []hostresources.ExecutionSurface{hostresources.SurfaceProcessExec}
-	loaded, diags := applySkillHostResources([]skills.Skill{
+	reach := hostresources.Reach{Surfaces: []hostresources.ExecutionSurface{hostresources.SurfaceProcessExec}}
+	loaded, diags := applySkillHostResources(t.Context(), []skills.Skill{
 		{Name: "plain", Metadata: map[string]string{}, Body: "plain"},
 		{Name: "ready", UnitID: "skills/ready", Metadata: map[string]string{"host_resources": "present"}, Body: "ready"},
 		{Name: "hidden", UnitID: "skills/hidden", Metadata: map[string]string{"host_resources": "absent"}, Body: "hidden"},
-	}, nil, snapshot, surfaces)
+	}, nil, snapshot, reach)
 	if len(loaded) != 2 || len(diags) != 1 {
 		t.Fatalf("loaded=%#v diags=%#v", loaded, diags)
 	}
-	if loaded[1].Name != "ready" || !strings.Contains(loaded[1].Body, "routes=proxy") {
+	if loaded[1].Name != "ready" || !strings.Contains(loaded[1].Body, "`present`") || !strings.HasSuffix(loaded[1].Body, "\n\nready") {
 		t.Fatalf("decorated skill = %#v", loaded[1])
 	}
 	if diags[0].UnitID != "skills/hidden" {
 		t.Fatalf("diagnostic = %#v", diags[0])
 	}
 
-	grouped, groupDiags := applySkillHostResources([]skills.Skill{
+	grouped, groupDiags := applySkillHostResources(t.Context(), []skills.Skill{
 		{Name: "either", UnitID: "skills/either", Metadata: map[string]string{"host_resources": "present|absent"}, Body: "either"},
 		{Name: "neither", UnitID: "skills/neither", Metadata: map[string]string{"host_resources": "absent|missing"}, Body: "neither"},
-	}, nil, snapshot, surfaces)
+	}, nil, snapshot, reach)
 	if len(grouped) != 1 || len(groupDiags) != 1 {
 		t.Fatalf("grouped=%#v diags=%#v", grouped, groupDiags)
 	}
-	if grouped[0].Name != "either" || !strings.Contains(grouped[0].Body, "id=present") {
+	if grouped[0].Name != "either" || !strings.Contains(grouped[0].Body, "`present`") {
 		t.Fatalf("any-of decorated skill = %#v", grouped[0])
 	}
-	if strings.Contains(grouped[0].Body, "id=absent") {
+	if strings.Contains(grouped[0].Body, "`absent`") {
 		t.Fatalf("unavailable alternative must not decorate: %s", grouped[0].Body)
 	}
 	if groupDiags[0].UnitID != "skills/neither" || !strings.Contains(groupDiags[0].Message, "absent|missing") {
 		t.Fatalf("group diagnostic = %#v", groupDiags[0])
+	}
+}
+
+func TestSkillHeaderListsOnlyUsesTheSurfaceCanTake(t *testing.T) {
+	colima := hostresources.State{
+		ID: "colima", Status: hostresources.StatusAvailable, HostSupport: hostresources.HostSupported, Access: hostresources.AccessAllow,
+		Uses: []hostresources.Use{{
+			ID: "vm", Label: "VM start", Roles: []hostresources.AgentRole{hostresources.RoleCoordinator},
+			Requires: hostresources.UseRequirement{Capabilities: []string{"host_execution"}, Alone: true},
+		}},
+	}
+	snapshot := hostresources.Snapshot{Resources: []hostresources.State{colima}}
+	skill := skills.Skill{Name: "containers", Body: "body"}
+	resolved := map[string]hostresources.State{"colima": colima}
+	coordinator, err := decorateSkillWithHostResources(t.Context(), skill, resolved, snapshot, hostresources.Reach{Role: hostresources.RoleCoordinator, Offered: []string{"host_execution"}})
+	testutil.FailErr(t, "decorate for coordinator", err)
+	worker, err := decorateSkillWithHostResources(t.Context(), skill, resolved, snapshot, hostresources.Reach{Role: hostresources.RoleWorker, Offered: []string{"host_execution"}})
+	testutil.FailErr(t, "decorate for worker", err)
+	if !strings.Contains(coordinator.Body, "VM start") {
+		t.Fatalf("coordinator header omits a use it can take:\n%s", coordinator.Body)
+	}
+	if strings.Contains(worker.Body, "VM start") || strings.Contains(worker.Body, "`host_execution`") {
+		t.Fatalf("worker header names a coordinator-only use:\n%s", worker.Body)
 	}
 }

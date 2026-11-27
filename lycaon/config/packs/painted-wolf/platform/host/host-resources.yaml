@@ -66,6 +66,8 @@ resources:
             names: [colima]
         connections:
           - mode: dynamic
+        uses:
+          - {id: vm_lifecycle, label: VM lifecycle, roles: [coordinator], requires: {capabilities: [host_execution], alone: true}}
   - id: deno
     family: runtimes
     label: Deno
@@ -163,6 +165,8 @@ resources:
         connections:
           - mode: proxy
           - mode: credential_store
+        uses:
+          - {id: keyring_auth, label: keyring auth, requires: {capabilities: [credential_store]}}
   - id: go
     family: runtimes
     label: Go
@@ -312,6 +316,8 @@ resources:
             transport: unix_socket
             target_from: daemon_socket
             client_env: CONTAINER_HOST
+        uses:
+          - {id: machine_lifecycle, label: machine lifecycle, roles: [coordinator], requires: {capabilities: [host_execution], alone: true}}
       - platforms: [windows]
         discover:
           executable:
@@ -441,6 +447,8 @@ resources:
             names: [devcontainer]
         connections:
           - mode: dynamic
+        uses:
+          - {id: containers, label: containers, requires: {any_resource: [docker, podman]}}
   - id: firebase-cli
     family: cloud
     label: Firebase CLI
@@ -519,6 +527,8 @@ resources:
             names: [kind]
         connections:
           - mode: dynamic
+        uses:
+          - {id: cluster_nodes, label: cluster nodes, requires: {any_resource: [docker, podman]}}
   - id: localstack
     family: developer-services
     label: LocalStack
@@ -565,6 +575,9 @@ resources:
             names: [minikube]
         connections:
           - mode: dynamic
+        uses:
+          - {id: container_driver, label: container driver, requires: {any_resource: [docker, podman]}}
+          - {id: vm_lifecycle, label: VM lifecycle, roles: [coordinator], requires: {capabilities: [host_execution], alone: true}}
   - id: mysql-cli
     family: data-tools
     label: MySQL client
@@ -578,6 +591,8 @@ resources:
             names: [mysql]
         connections:
           - mode: dynamic
+        uses:
+          - {id: remote_tcp, label: remote TCP, requires: {capabilities: [direct_ip]}}
   - id: ninja
     family: build-tools
     label: Ninja
@@ -643,6 +658,8 @@ resources:
             names: [psql]
         connections:
           - mode: dynamic
+        uses:
+          - {id: remote_tcp, label: remote TCP, requires: {capabilities: [direct_ip]}}
   - id: redis-cli
     family: data-tools
     label: Redis CLI
@@ -656,6 +673,8 @@ resources:
             names: [redis-cli]
         connections:
           - mode: dynamic
+        uses:
+          - {id: remote_tcp, label: remote TCP, requires: {capabilities: [direct_ip]}}
   - id: sqlite
     family: data-tools
     label: SQLite
@@ -682,6 +701,8 @@ resources:
             names: [supabase]
         connections:
           - mode: dynamic
+        uses:
+          - {id: local_stack, label: local stack, requires: {any_resource: [docker, podman]}}
   - id: uv
     family: package-managers
     label: uv
@@ -937,6 +958,8 @@ resources:
             names: [kcat]
         connections:
           - mode: dynamic
+        uses:
+          - {id: remote_brokers, label: remote brokers, requires: {capabilities: [direct_ip]}}
   - id: pandoc
     family: documents
     label: Pandoc
@@ -976,6 +999,8 @@ resources:
             names: [rpk]
         connections:
           - mode: dynamic
+        uses:
+          - {id: remote_brokers, label: remote brokers, requires: {capabilities: [direct_ip]}}
   - id: sops
     family: secrets
     label: sops

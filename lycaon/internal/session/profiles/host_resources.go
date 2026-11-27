@@ -1,12 +1,17 @@
 package profiles
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
 
+	"github.com/flosch/pongo2/v6"
+
+	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/hostresources"
+	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/skills"
 )
 
@@ -21,10 +26,11 @@ func (m *Service) SetHostResources(service *hostresources.Service) {
 }
 
 func applySkillHostResources(
+	ctx context.Context,
 	loaded []skills.Skill,
 	diags []extpacks.Diagnostic,
 	snapshot hostresources.Snapshot,
-	surfaces []hostresources.ExecutionSurface,
+	reach hostresources.Reach,
 ) ([]skills.Skill, []extpacks.Diagnostic) {
 	out := make([]skills.Skill, 0, len(loaded))
 	for _, skill := range loaded {
@@ -51,7 +57,7 @@ func applySkillHostResources(
 				flat = append(flat, id)
 			}
 		}
-		resolved, _ := hostresources.ResolveIDs(snapshot, flat, surfaces)
+		resolved, _ := hostresources.ResolveIDs(snapshot, flat, reach.Surfaces)
 		chosen := map[string]hostresources.State{}
 		var unmetGroups, deniedGroups []string
 		for _, group := range groups {
@@ -90,7 +96,12 @@ func applySkillHostResources(
 			))
 			continue
 		}
-		out = append(out, decorateSkillWithHostResources(skill, chosen))
+		decorated, err := decorateSkillWithHostResources(ctx, skill, chosen, snapshot, reach)
+		if err != nil {
+			diags = append(diags, skillHostResourceDiagnostic(extpacks.DiagSkillHostResourcesInvalid, skill, err.Error()))
+			continue
+		}
+		out = append(out, decorated)
 	}
 	return out, diags
 }
@@ -101,30 +112,50 @@ func skillHostResourceDiagnostic(code string, skill skills.Skill, message string
 	}
 }
 
-func decorateSkillWithHostResources(skill skills.Skill, resolved map[string]hostresources.State) skills.Skill {
+func skillHostResourcesTemplate() (*pongo2.Template, error) {
+	data, err := config.Read(config.SkillHostResources)
+	if err != nil {
+		return nil, err
+	}
+	return pongoplain.Compile(string(data))
+}
+
+// decorateSkillWithHostResources prepends the skill's resolved host resources,
+// with the uses this surface can take, to its body.
+func decorateSkillWithHostResources(ctx context.Context, skill skills.Skill, resolved map[string]hostresources.State, snapshot hostresources.Snapshot, reach hostresources.Reach) (skills.Skill, error) {
+	tpl, err := skillHostResourcesTemplate()
+	if err != nil {
+		return skill, fmt.Errorf("skill host-resource header: %w", err)
+	}
 	ids := make([]string, 0, len(resolved))
 	for id := range resolved {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	var context strings.Builder
-	context.WriteString("Host resource context (host-observed machine state; not authority):\n")
+	resources := make([]map[string]any, 0, len(ids))
+	var uses []map[string]any
 	for _, id := range ids {
 		state := resolved[id]
-		fmt.Fprintf(&context, "- id=%s status=%s access=%s", id, state.Status, state.Access)
 		modes := []string{}
 		for _, connection := range state.Connections {
 			modes = append(modes, string(connection.Mode))
 		}
-		modes = uniqueStrings(modes)
-		if len(modes) > 0 {
-			fmt.Fprintf(&context, " routes=%s", strings.Join(modes, ","))
+		resources = append(resources, map[string]any{
+			"id": id, "status": string(state.Status), "access": string(state.Access), "routes": uniqueStrings(modes),
+		})
+		for _, use := range reach.MatchingUses(state, snapshot) {
+			uses = append(uses, map[string]any{
+				"resource": id, "label": use.Label, "capabilities": use.Capabilities,
+				"alone": use.Alone, "ports": use.Ports, "through": use.Through,
+			})
 		}
-		context.WriteByte('\n')
 	}
-	context.WriteString("On a process start that needs one, declare its id in capability_request.host_resources. An ask uses the unified Approvals flow; a grant may suppress repeats. Sandbox and route-specific review still apply.")
-	skill.Body = context.String() + "\n\n" + skill.Body
-	return skill
+	header, err := pongoplain.Execute(ctx, tpl, map[string]any{"resources": resources, "uses": uses})
+	if err != nil {
+		return skill, fmt.Errorf("skill host-resource header: %w", err)
+	}
+	skill.Body = strings.TrimSpace(header) + "\n\n" + skill.Body
+	return skill, nil
 }
 
 func uniqueStrings(values []string) []string {

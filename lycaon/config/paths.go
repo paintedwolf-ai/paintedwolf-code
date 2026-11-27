@@ -36,6 +36,9 @@ const (
 	SharedIntake        = PlatformShared + "/intake"
 	SharedWorkflowDiag  = PlatformShared + "/workflow-diagnostics"
 
+	// SkillHostResources renders the host-resource header of a gated skill.
+	SkillHostResources = PlatformHost + "/skill-host-resources.md"
+
 	// Platform host shells — operator YAML each subsystem reads by a fixed path.
 	Providers           = PlatformHost + "/providers.yaml"
 	CredentialStoreRead = PlatformHost + "/credential-store-read.yaml"

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -44,29 +45,51 @@ func (m *Service) AgentProfile(ctx context.Context, sess *api.Session) (agentdef
 	return profile, true
 }
 
-func (m *Service) ExecutionSurfaces(
+// HostResourceReach is what the session's profile can do with host resources.
+// Ask mode starts no processes, so it reaches none.
+func (m *Service) HostResourceReach(
 	ctx context.Context,
 	sess *api.Session,
 	profileID string,
-) []hostresources.ExecutionSurface {
+) hostresources.Reach {
 	if sess != nil && sess.Mode == api.SessionModeAsk {
-		return nil
+		return hostresources.Reach{}
 	}
 	profile, ok := m.ToolProfile(ctx, sess, profileID)
 	if !ok {
-		return nil
+		return hostresources.Reach{}
 	}
-	return executionSurfacesForToolProfile(profile)
+	role := hostresources.RoleCoordinator
+	if sess != nil && sess.IsWorkerChild() {
+		role = hostresources.RoleWorker
+	}
+	return ReachForToolProfile(profile, role, !confine.Available())
 }
 
-func executionSurfacesForToolProfile(profile sandbox.ToolProfile) []hostresources.ExecutionSurface {
-	surfaces := []hostresources.ExecutionSurface{}
-	extExec, _ := toolcontract.NewCommandEffects(toolcontract.CommandExternalExec)
-	commandExec := profile.ToolAllowed("command") && (profile.CommandEffects == 0 || profile.CommandEffects.Allows(extExec))
-	if commandExec || profile.ToolAllowed("terminal_open") {
-		surfaces = append(surfaces, hostresources.SurfaceProcessExec)
+// ReachForToolProfile derives a profile's host-resource reach from the process
+// tools it allows.
+func ReachForToolProfile(profile sandbox.ToolProfile, role hostresources.AgentRole, unconfined bool) hostresources.Reach {
+	tools := processTools(profile)
+	reach := hostresources.Reach{Role: role, Unconfined: unconfined}
+	if len(tools) == 0 {
+		return reach
 	}
-	return surfaces
+	reach.Surfaces = []hostresources.ExecutionSurface{hostresources.SurfaceProcessExec}
+	reach.Offered = hostresources.OfferedCapabilities(tools)
+	return reach
+}
+
+// processTools are the profile's tools that start host processes.
+func processTools(profile sandbox.ToolProfile) []string {
+	extExec, _ := toolcontract.NewCommandEffects(toolcontract.CommandExternalExec)
+	var tools []string
+	if profile.ToolAllowed("command") && (profile.CommandEffects == 0 || profile.CommandEffects.Allows(extExec)) {
+		tools = append(tools, "command")
+	}
+	if profile.ToolAllowed("terminal_open") {
+		tools = append(tools, "terminal_open")
+	}
+	return tools
 }
 
 func (m *Service) MutationCapable(ctx context.Context, sess *api.Session, profileID string) bool {

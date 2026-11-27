@@ -37,13 +37,13 @@ func (m *Service) compileMachine(ctx context.Context, sess *api.Session, profile
 	projectDir, _ := m.workspace.ActivePath(ctx, sess)
 	project := hostresources.ProjectContext{ID: sess.ProjectID, Dir: projectDir}
 	snapshot := m.hostResourceSnapshot(ctx, project, m.workspace.SettingsRoots(ctx, sess))
-	surfaces := m.ExecutionSurfaces(ctx, sess, profileID)
-	loaded, _ := m.effectiveSkillsForSurfaces(ctx, sess.ProjectID, roots, surfaces, snapshot)
+	reach := m.HostResourceReach(ctx, sess, profileID)
+	loaded, _ := m.effectiveSkillsForReach(ctx, sess.ProjectID, roots, reach, snapshot)
 	loaded = m.SkillSelector(ctx, sess).Select(loaded)
 	return inject.Machine{
 		ProfileID:  profileID,
 		SkillCount: len(loaded),
-		Surface:    m.promptSurface(ctx, sess, loaded, snapshot, surfaces, m.MutationCapable(ctx, sess, profileID), observe),
+		Surface:    m.promptSurface(ctx, sess, loaded, snapshot, reach, m.MutationCapable(ctx, sess, profileID), observe),
 		ReadRoots:  SkillReadRoots(loaded),
 	}
 }
@@ -82,8 +82,8 @@ func (m *Service) EffectiveSkillsForProfile(
 		overlayRoots = m.workspace.SettingsRoots(ctx, sess)
 	}
 	snapshot := m.hostResourceSnapshot(ctx, project, overlayRoots)
-	surfaces := m.ExecutionSurfaces(ctx, sess, profileID)
-	loaded, diags := m.effectiveSkillsForSurfaces(ctx, projectID, roots, surfaces, snapshot)
+	reach := m.HostResourceReach(ctx, sess, profileID)
+	loaded, diags := m.effectiveSkillsForReach(ctx, projectID, roots, reach, snapshot)
 	return m.SkillSelector(ctx, sess).Select(loaded), diags
 }
 
@@ -102,13 +102,13 @@ func (m *Service) PromptSurface(
 	sess *api.Session,
 	loaded []skills.Skill,
 	snapshot hostresources.Snapshot,
-	surfaces []hostresources.ExecutionSurface,
+	reach hostresources.Reach,
 	mutationCapable bool,
 ) prompts.AgentPromptSurface {
-	return m.promptSurface(ctx, sess, loaded, snapshot, surfaces, mutationCapable, true)
+	return m.promptSurface(ctx, sess, loaded, snapshot, reach, mutationCapable, true)
 }
 
-func (m *Service) promptSurface(ctx context.Context, sess *api.Session, loaded []skills.Skill, snapshot hostresources.Snapshot, surfaces []hostresources.ExecutionSurface, mutationCapable, observe bool) prompts.AgentPromptSurface {
+func (m *Service) promptSurface(ctx context.Context, sess *api.Session, loaded []skills.Skill, snapshot hostresources.Snapshot, reach hostresources.Reach, mutationCapable, observe bool) prompts.AgentPromptSurface {
 	out := prompts.AgentPromptSurface{Posture: gate.PostureStrict}
 	if m == nil || sess == nil {
 		return out
@@ -117,11 +117,12 @@ func (m *Service) promptSurface(ctx context.Context, sess *api.Session, loaded [
 	out.Skills = agentSkillViews(loaded)
 	ambient := hostresources.ProjectAmbient(hostresources.AmbientInput{
 		Snapshot:        snapshot,
-		Surfaces:        surfaces,
+		Reach:           reach,
 		MutationCapable: mutationCapable,
 	})
-	out.HostResources = hostResourceViews(ambient)
+	out.HostResources = HostResourceViews(ambient)
 	out.HostResourcesOmitted = ambient.Omitted
+	out.HostUnconfined = reach.Unconfined
 	out.Posture = m.effectiveApprovalPosture(ctx, sess, observe)
 	if m.commandExternalHidden != nil {
 		out.CommandExternalHidden = m.commandExternalHidden()
@@ -177,13 +178,21 @@ func agentSkillViews(loaded []skills.Skill) []prompts.AgentSkillView {
 	return out
 }
 
-func hostResourceViews(plan hostresources.AmbientPlan) []prompts.AgentHostResourceView {
+// HostResourceViews maps an ambient plan onto prompt rows.
+func HostResourceViews(plan hostresources.AmbientPlan) []prompts.AgentHostResourceView {
 	out := make([]prompts.AgentHostResourceView, 0, len(plan.Resources))
 	for _, row := range plan.Resources {
-		out = append(out, prompts.AgentHostResourceView{
+		view := prompts.AgentHostResourceView{
 			ID: row.ID, Label: row.Label, Category: row.Category,
 			Status: row.Status, Access: row.Access, Guidance: row.Guidance,
-		})
+		}
+		for _, use := range row.Uses {
+			view.Uses = append(view.Uses, prompts.AgentHostResourceUse{
+				Label: use.Label, Capabilities: use.Capabilities, Alone: use.Alone,
+				Ports: use.Ports, Through: use.Through,
+			})
+		}
+		out = append(out, view)
 	}
 	return out
 }
