@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os/exec"
 	"sync"
 	"syscall"
 )
@@ -148,6 +149,27 @@ func (a *AsyncPipeline) PID() int {
 		return 0
 	}
 	return a.run.pid()
+}
+
+// ExecutablePath returns the prepared executable path of the started stage, or "".
+func (a *AsyncPipeline) ExecutablePath() string {
+	if a == nil || a.run == nil {
+		return ""
+	}
+	a.run.mu.Lock()
+	defer a.run.mu.Unlock()
+	return a.run.lastExecutable
+}
+
+func preparedExecutablePath(cmd *exec.Cmd) string {
+	if cmd == nil {
+		return ""
+	}
+	raw, ok := preparedLifecycles.Load(cmd)
+	if !ok {
+		return ""
+	}
+	return raw.(*preparedLifecycle).executablePath
 }
 
 type pipelineWaiter struct{ unblock func() }
