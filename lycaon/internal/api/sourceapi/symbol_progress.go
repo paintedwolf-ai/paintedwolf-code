@@ -5,8 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -21,70 +19,53 @@ import (
 const symbolProgressLimit = 16
 const symbolProgressTTL = 2 * time.Minute
 
+// symbolRevalidateFileLimit bounds per-resume content revalidation so resuming
+// retained progress stays bounded under normal symbol budgets; coverage whose
+// retained files exceed this bound is discarded rather than reused unverified.
+const symbolRevalidateFileLimit = symbolsearch.OutlineFileCap
+
 type symbolProgressCache struct {
 	mu      sync.Mutex
 	entries map[[32]byte]*symbolProgressEntry
 }
 
-type symbolFileVersion struct {
-	Size        int64
-	ModTimeNano int64
-}
-
 type symbolProgressEntry struct {
-	retained     bool
-	gate         chan struct{}
-	users        int
-	used         time.Time
-	stamp        string
-	state        symbolsearch.Progress
-	discovery    projectsource.DeclarationSearch
-	fileVersions map[string]symbolFileVersion
+	retained  bool
+	gate      chan struct{}
+	users     int
+	used      time.Time
+	stamp     string
+	state     symbolsearch.Progress
+	discovery projectsource.DeclarationSearch
 }
 
 func (e *symbolProgressEntry) reset(stamp string, discovery projectsource.DeclarationSearch) {
 	e.state = symbolsearch.Progress{}
 	e.discovery = discovery
 	e.stamp = stamp
-	e.fileVersions = nil
 }
 
-func (e *symbolProgressEntry) recordMatchFiles(p *project.Project, matches []symbolsearch.Match) {
-	if len(matches) == 0 {
-		e.fileVersions = nil
-		return
+// matchFilesCurrent re-observes every file contributing retained matches
+// through the root-confined projectsource reader and confirms its raw content
+// SHA-256 still matches the digest captured at the exact source read that
+// produced those declarations.
+func (e *symbolProgressEntry) matchFilesCurrent(ctx context.Context, p *project.Project) bool {
+	digests := e.state.RetainedFileDigests()
+	if len(digests) == 0 {
+		return true
 	}
-	rootsByID := make(map[string]string, len(p.Roots))
-	for _, r := range p.Roots {
-		rootsByID[r.ID] = r.Path
+	if len(digests) > symbolRevalidateFileLimit {
+		return false
 	}
-	versions := make(map[string]symbolFileVersion, len(matches))
-	for _, m := range matches {
-		rootPath, ok := rootsByID[m.RootID]
-		if !ok {
-			continue
-		}
-		abs := filepath.Join(rootPath, filepath.FromSlash(m.Path))
-		if _, seen := versions[abs]; seen {
-			continue
-		}
-		info, err := os.Stat(abs)
-		if err != nil {
-			versions[abs] = symbolFileVersion{Size: -1}
-			continue
-		}
-		versions[abs] = symbolFileVersion{Size: info.Size(), ModTimeNano: info.ModTime().UnixNano()}
-	}
-	e.fileVersions = versions
-}
-
-func (e *symbolProgressEntry) matchFilesCurrent() bool {
-	for abs, want := range e.fileVersions {
-		info, err := os.Stat(abs)
-		if err != nil {
+	for key, wantSHA := range digests {
+		if ctx.Err() != nil || wantSHA == "" {
 			return false
 		}
-		if info.Size() != want.Size || info.ModTime().UnixNano() != want.ModTimeNano {
+		obs, err := projectsource.ObserveProjectSource(p, projectsource.SourceReadRequest{
+			RootID: key.RootID,
+			Path:   key.Path,
+		})
+		if err != nil || obs.OverLimit || obs.Revision.SHA256 != wantSHA {
 			return false
 		}
 	}
@@ -191,7 +172,7 @@ func (c *symbolProgressCache) acquire(ctx context.Context, p *project.Project, l
 		release()
 		return nil, nil, err
 	}
-	if entry.discovery == nil || entry.stamp != stamp || !symbolEpochsCurrent(entry.stamp) || !entry.matchFilesCurrent() {
+	if entry.discovery == nil || entry.stamp != stamp || !symbolEpochsCurrent(entry.stamp) || !entry.matchFilesCurrent(ctx, p) {
 		entry.reset(stamp, declarationSearchIn(leg.DiscoveryScope(), leg.Flags.Include, leg.Flags.Exclude, leg.IncludeDependencies))
 	}
 	return entry, release, nil

@@ -19,8 +19,22 @@ type Progress struct {
 	pending       []projectsource.DeclarationSearchHit
 	discoveryDone bool
 	matches       []Match
+	fileDigests   map[projectsource.DeclarationFileKey]string
 	gaps          []projectsource.DeclarationGap
 	discoveryGaps []projectsource.DeclarationGap
+}
+
+// RetainedFileDigests returns the raw content SHA-256 digests observed at the
+// exact source reads that produced the currently retained matches.
+func (p *Progress) RetainedFileDigests() map[projectsource.DeclarationFileKey]string {
+	if p == nil || len(p.fileDigests) == 0 {
+		return nil
+	}
+	out := make(map[projectsource.DeclarationFileKey]string, len(p.fileDigests))
+	for k, v := range p.fileDigests {
+		out[k] = v
+	}
+	return out
 }
 
 func (r *symbolSearchRun) advance(ctx context.Context, query string, limit int, wall, abbreviationWall, outlineWall time.Duration, state *Progress, resume bool) (bool, error) {
@@ -131,11 +145,12 @@ func (r *symbolSearchRun) outlinePending(ctx context.Context, state *Progress) {
 		if r.filesLeft <= 0 || ctx.Err() != nil {
 			break
 		}
-		symbols, content, ok := projectsource.ReadSourceDeclarations(ctx, r.p, file.RootID, file.Path)
+		symbols, content, digest, ok := projectsource.ReadSourceDeclarationsVersioned(ctx, r.p, file.RootID, file.Path)
 		if ctx.Err() != nil {
 			break
 		}
-		consumed[projectsource.DeclarationFileKey{RootID: file.RootID, Path: file.Path}] = true
+		key := projectsource.DeclarationFileKey{RootID: file.RootID, Path: file.Path}
+		consumed[key] = true
 		r.filesLeft--
 		if n := len(r.passes); n > 0 {
 			r.passes[n-1].Files++
@@ -150,9 +165,13 @@ func (r *symbolSearchRun) outlinePending(ctx context.Context, state *Progress) {
 			state.gaps = mergeDeclarationGap(state.gaps, projectsource.DeclarationGap{Reason: projectsource.DeclarationFilesSkipped, Count: count})
 			continue
 		}
-		r.matches = append(r.matches, r.pick(file, symbols, content)...)
-		// Keep only the strongest results plus one probe, independent of tree size.
-		r.trimMatches()
+		picked := r.pick(file, symbols, content)
+		if len(picked) > 0 {
+			r.fileDigests[key] = digest
+			r.matches = append(r.matches, picked...)
+			// Keep only the strongest results plus one probe, independent of tree size.
+			r.trimMatches()
+		}
 	}
 	pending := state.pending[:0]
 	for _, hit := range state.pending {
@@ -194,6 +213,16 @@ func (r *symbolSearchRun) trimMatches() {
 func (r *symbolSearchRun) saveProgress(state *Progress) {
 	r.trimMatches()
 	state.matches = append([]Match(nil), r.matches...)
+	if len(state.matches) == 0 {
+		state.fileDigests = nil
+	} else {
+		digests := make(map[projectsource.DeclarationFileKey]string, len(state.matches))
+		for _, m := range state.matches {
+			key := projectsource.DeclarationFileKey{RootID: m.RootID, Path: m.Path}
+			digests[key] = r.fileDigests[key]
+		}
+		state.fileDigests = digests
+	}
 	for _, gap := range r.coverage.Gaps {
 		if !declarationRetryable(gap.Reason) {
 			state.gaps = mergeDeclarationGap(state.gaps, gap)

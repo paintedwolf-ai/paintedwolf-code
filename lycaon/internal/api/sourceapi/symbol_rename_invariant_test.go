@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -48,26 +47,79 @@ func TestSymbolExecutorDoesNotServeStaleDeclarationAfterExternalOverwrite(t *tes
 	}
 }
 
-func TestSymbolExecutorInvalidatesPendingProgressOnUnwatchedFileOverwrite(t *testing.T) {
+func TestSymbolExecutorInvalidatesPendingProgressOnRestoredMtimeSameSizeEdit(t *testing.T) {
 	e, p, leg := symbolProgressFixture(t, 60)
+	f0 := filepath.Join(p.Roots[0].Path, "f000.go")
+	origInfo, err := os.Stat(f0)
+	testutil.FailErr(t, "stat original f000.go", err)
+	origMod := origInfo.ModTime()
+
 	first, err := e.Run(t.Context(), search.PlanLeg{Symbol: leg})
 	testutil.FailErr(t, "first pending slice", err)
 	if len(first.Hits) != 48 {
 		t.Fatalf("first hits = %d, want 48 pending slice", len(first.Hits))
 	}
 
-	// Overwrite f000.go while progress is pending, advancing mtime explicitly
-	// without calling repochange.Advance, and verify stale f000.go is invalidated.
-	f0 := filepath.Join(p.Roots[0].Path, "f000.go")
-	testutil.FailErr(t, "overwrite f000.go", os.WriteFile(f0, []byte("package p\nfunc Others() {}\n"), 0o600))
-	future := time.Now().Add(2 * time.Second)
-	testutil.FailErr(t, "bump mtime", os.Chtimes(f0, future, future))
+	// Overwrite f000.go with the EXACT same byte length (27 bytes) and restore
+	// the exact original mtime without calling repochange.Advance.
+	replacement := []byte("package p\nfunc Others() {}\n")
+	if int64(len(replacement)) != origInfo.Size() {
+		t.Fatalf("replacement size %d != original size %d", len(replacement), origInfo.Size())
+	}
+	testutil.FailErr(t, "overwrite f000.go", os.WriteFile(f0, replacement, 0o600))
+	testutil.FailErr(t, "restore original mtime", os.Chtimes(f0, origMod, origMod))
 
 	second, err := e.Run(t.Context(), search.PlanLeg{Symbol: leg})
-	testutil.FailErr(t, "second slice after overwrite", err)
+	testutil.FailErr(t, "second slice after restored-mtime same-size edit", err)
 	for _, hit := range second.Hits {
 		if hit.Path == "f000.go" {
-			t.Fatalf("stale pending match survived overwrite: %+v", hit)
+			t.Fatalf("stale pending match survived restored-mtime same-size edit: %+v", hit)
+		}
+	}
+	if len(second.Hits) != 48 {
+		t.Fatalf("expected pending progress to restart at 48 hits, got %d", len(second.Hits))
+	}
+}
+
+func TestSymbolExecutorInvalidatesEditBetweenOutlineExtractionAndRetention(t *testing.T) {
+	e, p, leg := symbolProgressFixture(t, 60)
+	f0 := filepath.Join(p.Roots[0].Path, "f000.go")
+	origInfo, err := os.Stat(f0)
+	testutil.FailErr(t, "stat original f000.go", err)
+	origMod := origInfo.ModTime()
+
+	// Deterministically mutate f000.go AFTER outline extraction has read v1
+	// and BEFORE searchProject retains the pending progress entry. Because the
+	// digest is bound to the exact source read at outline extraction, retention
+	// cannot adopt v2 as the version of v1's extracted declaration.
+	mutated := false
+	e.beforeRetain = func() {
+		if mutated {
+			return
+		}
+		mutated = true
+		replacement := []byte("package p\nfunc Others() {}\n")
+		testutil.FailErr(t, "overwrite f000.go before retention", os.WriteFile(f0, replacement, 0o600))
+		testutil.FailErr(t, "restore mtime before retention", os.Chtimes(f0, origMod, origMod))
+	}
+
+	first, err := e.Run(t.Context(), search.PlanLeg{Symbol: leg})
+	testutil.FailErr(t, "first pending slice", err)
+	if !mutated {
+		t.Fatal("expected beforeRetain hook to fire")
+	}
+	if len(first.Hits) != 48 {
+		t.Fatalf("first hits = %d, want 48 pending slice", len(first.Hits))
+	}
+
+	// Next call must NOT reuse the stale f000.go declaration extracted before
+	// the edit, even though the file was edited before retention and has the
+	// same byte size and mtime.
+	second, err := e.Run(t.Context(), search.PlanLeg{Symbol: leg})
+	testutil.FailErr(t, "second slice after mid-retention edit", err)
+	for _, hit := range second.Hits {
+		if hit.Path == "f000.go" {
+			t.Fatalf("stale match adopted newer version between outline extraction and retention: %+v", hit)
 		}
 	}
 	if len(second.Hits) != 48 {

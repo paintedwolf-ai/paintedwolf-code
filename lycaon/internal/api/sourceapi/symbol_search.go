@@ -28,9 +28,10 @@ type SymbolLegBudget func(ctx context.Context, budget search.SearchBudget) (cont
 // discovery nominates files, their cached outlines confirm declarations, and
 // names rank by how they match, the pipeline Go to definition shares.
 type SymbolExecutor struct {
-	registry  project.Registry
-	progress  symbolProgressCache
-	legBudget SymbolLegBudget
+	registry     project.Registry
+	progress     symbolProgressCache
+	legBudget    SymbolLegBudget
+	beforeRetain func() // nil in production; test hook between outline extraction and retention
 }
 
 // NewSymbolExecutor returns the symbol leg over the project registry.
@@ -179,9 +180,10 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 		entry.reset("", nil)
 		return symbolProjectResult{coverage: projectsource.DeclarationCoverage{Gaps: []projectsource.DeclarationGap{{Reason: projectsource.DeclarationCatalogRefreshing}}}}
 	}
-	if result.Incomplete {
-		entry.recordMatchFiles(p, result.Symbols)
-	} else {
+	if e.beforeRetain != nil {
+		e.beforeRetain()
+	}
+	if !result.Incomplete {
 		// Completed searches do not retain disposable resume state; subsequent
 		// requests re-validate live file bytes instead of replaying stale hits.
 		entry.reset("", nil)
