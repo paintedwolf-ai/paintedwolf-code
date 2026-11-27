@@ -100,8 +100,8 @@ func runPY10Code(t *testing.T, svc *portablepython.Service, wsDir, execID, code 
 	})
 	contractcheck.FailErr(t, "execute "+execID, err)
 	if !resp.CleanCompletion || resp.ExitCode != 0 {
-		t.Fatalf("%s failed: exit=%d clean=%v stop=%+v stdout=%q stderr=%q",
-			execID, resp.ExitCode, resp.CleanCompletion, resp.Stop, resp.Stdout, resp.Stderr)
+		t.Fatalf("%s failed: exit=%d clean=%v stop=%+v diag=%v usage=%+v stdout=%q stderr=%q",
+			execID, resp.ExitCode, resp.CleanCompletion, resp.Stop, resp.RuntimeDiagnostics, resp.Usage, resp.Stdout, resp.Stderr)
 	}
 	if resp.Backend != pythonruntime.BackendNativeAOT {
 		t.Fatalf("%s ran on backend=%q want %q", execID, resp.Backend, pythonruntime.BackendNativeAOT)
@@ -587,10 +587,11 @@ from fpdf import FPDF
 from pypdf import PdfReader
 
 # Discover pinned redistributable Unicode TTF font bundled in the image
-font_candidates = sorted(Path("/packages").rglob("*.ttf"))
-preferred = [p for p in font_candidates if any(k in p.name.lower() for k in ("dejavusans", "liberationsans", "notosans"))]
-font_path = preferred[0] if preferred else (font_candidates[0] if font_candidates else None)
-assert font_path is not None, "no bundled Unicode .ttf font found in /packages"
+font_path = Path("/packages/fonts/DejaVuSans.ttf")
+if not font_path.is_file():
+    font_candidates = sorted(Path("/packages/fonts").glob("*.ttf"))
+    font_path = font_candidates[0] if font_candidates else None
+assert font_path is not None and font_path.is_file(), "no bundled Unicode .ttf font found in /packages/fonts"
 
 pdf = FPDF()
 pdf.set_auto_page_break(auto=True, margin=15)
