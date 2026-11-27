@@ -20,7 +20,7 @@ from .cf06_lookup_symbol_query import (
     run_s07_sidecar,
     run_s08_sidecar,
 )
-from .cf06_types import FamilySummary
+from .cf06_types import FamilySummary, RateLimitedTransport
 
 LEDGER_SIDECAR_COUNTS: dict[str, int] = {
     "S01": 300,
@@ -99,7 +99,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     counts = {f: max(1, int(round(LEDGER_SIDECAR_COUNTS[f] * args.scale))) for f in fams}
     s03_searches = 20 if args.scale >= 1.0 else max(2, int(round(20 * args.scale)))
 
-    transport = HTTPTransport(args.url, args.token)
+    transport = RateLimitedTransport(HTTPTransport(args.url, args.token))
     driver = SidecarDriver(transport)
 
     launch_receipt: dict[str, object] | None = None

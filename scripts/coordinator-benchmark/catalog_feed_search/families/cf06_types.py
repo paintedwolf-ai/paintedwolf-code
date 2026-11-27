@@ -6,9 +6,46 @@ from collections import Counter
 from dataclasses import dataclass, field
 import time
 from typing import Any
+import urllib.error
 
 from ..checker_types import Verdict
+from ..driver_http import SidecarTransport
 from ..driver_sidecar import SidecarDriver
+
+
+class RateLimitedTransport:
+    """Thin SidecarTransport wrapper that retries HTTP 429 with bounded backoff."""
+
+    def __init__(self, inner: SidecarTransport, *, max_retries: int = 8, base_sleep: float = 0.25) -> None:
+        self._inner = inner
+        self._max_retries = max_retries
+        self._base_sleep = base_sleep
+
+    def request(self, path: str, payload: dict[str, object] | None = None, *, method: str = "POST") -> dict[str, object]:
+        for attempt in range(self._max_retries + 1):
+            try:
+                return self._inner.request(path, payload, method=method)
+            except urllib.error.HTTPError as exc:
+                if exc.code != 429 or attempt >= self._max_retries:
+                    raise
+                time.sleep(self._base_sleep * (attempt + 1))
+        raise RuntimeError("unreachable")  # pragma: no cover
+
+    def request_raw(
+        self,
+        path: str,
+        payload: dict[str, object] | None = None,
+        *,
+        method: str = "POST",
+    ) -> tuple[bytes, dict[str, str]]:
+        for attempt in range(self._max_retries + 1):
+            try:
+                return self._inner.request_raw(path, payload, method=method)
+            except urllib.error.HTTPError as exc:
+                if exc.code != 429 or attempt >= self._max_retries:
+                    raise
+                time.sleep(self._base_sleep * (attempt + 1))
+        raise RuntimeError("unreachable")  # pragma: no cover
 
 
 @dataclass

@@ -15,7 +15,12 @@ from catalog_feed_search.families.cf06_cli import (
     build_parser,
     run_cf06_sidecar_suite,
 )
-from catalog_feed_search.families.cf06_types import FamilySummary, build_code_dsl, wait_for_catalog_ready
+from catalog_feed_search.families.cf06_types import (
+    FamilySummary,
+    RateLimitedTransport,
+    build_code_dsl,
+    wait_for_catalog_ready,
+)
 
 
 class _FakeTransport:
@@ -123,6 +128,27 @@ class TestCF06TypesAndCLI(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(ValueError):
                 run_cf06_sidecar_suite(driver, Path(tmp), families=("S99",), counts={"S99": 1})
+
+    def test_rate_limited_transport_retries_429(self) -> None:
+        class _Flaky429:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def request(self, path: str, payload: dict[str, object] | None = None, *, method: str = "POST") -> dict[str, object]:
+                self.calls += 1
+                if self.calls < 2:
+                    raise urllib.error.HTTPError(path, 429, "rate limited", hdrs={}, fp=None)  # type: ignore[arg-type]
+                return {"ok": True}
+
+            def request_raw(self, path: str, payload: dict[str, object] | None = None, *, method: str = "POST") -> tuple[bytes, dict[str, str]]:
+                self.calls += 1
+                if self.calls < 4:
+                    raise urllib.error.HTTPError(path, 429, "rate limited", hdrs={}, fp=None)  # type: ignore[arg-type]
+                return b"ok", {}
+
+        wrapped = RateLimitedTransport(_Flaky429(), max_retries=3, base_sleep=0.001)
+        self.assertEqual(wrapped.request("/v1/search"), {"ok": True})
+        self.assertEqual(wrapped.request_raw("/v1/search/export"), (b"ok", {}))
 
 
 if __name__ == "__main__":  # pragma: no cover
