@@ -65,7 +65,7 @@ func TestNativeEngineLiveExecutionPolicyFuelAndCancel(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(ws, "blocked.txt"), []byte("TOP_SECRET_VALUE"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	roots := []pythondocuments.HostRootConfig{{RootID: "ws", HostDir: ws}}
+	roots := []pythondocuments.HostRootConfig{{ID: "ws", Dir: ws}}
 	allowAll := func(_ context.Context, _ pythonruntime.ReachedOperation) pythonadmission.PolicyDecision {
 		return pythonadmission.PolicyDecision{Kind: pythonruntime.DecisionAllow}
 	}
