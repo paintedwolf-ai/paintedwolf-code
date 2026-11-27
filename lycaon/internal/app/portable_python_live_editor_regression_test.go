@@ -114,7 +114,6 @@ func TestPortablePythonLiveEditorSubdirectoryAndExistingFileEdit(t *testing.T) {
 	runPy := func(callID, code string) portablepython.ToolResponse {
 		t.Helper()
 		raw, err := appInst.ToolRegistry.Run(ctx, "python", map[string]any{
-			"mode": "code",
 			"code": code,
 		}, mkTC(callID))
 		testutil.FailErr(t, "execute python "+callID, err)
