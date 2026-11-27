@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/portablepython"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -99,6 +100,7 @@ func TestPortablePythonLiveEditorSubdirectoryAndExistingFileEdit(t *testing.T) {
 			},
 			Source: tools.InvocationSource{
 				SourceWorkspaceKind: wire.SourceWorkspaceKindProject,
+				ProjectSourceBranch: sourcebranch.Trunk,
 				ActiveRootID:        rootID,
 				SourceLedger:        appInst.Server.Sources.Workspace.SourceLedger,
 				EditorDocuments:     editorDocumentsAdapter{service: appInst.Server.Sources.Workspace.Watch.EditorDocuments},

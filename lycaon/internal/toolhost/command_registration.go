@@ -393,17 +393,21 @@ func buildPythonRoots(tc tools.ToolContext, readOnly bool) ([]pythondocuments.Ho
 			if label == "" {
 				label = id
 			}
+			rootBranch := branch
+			if resolvedBranch, err := tc.SourceBranch(id); err == nil && resolvedBranch != "" {
+				rootBranch = string(resolvedBranch)
+			}
 			isDefault := (id == activeID) || (activeID == "" && i == 0)
 			roots = append(roots, pythondocuments.HostRootConfig{
 				ID:       id,
-				Branch:   branch,
+				Branch:   rootBranch,
 				Dir:      r.Path,
 				ReadOnly: readOnly,
 			})
 			specs = append(specs, pythondocuments.RootSpec{
 				ID:       id,
 				Label:    label,
-				Branch:   branch,
+				Branch:   rootBranch,
 				Default:  isDefault,
 				ReadOnly: readOnly,
 			})
