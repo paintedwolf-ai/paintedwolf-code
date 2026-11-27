@@ -95,3 +95,25 @@ class BB03LiveWitnessOracleTests(unittest.TestCase):
             self.assertTrue(grading.grade_case(c17, obs17, p17, IDENT)['passed'])
             obs17_hit, _ = observe.build_observation(c17, session_id='sess1234', identity=IDENT, project_dir=p17, db_path=db17, sidecar_log=lp17, baseline_hashes=b17, turn_records=t17, prelude_records=[], witness_meta={'owned_listener_succeeded': True, 'unrelated_hits': 1})
             self.assertFalse(obs17_hit['facts']['no_request_sent'])
+
+    def test_cancellation_abort_witness_positive_and_negative_controls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            case, proj, base, dbp, lp = self._base(pathlib.Path(tmp), 'cancellation')
+            db = sqlite3.connect(dbp)
+            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','interrupted',1)")
+            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','interrupted',130,'TOOL_OWNER_INTERRUPTED')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e1','p1',1,'sleep','sleep','processes','completed','none'), ('e2','p1',2,'sleep','sleep','processes','completed','none'), ('e3','p1',3,'sleep','sleep','processes','interrupted','none')")
+            db.commit(); db.close()
+            turns = [{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}]
+            wm = {'db_program': {'state': 'interrupted', 'status_code': 130, 'stop_code': 'TOOL_OWNER_INTERRUPTED'}, 'exec_count_at_idle': 3, 'exec_count_after_wait': 3, 'unsettled_children': 0, 'recovery_ok': True, 'st01_st03_stop_fence_separate': True}
+            obs, audit = observe.build_observation(case, session_id='sess1234', identity=IDENT, project_dir=proj, db_path=dbp, sidecar_log=lp, baseline_hashes=base, turn_records=turns, prelude_records=[], witness_meta=wm)
+            self.assertEqual(audit['observation_gaps'], [])
+            self.assertTrue(grading.grade_case(case, obs, proj, IDENT)['passed'])
+            # Negative controls: later child admitted, unsettled child, or 'after' file leaked -> fail.
+            obs_later, _ = observe.build_observation(case, session_id='sess1234', identity=IDENT, project_dir=proj, db_path=dbp, sidecar_log=lp, baseline_hashes=base, turn_records=turns, prelude_records=[], witness_meta={**wm, 'exec_count_after_wait': 4})
+            self.assertFalse(obs_later['facts']['no_later_child'])
+            obs_unsettled, _ = observe.build_observation(case, session_id='sess1234', identity=IDENT, project_dir=proj, db_path=dbp, sidecar_log=lp, baseline_hashes=base, turn_records=turns, prelude_records=[], witness_meta={**wm, 'unsettled_children': 1})
+            self.assertFalse(obs_unsettled['facts']['owned_resources_reclaimed'])
+            (proj / 'after').write_text('leaked\n')
+            obs_leak, _ = observe.build_observation(case, session_id='sess1234', identity=IDENT, project_dir=proj, db_path=dbp, sidecar_log=lp, baseline_hashes=base, turn_records=turns, prelude_records=[], witness_meta=wm)
+            self.assertFalse(obs_leak['facts']['no_later_child'])

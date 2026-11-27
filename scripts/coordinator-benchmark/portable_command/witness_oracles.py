@@ -3,9 +3,9 @@ import pathlib
 
 
 def inspect_live_witnesses(case, *, project_dir, audit, receipts, effects, last_payload, recovery, witness_meta, invocations):
-    """Extract independent facts and refine recovery/effects for Q13, Q14, Q15, and Q17."""
+    """Extract independent facts and refine recovery/effects for Q13, Q14, Q15, Q16 cancellation, and Q17."""
     cid = case['id']
-    if cid not in {'stale-approval', 'publication-barrier', 'partial-write-unknown-http', 'listener-rebind'}:
+    if cid not in {'stale-approval', 'publication-barrier', 'partial-write-unknown-http', 'listener-rebind', 'cancellation'}:
         return {}, recovery
     wm = witness_meta if isinstance(witness_meta, dict) else {}
     execs = audit.get('invocation_program_executions') or []
@@ -85,5 +85,16 @@ def inspect_live_witnesses(case, *, project_dir, audit, receipts, effects, last_
         facts['observed_listener_identity'] = wm.get('owned_listener_succeeded') is True
         facts['revoked_on_rebind'] = rebound_refused
         facts['no_request_sent'] = hits == 0
+
+    elif cid == 'cancellation':
+        db_prog = wm.get('db_program') or {}
+        c_idle, c_after = wm.get('exec_count_at_idle'), wm.get('exec_count_after_wait')
+        after_absent = not (proj / 'after').exists()
+        facts['admission_closed'] = bool(
+            db_prog.get('state') == 'interrupted' and db_prog.get('status_code') == 130
+            and db_prog.get('stop_code') == 'TOOL_OWNER_INTERRUPTED' and isinstance(c_idle, int) and c_idle >= 3
+        )
+        facts['no_later_child'] = bool(isinstance(c_idle, int) and c_idle >= 3 and c_after == c_idle and after_absent)
+        facts['owned_resources_reclaimed'] = bool(wm.get('unsettled_children') == 0 and wm.get('recovery_ok') is True)
 
     return facts, recovery
