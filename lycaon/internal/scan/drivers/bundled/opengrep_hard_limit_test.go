@@ -36,9 +36,9 @@ func writeSlowFixtureBinary(t *testing.T, dir string) string {
 	return bin
 }
 
-func fixturePrepare(t *testing.T, onPrepare func()) func() (opengrepRunFiles, func(), []string, error) {
+func fixturePrepare(t *testing.T, onPrepare func()) func(context.Context) (opengrepRunFiles, func(), []string, error) {
 	t.Helper()
-	return func() (opengrepRunFiles, func(), []string, error) {
+	return func(context.Context) (opengrepRunFiles, func(), []string, error) {
 		if onPrepare != nil {
 			onPrepare()
 		}
