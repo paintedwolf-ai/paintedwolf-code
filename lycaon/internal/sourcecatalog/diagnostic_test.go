@@ -2,13 +2,17 @@ package sourcecatalog
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -342,7 +346,7 @@ func TestDiagnosticConcurrentReportPublicationAndWriteFailure(t *testing.T) {
 					{Path: fmt.Sprintf("f_%d.txt", idx), Kind: DisagreementMissingInCatalog, DiskKind: "file"},
 				},
 			}
-			if err := sampler.retainAndWrite(reportPath, rep, nil, 4); err != nil {
+			if err := sampler.retainAndWrite(t.Context(), reportPath, rep, nil, 4, nil); err != nil {
 				errs <- err
 			}
 		}()
@@ -380,7 +384,7 @@ func TestDiagnosticConcurrentReportPublicationAndWriteFailure(t *testing.T) {
 		GenerationRevision: 1,
 		Disagreements:      []DiagnosticDisagreement{{Path: "x.txt", Kind: DisagreementMissingInCatalog, DiskKind: "file"}},
 	}
-	failErr := sampler.retainAndWrite(badTarget, failReport, nil, 4)
+	failErr := sampler.retainAndWrite(t.Context(), badTarget, failReport, nil, 4, nil)
 	if failErr == nil {
 		t.Fatal("expected atomic publication error when target is a directory")
 	}
@@ -397,7 +401,7 @@ func TestDiagnosticConcurrentReportPublicationAndWriteFailure(t *testing.T) {
 		GenerationRevision: 1,
 		Disagreements:      []DiagnosticDisagreement{{Path: "x.txt", Kind: DisagreementMissingInCatalog, DiskKind: "file"}},
 	}
-	testutil.FailErr(t, "retry after write failure", sampler.retainAndWrite(retryPath, retryReport, nil, 4))
+	testutil.FailErr(t, "retry after write failure", sampler.retainAndWrite(t.Context(), retryPath, retryReport, nil, 4, nil))
 	if len(retryReport.Disagreements) != 1 || retryReport.DedupedCount != 0 {
 		t.Fatalf("failed-write disagreement was wrongly deduplicated on retry: len=%d deduped=%d", len(retryReport.Disagreements), retryReport.DedupedCount)
 	}
@@ -503,67 +507,358 @@ func TestDiagnosticDevBoundaryAndAsyncDispatch(t *testing.T) {
 	})
 }
 
-func TestDiagnosticLifecycleDetachAndDrainWinWithoutRecreatingStore(t *testing.T) {
-	reportPath := filepath.Join(t.TempDir(), "detach-barrier.jsonl")
+func TestDiagnosticRealDrainSealsDelayedPublicationAndWaitsForInFlight(t *testing.T) {
+	t.Run("drain_seals_delayed_publication_and_waits_for_inflight_job", func(t *testing.T) {
+		reportPath := filepath.Join(t.TempDir(), "drain-seal.jsonl")
+		t.Setenv("LYCAON_DEV", "1")
+		t.Setenv("LYCAON_CATALOG_DIAGNOSTIC", "1")
+		t.Setenv("LYCAON_CATALOG_DIAGNOSTIC_FILE", reportPath)
+		t.Setenv("LYCAON_CATALOG_DIAGNOSTIC_SUBTREE", "src")
+
+		catalog, rootA := indexFixture(t)
+		rootB := Root{ID: "root-b", Path: t.TempDir()}
+		writeIndexFile(t, rootA.Path, "src/a.txt", "a")
+		writeIndexFile(t, rootB.Path, "src/b.txt", "b")
+
+		storeA, err := catalog.Trees.indexStore(t.Context(), "p", rootA)
+		testutil.FailErr(t, "attach storeA", err)
+		storeB, err := catalog.Trees.indexStore(t.Context(), "p", rootB)
+		testutil.FailErr(t, "attach storeB", err)
+
+		// Hold storeB's diagnostic job in flight at a deterministic barrier.
+		inFlightEntered := make(chan struct{})
+		releaseInFlight := make(chan struct{})
+		storeB.mu.Lock()
+		storeB.diagHook = func() {
+			close(inFlightEntered)
+			<-releaseInFlight
+		}
+		storeB.mu.Unlock()
+
+		// Delay storeA's final publication right after publishFinalLocked releases
+		// storeA.mu and right before scheduleDiagnostic attempts admission.
+		pubPaused := make(chan struct{})
+		releasePub := make(chan struct{})
+		var storeAAdmitted atomic.Bool
+		storeA.mu.Lock()
+		storeA.diagBeforeAdmit = func() {
+			close(pubPaused)
+			<-releasePub
+		}
+		storeA.diagHook = func() {
+			storeAAdmitted.Store(true)
+		}
+		storeA.mu.Unlock()
+
+		// 1. Warm rootB so its diagnostic enters the in-flight barrier.
+		readerB := waitIndex(t, catalog, rootB)
+		testutil.FailErr(t, "close readerB", readerB.Close())
+		<-inFlightEntered
+
+		// 2. Warm rootA so its final publication pauses right before scheduleDiagnostic.
+		readerA := waitIndex(t, catalog, rootA)
+		testutil.FailErr(t, "close readerA", readerA.Close())
+		<-pubPaused
+
+		// 3. Call the REAL TreeStores.Drain while storeA is paused before admission
+		// and storeB has an in-flight diagnostic job.
+		drainDone := make(chan error, 1)
+		go func() {
+			drainDone <- catalog.Trees.Drain(t.Context())
+		}()
+
+		// Wait until Drain has sealed storeA.pins.drained under storeA.mu.
+		deadline := time.Now().Add(2 * time.Second)
+		for {
+			storeA.mu.Lock()
+			sealed := storeA.pins.drained
+			storeA.mu.Unlock()
+			if sealed {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("timed out waiting for TreeStores.Drain to seal storeA")
+			}
+			time.Sleep(2 * time.Millisecond)
+		}
+
+		// Release storeA's delayed publication AFTER Drain sealed admission.
+		// Drain must still wait for storeB's in-flight diagnostic.
+		close(releasePub)
+		select {
+		case err := <-drainDone:
+			t.Fatalf("TreeStores.Drain returned while storeB diagnostic was still in flight (err=%v)", err)
+		case <-time.After(30 * time.Millisecond):
+		}
+
+		// Release storeB's in-flight diagnostic; Drain must now complete cleanly.
+		close(releaseInFlight)
+		select {
+		case err := <-drainDone:
+			testutil.FailErr(t, "TreeStores.Drain", err)
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for TreeStores.Drain to join in-flight diagnostic")
+		}
+
+		if storeAAdmitted.Load() {
+			t.Fatal("delayed publication admitted a diagnostic after TreeStores.Drain sealed the store")
+		}
+		storeA.mu.Lock()
+		aDone := storeA.diagDone
+		storeA.mu.Unlock()
+		if aDone != nil {
+			t.Fatal("storeA has an active diagnostic after TreeStores.Drain returned")
+		}
+		catalog.Trees.diagMu.Lock()
+		stillActive := catalog.Trees.diagActive
+		catalog.Trees.diagMu.Unlock()
+		if stillActive {
+			t.Fatal("global diagnostic slot remained active after TreeStores.Drain returned")
+		}
+	})
+
+	t.Run("release_tree_root_cancels_and_joins_without_recreating_store", func(t *testing.T) {
+		reportPath := filepath.Join(t.TempDir(), "release-root.jsonl")
+		t.Setenv("LYCAON_DEV", "1")
+		t.Setenv("LYCAON_CATALOG_DIAGNOSTIC", "1")
+		t.Setenv("LYCAON_CATALOG_DIAGNOSTIC_FILE", reportPath)
+		t.Setenv("LYCAON_CATALOG_DIAGNOSTIC_SUBTREE", "src")
+
+		catalog, root := indexFixture(t)
+		writeIndexFile(t, root.Path, "src/a.txt", "a")
+		store, err := catalog.Trees.indexStore(t.Context(), "p", root)
+		testutil.FailErr(t, "attach store", err)
+
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		store.mu.Lock()
+		store.diagHook = func() {
+			close(entered)
+			<-release
+		}
+		store.mu.Unlock()
+
+		reader := waitIndex(t, catalog, root)
+		testutil.FailErr(t, "close reader", reader.Close())
+		<-entered
+
+		// Call REAL ReleaseTreeRoot while the diagnostic is paused at the barrier.
+		releaseDone := make(chan error, 1)
+		go func() {
+			releaseDone <- catalog.Trees.ReleaseTreeRoot(t.Context(), root.Path)
+		}()
+
+		select {
+		case err := <-releaseDone:
+			t.Fatalf("ReleaseTreeRoot returned while diagnostic was still in flight (err=%v)", err)
+		case <-time.After(30 * time.Millisecond):
+		}
+
+		close(release)
+		select {
+		case err := <-releaseDone:
+			testutil.FailErr(t, "ReleaseTreeRoot", err)
+		case <-time.After(2 * time.Second):
+			t.Fatal("timed out waiting for ReleaseTreeRoot to join diagnostic")
+		}
+
+		catalog.Trees.mu.Lock()
+		remaining := len(catalog.Trees.trees)
+		catalog.Trees.mu.Unlock()
+		if remaining != 0 {
+			t.Fatalf("detached store was recreated in catalog.Trees: count=%d", remaining)
+		}
+		if _, err := os.Stat(reportPath); !os.IsNotExist(err) {
+			t.Fatalf("released root diagnostic should not write report file, stat err=%v", err)
+		}
+	})
+}
+
+func TestDiagnosticGlobalSingleSlotBoundsConcurrentRoots(t *testing.T) {
 	t.Setenv("LYCAON_DEV", "1")
 	t.Setenv("LYCAON_CATALOG_DIAGNOSTIC", "1")
-	t.Setenv("LYCAON_CATALOG_DIAGNOSTIC_FILE", reportPath)
+	t.Setenv("LYCAON_CATALOG_DIAGNOSTIC_FILE", filepath.Join(t.TempDir(), "global-slot.jsonl"))
 	t.Setenv("LYCAON_CATALOG_DIAGNOSTIC_SUBTREE", "src")
 
-	catalog, root := indexFixture(t)
-	writeIndexFile(t, root.Path, "src/a.txt", "a")
-	reader := waitIndex(t, catalog, root)
-	store := reader.store
-	testutil.FailErr(t, "close reader", reader.Close())
-	testutil.FailErr(t, "drain initial diagnostic", catalog.Drain(t.Context()))
-
-	// Deterministic barrier inside the async diagnostic sample.
-	entered := make(chan struct{})
-	release := make(chan struct{})
-	store.mu.Lock()
-	store.retired = false
-	store.diagHook = func() {
-		close(entered)
-		<-release
+	catalog, root0 := indexFixture(t)
+	roots := []Root{
+		root0,
+		{ID: "r1", Path: t.TempDir()},
+		{ID: "r2", Path: t.TempDir()},
+		{ID: "r3", Path: t.TempDir()},
 	}
-	published := store.status
-	store.mu.Unlock()
+	stores := make([]*indexStore, len(roots))
+	var currentActive atomic.Int32
+	var maxActive atomic.Int32
+	var totalEntered atomic.Int32
+	firstEntered := make(chan struct{})
+	var firstOnce sync.Once
+	releaseFirst := make(chan struct{})
 
-	// Schedule off critical path: must return immediately before barrier releases.
-	store.scheduleDiagnostic(published)
-	<-entered
-
-	// Retire and remove the store from catalog.Trees while the diagnostic is paused at the barrier.
-	catalog.Trees.mu.Lock()
-	for k, s := range catalog.Trees.trees {
-		if s == store {
-			delete(catalog.Trees.trees, k)
+	for i, r := range roots {
+		writeIndexFile(t, r.Path, "src/file.txt", "ok")
+		s, err := catalog.Trees.indexStore(t.Context(), "p", r)
+		testutil.FailErr(t, "attach store", err)
+		s.mu.Lock()
+		s.diagHook = func() {
+			n := currentActive.Add(1)
+			totalEntered.Add(1)
+			for {
+				prev := maxActive.Load()
+				if n <= prev || maxActive.CompareAndSwap(prev, n) {
+					break
+				}
+			}
+			firstOnce.Do(func() { close(firstEntered) })
+			<-releaseFirst
+			currentActive.Add(-1)
 		}
-	}
-	catalog.Trees.mu.Unlock()
-	if !retireTreeStore(store) {
-		t.Fatal("expected retireTreeStore to succeed on detached store")
+		s.mu.Unlock()
+		stores[i] = s
 	}
 
-	// Capture diagDone so we verify clean exit after releasing barrier.
-	store.mu.Lock()
-	done := store.diagDone
-	store.mu.Unlock()
-	close(release)
-	if done != nil {
-		<-done
+	// Warm root0 so its diagnostic holds the single global slot.
+	reader0 := waitIndex(t, catalog, roots[0])
+	testutil.FailErr(t, "close reader0", reader0.Close())
+	<-firstEntered
+
+	// Simultaneously publish/schedule on roots 1..3 while root0 holds the global slot.
+	var wg sync.WaitGroup
+	for i := 1; i < len(roots); i++ {
+		idx := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rd := waitIndex(t, catalog, roots[idx])
+			testutil.FailErr(t, "close concurrent reader", rd.Close())
+			stores[idx].mu.Lock()
+			pub := stores[idx].status
+			stores[idx].mu.Unlock()
+			stores[idx].scheduleDiagnostic(pub)
+		}()
+	}
+	wg.Wait()
+
+	if maxActive.Load() != 1 {
+		t.Fatalf("global diagnostic concurrency exceeded 1: maxActive=%d", maxActive.Load())
+	}
+	if totalEntered.Load() != 1 {
+		t.Fatalf("expected only 1 root diagnostic admitted while global slot was held, got %d", totalEntered.Load())
 	}
 
-	// Detached store must NOT be recreated in catalog.Trees and no report written.
-	catalog.Trees.mu.Lock()
-	remaining := len(catalog.Trees.trees)
-	catalog.Trees.mu.Unlock()
-	if remaining != 0 {
-		t.Fatalf("detached store was recreated in catalog.Trees: count=%d", remaining)
-	}
-	if _, err := os.Stat(reportPath); !os.IsNotExist(err) {
-		t.Fatalf("retired diagnostic sample should not write report file, stat err=%v", err)
-	}
+	close(releaseFirst)
+	testutil.FailErr(t, "drain catalog", catalog.Drain(t.Context()))
+}
+
+func TestDiagnosticCancellationInWalkAndBeforeReportPublish(t *testing.T) {
+	t.Run("walk_stops_on_context_cancellation", func(t *testing.T) {
+		rootDir := t.TempDir()
+		for d := 0; d < 4; d++ {
+			for f := 0; f < 5; f++ {
+				writeIndexFile(t, rootDir, fmt.Sprintf("d%d/f%d.txt", d, f), "x")
+			}
+		}
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		_, _, _, reads, _, err := walkDirectSubtree(
+			ctx,
+			rootDir,
+			DiagnosticConfig{Enabled: true, Subtree: ".", MaxDirs: 64, MaxEntries: 1024, MaxDepth: 8}.normalized(),
+			walkPolicy{},
+			map[string]struct{}{},
+			map[string]string{},
+		)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected context.Canceled from walkDirectSubtree, got %v", err)
+		}
+		if reads.DirReads != 0 || reads.EntryReads != 0 {
+			t.Fatalf("expected zero reads on pre-canceled walk, got %+v", reads)
+		}
+	})
+
+	t.Run("publish_admission_unblocks_on_cancel_and_preserves_admitted_writer_order", func(t *testing.T) {
+		reportPath := filepath.Join(t.TempDir(), "cancel-publish.jsonl")
+		sampler := NewDiagnosticSampler()
+
+		writerEntered := make(chan struct{})
+		releaseWriter := make(chan struct{})
+		var hookOnce sync.Once
+		sampler.beforeWrite = func() {
+			hookOnce.Do(func() {
+				close(writerEntered)
+				<-releaseWriter
+			})
+		}
+
+		// Writer 1 is already admitted and holds the sampler lock at beforeWrite.
+		rep1 := &DiagnosticReport{
+			ProjectID:          "p1",
+			RootID:             "r1",
+			GenerationInstance: 1,
+			GenerationRevision: 1,
+			Disagreements:      []DiagnosticDisagreement{{Path: "first.txt", Kind: DisagreementMissingInCatalog, DiskKind: "file"}},
+		}
+		writer1Done := make(chan error, 1)
+		go func() {
+			writer1Done <- sampler.retainAndWrite(t.Context(), reportPath, rep1, nil, 8, func() bool { return true })
+		}()
+		<-writerEntered
+
+		// Writer 2 waits on cancellation-aware admission; canceling ctx2 must unblock it
+		// immediately WITHOUT waiting for Writer 1 to release.
+		ctx2, cancel2 := context.WithCancel(t.Context())
+		rep2 := &DiagnosticReport{
+			ProjectID:          "p2",
+			RootID:             "r2",
+			GenerationInstance: 2,
+			GenerationRevision: 1,
+			Disagreements:      []DiagnosticDisagreement{{Path: "canceled.txt", Kind: DisagreementMissingInCatalog, DiskKind: "file"}},
+		}
+		writer2Done := make(chan error, 1)
+		go func() {
+			writer2Done <- sampler.retainAndWrite(ctx2, reportPath, rep2, nil, 8, func() bool { return true })
+		}()
+		time.Sleep(15 * time.Millisecond)
+		cancel2()
+
+		select {
+		case err := <-writer2Done:
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("expected canceled waiter to return context.Canceled, got %v", err)
+			}
+		case <-time.After(1 * time.Second):
+			t.Fatal("canceled waiter blocked on held sampler lock instead of unblocking")
+		}
+
+		// Writer 1 (already admitted) completes cleanly when released.
+		close(releaseWriter)
+		testutil.FailErr(t, "admitted writer1", <-writer1Done)
+
+		// Writer 3 rejected by owner admit() check (simulating detach/Drain after acquire).
+		rep3 := &DiagnosticReport{
+			ProjectID:          "p3",
+			RootID:             "r3",
+			GenerationInstance: 3,
+			GenerationRevision: 1,
+			Disagreements:      []DiagnosticDisagreement{{Path: "drained.txt", Kind: DisagreementMissingInCatalog, DiskKind: "file"}},
+		}
+		if err := sampler.retainAndWrite(t.Context(), reportPath, rep3, nil, 8, func() bool { return false }); !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected admit=false to return context.Canceled, got %v", err)
+		}
+
+		raw, err := os.ReadFile(reportPath)
+		testutil.FailErr(t, "read published report", err)
+		lines := slices.DeleteFunc(splitLines(string(raw)), func(s string) bool { return s == "" })
+		if len(lines) != 1 {
+			t.Fatalf("expected only admitted writer1 report on disk, got %d lines", len(lines))
+		}
+		var dec DiagnosticReport
+		testutil.FailErr(t, "decode report", json.Unmarshal([]byte(lines[0]), &dec))
+		if dec.ProjectID != "p1" {
+			t.Fatalf("unexpected report on disk: %+v", dec)
+		}
+	})
 }
 
 func TestDiagnosticEnabledAndDisabledMatchAnswersAndProductWorkCounters(t *testing.T) {

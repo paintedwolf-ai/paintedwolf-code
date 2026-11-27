@@ -477,4 +477,5 @@ type TreeStores struct {
 	scopes      ScopeProvider
 	diagMu      sync.Mutex
 	diagSampler *DiagnosticSampler
+	diagActive  bool
 }
