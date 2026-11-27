@@ -30,6 +30,34 @@ from grounding.suites.gb08_presentation.diagnostic import (
 )
 
 _HANDLE_RE = re.compile(r"\b(?:read|command|grep|find|list|stat|wc|diff|web|surface)#\d+\b")
+_OBSERVED_HANDLES_LINE_RE = re.compile(r"^Observed handles:\s*(.+)$", re.MULTILINE)
+_CATALOG_EVIDENCE_RE = re.compile(r'"evidence"\s*:\s*"([^"]+)"')
+
+
+def _extract_repair_feedback_offers(raw_pending_requests: list[dict[str, Any]]) -> tuple[list[str], bool]:
+    """Extract offered handles and offender naming from the repair feedback message only.
+
+    Excludes static system-prompt syntax examples (e.g., ``handle:read#3``, ``[command#4]``)
+    by inspecting only the host-emitted repair message's ``Observed handles:`` list and
+    evidence catalog entries.
+    """
+    if not raw_pending_requests:
+        return [], False
+    last_req = raw_pending_requests[-1]
+    messages = last_req.get("messages") or []
+    repair_texts: list[str] = []
+    for msg in messages:
+        content = str(msg.get("content") or "")
+        if "Observed handles:" in content or "per rejected citation" in content:
+            repair_texts.append(content)
+    blob = "\n".join(repair_texts)
+    offered: set[str] = set()
+    for match in _OBSERVED_HANDLES_LINE_RE.finditer(blob):
+        offered.update(_HANDLE_RE.findall(match.group(1)))
+    for match in _CATALOG_EVIDENCE_RE.finditer(blob):
+        offered.update(_HANDLE_RE.findall(match.group(1)))
+    named_offender_present = "read#99" in blob
+    return sorted(offered - {"read#99"}), named_offender_present
 
 
 def run_gb08_pilot(
@@ -133,9 +161,7 @@ def run_gb08_pilot(
         )
 
         # Inspect serialized repair prompt sent to model after refusal
-        repair_blob = json.dumps(art_bad.raw_pending_requests[-1]) if art_bad.raw_pending_requests else ""
-        offered = sorted(set(_HANDLE_RE.findall(repair_blob)) - {"read#99"})
-        named_offender_present = "read#99" in repair_blob
+        offered, named_offender_present = _extract_repair_feedback_offers(art_bad.raw_pending_requests)
         feedback_audit = audit_refusal_feedback(
             art_bad.delivery_log,
             offered_handles=offered,
