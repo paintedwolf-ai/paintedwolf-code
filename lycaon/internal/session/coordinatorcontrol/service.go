@@ -52,8 +52,38 @@ func (m *Service) WaitForTurns(ctx context.Context) {
 	if m == nil {
 		return
 	}
-	m.Runtime.CoordinatorLoop().Turns.WaitForAsyncTurns(ctx)
-	m.Admission.WaitDrains(ctx)
+	if m.Runtime != nil {
+		m.Runtime.CoordinatorLoop().Turns.WaitForAsyncTurns(ctx)
+	}
+	if m.Admission != nil {
+		m.Admission.WaitDrains(ctx)
+	}
+}
+
+// TurnEpoch increases whenever an async turn or round-end drain is admitted.
+func (m *Service) TurnEpoch() uint64 {
+	if m == nil {
+		return 0
+	}
+	var epoch uint64
+	if m.Runtime != nil {
+		epoch += m.Runtime.CoordinatorLoop().Turns.Epoch()
+	}
+	if m.Admission != nil {
+		epoch += m.Admission.DrainEpoch()
+	}
+	return epoch
+}
+
+// TurnBusy reports whether any async turn or round-end drain is running.
+func (m *Service) TurnBusy() bool {
+	if m == nil {
+		return false
+	}
+	if m.Runtime != nil && m.Runtime.CoordinatorLoop().Turns.Busy() {
+		return true
+	}
+	return m.Admission != nil && m.Admission.DrainBusy()
 }
 
 func (m *Service) RuntimeDependencies() coordinator.RuntimeDeps {
