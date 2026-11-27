@@ -1,4 +1,5 @@
 """Unit controls for masked-upstream-failure pipeline publication fence grading."""
+import json
 import pathlib
 import sqlite3
 import tempfile
@@ -7,27 +8,31 @@ import unittest
 from portable_command.contracts import load_suite
 from portable_command.grading import grade_case
 from portable_command.observe import build_observation
+from portable_command.test_portable_command_harness import create_audit_db
 
 
 def _write_db(path, *, published):
+    create_audit_db(path)
     db = sqlite3.connect(path)
     db.executescript("""
-        CREATE TABLE invocation_receipts (id TEXT, session_id TEXT, tool_name TEXT, outcome TEXT, error_code TEXT, started_at TEXT, ended_at TEXT);
-        CREATE TABLE invocation_programs (id TEXT, parent_receipt_id TEXT, state TEXT, exit_code INTEGER, stop_code TEXT, complete INTEGER);
-        CREATE TABLE invocation_program_executions (id TEXT, program_id TEXT, parent_execution_id TEXT, execution_id TEXT, operation_id TEXT, state TEXT, exit_code INTEGER, publication_eligible INTEGER, effect_certainty TEXT);
-        CREATE TABLE invocation_program_revision_pins (id TEXT, program_id TEXT, execution_id TEXT, path TEXT, basis TEXT, accepted_revision TEXT, published_revision TEXT, disk_sha256 TEXT);
-        CREATE TABLE invocation_program_outputs (id TEXT, program_id TEXT, execution_id TEXT, stream TEXT, reference TEXT, sha256 TEXT, bytes INTEGER, preview_truncated INTEGER, blob_id TEXT, redacted INTEGER);
-        CREATE TABLE invocation_program_sources (id TEXT, program_id TEXT, source_unit_id TEXT, sha256 TEXT);
-        CREATE TABLE source_command_windows (id TEXT, session_id TEXT, invocation_id TEXT, state TEXT);
+        ALTER TABLE invocation_program_executions ADD COLUMN status_code INTEGER;
+        ALTER TABLE invocation_program_executions ADD COLUMN publication_eligible INTEGER;
+        ALTER TABLE invocation_program_executions ADD COLUMN complete INTEGER;
     """)
-    db.execute("INSERT INTO invocation_receipts VALUES ('r1','s1','command','completed','', 't0','t1')")
-    db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',1,'',1)")
-    db.execute("INSERT INTO invocation_program_executions VALUES ('e1','p1','', 'ex-ext','external','completed',1,0,'completed')")
-    db.execute("INSERT INTO invocation_program_executions VALUES ('e2','p1','', 'ex-cat','read','completed',0,1,'none')")
-    w_state, w_exit, w_elig, w_cert = ('completed', 0, 1, 'completed') if published else ('failed', 1, 0, 'none')
-    db.execute("INSERT INTO invocation_program_executions VALUES ('e3','p1','', 'ex-wr','write',?,?,?,?)", (w_state, w_exit, w_elig, w_cert))
-    acc, pub = ('rev1', 'rev2') if published else ('', '')
-    db.execute("INSERT INTO invocation_program_revision_pins VALUES ('pin1','p1','ex-wr','result.txt','redirect',?,?, '')", (acc, pub))
+    db.execute("INSERT INTO invocation_receipts VALUES ('r1','s1','tc1','command','command','completed',1)")
+    db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',1,'')")
+    db.execute("INSERT INTO invocation_program_executions VALUES ('ex-ext','p1',1,'external','external','processes','completed','completed','','','',1,0,1)")
+    db.execute("INSERT INTO invocation_program_executions VALUES ('ex-cat','p1',2,'cat','cat','files','completed','none','','','',0,1,1)")
+    w_state, w_cert, acc, pub, w_status, w_elig = (
+        ('completed', 'completed', 'rev1', 'rev2', 0, 1) if published else ('failed', 'none', '', '', 1, 0)
+    )
+    db.execute(
+        "INSERT INTO invocation_program_executions VALUES ('ex-wr','p1',3,'write','write','files',?,?,?,?,?, ?,?,1)",
+        (w_state, w_cert, acc, pub, '', w_status, w_elig),
+    )
+    db.execute("INSERT INTO invocation_program_revision_pins VALUES ('p1','ex-wr',1,'destination','replace','result.txt')")
+    res_json = json.dumps({'outcome': 'completed', 'content': json.dumps({'program_id': 'p1', 'state': 'completed', 'status': 1, 'stdout': '', 'stderr': ''})})
+    db.execute("INSERT INTO messages VALUES ('m1','s1',1,'tool','tc1',?)", (res_json,))
     db.commit()
     db.close()
 
@@ -53,7 +58,7 @@ class MaskedUpstreamFailureControlTests(unittest.TestCase):
                 project_dir=proj,
                 db_path=db_path,
                 sidecar_log=sidecar,
-                turn_records=[{'call_ids': ['r1'], 'await_call_ids': [], 'command_call_id': 'r1', 'batch_outcomes': [{'call_id': 'r1', 'tool': 'command', 'outcome': 'completed'}]}],
+                turn_records=[{'call_ids': ['tc1'], 'await_call_ids': [], 'command_call_id': 'tc1', 'batch_outcomes': [{'call_id': 'tc1', 'tool': 'command', 'outcome': 'completed'}]}],
                 prelude_records=[],
                 baseline_hashes={'result.txt': '2c0e3f276f2a2d677615a5656b9282b90c66509427029608d3790c178b56684f'},
             )
