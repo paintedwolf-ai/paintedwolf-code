@@ -36,7 +36,7 @@ def _inspect_artifact(art: SidecarRunArtifact, *, initial_turns: int) -> dict[st
     host_assembled = bool(grounding.get("host_assembled") is True)
     hint_code = str(grounding.get("hint_code") or "")
     extra_repair_prompts = max(0, len(art.raw_pending_requests) - initial_turns)
-    refused = bool(retry_count > 0 or host_assembled or hint_code or extra_repair_prompts > 0)
+    refused = bool(retry_count > 0 or host_assembled or hint_code)
     return {
         "session_id": art.session_id,
         "traced": grounding.get("traced"),
@@ -155,7 +155,7 @@ def run_gb04_pilot(
                 repair_reply_content=repair_text or "",
                 engine_provenance=sidecar.provenance,
                 run_manifest=manifest,
-                poll_timeout=60.0,
+                poll_timeout=120.0,
             )
             after = probe_store_db(sidecar.store_db_path, sid)
             (out_dir / f"{selector}.json").write_text(
