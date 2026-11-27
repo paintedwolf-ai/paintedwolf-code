@@ -112,6 +112,7 @@ func cf06ReferenceFileLookup(paths []string, query string) []cf06RefLookupHit {
 
 func TestCF06_S04_FileLookup(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
+	t.Cleanup(func() { _ = sourcecatalog.Process().Drain(context.Background()) })
 	// Build a realistic 1..5,000 path corpus (200 paths in primary + 5,000-path stress corpus).
 	rootSmall := t.TempDir()
 	var smallPaths []string

@@ -28,7 +28,10 @@ class _FakeTransport:
 
     def __init__(self) -> None:
         self.projects: dict[str, list[Path]] = {}
+        self.sessions: dict[str, str] = {}
+        self.messages: list[tuple[str, str, str]] = []  # (pid, sid, text)
         self.next_pid = 0
+        self.next_sid = 0
 
     def request(self, path: str, payload: dict[str, object] | None = None, *, method: str = "POST") -> dict[str, object]:
         if path == "/v1/projects" and method == "POST":
@@ -41,18 +44,42 @@ class _FakeTransport:
                 "id": pid,
                 "roots": [{"id": f"root-{i}", "path": str(p)} for i, p in enumerate(root_paths)],
             }
+        if path == "/v1/sessions" and method == "POST":
+            self.next_sid += 1
+            sid = f"sess-{self.next_sid}"
+            self.sessions[sid] = str((payload or {}).get("project_id") or "")
+            return {"id": sid}
+        if path.startswith("/v1/sessions/") and path.endswith("/prompts") and method == "POST":
+            sid = path.split("/")[3]
+            pid = self.sessions.get(sid, "")
+            self.messages.append((pid, sid, str((payload or {}).get("text") or "")))
+            return {"accepted": True}
+        if path.startswith("/v1/sessions/") and method == "DELETE":
+            sid = path.split("/")[3]
+            self.sessions.pop(sid, None)
+            self.messages = [m for m in self.messages if m[1] != sid]
+            return {"deleted": True}
         if path.endswith("/source/index"):
             return {"revision": 1, "coverage": [{"root_id": "root-0", "state": "ready", "discovery_complete": True, "refreshing": False}]}
         if "/source/search?" in path:
             return {"revision": 1, "matches": [], "coverage": [{"root_id": "root-0", "state": "ready"}]}
         if path == "/v1/search":
             q = str((payload or {}).get("query") or "")
+            origin = str((payload or {}).get("origin_project_id") or "")
             if "kind:bogus" in q or "kind:invalid" in q or "kind:code kind:symbol" in q or "NOT kind:code" in q:
                 raise urllib.error.HTTPError(path, 400, "bad query", hdrs={}, fp=None)  # type: ignore[arg-type]
             if (payload or {}).get("cursor") == "invalid-cursor-token":
                 raise urllib.error.HTTPError(path, 400, "bad cursor", hdrs={}, fp=None)  # type: ignore[arg-type]
-            if (payload or {}).get("origin_project_id") == "00000000-0000-0000-0000-000000000000":
+            if origin == "00000000-0000-0000-0000-000000000000":
                 raise urllib.error.HTTPError(path, 404, "not found", hdrs={}, fp=None)  # type: ignore[arg-type]
+            if "kind:message" in q:
+                tok = q.split()[-1]
+                hits = [
+                    {"hit_id": f"m-{i}", "hit_kind": "message", "project_id": pid, "snippet": txt}
+                    for i, (pid, _, txt) in enumerate(self.messages)
+                    if pid == origin and tok in txt
+                ]
+                return {"status": "complete", "hits": hits, "issues": []}
             return {"status": "complete", "hits": [], "issues": []}
         if "/editor-documents" in path and method == "POST":
             return {"id": "doc-1", "revision": 1}

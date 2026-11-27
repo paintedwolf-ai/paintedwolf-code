@@ -303,62 +303,139 @@ def run_s03_sidecar(
     searches_per_instance: int = 20,
     rg_bin: str = "rg",
 ) -> FamilySummary:
-    """Run S03 search-after-change under a continuous writer (100 instances x 20 searches + 2 edges)."""
+    """Run S03 search-after-change under a continuous atomic writer (100 instances x 20 searches + 2 edges).
+
+    Addresses Decision 033:
+    - Keeps the stable-token control (`base_alpha`) AND adds moving-result comparisons (`moving_token`).
+    - Logs every atomic version transition with identifiable sequence numbers.
+    - Applies strict D4 attribution in BOTH directions:
+      * Extra/stale hit (path not holding the queried token in ANY version during [t_start, t_end]) -> DEFECT.
+      * Missing hit (path holding the queried token in EVERY version during [t_start, t_end]) ->
+        PASS_DECLARED_GAP only if an accounting freshness/coverage gap is declared, else DEFECT.
+    - Deletion edge enforces D4 strictness: a stale hit for a deleted file is ALWAYS a DEFECT.
+    """
     summary = FamilySummary(family_id="S03", lane="sidecar", planned=instances, edges_planned=2)
     cdir = work_root / "s03_live_tree"
     cdir.mkdir(parents=True, exist_ok=True)
-    for i in range(12):
-        (cdir / f"doc_{i:02d}.txt").write_text(f"base_alpha stable_{i}\n", encoding="utf-8")
+    file_count = 12
+    # Track exact per-file moving_token membership across atomic versions.
+    state_lock = threading.Lock()
+    current_moving: set[str] = {f"doc_{i:02d}.txt" for i in range(0, file_count, 2)}
+    version_history: list[frozenset[str]] = [frozenset(current_moving)]
+    for i in range(file_count):
+        fname = f"doc_{i:02d}.txt"
+        tok = "moving_token" if fname in current_moving else "other_token"
+        (cdir / fname).write_text(f"base_alpha {tok} rev_0\n", encoding="utf-8")
+
     pid, roots = driver.attach_project([cdir])
     wait_for_catalog_ready(driver, pid)
 
     stop_event = threading.Event()
     write_counter = [0]
 
+    def _atomic_write(path: Path, text: str) -> None:
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(text, encoding="utf-8")
+        tmp.replace(path)
+
     def _writer() -> None:
-        idx = 0
+        idx = 1
         while not stop_event.is_set():
-            fidx = idx % 12
-            p = cdir / f"doc_{fidx:02d}.txt"
-            tok = "moving_token" if (idx % 2 == 0) else "other_token"
+            fidx = idx % file_count
+            fname = f"doc_{fidx:02d}.txt"
+            has_moving = (idx % 2 == 0)
+            tok = "moving_token" if has_moving else "other_token"
             try:
-                p.write_text(f"base_alpha {tok} rev_{idx}\n", encoding="utf-8")
+                _atomic_write(cdir / fname, f"base_alpha {tok} rev_{idx}\n")
+                with state_lock:
+                    if has_moving:
+                        current_moving.add(fname)
+                    else:
+                        current_moving.discard(fname)
+                    version_history.append(frozenset(current_moving))
+                    write_counter[0] = idx
             except OSError:
                 pass
-            write_counter[0] = idx + 1
             idx += 1
             time.sleep(0.015)
 
     writer_thread = threading.Thread(target=_writer, daemon=True)
     writer_thread.start()
+    freshness_reasons = frozenset(
+        {"catalog_refreshing", "catalog_incomplete", "catalog_warming", "stale_inventory", "time_budget", "index_warming"}
+    )
     try:
         q_stable = CodeQuerySpec(form="literal", pattern="base_alpha")
+        q_moving = CodeQuerySpec(form="literal", pattern="moving_token")
         for inst in range(instances):
             inst_ok = True
             inst_gaps: list[str] = []
             for s_idx in range(searches_per_instance):
-                # Stable token must ALWAYS be found across all 12 files unless a gap is declared.
-                before_ref = reference_search(cdir, q_stable, rg_bin=rg_bin).matched_files()
+                use_moving = (s_idx % 2 == 1)
+                q_spec = q_moving if use_moving else q_stable
+                dsl = f"project:current kind:code {q_spec.pattern}"
+
+                with state_lock:
+                    ver_start = len(version_history) - 1
+                before_ref = reference_search(cdir, q_spec, rg_bin=rg_bin).matched_files()
                 prod = _filter_code_hits(
                     driver.search(
-                        "project:current kind:code base_alpha",
+                        dsl,
                         default_root_id=roots[0],
                         origin_project_id=pid,
                         limit=200,
                         budget="interactive",
                     )
                 )
-                after_ref = reference_search(cdir, q_stable, rg_bin=rg_bin).matched_files()
-                always_present = before_ref & after_ref
+                after_ref = reference_search(cdir, q_spec, rg_bin=rg_bin).matched_files()
+                with state_lock:
+                    ver_end = len(version_history) - 1
+                    window_snaps = list(version_history[ver_start : ver_end + 1])
+
+                if use_moving:
+                    window_possible = set(before_ref) | set(after_ref)
+                    window_guaranteed = set(before_ref) & set(after_ref)
+                    for snap in window_snaps:
+                        window_possible |= set(snap)
+                        window_guaranteed &= set(snap)
+                else:
+                    window_possible = set(before_ref) | set(after_ref)
+                    window_guaranteed = set(before_ref) & set(after_ref)
+
                 prod_files = {h.hit.path for h in prod.hits}
-                missing = sorted(always_present - prod_files)
+                # D4 Direction 1: Extra / stale claim is ALWAYS a DEFECT (never excused by gaps).
+                extra_stale = sorted(prod_files - window_possible)
+                if extra_stale:
+                    inst_ok = False
+                    summary.record_fail(
+                        {
+                            "instance": inst,
+                            "search": s_idx,
+                            "query": q_spec.pattern,
+                            "extra_stale_files": extra_stale[:5],
+                            "ver_window": [ver_start, ver_end],
+                            "declared_gaps": [g.reason for g in prod.declared_gaps],
+                        }
+                    )
+                    break
+
+                # D4 Direction 2: Missing guaranteed file requires an accounting freshness/coverage gap.
+                missing = sorted(window_guaranteed - prod_files)
                 if missing:
-                    if prod.declared_gaps:
-                        inst_gaps.extend(g.reason for g in prod.declared_gaps)
+                    valid_gaps = [g.reason for g in prod.declared_gaps if g.reason in freshness_reasons]
+                    if valid_gaps:
+                        inst_gaps.extend(valid_gaps)
                     else:
                         inst_ok = False
                         summary.record_fail(
-                            {"instance": inst, "search": s_idx, "missing_stable_files": missing[:5], "writes": write_counter[0]}
+                            {
+                                "instance": inst,
+                                "search": s_idx,
+                                "query": q_spec.pattern,
+                                "missing_guaranteed_files": missing[:5],
+                                "ver_window": [ver_start, ver_end],
+                                "declared_gaps": [g.reason for g in prod.declared_gaps],
+                            }
                         )
                         break
             if inst_ok:
@@ -372,13 +449,15 @@ def run_s03_sidecar(
 
     # 2 hand-written S03 edges.
     e_file = cdir / "s03_edge_new.txt"
-    e_file.write_text("s03_brand_new_burst_token\n", encoding="utf-8")
+    _atomic_write(e_file, "s03_brand_new_burst_token\n")
     ans_new = _filter_code_hits(driver.search("project:current kind:code s03_brand_new_burst_token", default_root_id=roots[0], origin_project_id=pid, budget="complete"))
-    edge1_ok = any(h.hit.path == "s03_edge_new.txt" for h in ans_new.hits) or bool(ans_new.declared_gaps)
-    summary.record_edge(edge1_ok, {"edge": "s03_1_create_and_search", "hits": len(ans_new.hits), "gaps": [g.reason for g in ans_new.declared_gaps]})
+    valid_new_gaps = [g.reason for g in ans_new.declared_gaps if g.reason in freshness_reasons]
+    edge1_ok = any(h.hit.path == "s03_edge_new.txt" for h in ans_new.hits) or bool(valid_new_gaps)
+    summary.record_edge(edge1_ok, {"edge": "s03_1_create_and_search", "hits": len(ans_new.hits), "gaps": valid_new_gaps})
 
+    # Edge 2 (D4 strictness): Deleted file MUST NOT appear as a stale hit (never excused by a gap).
     e_file.unlink(missing_ok=True)
     ans_del = _filter_code_hits(driver.search("project:current kind:code s03_brand_new_burst_token", default_root_id=roots[0], origin_project_id=pid, budget="complete"))
-    edge2_ok = (not any(h.hit.path == "s03_edge_new.txt" for h in ans_del.hits)) or bool(ans_del.declared_gaps)
-    summary.record_edge(edge2_ok, {"edge": "s03_2_delete_and_search", "hits": len(ans_del.hits), "gaps": [g.reason for g in ans_del.declared_gaps]})
+    edge2_ok = not any(h.hit.path == "s03_edge_new.txt" for h in ans_del.hits)
+    summary.record_edge(edge2_ok, {"edge": "s03_2_delete_and_search", "stale_hits": [h.hit.path for h in ans_del.hits], "gaps": [g.reason for g in ans_del.declared_gaps]})
     return summary

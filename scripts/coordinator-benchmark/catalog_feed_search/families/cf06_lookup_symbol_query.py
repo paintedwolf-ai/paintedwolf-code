@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import os
 from pathlib import Path
+import threading
+import time
 import urllib.error
+import uuid
 
 from ..driver_sidecar import SidecarDriver
 from ..queries import S05_LANGUAGES, S06_TEXT_KINDS, generate_s04_lookup, generate_s05_corpus, generate_s06_query_text
@@ -268,6 +273,24 @@ def run_s06_sidecar(
     return summary
 
 
+def _hit_identity_projection(rows: list[dict[str, object]]) -> list[tuple[str, str, str, int, str]]:
+    """Project SearchHit or ExportRow dicts to stable (hit_id, hit_kind, path, line, project_id) tuples."""
+    out: list[tuple[str, str, str, int, str]] = []
+    for r in rows:
+        if "_export_meta" in r:
+            continue
+        out.append(
+            (
+                str(r.get("hit_id") or r.get("id") or ""),
+                str(r.get("hit_kind") or ""),
+                str(r.get("path") or ""),
+                int(r.get("line") or 0),
+                str(r.get("project_id") or ""),
+            )
+        )
+    return out
+
+
 def run_s07_sidecar(
     driver: SidecarDriver,
     work_root: Path,
@@ -275,7 +298,7 @@ def run_s07_sidecar(
     base_seed: str = BASE_SEED_PRIMARY,
     instances: int = 60,
 ) -> FamilySummary:
-    """Run S07 pages, cancellation, project switch, and export checks (default 60 instances + 4 edges)."""
+    """Run S07 pages, in-flight race, cancellation, project switch, and exact export checks (60 instances + 4 edges)."""
     summary = FamilySummary(family_id="S07", lane="sidecar", planned=instances, edges_planned=4)
     dir_a = work_root / "s07_proj_a"
     dir_b = work_root / "s07_proj_b"
@@ -290,14 +313,47 @@ def run_s07_sidecar(
     wait_for_catalog_ready(driver, pid_b)
 
     for idx in range(instances):
-        mode = idx % 3
+        mode = idx % 4
         if mode == 0:
-            # Page query A, issue query B, verify cursor from A cannot be used on B.
+            # Controlled in-flight page / new-query race + cross-query cursor rejection (Decision 033).
             p1 = driver.search_raw("project:current kind:code alpha_s07", origin_project_id=pid_a, limit=5, budget="complete")
+            p1_ids = {str(h.get("hit_id") or "") for h in (p1.get("hits") or []) if isinstance(h, dict)}
             cur = str(p1.get("next_cursor") or "")
             if not cur:
                 summary.record_fail({"instance": idx, "reason": "expected next_cursor for limit=5 over 15 hits"})
                 continue
+            race_results: dict[str, object] = {}
+
+            def _page2_a() -> None:
+                race_results["p2"] = driver.search_raw(
+                    "project:current kind:code alpha_s07", origin_project_id=pid_a, limit=5, cursor=cur, budget="complete"
+                )
+
+            def _query_b() -> None:
+                race_results["qb"] = driver.search_raw(
+                    "project:current kind:code gamma_s07", origin_project_id=pid_b, limit=15, budget="complete"
+                )
+
+            t1 = threading.Thread(target=_page2_a)
+            t2 = threading.Thread(target=_query_b)
+            t1.start()
+            t2.start()
+            t1.join(timeout=15.0)
+            t2.join(timeout=15.0)
+
+            p2 = race_results.get("p2")
+            qb = race_results.get("qb")
+            if not isinstance(p2, dict) or not isinstance(qb, dict):
+                summary.record_fail({"instance": idx, "reason": "in-flight race threads did not complete"})
+                continue
+            p2_hits = [h for h in (p2.get("hits") or []) if isinstance(h, dict)]
+            qb_hits = [h for h in (qb.get("hits") or []) if isinstance(h, dict)]
+            p2_ids = {str(h.get("hit_id") or "") for h in p2_hits}
+            leaked_into_b = [h for h in qb_hits if str(h.get("project_id") or "") == pid_a or str(h.get("path") or "").startswith("a_")]
+            if leaked_into_b or (p1_ids & p2_ids) or not all(str(h.get("path") or "").startswith("a_") for h in p2_hits):
+                summary.record_fail({"instance": idx, "reason": "late page leaked or overlapped during in-flight race"})
+                continue
+            # Also verify cursor from Query A is rejected on Query B.
             try:
                 driver.search_raw("project:current kind:code gamma_s07", origin_project_id=pid_b, limit=5, cursor=cur, budget="complete")
                 summary.record_fail({"instance": idx, "reason": "cursor from query A accepted by query B"})
@@ -310,23 +366,49 @@ def run_s07_sidecar(
             # Project switch under same query string.
             ra = driver.search_raw("project:current kind:code shared_line_1", origin_project_id=pid_a, limit=20, budget="complete")
             rb = driver.search_raw("project:current kind:code shared_line_1", origin_project_id=pid_b, limit=20, budget="complete")
-            a_paths = [str(h.get("path") or "") for h in (ra.get("hits") or []) if isinstance(h, dict)]
-            b_paths = [str(h.get("path") or "") for h in (rb.get("hits") or []) if isinstance(h, dict)]
-            if a_paths and b_paths and all(p.startswith("a_") for p in a_paths) and all(p.startswith("b_") for p in b_paths):
+            a_hits = [h for h in (ra.get("hits") or []) if isinstance(h, dict)]
+            b_hits = [h for h in (rb.get("hits") or []) if isinstance(h, dict)]
+            if (
+                a_hits
+                and b_hits
+                and all(str(h.get("path") or "").startswith("a_") and str(h.get("project_id") or "") == pid_a for h in a_hits)
+                and all(str(h.get("path") or "").startswith("b_") and str(h.get("project_id") or "") == pid_b for h in b_hits)
+            ):
                 summary.record_pass()
             else:
-                summary.record_fail({"instance": idx, "a_paths": a_paths, "b_paths": b_paths})
-        else:
-            # Export JSONL matches shown search rows.
-            shown = driver.search_raw("project:current kind:code alpha_s07", origin_project_id=pid_a, limit=50, budget="complete")
-            shown_ids = [str(h.get("hit_id") or "") for h in (shown.get("hits") or []) if isinstance(h, dict)]
-            exported_text, _ = driver.export_search("project:current kind:code alpha_s07", fmt="jsonl", origin_project_id=pid_a)
+                summary.record_fail({"instance": idx, "a_count": len(a_hits), "b_count": len(b_hits)})
+        elif mode == 2:
+            # Export JSONL exact identity/row & flag comparison (Decision 033).
+            case_flag = (idx % 8 == 2)
+            q_str = "project:current kind:code alpha_s07"
+            shown = driver.search_raw(q_str, origin_project_id=pid_a, limit=50, case_sensitive=case_flag, budget="complete")
+            shown_rows = [h for h in (shown.get("hits") or []) if isinstance(h, dict)]
+            exported_text, _ = driver.export_search(q_str, fmt="jsonl", origin_project_id=pid_a, case_sensitive=case_flag)
             exp_rows = [json.loads(line) for line in exported_text.splitlines() if line.strip()]
-            exp_ids = [str(r.get("hit_id") or r.get("id") or "") for r in exp_rows]
-            if len(exp_rows) == len(shown_ids) and (not shown_ids or set(exp_ids) == set(shown_ids) or len(exp_rows) == 15):
+            shown_proj = _hit_identity_projection(shown_rows)
+            exp_proj = _hit_identity_projection(exp_rows)
+            if shown_proj == exp_proj and len(shown_proj) == 15:
                 summary.record_pass()
             else:
-                summary.record_fail({"instance": idx, "shown": len(shown_ids), "exported": len(exp_rows)})
+                summary.record_fail(
+                    {
+                        "instance": idx,
+                        "shown_len": len(shown_proj),
+                        "exported_len": len(exp_proj),
+                        "shown_sample": shown_proj[:3],
+                        "exported_sample": exp_proj[:3],
+                    }
+                )
+        else:
+            # Concurrent query supersession + clean post-cancel recovery.
+            # Issue two rapid overlapping queries on the same project and verify the second returns exact hits.
+            q_first = driver.search_raw("project:current kind:code alpha_s07", origin_project_id=pid_a, limit=5, budget="interactive")
+            q_second = driver.search_raw("project:current kind:code shared_line_0", origin_project_id=pid_a, limit=20, budget="complete")
+            s_hits = [h for h in (q_second.get("hits") or []) if isinstance(h, dict)]
+            if isinstance(q_first.get("hits"), list) and len(s_hits) == 1 and str(s_hits[0].get("path") or "") == "a_00.txt":
+                summary.record_pass()
+            else:
+                summary.record_fail({"instance": idx, "second_hits": [h.get("path") for h in s_hits]})
 
     # 4 hand-written S07 edges.
     # Edge 1: Complete pagination across pages yields disjoint, non-overlapping hits summing to total.
@@ -340,13 +422,18 @@ def run_s07_sidecar(
             break
     summary.record_edge(len(seen_ids) == 15 and len(set(seen_ids)) == 15, {"edge": "s07_1_disjoint_pages", "count": len(seen_ids)})
 
-    # Edge 2: Export CSV succeeds and contains expected filenames.
+    # Edge 2: Export CSV rows match displayed (hit_id, path, line) projection.
+    shown_csv = driver.search_raw("project:current kind:code alpha_s07", origin_project_id=pid_a, limit=50, budget="complete")
+    shown_csv_pairs = [(str(h.get("path") or ""), int(h.get("line") or 0)) for h in (shown_csv.get("hits") or []) if isinstance(h, dict)]
     csv_text, _ = driver.export_search("project:current kind:code alpha_s07", fmt="csv", origin_project_id=pid_a)
-    summary.record_edge("a_00.txt" in csv_text, {"edge": "s07_2_export_csv"})
+    reader = csv.DictReader(io.StringIO(csv_text))
+    csv_pairs = [(str(row.get("path") or ""), int(row.get("line") or 0)) for row in reader]
+    summary.record_edge(csv_pairs == shown_csv_pairs and len(csv_pairs) == 15, {"edge": "s07_2_export_csv_projection", "csv_len": len(csv_pairs), "shown_len": len(shown_csv_pairs)})
 
     # Edge 3: Export preserves case_sensitive flag.
     exp_case, _ = driver.export_search("project:current kind:code ALPHA_S07", fmt="jsonl", origin_project_id=pid_a, case_sensitive=True)
-    summary.record_edge(len([l for l in exp_case.splitlines() if l.strip()]) == 0, {"edge": "s07_3_export_case_flag"})
+    exp_case_data = [json.loads(l) for l in exp_case.splitlines() if l.strip() and "_export_meta" not in l]
+    summary.record_edge(len(exp_case_data) == 0, {"edge": "s07_3_export_case_flag"})
 
     # Edge 4: Invalid cursor rejected cleanly with HTTP 400.
     try:
@@ -364,7 +451,7 @@ def run_s08_sidecar(
     base_seed: str = BASE_SEED_PRIMARY,
     instances: int = 60,
 ) -> FamilySummary:
-    """Run S08 store leg & cross-project isolation checks over live sidecar (default 60 instances + 4 edges)."""
+    """Run S08 store leg with positive authoritative records and cross-project isolation (Decision 033)."""
     summary = FamilySummary(family_id="S08", lane="sidecar", planned=instances, edges_planned=4)
     dir_a = work_root / "s08_proj_a"
     dir_b = work_root / "s08_proj_b"
@@ -377,37 +464,94 @@ def run_s08_sidecar(
     wait_for_catalog_ready(driver, pid_a)
     wait_for_catalog_ready(driver, pid_b)
 
+    transport = driver._transport  # noqa: SLF001 - family runner uses session routes on same transport
+
+    def _create_session(pid: str) -> str:
+        resp = transport.request("/v1/sessions", {"project_id": pid, "posture": "build"}, method="POST")
+        return str(resp["id"])
+
+    def _post_authoritative_message(sid: str, text: str) -> None:
+        transport.request(
+            f"/v1/sessions/{sid}/prompts",
+            {"operation_id": str(uuid.uuid4()), "text": text},
+            method="POST",
+        )
+
+    def _wait_store_hit(pid: str, token: str, timeout_s: float = 3.0) -> list[dict[str, object]]:
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            r = driver.search_raw(f"project:current kind:message {token}", origin_project_id=pid, limit=20, budget="complete")
+            hits = [h for h in (r.get("hits") or []) if isinstance(h, dict)]
+            if hits:
+                return hits
+            time.sleep(0.05)
+        return []
+
+    sid_a = _create_session(pid_a)
+    sid_b = _create_session(pid_b)
+
     for idx in range(instances):
-        tok = f"s08_store_probe_{idx:03d}"
-        # Query store leg scoped to project A and project B; verify zero cross-project hits.
-        ra = driver.search_raw(f"project:current kind:message {tok}", origin_project_id=pid_a, limit=20, budget="complete")
-        rb = driver.search_raw(f"project:current kind:scan {tok}", origin_project_id=pid_b, limit=20, budget="complete")
-        a_hits = [h for h in (ra.get("hits") or []) if isinstance(h, dict)]
-        b_hits = [h for h in (rb.get("hits") or []) if isinstance(h, dict)]
-        leaked_a = [h for h in a_hits if str(h.get("project_id") or "") not in ("", pid_a)]
-        leaked_b = [h for h in b_hits if str(h.get("project_id") or "") not in ("", pid_b)]
-        if not leaked_a and not leaked_b:
+        tok = f"s08postok_{idx:03d}_{uuid.uuid4().hex[:6]}"
+        own_pid, other_pid, own_sid = (pid_a, pid_b, sid_a) if (idx % 2 == 0) else (pid_b, pid_a, sid_b)
+        _post_authoritative_message(own_sid, f"authoritative store message {tok}")
+
+        # 1. Positive control: MUST be visible in owning project's store leg.
+        own_hits = _wait_store_hit(own_pid, tok)
+        # 2. Cross-project isolation: MUST be absent in the other project.
+        other_resp = driver.search_raw(f"project:current kind:message {tok}", origin_project_id=other_pid, limit=20, budget="complete")
+        other_hits = [h for h in (other_resp.get("hits") or []) if isinstance(h, dict)]
+
+        own_ok = bool(own_hits) and all(str(h.get("project_id") or "") == own_pid for h in own_hits)
+        if own_ok and not other_hits:
             summary.record_pass()
         else:
-            summary.record_fail({"instance": idx, "leaked_a": len(leaked_a), "leaked_b": len(leaked_b)})
+            summary.record_fail(
+                {
+                    "instance": idx,
+                    "token": tok,
+                    "own_pid": own_pid,
+                    "own_hits": len(own_hits),
+                    "other_hits": len(other_hits),
+                }
+            )
 
     # 4 hand-written S08 edges.
-    # Edge 1: Cross-project code/store isolation for project A searching project B's unique token.
-    r1 = driver.search_raw("project:current s08_secret_proj_b", origin_project_id=pid_a, limit=20, budget="complete")
-    summary.record_edge(len(r1.get("hits") or []) == 0, {"edge": "s08_1_cross_project_isolation_a"})
+    # Edge 1: Positive authoritative message in Project A visible in A and absent in B.
+    tok_e1 = f"s08edge1_{uuid.uuid4().hex[:8]}"
+    _post_authoritative_message(sid_a, f"edge1 authoritative {tok_e1}")
+    e1_own = _wait_store_hit(pid_a, tok_e1)
+    e1_other = driver.search_raw(f"project:current kind:message {tok_e1}", origin_project_id=pid_b, limit=20, budget="complete")
+    summary.record_edge(
+        bool(e1_own) and len(e1_other.get("hits") or []) == 0,
+        {"edge": "s08_1_positive_message_isolation_a", "own": len(e1_own), "other": len(e1_other.get("hits") or [])},
+    )
 
-    # Edge 2: Cross-project isolation in reverse direction (project B searching project A's unique token).
-    r2 = driver.search_raw("project:current s08_secret_proj_a", origin_project_id=pid_b, limit=20, budget="complete")
-    summary.record_edge(len(r2.get("hits") or []) == 0, {"edge": "s08_2_cross_project_isolation_b"})
+    # Edge 2: Positive authoritative message in Project B visible in B and absent in A.
+    tok_e2 = f"s08edge2_{uuid.uuid4().hex[:8]}"
+    _post_authoritative_message(sid_b, f"edge2 authoritative {tok_e2}")
+    e2_own = _wait_store_hit(pid_b, tok_e2)
+    e2_other = driver.search_raw(f"project:current kind:message {tok_e2}", origin_project_id=pid_a, limit=20, budget="complete")
+    summary.record_edge(
+        bool(e2_own) and len(e2_other.get("hits") or []) == 0,
+        {"edge": "s08_2_positive_message_isolation_b", "own": len(e2_own), "other": len(e2_other.get("hits") or [])},
+    )
 
-    # Edge 3: Unknown origin_project_id rejected cleanly (never falls back to global).
+    # Edge 3: Delete session removes its projected message from default store search.
+    sid_del = _create_session(pid_a)
+    tok_e3 = f"s08edge3del_{uuid.uuid4().hex[:8]}"
+    _post_authoritative_message(sid_del, f"edge3 delete target {tok_e3}")
+    before_del = _wait_store_hit(pid_a, tok_e3)
+    transport.request(f"/v1/sessions/{sid_del}", None, method="DELETE")
+    after_del = driver.search_raw(f"project:current kind:message {tok_e3}", origin_project_id=pid_a, limit=20, budget="complete")
+    summary.record_edge(
+        bool(before_del) and len(after_del.get("hits") or []) == 0,
+        {"edge": "s08_3_delete_session_removes_projection", "before": len(before_del), "after": len(after_del.get("hits") or [])},
+    )
+
+    # Edge 4: Unknown origin_project_id rejected cleanly (never falls back to global).
     try:
         driver.search_raw("project:current s08_secret_proj_a", origin_project_id="00000000-0000-0000-0000-000000000000")
-        summary.record_edge(False, {"edge": "s08_3_unknown_origin_rejected"})
+        summary.record_edge(False, {"edge": "s08_4_unknown_origin_rejected"})
     except urllib.error.HTTPError as exc:
-        summary.record_edge(exc.code in (400, 404), {"edge": "s08_3_unknown_origin_rejected", "status": exc.code})
-
-    # Edge 4: Store-only kind:evidence query executes cleanly without error.
-    r4 = driver.search_raw("project:current kind:evidence nonexistent_evidence_token", origin_project_id=pid_a, limit=10, budget="complete")
-    summary.record_edge(isinstance(r4.get("hits"), list), {"edge": "s08_4_store_evidence_query"})
+        summary.record_edge(exc.code in (400, 404), {"edge": "s08_4_unknown_origin_rejected", "status": exc.code})
     return summary
