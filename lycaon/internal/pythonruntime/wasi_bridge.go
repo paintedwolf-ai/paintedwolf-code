@@ -445,20 +445,30 @@ func (w *WorkspaceSysFS) Rmdir(p string) experimentalsys.Errno {
 	return ErrnoToSys(errno)
 }
 
-// Rename implements experimental/sys.FS.
-func (w *WorkspaceSysFS) Rename(from, to string) experimentalsys.Errno {
+// RenameErrno performs an admitted rename and returns the exact pythonruntime.Errno
+// (preserving ErrnoEXDEV across roots without lossy translation through wazero's
+// experimental/sys.Errno subset).
+func (w *WorkspaceSysFS) RenameErrno(from, to string) Errno {
 	if w.adapter == nil {
-		return experimentalsys.ENOSYS
+		return ErrnoEIO
 	}
 	relFrom := cleanGuestRelPath(from)
 	relTo := cleanGuestRelPath(to)
 	opID, sysErr := w.admit(EffectFilesystemWrite, "rename", relFrom, map[string]any{"to": relTo})
 	if sysErr != 0 {
-		return sysErr
+		return SysToErrno(sysErr)
 	}
 	errno := w.adapter.Rename(w.ctx, relFrom, relTo)
 	w.recordOutcome(opID, errno, 0, 1)
-	return ErrnoToSys(errno)
+	return errno
+}
+
+// Rename implements experimental/sys.FS.
+func (w *WorkspaceSysFS) Rename(from, to string) experimentalsys.Errno {
+	if w.adapter == nil {
+		return experimentalsys.ENOSYS
+	}
+	return ErrnoToSys(w.RenameErrno(from, to))
 }
 
 // Readlink implements experimental/sys.FS.
@@ -544,6 +554,30 @@ func (f *workspaceSysFile) Read(buf []byte) (int, experimentalsys.Errno) {
 	return n, ErrnoToSys(errno)
 }
 
+func (f *workspaceSysFile) Pread(buf []byte, offset int64) (int, experimentalsys.Errno) {
+	if offset < 0 {
+		return 0, experimentalsys.EINVAL
+	}
+	if f.fs.latch != nil && f.fs.latch.Stopped() {
+		return 0, experimentalsys.EACCES
+	}
+	if f.fs.meter != nil && len(buf) > 0 && !f.fs.meter.ReserveHostWork(1, "") {
+		return 0, experimentalsys.EACCES
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	origPos, errno := f.file.Seek(0, io.SeekCurrent)
+	if errno != ErrnoSuccess {
+		return 0, ErrnoToSys(errno)
+	}
+	if _, errno = f.file.Seek(offset, io.SeekStart); errno != ErrnoSuccess {
+		return 0, ErrnoToSys(errno)
+	}
+	n, readErr := f.file.Read(buf)
+	_, _ = f.file.Seek(origPos, io.SeekStart)
+	return n, ErrnoToSys(readErr)
+}
+
 func (f *workspaceSysFile) Write(buf []byte) (int, experimentalsys.Errno) {
 	if f.fs.latch != nil && f.fs.latch.Stopped() {
 		return 0, experimentalsys.EACCES
@@ -558,6 +592,35 @@ func (f *workspaceSysFile) Write(buf []byte) (int, experimentalsys.Errno) {
 	}
 	n, errno := f.file.Write(buf)
 	return n, ErrnoToSys(errno)
+}
+
+func (f *workspaceSysFile) Pwrite(buf []byte, offset int64) (int, experimentalsys.Errno) {
+	if offset < 0 {
+		return 0, experimentalsys.EINVAL
+	}
+	if f.fs.latch != nil && f.fs.latch.Stopped() {
+		return 0, experimentalsys.EACCES
+	}
+	if f.fs.meter != nil && len(buf) > 0 {
+		if !f.fs.meter.ReserveStagedBytes(int64(len(buf)), "") {
+			return 0, experimentalsys.EACCES
+		}
+		if !f.fs.meter.ReserveHostWork(1, "") {
+			return 0, experimentalsys.EACCES
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	origPos, errno := f.file.Seek(0, io.SeekCurrent)
+	if errno != ErrnoSuccess {
+		return 0, ErrnoToSys(errno)
+	}
+	if _, errno = f.file.Seek(offset, io.SeekStart); errno != ErrnoSuccess {
+		return 0, ErrnoToSys(errno)
+	}
+	n, writeErr := f.file.Write(buf)
+	_, _ = f.file.Seek(origPos, io.SeekStart)
+	return n, ErrnoToSys(writeErr)
 }
 
 func (f *workspaceSysFile) Seek(offset int64, whence int) (int64, experimentalsys.Errno) {
