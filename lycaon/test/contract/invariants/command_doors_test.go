@@ -21,7 +21,7 @@ func TestBB10CommandDoorInvariants(t *testing.T) {
 
 	readRule := rule(t, forbiddencalls.Family, "command-read-credit-through-delivery-bridge")
 	readClean := map[string]string{
-		"lycaon/internal/tools/editor_documents.go": "package tools\n\ntype EditorDocuments interface {\n\tRememberAgentRead()\n\tRememberAgentReadSpans()\n}\n",
+		"lycaon/internal/tools/editor_documents.go":        "package tools\n\ntype EditorDocuments interface {\n\tRememberAgentRead()\n\tRememberAgentReadSpans()\n}\n",
 		"lycaon/internal/tools/command_source_delivery.go": "package tools\n\nfunc RememberCommandSourceDelivery(d EditorDocuments) { d.RememberAgentRead() }\n",
 		"lycaon/internal/commandprogram/eval.go":           "package commandprogram\n\nfunc Eval() {}\n",
 		"lycaon/internal/tools/native/command/delivery.go": "package command\n\nimport \"github.com/lycaon/lycaon/internal/tools\"\n\n" +
