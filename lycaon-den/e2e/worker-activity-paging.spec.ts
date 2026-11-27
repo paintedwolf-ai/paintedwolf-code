@@ -102,7 +102,7 @@ async function readingRow(page: Page): Promise<{ key: string; top: number }> {
     const line = viewport.getBoundingClientRect().top;
     const rows = [...viewport.querySelectorAll<HTMLElement>("[data-worker-item-key]")]
       .map((row) => ({ row, box: row.getBoundingClientRect() }))
-      .filter(({ box }) => box.bottom > line)
+      .filter(({ box }) => box.bottom > line && box.top <= line)
       .sort((a, b) => a.box.top - b.box.top);
     const first = rows[0];
     if (!first) throw new Error("No activity row crosses the drawer's top edge.");
@@ -121,9 +121,15 @@ async function nextFrame(page: Page) {
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
 }
 
-async function scrollDrawerBy(page: Page, viewports: number) {
+/** Keep the reader inside the loaded activity until its next page arrives. */
+async function scrollThroughActivity(page: Page, viewports: number) {
   await drawerViewport(page).evaluate((viewport, by) => {
-    viewport.scrollTop += viewport.clientHeight * by;
+    const activity = viewport.querySelector<HTMLElement>(".den-worker-transcript")!;
+    const bounds = activity.getBoundingClientRect();
+    const origin = viewport.scrollTop - viewport.getBoundingClientRect().top;
+    const target = viewport.scrollTop + viewport.clientHeight * by;
+    viewport.scrollTop = Math.max(origin + bounds.top + viewport.clientHeight / 2,
+      Math.min(target, origin + bounds.bottom - viewport.clientHeight));
   }, viewports);
 }
 
@@ -133,7 +139,7 @@ async function expectReadingRowHeldAcross(page: Page, gates: { hold: (edge: "bef
   void gates.hold(edge).then((held) => { gate = held; });
   // Read on, a frame at a time, until the drawer asks for the held page.
   while (!gate) {
-    await scrollDrawerBy(page, step);
+    await scrollThroughActivity(page, step);
     await nextFrame(page);
   }
   const before = await readingRow(page);
@@ -173,13 +179,13 @@ webE2e.describe("worker activity paging", () => {
     }
     const lastStep = activity.getByText(`Step ${ROWS}.`, { exact: true });
     while (!(await lastStep.isVisible())) {
-      await scrollDrawerBy(page, 3);
+      await scrollThroughActivity(page, 3);
       await nextFrame(page);
     }
 
     // The drawer reads through to its end, each section header stacking at the top as it passes.
     await expect(async () => {
-      await scrollDrawerBy(page, 3);
+      await drawerViewport(page).evaluate(viewport => { viewport.scrollTop = viewport.scrollHeight; });
       expect(await drawerViewport(page).evaluate((viewport) =>
         viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 1)).toBe(true);
     }).toPass({ timeout: 30_000 });

@@ -22,8 +22,9 @@ rules:
       cases: { vet: observe_investigate }
       default: implement_overlay_promote
 
-  # A delivered worker's result needs the coordinator's call before new work.
-  - when: { workers_delivered: ">0" }
+  # A delivered worker's result needs the coordinator's call before new work,
+  # except inside a manifest-bound workflow phase whose surface already owns adjudication.
+  - when: { workers_delivered: ">0", manifest_bound_surface: absent }
     surface:
       dispatch_on: posture
       cases: { vet: observe_investigate }

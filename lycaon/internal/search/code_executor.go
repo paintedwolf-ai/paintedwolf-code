@@ -31,18 +31,19 @@ type CodeExecutor struct {
 	catalog *sourcecatalog.Catalog
 	// rerank blends the decision engine into the leg's hits.
 	rerank decide.Reranker
-	// wallBudget overrides the budget's wall clock; zero uses the budget's.
-	wallBudget time.Duration
+	// legDeadline injects the leg's deadline context in tests; nil in production.
+	legDeadline func(ctx context.Context, leg *CodePlanLeg) (context.Context, context.CancelFunc)
 }
 
-func (e *CodeExecutor) legWallBudget(leg *CodePlanLeg) time.Duration {
-	if e.wallBudget > 0 {
-		return e.wallBudget
+func (e *CodeExecutor) bindLegContext(ctx context.Context, leg *CodePlanLeg) (context.Context, context.CancelFunc) {
+	if e.legDeadline != nil {
+		return e.legDeadline(ctx, leg)
 	}
+	wall := leg.Budget.Wall()
 	if leg.Wall > 0 {
-		return leg.Wall
+		wall = leg.Wall
 	}
-	return leg.Budget.Wall()
+	return context.WithTimeout(ctx, wall)
 }
 
 // NewCodeExecutor returns a CodeExecutor on the process catalog.
@@ -92,7 +93,7 @@ func (e *CodeExecutor) Run(ctx context.Context, leg PlanLeg) (ExecutorReport, er
 	if leg.Code.Candidates {
 		return e.discoverCandidates(ctx, leg.Code, paths, spec)
 	}
-	legCtx, cancel := context.WithTimeout(ctx, e.legWallBudget(leg.Code))
+	legCtx, cancel := e.bindLegContext(ctx, leg.Code)
 	defer cancel()
 	wallEnd, _ := legCtx.Deadline()
 

@@ -4,6 +4,7 @@ package lineage
 
 import (
 	"encoding/binary"
+	"errors"
 	"golang.org/x/sys/unix"
 	"syscall"
 )
@@ -50,7 +51,10 @@ func inet6V6Only(protocol Protocol) map[uint64]bool {
 	out := map[uint64]bool{}
 	buf := make([]byte, 32768)
 	for batch := 0; batch < 1024; batch++ {
-		n, _, err := syscall.Recvfrom(fd, buf, 0)
+		n, err := retryInterrupted(func() (int, error) {
+			n, _, err := syscall.Recvfrom(fd, buf, 0)
+			return n, err
+		})
 		if err != nil || n <= 0 {
 			return out
 		}
@@ -85,4 +89,15 @@ func inet6V6Only(protocol Protocol) map[uint64]bool {
 		}
 	}
 	return out
+}
+
+// retryInterrupted repeats a receive a signal interrupted. A receive timeout makes a signal, such
+// as the runtime's preemption, interrupt the wait instead of restarting it.
+func retryInterrupted(recv func() (int, error)) (int, error) {
+	for {
+		n, err := recv()
+		if !errors.Is(err, syscall.EINTR) {
+			return n, err
+		}
+	}
 }

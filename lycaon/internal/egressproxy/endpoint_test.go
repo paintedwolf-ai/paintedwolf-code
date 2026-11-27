@@ -64,3 +64,56 @@ func TestParseHTTPEndpointRefusesHostsDNSCannotName(t *testing.T) {
 		}
 	}
 }
+
+// Non-ASCII hosts whose UTS #46 mapping introduces RTL runes that violate the
+// bidi rule must be refused rather than emitting a punycode host whose dial
+// address ParseHTTPEndpoint cannot parse back.
+func TestParseHTTPEndpointIDNANormalizationRoundTrip(t *testing.T) {
+	refused := []string{
+		"⅄ℵ",                 // nightly fuzz corpus 99e51b61e24ee86c (mapped to xn--4db961l)
+		"㌽ℵ",                 // nightly fuzz corpus b21acc490c34c18d (mapped to xn--4db140tddand5e)
+		"⅄ℵ:443",             // with explicit port
+		"㌽ℵ:8080",            // with explicit port
+		"aℵ",                 // ASCII L + U+2135 ALEF SYMBOL (-> U+05D0 R)
+		"aℶ",                 // ASCII L + U+2136 BET SYMBOL (-> U+05D1 R)
+		"aℷ",                 // ASCII L + U+2137 GIMEL SYMBOL (-> U+05D2 R)
+		"aℸ",                 // ASCII L + U+2138 DALET SYMBOL (-> U+05D3 R)
+		"⅄ℵ.example.com",     // multi-label with offending label
+		"xn--4db961l",        // punycode form of ⅄ℵ
+		"xn--4db140tddand5e", // punycode form of ㌽ℵ
+	}
+	for _, transport := range []egressproxy.Transport{egressproxy.TransportHTTPConnect, egressproxy.TransportHTTPRequest} {
+		for _, in := range refused {
+			if ep, err := egressproxy.ParseHTTPEndpoint(in, transport); err == nil {
+				t.Fatalf("ParseHTTPEndpoint(%q, %q) = %+v, want refusal", in, transport, ep)
+			}
+		}
+	}
+	for _, domain := range []string{"⅄ℵ", "㌽ℵ", "aℵ"} {
+		if ep, err := egressproxy.ParseSocksEndpoint(0x03, []byte(domain), 443); err == nil {
+			t.Fatalf("ParseSocksEndpoint(0x03, %q, 443) = %+v, want refusal", domain, ep)
+		}
+	}
+
+	accepted := []struct {
+		in   string
+		want string
+	}{
+		{in: "bücher.example.com", want: "xn--bcher-kva.example.com"},
+		{in: "ℵ", want: "xn--4db"},
+		{in: "אבג.example.com", want: "xn--4dbcd.example.com"},
+	}
+	for _, tc := range accepted {
+		ep, err := egressproxy.ParseHTTPEndpoint(tc.in, egressproxy.TransportHTTPConnect)
+		if err != nil {
+			t.Fatalf("ParseHTTPEndpoint(%q): %v", tc.in, err)
+		}
+		if ep.Host != tc.want {
+			t.Fatalf("ParseHTTPEndpoint(%q).Host = %q, want %q", tc.in, ep.Host, tc.want)
+		}
+		again, err := egressproxy.ParseHTTPEndpoint(ep.DialAddr(), ep.Transport)
+		if err != nil || again != ep {
+			t.Fatalf("ParseHTTPEndpoint(%q) dial addr %q round-trip = %+v, %v; want %+v", tc.in, ep.DialAddr(), again, err, ep)
+		}
+	}
+}

@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -263,8 +264,13 @@ func assertEngineDeathReapsOwnedGroup(t *testing.T, role string) {
 // only when the parent case re-execs this binary with reaperRoleEnv set.
 func TestReaperHelperProcess(t *testing.T) {
 	role, dir, _ := strings.Cut(os.Getenv(reaperRoleEnv), ":")
-	if role != "engine" && role != "engine-group" {
-		t.Skip("helper process for TestEngineKilledOutrightTakesItsTrackedGroupsWithIt")
+	switch role {
+	case "engine", "engine-group":
+	case "action-workspace":
+		runActionWorkspaceReaperHelper(dir)
+		return
+	default:
+		t.Skip("helper process for reaper cross-process tests")
 	}
 	self, err := os.Executable()
 	if err == nil {
@@ -337,11 +343,163 @@ func TestReaperDirPathStaysInsideTheTempRoot(t *testing.T) {
 		"/fixture/state/action-work/other":            false,
 		"/fixture/state/action-work":                  false,
 		"/fixture/state/action-work/action-42/nested": false,
+		"/fixture/state/action-work/action-42/..":     false,
+		"/fixture/state/action-work/action-42\n":      false,
 	} {
 		if got := reaperDirPath(path); got != want {
 			t.Errorf("reaperDirPath(%q) = %v, want %v", path, got, want)
 		}
 	}
+}
+
+func TestReaperChildEnvKeepsOnlyRootResolutionVars(t *testing.T) {
+	t.Setenv("TMPDIR", "/fixture/tmp")
+	t.Setenv("HOME", "/fixture/home")
+	t.Setenv(configdir.EnvConfigDir, "/fixture/state")
+	t.Setenv(configdir.EnvDev, "1")
+	t.Setenv("LYCAON_API_TOKEN", "secret-token")
+	t.Setenv("PW_UNRELATED_SECRET", "must-not-leak")
+
+	got := map[string]string{}
+	for _, entry := range reaperChildEnv() {
+		key, val, ok := strings.Cut(entry, "=")
+		if !ok {
+			t.Fatalf("malformed env entry %q", entry)
+		}
+		got[key] = val
+	}
+	want := map[string]string{
+		"TMPDIR":               "/fixture/tmp",
+		"HOME":                 "/fixture/home",
+		configdir.EnvConfigDir: "/fixture/state",
+		configdir.EnvDev:       "1",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("reaperChildEnv() = %v, want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("reaperChildEnv()[%q] = %q, want %q", k, got[k], v)
+		}
+	}
+}
+
+func TestEngineKilledOutrightReapsOwnedActionWorkspaceOnly(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		useConfigDir bool
+	}{
+		{name: "configdir", useConfigDir: true},
+		{name: "home-dev", useConfigDir: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			coordDir := t.TempDir()
+			tempDir := t.TempDir()
+			homeDir := t.TempDir()
+			stateDir := t.TempDir()
+
+			self, err := os.Executable()
+			testutil.FailErr(t, "locate test binary", err)
+			engine := exec.Command(self, "-test.run=^TestReaperHelperProcess$", "-test.v=false")
+			engine.Env = []string{
+				"TMPDIR=" + tempDir,
+				"HOME=" + homeDir,
+				configdir.EnvDev + "=1",
+				"LYCAON_API_TOKEN=secret-must-not-leak",
+				reaperRoleEnv + "=action-workspace:" + coordDir,
+			}
+			if tc.useConfigDir {
+				engine.Env = append(engine.Env, configdir.EnvConfigDir+"="+stateDir)
+			}
+			engine.Stdout, engine.Stderr = io.Discard, io.Discard
+			testutil.FailErr(t, "start engine helper", engine.Start())
+			t.Cleanup(func() { _ = engine.Process.Kill(); _ = engine.Wait() })
+
+			waitForPIDFile(t, filepath.Join(coordDir, "ready.pid"))
+			raw, err := os.ReadFile(filepath.Join(coordDir, "paths.txt"))
+			testutil.FailErr(t, "read workspace paths", err)
+			lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+			if len(lines) != 4 {
+				t.Fatalf("expected 4 paths, got %d: %q", len(lines), string(raw))
+			}
+			owned, sibling, nonAction, outside := lines[0], lines[1], lines[2], lines[3]
+
+			testutil.FailErr(t, "SIGKILL engine helper", engine.Process.Kill())
+			_ = engine.Wait()
+
+			testutil.WaitFor(t, "owned action workspace disappears after SIGKILL", func() bool {
+				_, statErr := os.Stat(owned)
+				return errors.Is(statErr, os.ErrNotExist)
+			})
+			for name, path := range map[string]string{
+				"untracked sibling action dir":      sibling,
+				"non-action dir in action-work":     nonAction,
+				"unrelated dir outside action-work": outside,
+				"action-work root":                  filepath.Dir(owned),
+			} {
+				if _, err := os.Stat(path); err != nil {
+					t.Fatalf("%s (%s) did not survive SIGKILL: %v", name, path, err)
+				}
+			}
+		})
+	}
+}
+
+func runActionWorkspaceReaperHelper(coordDir string) {
+	self, err := os.Executable()
+	if err == nil {
+		err = StartReaper(self, ReaperCommand)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "start reaper: %v\n", err)
+		os.Exit(1)
+	}
+	owned, err := confine.NewActionWorkspace()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create owned workspace: %v\n", err)
+		os.Exit(1)
+	}
+	if err := os.WriteFile(filepath.Join(owned.Path(), "report.json"), []byte("{}"), 0o600); err != nil {
+		os.Exit(1)
+	}
+	TrackScratchDir(owned.Path())
+
+	sibling, err := confine.NewActionWorkspace()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create sibling workspace: %v\n", err)
+		os.Exit(1)
+	}
+	actionRoot := filepath.Dir(owned.Path())
+	nonAction := filepath.Join(actionRoot, "keep-me")
+	if err := os.MkdirAll(nonAction, 0o700); err != nil {
+		os.Exit(1)
+	}
+	outside := filepath.Join(filepath.Dir(actionRoot), "unrelated")
+	if err := os.MkdirAll(outside, 0o700); err != nil {
+		os.Exit(1)
+	}
+
+	// Directly send out-of-scope directory entries over the pipe to prove the
+	// reaper child itself enforces narrow deletion authority after SIGKILL.
+	for _, rejected := range []string{
+		actionRoot,
+		nonAction,
+		outside,
+		owned.Path() + "/..",
+		filepath.Join(owned.Path(), "nested"),
+	} {
+		_ = sendReaper('+', reaperDir, rejected)
+	}
+
+	payload := strings.Join([]string{owned.Path(), sibling.Path(), nonAction, outside}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(coordDir, "paths.txt"), []byte(payload), 0o600); err != nil {
+		os.Exit(1)
+	}
+	if err := os.WriteFile(filepath.Join(coordDir, "ready.pid"), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
+		os.Exit(1)
+	}
+	time.Sleep(90 * time.Second)
+	os.Exit(0)
 }
 
 func TestEnsureReaperStartsAndReplacesCompanion(t *testing.T) {

@@ -148,7 +148,11 @@ func (m *Service) Begin(
 	if !m.Decider().Available() {
 		availability = turnload.RankingUnavailable
 	}
-	request := m.ResolvedRequest(ctx, sess)
+	request, err := m.ResolvedRequest(ctx, sess)
+	if err != nil {
+		// The turn still decides for its own instruction or the history's newest one.
+		turnLoadLog.Warn("workflow request unreadable", "session_id", sessionID, "error", err)
+	}
 	openingMessageID, text, ok := m.Request(ctx, in, history, openingMessageID, request)
 	if !ok {
 		opening, _ := RequestOpening(history, request)

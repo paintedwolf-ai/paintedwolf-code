@@ -22,6 +22,7 @@ const (
 	// CacheDirName groups rebuildable caches that have their own subtree.
 	CacheDirName              = "cache"
 	DecideCacheDirName        = "decide"
+	OpengrepRuntimeDirName    = "opengrep-runtime"
 	SourceCatalogDirName      = "sourcecatalog"
 	SessionWorktreesDirName   = "session-worktrees"
 	SessionCheckpointsDirName = "session-checkpoints"
@@ -86,6 +87,12 @@ func RepoOrientationRootUnder(stateRoot string) string {
 // generations that search and the file picker read.
 func SourceCatalogCacheRootUnder(stateRoot string) string {
 	return filepath.Join(strings.TrimSpace(stateRoot), CacheDirName, SourceCatalogDirName)
+}
+
+// OpengrepRuntimeRootUnder returns the host-prepared read-only runtime store
+// for the bundled OpenGrep engine, keyed by installed binary digest.
+func OpengrepRuntimeRootUnder(stateRoot string) string {
+	return filepath.Join(strings.TrimSpace(stateRoot), CacheDirName, OpengrepRuntimeDirName)
 }
 
 // PricingCacheRootUnder returns the pricing-feed disk cache directory.

@@ -1,14 +1,72 @@
 package transcript
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
+	"slices"
 	"sort"
 
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/decide"
+	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+var turnLoadWireCache = scopedstore.New[api.TurnLoad](256)
+
+func turnLoadWireCacheKey(r store.TurnLoadReceipt) string {
+	h := sha256.New()
+	writePart := func(s string) {
+		var lenBuf [8]byte
+		binary.LittleEndian.PutUint64(lenBuf[:], uint64(len(s)))
+		_, _ = h.Write(lenBuf[:])
+		_, _ = h.Write([]byte(s))
+	}
+	writePart(r.SessionID)
+	writePart(r.Trigger)
+	writePart(r.OpeningMessageID)
+	writePart(r.ToolCallID)
+	writePart(r.Reason)
+	writePart(r.Decisions)
+	writePart(r.Standing)
+	var meta [9]byte
+	if r.Abstained {
+		meta[0] = 1
+	}
+	binary.LittleEndian.PutUint64(meta[1:], uint64(max(r.ElapsedMs, 0)))
+	_, _ = h.Write(meta[:])
+	return string(h.Sum(nil))
+}
+
+func cloneTurnLoad(in api.TurnLoad) api.TurnLoad {
+	out := in
+	out.Floor = slices.Clone(in.Floor)
+	out.Tools = slices.Clone(in.Tools)
+	if in.Engine != nil {
+		cp := *in.Engine
+		out.Engine = &cp
+	}
+	if in.PreloadedSkill != nil {
+		cp := *in.PreloadedSkill
+		out.PreloadedSkill = &cp
+	}
+	if in.Kind != nil {
+		cp := *in.Kind
+		out.Kind = &cp
+	}
+	if in.Boundary != nil {
+		cp := *in.Boundary
+		out.Boundary = &cp
+	}
+	if in.Match != nil {
+		cp := *in.Match
+		cp.Names = slices.Clone(in.Match.Names)
+		out.Match = &cp
+	}
+	return out
+}
 
 // receiptDecisions is the decisions_json a receipt carries, one key per trigger.
 type receiptDecisions struct {
@@ -28,6 +86,10 @@ type receiptDecisions struct {
 // the turn_load event both go through it, so a reload draws what the event
 // drew.
 func TurnLoadWire(r store.TurnLoadReceipt) api.TurnLoad {
+	cacheKey := turnLoadWireCacheKey(r)
+	if cached, ok := turnLoadWireCache.Load(cacheKey); ok {
+		return cloneTurnLoad(cached)
+	}
 	out := api.TurnLoad{
 		SessionID:        r.SessionID,
 		Trigger:          api.TurnLoadTrigger(r.Trigger),
@@ -85,7 +147,8 @@ func TurnLoadWire(r store.TurnLoadReceipt) api.TurnLoad {
 	if out.Match != nil && out.Match.Names == nil {
 		out.Match.Names = []string{}
 	}
-	return out
+	turnLoadWireCache.Store(cacheKey, out)
+	return cloneTurnLoad(out)
 }
 
 // wireEngine is the first engine that answered any of the receipt's decisions.

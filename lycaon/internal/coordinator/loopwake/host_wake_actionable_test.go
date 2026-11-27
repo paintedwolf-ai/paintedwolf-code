@@ -302,3 +302,43 @@ func TestHostWakeActionableObligationsOverrideStaleCloseout(t *testing.T) {
 		t.Fatal("open workflow obligations must keep the host wake actionable past a stale closeout")
 	}
 }
+
+// Every fact that makes a wake actionable presumes a request to serve; before
+// the chat holds one, no wake opens a turn.
+func TestHostWakeWithoutRequestIsNeverActionable(t *testing.T) {
+	needsDecision := []api.Message{{Role: api.MessageRoleAssistant, WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "job-1", Status: api.WorkerSummaryStatusNeedsDecision}}}
+	running := &api.WorkflowRun{ID: "run", Status: api.WorkflowRunStatusRunning}
+	for _, tc := range []struct {
+		name        string
+		history     []api.Message
+		state       surface.ImplementSessionState
+		obligations bool
+		run         *api.WorkflowRun
+	}{
+		{name: "open workflow obligations", obligations: true, run: running},
+		{name: "running workflow", run: running},
+		{name: "pending overlay promote", state: surface.ImplementSessionState{PendingOverlayIDs: []string{"job-1"}}},
+		{name: "worker needs a decision", history: needsDecision},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, hasRequest := range []bool{false, true} {
+				actionable := loopwake.BuildHostWakeActionable(loopwake.HostWakeActionableDeps{
+					GetMessages:             func(context.Context, string) ([]api.Message, error) { return tc.history, nil },
+					GetSession:              func(context.Context, string) (*api.Session, error) { return &api.Session{ID: "chat"}, nil },
+					ImplementSessionState:   func(context.Context, *api.Session) surface.ImplementSessionState { return tc.state },
+					ActiveRun:               func(context.Context, string) (*api.WorkflowRun, error) { return tc.run, nil },
+					WorkflowObligationsOpen: func(context.Context, string) bool { return tc.obligations },
+					HasRequest: func(_ context.Context, _ string, history []api.Message) bool {
+						if len(history) != len(tc.history) {
+							t.Fatalf("request check read %d messages, want the chat's %d", len(history), len(tc.history))
+						}
+						return hasRequest
+					},
+				})(t.Context(), loopwake.HostWakeActionableInput{SessionID: "chat"})
+				if actionable != hasRequest {
+					t.Fatalf("with request=%v, actionable=%v", hasRequest, actionable)
+				}
+			}
+		})
+	}
+}

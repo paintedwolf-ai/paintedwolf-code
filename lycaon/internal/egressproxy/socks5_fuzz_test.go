@@ -21,7 +21,7 @@ func FuzzParseSocksAddress(f *testing.F) {
 // brackets, controls or spaces, brackets only around an IPv6 literal, and
 // parsing its dial address gives the same endpoint again.
 func FuzzParseHTTPEndpoint(f *testing.F) {
-	for _, seed := range []string{"example.com:443", "[::1]", "Example.COM.", "[::ffff:192.0.2.10]:443", "", "host:0", "host:99999", "bad\x00host", "[example.com]", "[::1", "a b:80", "xn--nxasmq6b"} {
+	for _, seed := range []string{"example.com:443", "[::1]", "Example.COM.", "[::ffff:192.0.2.10]:443", "", "host:0", "host:99999", "bad\x00host", "[example.com]", "[::1", "a b:80", "xn--nxasmq6b", "⅄ℵ", "㌽ℵ"} {
 		f.Add(seed, string(TransportHTTPConnect))
 		f.Add(seed, string(TransportHTTPRequest))
 	}

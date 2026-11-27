@@ -463,17 +463,16 @@ modelIndependentWebE2e("marks tabs in indentation while laid out", async ({ page
 modelIndependentWebE2e("keeps the text at the top of the view across line layout changes when the caret is off screen", async ({ page, request }) => {
   // With Off the one-line document is unwrapped, so the place to keep is sideways.
   const { scroller } = await openPretty(page, request, ITEMS_1_MB);
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  const layoutIdle = () => page.evaluate(async () => {
+    const scroll = await import(/* @vite-ignore */ String("/src/components/source/editor/editor-settled-scroll.ts")) as typeof import("../src/components/source/editor/editor-settled-scroll.ts");
+    const view = window.__pretty.view();
+    return view.state.facet(window.__pretty.active) && !scroll.isSettlingScroll(view);
+  });
+  await expect.poll(layoutIdle).toBe(true);
   await page.evaluate(() => window.__pretty.view().dispatch({ selection: { anchor: 0 } }));
   await scroller.evaluate((element) => { element.scrollTop = (element.scrollHeight - element.clientHeight) / 2; });
   await settle(page);
-  await settle(page);
-  // The document position drawn at the top left of the view, as the editor reads it.
-  const topText = () => page.evaluate(async () => {
-    const view = window.__pretty.view();
-    const scroll = await import(/* @vite-ignore */ String("/src/components/source/editor/editor-settled-scroll.ts")) as typeof import("../src/components/source/editor/editor-settled-scroll.ts");
-    return { pos: view.posAtCoords(scroll.topEdgePoint(view), false), line: view.defaultLineHeight };
-  });
-  const width = await scroller.evaluate((element) => element.clientWidth);
   const placeOf = (pos: number) => page.evaluate((pos) => {
     const view = window.__pretty.view();
     const rect = view.coordsAtPos(pos);
@@ -482,26 +481,39 @@ modelIndependentWebE2e("keeps the text at the top of the view across line layout
   }, pos);
   // Off, Pretty, Wrap and Off again: every change between line layouts.
   for (const [i, layout] of ["off", "pretty", "wrap", "off"].entries()) {
-    const before = await topText();
-    const placeBefore = (await placeOf(before.pos))!;
-    const start = await page.evaluate(() => {
-      const view = window.__pretty.view();
-      const rect = view.coordsAtPos(0);
-      const port = view.scrollDOM.getBoundingClientRect();
-      const visible = Boolean(rect && rect.bottom > port.top && rect.top < port.bottom && rect.right >= port.left && rect.left <= port.right);
-      return { visible, scrollTop: view.scrollDOM.scrollTop, scrollLeft: view.scrollDOM.scrollLeft };
+    const button = page.getByTestId(`files-editor-layout-${layout}`);
+    // Capture the text the reader actually sees when pressing the control.
+    const sample = await button.evaluateHandle(async (element) => {
+      const scroll = await import(/* @vite-ignore */ String("/src/components/source/editor/editor-settled-scroll.ts")) as typeof import("../src/components/source/editor/editor-settled-scroll.ts");
+      const read = () => {
+        const view = window.__pretty.view();
+        const port = view.scrollDOM.getBoundingClientRect();
+        const point = scroll.topEdgePoint(view);
+        const pos = view.posAtCoords(point, false);
+        const rect = view.coordsAtPos(pos);
+        if (!rect || rect.bottom < point.y - 1 || rect.top > point.y + 1) throw new Error("The editor has not drawn the text at its reading line");
+        const caret = view.coordsAtPos(0);
+        return { pos, line: view.defaultLineHeight, top: rect.top - port.top, left: rect.left - port.left,
+          width: port.width, caretVisible: !!caret && caret.bottom > port.top && caret.top < port.bottom && caret.right >= port.left && caret.left <= port.right };
+      };
+      let reading: ReturnType<typeof read> | undefined;
+      element.addEventListener("pointerdown", () => { reading = read(); }, { capture: true, once: true });
+      return { reading: () => reading };
     });
-    expect(start.visible, `before switch ${i}: the caret is on screen at ${start.scrollTop}, ${start.scrollLeft}`).toBe(false);
-    await page.getByTestId(`files-editor-layout-${layout}`).click();
-    await expect(page.getByTestId(`files-editor-layout-${layout}`)).toHaveAttribute("aria-pressed", "true");
+    await button.click();
+    const before = await sample.evaluate(sample => sample.reading());
+    await sample.dispose();
+    if (!before) throw new Error("Missing reading position at layout switch");
+    expect(before.caretVisible).toBe(false);
+    await expect(button).toHaveAttribute("aria-pressed", "true");
     let place: { top: number; left: number } | null = null;
     await expect.poll(async () => {
       place = await placeOf(before.pos);
       // Vertically held to within a line; sideways, still on screen (wrapped text has no sideways scroll).
-      return place !== null && Math.abs(place.top - placeBefore.top) < 2 * before.line && place.left >= 0 && place.left < width;
+      return place !== null && Math.abs(place.top - before.top) < 2 * before.line && place.left >= 0 && place.left < before.width;
       // Laying out a megabyte and measuring the line it becomes takes seconds on a loaded machine.
     }, { timeout: 15_000 }).toBe(true).catch((error: unknown) => {
-      throw new Error(`switch ${i} to ${layout}: pos ${before.pos} was at ${JSON.stringify(placeBefore)}, now ${JSON.stringify(place)}`, { cause: error });
+      throw new Error(`switch ${i} to ${layout}: pos ${before.pos} was at ${JSON.stringify(before)}, now ${JSON.stringify(place)}`, { cause: error });
     });
     await settle(page);
   }

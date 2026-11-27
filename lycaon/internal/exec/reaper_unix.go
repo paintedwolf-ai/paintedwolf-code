@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/installbinding"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/sandboxmark"
@@ -70,12 +71,9 @@ func startReaperLocked(name string, args ...string) error {
 	}
 	cmd := exec.CommandContext(context.Background(), name, args...) //nolint:gosec // G204 — the engine's own executable; the reaper outlives every request
 	cmd.Stdin = read
-	// The companion outlives the engine, so it takes along only the temp root its
+	// The companion outlives the engine, so it takes along only the roots its
 	// directory entries must lie in.
-	cmd.Env = []string{}
-	if tmp, ok := os.LookupEnv("TMPDIR"); ok {
-		cmd.Env = append(cmd.Env, "TMPDIR="+tmp)
-	}
+	cmd.Env = reaperChildEnv()
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
 		_ = read.Close()
@@ -101,6 +99,18 @@ func startReaperLocked(name string, args ...string) error {
 		}
 	}
 	return nil
+}
+
+// reaperChildEnv builds the minimal environment the companion needs to validate
+// tracked temp and action-work directories without inheriting parent secrets.
+func reaperChildEnv() []string {
+	env := []string{}
+	for _, key := range []string{"TMPDIR", "HOME", configdir.EnvConfigDir, configdir.EnvDev} {
+		if value, ok := os.LookupEnv(key); ok && value != "" {
+			env = append(env, key+"="+value)
+		}
+	}
+	return env
 }
 
 func track(kind byte, payload string) func() {

@@ -26,9 +26,35 @@ func EvaluatorBuiltin(name string) bool {
 // reserved: a function cannot shadow them.
 var controlBuiltins = map[string]bool{"exit": true, "return": true, "break": true, "continue": true}
 
-var catalogCommands = sync.OnceValues(func() ([]toolcontract.CommandSpecification, error) {
+type catalogCommandEntry struct {
+	spec  toolcontract.CommandSpecification
+	names []string
+}
+
+var catalogCommands = sync.OnceValues(func() (map[string][]catalogCommandEntry, error) {
 	catalog, err := toolcontract.ReadOnlyLanguageV1()
-	return catalog.Commands, err
+	if err != nil {
+		return nil, err
+	}
+	byWord := make(map[string][]catalogCommandEntry, len(catalog.Commands))
+	for _, spec := range catalog.Commands {
+		names := strings.Fields(spec.Name)
+		if len(names) == 0 {
+			continue
+		}
+		entry := catalogCommandEntry{spec: spec, names: names}
+		seen := make(map[string]struct{}, 1+len(spec.Aliases))
+		seen[names[0]] = struct{}{}
+		byWord[names[0]] = append(byWord[names[0]], entry)
+		for _, alias := range spec.Aliases {
+			if _, dup := seen[alias]; dup {
+				continue
+			}
+			seen[alias] = struct{}{}
+			byWord[alias] = append(byWord[alias], entry)
+		}
+	}
+	return byWord, nil
 })
 
 // ResolveCommand binds argv to the longest catalog command whose words prefix it
@@ -39,19 +65,21 @@ func ResolveCommand(argv Fields) (toolcontract.CommandSpecification, bool, error
 	if err != nil {
 		return toolcontract.CommandSpecification{}, false, err
 	}
+	if len(argv) == 0 {
+		return toolcontract.CommandSpecification{}, false, nil
+	}
 	best, words := toolcontract.CommandSpecification{}, 0
-	for _, spec := range commands {
-		names := strings.Fields(spec.Name)
-		if len(names) == 0 || len(names) > len(argv) || len(names) <= words || !commandWord(spec, names[0], argv[0].Value) {
+	for _, entry := range commands[argv[0].Value] {
+		if len(entry.names) > len(argv) || len(entry.names) <= words {
 			continue
 		}
-		if len(names) > 1 {
-			b := argvBinding{spec: spec, argv: argv, index: 1, bound: &BoundArgv{}}
-			if b.global(names[1:]) != nil {
+		if len(entry.names) > 1 {
+			b := argvBinding{spec: entry.spec, argv: argv, index: 1, bound: &BoundArgv{}}
+			if b.global(entry.names[1:]) != nil {
 				continue
 			}
 		}
-		best, words = spec, len(names)
+		best, words = entry.spec, len(entry.names)
 	}
 	return best, words > 0, nil
 }

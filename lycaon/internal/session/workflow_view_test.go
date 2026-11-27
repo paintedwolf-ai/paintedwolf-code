@@ -53,9 +53,9 @@ func (r *recordingWorkflowView) ActiveCloseoutGateState(ctx context.Context, ses
 	return workflowfacts.WorkflowCloseoutGateState{}, nil
 }
 
-func (r *recordingWorkflowView) ResolvedRequest(ctx context.Context, sessionID string) workflowfacts.ResolvedWorkflowRequest {
+func (r *recordingWorkflowView) ResolvedRequest(ctx context.Context, sessionID string) (workflowfacts.ResolvedWorkflowRequest, error) {
 	r.record("ResolvedRequest")
-	return workflowfacts.ResolvedWorkflowRequest{}
+	return workflowfacts.ResolvedWorkflowRequest{}, nil
 }
 
 func (r *recordingWorkflowView) ActivePhaseHasReviewLoop(ctx context.Context, sessionID string) bool {
