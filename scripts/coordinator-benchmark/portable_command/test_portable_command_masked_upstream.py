@@ -58,7 +58,7 @@ class MaskedUpstreamFailureControlTests(unittest.TestCase):
                 project_dir=proj,
                 db_path=db_path,
                 sidecar_log=sidecar,
-                turn_records=[{'call_ids': ['tc1'], 'await_call_ids': [], 'command_call_id': 'tc1', 'batch_outcomes': [{'call_id': 'tc1', 'tool': 'command', 'outcome': 'completed'}]}],
+                turn_records=[{'program': case['turns'][0]['program'], 'call_ids': ['tc1'], 'await_call_ids': [], 'command_call_id': 'tc1', 'batch_outcomes': [{'call_id': 'tc1', 'tool': 'command', 'outcome': 'completed'}]}],
                 prelude_records=[],
                 baseline_hashes={'result.txt': '2c0e3f276f2a2d677615a5656b9282b90c66509427029608d3790c178b56684f'},
             )
