@@ -716,12 +716,13 @@
       "turns": [
         {
           "program": "printf 'parent\\n'; source -- ./bad.sh; printf 'after\\n'",
-          "expected_outcome": "rejected"
+          "expected_outcome": "rejected",
+          "expected_rejection": "COMMAND_SYNTAX_UNSUPPORTED"
         }
       ],
       "expected": {
         "stdout": "parent\n",
-        "stderr": "",
+        "stderr": "source: line 2: trap '...' EXIT [COMMAND_SYNTAX_UNSUPPORTED]\n",
         "status": 2,
         "host_stop": "rejected",
         "complete": false,
