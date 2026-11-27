@@ -730,7 +730,7 @@ def _run_a10_model_slots(
                         "label": f"TB09 {pid}",
                         "base_url": f"{ep.base_url}/v1",
                         "requires_api_key": False,
-                        "models": [{"id": mid, "context_window": 200000}],
+                        "models": [{"id": mid, "context_length": 200000}],
                     },
                     method="POST",
                 )
