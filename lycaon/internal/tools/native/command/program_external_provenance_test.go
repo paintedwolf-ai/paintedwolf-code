@@ -101,7 +101,7 @@ func TestExternalLaunchDiskProvenanceControls(t *testing.T) {
 			t.Fatalf("got %d launch provenance records, want 1: %+v", len(recs), recs)
 		}
 		rec := recs[0]
-		if rec["execution_id"] != execID || rec["executable_path"] == "" || rec["executable_sha256_status"] != "ok" || rec["executable_provenance_basis"] != "prepared_file" {
+		if rec["execution_id"] != execID || rec["executable_path"] == "" || rec["executable_sha256_status"] != "ok" || rec["executable_provenance_basis"] != "post_start_path_sample" {
 			t.Fatalf("unexpected provenance record: %+v", rec)
 		}
 		resolved, err := filepath.EvalSymlinks(rec["executable_path"])

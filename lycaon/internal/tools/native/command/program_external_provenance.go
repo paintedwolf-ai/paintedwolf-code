@@ -15,8 +15,9 @@ import (
 const defaultExternalLaunchDigestMaxBytes int64 = 64 << 20
 
 // logExternalLaunchProvenance emits opt-in executable provenance on the actual
-// started edge using the path captured by confined preparation. When the
-// development harness evidence channel is inactive, it does no file I/O.
+// started edge. The digest is a bounded post-start observation of the file at
+// the preparation-selected path (not a digest of the prepared executable handle).
+// When the development harness evidence channel is inactive, it does no file I/O.
 func logExternalLaunchProvenance(ctx context.Context, executionID, execPath string) {
 	if !configdir.IsHarnessChannel() {
 		return
@@ -27,7 +28,7 @@ func logExternalLaunchProvenance(ctx context.Context, executionID, execPath stri
 		"executable_path", execPath,
 		"executable_sha256", digest,
 		"executable_sha256_status", status,
-		"executable_provenance_basis", "prepared_file",
+		"executable_provenance_basis", "post_start_path_sample",
 	)
 }
 
