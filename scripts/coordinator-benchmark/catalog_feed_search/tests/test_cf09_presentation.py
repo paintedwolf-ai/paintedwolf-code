@@ -19,6 +19,7 @@ from catalog_feed_search.families.cf09_presentation import (
     NEEDLE_TOKEN,
     PresentationObservation,
     build_coverage_fixture,
+    classify_files_tree_notice,
     extract_declared_facts,
     mutate_for_refreshing,
     verify_presentation_observation,
@@ -180,6 +181,61 @@ class TestCF09Presentation(unittest.TestCase):
         res = verify_presentation_observation(settled_warming)
         self.assertEqual(res.verdict, "UNVERIFIED")
         self.assertTrue(any("requested_state_not_in_effect" in v for v in res.violations))
+
+    def test_classify_files_tree_root_summary_notices_and_negative_control(self) -> None:
+        # Positive controls matching the real ProjectRootSummary coverage card (`files-root-summary-coverage`).
+        failed_cls = classify_files_tree_notice(
+            "1 folder could not be read and matches may be missing. Retry file index",
+            testid="files-root-summary-coverage",
+            retry_button_visible=True,
+        )
+        self.assertTrue(failed_cls.visible)
+        self.assertEqual(failed_cls.testid, "files-root-summary-coverage")
+        self.assertIn("catalog_failed", failed_cls.categories)
+        self.assertTrue(failed_cls.retry_offered)
+
+        bounded_cls = classify_files_tree_notice(
+            "1 folder exceeded the indexing budget and matches may be missing. Retry file index",
+            testid="files-root-summary-coverage",
+            retry_button_visible=True,
+        )
+        self.assertTrue(bounded_cls.visible)
+        self.assertEqual(bounded_cls.testid, "files-root-summary-coverage")
+        self.assertIn("catalog_bounded", bounded_cls.categories)
+        self.assertTrue(bounded_cls.retry_offered)
+
+        # Negative control (Decision 073): a pane with visible results and NO coverage notice
+        # must classify as visible=False and fail verification when a coverage gap is declared.
+        plain_pane_cls = classify_files_tree_notice(
+            "12 files\nhealthy/target.txt\nwide_dir/item_00.txt",
+            testid="",
+            retry_button_visible=False,
+        )
+        self.assertFalse(plain_pane_cls.visible)
+        self.assertEqual(plain_pane_cls.categories, ())
+        self.assertEqual(plain_pane_cls.testid, "")
+
+        empty_notice_cls = classify_files_tree_notice("", testid="", retry_button_visible=False)
+        self.assertFalse(empty_notice_cls.visible)
+
+        no_notice_obs = PresentationObservation(
+            surface="files_tree",
+            state="failed",
+            platform="macos",
+            native_window=True,
+            api_response={
+                "coverage": [
+                    {"root_id": "r1", "state": "ready", "discovery_complete": True, "failed_directories": 1}
+                ]
+            },
+            coverage_note_visible=plain_pane_cls.visible,
+            coverage_note_testid=plain_pane_cls.testid,
+            results_visible_count=12,
+            empty_final_shown=False,
+        )
+        verdict = verify_presentation_observation(no_notice_obs)
+        self.assertEqual(verdict.verdict, "DEFECT")
+        self.assertTrue(any("missing_coverage_presentation" in v for v in verdict.violations))
 
     def test_write_presentation_evidence_writes_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

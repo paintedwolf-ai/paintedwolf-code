@@ -65,6 +65,69 @@ EXPECTED_STATE_FACTS: dict[str, frozenset[str]] = {
     ),
 }
 
+FILES_TREE_NOTICE_TESTIDS: frozenset[str] = frozenset(
+    {
+        "files-root-summary-coverage",
+        "source-watch-notice",
+        "files-tree-coverage-note",
+        "review-inventory-status",
+    }
+)
+
+
+@dataclass(frozen=True)
+class FilesTreeNoticeClassification:
+    """Typed classification of a rendered Files-tree / root-summary coverage notice."""
+
+    visible: bool
+    testid: str
+    categories: tuple[str, ...]
+    retry_offered: bool
+    raw_text: str
+
+
+def classify_files_tree_notice(
+    notice_text: str,
+    *,
+    testid: str = "",
+    retry_button_visible: bool = False,
+) -> FilesTreeNoticeClassification:
+    """Classify scoped Files-tree / root-summary notice text without false positives on plain results."""
+    cleaned = " ".join(notice_text.split()).strip()
+    low = cleaned.lower()
+    if not cleaned:
+        return FilesTreeNoticeClassification(
+            visible=False,
+            testid=testid,
+            categories=(),
+            retry_offered=False,
+            raw_text="",
+        )
+
+    categories: list[str] = []
+    if "could not be read" in low or "permission denied" in low or "index failed" in low:
+        categories.append("catalog_failed")
+    if "indexing budget" in low or "exceeded" in low or "bounded" in low:
+        categories.append("catalog_bounded")
+    if "still indexing" in low or "warming" in low or "indexing files" in low:
+        categories.append("catalog_warming")
+    if "refreshing" in low or "being updated" in low:
+        categories.append("catalog_refreshing")
+    if "matches may be missing" in low or "incomplete" in low or "unavailable" in low:
+        categories.append("catalog_incomplete")
+
+    retry_offered = retry_button_visible or ("retry file index" in low)
+    # Require at least one recognized coverage-notice marker so plain result listings
+    # or file counts in the pane can never pass as a coverage notice.
+    visible = len(categories) > 0
+    return FilesTreeNoticeClassification(
+        visible=visible,
+        testid=testid if visible else "",
+        categories=tuple(sorted(set(categories))),
+        retry_offered=retry_offered if visible else False,
+        raw_text=cleaned,
+    )
+
 
 @dataclass(frozen=True)
 class CoverageFixture:

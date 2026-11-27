@@ -29,6 +29,7 @@ from .cf09_presentation import (
     NEEDLE_TOKEN,
     PresentationObservation,
     build_coverage_fixture,
+    classify_files_tree_notice,
     verify_presentation_observation,
     write_presentation_evidence,
 )
@@ -360,16 +361,26 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
     }
     const indexApi = await apiGet(`/v1/projects/${proj.id}/source/index`);
     const treeVisible = await page.getByTestId("files-tree-pane").isVisible().catch(() => false);
-    const treeNoticeLocator = page
-      .locator(
-        '[data-testid="files-tree-pane"] [role="status"], [data-testid="source-watch-notice"], [data-testid="files-tree-coverage-note"], [data-testid="review-inventory-status"]',
-      )
-      .first();
-    const treeNoticePresent = await treeNoticeLocator.isVisible({ timeout: 1000 }).catch(() => false);
-    const treeNoticeText = treeNoticePresent
-      ? ((await treeNoticeLocator.textContent({ timeout: 1000 }).catch(() => ""))?.trim() ?? "")
-      : "";
-    const treeNoticeVisible = treeNoticePresent && treeNoticeText.length > 0;
+    const noticeCandidates = [
+      { testid: "files-root-summary-coverage", loc: page.getByTestId("files-root-summary-coverage").first() },
+      { testid: "source-watch-notice", loc: page.getByTestId("source-watch-notice").first() },
+      { testid: "files-tree-coverage-note", loc: page.getByTestId("files-tree-coverage-note").first() },
+      { testid: "review-inventory-status", loc: page.getByTestId("review-inventory-status").first() },
+    ];
+    let treeNoticeTestId = "";
+    let treeNoticeText = "";
+    for (const candidate of noticeCandidates) {
+      if (await candidate.loc.isVisible({ timeout: 1200 }).catch(() => false)) {
+        const txt = ((await candidate.loc.textContent({ timeout: 1000 }).catch(() => "")) ?? "").trim();
+        if (txt.length > 0) {
+          treeNoticeTestId = candidate.testid;
+          treeNoticeText = txt;
+          break;
+        }
+      }
+    }
+    const retryVisible = await page.getByTestId("retry-file-index").first().isVisible({ timeout: 500 }).catch(() => false);
+    const treeNoticeVisible = treeNoticeTestId.length > 0 && treeNoticeText.length > 0;
     const treeFilterEmpty = await page.getByTestId("files-tree-filter-empty").isVisible().catch(() => false);
     const filesShot = path.join(outDir, `macos_files_tree_${state}.png`);
     await page.screenshot({ path: filesShot });
@@ -386,11 +397,11 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
       workspace_ready: treeVisible,
       api_response: indexApi,
       coverage_note_visible: treeNoticeVisible,
-      coverage_note_testid: treeNoticeVisible ? "files-tree-status" : "",
+      coverage_note_testid: treeNoticeTestId,
       results_visible_count: treeVisible ? 1 : 0,
       empty_final_shown: treeFilterEmpty,
       screenshot_path: path.basename(filesShot),
-      notes: treeNoticeText,
+      notes: retryVisible ? `${treeNoticeText} [retry-file-index]` : treeNoticeText,
     });
   }
 
@@ -561,10 +572,23 @@ def run_macos_native(
             raw_obs = json.loads(
                 (out_dir / "raw_observations_macos.json").read_text(encoding="utf-8")
             )
-            verdicts = [
-                verify_presentation_observation(PresentationObservation(**item))
-                for item in raw_obs
-            ]
+            verdicts = []
+            for item in raw_obs:
+                obs = PresentationObservation(**item)
+                if obs.surface == "files_tree":
+                    cls = classify_files_tree_notice(
+                        obs.notes,
+                        testid=obs.coverage_note_testid,
+                        retry_button_visible="[retry-file-index]" in obs.notes,
+                    )
+                    obs = PresentationObservation(
+                        **{
+                            **item,
+                            "coverage_note_visible": cls.visible,
+                            "coverage_note_testid": cls.testid,
+                        }
+                    )
+                verdicts.append(verify_presentation_observation(obs))
             return write_presentation_evidence(
                 out_dir,
                 platform="macos",
