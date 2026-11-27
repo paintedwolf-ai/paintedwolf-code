@@ -5,9 +5,11 @@ import os
 import pathlib
 import platform
 import shlex
+import shutil
 import subprocess
 import uuid
 import smoke
+import yaml
 from built_runtime import engine_path
 from portable_command.contracts import DIRECTORY, ROOT, bytes_value
 
@@ -58,7 +60,26 @@ def materialize_helpers(helpers, helpers_dir):
     return dest
 
 
-def make_app_factory(engine_bin=None, base_factory=smoke.Application, helpers_dir=None):
+def materialize_denied_progress_scope(case, dest):
+    """Narrow the disposable coordinator scope for the pinned native Q20 call."""
+    facts = case['setup'].get('host_facts') or {}
+    if case['id'] != 'progress-then-denial' or set(facts) != {'denied_path'}:
+        return None
+    filename = facts['denied_path']
+    if (not isinstance(filename, str) or not filename or filename in {'.', '..'}
+            or not all(c.isascii() and (c.isalnum() or c in '-_.') for c in filename)):
+        raise ValueError('progress denial requires one literal fixture filename')
+    shutil.copytree(ROOT / 'lycaon/config', dest / 'config')
+    scopes = dest / 'config/packs/painted-wolf/platform/host/path-scopes.yaml'
+    catalog = yaml.safe_load(scopes.read_text())
+    scope = catalog['scopes']['coordinator_product_write']
+    scope['deny'] = [*scope.get('deny', []), filename]
+    scopes.write_text(yaml.safe_dump(catalog, sort_keys=False))
+    return {'denied_path': filename, 'scope_id': 'coordinator_product_write',
+            'path_scopes_sha256': file_sha256(scopes)}
+
+
+def make_app_factory(engine_bin=None, base_factory=smoke.Application, helpers_dir=None, config_root=None):
     """Wrap smoke.Application so an explicit engine binary, PW_ENGINE_BIN, or helper PATH is honored."""
     if base_factory is not smoke.Application:
         return base_factory
@@ -70,7 +91,7 @@ def make_app_factory(engine_bin=None, base_factory=smoke.Application, helpers_di
         if helpers_dir is not None:
             os.environ['PATH'] = str(helpers_dir) + (os.pathsep + orig_path if orig_path else '')
         try:
-            return base_factory(directory)
+            return base_factory(directory) if config_root is None else base_factory(directory, config_root=config_root)
         finally:
             smoke.engine_path = orig
             if helpers_dir is not None:
