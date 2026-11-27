@@ -332,6 +332,10 @@ lines += [
 (adir / "paired-baseline-summary.md").write_text("\n".join(lines) + "\n")
 sys.exit(1 if contaminated else 0)
 PY
+  python3 "${SCRIPT_DIR}/grade_paired_receipt.py" \
+    --kind baseline \
+    --receipt "${attempt_dir}/paired-baseline-receipt.json" \
+    --expected-samples "${SAMPLES}"
 }
 
 if [[ "${MODE}" == "baseline" ]]; then
@@ -516,7 +520,12 @@ report = {
 print(json.dumps(report, indent=2))
 sys.exit(1 if (contaminated or regression_flags) else 0)
 PY
-  exit $?
+  cmp_rc=$?
+  python3 "${SCRIPT_DIR}/grade_paired_receipt.py" \
+    --kind compare \
+    --receipt "${OUT_DIR}/paired-compare-report.json" \
+    --expected-samples "${SAMPLES}" || exit 1
+  exit "${cmp_rc}"
 fi
 
 usage

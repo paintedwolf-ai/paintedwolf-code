@@ -118,6 +118,31 @@ class PairedCompareIdentityControlsTest(unittest.TestCase):
             self.assertFalse(idents["same_root"])
             self.assertFalse(idents["same_image_and_engine_digest"])
 
+    def test_real_receipt_grader_blocks_malformed_warm_and_same_image(self) -> None:
+        grader = SCRIPT_DIR / "grade_paired_receipt.py"
+        fixture = REPO_ROOT / "lycaon" / "test" / "contract" / "portablepython" / "testdata" / "py14" / "paired-baseline-receipt-sanitized.json"
+        self.assertTrue(fixture.is_file(), f"missing sanitized receipt fixture: {fixture}")
+
+        # Clean real receipt passes
+        ok = subprocess.run(
+            ["python3", str(grader), "--kind", "baseline", "--receipt", str(fixture), "--expected-samples", "5"],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+
+        # Mutated warm sample with fresh service_construction_ms > 0 fails
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = json.loads(fixture.read_text(encoding="utf-8"))
+            bad["workloads"][0]["warm"]["samples"][0]["service_construction_ms"] = 1900.0
+            bad_path = Path(tmp) / "bad-warm.json"
+            bad_path.write_text(json.dumps(bad), encoding="utf-8")
+            fail = subprocess.run(
+                ["python3", str(grader), "--kind", "baseline", "--receipt", str(bad_path), "--expected-samples", "5"],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertNotEqual(fail.returncode, 0)
+            self.assertIn("fresh service mislabeled warm", fail.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

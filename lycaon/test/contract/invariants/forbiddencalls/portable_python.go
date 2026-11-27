@@ -142,17 +142,157 @@ func rawGuestHTTPBypassReason(fn *types.Func) string {
 	return ""
 }
 
-func isGuestHTTPEntry(modulePath string, fn *types.Func) bool {
-	pkgPath, recv, name := canonicalFuncSymbol(fn)
-	switch pkgPath {
-	case modulePath + "/internal/portablepython":
-		return (recv == "Service" && name == "ExecuteTool") ||
-			(recv == "GuestHTTPBridgeFS" && name == "OpenFile") ||
-			(recv == "httpBridgeFile" && (name == "Read" || name == "Seek"))
-	case modulePath + "/internal/pythonadmission":
-		return recv == "GuestHTTPAdapter" && (name == "HandleJSON" || name == "ReadStreamChunk")
+func findMethodBySymbol(bodies map[*types.Func]typedFuncBody, pkgPath, recvType, name string) *types.Func {
+	for fn := range bodies {
+		p, recv, n := canonicalFuncSymbol(fn)
+		if p == pkgPath && recv == recvType && n == name {
+			return fn
+		}
 	}
-	return false
+	return nil
+}
+
+func namedTypeFromResult(fn *types.Func) *types.Named {
+	if fn == nil {
+		return nil
+	}
+	sig, ok := fn.Type().(*types.Signature)
+	if !ok || sig.Results() == nil || sig.Results().Len() == 0 {
+		return nil
+	}
+	t := sig.Results().At(0).Type()
+	if ptr, ok := t.(*types.Pointer); ok {
+		t = ptr.Elem()
+	}
+	named, _ := t.(*types.Named)
+	return named
+}
+
+// collectReturnedNamedTypes walks a function body and returns every concrete
+// *types.Named returned (directly or via pointer/composite literal) by return
+// statements, so interface-typed methods like OpenFile(...) (sys.File, Errno)
+// still resolve to their concrete bridge file types.
+func collectReturnedNamedTypes(body typedFuncBody) []*types.Named {
+	seen := make(map[*types.Named]bool)
+	var out []*types.Named
+	if body.decl == nil || body.decl.Body == nil || body.pkg == nil || body.pkg.Info == nil {
+		return nil
+	}
+	ast.Inspect(body.decl.Body, func(n ast.Node) bool {
+		ret, ok := n.(*ast.ReturnStmt)
+		if !ok {
+			return true
+		}
+		for _, res := range ret.Results {
+			tv, ok := body.pkg.Info.Types[res]
+			if !ok || tv.Type == nil {
+				continue
+			}
+			t := tv.Type
+			if ptr, ok := t.(*types.Pointer); ok {
+				t = ptr.Elem()
+			}
+			if named, ok := t.(*types.Named); ok && named != nil && !seen[named] {
+				seen[named] = true
+				out = append(out, named)
+			}
+		}
+		return true
+	})
+	return out
+}
+
+func collectTypeMethods(named *types.Named, bodies map[*types.Func]typedFuncBody) []*types.Func {
+	if named == nil {
+		return nil
+	}
+	var out []*types.Func
+	for i := range named.NumMethods() {
+		m := named.Method(i)
+		if _, ok := bodies[m]; ok {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// discoverGuestHTTPRoots derives the HTTP traversal roots from the registered
+// direct-tool entry point, the registered WASI HTTP bridge constructor and all
+// methods of its FS/File implementations, and the GuestHTTPAdapter methods.
+// It fails closed (reporting a violation) if ANY expected live root disappears
+// so coverage can never silently shrink.
+func discoverGuestHTTPRoots(r *invariants.Run, modulePath string, bodies map[*types.Func]typedFuncBody) []*types.Func {
+	ppPkg := modulePath + "/internal/portablepython"
+	admPkg := modulePath + "/internal/pythonadmission"
+
+	seen := make(map[*types.Func]bool)
+	var roots []*types.Func
+	addRoot := func(fn *types.Func) {
+		if fn != nil && !seen[fn] {
+			seen[fn] = true
+			roots = append(roots, fn)
+		}
+	}
+
+	// 1. Direct-tool Python dispatch entry.
+	execTool := findMethodBySymbol(bodies, ppPkg, "Service", "ExecuteTool")
+	if execTool == nil {
+		r.Report("missing required guest HTTP traversal root %s.(*Service).ExecuteTool", ppPkg)
+	} else {
+		addRoot(execTool)
+	}
+
+	// 2. Registered WASI HTTP bridge FS constructor -> all methods of bridge FS
+	//    and all methods of concrete file types returned by OpenFile.
+	bridgeCtor := findMethodBySymbol(bodies, ppPkg, "", "NewGuestHTTPBridgeFS")
+	bridgeType := namedTypeFromResult(bridgeCtor)
+	if bridgeCtor == nil || bridgeType == nil {
+		r.Report("missing required HTTP bridge constructor %s.NewGuestHTTPBridgeFS", ppPkg)
+	} else {
+		var openFileFn *types.Func
+		for _, m := range collectTypeMethods(bridgeType, bodies) {
+			addRoot(m)
+			if m.Name() == "OpenFile" {
+				openFileFn = m
+			}
+		}
+		if openFileFn == nil {
+			r.Report("registered HTTP bridge %s missing OpenFile method", bridgeType.Obj().Name())
+		} else {
+			fileTypes := collectReturnedNamedTypes(bodies[openFileFn])
+			hasRead, hasSeek := false, false
+			for _, ft := range fileTypes {
+				for _, m := range collectTypeMethods(ft, bodies) {
+					addRoot(m)
+					if m.Name() == "Read" {
+						hasRead = true
+					}
+					if m.Name() == "Seek" {
+						hasSeek = true
+					}
+				}
+			}
+			if !hasRead || !hasSeek {
+				r.Report("registered HTTP bridge file returned by %s.OpenFile missing required Read/Seek methods (read=%v seek=%v)", bridgeType.Obj().Name(), hasRead, hasSeek)
+			}
+		}
+	}
+
+	// 3. Registered GuestHTTPAdapter methods.
+	handleJSON := findMethodBySymbol(bodies, admPkg, "GuestHTTPAdapter", "HandleJSON")
+	readChunk := findMethodBySymbol(bodies, admPkg, "GuestHTTPAdapter", "ReadStreamChunk")
+	if handleJSON == nil {
+		r.Report("missing required guest HTTP adapter root %s.(*GuestHTTPAdapter).HandleJSON", admPkg)
+	} else {
+		addRoot(handleJSON)
+	}
+	if readChunk == nil {
+		r.Report("missing required guest HTTP adapter root %s.(*GuestHTTPAdapter).ReadStreamChunk", admPkg)
+	} else {
+		addRoot(readChunk)
+	}
+
+	return roots
 }
 
 func checkPortablePythonGuestHTTP(r *invariants.Run) {
@@ -160,15 +300,12 @@ func checkPortablePythonGuestHTTP(r *invariants.Run) {
 	modulePath := r.Go().Module
 	bodies := indexTypedFuncBodies(prog)
 
-	var queue []*types.Func
-	visited := make(map[*types.Func]bool)
-	for fn := range bodies {
-		if isGuestHTTPEntry(modulePath, fn) {
-			visited[fn] = true
-			queue = append(queue, fn)
-		}
+	roots := discoverGuestHTTPRoots(r, modulePath, bodies)
+	queue := append([]*types.Func(nil), roots...)
+	visited := make(map[*types.Func]bool, len(roots))
+	for _, fn := range roots {
+		visited[fn] = true
 	}
-	r.Expect(len(queue), "guest HTTP dispatch entry points")
 
 	for len(queue) > 0 {
 		cur := queue[0]

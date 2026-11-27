@@ -205,6 +205,50 @@ func (f *httpBridgeFile) Seek(off int64, whence int) (int64, error) { return 0, 
 		})
 		expect(t, invariants.Evaluate(fixture(t, v2), r), violates, 1)
 	})
+
+	t.Run("disappearing single live root fails closed without silent shrink", func(t *testing.T) {
+		t.Parallel()
+		// Keep Service.ExecuteTool, GuestHTTPBridgeFS.OpenFile, httpBridgeFile.Read,
+		// and GuestHTTPAdapter.HandleJSON intact, but rename httpBridgeFile.Seek
+		// so one live root disappears while all others remain.
+		shrunkBridge := with(portablePythonHTTPBase, map[string]string{
+			"lycaon/internal/portablepython/bridge.go": `package portablepython
+
+import (
+	"context"
+	"github.com/lycaon/lycaon/internal/pythonadmission"
+)
+
+type Service struct{ adapter *pythonadmission.GuestHTTPAdapter }
+
+func (s *Service) ExecuteTool(ctx context.Context) error {
+	_, err := s.adapter.HandleJSON(ctx, nil)
+	return err
+}
+
+type GuestHTTPBridgeFS struct{ adapter *pythonadmission.GuestHTTPAdapter }
+
+func NewGuestHTTPBridgeFS(a *pythonadmission.GuestHTTPAdapter) *GuestHTTPBridgeFS {
+	return &GuestHTTPBridgeFS{adapter: a}
+}
+
+func (b *GuestHTTPBridgeFS) OpenFile(p string) *httpBridgeFile {
+	return &httpBridgeFile{parent: b}
+}
+
+type httpBridgeFile struct{ parent *GuestHTTPBridgeFS }
+
+func (f *httpBridgeFile) Read(p []byte) (int, error) {
+	_, err := f.parent.adapter.HandleJSON(context.Background(), p)
+	return 0, err
+}
+
+// Seek renamed -> must fail closed rather than silently shrinking coverage.
+func (f *httpBridgeFile) Reposition(off int64, whence int) (int64, error) { return 0, nil }
+`,
+		})
+		expect(t, invariants.Evaluate(fixture(t, shrunkBridge), r), violates, 1)
+	})
 }
 
 // wazeroStub stands in for the wazero packages in mount-rule fixtures so

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -378,27 +379,64 @@ func TestPY14_ImportSurfaceSymbolChangeControl(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 // PY14 Behavioral Control 3: Staged package grader & negative controls
-// (substituting another valid image or removing a required resource while
-// retaining the expected catalog).
+// (independent checked-in shipping selection pins from bundled-manifest.yaml,
+// strict trusted guest origins, and wrong-origin / substituted-image /
+// missing-resource negative controls).
 // ---------------------------------------------------------------------------
+
+type py14GuestImportOrigin struct {
+	Kind  string   `json:"kind"` // "file", "built-in", "frozen", "namespace", "unknown"
+	File  string   `json:"file,omitempty"`
+	Paths []string `json:"paths,omitempty"`
+}
+
+func validateTrustedGuestImportOrigin(modName string, origin py14GuestImportOrigin) error {
+	isTrustedPath := func(p string) bool {
+		return strings.HasPrefix(p, "/packages/") || strings.HasPrefix(p, "/usr/local/lib/")
+	}
+	switch origin.Kind {
+	case "built-in", "frozen":
+		return nil
+	case "file":
+		if !isTrustedPath(origin.File) {
+			return fmt.Errorf("import %q loaded from untrusted guest path %q (must be under /packages/ or /usr/local/lib/)", modName, origin.File)
+		}
+		return nil
+	case "namespace":
+		if len(origin.Paths) == 0 {
+			return fmt.Errorf("namespace import %q has empty __path__", modName)
+		}
+		for _, p := range origin.Paths {
+			if !isTrustedPath(p) {
+				return fmt.Errorf("namespace import %q includes untrusted search path %q", modName, p)
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("import %q has unsupported/untrusted origin kind %q (file=%q paths=%v)", modName, origin.Kind, origin.File, origin.Paths)
+	}
+}
 
 type py14StagedCatalogPin struct {
 	ExpectedImageID            string
+	ExpectedManifestSHA256     string
 	ExpectedWasmSHA256         string
 	ExpectedPackagesTreeSHA256 string
 	ExpectedEngineTag          string
 	ExpectedEngineLibSHA256    string
-	RequiredResources          []string // image-relative resource paths (fonts, dist-info, etc.)
+	RequiredResources          []string
 	RequiredPublicImports      map[string][]string
 }
 
 type py14ObservedStagedImage struct {
-	ImageDir        string
-	Manifest        *pythonruntime.ImageManifest
-	ActualWasmSHA   string
-	EngineIdentity  *pythonruntime.NativeEngineIdentity
-	PresentFiles    map[string]bool
-	ImportedModules map[string]bool
+	ImageDir         string
+	Manifest         *pythonruntime.ImageManifest
+	ActualManifestSH string
+	ActualWasmSHA    string
+	ActualEngineLibS string
+	EngineIdentity   *pythonruntime.NativeEngineIdentity
+	PresentFiles     map[string]bool
+	ImportedOrigins  map[string]py14GuestImportOrigin
 }
 
 func gradePY14StagedPackageCatalog(pin py14StagedCatalogPin, obs py14ObservedStagedImage) error {
@@ -406,19 +444,27 @@ func gradePY14StagedPackageCatalog(pin py14StagedCatalogPin, obs py14ObservedSta
 		return errors.New("missing observed image manifest")
 	}
 	if obs.Manifest.ImageID != pin.ExpectedImageID {
-		return fmt.Errorf("image_id mismatch: got %q want %q", obs.Manifest.ImageID, pin.ExpectedImageID)
+		return fmt.Errorf("image_id mismatch against shipping selection: got %q want %q", obs.Manifest.ImageID, pin.ExpectedImageID)
+	}
+	if pin.ExpectedManifestSHA256 != "" && obs.ActualManifestSH != pin.ExpectedManifestSHA256 {
+		return fmt.Errorf("image-manifest.json sha256 mismatch against shipping selection: got %q want %q", obs.ActualManifestSH, pin.ExpectedManifestSHA256)
 	}
 	if obs.ActualWasmSHA != pin.ExpectedWasmSHA256 {
-		return fmt.Errorf("wasm_sha256 mismatch: got %q want %q", obs.ActualWasmSHA, pin.ExpectedWasmSHA256)
+		return fmt.Errorf("python.wasm sha256 mismatch against shipping selection: got %q want %q", obs.ActualWasmSHA, pin.ExpectedWasmSHA256)
 	}
 	if pin.ExpectedPackagesTreeSHA256 != "" && obs.Manifest.PackagesTreeSHA256 != pin.ExpectedPackagesTreeSHA256 {
-		return fmt.Errorf("packages_tree_sha256 mismatch: got %q want %q", obs.Manifest.PackagesTreeSHA256, pin.ExpectedPackagesTreeSHA256)
+		return fmt.Errorf("packages_tree_sha256 mismatch against shipping selection: got %q want %q", obs.Manifest.PackagesTreeSHA256, pin.ExpectedPackagesTreeSHA256)
 	}
 	if obs.EngineIdentity == nil || obs.EngineIdentity.EngineTag != pin.ExpectedEngineTag {
-		return fmt.Errorf("engine_tag mismatch: got %+v want %q", obs.EngineIdentity, pin.ExpectedEngineTag)
+		return fmt.Errorf("engine_tag mismatch against shipping selection: got %+v want %q", obs.EngineIdentity, pin.ExpectedEngineTag)
 	}
-	if pin.ExpectedEngineLibSHA256 != "" && obs.EngineIdentity.LibrarySHA256 != pin.ExpectedEngineLibSHA256 {
-		return fmt.Errorf("engine library_sha256 mismatch: got %q want %q", obs.EngineIdentity.LibrarySHA256, pin.ExpectedEngineLibSHA256)
+	if pin.ExpectedEngineLibSHA256 != "" {
+		if obs.EngineIdentity.LibrarySHA256 != pin.ExpectedEngineLibSHA256 {
+			return fmt.Errorf("runtime engine library_sha256 mismatch against shipping selection: got %q want %q", obs.EngineIdentity.LibrarySHA256, pin.ExpectedEngineLibSHA256)
+		}
+		if obs.ActualEngineLibS != "" && obs.ActualEngineLibS != pin.ExpectedEngineLibSHA256 {
+			return fmt.Errorf("on-disk staged engine library sha256 mismatch against shipping selection: got %q want %q", obs.ActualEngineLibS, pin.ExpectedEngineLibSHA256)
+		}
 	}
 	for _, res := range pin.RequiredResources {
 		if !obs.PresentFiles[res] {
@@ -427,15 +473,69 @@ func gradePY14StagedPackageCatalog(pin py14StagedCatalogPin, obs py14ObservedSta
 	}
 	for dist, imports := range pin.RequiredPublicImports {
 		for _, imp := range imports {
-			if !obs.ImportedModules[imp] {
+			origin, ok := obs.ImportedOrigins[imp]
+			if !ok {
 				return fmt.Errorf("public distribution %q import %q failed resolution from read-only image", dist, imp)
+			}
+			if err := validateTrustedGuestImportOrigin(imp, origin); err != nil {
+				return fmt.Errorf("public distribution %q: %w", dist, err)
 			}
 		}
 	}
 	return nil
 }
 
+func sha256FileHex(t *testing.T, p string) string {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	contractcheck.FailErr(t, "read file for sha256 "+p, err)
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
+func probeGuestImportOrigins(t *testing.T, svc *portablepython.Service, wsDir, execID string, mods []string) map[string]py14GuestImportOrigin {
+	t.Helper()
+	importsJSON, err := json.Marshal(mods)
+	contractcheck.FailErr(t, "marshal import list", err)
+	resp := runPY10Code(t, svc, wsDir, execID, fmt.Sprintf(`
+import importlib, json
+mods = json.loads(%q)
+out = {}
+for m in mods:
+    mod = importlib.import_module(m)
+    spec = getattr(mod, "__spec__", None)
+    spec_origin = getattr(spec, "origin", None) if spec is not None else None
+    mod_file = getattr(mod, "__file__", None)
+    mod_path = getattr(mod, "__path__", None)
+    if spec_origin in ("built-in", "frozen"):
+        out[m] = {"kind": spec_origin}
+    elif mod_file:
+        out[m] = {"kind": "file", "file": str(mod_file)}
+    elif mod_path is not None:
+        out[m] = {"kind": "namespace", "paths": [str(p) for p in list(mod_path)]}
+    else:
+        out[m] = {"kind": "unknown"}
+print(json.dumps(out))
+`, string(importsJSON)))
+
+	var resolved map[string]py14GuestImportOrigin
+	contractcheck.FailErr(t, "decode guest import origin map", json.Unmarshal([]byte(strings.TrimSpace(resp.Stdout)), &resolved))
+	return resolved
+}
+
 func TestPY14_StagedPackageGraderAndNegativeControls(t *testing.T) {
+	// 1. Read expected pins from the INDEPENDENT checked-in shipping selection
+	//    (lycaon/config/runtime/portable-python/bundled-manifest.yaml), never
+	//    from the observed staged image/runtime being judged.
+	bundled, err := pythonruntime.LoadBundledEngineManifest()
+	contractcheck.FailErr(t, "load independent checked-in bundled-manifest.yaml", err)
+	if bundled.Image == nil || bundled.Selection == nil {
+		t.Fatalf("bundled-manifest.yaml missing Image or Selection pins: %+v", bundled)
+	}
+	platformArt, err := bundled.ArtifactForPlatform(runtime.GOOS, runtime.GOARCH)
+	contractcheck.FailErr(t, "resolve shipping engine artifact for "+runtime.GOOS+"/"+runtime.GOARCH, err)
+
+	// 2. Observe the live staged service and independently hash staged files on disk.
 	svc := newPY10Service(t, t.TempDir())
 	info := svc.RuntimeInfo()
 	imageDir := svc.ImageDir()
@@ -444,14 +544,12 @@ func TestPY14_StagedPackageGraderAndNegativeControls(t *testing.T) {
 	}
 
 	manifestPath := filepath.Join(imageDir, "image-manifest.json")
+	actualManifestSHA := sha256FileHex(t, manifestPath)
 	manifest, err := pythonruntime.LoadImageManifest(manifestPath)
 	contractcheck.FailErr(t, "load staged image-manifest.json", err)
 
-	// Independently hash the staged python.wasm binary on disk.
-	wasmBytes, err := os.ReadFile(filepath.Join(imageDir, filepath.FromSlash(manifest.Interpreter.WasmPath)))
-	contractcheck.FailErr(t, "read staged wasm binary", err)
-	wasmSum := sha256.Sum256(wasmBytes)
-	actualWasmSHA := hex.EncodeToString(wasmSum[:])
+	actualWasmSHA := sha256FileHex(t, filepath.Join(imageDir, filepath.FromSlash(manifest.Interpreter.WasmPath)))
+	actualEngineLibSHA := sha256FileHex(t, info.NativeEngine.LibraryPath)
 
 	// Enumerate public distributions, imports, and required image resources.
 	pubImports := make(map[string][]string)
@@ -488,54 +586,41 @@ func TestPY14_StagedPackageGraderAndNegativeControls(t *testing.T) {
 		t.Fatalf("staged manifest missing public distributions or resources: dists=%d res=%d", len(pubImports), len(requiredResources))
 	}
 
-	// Resolve every public import inside the real read-only guest image.
-	importsJSON, err := json.Marshal(allImports)
-	contractcheck.FailErr(t, "marshal public import list", err)
+	// Resolve every public import + explicit builtin/frozen stdlib modules inside
+	// the real read-only guest image and inspect their exact origins.
 	ws := t.TempDir()
-	resp := runPY10Code(t, svc, ws, "py14-staged-imports", fmt.Sprintf(`
-import importlib, json
-mods = json.loads(%q)
-resolved = {}
-for m in mods:
-    mod = importlib.import_module(m)
-    resolved[m] = getattr(mod, "__file__", "builtin") or "builtin"
-print(json.dumps(resolved))
-`, string(importsJSON)))
-
-	var resolvedMap map[string]string
-	contractcheck.FailErr(t, "decode guest import resolution map", json.Unmarshal([]byte(strings.TrimSpace(resp.Stdout)), &resolvedMap))
-	importedOK := make(map[string]bool, len(resolvedMap))
-	for m, loc := range resolvedMap {
-		if loc == "" {
-			t.Fatalf("import %q resolved to empty location", m)
-		}
-		importedOK[m] = true
-	}
+	probeList := append([]string{"sys", "importlib"}, allImports...)
+	origins := probeGuestImportOrigins(t, svc, ws, "py14-staged-imports", probeList)
+	contractcheck.FailErr(t, "verify builtin sys origin", validateTrustedGuestImportOrigin("sys", origins["sys"]))
+	contractcheck.FailErr(t, "verify stdlib importlib origin", validateTrustedGuestImportOrigin("importlib", origins["importlib"]))
 
 	pin := py14StagedCatalogPin{
-		ExpectedImageID:            manifest.ImageID,
-		ExpectedWasmSHA256:         manifest.Interpreter.WasmSHA256,
-		ExpectedPackagesTreeSHA256: manifest.PackagesTreeSHA256,
-		ExpectedEngineTag:          info.NativeEngine.EngineTag,
-		ExpectedEngineLibSHA256:    info.NativeEngine.LibrarySHA256,
+		ExpectedImageID:            bundled.Image.ImageID,
+		ExpectedManifestSHA256:     bundled.Image.ManifestSHA256,
+		ExpectedWasmSHA256:         bundled.Image.CPythonWasmSHA256,
+		ExpectedPackagesTreeSHA256: bundled.Image.PackagesTreeSHA256,
+		ExpectedEngineTag:          bundled.Selection.Tag,
+		ExpectedEngineLibSHA256:    platformArt.SHA256,
 		RequiredResources:          requiredResources,
 		RequiredPublicImports:      pubImports,
 	}
 	obs := py14ObservedStagedImage{
-		ImageDir:        imageDir,
-		Manifest:        manifest,
-		ActualWasmSHA:   actualWasmSHA,
-		EngineIdentity:  info.NativeEngine,
-		PresentFiles:    presentFiles,
-		ImportedModules: importedOK,
+		ImageDir:         imageDir,
+		Manifest:         manifest,
+		ActualManifestSH: actualManifestSHA,
+		ActualWasmSHA:    actualWasmSHA,
+		ActualEngineLibS: actualEngineLibSHA,
+		EngineIdentity:   info.NativeEngine,
+		PresentFiles:     presentFiles,
+		ImportedOrigins:  origins,
 	}
 
-	// Positive control: exact staged image + engine + public imports pass.
+	// Positive control: staged bytes/manifest/runtime match independent shipping selection.
 	contractcheck.FailErr(t, "grade staged package catalog on "+runtime.GOOS+"/"+runtime.GOARCH, gradePY14StagedPackageCatalog(pin, obs))
 
-	// Negative control A: substitute another valid image while retaining expected catalog -> MUST FAIL.
+	// Negative control A: substitute another valid image while retaining shipping selection pin -> MUST FAIL.
 	subManifest := *manifest
-	subManifest.ImageID = manifest.ImageID + "-other-valid-build"
+	subManifest.ImageID = bundled.Image.ImageID + "-other-valid-build"
 	subObs := obs
 	subObs.Manifest = &subManifest
 	if err := gradePY14StagedPackageCatalog(pin, subObs); err == nil {
@@ -553,186 +638,210 @@ print(json.dumps(resolved))
 	if err := gradePY14StagedPackageCatalog(pin, missingResObs); err == nil {
 		t.Fatalf("staged package grader failed to reject missing required resource %q", requiredResources[0])
 	}
+
+	// Negative control C (wrong-origin control): plant a shadowing module in /workspace/
+	// and verify the guest resolves it from /workspace/ and the origin grader REJECTS it!
+	shadowWS := t.TempDir()
+	shadowFile := filepath.Join(shadowWS, "yaml.py")
+	contractcheck.FailErr(t, "write workspace shadowing yaml.py", os.WriteFile(shadowFile, []byte("SHADOWED = True\n"), 0o644))
+	shadowOrigins := probeGuestImportOrigins(t, svc, shadowWS, "py14-wrong-origin-shadow", []string{"yaml"})
+	if !strings.HasPrefix(shadowOrigins["yaml"].File, "/workspace/") {
+		t.Fatalf("expected shadowing yaml.py to resolve under /workspace/, got %+v", shadowOrigins["yaml"])
+	}
+	wrongOriginMap := make(map[string]py14GuestImportOrigin, len(origins))
+	for k, v := range origins {
+		wrongOriginMap[k] = v
+	}
+	wrongOriginMap["yaml"] = shadowOrigins["yaml"]
+	wrongOriginObs := obs
+	wrongOriginObs.ImportedOrigins = wrongOriginMap
+	if err := gradePY14StagedPackageCatalog(pin, wrongOriginObs); err == nil {
+		t.Fatalf("staged package grader failed to reject /workspace/ shadowed import origin %+v", shadowOrigins["yaml"])
+	}
 }
 
 // ---------------------------------------------------------------------------
-// PY14 Behavioral Control 4: Paired benchmark receipt grader (pure unit /
-// contract controls with synthetic mutations + 1 known-good control).
+// PY14 Behavioral Control 4: Real Paired Benchmark Receipt Grader
+// (exercises scripts/portable-python-qual/paired/grade_paired_receipt.py —
+// the exact same grading entry point invoked by run-paired.sh — against a
+// real sanitized baseline receipt and synthetic mutations).
 // ---------------------------------------------------------------------------
 
-type py14BenchmarkSample struct {
-	SampleIndex int     `json:"sample_index"`
-	ServiceSeq  int     `json:"service_seq"`
-	InstanceSeq int     `json:"instance_seq"`
-	IsPriming   bool    `json:"is_priming"`
-	LatencyMs   float64 `json:"latency_ms"`
-	Clean       bool    `json:"clean"`
-	ExitCode    int     `json:"exit_code"`
+func runRealPairedReceiptGrader(t *testing.T, kind, receiptPath string, expectedSamples int) (string, error) {
+	t.Helper()
+	graderScript := filepath.Join("..", "..", "..", "..", "scripts", "portable-python-qual", "paired", "grade_paired_receipt.py")
+	if _, err := os.Stat(graderScript); err != nil {
+		t.Fatalf("real paired receipt grader script not found at %s: %v", graderScript, err)
+	}
+	args := []string{graderScript, "--kind", kind, "--receipt", receiptPath}
+	if expectedSamples > 0 {
+		args = append(args, "--expected-samples", fmt.Sprintf("%d", expectedSamples))
+	}
+	cmd := exec.Command("python3", args...)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
 }
 
-type py14BenchmarkSide struct {
-	Label               string                `json:"label"`
-	Lifecycle           string                `json:"lifecycle"` // "cold" or "warm"
-	ExpectedImageID     string                `json:"expected_image_id"`
-	ObservedImageID     string                `json:"observed_image_id"`
-	ExpectedEngineTag   string                `json:"expected_engine_tag"`
-	ObservedEngineTag   string                `json:"observed_engine_tag"`
-	PrimingRuns         int                   `json:"priming_runs"`
-	ExpectedSamples     int                   `json:"expected_samples"`
-	CountedPrimingCalls int                   `json:"counted_priming_calls"`
-	Samples             []py14BenchmarkSample `json:"samples"`
+func loadSanitizedBaselineReceipt(t *testing.T) map[string]any {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", "py14", "paired-baseline-receipt-sanitized.json"))
+	contractcheck.FailErr(t, "read sanitized real paired baseline receipt", err)
+	var data map[string]any
+	contractcheck.FailErr(t, "decode sanitized real paired baseline receipt", json.Unmarshal(raw, &data))
+	return data
 }
 
-type py14PairedBenchmarkReceipt struct {
-	ComparisonMode       string            `json:"comparison_mode"` // "image_change" or "same_image"
-	OverridesUnset       bool              `json:"overrides_unset"`
-	HostConditionVerdict string            `json:"host_condition_verdict"` // "clean" or "contaminated"
-	Baseline             py14BenchmarkSide `json:"baseline"`
-	Candidate            py14BenchmarkSide `json:"candidate"`
+func writeJSONTemp(t *testing.T, name string, data map[string]any) string {
+	t.Helper()
+	raw, err := json.MarshalIndent(data, "", "  ")
+	contractcheck.FailErr(t, "marshal "+name, err)
+	p := filepath.Join(t.TempDir(), name)
+	contractcheck.FailErr(t, "write "+name, os.WriteFile(p, raw, 0o644))
+	return p
 }
 
-func gradePY14PairedBenchmarkReceipt(rec py14PairedBenchmarkReceipt) error {
-	if !rec.OverridesUnset {
-		return errors.New("benchmark contaminated: image/engine env overrides were set")
+func buildRealCompareReportFromBaseline(base map[string]any) map[string]any {
+	eng := base["native_engine"].(map[string]any)
+	w0 := base["workloads"].([]any)[0].(map[string]any)
+	warmPriming := w0["warm"].(map[string]any)["priming_sample_excluded"]
+	return map[string]any{
+		"schema_version":        "paintedwolf.portable-python.paired-compare/v2",
+		"cold_order":            "alternating-ABAB-fresh-service",
+		"warm_protocol":         "reused-service-1-excluded-priming-plus-5-fresh-guests-alternating-workload-order",
+		"samples":               5,
+		"contaminated":          false,
+		"contamination_reasons": []any{},
+		"identities": map[string]any{
+			"harness_revision":             base["harness_revision"],
+			"allow_same_image":             false,
+			"same_root":                    false,
+			"same_image_and_engine_digest": false,
+			"baseline": map[string]any{
+				"label":                 "baseline",
+				"product_revision":      base["product_revision"],
+				"image_id":              base["image_id"],
+				"image_manifest_sha256": base["manifest_sha256"],
+				"library_sha256":        eng["library_sha256"],
+			},
+			"candidate": map[string]any{
+				"label":                 "candidate",
+				"product_revision":      "candidate-rev-py11",
+				"image_id":              "pp-cpython-3.12.0-wasi-candidate",
+				"image_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				"library_sha256":        eng["library_sha256"],
+			},
+		},
+		"priming_samples_excluded": map[string]any{
+			"baseline":  map[string]any{"pass_noop": warmPriming},
+			"candidate": map[string]any{"pass_noop": warmPriming},
+		},
+		"comparisons": []any{
+			map[string]any{
+				"workload":                      "pass_noop",
+				"mode":                          "warm",
+				"sample_count":                  5,
+				"baseline_median_construct_ms":  0.0,
+				"candidate_median_construct_ms": 0.0,
+				"baseline_median_tool_ms":       164.9,
+				"candidate_median_tool_ms":      166.1,
+			},
+		},
+		"regression_flags": []any{},
 	}
-	if rec.HostConditionVerdict != "clean" {
-		return fmt.Errorf("benchmark host condition not clean: %q", rec.HostConditionVerdict)
-	}
-	if rec.ComparisonMode == "image_change" && rec.Baseline.ObservedImageID == rec.Candidate.ObservedImageID {
-		return fmt.Errorf("intended image_change comparison measured identical observed image_id %q on both sides", rec.Baseline.ObservedImageID)
-	}
-	for _, side := range []py14BenchmarkSide{rec.Baseline, rec.Candidate} {
-		if side.ObservedImageID == "" || side.ObservedImageID != side.ExpectedImageID {
-			return fmt.Errorf("side %q image_id mismatch: observed=%q expected=%q", side.Label, side.ObservedImageID, side.ExpectedImageID)
-		}
-		if side.ObservedEngineTag == "" || side.ObservedEngineTag != side.ExpectedEngineTag {
-			return fmt.Errorf("side %q engine_tag mismatch: observed=%q expected=%q", side.Label, side.ObservedEngineTag, side.ExpectedEngineTag)
-		}
-		if side.CountedPrimingCalls > 0 {
-			return fmt.Errorf("side %q counted %d priming calls in measured results", side.Label, side.CountedPrimingCalls)
-		}
-		if len(side.Samples) != side.ExpectedSamples || side.ExpectedSamples <= 0 {
-			return fmt.Errorf("side %q incomplete samples: got %d want %d", side.Label, len(side.Samples), side.ExpectedSamples)
-		}
-		seenInstances := make(map[int]bool, len(side.Samples))
-		firstSvcSeq := side.Samples[0].ServiceSeq
-		for _, s := range side.Samples {
-			if s.IsPriming {
-				return fmt.Errorf("side %q sample %d is marked is_priming=true inside measured samples", side.Label, s.SampleIndex)
-			}
-			if !s.Clean || s.ExitCode != 0 {
-				return fmt.Errorf("side %q sample %d contaminated/failed (clean=%v exit=%d)", side.Label, s.SampleIndex, s.Clean, s.ExitCode)
-			}
-			if seenInstances[s.InstanceSeq] {
-				return fmt.Errorf("side %q reused instance_seq %d", side.Label, s.InstanceSeq)
-			}
-			seenInstances[s.InstanceSeq] = true
-			if side.Lifecycle == "warm" && s.ServiceSeq != firstSvcSeq {
-				return fmt.Errorf("side %q labeled warm but sample %d used fresh service_seq %d (initial %d)", side.Label, s.SampleIndex, s.ServiceSeq, firstSvcSeq)
-			}
-		}
-	}
-	return nil
 }
 
 func TestPY14_PairedBenchmarkReceiptGrader(t *testing.T) {
 	t.Parallel()
 
-	goodReceipt := func() py14PairedBenchmarkReceipt {
-		return py14PairedBenchmarkReceipt{
-			ComparisonMode:       "image_change",
-			OverridesUnset:       true,
-			HostConditionVerdict: "clean",
-			Baseline: py14BenchmarkSide{
-				Label:               "baseline-py08",
-				Lifecycle:           "warm",
-				ExpectedImageID:     "pp-cpython-3.12.0-wasi-base",
-				ObservedImageID:     "pp-cpython-3.12.0-wasi-base",
-				ExpectedEngineTag:   "v0.1.0",
-				ObservedEngineTag:   "v0.1.0",
-				PrimingRuns:         1,
-				ExpectedSamples:     3,
-				CountedPrimingCalls: 0,
-				Samples: []py14BenchmarkSample{
-					{SampleIndex: 1, ServiceSeq: 1, InstanceSeq: 2, LatencyMs: 41.2, Clean: true, ExitCode: 0},
-					{SampleIndex: 2, ServiceSeq: 1, InstanceSeq: 3, LatencyMs: 40.8, Clean: true, ExitCode: 0},
-					{SampleIndex: 3, ServiceSeq: 1, InstanceSeq: 4, LatencyMs: 41.0, Clean: true, ExitCode: 0},
-				},
-			},
-			Candidate: py14BenchmarkSide{
-				Label:               "candidate-py10",
-				Lifecycle:           "warm",
-				ExpectedImageID:     "pp-cpython-3.12.0-wasi-py10",
-				ObservedImageID:     "pp-cpython-3.12.0-wasi-py10",
-				ExpectedEngineTag:   "v0.1.0",
-				ObservedEngineTag:   "v0.1.0",
-				PrimingRuns:         1,
-				ExpectedSamples:     3,
-				CountedPrimingCalls: 0,
-				Samples: []py14BenchmarkSample{
-					{SampleIndex: 1, ServiceSeq: 2, InstanceSeq: 6, LatencyMs: 42.1, Clean: true, ExitCode: 0},
-					{SampleIndex: 2, ServiceSeq: 2, InstanceSeq: 7, LatencyMs: 41.9, Clean: true, ExitCode: 0},
-					{SampleIndex: 3, ServiceSeq: 2, InstanceSeq: 8, LatencyMs: 42.0, Clean: true, ExitCode: 0},
-				},
-			},
-		}
-	}
-
-	t.Run("known_good_control_passes", func(t *testing.T) {
+	t.Run("real_sanitized_baseline_receipt_passes", func(t *testing.T) {
 		t.Parallel()
-		contractcheck.FailErr(t, "known-good paired benchmark receipt", gradePY14PairedBenchmarkReceipt(goodReceipt()))
+		p := writeJSONTemp(t, "baseline-good.json", loadSanitizedBaselineReceipt(t))
+		out, err := runRealPairedReceiptGrader(t, "baseline", p, 5)
+		if err != nil {
+			t.Fatalf("real grader rejected clean sanitized baseline receipt: %v\n%s", err, out)
+		}
+	})
+
+	t.Run("real_compare_report_passes", func(t *testing.T) {
+		t.Parallel()
+		cmp := buildRealCompareReportFromBaseline(loadSanitizedBaselineReceipt(t))
+		p := writeJSONTemp(t, "compare-good.json", cmp)
+		out, err := runRealPairedReceiptGrader(t, "compare", p, 5)
+		if err != nil {
+			t.Fatalf("real grader rejected clean compare report: %v\n%s", err, out)
+		}
 	})
 
 	t.Run("rejects_same_actual_image_on_both_sides", func(t *testing.T) {
 		t.Parallel()
-		r := goodReceipt()
-		r.Candidate.ExpectedImageID = r.Baseline.ObservedImageID
-		r.Candidate.ObservedImageID = r.Baseline.ObservedImageID
-		if err := gradePY14PairedBenchmarkReceipt(r); err == nil {
-			t.Fatal("grader failed to reject identical actual image on both sides of image_change comparison")
+		base := loadSanitizedBaselineReceipt(t)
+		cmp := buildRealCompareReportFromBaseline(base)
+		idents := cmp["identities"].(map[string]any)
+		cand := idents["candidate"].(map[string]any)
+		cand["image_id"] = base["image_id"]
+		cand["image_manifest_sha256"] = base["manifest_sha256"]
+		p := writeJSONTemp(t, "compare-same-image.json", cmp)
+		out, err := runRealPairedReceiptGrader(t, "compare", p, 5)
+		if err == nil {
+			t.Fatalf("real grader failed to block identical image on both sides:\n%s", out)
+		}
+		if !strings.Contains(out, "same actual image") {
+			t.Fatalf("unexpected grader failure reason:\n%s", out)
 		}
 	})
 
 	t.Run("rejects_fresh_services_mislabeled_warm", func(t *testing.T) {
 		t.Parallel()
-		r := goodReceipt()
-		r.Candidate.Samples[1].ServiceSeq = 3 // fresh service on sample 2!
-		if err := gradePY14PairedBenchmarkReceipt(r); err == nil {
-			t.Fatal("grader failed to reject fresh service mislabeled warm")
+		base := loadSanitizedBaselineReceipt(t)
+		w0 := base["workloads"].([]any)[0].(map[string]any)
+		warmSamples := w0["warm"].(map[string]any)["samples"].([]any)
+		warmSamples[1].(map[string]any)["service_construction_ms"] = 1850.5
+		p := writeJSONTemp(t, "baseline-fresh-as-warm.json", base)
+		out, err := runRealPairedReceiptGrader(t, "baseline", p, 5)
+		if err == nil {
+			t.Fatalf("real grader failed to block fresh service mislabeled warm:\n%s", out)
+		}
+		if !strings.Contains(out, "fresh service mislabeled warm") {
+			t.Fatalf("unexpected grader failure reason:\n%s", out)
 		}
 	})
 
 	t.Run("rejects_counted_priming_calls", func(t *testing.T) {
 		t.Parallel()
-		r1 := goodReceipt()
-		r1.Baseline.CountedPrimingCalls = 1
-		if err := gradePY14PairedBenchmarkReceipt(r1); err == nil {
-			t.Fatal("grader failed to reject CountedPrimingCalls > 0")
+		base := loadSanitizedBaselineReceipt(t)
+		w0 := base["workloads"].([]any)[0].(map[string]any)
+		warmSamples := w0["warm"].(map[string]any)["samples"].([]any)
+		warmSamples[0].(map[string]any)["mode"] = "warm-priming"
+		warmSamples[0].(map[string]any)["index"] = 0
+		p := writeJSONTemp(t, "baseline-counted-priming.json", base)
+		out, err := runRealPairedReceiptGrader(t, "baseline", p, 5)
+		if err == nil {
+			t.Fatalf("real grader failed to block counted priming call:\n%s", out)
 		}
-		r2 := goodReceipt()
-		r2.Candidate.Samples[0].IsPriming = true
-		if err := gradePY14PairedBenchmarkReceipt(r2); err == nil {
-			t.Fatal("grader failed to reject is_priming=true inside measured samples")
+		if !strings.Contains(out, "counted priming call") {
+			t.Fatalf("unexpected grader failure reason:\n%s", out)
 		}
 	})
 
 	t.Run("rejects_contaminated_or_incomplete_samples", func(t *testing.T) {
 		t.Parallel()
-		r1 := goodReceipt()
-		r1.HostConditionVerdict = "contaminated"
-		if err := gradePY14PairedBenchmarkReceipt(r1); err == nil {
-			t.Fatal("grader failed to reject contaminated host condition")
+		// Contaminated flag
+		base1 := loadSanitizedBaselineReceipt(t)
+		base1["contaminated"] = true
+		base1["contamination_reasons"] = []any{"competing build detected"}
+		p1 := writeJSONTemp(t, "baseline-contaminated.json", base1)
+		if out, err := runRealPairedReceiptGrader(t, "baseline", p1, 5); err == nil {
+			t.Fatalf("real grader failed to block contaminated receipt:\n%s", out)
 		}
-		r2 := goodReceipt()
-		r2.Candidate.Samples = r2.Candidate.Samples[:2]
-		if err := gradePY14PairedBenchmarkReceipt(r2); err == nil {
-			t.Fatal("grader failed to reject incomplete sample set")
-		}
-		r3 := goodReceipt()
-		r3.Baseline.Samples[2].Clean = false
-		r3.Baseline.Samples[2].ExitCode = 1
-		if err := gradePY14PairedBenchmarkReceipt(r3); err == nil {
-			t.Fatal("grader failed to reject failed sample")
+
+		// Incomplete warm samples
+		base2 := loadSanitizedBaselineReceipt(t)
+		w0 := base2["workloads"].([]any)[0].(map[string]any)
+		warm := w0["warm"].(map[string]any)
+		warm["samples"] = warm["samples"].([]any)[:3]
+		p2 := writeJSONTemp(t, "baseline-incomplete.json", base2)
+		if out, err := runRealPairedReceiptGrader(t, "baseline", p2, 5); err == nil {
+			t.Fatalf("real grader failed to block incomplete warm samples:\n%s", out)
 		}
 	})
 }
