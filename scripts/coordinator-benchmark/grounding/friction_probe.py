@@ -114,12 +114,12 @@ def build_exact_binary_debugger_prefix(
         "set follow-fork-mode parent\n"
         "starti\n"
         'python print("PW_GND_OWNED_PID="+str(gdb.selected_inferior().pid),flush=True)\n'
-        "rbreak recordFrictionLocked\n"
-        "commands 1\n"
-        "silent\n"
-        'printf "PW_GND_FRICTION_HIT\\n"\n'
-        "info args\n"
-        "continue\n"
+        "python\n"
+        '_, locs = gdb.decode_line("github.com/lycaon/lycaon/internal/session/closeouts.(*Service).recordFrictionLocked")\n'
+        "sal = locs[0]\n"
+        'bp = gdb.Breakpoint(f"{sal.symtab.filename}:{sal.line + 2}")\n'
+        "bp.silent = True\n"
+        'bp.commands = \'printf "PW_GND_FRICTION_HIT\\\\n"\\ninfo args\\ncontinue\\n\'\n'
         "end\n"
         "continue\n",
         encoding="utf-8",
