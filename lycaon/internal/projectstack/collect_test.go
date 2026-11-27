@@ -24,6 +24,8 @@ func (stubRepo) Warm(string)                                      {}
 func (stubRepo) Changed(context.Context, string)                  {}
 func (stubRepo) SetOnSettled(func(string))                        {}
 func (stubRepo) Wait(context.Context) error                       { return nil }
+func (stubRepo) Epoch() uint64                                    { return 0 }
+func (stubRepo) Busy() bool                                       { return false }
 func (stubRepo) Stop()                                            {}
 func (stubRepo) Close() error                                     { return nil }
 

@@ -40,6 +40,11 @@ func EnsureProjectWatch(ctx context.Context, lifetime *WatchLifetime, projectID,
 	if previous != nil && sameWatchRoots(previous.roots, cleaned) {
 		previous.external = external
 		previous.lifetime = lifetime
+		if lifetime != nil {
+			previous.changes.setAdmitCounter(&lifetime.batchEpoch)
+		} else {
+			previous.changes.setAdmitCounter(nil)
+		}
 		for _, root := range cleaned {
 			repochange.EnsureRoot(ctx, root.Path)
 		}
@@ -56,6 +61,9 @@ func EnsureProjectWatch(ctx context.Context, lifetime *WatchLifetime, projectID,
 	}
 	w := &projectWatch{callbacks: callbacks, projectID: projectID, roots: cleaned, external: external, lifetime: lifetime}
 	w.changes = newChangeConverger(externalChangeQuietWindow, externalChangeMaxDelay, w.flushExternalChanges)
+	if lifetime != nil {
+		w.changes.setAdmitCounter(&lifetime.batchEpoch)
+	}
 	w.changes.holdWhile(w.gitBusy, externalChangeHoldCeiling)
 	w.unbind = repochange.RegisterObserver(w.observe)
 	watchers[key] = w

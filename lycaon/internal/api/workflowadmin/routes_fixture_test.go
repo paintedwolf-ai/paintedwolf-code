@@ -61,7 +61,7 @@ func newRoutesFixture(t *testing.T, orchestrator orchestration.Orchestrator) *ro
 		server.StopBackground(t.Context())
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		server.WaitForBackground(ctx)
+		testutil.FailErr(t, "drain workflow fixture background", server.WaitForBackground(ctx))
 	})
 	h := server.Admin.Workflow
 	return &routesFixture{

@@ -104,7 +104,9 @@ func (a *ServeApp) Close() error {
 	a.stopRunnersWithin(drainCtx)
 	if a.Server != nil {
 		a.Server.StopBackground(drainCtx)
-		a.Server.WaitForBackground(drainCtx)
+		if err := a.Server.WaitForBackground(drainCtx); err != nil {
+			slog.Warn("background work did not reach a fixed point during serve drain", "err", err)
+		}
 	}
 	cancelDrain()
 
@@ -112,8 +114,8 @@ func (a *ServeApp) Close() error {
 	releaseCtx, cancelRelease := context.WithTimeout(context.Background(), resourceReleaseTimeout)
 	defer cancelRelease()
 	if a.Server != nil {
-		a.Server.WaitForBackground(releaseCtx)
-		if err := releaseCtx.Err(); err != nil {
+		if err := a.Server.WaitForBackground(releaseCtx); err != nil {
+			slog.Warn("background work did not reach a fixed point before resource release", "err", err)
 			return err
 		}
 	}

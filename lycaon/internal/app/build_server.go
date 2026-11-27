@@ -79,7 +79,7 @@ func (b *serveBuilder) wireServer() error {
 	deps := api.Dependencies{Core: api.CoreDependencies{
 		Database: b.storage.Database, Store: b.storage.Sessions, PersonActions: personactions.New(b.storage.Database), Projects: b.storage.Projects, Sessions: b.sessions.Manager, Settings: b.settings.Service,
 		Invocations: b.sessions.Invocations, MutationGate: project.NewMutationGate()}, Providers: api.ProvidersDependencies{LLM: b.providers.Service, CostTracker: b.providers.Costs, Rerank: b.decisions.Rerank}, Host: api.HostDependencies{
-		Events: b.events.Hub, EventPublisher: b.events.Publisher, Presence: b.events.Presence, HostIdentity: b.identity.Host,
+		Events: b.events.Hub, EventPublisher: b.events.Publisher, EventOutbox: b.events.Outbox, Presence: b.events.Presence, HostIdentity: b.identity.Host,
 		HostResources: b.settings.HostResources, HostPower: b.settings.Power, Pricing: b.providers.Pricing, Preview: b.interactions.Preview,
 		PreflightEnv: readiness.New(b.providers.Service, b.decisions.Decider, b.processes.Path).Environment()}, Storage: api.StorageDependencies{
 		DataDir: b.storage.Directory, StorePath: b.storage.Path, WorkerBranchRoot: b.workerRuntime.BranchRoot,

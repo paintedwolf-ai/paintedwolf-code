@@ -434,6 +434,8 @@ func (fixedBriefProvider) Warm(string)                                      {}
 func (fixedBriefProvider) Changed(context.Context, string)                  {}
 func (fixedBriefProvider) SetOnSettled(func(string))                        {}
 func (fixedBriefProvider) Wait(context.Context) error                       { return nil }
+func (fixedBriefProvider) Epoch() uint64                                    { return 0 }
+func (fixedBriefProvider) Busy() bool                                       { return false }
 func (fixedBriefProvider) Stop()                                            {}
 func (fixedBriefProvider) Close() error                                     { return nil }
 

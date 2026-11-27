@@ -170,7 +170,7 @@ func sourceSettle(ctx context.Context, s *conformanceSweep) error {
 		return err
 	}
 	if s.host != nil {
-		s.host.Server.WaitForBackground(ctx)
+		return s.host.Server.WaitForBackground(ctx)
 	}
 	return nil
 }
@@ -314,7 +314,9 @@ func sourceView(ctx context.Context, s *conformanceSweep) (string, string, error
 		return "", "", err
 	}
 	id := sourceString(created, "id")
-	s.host.Server.WaitForBackground(ctx)
+	if err := s.host.Server.WaitForBackground(ctx); err != nil {
+		return "", "", err
+	}
 	view, err := s.prerequisite(ctx, "getSourceView", successInputs{params: map[string]string{"view_id": id}})
 	if err != nil {
 		return "", "", err
