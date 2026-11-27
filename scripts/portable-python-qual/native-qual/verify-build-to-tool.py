@@ -59,6 +59,20 @@ def start_deterministic_provider(req_log_path: Path, tool_result_path: Path):
         def log_message(self, fmt, *args):
             pass
 
+        def do_GET(self):
+            if self.path.endswith("/api/tags"):
+                resp = {"models": [{"name": "qual-deterministic", "model": "qual-deterministic"}]}
+            elif self.path.endswith("/v1/models") or self.path.endswith("/models"):
+                resp = {"object": "list", "data": [{"id": "qual-deterministic", "object": "model"}]}
+            else:
+                resp = {"status": "ok"}
+            payload = json.dumps(resp).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
         def do_POST(self):
             length = int(self.headers.get("Content-Length", "0"))
             raw = self.rfile.read(length) if length > 0 else b"{}"
