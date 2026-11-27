@@ -71,6 +71,7 @@ var Family = invariants.Family{Name: "forbidden-calls", Invariants: slices.Conca
 	runnerNeutrality,
 	sessions,
 	toolOutput,
+	renderImports,
 	wireQueries,
 	workflowVersion,
 )}
