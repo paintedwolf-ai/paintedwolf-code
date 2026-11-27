@@ -27,11 +27,17 @@ typedef struct pw_py_lib {
     fn_pw_py_instance_free instance_free;
 } pw_py_lib_t;
 
-static int pw_py_lib_open(const char* path, pw_py_lib_t* out, const char** err_out) {
+static pw_py_lib_t* pw_py_lib_open(const char* path, const char** err_out) {
     void* h = dlopen(path, RTLD_LOCAL | RTLD_NOW);
     if (!h) {
         *err_out = dlerror();
-        return -1;
+        return NULL;
+    }
+    pw_py_lib_t* out = (pw_py_lib_t*)calloc(1, sizeof(pw_py_lib_t));
+    if (!out) {
+        *err_out = "out of memory allocating pw_py_lib_t";
+        dlclose(h);
+        return NULL;
     }
     out->handle = h;
     out->engine_identity = (fn_pw_py_engine_identity)dlsym(h, "pw_py_engine_identity");
@@ -46,16 +52,19 @@ static int pw_py_lib_open(const char* path, pw_py_lib_t* out, const char** err_o
         !out->instance_free) {
         *err_out = "missing one or more required pw_py_* exported symbols";
         dlclose(h);
-        out->handle = NULL;
-        return -2;
+        free(out);
+        return NULL;
     }
-    return 0;
+    return out;
 }
 
 static void pw_py_lib_close(pw_py_lib_t* lib) {
-    if (lib && lib->handle) {
-        dlclose(lib->handle);
-        lib->handle = NULL;
+    if (lib) {
+        if (lib->handle) {
+            dlclose(lib->handle);
+            lib->handle = NULL;
+        }
+        free(lib);
     }
 }
 
@@ -177,7 +186,7 @@ func pwGoWasiCallback(handleVal C.uintptr_t, opID C.uint32_t, argsPtr *C.uint64_
 type NativeEngineRuntime struct {
 	mu                  sync.Mutex
 	closed              bool
-	lib                 C.pw_py_lib_t
+	lib                 *C.pw_py_lib_t
 	identity            NativeEngineIdentity
 	manifest            *ImageManifest
 	imageDir            string
@@ -245,11 +254,11 @@ func NewNativeEngineRuntime(_ context.Context, cfg RuntimeConfig) (Runtime, erro
 		}
 	}
 
-	var lib C.pw_py_lib_t
 	cPath := C.CString(libPath)
 	defer C.free(unsafe.Pointer(cPath))
 	var cErr *C.char
-	if rc := C.pw_py_lib_open(cPath, &lib, &cErr); rc != 0 {
+	lib := C.pw_py_lib_open(cPath, &cErr)
+	if lib == nil {
 		msg := "dlopen failed"
 		if cErr != nil {
 			msg = C.GoString(cErr)
@@ -260,9 +269,9 @@ func NewNativeEngineRuntime(_ context.Context, cfg RuntimeConfig) (Runtime, erro
 		}
 	}
 
-	cID := C.pw_py_call_identity(&lib)
+	cID := C.pw_py_call_identity(lib)
 	if cID == nil {
-		C.pw_py_lib_close(&lib)
+		C.pw_py_lib_close(lib)
 		return nil, &NativeEngineVerificationError{
 			Stage:   "abi",
 			Message: "pw_py_engine_identity() returned NULL",
@@ -280,12 +289,12 @@ func NewNativeEngineRuntime(_ context.Context, cfg RuntimeConfig) (Runtime, erro
 		GOARCH:           runtime.GOARCH,
 	})
 	if err != nil {
-		C.pw_py_lib_close(&lib)
+		C.pw_py_lib_close(lib)
 		return nil, err
 	}
 
-	if st := C.pw_py_call_init(&lib); st != C.PW_PY_STATUS_OK {
-		C.pw_py_lib_close(&lib)
+	if st := C.pw_py_call_init(lib); st != C.PW_PY_STATUS_OK {
+		C.pw_py_lib_close(lib)
 		return nil, &NativeEngineVerificationError{
 			Stage:   "init",
 			Message: fmt.Sprintf("pw_py_engine_init() failed with status %d", int(st)),
@@ -306,7 +315,7 @@ func NewNativeEngineRuntime(_ context.Context, cfg RuntimeConfig) (Runtime, erro
 	}
 	if strings.TrimSpace(cfg.ScratchRoot) != "" {
 		if err := os.MkdirAll(cfg.ScratchRoot, 0o700); err != nil {
-			C.pw_py_lib_close(&lib)
+			C.pw_py_lib_close(lib)
 			return nil, fmt.Errorf("create scratch root: %w", err)
 		}
 		_, _ = CleanOrphanedScratchDirs(cfg.ScratchRoot)
@@ -374,7 +383,10 @@ func (r *NativeEngineRuntime) Close(_ context.Context) error {
 	}
 	r.closed = true
 	r.parked.ReleaseAll()
-	C.pw_py_lib_close(&r.lib)
+	if r.lib != nil {
+		C.pw_py_lib_close(r.lib)
+		r.lib = nil
+	}
 	return nil
 }
 
@@ -472,7 +484,7 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 	defer runtime.UnlockOSThread()
 
 	execHandle := &nativeExecHandle{
-		lib:  &r.lib,
+		lib:  r.lib,
 		host: wasiHost,
 	}
 	cgoHandle := cgo.NewHandle(execHandle)
@@ -484,7 +496,7 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 		fuel_budget:      C.uint64_t(inv.Limits.MaxGuestWork),
 	}
 	var inst *C.pw_py_instance_t
-	if st := C.pw_py_call_instance_new(&r.lib, &instCfg, C.uintptr_t(cgoHandle), &inst); st != C.PW_PY_STATUS_OK {
+	if st := C.pw_py_call_instance_new(r.lib, &instCfg, C.uintptr_t(cgoHandle), &inst); st != C.PW_PY_STATUS_OK {
 		return nil, fmt.Errorf("pw_py_instance_new failed with status %d", int(st))
 	}
 	execHandle.inst = inst
@@ -493,7 +505,7 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 	freeInstance := func() {
 		freeOnce.Do(func() {
 			if inst != nil {
-				C.pw_py_call_instance_free(&r.lib, inst)
+				C.pw_py_call_instance_free(r.lib, inst)
 				inst = nil
 				execHandle.inst = nil
 			}
@@ -503,21 +515,30 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 
 	// Asynchronous cancellation watcher: interrupts pure CPU loops via
 	// pw_py_instance_cancel(inst) when execCtx is canceled or times out.
+	// Deferred stop runs BEFORE freeInstance() so cancel is never called on a freed instance.
 	doneCh := make(chan struct{})
 	watcherDone := make(chan struct{})
+	var stopWatcherOnce sync.Once
+	stopWatcher := func() {
+		stopWatcherOnce.Do(func() {
+			close(doneCh)
+			<-watcherDone
+		})
+	}
+	cancelTarget := inst
 	go func() {
 		defer close(watcherDone)
 		select {
 		case <-execCtx.Done():
-			C.pw_py_call_instance_cancel(&r.lib, inst)
+			C.pw_py_call_instance_cancel(r.lib, cancelTarget)
 		case <-doneCh:
 		}
 	}()
+	defer stopWatcher()
 
 	var runRes C.pw_py_run_result_t
-	_ = C.pw_py_call_instance_run(&r.lib, inst, &runRes)
-	close(doneCh)
-	<-watcherDone
+	_ = C.pw_py_call_instance_run(r.lib, inst, &runRes)
+	stopWatcher()
 
 	// Capture open write descriptor count BEFORE closing host FDs.
 	var unclosedWriteDescs int64
