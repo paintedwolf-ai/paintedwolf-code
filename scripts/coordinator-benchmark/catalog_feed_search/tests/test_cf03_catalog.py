@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+import urllib.error
 import urllib.parse
 
 from catalog_feed_search.checker import CatalogItem, ProductCatalogAnswer
@@ -33,13 +35,36 @@ from catalog_feed_search.seeds import BASE_SEED_PRIMARY, ReplaySelector
 
 
 class _FakeSidecarTransport:
-    """Deterministic in-memory HTTP transport mimicking D1 /v1 catalog & walk endpoints."""
+    """Deterministic in-memory HTTP transport mimicking D1 /v1 catalog, browse, & walk endpoints."""
 
-    def __init__(self, boundary_cfg: BoundaryConfig) -> None:
+    def __init__(self, boundary_cfg: BoundaryConfig, *, db_path: Path | None = None) -> None:
         self._boundary = boundary_cfg
+        self._db_path = db_path
         self._projects: dict[str, dict[str, Path]] = {}
+        self._project_sigs: dict[str, tuple[int, tuple[str, ...]]] = {}
         self._counter = 0
+        self._snap_seq = 0
         self._rev = 1
+
+    def _current_rev(self, pid: str) -> int:
+        root_map = self._projects[pid]
+        sig_parts: list[str] = []
+        for rid, rpath in sorted(root_map.items()):
+            if not os.access(rpath, os.R_OK | os.X_OK):
+                sig_parts.append(f"{rid}:unreadable")
+            else:
+                files, failed_d, bounded_d = self._safe_walk_files(rpath)
+                sig_parts.append(f"{rid}:{failed_d}:{bounded_d}:{','.join(files)}")
+        sig = tuple(sig_parts)
+        prev = self._project_sigs.get(pid)
+        if prev is None:
+            self._project_sigs[pid] = (self._rev, sig)
+            return self._rev
+        if prev[1] != sig:
+            self._rev += 1
+            self._project_sigs[pid] = (self._rev, sig)
+            return self._rev
+        return prev[0]
 
     def request(self, path: str, body: dict[str, object] | None = None, *, method: str = "GET") -> dict[str, object]:
         parsed = urllib.parse.urlsplit(path)
@@ -62,12 +87,22 @@ class _FakeSidecarTransport:
             pid = parts[2]
             root_map = self._projects[pid]
             sub = parts[4]
+            if sub == "browse":
+                rid = qs.get("root_id", ["root-0"])[0]
+                rel_dir = qs.get("dir", ["."])[0]
+                target = root_map[rid] if rel_dir in ("", ".") else (root_map[rid] / rel_dir)
+                entries_out = []
+                if target.is_dir():
+                    for de in sorted(os.scandir(target), key=lambda e: e.name):
+                        entries_out.append({"name": de.name, "is_dir": de.is_dir(follow_symlinks=False)})
+                return {"entries": entries_out}
             if sub == "index":
                 cov = []
                 overall_state = "ready"
                 for rid, rpath in root_map.items():
                     root_unreadable = not os.access(rpath, os.R_OK | os.X_OK)
                     failed_dirs = 1 if root_unreadable else self._count_unreadable_dirs(rpath)
+                    bounded_dirs = 0 if root_unreadable else self._count_bounded_dirs(rpath)
                     st = "failed" if root_unreadable else "ready"
                     if st == "failed":
                         overall_state = "failed"
@@ -77,16 +112,32 @@ class _FakeSidecarTransport:
                             "state": st,
                             "discovery_complete": not root_unreadable,
                             "refreshing": False,
-                            "bounded_directories": 0,
+                            "bounded_directories": bounded_dirs,
                             "failed_directories": failed_dirs,
                             "error": "permission denied" if root_unreadable else "",
                         }
                     )
-                return {"state": overall_state, "refreshing": False, "revision": self._rev, "coverage": cov}
+                return {"state": overall_state, "refreshing": False, "revision": self._current_rev(pid), "coverage": cov}
             if sub == "search":
                 rid_filter = qs.get("root_id", [""])[0]
                 limit = int(qs.get("limit", ["50"])[0])
                 cursor = qs.get("cursor", [""])[0]
+                cur_rev = self._current_rev(pid)
+                start = 0
+                if cursor:
+                    if ":" in cursor:
+                        c_rev_s, c_off_s = cursor.split(":", 1)
+                        if int(c_rev_s) != cur_rev:
+                            raise urllib.error.HTTPError(
+                                path,
+                                409,
+                                "Conflict",
+                                {},  # type: ignore[arg-type]
+                                io.BytesIO(json.dumps({"code": "cursor_generation_expired"}).encode("utf-8")),
+                            )
+                        start = int(c_off_s)
+                    elif cursor.isdigit():
+                        start = int(cursor)
                 selected_roots = [(rid_filter, root_map[rid_filter])] if rid_filter else list(root_map.items())
                 all_matches: list[dict[str, str]] = []
                 cov_out: list[dict[str, object]] = []
@@ -105,7 +156,7 @@ class _FakeSidecarTransport:
                             }
                         )
                         continue
-                    files, failed_dirs = self._safe_walk_files(rpath)
+                    files, failed_dirs, bounded_dirs = self._safe_walk_files(rpath)
                     for p in files:
                         all_matches.append({"root_id": rid, "path": p})
                     cov_out.append(
@@ -114,26 +165,61 @@ class _FakeSidecarTransport:
                             "state": "ready",
                             "discovery_complete": True,
                             "refreshing": False,
-                            "bounded_directories": 0,
+                            "bounded_directories": bounded_dirs,
                             "failed_directories": failed_dirs,
                             "error": "",
                         }
                     )
-                start = int(cursor) if cursor.isdigit() else 0
                 page = all_matches[start : start + limit]
-                next_cur = str(start + limit) if (start + limit) < len(all_matches) else ""
+                next_cur = f"{cur_rev}:{start + limit}" if (start + limit) < len(all_matches) else ""
                 return {
-                    "revision": self._rev,
+                    "revision": cur_rev,
                     "matches": page,
                     "next_cursor": next_cur,
                     "coverage": cov_out,
                 }
             if sub == "walk":
+                if self._db_path is not None and self._db_path.is_file():
+                    self._record_fake_snapshot(root_map)
                 return {"items": [], "next_cursor": ""}
         raise AssertionError(f"unexpected fake route: {method} {path}")
 
+    def _record_fake_snapshot(self, root_map: dict[str, Path]) -> None:
+        conn = sqlite3.connect(self._db_path)
+        try:
+            cur = conn.cursor()
+            for rpath in root_map.values():
+                self._snap_seq += 1
+                sid = f"snap-{self._snap_seq}"
+                mid = f"man-{self._snap_seq}"
+                cid = f"chunk-{self._snap_seq}"
+                norm = str(rpath.resolve())
+                cur.execute("INSERT INTO source_snapshots(id, created_ts) VALUES (?, ?)", (sid, f"2026-11-27T00:00:{self._snap_seq:02d}Z"))
+                cur.execute("INSERT INTO source_manifests(id) VALUES (?)", (mid,))
+                cur.execute("INSERT INTO source_snapshot_roots(snapshot_id, root_path, manifest_id) VALUES (?, ?, ?)", (sid, norm, mid))
+                cur.execute("INSERT INTO source_manifest_chunks(id) VALUES (?)", (cid,))
+                cur.execute("INSERT INTO source_manifest_layout(manifest_id, first_path, chunk_id) VALUES (?, ?, ?)", (mid, "src/main.go", cid))
+                if (rpath / "node_modules").is_dir():
+                    cur.execute(
+                        "INSERT INTO source_snapshot_boundaries(snapshot_id, root_path, path, reason, detail) VALUES (?, ?, ?, ?, ?)",
+                        (sid, norm, "node_modules", "scope", "floor"),
+                    )
+                if (rpath / "locked").is_dir() and not os.access(rpath / "locked", os.R_OK | os.X_OK):
+                    cur.execute(
+                        "INSERT INTO source_snapshot_boundaries(snapshot_id, root_path, path, reason, detail) VALUES (?, ?, ?, ?, ?)",
+                        (sid, norm, "locked", "unreadable", "permission denied"),
+                    )
+            conn.commit()
+        finally:
+            conn.close()
+
     def request_raw(self, path: str, body: dict[str, object] | None = None, *, method: str = "POST") -> tuple[bytes, dict[str, str]]:
         return b"", {}
+
+    def _count_bounded_dirs(self, root: Path) -> int:
+        if (root / ".paintedwolf" / "source-scope.yaml").is_file() and (root / "wide").is_dir():
+            return 1
+        return 0
 
     def _count_unreadable_dirs(self, root: Path) -> int:
         count = 0
@@ -148,14 +234,18 @@ class _FakeSidecarTransport:
                     dirnames.remove(d)
         return count
 
-    def _safe_walk_files(self, root: Path) -> tuple[list[str], int]:
+    def _safe_walk_files(self, root: Path) -> tuple[list[str], int, int]:
         failed = self._count_unreadable_dirs(root)
+        bounded = self._count_bounded_dirs(root)
         try:
             entries = reference_walk(root, boundary_config=self._boundary, include_hidden=True, prune_nested_checkouts=True)
-            return [e.path for e in entries if e.kind == "file"], failed
+            files = [e.path for e in entries if e.kind == "file"]
+            if bounded:
+                files = [p for p in files if not p.startswith("wide/")]
+            return files, failed, bounded
         except PermissionError:
             # Walk skipping unreadable directories to mirror real sidecar fault recording.
-            files: list[str] = []
+            files = []
             for dirpath, dirnames, filenames in os.walk(root):
                 rel_dir = Path(dirpath).relative_to(root).as_posix()
                 kept_dirs = []
@@ -174,7 +264,7 @@ class _FakeSidecarTransport:
                         continue
                     rel = f if rel_dir == "." else f"{rel_dir}/{f}"
                     files.append(rel)
-            return sorted(files), failed
+            return sorted(files), failed, bounded
 
 
 class _FakeManagedSidecar:
@@ -286,10 +376,10 @@ class TestCF03Families(unittest.TestCase):
 
         bad_driver = SidecarDriver(_CompleteEmptyAfterWarmingTransport(self.boundary_cfg))
         with tempfile.TemporaryDirectory() as tmp:
-            r2, incidents = run_k02_sidecar(bad_driver, self.boundary_cfg, Path(tmp), count=4)
-            # Instance 3 is cold_query -> must be graded DEFECT, NOT excused by earlier warming frame!
+            r2, incidents = run_k02_sidecar(bad_driver, self.boundary_cfg, Path(tmp), count=1)
+            # Instance 0 is cold -> must be graded DEFECT, NOT excused by earlier warming frame!
             self.assertGreaterEqual(r2.failed, 1)
-            cold_entries = [e for e in r2.state_ledger if e.get("attempted_state") == "cold_query"]
+            cold_entries = [e for e in r2.state_ledger if e.get("attempted_state") == "cold"]
             self.assertEqual(len(cold_entries), 1)
             self.assertEqual(cold_entries[0]["verdict"], "DEFECT")
             self.assertEqual(cold_entries[0]["transition_evidence"]["earlier_index_state"], "warming")
@@ -312,20 +402,23 @@ class TestCF03Families(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as cfg_tmp:
             cfg = Path(cfg_tmp)
-            # Create minimal SQLite store.db matching snapshot schema.
-            conn = sqlite3.connect(cfg / "store.db")
+            db_path = cfg / "store.db"
+            # Create minimal SQLite store.db matching root-pinned snapshot schema.
+            conn = sqlite3.connect(db_path)
             conn.executescript(
                 """
-                CREATE TABLE source_snapshots (id TEXT);
-                CREATE TABLE source_snapshot_boundaries (snapshot_id TEXT);
+                CREATE TABLE source_snapshots (id TEXT, created_ts TEXT);
+                CREATE TABLE source_snapshot_roots (snapshot_id TEXT, root_path TEXT, manifest_id TEXT);
+                CREATE TABLE source_snapshot_boundaries (snapshot_id TEXT, root_path TEXT, path TEXT, reason TEXT, detail TEXT);
                 CREATE TABLE source_manifests (id TEXT);
                 CREATE TABLE source_manifest_chunks (id TEXT);
-                CREATE TABLE source_manifest_layout (manifest_id TEXT, chunk_id TEXT);
+                CREATE TABLE source_manifest_layout (manifest_id TEXT, first_path TEXT, chunk_id TEXT);
                 """
             )
             conn.commit()
             conn.close()
-            r7 = run_k07_sidecar(self.driver, cfg, count=4)
+            k07_driver = SidecarDriver(_FakeSidecarTransport(self.boundary_cfg, db_path=db_path))
+            r7 = run_k07_sidecar(k07_driver, cfg, count=4)
             self.assertEqual(r7.executed, 4)
             self.assertEqual(r7.failed, 0)
             self.assertEqual(r7.edge_executed, 4)

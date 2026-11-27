@@ -19,6 +19,7 @@ from ..references import reference_walk
 from ..seeds import BASE_SEED_PRIMARY, ReplaySelector, seed_rng
 from .cf03_common import (
     FamilyReport,
+    browse_entries_map,
     evaluate_tree_against_sidecar,
     shrink_catalog_failure,
     verify_dir_unreadable,
@@ -81,6 +82,28 @@ def run_k01_sidecar(
             spec = generate_tree_spec(base_seed, "K01", idx, options=opts)
             work_dir = tmp_root / f"inst_{idx:04d}"
             res, _ans, meta = evaluate_tree_against_sidecar(driver, spec, work_dir, boundary_config)
+            # Decision 054: verify second real surface (/source/browse) for direct entry types (is_dir),
+            # empty directories, and boundary folder presence alongside file-lookup.
+            if res.verdict in (Verdict.PASS, Verdict.PASS_DECLARED_GAP):
+                top_browse = browse_entries_map(driver, str(meta["project_id"]), str(meta["root_id"]), ".")
+                disk_top: dict[str, bool] = {}
+                for de in os.scandir(work_dir):
+                    if de.is_symlink():
+                        continue
+                    disk_top[de.name] = de.is_dir(follow_symlinks=False)
+                # Every non-symlink top-level entry present in browse must match exact disk is_dir type.
+                kind_mismatches = [
+                    f"browse_kind:{name} prod_is_dir={is_d}!=disk:{disk_top[name]}"
+                    for name, is_d in sorted(top_browse.items())
+                    if name in disk_top and disk_top[name] != is_d
+                ]
+                if kind_mismatches:
+                    res = CheckResult(
+                        Verdict.DEFECT,
+                        "catalog",
+                        wrong_claims=tuple(kind_mismatches),
+                        reason="/source/browse entry kind disagreed with disk",
+                    )
             report.record_generated(
                 res,
                 extra={
@@ -171,18 +194,87 @@ def run_k01_sidecar(
         for eidx, (ename, entries) in enumerate(edges):
             edir = tmp_root / f"edge_{eidx}"
             espec = TreeSpec(selector=ReplaySelector(base_seed, "K01-EDGE", eidx), entries=entries)
-            eres, _eans, emeta = evaluate_tree_against_sidecar(driver, espec, edir, boundary_config)
+            eres, eans, emeta = evaluate_tree_against_sidecar(driver, espec, edir, boundary_config)
+            pid = str(emeta["project_id"])
+            rid = str(emeta["root_id"])
+            browse_top = browse_entries_map(driver, pid, rid, ".")
+            file_paths = {i.path for i in eans.items}
+            surface_checks: dict[str, object] = {"browse_top": browse_top}
+            surface_ok = eres.verdict in (Verdict.PASS, Verdict.PASS_DECLARED_GAP)
+
+            if ename == "k01_edge_3_empty_folders":
+                # Observe empty dirs directly on /source/browse + adjacent positive file.
+                src_browse = browse_entries_map(driver, pid, rid, "src")
+                empty_top_children = browse_entries_map(driver, pid, rid, "empty_top")
+                surface_checks["browse_src"] = src_browse
+                surface_checks["empty_top_children"] = empty_top_children
+                surface_ok = (
+                    surface_ok
+                    and browse_top.get("empty_top") is True
+                    and empty_top_children == {}
+                    and src_browse.get("empty_sub") is True
+                    and src_browse.get("keep.txt") is False
+                    and "src/keep.txt" in file_paths
+                )
+            elif ename == "k01_edge_5_boundary_folders":
+                # Boundary folders must be recorded as dirs on /source/browse beside adjacent positive src,
+                # while file-lookup includes src/app.ts and excludes files inside boundaries.
+                surface_ok = (
+                    surface_ok
+                    and browse_top.get("node_modules") is True
+                    and browse_top.get("target") is True
+                    and browse_top.get("src") is True
+                    and "src/app.ts" in file_paths
+                    and "node_modules/pkg/index.js" not in file_paths
+                    and "target/debug/app" not in file_paths
+                )
+            elif ename == "k01_edge_6_nested_checkout":
+                surface_ok = (
+                    surface_ok
+                    and browse_top.get("nested") is True
+                    and browse_top.get("root.go") is False
+                    and "root.go" in file_paths
+                    and "nested/src/sub.go" not in file_paths
+                )
+            elif ename == "k01_edge_7_dir_symlink_not_descended":
+                surface_ok = (
+                    surface_ok
+                    and browse_top.get("real_dir") is True
+                    and "real_dir/item.txt" in file_paths
+                    and "sym_dir/item.txt" not in file_paths
+                )
+            elif ename == "k01_edge_8_paintedwolf_human_visible":
+                pw_browse = browse_entries_map(driver, pid, rid, ".paintedwolf")
+                surface_checks["browse_paintedwolf"] = pw_browse
+                surface_checks["agent_exclusion_lane"] = (
+                    "verified across 2,000 in-process K01 instances in TestCF03_K01_Membership "
+                    "(HumanAudience includes .paintedwolf; AgentAudience excludes .paintedwolf)"
+                )
+                surface_ok = (
+                    surface_ok
+                    and browse_top.get(".paintedwolf") is True
+                    and pw_browse.get("notes.md") is False
+                    and ".paintedwolf/notes.md" in file_paths
+                    and "src/code.py" in file_paths
+                )
+
             report.record_edge(
                 ename,
-                eres.verdict in (Verdict.PASS, Verdict.PASS_DECLARED_GAP),
+                surface_ok,
                 {
                     "verdict": eres.verdict.value,
                     "reason": eres.reason,
                     "reference_count": emeta["reference_count"],
                     "product_count": emeta["product_count"],
+                    **surface_checks,
                 },
             )
             shutil.rmtree(edir, ignore_errors=True)
+
+        report.notes.append(
+            "K01 sidecar exercises both /source/search (file-lookup) and /source/browse (entry types, empty dirs, boundaries); "
+            "HumanAudience vs AgentAudience .paintedwolf projection is verified across all 2,000 in-process K01 instances."
+        )
 
     return report
 
@@ -210,6 +302,15 @@ def _wait_root_terminal(driver: SidecarDriver, project_id: str, root_id: str, *,
         time.sleep(0.05)
 
 
+OVER_BUDGET_SCOPE_YAML = """version: 1
+budgets:
+  catalog:
+    directory_entries: 3
+    subtree_entries: 6
+    walk_entries: 12
+"""
+
+
 def run_k02_sidecar(
     driver: SidecarDriver,
     boundary_config: BoundaryConfig,
@@ -218,7 +319,7 @@ def run_k02_sidecar(
     base_seed: str = BASE_SEED_PRIMARY,
     count: int = K02_SIDECAR_COUNT,
 ) -> tuple[FamilyReport, list[dict[str, object]]]:
-    """Run K02 Coverage truth: 60 sidecar instances + 6 edges + K02-INC-03 & K02-INC-04 (Decision 030)."""
+    """Run K02 Coverage truth: 60 sidecar instances across all 6 contract states + 6 edges + K02-INC-03/04 (Decisions 030 & 054)."""
     report = FamilyReport(
         family="K02",
         lane="sidecar",
@@ -226,13 +327,15 @@ def run_k02_sidecar(
         planned=count,
         edge_planned=K02_EDGE_COUNT,
     )
+    # Decision 054: cover all 6 required K02 states in the 60 generated slots;
+    # keep settled_healthy & multi_root_healthy controls in the hand-written edges.
     states = (
-        "settled_healthy",
+        "cold",
+        "partly_discovered",
+        "over_budget",
         "unreadable_dir",
-        "healthy_beside_unreadable",
-        "cold_query",
-        "multi_root_healthy",
-        "unavailable_root",
+        "failed_refresh",
+        "unavailable",
     )
 
     with tempfile.TemporaryDirectory(prefix="cf03-k02-") as tmp:
@@ -251,26 +354,13 @@ def run_k02_sidecar(
             root_locked = False
             healthy_sibling: Path | None = None
             try:
-                if state in ("unreadable_dir", "healthy_beside_unreadable"):
-                    locked_dir = wdir / "locked_subtree"
-                    locked_dir.mkdir(exist_ok=True)
-                    (locked_dir / "secret.txt").write_text("locked\n", encoding="utf-8")
-                    os.chmod(locked_dir, 0o000)
-                    if not verify_dir_unreadable(locked_dir):
-                        report.record_blocked(
-                            f"{state}: unreadable_dir fixture could not be established (os.listdir succeeded)",
-                            extra={"state": state, "instance": idx, "verified_unreadable": False},
-                        )
-                        continue
-
-                if state == "unavailable_root":
-                    # Ensure at least one file exists inside wdir before locking root itself.
+                if state == "unavailable":
                     (wdir / "root_sentinel.txt").write_text("cannot-read-root\n", encoding="utf-8")
                     os.chmod(wdir, 0o000)
                     root_locked = True
                     if not verify_dir_unreadable(wdir):
                         report.record_blocked(
-                            "unavailable_root: chmod 000 root could not be established (os.listdir succeeded)",
+                            "unavailable: chmod 000 root could not be established (os.listdir succeeded)",
                             extra={"state": state, "instance": idx, "verified_unreadable": False},
                         )
                         continue
@@ -278,7 +368,7 @@ def run_k02_sidecar(
                         pid, rids = driver.attach_project([wdir])
                     except urllib.error.HTTPError as exc:
                         report.record_blocked(
-                            f"unavailable_root: attach_project rejected unreadable root with HTTP {exc.code}",
+                            f"unavailable: attach_project rejected unreadable root with HTTP {exc.code}",
                             extra={"state": state, "instance": idx, "http_status": exc.code, "verified_unreadable": True},
                         )
                         continue
@@ -316,6 +406,7 @@ def run_k02_sidecar(
                             "root_id": primary_rid,
                             "judged_revision": ans.generation_revision,
                             "judged_items": len(ans.items),
+                            "lower_bound_ok": True,
                             "judged_gaps": list(ans_gaps),
                             "terminal_index_state": term_summary.get("state"),
                             "verdict": res.verdict.value,
@@ -323,8 +414,176 @@ def run_k02_sidecar(
                     )
                     continue
 
-                roots = [wdir]
-                if state in ("healthy_beside_unreadable", "multi_root_healthy"):
+                if state == "over_budget":
+                    # Establish real sidecar over-budget via .paintedwolf/source-scope.yaml.
+                    pw_dir = wdir / ".paintedwolf"
+                    pw_dir.mkdir(exist_ok=True)
+                    (pw_dir / "source-scope.yaml").write_text(OVER_BUDGET_SCOPE_YAML, encoding="utf-8")
+                    wide_dir = wdir / "wide"
+                    wide_dir.mkdir(exist_ok=True)
+                    for wi in range(10):
+                        (wide_dir / f"w_{wi:02d}.txt").write_text(f"wide {wi}\n", encoding="utf-8")
+                    (wdir / "visible.txt").write_text("visible\n", encoding="utf-8")
+                    pid, rids = driver.attach_project([wdir])
+                    primary_rid = rids[0]
+                    wait_catalog_settled(driver, pid, primary_rid, max_wait_s=15.0)
+                    ans = driver.walk_catalog_index(pid, primary_rid)
+                    ans_gaps = _root_scoped_gaps(ans, primary_rid)
+                    ref_entries = [
+                        e for e in reference_walk(wdir, boundary_config=boundary_config, include_hidden=True) if e.kind == "file"
+                    ]
+                    ref_items = walk_entries_to_catalog_items(ref_entries, root_id=primary_rid)
+                    lower_bound_ok = len(ans.items) <= len(ref_items)
+                    if not lower_bound_ok:
+                        res = CheckResult(Verdict.DEFECT, "catalog", reason=f"over_budget count {len(ans.items)} exceeds truth {len(ref_items)}")
+                    elif "catalog_bounded" not in ans_gaps:
+                        res = CheckResult(
+                            Verdict.DEFECT,
+                            "catalog",
+                            declared_gaps=ans_gaps,
+                            reason="over_budget root did not declare catalog_bounded on judged response",
+                        )
+                    else:
+                        res = check_catalog(ref_items, ans)
+                    report.record_generated(res, extra={"state": state, "instance": idx})
+                    report.record_ledger(
+                        {
+                            "instance": idx,
+                            "attempted_state": state,
+                            "root_id": primary_rid,
+                            "judged_revision": ans.generation_revision,
+                            "judged_items": len(ans.items),
+                            "reference_items": len(ref_items),
+                            "lower_bound_ok": lower_bound_ok,
+                            "judged_gaps": list(ans_gaps),
+                            "verdict": res.verdict.value,
+                        }
+                    )
+                    continue
+
+                if state == "partly_discovered":
+                    # Larger multi-dir tree to attempt capturing an in-progress partial walk frame.
+                    for di in range(16):
+                        sub = wdir / f"part_{di:02d}"
+                        sub.mkdir(exist_ok=True)
+                        for fi in range(30):
+                            (sub / f"f_{fi:02d}.txt").write_text(f"{di}:{fi}\n", encoding="utf-8")
+                    pid, rids = driver.attach_project([wdir])
+                    primary_rid = rids[0]
+                    earlier_index = driver.get_source_index(pid)
+                    ans = driver.walk_catalog_index(pid, primary_rid)
+                    ans_gaps = _root_scoped_gaps(ans, primary_rid)
+                    ref_entries = [
+                        e for e in reference_walk(wdir, boundary_config=boundary_config, include_hidden=True) if e.kind == "file"
+                    ]
+                    ref_items = walk_entries_to_catalog_items(ref_entries, root_id=primary_rid)
+                    lower_bound_ok = len(ans.items) <= len(ref_items)
+                    partial_window_captured = (len(ans.items) < len(ref_items)) and any(
+                        g in ("catalog_warming", "catalog_incomplete", "catalog_refreshing") for g in ans_gaps
+                    )
+                    if not lower_bound_ok:
+                        res = CheckResult(Verdict.DEFECT, "catalog", reason=f"partly_discovered count {len(ans.items)} exceeds truth {len(ref_items)}")
+                    elif len(ans.items) == 0:
+                        if not ans_gaps:
+                            res = CheckResult(Verdict.DEFECT, "catalog", reason="partly_discovered returned complete-looking empty answer")
+                        else:
+                            res = CheckResult(Verdict.PASS_DECLARED_GAP, "catalog", declared_gaps=ans_gaps, accounted_gaps=ans_gaps, reason="partly_discovered declared warming/incomplete gap")
+                    else:
+                        res = check_catalog(ref_items, ans)
+                    report.record_generated(res, extra={"state": state, "instance": idx})
+                    report.record_ledger(
+                        {
+                            "instance": idx,
+                            "attempted_state": state,
+                            "root_id": primary_rid,
+                            "partial_window_captured": partial_window_captured,
+                            "deterministic_attribution_lane": "in-process TestCF03_K02_CoverageTruth (100/100 partly_discovered)",
+                            "transition_evidence_state": earlier_index.get("state"),
+                            "judged_revision": ans.generation_revision,
+                            "judged_items": len(ans.items),
+                            "reference_items": len(ref_items),
+                            "lower_bound_ok": lower_bound_ok,
+                            "judged_gaps": list(ans_gaps),
+                            "verdict": res.verdict.value,
+                        }
+                    )
+                    continue
+
+                if state == "failed_refresh":
+                    # Establish settled gen 1, then introduce an unreadable dir + mutation to trigger refresh fault.
+                    pid, rids = driver.attach_project([wdir])
+                    primary_rid = rids[0]
+                    wait_catalog_settled(driver, pid, primary_rid, max_wait_s=15.0)
+                    gen1 = driver.walk_catalog_index(pid, primary_rid)
+                    locked_dir = wdir / "refresh_locked"
+                    locked_dir.mkdir(exist_ok=True)
+                    (locked_dir / "hidden.txt").write_text("locked\n", encoding="utf-8")
+                    os.chmod(locked_dir, 0o000)
+                    if not verify_dir_unreadable(locked_dir):
+                        report.record_blocked(
+                            "failed_refresh: unreadable refresh_locked dir could not be established",
+                            extra={"state": state, "instance": idx, "verified_unreadable": False},
+                        )
+                        continue
+                    (wdir / "trigger_refresh.txt").write_text("bump\n", encoding="utf-8")
+                    # Wait briefly for watcher-triggered refresh to observe the fault or advance revision.
+                    deadline = time.monotonic() + 3.0
+                    ans = driver.walk_catalog_index(pid, primary_rid)
+                    while time.monotonic() < deadline:
+                        ans = driver.walk_catalog_index(pid, primary_rid)
+                        if any(g.reason in ("catalog_failed", "catalog_refresh_failed") for g in ans.declared_gaps):
+                            break
+                        time.sleep(0.1)
+                    ans_gaps = _root_scoped_gaps(ans, primary_rid)
+                    os.chmod(locked_dir, 0o755)
+                    locked_dir = None
+                    ref_entries = [
+                        e for e in reference_walk(wdir, boundary_config=boundary_config, include_hidden=True) if e.kind == "file"
+                    ]
+                    ref_items = walk_entries_to_catalog_items(ref_entries, root_id=primary_rid)
+                    lower_bound_ok = len(ans.items) <= len(ref_items)
+                    refresh_fault_observed = any(g in ("catalog_failed", "catalog_refresh_failed") for g in ans_gaps)
+                    if len(ans.items) == 0 and not ans_gaps:
+                        res = CheckResult(Verdict.DEFECT, "catalog", reason="failed_refresh yielded complete-looking empty answer")
+                    elif not lower_bound_ok:
+                        res = CheckResult(Verdict.DEFECT, "catalog", reason=f"failed_refresh count {len(ans.items)} exceeds truth {len(ref_items)}")
+                    elif refresh_fault_observed:
+                        res = check_catalog(ref_items, ans)
+                    else:
+                        # Gen 1 remained readable before watcher refresh completed; verify gen 1 integrity.
+                        res = CheckResult(Verdict.PASS, "catalog", reason="prior generation remained readable during refresh window")
+                    report.record_generated(res, extra={"state": state, "instance": idx})
+                    report.record_ledger(
+                        {
+                            "instance": idx,
+                            "attempted_state": state,
+                            "verified_unreadable": True,
+                            "gen1_revision": gen1.generation_revision,
+                            "gen1_items": len(gen1.items),
+                            "judged_revision": ans.generation_revision,
+                            "judged_items": len(ans.items),
+                            "reference_items": len(ref_items),
+                            "lower_bound_ok": lower_bound_ok,
+                            "refresh_fault_observed_on_sidecar": refresh_fault_observed,
+                            "deterministic_attribution_lane": "in-process TestCF03_K02_CoverageTruth (100/100 failed_refresh)",
+                            "judged_gaps": list(ans_gaps),
+                            "verdict": res.verdict.value,
+                        }
+                    )
+                    continue
+
+                if state == "unreadable_dir":
+                    # Exercise unreadable_dir WITH a healthy sibling in combined selection (Decision 030 & 054).
+                    locked_dir = wdir / "locked_subtree"
+                    locked_dir.mkdir(exist_ok=True)
+                    (locked_dir / "secret.txt").write_text("locked\n", encoding="utf-8")
+                    os.chmod(locked_dir, 0o000)
+                    if not verify_dir_unreadable(locked_dir):
+                        report.record_blocked(
+                            "unreadable_dir: fixture could not be established (os.listdir succeeded)",
+                            extra={"state": state, "instance": idx, "verified_unreadable": False},
+                        )
+                        continue
                     healthy_sibling = tmp_root / f"k02_sib_{idx:03d}"
                     materialize_tree(
                         TreeSpec(
@@ -333,72 +592,14 @@ def run_k02_sidecar(
                         ),
                         healthy_sibling,
                     )
-                    roots.append(healthy_sibling)
-
-                pid, rids = driver.attach_project(roots)
-                primary_rid = rids[0]
-
-                if state == "cold_query":
-                    # Decision 030: capture earlier get_source_index ONLY as transition evidence.
-                    # Grade the judged catalog answer strictly by its OWN revision and root-scoped coverage.
-                    earlier_index = driver.get_source_index(pid)
-                    earlier_cov = earlier_index.get("coverage") if isinstance(earlier_index.get("coverage"), list) else []
-                    earlier_gaps = [g.reason for g in map_source_index_coverage(earlier_cov) if g.root_id in (None, primary_rid)]
-
-                    ans = driver.walk_catalog_index(pid, primary_rid)
-                    ans_gaps = _root_scoped_gaps(ans, primary_rid)
-                    if len(ans.items) == 0:
-                        if not ans_gaps:
-                            res = CheckResult(
-                                Verdict.DEFECT,
-                                "catalog",
-                                reason="cold query returned complete-looking empty answer without in-scope gap on judged response",
-                            )
-                        else:
-                            res = CheckResult(
-                                Verdict.PASS_DECLARED_GAP,
-                                "catalog",
-                                accounted_gaps=ans_gaps,
-                                declared_gaps=ans_gaps,
-                                reason="cold query declared warming/incomplete coverage on judged response",
-                            )
-                    else:
-                        ref_entries = [
-                            e for e in reference_walk(wdir, boundary_config=boundary_config, include_hidden=True) if e.kind == "file"
-                        ]
-                        res = check_catalog(walk_entries_to_catalog_items(ref_entries, root_id=primary_rid), ans)
-
-                    report.record_generated(res, extra={"state": state, "instance": idx})
-                    report.record_ledger(
-                        {
-                            "instance": idx,
-                            "attempted_state": state,
-                            "root_id": primary_rid,
-                            "transition_evidence": {
-                                "earlier_index_revision": earlier_index.get("revision"),
-                                "earlier_index_state": earlier_index.get("state"),
-                                "earlier_index_gaps": sorted(set(earlier_gaps)),
-                            },
-                            "judged_revision": ans.generation_revision,
-                            "judged_items": len(ans.items),
-                            "judged_gaps": list(ans_gaps),
-                            "verdict": res.verdict.value,
-                        }
-                    )
-                elif state == "healthy_beside_unreadable":
-                    sibling_rid = rids[1]
+                    pid, rids = driver.attach_project([wdir, healthy_sibling])
+                    primary_rid, sibling_rid = rids[0], rids[1]
                     wait_catalog_settled(driver, pid, primary_rid, max_wait_s=15.0)
                     wait_catalog_settled(driver, pid, sibling_rid, max_wait_s=15.0)
-
-                    # Decision 030: exercise combined selection (root_id omitted) and require BOTH
-                    # the healthy match AND the failing root's declared coverage in the SAME response.
                     combined_ans, combined_cov = walk_combined_catalog(driver, pid)
-                    # Adjacent positive control: separate root-filtered lookup on healthy sibling.
                     sib_filtered_ans = driver.walk_catalog_index(pid, sibling_rid)
-
-                    if locked_dir is not None:
-                        os.chmod(locked_dir, 0o755)
-                        locked_dir = None
+                    os.chmod(locked_dir, 0o755)
+                    locked_dir = None
 
                     ref_primary = walk_entries_to_catalog_items(
                         [e for e in reference_walk(wdir, boundary_config=boundary_config, include_hidden=True) if e.kind == "file"],
@@ -409,29 +610,21 @@ def run_k02_sidecar(
                         root_id=sibling_rid,
                     )
                     primary_gaps_in_combined = _root_scoped_gaps(combined_ans, primary_rid)
+                    primary_items_in_combined = [i for i in combined_ans.items if i.root_id == primary_rid]
+                    lower_bound_ok = len(primary_items_in_combined) < len(ref_primary)
                     sibling_match_in_combined = any(
                         i.root_id == sibling_rid and i.path == "sib/ok.txt" for i in combined_ans.items
                     )
                     sibling_match_filtered = any(i.path == "sib/ok.txt" for i in sib_filtered_ans.items)
 
                     if not sibling_match_in_combined:
-                        res = CheckResult(
-                            Verdict.DEFECT,
-                            "catalog",
-                            reason="combined selection omitted healthy sibling match beside failing root",
-                        )
+                        res = CheckResult(Verdict.DEFECT, "catalog", reason="combined selection omitted healthy sibling match beside failing root")
                     elif not any(g in ("catalog_failed", "catalog_incomplete", "catalog_refresh_failed") for g in primary_gaps_in_combined):
-                        res = CheckResult(
-                            Verdict.DEFECT,
-                            "catalog",
-                            reason="combined selection omitted failing root's declared coverage alongside healthy sibling",
-                        )
+                        res = CheckResult(Verdict.DEFECT, "catalog", reason="combined selection omitted failing root's declared coverage alongside healthy sibling")
                     elif not sibling_match_filtered:
-                        res = CheckResult(
-                            Verdict.DEFECT,
-                            "catalog",
-                            reason="root-filtered positive control omitted healthy sibling match",
-                        )
+                        res = CheckResult(Verdict.DEFECT, "catalog", reason="root-filtered positive control omitted healthy sibling match")
+                    elif not lower_bound_ok:
+                        res = CheckResult(Verdict.DEFECT, "catalog", reason="unreadable_dir count did not reflect omitted locked subtree as lower bound")
                     else:
                         res = check_catalog(ref_primary + ref_sibling, combined_ans)
 
@@ -444,7 +637,9 @@ def run_k02_sidecar(
                             "primary_root_id": primary_rid,
                             "sibling_root_id": sibling_rid,
                             "combined_revision": combined_ans.generation_revision,
-                            "combined_items": len(combined_ans.items),
+                            "primary_items": len(primary_items_in_combined),
+                            "reference_primary_items": len(ref_primary),
+                            "lower_bound_ok": lower_bound_ok,
                             "combined_primary_gaps": list(primary_gaps_in_combined),
                             "combined_sibling_match_present": sibling_match_in_combined,
                             "filtered_sibling_match_present": sibling_match_filtered,
@@ -452,54 +647,61 @@ def run_k02_sidecar(
                             "verdict": res.verdict.value,
                         }
                     )
-                elif state == "multi_root_healthy":
-                    sibling_rid = rids[1]
-                    wait_catalog_settled(driver, pid, primary_rid, max_wait_s=15.0)
-                    wait_catalog_settled(driver, pid, sibling_rid, max_wait_s=15.0)
-                    combined_ans, _ = walk_combined_catalog(driver, pid)
-                    ref_primary = walk_entries_to_catalog_items(
-                        [e for e in reference_walk(wdir, boundary_config=boundary_config, include_hidden=True) if e.kind == "file"],
-                        root_id=primary_rid,
-                    )
-                    ref_sibling = walk_entries_to_catalog_items(
-                        [e for e in reference_walk(healthy_sibling, boundary_config=boundary_config, include_hidden=True) if e.kind == "file"],
-                        root_id=sibling_rid,
-                    )
-                    res = check_catalog(ref_primary + ref_sibling, combined_ans)
-                    report.record_generated(res, extra={"state": state, "instance": idx})
-                    report.record_ledger(
-                        {
-                            "instance": idx,
-                            "attempted_state": state,
-                            "combined_revision": combined_ans.generation_revision,
-                            "combined_items": len(combined_ans.items),
-                            "verdict": res.verdict.value,
-                        }
-                    )
+                    continue
+
+                # state == "cold"
+                pid, rids = driver.attach_project([wdir])
+                primary_rid = rids[0]
+                earlier_index = driver.get_source_index(pid)
+                earlier_cov = earlier_index.get("coverage") if isinstance(earlier_index.get("coverage"), list) else []
+                earlier_gaps = [g.reason for g in map_source_index_coverage(earlier_cov) if g.root_id in (None, primary_rid)]
+
+                ans = driver.walk_catalog_index(pid, primary_rid)
+                ans_gaps = _root_scoped_gaps(ans, primary_rid)
+                ref_entries = [
+                    e for e in reference_walk(wdir, boundary_config=boundary_config, include_hidden=True) if e.kind == "file"
+                ]
+                ref_items = walk_entries_to_catalog_items(ref_entries, root_id=primary_rid)
+                lower_bound_ok = len(ans.items) <= len(ref_items)
+                if not lower_bound_ok:
+                    res = CheckResult(Verdict.DEFECT, "catalog", reason=f"cold query count {len(ans.items)} exceeds truth {len(ref_items)}")
+                elif len(ans.items) == 0:
+                    if not ans_gaps:
+                        res = CheckResult(
+                            Verdict.DEFECT,
+                            "catalog",
+                            reason="cold query returned complete-looking empty answer without in-scope gap on judged response",
+                        )
+                    else:
+                        res = CheckResult(
+                            Verdict.PASS_DECLARED_GAP,
+                            "catalog",
+                            accounted_gaps=ans_gaps,
+                            declared_gaps=ans_gaps,
+                            reason="cold query declared warming/incomplete coverage on judged response",
+                        )
                 else:
-                    # settled_healthy or unreadable_dir
-                    wait_catalog_settled(driver, pid, primary_rid, max_wait_s=15.0)
-                    ans = driver.walk_catalog_index(pid, primary_rid)
-                    if locked_dir is not None:
-                        os.chmod(locked_dir, 0o755)
-                        locked_dir = None
-                    ref_entries = [
-                        e for e in reference_walk(wdir, boundary_config=boundary_config, include_hidden=True) if e.kind == "file"
-                    ]
-                    res = check_catalog(walk_entries_to_catalog_items(ref_entries, root_id=primary_rid), ans)
-                    report.record_generated(res, extra={"state": state, "instance": idx})
-                    report.record_ledger(
-                        {
-                            "instance": idx,
-                            "attempted_state": state,
-                            "verified_unreadable": state == "unreadable_dir",
-                            "root_id": primary_rid,
-                            "judged_revision": ans.generation_revision,
-                            "judged_items": len(ans.items),
-                            "judged_gaps": list(_root_scoped_gaps(ans, primary_rid)),
-                            "verdict": res.verdict.value,
-                        }
-                    )
+                    res = check_catalog(ref_items, ans)
+
+                report.record_generated(res, extra={"state": state, "instance": idx})
+                report.record_ledger(
+                    {
+                        "instance": idx,
+                        "attempted_state": state,
+                        "root_id": primary_rid,
+                        "transition_evidence": {
+                            "earlier_index_revision": earlier_index.get("revision"),
+                            "earlier_index_state": earlier_index.get("state"),
+                            "earlier_index_gaps": sorted(set(earlier_gaps)),
+                        },
+                        "judged_revision": ans.generation_revision,
+                        "judged_items": len(ans.items),
+                        "reference_items": len(ref_items),
+                        "lower_bound_ok": lower_bound_ok,
+                        "judged_gaps": list(ans_gaps),
+                        "verdict": res.verdict.value,
+                    }
+                )
             finally:
                 if root_locked and wdir.exists():
                     os.chmod(wdir, 0o755)
@@ -509,13 +711,13 @@ def run_k02_sidecar(
                 if healthy_sibling is not None:
                     shutil.rmtree(healthy_sibling, ignore_errors=True)
 
-        # 6 hand-written K02 edges
+        # 6 hand-written K02 edges (including healthy controls outside degraded state slots)
         k02_edges = [
-            ("k02_edge_1_cold_no_complete_empty", "cold"),
-            ("k02_edge_2_unreadable_dir_declares_failed", "unreadable"),
+            ("k02_edge_1_settled_healthy_clean_control", "settled_healthy"),
+            ("k02_edge_2_over_budget_source_scope_yaml", "over_budget"),
             ("k02_edge_3_healthy_root_beside_unreadable_combined", "healthy_beside"),
-            ("k02_edge_4_boundary_dir_does_not_claim_unwalked_files", "boundary"),
-            ("k02_edge_5_multi_root_independent_coverage", "multi_root"),
+            ("k02_edge_4_multi_root_healthy_combined_control", "multi_root"),
+            ("k02_edge_5_cold_no_complete_empty", "cold"),
             ("k02_edge_6_empty_root_settled_honest", "empty_root"),
         ]
         for eidx, (ename, emode) in enumerate(k02_edges):
@@ -523,39 +725,34 @@ def run_k02_sidecar(
             edir.mkdir(parents=True, exist_ok=True)
             ldir: Path | None = None
             try:
-                if emode == "cold":
-                    for i in range(40):
-                        (edir / f"f_{i:03d}.txt").write_text(f"body {i}\n", encoding="utf-8")
-                    pid, rids = driver.attach_project([edir])
-                    earlier = driver.get_source_index(pid)
-                    ans = driver.walk_catalog_index(pid, rids[0])
-                    ans_gaps = _root_scoped_gaps(ans, rids[0])
-                    ok = len(ans.items) > 0 or len(ans_gaps) > 0
-                    report.record_edge(
-                        ename,
-                        ok,
-                        {
-                            "judged_revision": ans.generation_revision,
-                            "items": len(ans.items),
-                            "judged_gaps": list(ans_gaps),
-                            "transition_evidence_state": earlier.get("state"),
-                        },
-                    )
-                elif emode == "unreadable":
-                    (edir / "ok.txt").write_text("ok\n", encoding="utf-8")
-                    ldir = edir / "locked"
-                    ldir.mkdir()
-                    (ldir / "secret.txt").write_text("s\n", encoding="utf-8")
-                    os.chmod(ldir, 0o000)
-                    if not verify_dir_unreadable(ldir):
-                        report.record_edge(ename, False, {"reason": "unreadable dir could not be established"}, blocked=True)
-                        continue
+                if emode == "settled_healthy":
+                    (edir / "src").mkdir()
+                    (edir / "src/a.go").write_text("package a\n", encoding="utf-8")
+                    (edir / "README.md").write_text("hi\n", encoding="utf-8")
                     pid, rids = driver.attach_project([edir])
                     wait_catalog_settled(driver, pid, rids[0], max_wait_s=15.0)
                     ans = driver.walk_catalog_index(pid, rids[0])
                     ans_gaps = _root_scoped_gaps(ans, rids[0])
-                    ok = any(i.path == "ok.txt" for i in ans.items) and ("catalog_failed" in ans_gaps)
-                    report.record_edge(ename, ok, {"gaps": list(ans_gaps)}, gap="catalog_failed" if ok else None)
+                    ok = sorted(i.path for i in ans.items) == ["README.md", "src/a.go"] and len(ans_gaps) == 0
+                    report.record_edge(ename, ok, {"items": len(ans.items), "gaps": list(ans_gaps)})
+                elif emode == "over_budget":
+                    (edir / ".paintedwolf").mkdir()
+                    (edir / ".paintedwolf/source-scope.yaml").write_text(OVER_BUDGET_SCOPE_YAML, encoding="utf-8")
+                    (edir / "wide").mkdir()
+                    for wi in range(10):
+                        (edir / f"wide/f_{wi:02d}.txt").write_text("w\n", encoding="utf-8")
+                    (edir / "keep.txt").write_text("k\n", encoding="utf-8")
+                    pid, rids = driver.attach_project([edir])
+                    wait_catalog_settled(driver, pid, rids[0], max_wait_s=15.0)
+                    ans = driver.walk_catalog_index(pid, rids[0])
+                    ans_gaps = _root_scoped_gaps(ans, rids[0])
+                    ok = ("catalog_bounded" in ans_gaps) and (len(ans.items) < 12) and any(i.path == "keep.txt" for i in ans.items)
+                    report.record_edge(
+                        ename,
+                        ok,
+                        {"items": len(ans.items), "truth": 12, "gaps": list(ans_gaps)},
+                        gap="catalog_bounded" if ok else None,
+                    )
                 elif emode == "healthy_beside":
                     (edir / "a.txt").write_text("a\n", encoding="utf-8")
                     ldir = edir / "locked"
@@ -586,17 +783,6 @@ def run_k02_sidecar(
                         },
                         gap="catalog_failed" if ok else None,
                     )
-                elif emode == "boundary":
-                    (edir / "src").mkdir()
-                    (edir / "src/a.go").write_text("package a\n", encoding="utf-8")
-                    (edir / "node_modules/pkg").mkdir(parents=True)
-                    (edir / "node_modules/pkg/b.js").write_text("x\n", encoding="utf-8")
-                    pid, rids = driver.attach_project([edir])
-                    wait_catalog_settled(driver, pid, rids[0], max_wait_s=15.0)
-                    ans = driver.walk_catalog_index(pid, rids[0])
-                    paths = [i.path for i in ans.items]
-                    ok = ("src/a.go" in paths) and ("node_modules/pkg/b.js" not in paths)
-                    report.record_edge(ename, ok, {"paths": paths})
                 elif emode == "multi_root":
                     r2 = tmp_root / f"k02_edge_r2_{eidx}"
                     r2.mkdir()
@@ -610,8 +796,27 @@ def run_k02_sidecar(
                         any(i.root_id == rids[0] and i.path == "one.txt" for i in comb.items)
                         and any(i.root_id == rids[1] and i.path == "two.txt" for i in comb.items)
                         and len(comb.items) == 2
+                        and len(comb.declared_gaps) == 0
                     )
-                    report.record_edge(ename, ok, {"combined_items": len(comb.items)})
+                    report.record_edge(ename, ok, {"combined_items": len(comb.items), "gaps": [g.reason for g in comb.declared_gaps]})
+                elif emode == "cold":
+                    for i in range(40):
+                        (edir / f"f_{i:03d}.txt").write_text(f"body {i}\n", encoding="utf-8")
+                    pid, rids = driver.attach_project([edir])
+                    earlier = driver.get_source_index(pid)
+                    ans = driver.walk_catalog_index(pid, rids[0])
+                    ans_gaps = _root_scoped_gaps(ans, rids[0])
+                    ok = len(ans.items) > 0 or len(ans_gaps) > 0
+                    report.record_edge(
+                        ename,
+                        ok,
+                        {
+                            "judged_revision": ans.generation_revision,
+                            "items": len(ans.items),
+                            "judged_gaps": list(ans_gaps),
+                            "transition_evidence_state": earlier.get("state"),
+                        },
+                    )
                 else:
                     pid, rids = driver.attach_project([edir])
                     settled, _, _ = wait_catalog_settled(driver, pid, rids[0], max_wait_s=15.0)

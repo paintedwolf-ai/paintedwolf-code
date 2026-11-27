@@ -166,6 +166,8 @@ class FamilyReport:
     edge_planned: int
     executed: int = 0
     passed: int = 0
+    passed_clean: int = 0
+    passed_declared_gap: int = 0
     failed: int = 0
     blocked: int = 0
     inconclusive: int = 0
@@ -184,8 +186,10 @@ class FamilyReport:
         self.executed += 1
         if check.verdict == Verdict.PASS:
             self.passed += 1
+            self.passed_clean += 1
         elif check.verdict == Verdict.PASS_DECLARED_GAP:
             self.passed += 1
+            self.passed_declared_gap += 1
             for g in check.accounted_gaps:
                 self.declared_gaps[g] += 1
         elif check.verdict == Verdict.DEFECT:
@@ -255,6 +259,8 @@ class FamilyReport:
             "planned": self.planned,
             "executed": self.executed,
             "passed": self.passed,
+            "passed_clean": self.passed_clean,
+            "passed_declared_gap": self.passed_declared_gap,
             "failed": self.failed,
             "blocked": self.blocked,
             "inconclusive": self.inconclusive,
@@ -317,6 +323,29 @@ def walk_combined_catalog(
         generation_revision=revision,
     )
     return answer, last_coverage
+
+
+def browse_entries_map(driver: SidecarDriver, project_id: str, root_id: str, dir_path: str = ".") -> dict[str, bool]:
+    """Return {entry_name: is_dir} from /source/browse for direct type, empty-dir, and boundary checks."""
+    resp = driver.browse_dir(project_id, root_id, dir_path)
+    out: dict[str, bool] = {}
+    for entry in resp.get("entries") or []:
+        if isinstance(entry, dict) and entry.get("name"):
+            out[str(entry["name"])] = bool(entry.get("is_dir"))
+    return out
+
+
+def parse_http_error_json(exc: urllib.error.HTTPError) -> dict[str, object]:
+    """Safely decode JSON error body from an urllib HTTPError."""
+    try:
+        raw = exc.read()
+        if isinstance(raw, bytes) and raw:
+            parsed = json.loads(raw.decode("utf-8", errors="replace"))
+            if isinstance(parsed, dict):
+                return parsed
+    except Exception:
+        pass
+    return {}
 
 
 def shrink_catalog_failure(

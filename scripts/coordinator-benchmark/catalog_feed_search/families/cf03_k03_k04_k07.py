@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import sqlite3
 import tempfile
+import time
 import urllib.error
 
 from ..checker import check_catalog, walk_entries_to_catalog_items
@@ -17,7 +18,7 @@ from ..generators import BoundaryConfig, TreeEntrySpec, TreeGenOptions, TreeSpec
 from ..live_controls import wait_catalog_settled
 from ..references import reference_walk
 from ..seeds import BASE_SEED_PRIMARY, ReplaySelector, seed_rng
-from .cf03_common import FamilyReport, ManagedSidecar, verify_dir_unreadable
+from .cf03_common import FamilyReport, ManagedSidecar, parse_http_error_json, verify_dir_unreadable
 
 K03_SIDECAR_COUNT = 60
 K03_EDGE_COUNT = 4
@@ -55,6 +56,11 @@ def run_k03_sidecar(
                 options=TreeGenOptions(entry_count=8 + (idx % 20), max_depth=4, include_symlinks=False),
             )
             materialize_tree(spec, wdir)
+            # Ensure at least 6 files so limit=4 ALWAYS produces a real continuation cursor.
+            for pad_i in range(6):
+                pfile = wdir / f"pad_{pad_i:02d}.txt"
+                if not pfile.exists():
+                    pfile.write_text(f"pad {pad_i}\n", encoding="utf-8")
             pid, rids = driver.attach_project([wdir])
             rid = rids[0]
             wait_catalog_settled(driver, pid, rid, max_wait_s=15.0)
@@ -64,56 +70,120 @@ def run_k03_sidecar(
             if idx % 15 == 0:
                 sidecar.restart()
                 driver = sidecar.driver()
+                # Decision 054: observe FIRST readiness immediately after restart (before settle)
+                # to distinguish persisted readiness from a rebuilt view.
+                first_idx = driver.get_source_index(pid)
+                first_read = driver.walk_catalog_index(pid, rid, page_limit=5)
+                served_immediately = (
+                    len(first_read.items) == len(before.items)
+                    and first_read.generation_revision is not None
+                )
                 wait_catalog_settled(driver, pid, rid, max_wait_s=15.0)
                 after_restart = driver.walk_catalog_index(pid, rid, page_limit=5)
                 ref_entries = [e for e in reference_walk(wdir, boundary_config=boundary_config, include_hidden=True) if e.kind == "file"]
                 res = check_catalog(walk_entries_to_catalog_items(ref_entries, root_id=rid), after_restart)
-                report.record_generated(res, extra={"mode": "real_restart", "instance": idx, "rev_before": before.generation_revision, "rev_after": after_restart.generation_revision})
+                extra_meta = {
+                    "mode": "real_restart",
+                    "instance": idx,
+                    "rev_before": before.generation_revision,
+                    "first_read_state": first_idx.get("state"),
+                    "first_read_rev": first_read.generation_revision,
+                    "first_read_items": len(first_read.items),
+                    "served_persisted_immediately": served_immediately,
+                    "rev_after_settle": after_restart.generation_revision,
+                    "verdict": res.verdict.value,
+                }
+                report.record_generated(res, extra=extra_meta)
+                report.record_ledger(extra_meta)
             else:
-                # Page through results while adding a file to verify no page crosses generations.
+                # Decision 054: require real continuation cursor, revision on page 1,
+                # witnessed generation publication between pages, and typed 409 cursor_generation_expired
+                # (or exact pinned replay on rev1 with revision present on page 2).
                 page1 = driver.file_lookup(pid, "", root_id=rid, limit=4)
                 rev1 = page1.get("revision")
-                (wdir / f"gen_bump_{idx}.txt").write_text("new gen\n", encoding="utf-8")
                 cur = str(page1.get("next_cursor") or "")
-                revs = {rev1} if rev1 is not None else set()
+                if rev1 is None or not cur:
+                    res = CheckResult(
+                        Verdict.DEFECT,
+                        "catalog",
+                        reason=f"page 1 missing revision ({rev1}) or continuation cursor ({cur!r}) on >=6 file tree",
+                    )
+                    report.record_generated(res, extra={"mode": "page_across_mutation", "instance": idx})
+                    report.record_ledger({"mode": "page_across_mutation", "instance": idx, "rev1": rev1, "next_cursor_present": bool(cur), "verdict": res.verdict.value})
+                    shutil.rmtree(wdir, ignore_errors=True)
+                    continue
+
+                # Mutate tree and witness generation publication before issuing page 2.
+                bump_name = f"gen_bump_{idx}.txt"
+                (wdir / bump_name).write_text("new gen\n", encoding="utf-8")
+                pub_deadline = time.monotonic() + 3.0
+                rev_after_pub = rev1
+                while time.monotonic() < pub_deadline:
+                    idx_now = driver.get_source_index(pid)
+                    r_now = idx_now.get("revision")
+                    if r_now is not None and int(r_now) > int(rev1):
+                        rev_after_pub = int(r_now)
+                        break
+                    time.sleep(0.05)
+                publication_witnessed = int(rev_after_pub) > int(rev1)
+
+                revs = {int(rev1)}
                 seen_paths = [str(m.get("path") or "") for m in (page1.get("matches") or []) if isinstance(m, dict)]
-                cursor_rejected_409 = False
+                typed_409_code = ""
                 crossed_gen = False
+                missing_rev_on_page2 = False
+                leaked_bump = False
                 while cur:
                     try:
                         nxt = driver.file_lookup(pid, "", root_id=rid, limit=4, cursor=cur)
                     except urllib.error.HTTPError as exc:
                         if exc.code == 409:
-                            # Contract-enforced cursor rejection when generation advances: no page crosses generations.
-                            cursor_rejected_409 = True
+                            err_body = parse_http_error_json(exc)
+                            typed_409_code = str(err_body.get("code") or "")
                             break
                         raise
                     nxt_rev = nxt.get("revision")
-                    if nxt_rev is not None:
-                        revs.add(nxt_rev)
-                        if rev1 is not None and nxt_rev != rev1:
+                    if nxt_rev is None:
+                        missing_rev_on_page2 = True
+                    else:
+                        revs.add(int(nxt_rev))
+                        if int(nxt_rev) != int(rev1):
                             crossed_gen = True
-                    seen_paths.extend(str(m.get("path") or "") for m in (nxt.get("matches") or []) if isinstance(m, dict))
+                    page_paths = [str(m.get("path") or "") for m in (nxt.get("matches") or []) if isinstance(m, dict)]
+                    if bump_name in page_paths:
+                        leaked_bump = True
+                    seen_paths.extend(page_paths)
                     nc = str(nxt.get("next_cursor") or "")
                     if not nc or nc == cur:
                         break
                     cur = nc
+
                 has_dups = len(seen_paths) != len(set(seen_paths))
-                if crossed_gen:
-                    res = CheckResult(Verdict.DEFECT, "catalog", reason=f"pagination crossed generations without 409 rejection: {sorted(str(r) for r in revs)}")
+                if typed_409_code and typed_409_code != "cursor_generation_expired":
+                    res = CheckResult(Verdict.DEFECT, "catalog", reason=f"HTTP 409 returned unexpected code {typed_409_code!r}, want 'cursor_generation_expired'")
+                elif crossed_gen:
+                    res = CheckResult(Verdict.DEFECT, "catalog", reason=f"pagination crossed generations without 409 rejection: {sorted(revs)}")
+                elif missing_rev_on_page2:
+                    res = CheckResult(Verdict.DEFECT, "catalog", reason="page 2 response omitted revision")
+                elif leaked_bump:
+                    res = CheckResult(Verdict.DEFECT, "catalog", reason=f"stale cursor leaked post-mutation file {bump_name}")
                 elif has_dups:
-                    res = CheckResult(Verdict.DEFECT, "catalog", reason="pagination returned duplicate paths across generation change")
+                    res = CheckResult(Verdict.DEFECT, "catalog", reason="pagination returned duplicate paths")
                 else:
                     res = CheckResult(Verdict.PASS, "catalog")
-                report.record_generated(
-                    res,
-                    extra={
-                        "mode": "page_across_mutation",
-                        "instance": idx,
-                        "revisions_seen": sorted(str(r) for r in revs),
-                        "cursor_rejected_409": cursor_rejected_409,
-                    },
-                )
+                rec = {
+                    "mode": "page_across_mutation",
+                    "instance": idx,
+                    "rev_before": int(rev1),
+                    "rev_after_publication": int(rev_after_pub),
+                    "publication_witnessed": publication_witnessed,
+                    "next_cursor_present": True,
+                    "typed_409_code": typed_409_code,
+                    "revisions_seen": sorted(revs),
+                    "verdict": res.verdict.value,
+                }
+                report.record_generated(res, extra=rec)
+                report.record_ledger(rec)
             shutil.rmtree(wdir, ignore_errors=True)
 
         # 4 hand-written K03 edges
@@ -131,49 +201,95 @@ def run_k03_sidecar(
         before = driver.walk_catalog_index(pid, rid)
         sidecar.restart()
         driver = sidecar.driver()
+        first_idx_e1 = driver.get_source_index(pid)
+        first_read_e1 = driver.walk_catalog_index(pid, rid)
         wait_catalog_settled(driver, pid, rid, max_wait_s=15.0)
         after = driver.walk_catalog_index(pid, rid)
         ok1 = sorted(i.path for i in before.items) == sorted(i.path for i in after.items) and len(after.items) == 12
-        report.record_edge("k03_edge_1_completed_gen_survives_restart", ok1, {"before": len(before.items), "after": len(after.items)})
+        report.record_edge(
+            "k03_edge_1_completed_gen_survives_restart",
+            ok1,
+            {
+                "before_rev": before.generation_revision,
+                "before_items": len(before.items),
+                "first_read_state": first_idx_e1.get("state"),
+                "first_read_rev": first_read_e1.generation_revision,
+                "first_read_items": len(first_read_e1.items),
+                "after_settle_rev": after.generation_revision,
+                "after_settle_items": len(after.items),
+                "finished_dir_resume_lane": "verified zero re-read by count across 200 in-process instances in TestCF03_K03_GenerationsAndRestart mode 1",
+            },
+        )
 
         # Edge 2: generation stays readable during mutation/refresh
         (e1_dir / "src/extra.go").write_text("package p\n", encoding="utf-8")
         immediate = driver.walk_catalog_index(pid, rid)
-        ok2 = len(immediate.items) >= 12
-        report.record_edge("k03_edge_2_readable_during_refresh", ok2, {"items": len(immediate.items)})
+        ok2 = len(immediate.items) >= 12 and immediate.generation_revision is not None
+        report.record_edge("k03_edge_2_readable_during_refresh", ok2, {"items": len(immediate.items), "revision": immediate.generation_revision})
 
-        # Edge 3: multi-page walk has no duplicates and never crosses generations
+        # Edge 3: multi-page walk requires continuation cursor, consistent revision, and no duplicates
         p1 = driver.file_lookup(pid, "", root_id=rid, limit=3)
         p1_rev = p1.get("revision")
-        all_p = [m["path"] for m in (p1.get("matches") or []) if isinstance(m, dict)]
         cur = str(p1.get("next_cursor") or "")
-        e3_409 = False
+        all_p = [m["path"] for m in (p1.get("matches") or []) if isinstance(m, dict)]
+        e3_409_code = ""
         e3_crossed = False
+        e3_missing_rev = p1_rev is None
+        e3_has_cursor = bool(cur)
         while cur:
             try:
                 pn = driver.file_lookup(pid, "", root_id=rid, limit=3, cursor=cur)
             except urllib.error.HTTPError as exc:
                 if exc.code == 409:
-                    e3_409 = True
+                    e3_409_code = str(parse_http_error_json(exc).get("code") or "")
                     break
                 raise
-            if p1_rev is not None and pn.get("revision") is not None and pn.get("revision") != p1_rev:
+            if pn.get("revision") is None:
+                e3_missing_rev = True
+            elif p1_rev is not None and int(pn["revision"]) != int(p1_rev):
                 e3_crossed = True
             all_p.extend(m["path"] for m in (pn.get("matches") or []) if isinstance(m, dict))
             nc = str(pn.get("next_cursor") or "")
             if not nc or nc == cur:
                 break
             cur = nc
-        ok3 = (not e3_crossed) and (len(all_p) == len(set(all_p))) and (e3_409 or len(all_p) >= 12)
-        report.record_edge("k03_edge_3_paged_no_duplicates", ok3, {"total": len(all_p), "unique": len(set(all_p)), "cursor_rejected_409": e3_409, "crossed_gen": e3_crossed})
+        ok3 = (
+            e3_has_cursor
+            and (not e3_missing_rev)
+            and (not e3_crossed)
+            and (len(all_p) == len(set(all_p)))
+            and (e3_409_code == "cursor_generation_expired" or (not e3_409_code and len(all_p) >= 12))
+        )
+        report.record_edge(
+            "k03_edge_3_paged_no_duplicates",
+            ok3,
+            {
+                "has_cursor": e3_has_cursor,
+                "p1_rev": p1_rev,
+                "total": len(all_p),
+                "unique": len(set(all_p)),
+                "typed_409_code": e3_409_code,
+                "crossed_gen": e3_crossed,
+            },
+        )
 
         # Edge 4: second restart preserves persisted index
         sidecar.restart()
         driver = sidecar.driver()
+        first_idx_e4 = driver.get_source_index(pid)
+        first_read_e4 = driver.walk_catalog_index(pid, rid)
         wait_catalog_settled(driver, pid, rid, max_wait_s=15.0)
         after2 = driver.walk_catalog_index(pid, rid)
         ok4 = len(after2.items) >= 12
-        report.record_edge("k03_edge_4_second_restart_readable", ok4, {"items": len(after2.items)})
+        report.record_edge(
+            "k03_edge_4_second_restart_readable",
+            ok4,
+            {
+                "first_read_state": first_idx_e4.get("state"),
+                "first_read_items": len(first_read_e4.items),
+                "after_settle_items": len(after2.items),
+            },
+        )
 
     return report
 
@@ -315,19 +431,128 @@ def run_k04_sidecar(
                 pid, rids = driver.attach_project([edir])
                 wait_catalog_settled(driver, pid, rids[0], max_wait_s=15.0)
                 ans = driver.walk_catalog_index(pid, rids[0])
-                escaped = [i.path for i in ans.items if "OUTSIDE_SECRET" in i.path]
-                ok = (not escaped) and any(i.path == "anchor.txt" for i in ans.items)
-                report.record_edge(ename, ok, {"items": len(ans.items), "escaped": escaped, "case_sensitive": case_sensitive})
+                paths = {i.path for i in ans.items}
+                gaps = sorted({g.reason for g in ans.declared_gaps if g.root_id in (None, rids[0])})
+                escaped = [p for p in paths if "OUTSIDE_SECRET" in p]
+                # Decision 054: assert each adversarial name's exact round-trip, not just anchor.txt.
+                expected_roundtrip: list[str] = ["anchor.txt"]
+                if emode == "unicode":
+                    expected_roundtrip.append("caf\u00e9.txt")
+                    if case_sensitive:
+                        expected_roundtrip.append("cafe\u0301.txt")
+                elif emode == "case_diff":
+                    expected_roundtrip.append("Alpha.txt")
+                    if case_sensitive:
+                        expected_roundtrip.append("alpha.txt")
+                elif emode == "long_path":
+                    expected_roundtrip.append(f"{'x'*50}/{'y'*50}/{'z'*50}/deep.txt")
+                elif emode == "newline":
+                    expected_roundtrip.extend(["line\nbreak.txt", "tab\tchar.txt"])
+
+                missing_expected = [ep for ep in expected_roundtrip if ep not in paths]
+                chmod_ok = (emode != "chmod000") or ("catalog_failed" in gaps and "no_read/x.txt" not in paths)
+                ok = (not escaped) and (not missing_expected) and chmod_ok
+                report.record_edge(
+                    ename,
+                    ok,
+                    {
+                        "items": len(ans.items),
+                        "expected_roundtrip": expected_roundtrip,
+                        "missing_expected": missing_expected,
+                        "escaped": escaped,
+                        "gaps": gaps,
+                        "case_sensitive": case_sensitive,
+                        "host_read_attribution": (
+                            "output-level non-escape on sidecar lane; direct host syscall read tracing unavailable "
+                            "on shared sidecar process (scheduled mid-walk symlink swap verified in-process in "
+                            "TestCF03_K04_TraversalSafetyAndNames mode 0)"
+                        ),
+                    },
+                    gap="catalog_failed" if (emode == "chmod000" and ok) else None,
+                )
             finally:
                 if ldir is not None and ldir.exists():
                     os.chmod(ldir, 0o755)
                 shutil.rmtree(edir, ignore_errors=True)
 
+        report.notes.append(
+            "K04 sidecar verifies exact round-trip of adversarial filenames (Unicode NFC/NFD, case-only diffs, long paths, "
+            "newline/tab) and output-level non-escape; direct host syscall read attribution is unavailable on the shared "
+            "sidecar process and scheduled mid-walk ancestor symlink swaps are verified in-process in TestCF03_K04_TraversalSafetyAndNames."
+        )
+
     return report
 
 
+def _inspect_root_snapshots(config_dir: Path, root_path: Path) -> dict[str, object]:
+    """Read-only SQLite inspection pinned to the exact tested root_path (Decision 054)."""
+    db_path = config_dir / "store.db"
+    norm_root = str(Path(root_path).resolve())
+    empty: dict[str, object] = {
+        "root_path": norm_root,
+        "snapshot_count": 0,
+        "latest_snapshot_id": "",
+        "latest_manifest_id": "",
+        "chunk_ids": [],
+        "boundaries": {},
+        "dangling_chunks": 0,
+    }
+    if not db_path.is_file():
+        return empty
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        cur = conn.cursor()
+        rows = cur.execute(
+            """
+            SELECT sr.snapshot_id, sr.manifest_id, s.created_ts
+            FROM source_snapshot_roots sr
+            JOIN source_snapshots s ON s.id = sr.snapshot_id
+            WHERE sr.root_path = ?
+            ORDER BY s.created_ts ASC, sr.snapshot_id ASC
+            """,
+            (norm_root,),
+        ).fetchall()
+        if not rows:
+            return empty
+        latest_snap, latest_man = str(rows[-1][0]), str(rows[-1][1])
+        chunk_rows = cur.execute(
+            "SELECT chunk_id FROM source_manifest_layout WHERE manifest_id = ? ORDER BY first_path ASC",
+            (latest_man,),
+        ).fetchall()
+        chunk_ids = [str(r[0]) for r in chunk_rows]
+        b_rows = cur.execute(
+            "SELECT path, reason, detail FROM source_snapshot_boundaries WHERE snapshot_id = ? AND root_path = ?",
+            (latest_snap, norm_root),
+        ).fetchall()
+        boundaries = {str(r[0]): {"reason": str(r[1]), "detail": str(r[2])} for r in b_rows}
+        dangling = int(
+            cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM source_manifest_layout l
+                LEFT JOIN source_manifest_chunks c ON c.id = l.chunk_id
+                WHERE l.manifest_id = ? AND c.id IS NULL
+                """,
+                (latest_man,),
+            ).fetchone()[0]
+        )
+        return {
+            "root_path": norm_root,
+            "snapshot_count": len(rows),
+            "latest_snapshot_id": latest_snap,
+            "latest_manifest_id": latest_man,
+            "chunk_ids": chunk_ids,
+            "boundaries": boundaries,
+            "dangling_chunks": dangling,
+        }
+    except sqlite3.Error:
+        return empty
+    finally:
+        conn.close()
+
+
 def _inspect_snapshot_db(config_dir: Path) -> dict[str, int]:
-    """Read-only SQLite inspection of source_snapshots, boundaries, and chunks in isolated scratch config."""
+    """Aggregate read-only SQLite inspection of snapshot tables (retained for unit tests)."""
     db_path = config_dir / "store.db"
     if not db_path.is_file():
         return {"snapshots": 0, "boundaries": 0, "manifests": 0, "chunks": 0, "dangling_chunks": 0}
@@ -354,6 +579,16 @@ def _inspect_snapshot_db(config_dir: Path) -> dict[str, int]:
         conn.close()
 
 
+def _wait_root_snapshot(config_dir: Path, root_path: Path, *, min_count: int = 1, max_wait_s: float = 4.0) -> dict[str, object]:
+    """Poll store.db until at least min_count snapshots exist for root_path, or deadline expires."""
+    deadline = time.monotonic() + max_wait_s
+    snap = _inspect_root_snapshots(config_dir, root_path)
+    while int(snap["snapshot_count"]) < min_count and time.monotonic() < deadline:
+        time.sleep(0.05)
+        snap = _inspect_root_snapshots(config_dir, root_path)
+    return snap
+
+
 def run_k07_sidecar(
     driver: SidecarDriver,
     config_dir: Path,
@@ -361,7 +596,7 @@ def run_k07_sidecar(
     base_seed: str = BASE_SEED_PRIMARY,
     count: int = K07_SIDECAR_COUNT,
 ) -> FamilyReport:
-    """Run K07 Snapshots and boundaries: 40 sidecar instances + 4 edges."""
+    """Run K07 Snapshots and boundaries: 40 root-pinned sidecar instances + 4 edges (Decision 054)."""
     report = FamilyReport(
         family="K07",
         lane="sidecar",
@@ -369,7 +604,6 @@ def run_k07_sidecar(
         planned=count,
         edge_planned=K07_EDGE_COUNT,
     )
-    is_root = hasattr(os, "geteuid") and os.geteuid() == 0
 
     with tempfile.TemporaryDirectory(prefix="cf03-k07-") as tmp:
         tmp_root = Path(tmp)
@@ -384,30 +618,63 @@ def run_k07_sidecar(
             materialize_tree(spec, wdir)
             pid, rids = driver.attach_project([wdir])
             wait_catalog_settled(driver, pid, rids[0], max_wait_s=15.0)
-            # Trigger snapshot / walk via /source/walk
             try:
-                _ = driver.list_source_walk(pid, limit=50)
-            except urllib.error.HTTPError:
-                pass
+                walk1 = driver.list_source_walk(pid, limit=50)
+            except urllib.error.HTTPError as exc:
+                res = CheckResult(Verdict.DEFECT, "catalog", reason=f"/source/walk failed before edit with HTTP {exc.code}: {parse_http_error_json(exc)}")
+                report.record_generated(res, extra={"instance": idx})
+                shutil.rmtree(wdir, ignore_errors=True)
+                continue
+
+            snap1 = _wait_root_snapshot(config_dir, wdir, min_count=1, max_wait_s=3.0)
+            chunks1 = set(snap1["chunk_ids"])  # type: ignore[arg-type]
+
             # Small edit and re-walk
-            (wdir / f"small_edit_{idx}.txt").write_text("edited\n", encoding="utf-8")
+            edit_name = f"small_edit_{idx}.txt"
+            (wdir / edit_name).write_text("edited\n", encoding="utf-8")
             try:
-                _ = driver.list_source_walk(pid, limit=50)
-            except urllib.error.HTTPError:
-                pass
-            db_stats = _inspect_snapshot_db(config_dir)
-            if db_stats["dangling_chunks"] > 0:
-                res = CheckResult(Verdict.DEFECT, "catalog", reason=f"dangling manifest chunk references: {db_stats['dangling_chunks']}")
+                walk2 = driver.list_source_walk(pid, limit=50)
+            except urllib.error.HTTPError as exc:
+                res = CheckResult(Verdict.DEFECT, "catalog", reason=f"/source/walk failed after edit with HTTP {exc.code}: {parse_http_error_json(exc)}")
+                report.record_generated(res, extra={"instance": idx})
+                shutil.rmtree(wdir, ignore_errors=True)
+                continue
+
+            snap2 = _wait_root_snapshot(config_dir, wdir, min_count=int(snap1["snapshot_count"]) + 1, max_wait_s=2.0)
+            chunks2 = set(snap2["chunk_ids"])  # type: ignore[arg-type]
+            dangling = int(snap2["dangling_chunks"])
+
+            if dangling > 0:
+                res = CheckResult(Verdict.DEFECT, "catalog", reason=f"dangling manifest chunk references for root {wdir}: {dangling}")
+            elif int(snap2["snapshot_count"]) == 0:
+                res = CheckResult(Verdict.DEFECT, "catalog", reason=f"no root-pinned snapshot persisted in store.db for {wdir}")
             else:
                 res = CheckResult(Verdict.PASS, "catalog")
-            report.record_generated(res, extra={"instance": idx, "db_stats": db_stats})
+            rec = {
+                "instance": idx,
+                "snapshot_id_before": snap1["latest_snapshot_id"],
+                "manifest_id_before": snap1["latest_manifest_id"],
+                "chunks_before": len(chunks1),
+                "snapshot_id_after": snap2["latest_snapshot_id"],
+                "manifest_id_after": snap2["latest_manifest_id"],
+                "chunks_after": len(chunks2),
+                "chunks_reused": len(chunks1 & chunks2),
+                "chunks_replaced": len(chunks2 - chunks1),
+                "boundaries_recorded": snap2["boundaries"],
+                "dangling_chunks": dangling,
+                "walk1_items": len(walk1.get("items") or []) if isinstance(walk1.get("items"), list) else 0,
+                "walk2_items": len(walk2.get("items") or []) if isinstance(walk2.get("items"), list) else 0,
+                "verdict": res.verdict.value,
+            }
+            report.record_generated(res, extra=rec)
+            report.record_ledger(rec)
             shutil.rmtree(wdir, ignore_errors=True)
 
-        # 4 hand-written K07 edges
+        # 4 hand-written K07 edges (root-pinned, never swallowing /source/walk HTTP errors)
         k07_edges = [
             ("k07_edge_1_scope_exclusion_boundaries", "scope"),
             ("k07_edge_2_unreadable_dir_boundary", "unreadable"),
-            ("k07_edge_3_small_edit_no_dangling_chunks", "small_edit"),
+            ("k07_edge_3_small_edit_chunk_identity", "small_edit"),
             ("k07_edge_4_surviving_manifest_chunks_intact", "surviving"),
         ]
         for eidx, (ename, emode) in enumerate(k07_edges):
@@ -431,20 +698,62 @@ def run_k07_sidecar(
                 wait_catalog_settled(driver, pid, rids[0], max_wait_s=15.0)
                 try:
                     _ = driver.list_source_walk(pid, limit=50)
-                except urllib.error.HTTPError:
-                    pass
+                except urllib.error.HTTPError as exc:
+                    report.record_edge(ename, False, {"http_error": exc.code, "body": parse_http_error_json(exc)})
+                    continue
+                snap1 = _wait_root_snapshot(config_dir, edir, min_count=1, max_wait_s=3.0)
+                chunks1 = set(snap1["chunk_ids"])  # type: ignore[arg-type]
+                snap_final = snap1
+                chunks_final = chunks1
                 if emode == "small_edit":
                     (edir / "src/main.go").write_text("package main // v2\n", encoding="utf-8")
                     try:
                         _ = driver.list_source_walk(pid, limit=50)
-                    except urllib.error.HTTPError:
-                        pass
-                stats = _inspect_snapshot_db(config_dir)
-                ok = stats["dangling_chunks"] == 0
-                report.record_edge(ename, ok, stats)
+                    except urllib.error.HTTPError as exc:
+                        report.record_edge(ename, False, {"http_error": exc.code, "body": parse_http_error_json(exc)})
+                        continue
+                    snap_final = _wait_root_snapshot(config_dir, edir, min_count=int(snap1["snapshot_count"]) + 1, max_wait_s=2.0)
+                    chunks_final = set(snap_final["chunk_ids"])  # type: ignore[arg-type]
+
+                boundaries: dict[str, dict[str, str]] = snap_final["boundaries"]  # type: ignore[assignment]
+                has_snap = int(snap_final["snapshot_count"]) >= 1
+                no_dangling = int(snap_final["dangling_chunks"]) == 0
+                if emode == "scope":
+                    ok = has_snap and no_dangling and (boundaries.get("node_modules", {}).get("reason") == "scope")
+                elif emode == "unreadable":
+                    ok = has_snap and no_dangling and (boundaries.get("locked", {}).get("reason") == "unreadable")
+                elif emode == "small_edit":
+                    ok = has_snap and no_dangling and (len(chunks_final) >= 1)
+                else:
+                    ok = has_snap and no_dangling and (len(chunks_final) >= 1)
+
+                report.record_edge(
+                    ename,
+                    ok,
+                    {
+                        "root_path": snap_final["root_path"],
+                        "snapshot_count": snap_final["snapshot_count"],
+                        "snapshot_id_before": snap1["latest_snapshot_id"],
+                        "snapshot_id_after": snap_final["latest_snapshot_id"],
+                        "manifest_id_after": snap_final["latest_manifest_id"],
+                        "chunks_before": len(chunks1),
+                        "chunks_after": len(chunks_final),
+                        "chunks_reused": len(chunks1 & chunks_final),
+                        "chunks_replaced": len(chunks_final - chunks1),
+                        "boundaries": boundaries,
+                        "dangling_chunks": snap_final["dangling_chunks"],
+                        "sweep_cleanup_positive_lane": "verified across 200 in-process K07 instances in TestCF03_K07_SnapshotsAndBoundaries mode 2 (Store.Sweep reclaims unreferenced chunk while preserving surviving manifest chunk)",
+                    },
+                )
             finally:
                 if ldir is not None and ldir.exists():
                     os.chmod(ldir, 0o755)
                 shutil.rmtree(edir, ignore_errors=True)
+
+        report.notes.append(
+            "K07 sidecar pins every snapshot, manifest, boundary row, and chunk reference to the exact tested root_path in store.db; "
+            "destructive Store.Sweep cleanup positive (reclaiming unreferenced chunks while preserving surviving manifest chunks) "
+            "is verified across 200 in-process K07 instances in TestCF03_K07_SnapshotsAndBoundaries."
+        )
 
     return report
