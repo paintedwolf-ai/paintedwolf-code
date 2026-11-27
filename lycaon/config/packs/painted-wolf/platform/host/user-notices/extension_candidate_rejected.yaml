@@ -3,10 +3,28 @@ notification: { tier: non_catastrophic, scope: app }
 context_schema:
   optional:
     - reason
+    - retired_tool
+    - retired_site
+    - successor
+    - successor_contract
 title: This extension change was rejected
-message: "{{ reason }}"
+message: >-
+  {% if retired_tool -%}
+  The {{ retired_site }} names {{ retired_tool }}, a tool Painted Wolf Code has
+  retired.
+  {%- else -%}
+  {{ reason }}
+  {%- endif %}
 suggested_action: >-
+  {% if retired_tool and successor -%}
+  Use {% for name in successor %}{{ name }}{% if not forloop.Last %} or {% endif %}{% endfor %}
+  instead of {{ retired_tool }}, then try again.
+  {%- elif retired_tool -%}
+  Remove {{ retired_tool }} from the pack; no tool replaces it, because the host
+  now provides that ({{ successor_contract }}). Then try again.
+  {%- else -%}
   Check the pack's manifest, version range, and dependencies, then try again.
+  {%- endif %}
 scenarios:
   - id: default
     vars:
@@ -14,3 +32,13 @@ scenarios:
         extensions install: source https://example.com/pack.git has no valid
         compatible releases: v1.0.0: pack requires extension API ^2.0.0; host
         provides 1.0.0
+  - id: retired_tool_with_successor
+    vars:
+      retired_tool: state_update
+      retired_site: profile "acme_worker" grant
+      successor: [workflow_advance, workflow_transition]
+  - id: retired_tool_to_host_content
+    vars:
+      retired_tool: state_query
+      retired_site: rule "ACME_RULE" selector.tool
+      successor_contract: paintedwolf.workflow_run_context

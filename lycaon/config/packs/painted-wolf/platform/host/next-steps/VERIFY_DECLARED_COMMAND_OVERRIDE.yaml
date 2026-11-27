@@ -1,4 +1,4 @@
 mentions: ["command"]
 steps:
   - tool: "command"
-    say: "Use {{ call }} for a narrower check; its result does not replace the declared check."
+    say: "Use {% if load %}{{ load }}, then {% endif %}{{ call }} for a narrower check; its result does not replace the declared check."

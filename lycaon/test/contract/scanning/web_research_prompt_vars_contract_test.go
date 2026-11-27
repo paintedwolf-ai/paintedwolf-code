@@ -34,17 +34,21 @@ func TestWebResearchPromptVarsSuppliedAndGated(t *testing.T) {
 			for _, enabled := range []bool{false, true} {
 				plan, err := prompts.CompileSurfacePlan(surfaceID, rootCount)
 				contractcheck.FailErr(t, "CompileSurfacePlan "+surfaceID, err)
-				reader, err := prompts.NewReader(prompts.ReaderInput{
+				roster := inject.ResolveAgentRoster(surfaceID, spawn.AmbientAllowedAgents(), rootCount, false, enabled).Effective
+				reader, err := prompts.NewReader(prompts.HostFacts{
+					Profiles:       profiles,
+					RootCount:      rootCount,
+					WebSearch:      enabled,
+					SpawnAllowlist: roster,
+				}, prompts.TurnProjection{
 					ProfileID: prompts.CoordinatorProfileID,
 					SurfaceID: surfaceID,
 					Plan:      plan,
-					Profiles:  profiles,
-					WebSearch: enabled,
+					Offered:   (plan).ImmediateNames(),
 				})
 				contractcheck.FailErr(t, "NewReader "+surfaceID, err)
 				vars := map[string]any{}
-				contractcheck.FailErr(t, "MergeForTurn "+surfaceID, capability.MergeForTurn(vars, reader,
-					inject.ResolveAgentRoster(surfaceID, spawn.AmbientAllowedAgents(), rootCount, false, enabled).Effective))
+				contractcheck.FailErr(t, "MergeForTurn "+surfaceID, capability.MergeForTurn(vars, reader, roster))
 				vars, err = prompts.Vars(reader, vars)
 				contractcheck.FailErr(t, "prompts.Vars "+surfaceID, err)
 				if vars["web_search_enabled"] != enabled {

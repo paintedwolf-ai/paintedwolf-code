@@ -1,6 +1,6 @@
 # Build and test Android
 
-Use this workflow to drive Android builds and device runs with evidence at the end. On a process start that uses the SDK tools, declare `android-sdk` in `capability_request.host_resources`. `adb` calls also need `capability_request.loopback_connect` `ports: [5037]`, plus `local_listen` on 5037 when the call starts the adb server.
+Use this workflow to drive Android builds and device runs with evidence at the end. On a process start that uses the SDK tools, declare `android-sdk` in `capability_request.host_resources`.{% if runner_loopback_connect_tools %} `adb` calls also need `capability_request.loopback_connect` `ports: [5037]`{% if runner_local_listen_tools %}, plus `local_listen` on 5037 when the call starts the adb server{% endif %}.{% endif %}
 
 ## Workflow
 

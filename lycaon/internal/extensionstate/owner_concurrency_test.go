@@ -3,6 +3,7 @@
 package extensionstate_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -17,7 +18,15 @@ func TestConcurrentMutationsNoLostUpdate(t *testing.T) {
 	testutil.SkipIfShort(t, "concurrent full-catalog mutation stress")
 	owner := testOwner(t)
 
+	// The test owns the units it disables, so no stock catalog requirement
+	// decides which of them a candidate may drop.
 	const n = 6
+	notes := map[string]string{}
+	unitID := func(i int) string { return fmt.Sprintf("guidance/concurrent-note-%d", i) }
+	for i := range n {
+		notes[fmt.Sprintf("guidance/concurrent-note-%d.md", i)] = "note\n"
+	}
+	apply(t, owner, deviceScope(), extensionstate.InstallOp{Source: "path:" + writeAuthorPack(t, "acme/concurrent", notes)})
 	var wg sync.WaitGroup
 	errs := make(chan error, n)
 	for i := range n {
@@ -25,7 +34,7 @@ func TestConcurrentMutationsNoLostUpdate(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			err := applyWithRetry(t, owner, deviceScope(),
-				extensionstate.SetUnitDisabledOp{UnitID: stockUnitIDAt(t, i), Disabled: true})
+				extensionstate.SetUnitDisabledOp{UnitID: unitID(i), Disabled: true})
 			if err != nil {
 				errs <- err
 			}
@@ -47,9 +56,9 @@ func TestConcurrentMutationsNoLostUpdate(t *testing.T) {
 		got[id] = true
 	}
 	for i := range n {
-		if !got[stockUnitIDAt(t, i)] {
+		if !got[unitID(i)] {
 			t.Fatalf("lost update: %s missing from %v (%d of %d present)",
-				stockUnitIDAt(t, i), d.Disabled, len(d.Disabled), n)
+				unitID(i), d.Disabled, len(d.Disabled), n)
 		}
 	}
 }

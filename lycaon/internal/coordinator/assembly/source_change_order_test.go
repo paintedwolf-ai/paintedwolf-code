@@ -26,10 +26,17 @@ func TestTurnSourceBriefsSitBeforeTheirOpeningPrompt(t *testing.T) {
 		loads++
 		return map[string]inject.SourceChangeBrief{"u2": brief, "gone": brief}
 	}
-	eng.SetDeps(deps)
+	eng.SetDeps(withTestTurnReader(deps))
 	sess := &api.Session{ID: "source-window", AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
 	ctx := context.Background()
-	block := inject.RenderSourceChangesBlock(ctx, deps.Injects, sess.ID, brief, false)
+	history := []api.Message{
+		{ID: "u1", Role: api.MessageRoleUser, Content: "Count the apples."},
+		{ID: "a1", Role: api.MessageRoleAssistant, Content: "There are 3."},
+		{ID: "u2", Role: api.MessageRoleUser, Content: "Update the inventory and summarize the result."},
+	}
+	reader, err := testTurnContext(eng).surface.turnReader(ctx, sess, inject.CoordinatorTurnFrame{}, history, &TurnAssemblyScratch{})
+	testutil.FailErr(t, "turnReader", err)
+	block := inject.RenderSourceChangesBlock(ctx, deps.Injects, reader, sess.ID, brief)
 	if block == "" {
 		t.Fatal("source change fixture did not render")
 	}
@@ -39,11 +46,6 @@ func TestTurnSourceBriefsSitBeforeTheirOpeningPrompt(t *testing.T) {
 	}})
 	block = projected[len(projected)-1].Content
 	eng.BeginPromptTurn(sess.ID, "")
-	history := []api.Message{
-		{ID: "u1", Role: api.MessageRoleUser, Content: "Count the apples."},
-		{ID: "a1", Role: api.MessageRoleAssistant, Content: "There are 3."},
-		{ID: "u2", Role: api.MessageRoleUser, Content: "Update the inventory and summarize the result."},
-	}
 	var previous []api.Message
 	for _, observation := range []string{
 		"Read notes.txt at the current revision, including the human note.",
@@ -86,39 +88,6 @@ func TestTurnSourceBriefsSitBeforeTheirOpeningPrompt(t *testing.T) {
 	}
 }
 
-// The truncated line follows the turn's surface, which can change within a
-// prompt run. plan_execute has no source_history; implement_investigate loads it.
-func TestTruncatedBriefOffersSourceHistoryOnlyWhereTheSurfaceHasIt(t *testing.T) {
-	eng := prefixStabilityEngine(t)
-	deps := eng.deps()
-	deps.TurnSourceBriefs = func(context.Context, *api.Session) map[string]inject.SourceChangeBrief {
-		return map[string]inject.SourceChangeBrief{"u1": {Truncated: true}}
-	}
-	eng.SetDeps(deps)
-	sess := &api.Session{ID: "source-surface", AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
-	eng.BeginPromptTurn(sess.ID, "")
-	history := []api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "Update the inventory."}}
-	brief := func(surfaceID string) string {
-		eng.SetTurnSurfaceID(sess.ID, surfaceID)
-		msgs, err := eng.BuildCompletionMessages(context.Background(), sess, history, nil)
-		testutil.FailErr(t, "assemble on "+surfaceID, err)
-		for i, msg := range msgs {
-			if msg.ID == "u1" && i > 0 {
-				return msgs[i-1].Content
-			}
-		}
-		t.Fatalf("no brief before the opening prompt on %s", surfaceID)
-		return ""
-	}
-	withheld, offered := brief("plan_execute"), brief("implement_investigate")
-	if len(offered) <= len(withheld) {
-		t.Fatalf("the surface with the tool must get the longer line:\noffered: %s\nwithheld: %s", offered, withheld)
-	}
-	if again := brief("plan_execute"); again != withheld {
-		t.Fatalf("returning to the surface changed its bytes:\n%s\n%s", again, withheld)
-	}
-}
-
 func TestSourceChangeSnapshotNeverAppearsAsDynamicTailState(t *testing.T) {
 	for _, brief := range []inject.SourceChangeBrief{
 		{},
@@ -134,7 +103,7 @@ func TestSourceChangeSnapshotNeverAppearsAsDynamicTailState(t *testing.T) {
 			calls++
 			return map[string]inject.SourceChangeBrief{"u1": brief}
 		}
-		eng.SetDeps(deps)
+		eng.SetDeps(withTestTurnReader(deps))
 		sess := &api.Session{ID: "source-tail", AgentType: orchestration.ProfileCoordinator}
 		eng.BeginPromptTurn(sess.ID, "")
 		_, err := testTurnContext(eng).buildTailSystemInjects(context.Background(), sess, true, inject.CoordinatorTurnFrame{}, nil, nil, eng.cache.LoadTurn(sess.ID))

@@ -22,7 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/toolreach"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -298,13 +297,14 @@ func TestCredentialAdvisoriesDistinguishWeakAndOtherLiterals(t *testing.T) {
 }
 
 func TestCredentialRemediesUseOfferedToolSnapshot(t *testing.T) {
+	askSchemas := map[string]map[string]any{"ask_user": {"properties": map[string]any{"response_type": map[string]any{"type": "string", "enum": []string{"text", "choice", "secret"}}, "secret": map[string]any{"type": "object"}}}}
 	for _, offered := range []bool{false, true} {
 		mgr, _ := newWeakSecretMintGuidanceManager(t)
-		names := []string{}
+		var names []string
 		if offered {
 			names = []string{"secret_generate", "ask_user"}
 		}
-		ctx := tools.WithCallReach(t.Context(), toolreach.Offered(names))
+		ctx := toolreach.WithRequest(t.Context(), toolreach.Offered(names).WithSchemas(askSchemas))
 		output, facts := mgr.ToolPolicy.AfterTool(ctx, &api.Session{ID: "remedies"}, "command",
 			map[string]any{"command": "example --password=password"}, "completed", 1, guidance.ToolResultFacts{})
 		if !facts.HasCode("WEAK_CREDENTIAL_LITERAL") {
@@ -328,6 +328,7 @@ func TestCredentialAdvisoriesKeepDistinctValueSubjects(t *testing.T) {
 }
 
 func TestCredentialRemediesDiscoverDeferredTools(t *testing.T) {
+	askSchemas := map[string]map[string]any{"ask_user": {"properties": map[string]any{"response_type": map[string]any{"type": "string", "enum": []string{"text", "choice", "secret"}}, "secret": map[string]any{"type": "object"}}}}
 	for _, value := range []string{"password", "A123456789012345"} {
 		for _, loaded := range []bool{false, true} {
 			mgr, _ := newWeakSecretMintGuidanceManager(t)
@@ -335,8 +336,7 @@ func TestCredentialRemediesDiscoverDeferredTools(t *testing.T) {
 			if loaded {
 				names = append(names, "secret_generate", "ask_user")
 			}
-			plan := toolsurface.Compile(names, []string{"secret_generate", "ask_user"})
-			ctx := tools.WithCallReach(t.Context(), toolreach.Freeze(names, plan))
+			ctx := toolreach.WithRequest(t.Context(), toolreach.Freeze(names, toolsurface.Compile(names, []string{"secret_generate", "ask_user"})).WithSchemas(askSchemas))
 			output, facts := mgr.ToolPolicy.AfterTool(ctx, &api.Session{ID: "deferred-remedies"}, "write",
 				map[string]any{"content": "password=" + value}, "written", 1, guidance.ToolResultFacts{})
 			if !facts.HasCode("WEAK_CREDENTIAL_LITERAL") && !facts.HasCode("CREDENTIAL_LITERAL") {

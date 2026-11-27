@@ -19,9 +19,7 @@ func visualShowFacts(t *testing.T, offered, requestable []string) map[string]any
 	for _, name := range requestable {
 		tools[name] = true
 	}
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "worker",
-		Plan:      toolsurface.Compile(offered, requestable),
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles: []sandbox.ToolProfile{{
 			ID:             "worker",
 			Tools:          tools,
@@ -29,6 +27,10 @@ func visualShowFacts(t *testing.T, offered, requestable []string) map[string]any
 		}},
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "worker",
+		Plan:      toolsurface.Compile(offered, requestable),
+		Offered:   (toolsurface.Compile(offered, requestable)).ImmediateNames(),
 	})
 	testutil.FailErr(t, "NewReader", err)
 	return reader.Facts()
@@ -128,15 +130,16 @@ func TestMergeCoordinatorPromptVarsInvestigateFloorAsksForCapture(t *testing.T) 
 	testutil.FailErr(t, "LoadToolProfiles", err)
 	plan, err := prompts.CompileSurfacePlan("implement_investigate", 1)
 	testutil.FailErr(t, "CompileSurfacePlan", err)
-	loadedReader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: "implement_investigate",
+	loadedReader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Plan:      plan,
-		Loaded:    map[string]bool{"capture_page": true},
 		RootCount: 1,
 		HasGit:    true,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_investigate",
+		Plan:      readerLoadedPlan(plan, map[string]bool{"capture_page": true}),
+		Offered:   readerLoadedOffer(plan, nil, map[string]bool{"capture_page": true}),
 	})
 	testutil.FailErr(t, "loaded reader", err)
 	loaded := loadedReader.Facts()

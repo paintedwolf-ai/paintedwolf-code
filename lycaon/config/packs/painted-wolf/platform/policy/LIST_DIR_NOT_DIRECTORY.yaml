@@ -3,7 +3,7 @@ id: LIST_DIR_NOT_DIRECTORY
 kind: schema
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.can_command, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.admitted_file_read_forms, paintedwolf.command_loader_call, paintedwolf.file_read_forms_loadable_without_schema, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.operation == "list_dir" && paintedwolf.rejection_code == "LIST_DIR_NOT_DIRECTORY"
 effect: block
 x-paintedwolf-category: recoverable
@@ -12,7 +12,7 @@ message: list_dir path is not a directory
 what: The listing path {{ paintedwolf.path }} is not a directory.
 cause: A listing traverses directories; the selected path names a file.
 why: File content and directory membership are separate observations.
-fix: '{% if paintedwolf.can_command %}Read the selected file’s content with `cat`, `head`, or `sed -n` inside command.{% else %}File content requires a reader offered on the current surface.{% endif %} For directory membership, list the intended parent directory instead.'
+fix: '{% if paintedwolf.admitted_file_read_forms %}Read the selected file’s content inside command{% if paintedwolf.command_loader_call %} after loading it with {{ paintedwolf.command_loader_call }}{% endif %} ({{ paintedwolf.admitted_file_read_forms }}).{% else %}{% if paintedwolf.file_read_forms_loadable_without_schema %}Call {{ paintedwolf.command_loader_call }} to inspect its projected schema for file reads, or choose a reader offered on the current surface.{% else %}File content requires a reader offered on the current surface.{% endif %}{% endif %} For directory membership, list the intended parent directory instead.'
 instead: Choose a directory to list, or use an offered file reader
 x-paintedwolf-scenarios:
   - id: default
@@ -22,9 +22,9 @@ x-paintedwolf-scenarios:
       tool: list_dir
   - id: command-leg
     vars:
-      can_command: true
+      admitted_file_read_forms: [cat FILE, head FILE, 'sed -n 1,10p FILE']
       path: docs/README.md
       profile: explore_readonly
       tool: list_dir
     expect_contains:
-      - '`cat`'
+      - cat FILE

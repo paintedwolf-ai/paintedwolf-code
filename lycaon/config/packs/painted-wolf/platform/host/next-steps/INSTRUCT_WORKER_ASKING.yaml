@@ -3,5 +3,5 @@ steps:
     tool: "answer_decision"
     args:
       worker: "{{ paintedwolf.worker }}"
-    say: "Answer the worker's pending question with {{ call }}; it resumes on its own."
+    say: "Answer the worker's pending question with {% if load %}{{ load }}, then {% endif %}{{ call }}; it resumes on its own."
     otherwise: "Answer the worker's pending question; it resumes on its own."

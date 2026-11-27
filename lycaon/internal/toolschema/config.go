@@ -206,6 +206,17 @@ func ArgFieldSummary(schema map[string]any) (required, optional []string) {
 	return required, optional
 }
 
+// commandReadOnlyPrunedFields lists top-level command argument fields removed
+// when a surface or posture restricts command to read-only native utilities.
+var commandReadOnlyPrunedFields = []string{
+	"capability_request",
+	"secret_use",
+	"snapshot_capture",
+	"socks_proxy",
+	"terminal_capture",
+	"verification",
+}
+
 // ArgFieldPaths returns accepted top-level and nested argument paths.
 func ArgFieldPaths(schema map[string]any) []string {
 	seen := map[string]bool{}

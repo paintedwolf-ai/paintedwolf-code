@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/prompts"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -143,11 +144,11 @@ func summarySection(ctx context.Context, task *wire.WorkerTask, resultHandle str
 			vars["reasoning"] = evidence.Text
 		}
 	}
-	system, err := guidance.RenderCatalog(ctx, guidance.UtilityWorkerResultSystemRef, nil)
+	system, err := prompts.RenderUtilityPrompt(ctx, guidance.UtilityWorkerResultSystemRef, nil)
 	if err != nil {
 		return briefing.SectionPlan{}, err
 	}
-	user, err := guidance.RenderCatalog(ctx, guidance.UtilityWorkerResultUserRef, vars)
+	user, err := prompts.RenderUtilityPrompt(ctx, guidance.UtilityWorkerResultUserRef, vars)
 	if err != nil {
 		return briefing.SectionPlan{}, err
 	}

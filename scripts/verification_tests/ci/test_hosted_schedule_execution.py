@@ -65,4 +65,5 @@ class HostedScheduleTests(unittest.TestCase):
         self.assertIn(f"`{BEHAVIOR} 2/{SHARDS}`", summary)
         self.assertIn("Nightly timing source: run 30.", summary)
         self.assertIn(f"| 2 | {RUNNER} |  | reject | 3600 |", summary)
-        self.assertIn(f"| 3 | {BEHAVIOR} | 1/{SHARDS} | critical | 9000 |", summary)
+        behavior_seconds = hosted_plan.lanes()[BEHAVIOR]["minutes"] * 60
+        self.assertIn(f"| 3 | {BEHAVIOR} | 1/{SHARDS} | critical | {behavior_seconds} |", summary)

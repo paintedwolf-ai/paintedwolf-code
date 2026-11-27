@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -235,7 +236,7 @@ func (l *toolInvocations) executeToolCall(
 	assistantMessageID string,
 	_ api.CoordinatorRunContext,
 ) toolInvocation {
-	ctx = tools.WithCallReach(ctx, tools.TurnReach(toolCtx))
+	ctx = toolreach.WithRequest(ctx, tools.TurnReach(toolCtx))
 	// A non-nil roster constrains task spawning.
 	if taskAllowlist != nil {
 		ctx = toolpolicy.WithTaskSpawnAllowlist(ctx, taskAllowlist)
@@ -298,8 +299,11 @@ func (l *toolInvocations) executeToolCall(
 		schema = offered
 	}
 	if reject := tools.ValidateCallArguments(tc.Name, tc.Args, schema, toolCtx); reject != nil {
-		refused := refusedInvocation(l.toolReject(reject.Code, reject.Data))
+		refused := refusedInvocation(l.curateToolRejectOccurrence(ctx, sess, tc, toolCtx, reject))
 		refused.receipt, refused.contract = receipt, def.Contract
+		if typed := toolrejection.AsToolReject(refused.reject); typed != nil && typed.FailureClass != "" {
+			refused.failure = rejectionFailure(refused.reject.Code(), typed.FailureClass, invocationFailureOwner(def.Contract, toolCaptures{}), refused.facts.FeedbackFor(refused.reject.Code()).Details)
+		}
 		return refused
 	}
 	if l.Deps.BeforeToolRun != nil {

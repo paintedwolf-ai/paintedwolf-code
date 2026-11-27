@@ -1,0 +1,7 @@
+steps:
+  - when: "paintedwolf.command_external_reachable"
+    tool: "command"
+    args:
+      command: "{{ paintedwolf.command }}"
+    say: "Run the package action in a fresh boundary with {% if load %}{{ load }}, then {% endif %}{{ call }} instead of sending it into this terminal."
+    otherwise: "This request offers no fresh command boundary for `{{ paintedwolf.command }}`; report the blocked package action instead of sending it into this terminal."
