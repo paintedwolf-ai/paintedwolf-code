@@ -79,11 +79,10 @@ func TestPY09_NativeLifetimeCloseDuringHeldHostCallAndFreshService(t *testing.T)
 	// Policy requires approval on workspace writes so the guest deterministically
 	// parks inside ApprovalBroker.WaitForApproval during its write syscall.
 	holdWritePolicy := func(_ context.Context, op pythonruntime.ReachedOperation) pythonadmission.PolicyDecision {
-		if op.Family == pythonruntime.EffectWrite {
+		if op.Family == pythonruntime.EffectFilesystemWrite {
 			return pythonadmission.PolicyDecision{
-				Kind:      pythonruntime.DecisionHold,
-				Condition: pythonadmission.ConditionRequiresApproval,
-				Reason:    "PY09 deterministic hold on workspace write",
+				Kind:   pythonruntime.DecisionHold,
+				Reason: "PY09 deterministic hold on workspace write",
 			}
 		}
 		return pythonadmission.PolicyDecision{Kind: pythonruntime.DecisionAllow}
@@ -178,7 +177,7 @@ print("SHOULD_NOT_COMPLETE")
 	contractcheck.FailErr(t, "LoadAdmissions", err)
 	writeEffects := 0
 	for _, adm := range adms {
-		if adm.Record.Family == pythonruntime.EffectWrite {
+		if adm.Record.Family == pythonruntime.EffectFilesystemWrite {
 			writeEffects++
 		}
 	}
