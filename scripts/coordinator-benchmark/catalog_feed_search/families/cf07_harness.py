@@ -311,12 +311,33 @@ class AgentToolSession:
             method="POST",
         )
         self.session_id = str(sess["id"])
+        try:
+            self._transport.request(
+                "/harness/model-limit",
+                {"session_id": self.session_id, "limit": 500},
+                method="POST",
+            )
+        except Exception:
+            pass
+        self._wait_session_idle(timeout_s=30.0)
         self._transport.request(
             f"/v1/sessions/{self.session_id}/prompts",
             {"operation_id": str(uuid.uuid4()), "text": "CF07 agent discovery probe"},
             method="POST",
         )
         self._pending = self._wait_pending(timeout_s=30.0)
+
+    def _wait_session_idle(self, timeout_s: float = 30.0) -> None:
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            state = self._transport.request(f"/v1/sessions/{self.session_id}", method="GET")
+            status = str(state.get("status") or "")
+            if status == "idle":
+                return
+            if status != "preparing":
+                raise RuntimeError(f"session {self.session_id} preparation ended in {status!r}")
+            time.sleep(0.05)
+        raise RuntimeError(f"session {self.session_id} stayed in preparing past {timeout_s}s")
 
     def _wait_pending(self, timeout_s: float = 30.0) -> dict[str, object]:
         deadline = time.monotonic() + timeout_s
