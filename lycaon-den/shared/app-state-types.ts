@@ -563,6 +563,8 @@ export type DenAppStateV1 = {
   draftPromoteDismissed?: string[];
   /** Persistent no-folder dismissals by project id. */
   nofolderDismissed?: string[];
+  /** Hidden proposal overflow watermarks: session id -> newest hidden watch handle. */
+  hiddenProposalOverflows?: Record<string, string>;
   /** Per-file editor view state that survives close and restart (LRU-capped). */
   editorViewState?: DenEditorViewStateStore;
   /** Reopen-closed-tab ring per project (cap 20, most-recent first). */

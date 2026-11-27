@@ -12,7 +12,7 @@ Use this workflow to operate the stack the repository itself defines. On a proce
 ## Workflow
 
 1. Find the project's compose definition first — `compose.yaml`, `docker-compose.yml`, overrides, and profiles — and read which services, ports, and env files it expects. The stack the project defines is the one to run; do not invent an alternative.
-2. Bring up only what the task needs — `compose up -d <service…>` with the relevant profile — rather than the whole stack by default.
+2. Bring up only what the task needs — `compose up -d <service…>` with the relevant profile — rather than the whole stack by default. Detached containers belong to the container engine rather than session Bash jobs;{% if profile_has_wait %} confirm published loopback service ports with `wait`{% if profile_has_watch %} or `watch`{% endif %} (`port_ready` or `http_ready`) rather than a shell sleep loop.{% endif %}
 3. Observe before acting. `compose ps` for state, `compose logs --tail` on the failing service for cause. Logs-first beats restart-first; a restart destroys the evidence.
 4. Rebuild only the changed service (`compose up -d --build <service>`). Rebuilding the world to fix one container wastes minutes and masks which change mattered.
 5. On a port conflict, find the holder with `lsof -iTCP:PORT -sTCP:LISTEN` (`-iUDP:PORT` for UDP), report it, and let the user decide; never kill an unrelated listener to free it.

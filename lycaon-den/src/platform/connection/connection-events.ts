@@ -5,6 +5,10 @@ import {
   resyncProjectBackground,
   retainProjectBackgroundProject,
 } from "../../project/project-background-store.ts";
+import {
+  refreshProjectWatches,
+  retainProjectWatchesProject,
+} from "../../watches/watches-store.ts";
 import { setWalkLoadSubscription } from "../../files/walk/walk-loader.ts";
 import { requestWalkRefresh } from "../../files/walk/walk-store.ts";
 import { watchWindowExit } from "../windows/watch-window-exit.ts";
@@ -148,11 +152,13 @@ export function createConnectionEvents(ports: EventPorts) {
 
     retainAgentPresenceProject(projectId);
     retainProjectBackgroundProject(projectId);
+    retainProjectWatchesProject(projectId);
     const resyncPresence = () => {
       const client = ports.host.client;
       if (client) {
         void resyncAgentPresence(client, projectId).catch(() => undefined);
         void resyncProjectBackground(client, projectId).catch(() => undefined);
+        void refreshProjectWatches(client, projectId).catch(() => undefined);
       }
     };
 

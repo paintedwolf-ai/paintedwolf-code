@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Run already active
+message: >-
+  This standing watch already has a queued, running, or held run.
+suggested_action: Wait for the current run to finish or stop its chat, then try again.
+scenarios:
+  - id: default
+    vars: {}

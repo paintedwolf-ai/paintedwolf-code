@@ -20,16 +20,18 @@ import (
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // SessionJobs puts a program's & jobs in the session's process registry, so
 // jobs, wait, kill, command_output and command_stop share one set of handles.
 // A native job has a session numeric identifier; its stop cancels its context.
 type SessionJobs struct {
-	Registry   *bgprocess.Registry
-	Supervisor *ProgramSupervisor
-	SessionID  string
-	ProjectID  string
+	Registry       *bgprocess.Registry
+	Supervisor     *ProgramSupervisor
+	DerivedWatches DerivedWatchRegistrar
+	SessionID      string
+	ProjectID      string
 
 	mu        sync.Mutex
 	closed    atomic.Bool
@@ -51,6 +53,7 @@ type jobWaiter struct{ unblock func() }
 // ProgramJobOrigin binds a job to the call that started its program.
 type ProgramJobOrigin struct {
 	Tool, ToolCallID, RootSessionID string
+	ToolContext                     tools.ToolContext
 }
 
 type programJobsBinding struct {
@@ -61,8 +64,11 @@ type programJobsBinding struct {
 // sessionJobsKey binds program provenance to its retained session owner.
 type sessionJobsKey struct{}
 
-// programJobs holds one program's bare-wait set under SessionJobs.mu.
-type programJobs struct{ handles []string }
+// programJobs holds one program's bare-wait and same-call join sets under SessionJobs.mu.
+type programJobs struct {
+	handles []string
+	joined  map[string]bool
+}
 type programJobsKey struct{}
 
 type jobOutcome struct {
@@ -388,6 +394,29 @@ func (j *SessionJobs) Unwaited(ctx context.Context) ([]string, error) {
 	return out, nil
 }
 
+// UnjoinedFromCall returns handles actually started by & during this call and not joined by wait in the same call.
+func (j *SessionJobs) UnjoinedFromCall(ctx context.Context) []string {
+	if j == nil {
+		return nil
+	}
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	own, ok := ctx.Value(programJobsKey{}).(*programJobs)
+	if !ok || len(own.handles) == 0 {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, h := range own.handles {
+		if h == "" || seen[h] || own.joined[h] {
+			continue
+		}
+		seen[h] = true
+		out = append(out, h)
+	}
+	return out
+}
+
 // Number is a handle's %N job number in this session, or 0.
 func (j *SessionJobs) Number(handle string) int {
 	j.mu.Lock()
@@ -447,6 +476,15 @@ func (j *SessionJobs) Wait(ctx context.Context, reference string, activity *comm
 	}
 	j.mu.Lock()
 	outcome, ok := j.results[handle]
+	if ok {
+		if own, hasOwn := ctx.Value(programJobsKey{}).(*programJobs); hasOwn {
+			if own.joined == nil {
+				own.joined = map[string]bool{}
+			}
+			own.joined[handle] = true
+		}
+	}
+	registrar := j.DerivedWatches
 	j.mu.Unlock()
 	// The registry keeps few finished jobs; this table keeps every outcome.
 	if waitErr != nil && !(ok && errors.Is(waitErr, bgprocess.ErrProcessNotFound)) {
@@ -454,6 +492,19 @@ func (j *SessionJobs) Wait(ctx context.Context, reference string, activity *comm
 	}
 	if !ok {
 		return toolcontract.ProducerResult{}, fmt.Errorf("job %s settled without an outcome", handle)
+	}
+	if registrar != nil {
+		var tc tools.ToolContext
+		if binding, hasBinding := ctx.Value(sessionJobsKey{}).(programJobsBinding); hasBinding {
+			tc = binding.origin.ToolContext
+		}
+		if tc.Identity.SessionID == "" {
+			tc.Identity.SessionID = j.SessionID
+		}
+		if tc.Identity.ProjectID == "" {
+			tc.Identity.ProjectID = j.ProjectID
+		}
+		_ = registrar.ReconcileShellJoin(context.WithoutCancel(ctx), tc, handle)
 	}
 	j.reap(handle)
 	if outcome.result.Terminal == toolcontract.ProducerInterrupted && errors.Is(outcome.err, context.Canceled) {

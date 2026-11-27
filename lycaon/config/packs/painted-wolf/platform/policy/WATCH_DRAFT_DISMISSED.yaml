@@ -1,0 +1,24 @@
+spec_version: "1.0"
+id: WATCH_DRAFT_DISMISSED
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - watch
+requires_facts: [paintedwolf.handle, paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "WATCH_DRAFT_DISMISSED"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:watch
+message: Standing watch draft matches a dismissed proposal
+what: A standing watch draft with these conditions was already dismissed in this chat ({{ paintedwolf.handle }}).
+cause: The person declined this standing watch proposal earlier in the conversation.
+why: Re-proposing a dismissed standing watch with identical conditions repeats a declined suggestion.
+fix: Continue without proposing this standing watch again unless the person explicitly asks for a new schedule or trigger.
+instead: Drop the proposal; do not retry with reworded name or prompt fields
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      handle: watch-2
+      profile: coordinator
+      tool: watch

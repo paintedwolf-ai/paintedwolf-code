@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
+	"github.com/lycaon/lycaon/internal/watch"
 )
 
 // One-second waits support short local readiness checks.
@@ -30,10 +31,12 @@ type WaitToolResult struct {
 	TimeoutMS     int                    `json:"timeout_ms,omitempty"`
 	Resumed       bool                   `json:"resumed,omitempty"`
 	Conditions    []awaitstore.Condition `json:"conditions,omitempty"`
+	ActiveHandles []string               `json:"active_handles,omitempty"`
 }
 
 type WaitToolDeps struct {
 	Store             *awaitstore.Store
+	Watches           *watch.Store
 	ProfileConditions map[string]map[string]bool
 	SecretMatcher     *secretmatch.Matcher
 	RuntimeContext    context.Context
@@ -47,6 +50,7 @@ type waitSubscription struct {
 	Triggers           []WaitTrigger
 	ProcessHandles     []string
 	WorkerHandles      []string
+	WatchHandles       []string
 	ExplicitConditions bool
 	UntilComplete      bool
 }
@@ -66,6 +70,9 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 		return fmt.Errorf("registry, loop engine and worker lookup required")
 	}
 	loop.SetWaitStore(deps.Store)
+	if deps.Watches != nil {
+		loop.SetWatchStore(deps.Watches)
+	}
 	return reg.Register("wait", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		request, err := prepareWaitRequest(ctx, loop, deps, args, tctx)
 		if err != nil {
@@ -73,6 +80,9 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 		}
 		if subject := processDisplaySubject(loop, tctx.Identity.SessionID, request.ProcessHandles); subject != "" {
 			tctx.SetDisplaySubject(subject)
+		}
+		if len(request.WatchHandles) > 0 {
+			return executeWatchWait(ctx, loop, deps, args, tctx, request)
 		}
 		if len(request.ProcessHandles) > 0 {
 			winner, ready := loop.processConditionOutcome(tctx.Identity.SessionID, awaitstore.Condition{

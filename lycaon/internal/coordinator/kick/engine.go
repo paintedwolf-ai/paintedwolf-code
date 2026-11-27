@@ -136,6 +136,20 @@ func (k *KickEngine) DropKickID(sessionID, kickID string) {
 	k.sessionKickQueue(sessionID).dropKickID(kickID)
 }
 
+// DropKickSubject removes queued and staged kicks matching both kickID and subject.
+func (k *KickEngine) DropKickSubject(sessionID, kickID, subject string) bool {
+	if k == nil {
+		return false
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	kickID = strings.TrimSpace(kickID)
+	subject = strings.TrimSpace(subject)
+	if sessionID == "" || kickID == "" || subject == "" {
+		return false
+	}
+	return k.sessionKickQueue(sessionID).dropKickSubject(kickID, subject)
+}
+
 // ClearPending drops queued and staged kicks.
 func (k *KickEngine) ClearPending(sessionID string) {
 	if k == nil || strings.TrimSpace(sessionID) == "" {
@@ -270,12 +284,12 @@ func (k *KickEngine) AckLatest(sessionID, latestKey string, lease uint64) {
 	k.sessionKickQueue(sessionID).dropLatest(strings.TrimSpace(latestKey), lease)
 }
 
-// AckPendingNudge consumes the matching rendered lease.
-func (k *KickEngine) AckPendingNudge(sessionID string, lease uint64) {
+// AckPendingNudge consumes the matching rendered lease and returns its subject.
+func (k *KickEngine) AckPendingNudge(sessionID string, lease uint64) string {
 	if k == nil || strings.TrimSpace(sessionID) == "" || lease == 0 {
-		return
+		return ""
 	}
-	k.sessionKickQueue(sessionID).ack(lease)
+	return k.sessionKickQueue(sessionID).ack(lease)
 }
 
 // QueueEager stages worker-spawn data for rendering at the take boundary.

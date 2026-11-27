@@ -42,6 +42,8 @@ export type ClientNoticeKind =
   | "readiness_recheck_failed"
   | "session_create_failed"
   | "session_load_failed"
+  | "standing_watch_disabled"
+  | "standing_watch_paused"
   | "startup_cancelled"
   | "store_incompatible_fresh_restart"
   | "store_incompatible_integrity"
@@ -203,6 +205,18 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     title: "Could not load session",
     message: "Try again or pick another session.",
     scope: "session",
+  },
+  standing_watch_disabled: {
+    title: "Standing watch disabled",
+    message: "A standing watch was disabled because its owner no longer has access to this project.",
+    suggestedAction: "Open Activity to edit and re-enable the watch as its new owner, or delete it.",
+    scope: "project",
+  },
+  standing_watch_paused: {
+    title: "Standing watch paused",
+    message: "A standing watch was paused automatically after repeated run failures or because its target chat is no longer available.",
+    suggestedAction: "Open Activity to review the watch, update its target or settings if needed, and resume it.",
+    scope: "project",
   },
   startup_cancelled: {
     title: "Startup stopped",

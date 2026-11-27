@@ -8,5 +8,4 @@ tier: builtin
 invariants:
   trigger_class: wait_trigger
   fires_in:
-  - wait() process_done condition — the kernel refused a running command/verify
-    job an operation
+  - wait() process_done condition or live command/verify refusal notice while the job runs (even when completion is watched)

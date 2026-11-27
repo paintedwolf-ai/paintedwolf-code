@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/watch_run.updated.json",
+  "$ref": "../../openapi/components/schemas/watches.yaml#/components/schemas/WatchRunEvent",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WatchRunEvent"
+}

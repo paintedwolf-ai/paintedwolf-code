@@ -265,9 +265,10 @@ type DecisionResolver interface {
 
 // SQLDecisionResolver resolves decisions in one database transaction.
 type SQLDecisionResolver struct {
-	messages sessionstore.TranscriptRepository
-	database db.Handle
-	queue    *SQLQueue
+	messages   sessionstore.TranscriptRepository
+	database   db.Handle
+	queue      *SQLQueue
+	onResolved func(ctx context.Context, expected api.WorkerDecisionRequest)
 }
 
 func NewSQLDecisionResolver(messages *sessionstore.Repositories, queue *SQLQueue) *SQLDecisionResolver {
@@ -275,6 +276,13 @@ func NewSQLDecisionResolver(messages *sessionstore.Repositories, queue *SQLQueue
 		return &SQLDecisionResolver{queue: queue}
 	}
 	return &SQLDecisionResolver{messages: messages.Transcript, database: messages.DB(), queue: queue}
+}
+
+// SetOnResolved attaches a post-commit observer when a pending decision is answered.
+func (r *SQLDecisionResolver) SetOnResolved(fn func(ctx context.Context, expected api.WorkerDecisionRequest)) {
+	if r != nil {
+		r.onResolved = fn
+	}
 }
 
 func (r *SQLDecisionResolver) Resolve(ctx context.Context, expected api.WorkerDecisionRequest, message api.Message) error {
@@ -337,5 +345,8 @@ func (r *SQLDecisionResolver) resolve(ctx context.Context, expected api.WorkerDe
 	r.queue.store.notify()
 	r.queue.PublishEnqueued(ctx, jobID)
 	r.queue.NotifyRunnable()
+	if r.onResolved != nil {
+		r.onResolved(ctx, expected)
+	}
 	return nil
 }

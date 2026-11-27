@@ -173,6 +173,35 @@ func (l *Admission) ConsumeBudget(ctx context.Context, sessionID, runID string, 
 	return true
 }
 
+// AdmitAmbientWatchWake checks host/approval holds and optional workflow cycle budget for an ambient watch wake.
+func (l *Admission) AdmitAmbientWatchWake(ctx context.Context, sessionID string) (allow bool, hasWorkflow bool) {
+	if l == nil || l.Turns.hostTurnBlocked(ctx, sessionID) || l.PromptExecutionActive(sessionID) {
+		return false, false
+	}
+	deps := l.loopDeps()
+	sess, err := deps.GetSession(ctx, sessionID)
+	if err != nil || sess == nil || sess.IsWorkerChild() {
+		return false, false
+	}
+	if deps.IsEscalated != nil && deps.IsEscalated(sessionID) {
+		return false, false
+	}
+	if l.Facts.sessionHumanApprovalAwaiting(ctx, sessionID) || l.Facts.sessionHostObligationHeld(ctx, sessionID) {
+		return false, false
+	}
+	run, vars, ok := l.Facts.activeRunAndVars(ctx, sessionID)
+	if !ok || run == nil {
+		return true, false
+	}
+	if !deps.Limits(ctx, sess).CoordinatorLoopEnabled() || run.Status != api.WorkflowRunStatusRunning {
+		return false, true
+	}
+	if scaffoldvars.HasPendingUserInput(vars) {
+		return false, true
+	}
+	return l.ConsumeBudget(ctx, sessionID, run.ID, anchor.LoopWake), true
+}
+
 type loopBudgetKey struct {
 	sessionID string
 	runID     string

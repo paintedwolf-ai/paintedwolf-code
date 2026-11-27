@@ -42,6 +42,8 @@ func (l *Waits) enterSleep(ctx context.Context, sessionID string, arm sleepArm) 
 	st.waitTriggers = dedupeWaitTriggers(triggers)
 	st.processHandles = normalizeProcessHandles(arm.processHandles)
 	st.workerHandles = normalizeProcessHandles(arm.workerHandles)
+	st.watchHandles = normalizeProcessHandles(arm.watchHandles)
+	st.refusalHandles = normalizeProcessHandles(arm.refusalHandles)
 	st.mover = arm.mover
 	st.caller = arm.caller
 	opened := openWaitLeaseLocked(st, sessionID, arm.mover)

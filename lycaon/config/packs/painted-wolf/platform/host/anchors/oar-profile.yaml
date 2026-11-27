@@ -576,6 +576,10 @@ host_facts:
    type: int
  - name: paintedwolf.wait_allowed_conditions
    type: list<string>
+ - name: paintedwolf.watch_invalid_fields
+   type: list<string>
+ - name: paintedwolf.watch_reclaimable_handles
+   type: list<string>
  - name: paintedwolf.condition
    type: string
  - name: paintedwolf.read_empty_file

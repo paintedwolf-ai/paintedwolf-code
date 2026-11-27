@@ -9,6 +9,7 @@ import (
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
+	"github.com/lycaon/lycaon/internal/watch"
 )
 
 func parseWaitRequest(args map[string]any) (waitRequest, error) {
@@ -74,14 +75,15 @@ func resolveConditions(raw any) (waitSubscription, error) {
 			return waitSubscription{}, fmt.Errorf("each wait condition must be an object")
 		}
 		kind, _ := obj["kind"].(string)
-		trigger := WaitTrigger(strings.TrimSpace(kind))
+		trimmedKind := strings.TrimSpace(kind)
+		trigger := WaitTrigger(trimmedKind)
 		if _, allowed := validWaitTriggers[trigger]; !allowed || trigger == WaitTriggerTimer {
 			return waitSubscription{}, fmt.Errorf("unsupported wait condition %q", kind)
 		}
 		if err := validateConditionShape(trigger, obj); err != nil {
 			return waitSubscription{}, err
 		}
-		condition := awaitstore.Condition{Kind: string(trigger)}
+		condition := awaitstore.Condition{Kind: trimmedKind}
 		if rawHandles, present := obj["handles"]; present {
 			parsed, err := ResolveProcessHandlesArgs(rawHandles)
 			if err != nil {
@@ -92,28 +94,34 @@ func resolveConditions(raw any) (waitSubscription, error) {
 				handles = append(handles, parsed...)
 			}
 		}
+		if trigger == WaitTriggerWatchMatch && (len(condition.Handles) == 0 || len(condition.Handles) > watch.MaxAlternatives) {
+			return waitSubscription{}, fmt.Errorf("watch_match requires 1 to 8 handles")
+		}
 		switch trigger {
 		case WaitTriggerHTTPReady:
-			parsed, err := parseHTTPReadyCondition(obj)
+			parsed, err := ParseHTTPReadyCondition(obj)
 			if err != nil {
 				return waitSubscription{}, err
 			}
 			condition = parsed
 		case WaitTriggerPortReady:
-			parsed, err := parsePortReadyCondition(obj)
+			parsed, err := ParsePortReadyCondition(obj)
 			if err != nil {
 				return waitSubscription{}, err
 			}
 			condition = parsed
 		case WaitTriggerTimer, WaitTriggerNextWorkerDone, WaitTriggerAllWorkersIdle, WaitTriggerOverlayPromote,
-			WaitTriggerScanDone, WaitTriggerProcessDone, WaitTriggerProgramDone:
+			WaitTriggerScanDone, WaitTriggerProcessDone, WaitTriggerWatchMatch, WaitTriggerProgramDone:
 		}
 		conditions = append(conditions, condition)
-		triggers = append(triggers, trigger)
+		if trigger != WaitTriggerWatchMatch {
+			triggers = append(triggers, trigger)
+		}
 	}
 	return waitSubscription{
 		Conditions: conditions, Triggers: ensureTimerBackstop(triggers),
 		ProcessHandles: normalizeProcessHandles(handles), WorkerHandles: workerHandlesFromConditions(conditions),
+		WatchHandles:       watchHandlesFromConditions(conditions),
 		ExplicitConditions: true,
 	}, nil
 }
@@ -121,7 +129,7 @@ func resolveConditions(raw any) (waitSubscription, error) {
 func validateConditionShape(trigger WaitTrigger, obj map[string]any) error {
 	allowed := map[string]bool{"kind": true}
 	switch trigger {
-	case WaitTriggerProcessDone, WaitTriggerNextWorkerDone:
+	case WaitTriggerProcessDone, WaitTriggerNextWorkerDone, WaitTriggerWatchMatch:
 		allowed["handles"] = true
 	case WaitTriggerHTTPReady:
 		for _, field := range []string{"url", "method", "status_min", "status_max", "port"} {
@@ -140,7 +148,8 @@ func validateConditionShape(trigger WaitTrigger, obj map[string]any) error {
 	return nil
 }
 
-func parseHTTPReadyCondition(obj map[string]any) (awaitstore.Condition, error) {
+// ParseHTTPReadyCondition validates and normalizes an http_ready condition.
+func ParseHTTPReadyCondition(obj map[string]any) (awaitstore.Condition, error) {
 	rawURL, _ := obj["url"].(string)
 	declared, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
@@ -183,7 +192,8 @@ func parseHTTPReadyCondition(obj map[string]any) (awaitstore.Condition, error) {
 	return awaitstore.Condition{Kind: "http_ready", URL: target.String(), Method: method, StatusMin: minimum, StatusMax: maximum}, nil
 }
 
-func parsePortReadyCondition(obj map[string]any) (awaitstore.Condition, error) {
+// ParsePortReadyCondition validates and normalizes a port_ready condition.
+func ParsePortReadyCondition(obj map[string]any) (awaitstore.Condition, error) {
 	host, _ := obj["host"].(string)
 	host = strings.TrimSpace(host)
 	if host == "" {
@@ -225,7 +235,7 @@ func conditionsFromTriggers(triggers []WaitTrigger, processHandles, workerHandle
 		case WaitTriggerNextWorkerDone:
 			condition.Handles = append([]string(nil), workerHandles...)
 		case WaitTriggerTimer, WaitTriggerAllWorkersIdle, WaitTriggerOverlayPromote, WaitTriggerScanDone,
-			WaitTriggerHTTPReady, WaitTriggerPortReady, WaitTriggerProgramDone:
+			WaitTriggerWatchMatch, WaitTriggerHTTPReady, WaitTriggerPortReady, WaitTriggerProgramDone:
 		}
 		out = append(out, condition)
 	}
@@ -236,6 +246,9 @@ func triggersFromConditions(conditions []awaitstore.Condition) ([]WaitTrigger, [
 	triggers := make([]WaitTrigger, 0, len(conditions)+1)
 	var handles []string
 	for _, condition := range conditions {
+		if condition.Kind == watch.ConditionWatchMatch {
+			continue
+		}
 		triggers = append(triggers, WaitTrigger(condition.Kind))
 		if condition.Kind == string(WaitTriggerProcessDone) {
 			handles = append(handles, condition.Handles...)

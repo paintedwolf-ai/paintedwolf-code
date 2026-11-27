@@ -98,7 +98,7 @@ func projectedChunks(chunks []OutputChunk, head, cursor int64, raw, safe string,
 			at = min(end, head+span.InputEnd)
 		}
 		if text.Len() > 0 {
-			out = append(out, OutputChunk{Cursor: start, Stream: chunk.Stream, Text: text.String()})
+			out = append(out, OutputChunk{Cursor: start, Stream: chunk.Stream, Text: text.String(), HostOrigin: chunk.HostOrigin})
 		}
 	}
 	return out

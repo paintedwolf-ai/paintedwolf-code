@@ -26,6 +26,8 @@ type Workers struct {
 	// RoundProvenance resolves a job's worker name, round ordinal, workflow
 	// work ID, and latest sent message seq in one lookup when set.
 	RoundProvenance func(ctx context.Context, jobID string) (worker string, ordinal int64, workID string, latestSent int64, ok bool, err error)
+	OnWatchTerminal func(ctx context.Context, parentID, completingJobID string)
+	OnWatchRunning  func(ctx context.Context, parentID, jobID, workerName, kind, outcome, occID, summary string)
 }
 
 func (m *Workers) Terminal(ctx context.Context, parentID, completingJobID string) {
@@ -38,6 +40,9 @@ func (m *Workers) Terminal(ctx context.Context, parentID, completingJobID string
 	m.Settlement.ReconcileSandbox(ctx, parentID)
 	m.Admission.MaybePromote(ctx, parentID)
 	m.Digests.Forget(completingJobID)
+	if m.OnWatchTerminal != nil {
+		m.OnWatchTerminal(ctx, parentID, completingJobID)
+	}
 }
 
 // RoundNotice tells a worker's coordinator about its running round.
@@ -47,6 +52,10 @@ func (m *Workers) RoundNotice(ctx context.Context, parentID string, facts kick.W
 		return
 	}
 	facts = m.addressed(ctx, facts)
+	if m.OnWatchRunning != nil {
+		occ := "worker_notice:" + facts.JobID
+		m.OnWatchRunning(ctx, parentID, facts.JobID, facts.Worker, "notice", "notice", occ, "")
+	}
 	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerRoundNotice(ctx, parentID, facts.JobID, anchor.Envelope{WorkerRoundNotice: &facts})
 }
 
@@ -74,8 +83,13 @@ func (m *Workers) PrerequisiteBlocked(ctx context.Context, parentID, consumerJob
 	if m == nil || parentID == "" || strings.TrimSpace(consumerJobID) == "" {
 		return
 	}
+	workerName := m.Names.Name(ctx, consumerJobID)
+	if m.OnWatchRunning != nil {
+		occ := "worker_prereq_blocked:" + consumerJobID + ":" + producerJobID
+		m.OnWatchRunning(ctx, parentID, consumerJobID, workerName, "notice", "notice", occ, reason)
+	}
 	env := anchor.Envelope{Vars: map[string]any{
-		"worker": m.Names.Name(ctx, consumerJobID), "producer": m.Names.Name(ctx, producerJobID), "producer_state": reason,
+		"worker": workerName, "producer": m.Names.Name(ctx, producerJobID), "producer_state": reason,
 	}}
 	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerPrerequisiteBlocked(ctx, parentID, consumerJobID, env)
 }
@@ -86,6 +100,11 @@ func (m *Workers) MessageNeedsReply(ctx context.Context, parentID, jobID string)
 	parentID = strings.TrimSpace(parentID)
 	if m == nil || parentID == "" || strings.TrimSpace(jobID) == "" {
 		return
+	}
+	if m.OnWatchRunning != nil {
+		workerName := m.Names.Name(ctx, jobID)
+		occ := "worker_message:" + strings.TrimSpace(jobID)
+		m.OnWatchRunning(ctx, parentID, strings.TrimSpace(jobID), workerName, "message", "message", occ, "")
 	}
 	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerMessage(ctx, parentID, strings.TrimSpace(jobID))
 }

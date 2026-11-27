@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Only the watch owner can do this
+message: >-
+  Only the person who owns this standing watch can edit, resume, or run it manually.
+suggested_action: Ask the watch owner to make the change, or take ownership if the watch is disabled.
+scenarios:
+  - id: default
+    vars: {}

@@ -184,3 +184,22 @@ func TestPlannedOutputsMatchTheRepositoryAndStage(t *testing.T) {
 		t.Fatal("an output outside the repository was staged")
 	}
 }
+
+func TestDottedEventTopicRendering(t *testing.T) {
+	e := EnumDef{
+		Name: "EventTopic",
+		Values: []EnumValue{
+			{ID: "watch.updated", Go: "WatchUpdated", Payload: "watches.yaml#/components/schemas/WatchEvent"},
+			{ID: "watch_run.updated", Go: "WatchRunUpdated", Payload: "watches.yaml#/components/schemas/WatchRunEvent"},
+		},
+	}
+	ts, err := renderEventPayloadsTS(e)
+	testutil.FailErr(t, "renderEventPayloadsTS", err)
+	if !strings.Contains(string(ts), `"watch.updated": WatchEvent;`) {
+		t.Fatalf("expected quoted TS property key, got:\n%s", ts)
+	}
+	openapi := string(renderEventEnvelopeOpenAPI(e))
+	if !strings.Contains(openapi, "EventEnvelopeWatchUpdated:") || !strings.Contains(openapi, "EventEnvelopeWatchRunUpdated:") {
+		t.Fatalf("expected PascalCase envelope component names, got:\n%s", openapi)
+	}
+}

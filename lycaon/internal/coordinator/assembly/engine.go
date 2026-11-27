@@ -90,6 +90,7 @@ type SelectionSource interface {
 type Deliveries struct {
 	SiblingNotes SiblingNoteDeliveryRecorder
 	Messages     MessageDeliveryRecorder
+	Watches      WatchDeliveryRecorder
 }
 
 // WorkerRosterSource returns a coordinator session's bounded worker roster.
@@ -211,7 +212,7 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 	sess *api.Session,
 	history []api.Message,
 	turnFrame *inject.CoordinatorTurnFrame,
-) ([]api.Message, error) {
+) (retMsgs []api.Message, retErr error) {
 	if e == nil {
 		return history, nil
 	}
@@ -226,6 +227,16 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 	}
 
 	turn := e.cache.LoadTurn(sess.ID)
+	hadWatchReservation := turn.PendingWatches.DeliveryID != ""
+	if err := contextAssembler.prepareWatchDelivery(ctx, sess, turn); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if retErr != nil && !hadWatchReservation && turn.PendingWatches.DeliveryID != "" && deps.Deliveries.Watches != nil {
+			_ = deps.Deliveries.Watches.ReleaseWatches(context.WithoutCancel(ctx), sess.ID, turn.PendingWatches)
+			turn.PendingWatches = WatchDelivery{}
+		}
+	}()
 
 	coordinator := surface.IsCoordinatorSession(sess)
 	var err error
@@ -351,11 +362,31 @@ func (e *AssemblyEngine) EndPromptTurn(sessionID string) {
 	if e == nil {
 		return
 	}
+	deps := e.deps()
 	turn := e.cache.LoadTurn(sessionID)
+	if turn.PendingWatches.DeliveryID != "" && deps.Deliveries.Watches != nil {
+		_ = deps.Deliveries.Watches.ReleaseWatches(context.Background(), sessionID, turn.PendingWatches)
+		turn.PendingWatches = WatchDelivery{}
+	}
 	if family := strings.TrimSpace(turn.CurrentExecutionModeFamily); family != "" {
-		e.deps().ExecutionModes.Save(sessionID, family)
+		deps.ExecutionModes.Save(sessionID, family)
 	}
 	e.cache.EndTurn(sessionID)
+}
+
+// ReleasePendingWatches releases any uncommitted watch batch reserved for sessionID.
+func (e *AssemblyEngine) ReleasePendingWatches(ctx context.Context, sessionID string) error {
+	if e == nil {
+		return nil
+	}
+	deps := e.deps()
+	turn := e.cache.LoadTurn(sessionID)
+	if turn.PendingWatches.DeliveryID == "" || deps.Deliveries.Watches == nil {
+		return nil
+	}
+	err := deps.Deliveries.Watches.ReleaseWatches(context.WithoutCancel(ctx), sessionID, turn.PendingWatches)
+	turn.PendingWatches = WatchDelivery{}
+	return err
 }
 
 // PushModeTransitionCause records an explicit execution-mode entry for the active turn.
@@ -403,6 +434,13 @@ func (e *AssemblyEngine) CommitTurnContext(ctx context.Context, sessionID, respo
 			return err
 		}
 		turn.PendingMessages = MessageDelivery{}
+	}
+	if recorder := deps.Deliveries.Watches; recorder != nil && turn.PendingWatches.DeliveryID != "" {
+		if err := recorder.CommitWatches(ctx, sessionID, turn.PendingWatches); err != nil {
+			return err
+		}
+		turn.PendingWatches = WatchDelivery{}
+		turn.WatchRequestSeq++
 	}
 	return nil
 }

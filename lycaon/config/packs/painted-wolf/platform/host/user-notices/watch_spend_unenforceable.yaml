@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Spend limit cannot be enforced
+message: >-
+  The selected model has no pricing data, so Painted Wolf Code cannot enforce a per-run spend limit unless unpriced runs are explicitly allowed.
+suggested_action: Choose a priced model or allow unpriced runs for this standing watch.
+scenarios:
+  - id: default
+    vars: {}

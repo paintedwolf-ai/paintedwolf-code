@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Watch not found
+message: >-
+  This watch no longer exists or has already been removed.
+suggested_action: Refresh Activity to see current watches.
+scenarios:
+  - id: default
+    vars: {}

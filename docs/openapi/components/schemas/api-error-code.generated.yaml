@@ -354,3 +354,13 @@ components:
         - manual_llm_request_not_found
         - preparation_receipt_not_found
         - history_protection_not_found
+        - watch_not_found
+        - watch_revision_conflict
+        - watch_run_active
+        - watch_daily_cap_reached
+        - watch_name_taken
+        - watch_spend_unenforceable
+        - watch_not_owner
+        - watch_not_person_owned
+        - watch_keep_unavailable
+        - watch_condition_invalid

@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Daily run cap reached
+message: >-
+  This standing watch has already reached its daily run limit in its configured time zone.
+suggested_action: Increase the daily run cap on the watch or try again tomorrow.
+scenarios:
+  - id: default
+    vars: {}

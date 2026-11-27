@@ -43,7 +43,7 @@ func (l *promptContext) compileWorkerToolPlan(ctx context.Context, sess *api.Ses
 			plan = plan.Promote(name)
 		}
 	}
-	for _, name := range toolcontract.Implied(l.liveResources(sess)) {
+	for _, name := range toolcontract.Implied(l.liveResources(ctx, sess)) {
 		if plan.Addressable(name) {
 			plan = plan.Promote(name)
 		}
@@ -153,7 +153,7 @@ func (l *promptContext) coordinatorToolsForTurn(
 	}
 	all = l.askEnabledMCPMetas(ctx, sess, all)
 	mcpPlan := l.mcpToolPlan(ctx, sess, all, activated)
-	plan = l.compileRuntimeToolPlan(plan, frame.RunContext, all, activated, mcpPlan, openWorld, sess)
+	plan = l.compileRuntimeToolPlanForSurface(ctx, plan, surfaceID, frame.RunContext, all, activated, mcpPlan, openWorld, sess)
 	plan = filterToolPlanForRootCount(plan, rootCount)
 	if ask {
 		plan = clampAskMode(plan, all)
@@ -212,8 +212,10 @@ func trimCoordinatorToolMetasForPlan(plan toolsurface.Plan, all []tools.ToolMeta
 	return out
 }
 
-func (l *promptContext) compileRuntimeToolPlan(
+func (l *promptContext) compileRuntimeToolPlanForSurface(
+	ctx context.Context,
 	plan toolsurface.Plan,
+	surfaceID string,
 	runCtx api.CoordinatorRunContext,
 	metas []tools.ToolMeta,
 	activated map[string]bool,
@@ -227,7 +229,16 @@ func (l *promptContext) compileRuntimeToolPlan(
 	if !l.webSearchEnabled() {
 		plan = plan.Without(webresearch.SearchToolName, webresearch.FetchURLToolName)
 	}
-	plan = plan.Promote(toolcontract.Implied(l.liveResources(sess))...)
+	resources := l.liveResources(ctx, sess)
+	nonWatchResources := resources
+	nonWatchResources.Watches = false
+	plan = plan.Promote(toolcontract.Implied(nonWatchResources)...)
+	if resources.Watches && surface.AllowsWatchManagement(surfaceID) {
+		plan = plan.Promote("watch_control")
+		if plan.Addressable("wait") {
+			plan = plan.Promote("wait")
+		}
+	}
 	for name := range activated {
 		if plan.Addressable(name) || !toolcontract.IsCatalog(name) {
 			plan = plan.Promote(name)
@@ -322,11 +333,11 @@ func trimPromptToolMetas(metas []tools.ToolMeta) []tools.ToolMeta {
 	return out
 }
 
-func (l *promptContext) liveResources(sess *api.Session) toolcontract.ResourcePresence {
+func (l *promptContext) liveResources(ctx context.Context, sess *api.Session) toolcontract.ResourcePresence {
 	if l == nil || l.Deps.LiveResources == nil || sess == nil {
 		return toolcontract.ResourcePresence{}
 	}
-	return l.Deps.LiveResources(sess.ID)
+	return l.Deps.LiveResources(ctx, sess.ID)
 }
 
 func (l *promptContext) liveMCPMetas() []tools.ToolMeta {

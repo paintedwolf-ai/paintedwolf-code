@@ -14,17 +14,34 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 )
 
+type CalendarSpec struct {
+	Days  []string `json:"days"`
+	Times []string `json:"times"`
+}
+
 type Condition struct {
-	Kind      string   `json:"kind"`
-	Outcome   string   `json:"outcome,omitempty"`
-	Code      string   `json:"code,omitempty"`
-	Handles   []string `json:"handles,omitempty"`
-	URL       string   `json:"url,omitempty"`
-	Method    string   `json:"method,omitempty"`
-	StatusMin int      `json:"status_min,omitempty"`
-	StatusMax int      `json:"status_max,omitempty"`
-	Host      string   `json:"host,omitempty"`
-	Port      uint16   `json:"port,omitempty"`
+	Kind         string        `json:"kind"`
+	Outcome      string        `json:"outcome,omitempty"`
+	Code         string        `json:"code,omitempty"`
+	Handles      []string      `json:"handles,omitempty"`
+	Handle       string        `json:"handle,omitempty"`
+	Cursor       *int64        `json:"cursor,omitempty"`
+	URL          string        `json:"url,omitempty"`
+	Method       string        `json:"method,omitempty"`
+	StatusMin    int           `json:"status_min,omitempty"`
+	StatusMax    int           `json:"status_max,omitempty"`
+	Host         string        `json:"host,omitempty"`
+	Port         uint16        `json:"port,omitempty"`
+	Root         string        `json:"root,omitempty"`
+	Path         string        `json:"path,omitempty"`
+	Glob         string        `json:"glob,omitempty"`
+	IncludeOwn   bool          `json:"include_own,omitempty"`
+	Ref          string        `json:"ref,omitempty"`
+	DelayMS      int64         `json:"delay_ms,omitempty"`
+	EveryMinutes int64         `json:"every_minutes,omitempty"`
+	At           string        `json:"at,omitempty"`
+	TimeZone     string        `json:"time_zone,omitempty"`
+	Calendar     *CalendarSpec `json:"calendar,omitempty"`
 	// ProgramID names the command program a parked call waits on.
 	ProgramID string `json:"program_id,omitempty"`
 	// Report is the host's account of a settled wake: how a job or a parked
@@ -217,12 +234,18 @@ func (s *Store) ForSession(ctx context.Context, sessionID string) (Lease, bool, 
 
 // LatestResumeCandidate returns the latest completed or interrupted wait.
 func (s *Store) LatestResumeCandidate(ctx context.Context, sessionID string) (Lease, bool, error) {
+	return s.LatestResumeCandidateForOwner(ctx, sessionID, "")
+}
+
+// LatestResumeCandidateForOwner returns the latest completed or interrupted wait scoped to the caller.
+func (s *Store) LatestResumeCandidateForOwner(ctx context.Context, sessionID, workerJobID string) (Lease, bool, error) {
 	if s == nil || s.DB == nil {
 		return Lease{}, false, nil
 	}
 	lease, err := scanLease(s.DB.QueryRowContext(ctx, `SELECT `+leaseColumns+`
-		FROM wait_leases WHERE session_id = ? AND status IN ('resolved', 'interrupted', 'timed_out')
-		ORDER BY resolved_at DESC, id DESC LIMIT 1`, strings.TrimSpace(sessionID)))
+		FROM wait_leases WHERE session_id = ? AND COALESCE(worker_job_id, '') = ?
+		  AND status IN ('resolved', 'interrupted', 'timed_out')
+		ORDER BY resolved_at DESC, id DESC LIMIT 1`, strings.TrimSpace(sessionID), strings.TrimSpace(workerJobID)))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Lease{}, false, nil
 	}

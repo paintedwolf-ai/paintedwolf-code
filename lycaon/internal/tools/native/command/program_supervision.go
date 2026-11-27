@@ -35,11 +35,26 @@ var errSupervisorLost = errors.New("command program supervisor lost")
 type ProgramSupervisor struct {
 	Interrupter ProgramInterrupter
 	// Background is the session process registry that holds & jobs.
-	Background *bgprocess.Registry
+	Background     *bgprocess.Registry
+	DerivedWatches DerivedWatchRegistrar
 
 	mu       sync.Mutex
 	programs map[string]*supervisedProgram
 	sessions map[string]*SessionJobs
+}
+
+func (s *ProgramSupervisor) SetDerivedWatches(registrar DerivedWatchRegistrar) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.DerivedWatches = registrar
+	for _, jobs := range s.sessions {
+		jobs.mu.Lock()
+		jobs.DerivedWatches = registrar
+		jobs.mu.Unlock()
+	}
+	s.mu.Unlock()
 }
 
 // Jobs returns the session's job set; wait and kill read the same outcomes
@@ -57,8 +72,16 @@ func (s *ProgramSupervisor) Jobs(sessionID, projectID string) *SessionJobs {
 	}
 	jobs, ok := s.sessions[sessionID]
 	if !ok {
-		jobs = &SessionJobs{Registry: s.Background, Supervisor: s, SessionID: sessionID, ProjectID: projectID}
+		jobs = &SessionJobs{
+			Registry:       s.Background,
+			Supervisor:     s,
+			DerivedWatches: s.DerivedWatches,
+			SessionID:      sessionID,
+			ProjectID:      projectID,
+		}
 		s.sessions[sessionID] = jobs
+	} else if jobs.DerivedWatches == nil && s.DerivedWatches != nil {
+		jobs.DerivedWatches = s.DerivedWatches
 	}
 	return jobs
 }

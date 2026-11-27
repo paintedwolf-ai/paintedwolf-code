@@ -1,0 +1,25 @@
+spec_version: "1.0"
+id: WATCH_DRAFT_INVALID
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - watch
+requires_facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason, paintedwolf.watch_invalid_fields]
+when: paintedwolf.rejection_code == "WATCH_DRAFT_INVALID"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:watch
+message: Standing watch draft is invalid
+what: 'Standing watch draft rejected ({{ paintedwolf.watch_invalid_fields }}): {{ paintedwolf.rejection_reason }}.'
+cause: Standing drafts require a project chat, delivery="collect", timer/git_ref/file_change conditions without include_own, a 1-80 character name, a 1-8000 character prompt, and an existing standing watch UUID when replaces is set.
+why: Only durable project-scoped sources can run unattended after a person keeps the draft.
+fix: Fix the named standing draft fields or omit standing when registering an ordinary session watch.
+instead: Do not attach standing drafts on worker turns, chats without a project, or session-bound condition kinds
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      reason: standing drafts allow only timer, git_ref, or file_change conditions
+      tool: watch
+      watch_invalid_fields: [standing, conditions.0.kind]

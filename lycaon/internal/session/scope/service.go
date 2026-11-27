@@ -205,6 +205,11 @@ func (m *Service) Project(ctx context.Context, sess *api.Session) (*project.Proj
 	return p, true
 }
 
+func (m *Service) BelongsToProject(ctx context.Context, sess *api.Session) bool {
+	p, ok := m.Project(ctx, sess)
+	return ok && p != nil && !p.IsDraft
+}
+
 func (m *Service) Applies(ctx context.Context, surface string, sess *api.Session) bool {
 	if m == nil || m.trust == nil {
 		return false

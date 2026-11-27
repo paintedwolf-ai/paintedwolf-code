@@ -18,6 +18,7 @@ func restoreWaitRequest(ctx context.Context, loop *WaitSubscriptions, store *awa
 				request.Triggers = subscription.Triggers
 				request.ProcessHandles = subscription.ProcessHandles
 				request.WorkerHandles = subscription.WorkerHandles
+				request.WatchHandles = watchHandlesFromConditions(subscription.Conditions)
 			}
 			if !request.ExplicitMode {
 				request.UntilComplete = subscription.UntilComplete
@@ -28,7 +29,10 @@ func restoreWaitRequest(ctx context.Context, loop *WaitSubscriptions, store *awa
 			return nil
 		}
 	}
-	lease, found, err := store.LatestResumeCandidate(ctx, tctx.Identity.SessionID)
+	if store == nil {
+		return nil
+	}
+	lease, found, err := store.LatestResumeCandidateForOwner(ctx, tctx.Identity.SessionID, tctx.Identity.WorkerJobID)
 	if err != nil || !found {
 		return err
 	}
@@ -43,6 +47,7 @@ func restoreWaitRequest(ctx context.Context, loop *WaitSubscriptions, store *awa
 		request.Conditions = append([]awaitstore.Condition(nil), lease.Conditions...)
 		request.Triggers, request.ProcessHandles = triggersFromConditions(request.Conditions)
 		request.WorkerHandles = workerHandlesFromConditions(request.Conditions)
+		request.WatchHandles = watchHandlesFromConditions(request.Conditions)
 	}
 	return nil
 }
@@ -54,6 +59,11 @@ func restoreWaitRequest(ctx context.Context, loop *WaitSubscriptions, store *awa
 func RecoverWaitLeases(ctx context.Context, loop *WaitSubscriptions, store *awaitstore.Store) error {
 	if loop == nil || store == nil {
 		return nil
+	}
+	if watchStore := loop.WatchStore(); watchStore != nil {
+		if err := watchStore.Recover(ctx); err != nil {
+			return err
+		}
 	}
 	leases, err := store.Active(ctx)
 	if err != nil {
@@ -82,7 +92,10 @@ func RecoverWaitLeases(ctx context.Context, loop *WaitSubscriptions, store *awai
 		}
 		loop.Waits.enterSleep(ctx, lease.SessionID, sleepArm{
 			until: until, untilComplete: lease.UntilComplete, reason: lease.Reason,
-			triggers: triggers, processHandles: handles, workerHandles: workerHandlesFromConditions(lease.Conditions), mover: SleepMoverHost,
+			triggers: triggers, processHandles: handles, workerHandles: workerHandlesFromConditions(lease.Conditions),
+			watchHandles:   watchHandlesFromConditions(lease.Conditions),
+			refusalHandles: loop.watchedCommands(ctx, lease.SessionID, watchHandlesFromConditions(lease.Conditions)),
+			mover:          SleepMoverHost,
 		})
 		startConditionMonitor(ctx, loop, store, lease)
 	}

@@ -14858,6 +14858,509 @@ paths:
           $ref: '#/components/responses/Conflict'
         default:
           $ref: '#/components/responses/Error'
+  /v1/projects/{id}/watches:
+    get:
+      tags:
+        - projects
+      operationId: listProjectWatches
+      summary: List agent watches and person-owned standing watches for a project
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: owner
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - agent
+              - person
+              - all
+            default: all
+      responses:
+        '200':
+          description: Project watches and daily spend ceiling summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectWatchListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      tags:
+        - projects
+      operationId: createStandingWatch
+      x-person-action: record
+      summary: Create a person-owned standing watch in a project
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStandingWatchRequest'
+      responses:
+        '201':
+          description: Created standing watch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandingWatch'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/projects/{id}/watches/{watch_id}:
+    get:
+      tags:
+        - projects
+      operationId: getProjectWatch
+      summary: Read one project watch for any owner
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/WatchId'
+      responses:
+        '200':
+          description: Project watch record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectWatch'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+    patch:
+      tags:
+        - projects
+      operationId: updateStandingWatch
+      x-person-action: record
+      summary: Edit a standing watch or take ownership of a disabled standing watch
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/WatchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStandingWatchRequest'
+      responses:
+        '200':
+          description: Updated standing watch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandingWatch'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      tags:
+        - projects
+      operationId: deleteStandingWatch
+      x-person-action: record
+      summary: Delete a standing watch and its stored run history
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/WatchId'
+      responses:
+        '204':
+          description: Standing watch deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/projects/{id}/watches/{watch_id}/pause:
+    post:
+      tags:
+        - projects
+      operationId: pauseStandingWatch
+      x-person-action: record
+      summary: Pause a standing watch and discard pending or queued runs
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/WatchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StandingWatchRevisionRequest'
+      responses:
+        '200':
+          description: Paused standing watch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandingWatch'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/projects/{id}/watches/{watch_id}/resume:
+    post:
+      tags:
+        - projects
+      operationId: resumeStandingWatch
+      x-person-action: record
+      summary: Resume a paused standing watch from the current time
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/WatchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StandingWatchRevisionRequest'
+      responses:
+        '200':
+          description: Resumed standing watch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandingWatch'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/projects/{id}/watches/{watch_id}/run:
+    post:
+      tags:
+        - projects
+      operationId: runStandingWatchNow
+      x-person-action: record
+      summary: Trigger an immediate standing-watch run ignoring the change gate
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/WatchId'
+      responses:
+        '200':
+          description: Created and dispatched standing-watch run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatchRun'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/projects/{id}/watches/{watch_id}/runs:
+    get:
+      tags:
+        - projects
+      operationId: listWatchRuns
+      summary: List runs for a standing watch newest first
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/WatchId'
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 50
+      responses:
+        '200':
+          description: Paged standing-watch runs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatchRunListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/sessions/{id}/watches:
+    get:
+      tags:
+        - sessions
+      operationId: listWatches
+      summary: List agent watches owned by a session or its worker jobs
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Session agent watches
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentWatchListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/sessions/{id}/watches/{watch_handle}:
+    get:
+      tags:
+        - sessions
+      operationId: getWatch
+      summary: Inspect one session or worker watch without acknowledging pending matches
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/WatchHandle'
+      responses:
+        '200':
+          description: Session agent watch record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentWatch'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+    patch:
+      tags:
+        - sessions
+      operationId: updateWatchDelivery
+      x-person-action: record
+      summary: Switch delivery mode on a live agent watch
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/WatchHandle'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWatchDeliveryRequest'
+      responses:
+        '200':
+          description: Updated agent watch record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentWatch'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/sessions/{id}/watches/{watch_handle}/cancel:
+    post:
+      tags:
+        - sessions
+      operationId: cancelWatch
+      x-person-action: record
+      summary: Cancel an agent watch or dismiss a standing-watch proposal
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/WatchHandle'
+      responses:
+        '200':
+          description: Terminal watch and final receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelWatchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/sessions/{id}/watches/{watch_handle}/keep:
+    post:
+      tags:
+        - sessions
+      operationId: keepWatch
+      x-person-action: record
+      summary: Keep an agent watch as a person-owned standing watch or apply a replaces edit
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/WatchHandle'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeepWatchRequest'
+      responses:
+        '200':
+          description: Kept standing watch and terminal agent-watch receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeepWatchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
 components:
   parameters:
     SessionId:
@@ -15026,6 +15529,22 @@ components:
       schema:
         type: string
         pattern: ^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_-][a-zA-Z0-9_.-]*)*$
+    WatchId:
+      name: watch_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Project watch UUID
+    WatchHandle:
+      name: watch_handle
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^[A-Za-z0-9:._-]+$
+      description: Session or worker watch handle
   responses:
     MethodNotAllowed:
       description: Route exists but does not support the request method
@@ -16049,6 +16568,8 @@ components:
         - turn_load
         - chat_vault
         - source_view
+        - watch.updated
+        - watch_run.updated
     EventEnvelope:
       description: Topic-discriminated EventHub SSE envelope.
       oneOf:
@@ -16088,6 +16609,8 @@ components:
         - $ref: '#/components/schemas/EventEnvelopeTurnLoad'
         - $ref: '#/components/schemas/EventEnvelopeChatVault'
         - $ref: '#/components/schemas/EventEnvelopeSourceView'
+        - $ref: '#/components/schemas/EventEnvelopeWatchUpdated'
+        - $ref: '#/components/schemas/EventEnvelopeWatchRunUpdated'
       discriminator:
         propertyName: topic
         mapping:
@@ -16127,6 +16650,8 @@ components:
           turn_load: '#/components/schemas/EventEnvelopeTurnLoad'
           chat_vault: '#/components/schemas/EventEnvelopeChatVault'
           source_view: '#/components/schemas/EventEnvelopeSourceView'
+          watch.updated: '#/components/schemas/EventEnvelopeWatchUpdated'
+          watch_run.updated: '#/components/schemas/EventEnvelopeWatchRunUpdated'
     MessageEvent:
       x-go-generate: true
       type: object
@@ -27783,6 +28308,919 @@ components:
           type: object
           additionalProperties:
             $ref: '#/components/schemas/WorkflowTemplateParameter'
+    WatchCalendarSchedule:
+      x-go-generate: true
+      type: object
+      required:
+        - days
+        - times
+      additionalProperties: false
+      properties:
+        days:
+          type: array
+          minItems: 1
+          maxItems: 7
+          items:
+            type: string
+            enum:
+              - every_day
+              - weekdays
+              - monday
+              - tuesday
+              - wednesday
+              - thursday
+              - friday
+              - saturday
+              - sunday
+        times:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            type: string
+            pattern: ^\d{2}:\d{2}$
+    WatchCondition:
+      x-go-generate: true
+      type: object
+      required:
+        - kind
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum:
+            - process_done
+            - process_output
+            - next_worker_done
+            - all_workers_idle
+            - overlay_promote_pending
+            - worker_decision_needed
+            - worker_failed
+            - scan_done
+            - http_ready
+            - port_ready
+            - timer
+            - file_change
+            - git_ref
+        process_id:
+          type: string
+          pattern: ^[A-Za-z0-9:._-]+$
+        cursor:
+          type: integer
+          format: int64
+          minimum: 0
+        url:
+          type: string
+          minLength: 1
+        host:
+          type: string
+          minLength: 1
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        delay_ms:
+          type: integer
+          format: int64
+          minimum: 1
+        at:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$
+        every_minutes:
+          type: integer
+          format: int64
+          minimum: 15
+          maximum: 10080
+        calendar:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WatchCalendarSchedule'
+        root_id:
+          type: string
+          pattern: ^[A-Za-z0-9:._-]+$
+        path:
+          type: string
+        glob:
+          type: string
+        include_own:
+          type: boolean
+        ref:
+          type: string
+          minLength: 1
+    WatchGate:
+      x-go-generate: true
+      type: object
+      required:
+        - kind
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum:
+            - git_ref
+            - file_change
+        root_id:
+          type: string
+          pattern: ^[A-Za-z0-9:._-]+$
+        path:
+          type: string
+        glob:
+          type: string
+        ref:
+          type: string
+          minLength: 1
+    StandingWatchTarget:
+      x-go-generate: true
+      type: object
+      required:
+        - kind
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum:
+            - new_chat
+            - existing_chat
+        session_id:
+          type: string
+          format: uuid
+    StandingWatchOrigin:
+      x-go-generate: true
+      type: object
+      required:
+        - session_id
+        - handle
+      additionalProperties: false
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        handle:
+          type: string
+          minLength: 1
+    AgentStandingDraft:
+      x-go-generate: true
+      type: object
+      required:
+        - name
+        - prompt
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        replaces:
+          type: string
+          format: uuid
+    OverlappingStandingWatch:
+      x-go-generate: true
+      type: object
+      required:
+        - watch_id
+        - name
+        - state
+        - condition_summary
+      additionalProperties: false
+      properties:
+        watch_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        state:
+          type: string
+          enum:
+            - enabled
+            - paused
+        condition_summary:
+          type: string
+    AgentWatchReceipt:
+      x-go-generate: true
+      type: object
+      required:
+        - handle
+        - state
+      additionalProperties: false
+      properties:
+        handle:
+          type: string
+        state:
+          type: string
+          enum:
+            - live
+            - terminal
+        terminal_outcome:
+          type: string
+          enum:
+            - completed
+            - canceled
+            - dismissed
+            - kept
+            - expired
+            - source_lost
+            - stopped
+            - owner_ended
+        standing_watch_id:
+          type: string
+          format: uuid
+        matched_kind:
+          type: string
+        occurrence:
+          type: integer
+          format: int64
+          minimum: 0
+        detail:
+          type: object
+          additionalProperties: true
+        recorded_at:
+          type: string
+          format: date-time
+    AgentWatch:
+      x-go-generate: true
+      type: object
+      required:
+        - watch_id
+        - handle
+        - owner_kind
+        - project_id
+        - session_id
+        - conditions
+        - condition_summary
+        - delivery
+        - repeat
+        - derived
+        - keepable
+        - state
+        - revision
+        - expires_at
+        - created_at
+        - updated_at
+      additionalProperties: false
+      properties:
+        watch_id:
+          type: string
+          format: uuid
+        handle:
+          type: string
+        owner_kind:
+          type: string
+          enum:
+            - session
+            - job
+        project_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        worker_id:
+          type: string
+          format: uuid
+        source_process_id:
+          type: string
+          pattern: ^[A-Za-z0-9:._-]+$
+        label:
+          type: string
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/WatchCondition'
+        condition_summary:
+          type: string
+        delivery:
+          type: string
+          enum:
+            - collect
+            - wake
+        repeat:
+          type: boolean
+        derived:
+          type: boolean
+        keepable:
+          type: boolean
+        state:
+          type: string
+          enum:
+            - live
+            - terminal
+        terminal_outcome:
+          type: string
+          enum:
+            - completed
+            - canceled
+            - dismissed
+            - kept
+            - expired
+            - source_lost
+            - stopped
+            - owner_ended
+        standing_draft:
+          x-go-pointer: true
+          $ref: '#/components/schemas/AgentStandingDraft'
+        overlapping_standing:
+          type: array
+          items:
+            $ref: '#/components/schemas/OverlappingStandingWatch'
+        final_receipt:
+          x-go-pointer: true
+          $ref: '#/components/schemas/AgentWatchReceipt'
+        revision:
+          type: integer
+          minimum: 1
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    WatchRun:
+      x-go-generate: true
+      type: object
+      required:
+        - run_id
+        - watch_id
+        - watch_name
+        - project_id
+        - status
+        - scheduled_at
+        - missed_count
+        - spend_limit_nano_usd
+        - allow_unpriced
+        - created_at
+      additionalProperties: false
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        watch_id:
+          type: string
+          format: uuid
+        watch_name:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - pending
+            - queued
+            - running
+            - waiting_for_owner
+            - completed
+            - failed
+            - fenced
+            - canceled
+            - skipped_overlap
+            - skipped_unchanged
+            - skipped_daily_cap
+            - skipped_busy
+            - missed
+        scheduled_at:
+          type: string
+          format: date-time
+        session_id:
+          type: string
+          format: uuid
+        missed_count:
+          type: integer
+          minimum: 0
+        condition_detail:
+          type: object
+          additionalProperties: true
+        spend_limit_nano_usd:
+          type: integer
+          format: int64
+          minimum: 0
+        allow_unpriced:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        ended_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+    StandingWatch:
+      x-go-generate: true
+      type: object
+      required:
+        - watch_id
+        - project_id
+        - owner_person_id
+        - name
+        - prompt
+        - conditions
+        - condition_summary
+        - min_gap_minutes
+        - target
+        - workflow_id
+        - model_id
+        - run_spend_limit_nano_usd
+        - allow_unpriced
+        - daily_run_cap
+        - time_zone
+        - state
+        - revision
+        - created_at
+        - updated_at
+      additionalProperties: false
+      properties:
+        watch_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        owner_person_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        conditions:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/WatchCondition'
+        condition_summary:
+          type: string
+        gate:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WatchGate'
+        min_gap_minutes:
+          type: integer
+          minimum: 15
+          maximum: 1440
+        target:
+          $ref: '#/components/schemas/StandingWatchTarget'
+        workflow_id:
+          type: string
+          pattern: ^[A-Za-z0-9@._/-]{1,128}$
+        model_id:
+          type: string
+          pattern: ^[A-Za-z0-9:._/-]{1,160}$
+        run_spend_limit_nano_usd:
+          type: integer
+          format: int64
+          minimum: 100000000
+          maximum: 100000000000
+        allow_unpriced:
+          type: boolean
+        daily_run_cap:
+          type: integer
+          minimum: 1
+          maximum: 96
+        time_zone:
+          type: string
+          minLength: 1
+        state:
+          type: string
+          enum:
+            - enabled
+            - paused
+            - disabled
+            - completed
+        state_reason:
+          type:
+            - string
+            - 'null'
+          enum:
+            - person
+            - consecutive_failures
+            - target_unavailable
+            - owner_access_revoked
+            - null
+        kept_from:
+          x-go-pointer: true
+          $ref: '#/components/schemas/StandingWatchOrigin'
+        next_run_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        last_outcome:
+          type: string
+        active_run:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WatchRun'
+        recent_runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/WatchRun'
+        revision:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ProjectWatch:
+      x-go-generate: true
+      type: object
+      required:
+        - watch_id
+        - owner_kind
+        - project_id
+        - revision
+      additionalProperties: false
+      properties:
+        watch_id:
+          type: string
+          format: uuid
+        owner_kind:
+          type: string
+          enum:
+            - session
+            - job
+            - person
+        project_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        handle:
+          type: string
+        revision:
+          type: integer
+          minimum: 1
+        agent_watch:
+          x-go-pointer: true
+          $ref: '#/components/schemas/AgentWatch'
+        standing_watch:
+          x-go-pointer: true
+          $ref: '#/components/schemas/StandingWatch'
+    ProjectWatchListResponse:
+      x-go-generate: true
+      type: object
+      required:
+        - watches
+        - daily_spend_cap_nano_usd
+        - has_unpriced_standing_watch
+        - enabled_standing_total
+      additionalProperties: false
+      properties:
+        watches:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectWatch'
+        daily_spend_cap_nano_usd:
+          type: integer
+          format: int64
+          minimum: 0
+        has_unpriced_standing_watch:
+          type: boolean
+        enabled_standing_total:
+          type: integer
+          minimum: 0
+    AgentWatchListResponse:
+      x-go-generate: true
+      type: object
+      required:
+        - watches
+      additionalProperties: false
+      properties:
+        watches:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentWatch'
+    WatchRunListResponse:
+      x-go-generate: true
+      type: object
+      required:
+        - runs
+      additionalProperties: false
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/WatchRun'
+        next_cursor:
+          type: string
+    CreateStandingWatchRequest:
+      x-go-generate: true
+      type: object
+      required:
+        - name
+        - prompt
+        - conditions
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        conditions:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/WatchCondition'
+        gate:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WatchGate'
+        min_gap_minutes:
+          type: integer
+          minimum: 15
+          maximum: 1440
+        target:
+          x-go-pointer: true
+          $ref: '#/components/schemas/StandingWatchTarget'
+        workflow_id:
+          type: string
+          pattern: ^[A-Za-z0-9@._/-]{1,128}$
+        model_id:
+          type: string
+          pattern: ^[A-Za-z0-9:._/-]{1,160}$
+        run_spend_limit_nano_usd:
+          type: integer
+          format: int64
+          minimum: 100000000
+          maximum: 100000000000
+        allow_unpriced:
+          type: boolean
+        daily_run_cap:
+          type: integer
+          minimum: 1
+          maximum: 96
+        time_zone:
+          type: string
+          minLength: 1
+    UpdateStandingWatchRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        revision:
+          type: integer
+          minimum: 1
+        name:
+          x-go-pointer: true
+          type: string
+          minLength: 1
+          maxLength: 80
+        prompt:
+          x-go-pointer: true
+          type: string
+          minLength: 1
+          maxLength: 8000
+        conditions:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/WatchCondition'
+        gate:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WatchGate'
+        clear_gate:
+          type: boolean
+        min_gap_minutes:
+          x-go-pointer: true
+          type: integer
+          minimum: 15
+          maximum: 1440
+        target:
+          x-go-pointer: true
+          $ref: '#/components/schemas/StandingWatchTarget'
+        workflow_id:
+          x-go-pointer: true
+          type: string
+          pattern: ^[A-Za-z0-9@._/-]{1,128}$
+        model_id:
+          x-go-pointer: true
+          type: string
+          pattern: ^[A-Za-z0-9:._/-]{1,160}$
+        run_spend_limit_nano_usd:
+          x-go-pointer: true
+          type: integer
+          format: int64
+          minimum: 100000000
+          maximum: 100000000000
+        allow_unpriced:
+          x-go-pointer: true
+          type: boolean
+        daily_run_cap:
+          x-go-pointer: true
+          type: integer
+          minimum: 1
+          maximum: 96
+        time_zone:
+          x-go-pointer: true
+          type: string
+          minLength: 1
+        state:
+          x-go-pointer: true
+          type: string
+          enum:
+            - enabled
+            - paused
+    StandingWatchRevisionRequest:
+      x-go-generate: true
+      type: object
+      required:
+        - revision
+      additionalProperties: false
+      properties:
+        revision:
+          type: integer
+          minimum: 1
+    UpdateWatchDeliveryRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        delivery:
+          type: string
+          enum:
+            - collect
+            - wake
+    KeepWatchRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        conditions:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/WatchCondition'
+        gate:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WatchGate'
+        min_gap_minutes:
+          type: integer
+          minimum: 15
+          maximum: 1440
+        target:
+          x-go-pointer: true
+          $ref: '#/components/schemas/StandingWatchTarget'
+        workflow_id:
+          type: string
+          pattern: ^[A-Za-z0-9@._/-]{1,128}$
+        model_id:
+          type: string
+          pattern: ^[A-Za-z0-9:._/-]{1,160}$
+        run_spend_limit_nano_usd:
+          type: integer
+          format: int64
+          minimum: 100000000
+          maximum: 100000000000
+        allow_unpriced:
+          type: boolean
+        daily_run_cap:
+          type: integer
+          minimum: 1
+          maximum: 96
+        time_zone:
+          type: string
+          minLength: 1
+        revision:
+          type: integer
+          minimum: 1
+    KeepWatchResponse:
+      x-go-generate: true
+      type: object
+      required:
+        - standing_watch
+        - receipt
+      additionalProperties: false
+      properties:
+        standing_watch:
+          $ref: '#/components/schemas/StandingWatch'
+        receipt:
+          $ref: '#/components/schemas/AgentWatchReceipt'
+    CancelWatchResponse:
+      x-go-generate: true
+      type: object
+      required:
+        - watch
+        - receipt
+      additionalProperties: false
+      properties:
+        watch:
+          $ref: '#/components/schemas/AgentWatch'
+        receipt:
+          $ref: '#/components/schemas/AgentWatchReceipt'
+    SessionStandingWatchOrigin:
+      x-go-generate: true
+      type: object
+      required:
+        - watch_id
+        - watch_name
+        - run_id
+        - deleted
+      additionalProperties: false
+      properties:
+        watch_id:
+          type: string
+          format: uuid
+        watch_name:
+          type: string
+        run_id:
+          type: string
+          format: uuid
+        deleted:
+          type: boolean
+    WatchEvent:
+      x-go-generate: true
+      type: object
+      required:
+        - action
+        - watch_id
+        - owner_kind
+        - project_id
+        - revision
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+          enum:
+            - updated
+            - deleted
+        watch_id:
+          type: string
+          format: uuid
+        owner_kind:
+          type: string
+          enum:
+            - session
+            - job
+            - person
+        project_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        handle:
+          type: string
+        revision:
+          type: integer
+          minimum: 1
+        watch:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ProjectWatch'
+    WatchRunEvent:
+      x-go-generate: true
+      type: object
+      required:
+        - run_id
+        - watch_id
+        - project_id
+        - revision
+        - run
+      additionalProperties: false
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        watch_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          minimum: 1
+        run:
+          $ref: '#/components/schemas/WatchRun'
     ApiErrorCode:
       type: string
       description: Closed machine-readable error identity emitted by the private Den-sidecar API.
@@ -28135,6 +29573,16 @@ components:
         - manual_llm_request_not_found
         - preparation_receipt_not_found
         - history_protection_not_found
+        - watch_not_found
+        - watch_revision_conflict
+        - watch_run_active
+        - watch_daily_cap_reached
+        - watch_name_taken
+        - watch_spend_unenforceable
+        - watch_not_owner
+        - watch_not_person_owned
+        - watch_keep_unavailable
+        - watch_condition_invalid
     NoticeAction:
       type: string
       enum:
@@ -28531,6 +29979,9 @@ components:
         protection:
           x-go-pointer: true
           $ref: '#/components/schemas/SessionProtectionState'
+        standing_watch:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SessionStandingWatchOrigin'
     UpdateSessionRequest:
       x-go-generate: true
       type: object
@@ -44682,6 +46133,30 @@ components:
               const: source_view
             data:
               $ref: '#/components/schemas/SourceViewEvent'
+    EventEnvelopeWatchUpdated:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelopeBase'
+        - type: object
+          required:
+            - topic
+            - data
+          properties:
+            topic:
+              const: watch.updated
+            data:
+              $ref: '#/components/schemas/WatchEvent'
+    EventEnvelopeWatchRunUpdated:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelopeBase'
+        - type: object
+          required:
+            - topic
+            - data
+          properties:
+            topic:
+              const: watch_run.updated
+            data:
+              $ref: '#/components/schemas/WatchRunEvent'
     SummarizeCoverage:
       x-go-generate: true
       type: object

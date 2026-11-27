@@ -43,6 +43,7 @@ import { listenHostEvent } from "./platform/windows/window-channel.ts";
 import { isIncludedProvider } from "./settings/providers/models-editor-model.ts";
 import { WhatsNewNotice } from "./components/home/WhatsNewNotice.tsx";
 import { mountUpdateNotice } from "./settings/system/mount-update-notice.ts";
+import { mountStandingWatchNotices } from "./watches/mount-standing-watch-notices.ts";
 import { EngineStartupStage } from "./components/EngineStartupStage.tsx";
 import { engineStartupState } from "./platform/connection/engine-startup.ts";
 
@@ -109,6 +110,12 @@ function App() {
     const unmountUpdates = subject || !isTauriRuntime()
       ? () => {}
       : mountUpdateNotice({ notices: noticeStore });
+    const unmountWatchNotices = mountStandingWatchNotices({
+      notices: noticeStore,
+      activeProjectId: () => shellStore.state.activeProjectId,
+      getClient: () =>
+        appStore.state.sidecarStatus === "connected" ? getLycaonClient() : null,
+    });
     let stopped = false;
     let stopUpdateRecovery = () => {};
     const releaseUpdateRecovery = () => {
@@ -134,6 +141,7 @@ function App() {
       stopComposerDocumentMirror();
       unmountNotifications();
       unmountUpdates();
+      unmountWatchNotices();
     };
     connectionBinding.signal.addEventListener("abort", releaseBackground, { once: true });
     onCleanup(() => {

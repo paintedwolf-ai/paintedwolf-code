@@ -957,6 +957,35 @@ const (
 	ApiErrorCodePreparationReceiptNotFound ApiErrorCode = "preparation_receipt_not_found"
 	// ApiErrorCodeHistoryProtectionNotFound history protection owner not found
 	ApiErrorCodeHistoryProtectionNotFound ApiErrorCode = "history_protection_not_found"
+	// ApiErrorCodeWatchNotFound watch id or session watch handle not found
+	ApiErrorCodeWatchNotFound ApiErrorCode = "watch_not_found"
+	// ApiErrorCodeWatchRevisionConflict standing watch revision no longer matches
+	// the stored record
+	ApiErrorCodeWatchRevisionConflict ApiErrorCode = "watch_revision_conflict"
+	// ApiErrorCodeWatchRunActive standing watch already has a queued, running, or
+	// held run
+	ApiErrorCodeWatchRunActive ApiErrorCode = "watch_run_active"
+	// ApiErrorCodeWatchDailyCapReached standing watch reached its configured daily
+	// run cap
+	ApiErrorCodeWatchDailyCapReached ApiErrorCode = "watch_daily_cap_reached"
+	// ApiErrorCodeWatchNameTaken another standing watch in the project already
+	// uses this name
+	ApiErrorCodeWatchNameTaken ApiErrorCode = "watch_name_taken"
+	// ApiErrorCodeWatchSpendUnenforceable selected model lacks pricing data and
+	// allow_unpriced is false
+	ApiErrorCodeWatchSpendUnenforceable ApiErrorCode = "watch_spend_unenforceable"
+	// ApiErrorCodeWatchNotOwner only the standing watch owner may perform this
+	// mutation
+	ApiErrorCodeWatchNotOwner ApiErrorCode = "watch_not_owner"
+	// ApiErrorCodeWatchNotPersonOwned standing-watch mutation targeted a session
+	// or worker agent watch
+	ApiErrorCodeWatchNotPersonOwned ApiErrorCode = "watch_not_person_owned"
+	// ApiErrorCodeWatchKeepUnavailable agent watch has already ended or uses a
+	// condition a person cannot own
+	ApiErrorCodeWatchKeepUnavailable ApiErrorCode = "watch_keep_unavailable"
+	// ApiErrorCodeWatchConditionInvalid standing watch condition, gate, or field
+	// failed domain validation
+	ApiErrorCodeWatchConditionInvalid ApiErrorCode = "watch_condition_invalid"
 )
 
 var allApiErrorCodeValues = []ApiErrorCode{
@@ -1308,6 +1337,16 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeManualLlmRequestNotFound,
 	ApiErrorCodePreparationReceiptNotFound,
 	ApiErrorCodeHistoryProtectionNotFound,
+	ApiErrorCodeWatchNotFound,
+	ApiErrorCodeWatchRevisionConflict,
+	ApiErrorCodeWatchRunActive,
+	ApiErrorCodeWatchDailyCapReached,
+	ApiErrorCodeWatchNameTaken,
+	ApiErrorCodeWatchSpendUnenforceable,
+	ApiErrorCodeWatchNotOwner,
+	ApiErrorCodeWatchNotPersonOwned,
+	ApiErrorCodeWatchKeepUnavailable,
+	ApiErrorCodeWatchConditionInvalid,
 }
 
 // AllApiErrorCodeValues returns every ApiErrorCode in vocab order.
@@ -1389,7 +1428,8 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeForbidden,
 		ApiErrorCodeWorkflowStartRequiresHumanApproval,
 		ApiErrorCodePresenceDenied,
-		ApiErrorCodePresenceRequired:
+		ApiErrorCodePresenceRequired,
+		ApiErrorCodeWatchNotOwner:
 		return 403
 	case ApiErrorCodeSourceViewNotFound,
 		ApiErrorCodeBackgroundProcessNotFound,
@@ -1453,7 +1493,8 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeChatContentNotFound,
 		ApiErrorCodeManualLlmRequestNotFound,
 		ApiErrorCodePreparationReceiptNotFound,
-		ApiErrorCodeHistoryProtectionNotFound:
+		ApiErrorCodeHistoryProtectionNotFound,
+		ApiErrorCodeWatchNotFound:
 		return 404
 	case ApiErrorCodeMethodNotAllowed:
 		return 405
@@ -1574,7 +1615,13 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeChatContentChanged,
 		ApiErrorCodeHistoryPreviewChanged,
 		ApiErrorCodePricingSourceDisabled,
-		ApiErrorCodeAskUserRejected:
+		ApiErrorCodeAskUserRejected,
+		ApiErrorCodeWatchRevisionConflict,
+		ApiErrorCodeWatchRunActive,
+		ApiErrorCodeWatchDailyCapReached,
+		ApiErrorCodeWatchNameTaken,
+		ApiErrorCodeWatchNotPersonOwned,
+		ApiErrorCodeWatchKeepUnavailable:
 		return 409
 	case ApiErrorCodeArtifactUnavailable,
 		ApiErrorCodeArtifactDeleted,
@@ -1616,7 +1663,9 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeProviderToolCallsUnsupported,
 		ApiErrorCodeThinkingOverrideUnavailable,
 		ApiErrorCodeModelRefused,
-		ApiErrorCodeWorkflowValidationFailed:
+		ApiErrorCodeWorkflowValidationFailed,
+		ApiErrorCodeWatchSpendUnenforceable,
+		ApiErrorCodeWatchConditionInvalid:
 		return 422
 	case ApiErrorCodeBriefingBusy,
 		ApiErrorCodeRateLimited,

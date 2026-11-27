@@ -1,9 +1,24 @@
-/** Routes in-app links (such as loopback holder attribution and folder-removal errors) to the Running context stage. */
+/** Routes in-app links and watch actions to the Activity context stage. */
 
+import { createSignal } from "solid-js";
 import { listenHostEvent } from "../windows/window-channel.ts";
+
+type ActivityWatchPrefillIntent = {
+  sessionId: string;
+  handle: string;
+  reviewChanges?: boolean;
+};
 
 export type OpenRunningRequest = {
   projectId?: string;
+  watchId?: string;
+  sessionId?: string;
+  prefillFromWatch?: ActivityWatchPrefillIntent;
+  createNew?: boolean;
+};
+
+type ActivityFocusRequest = OpenRunningRequest & {
+  serial: number;
 };
 
 type OpenRunningSink = (req?: OpenRunningRequest) => void;
@@ -11,6 +26,19 @@ type OpenRunningSink = (req?: OpenRunningRequest) => void;
 let sink: OpenRunningSink | null = null;
 let pending: OpenRunningRequest | undefined;
 let hasPending = false;
+let nextSerial = 0;
+
+const [activityFocusRequest, setActivityFocusRequest] =
+  createSignal<ActivityFocusRequest | null>(null);
+
+export { activityFocusRequest };
+
+export function clearActivityFocusRequest(serial?: number): void {
+  const cur = activityFocusRequest();
+  if (!cur) return;
+  if (serial !== undefined && cur.serial !== serial) return;
+  setActivityFocusRequest(null);
+}
 
 export function registerOpenRunningStageSink(next: OpenRunningSink): () => void {
   sink = next;
@@ -38,6 +66,13 @@ export function registerOpenRunningStageSink(next: OpenRunningSink): () => void 
 }
 
 export function openRunningStage(req?: OpenRunningRequest): void {
+  if (
+    req &&
+    (req.watchId || req.sessionId || req.prefillFromWatch || req.createNew)
+  ) {
+    nextSerial += 1;
+    setActivityFocusRequest({ ...req, serial: nextSerial });
+  }
   if (sink) {
     sink(req);
   } else {
@@ -50,4 +85,6 @@ export function resetOpenRunningForTests(): void {
   sink = null;
   pending = undefined;
   hasPending = false;
+  nextSerial = 0;
+  setActivityFocusRequest(null);
 }

@@ -4,13 +4,17 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/lycaon/lycaon/internal/app/sessions"
+	"github.com/lycaon/lycaon/internal/app/workerruntime"
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/boot"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/captureprojection"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -25,6 +29,8 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerlane"
 	"github.com/lycaon/lycaon/internal/workerops"
@@ -35,21 +41,70 @@ import (
 func (b *serveBuilder) wireCoordinatorRuntime() error {
 	b.server.Coordinator = b.sessions.Manager.Coordinator.Runtime
 	waitConditions := make(map[string]map[string]bool, len(b.agents.ToolProfiles))
+	watchConditions := make(map[string]map[string]bool, len(b.agents.ToolProfiles))
 	for _, profile := range b.agents.ToolProfiles {
 		allowed := make(map[string]bool, len(profile.WaitConditions))
 		for _, condition := range profile.WaitConditions {
 			allowed[condition] = true
 		}
 		waitConditions[profile.ID] = allowed
+		allowedWatch := make(map[string]bool, len(profile.WatchConditions))
+		for _, condition := range profile.WatchConditions {
+			allowedWatch[condition] = true
+		}
+		watchConditions[profile.ID] = allowedWatch
 	}
 	waitStore := &awaitstore.Store{DB: b.storage.Database}
 	subscriptions := b.server.Coordinator.CoordinatorLoop().Waits.Subscriptions
+	watchStore := newCoordinatorWatchStore(b.storage.Database, b.sessions, subscriptions, b.workerRuntime)
+	wireCoordinatorWatchDelivery(watchStore, b.storage.Database, b.sessions, b.server.Coordinator.CoordinatorLoop())
+	if watchStore != nil {
+		if b.execution.Host != nil && b.execution.Host.Commands != nil {
+			b.execution.Host.Commands.SetDerivedWatches(derivedCommandWatchAdapter{store: watchStore})
+		}
+		wireWatchProducers(b, watchStore)
+		wireStandingWatchHost(b, watchStore)
+	}
+	workerKnownFn := waitWorkerKnown(b.boards.WorkerRecords, b.workerRuntime.Queue)
 	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, subscriptions, loopwake.WaitToolDeps{
-		Store: waitStore, ProfileConditions: waitConditions,
+		Store: waitStore, Watches: watchStore, ProfileConditions: waitConditions,
 		SecretMatcher: b.security.Matcher, RuntimeContext: b.startup.ctx,
-		WorkerKnown: waitWorkerKnown(b.boards.WorkerRecords, b.workerRuntime.Queue),
+		WorkerKnown: workerKnownFn,
 	}); err != nil {
 		return fmt.Errorf("wait tool: %w", err)
+	}
+	if err := watch.RegisterWatchTools(b.execution.Host.Registry, watch.ToolDeps{
+		Store:             watchStore,
+		ProfileConditions: watchConditions,
+		SecretMatcher:     b.security.Matcher,
+		WorkerKnown: func(sessionID, handle string) bool {
+			return workerKnownFn == nil || workerKnownFn(b.startup.ctx, sessionID, handle)
+		},
+		ProcessKnown: func(sessionID, handle string) bool {
+			if b.sessions == nil || b.sessions.Manager == nil || b.sessions.Manager.Processes == nil || b.sessions.Manager.Processes.Background == nil {
+				return true
+			}
+			known, _ := b.sessions.Manager.Processes.Background.State(sessionID, handle)
+			return known
+		},
+		ProjectChat: func(ctx context.Context, projectID string) bool {
+			if b.storage.Projects == nil || projectID == "" {
+				return false
+			}
+			p, err := b.storage.Projects.Get(ctx, projectID)
+			return err == nil && p != nil && !p.IsDraft
+		},
+		StandingWatchExists: func(projectID, watchID string) bool {
+			return watchStore != nil && watchStore.Standing().Exists(b.startup.ctx, projectID, watchID)
+		},
+		OverlappingStanding: func(ctx context.Context, projectID string, conditions []awaitstore.Condition) []watch.OverlappingStandingWatch {
+			if watchStore == nil {
+				return []watch.OverlappingStandingWatch{}
+			}
+			return watchStore.Standing().Overlapping(ctx, projectID, conditions)
+		},
+	}); err != nil {
+		return fmt.Errorf("watch tools: %w", err)
 	}
 	if err := b.wireWaitRecovery(subscriptions, waitStore); err != nil {
 		return err
@@ -65,6 +120,92 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 		return fmt.Errorf("serve wiring: %w", err)
 	}
 	return nil
+}
+
+func newCoordinatorWatchStore(
+	database *db.Store,
+	sessRuntime *sessions.Runtime,
+	subscriptions *loopwake.WaitSubscriptions,
+	workerRuntime *workerruntime.Runtime,
+) *watch.Store {
+	if database == nil {
+		return nil
+	}
+	watchStore := watch.NewStore(database, nil)
+	if sessRuntime != nil && sessRuntime.Manager != nil && sessRuntime.Manager.Processes != nil {
+		processes := sessRuntime.Manager.Processes
+		processes.SetWatches(watchStore)
+		watchStore.SetProcessLookup(func(_ context.Context, sessionID, handle string) (watch.ProcessCompletionFact, bool, error) {
+			fact, ok := processes.CompletedReport(sessionID, handle)
+			return fact, ok, nil
+		})
+	}
+	watchStore.SetLeaseWakeHandler(func(ctx context.Context, lease awaitstore.Lease, winner awaitstore.Condition) {
+		if lease.WorkerJobID != "" {
+			if subscriptions != nil && subscriptions.Waits != nil {
+				subscriptions.Waits.BreakSleep(ctx, lease.SessionID, winner.Kind, true)
+			}
+			if workerRuntime != nil && workerRuntime.Queue != nil {
+				_, _ = workerRuntime.Queue.ResumeReadyWaits(ctx)
+			}
+			return
+		}
+		if subscriptions != nil && subscriptions.Deliveries != nil {
+			subscriptions.Deliveries.NotifyWatchLeaseResolved(ctx, lease.SessionID, lease.ID, winner)
+		}
+	})
+	return watchStore
+}
+
+func wireCoordinatorWatchDelivery(
+	watchStore *watch.Store,
+	database *db.Store,
+	sessRuntime *sessions.Runtime,
+	coordLoop *loopwake.LoopEngine,
+) {
+	if watchStore == nil || database == nil || sessRuntime == nil || sessRuntime.Manager == nil {
+		return
+	}
+	mgr := sessRuntime.Manager
+	mgr.SetWatchDelivery(&watch.Delivery{
+		Store: watchStore,
+		WorkerJobID: func(ctx context.Context, childSessionID string) string {
+			var jobID string
+			_ = database.QueryRowContext(ctx,
+				`SELECT id FROM worker_jobs WHERE child_session_id = ? ORDER BY created_at DESC LIMIT 1`,
+				childSessionID).Scan(&jobID)
+			return jobID
+		},
+	})
+	if coordLoop != nil {
+		watchStore.SetAmbientWakeGate(watch.AmbientWakeGate{
+			SessionEligible: mgr.Submissions.AmbientWakeEligible,
+			WorkflowAdmit:   coordLoop.Admission.AdmitAmbientWatchWake,
+			DispatchTurn: func(ctx context.Context, sessionID, submissionID, text string, onAdmitted func() error) error {
+				_, err := mgr.Submissions.AmbientWatchWake(ctx, sessionID, submissionID, text, onAdmitted)
+				return err
+			},
+		})
+	}
+	if mgr.Coordinator.Guidance != nil {
+		mgr.Coordinator.Guidance.SetKickAdmittedObserver(func(ctx context.Context, sessionID, kickID, subject, receiptID string) {
+			if anchor.SameInform(kickID, anchor.ProcessFinished) && subject != "" {
+				_ = watch.MarkPresentationAdmittedByHandle(ctx, watchStore, sessionID, subject, receiptID)
+			}
+		})
+	}
+	if mgr.Submissions != nil && mgr.Submissions.Gate != nil {
+		gate := mgr.Submissions.Gate
+		watchStore.SetTreeStoppingFunc(func(sessionID string) bool {
+			return gate.InProgress(context.Background(), sessionID)
+		})
+	}
+	if mgr.Stops != nil {
+		mgr.Stops.SetWatchStop(watchTreeStopAdapter{store: watchStore})
+	}
+	if mgr.Runner != nil && mgr.Runner.Instructions != nil {
+		mgr.Runner.Instructions.SetWatchFenceClearer(watchStore.ClearSessionStopFence)
+	}
 }
 
 func (b *serveBuilder) registerCoordinatorTools() error {
@@ -322,4 +463,70 @@ func (b *serveBuilder) wireMCP() error {
 		b.sessions.Manager.ToolPolicy.SetMCPRuntime(b.server.MCP.Catalog)
 	}
 	return nil
+}
+
+type watchTreeStopAdapter struct {
+	store *watch.Store
+}
+
+func (a watchTreeStopAdapter) FenceWatches(ctx context.Context, sessionIDs []string) error {
+	return a.store.FenceSessions(ctx, sessionIDs)
+}
+
+func (a watchTreeStopAdapter) ReconcileStoppedWatches(ctx context.Context, sessionIDs []string) (int, error) {
+	summary, err := a.store.ReconcileStoppedSessions(ctx, sessionIDs...)
+	return summary.CanceledCount, err
+}
+
+type derivedCommandWatchAdapter struct {
+	store *watch.Store
+}
+
+func (a derivedCommandWatchAdapter) HandoffCommand(
+	ctx context.Context,
+	tc tools.ToolContext,
+	commandHandle string,
+	outputCursor int64,
+) (command.DerivedCommandHandoff, bool, error) {
+	if !a.store.Configured() {
+		return command.DerivedCommandHandoff{}, false, nil
+	}
+	owner := watch.Owner{
+		ProjectID:   tc.Identity.ProjectID,
+		SessionID:   tc.Identity.SessionID,
+		WorkerJobID: tc.Identity.WorkerJobID,
+	}.Normalized()
+	var rootPaths []string
+	for _, root := range tc.Source.Roots {
+		if root.Path != "" {
+			rootPaths = append(rootPaths, root.Path)
+		}
+	}
+	authority := watch.Authority{
+		WorkspaceID:   tc.Source.ActiveRootID,
+		RootPaths:     rootPaths,
+		LoopbackPorts: append([]uint16(nil), tc.Local.LoopbackConnectPorts...),
+	}
+	h, err := a.store.HandoffDerivedCommand(ctx, owner, authority, commandHandle, outputCursor)
+	if err != nil {
+		return command.DerivedCommandHandoff{}, false, err
+	}
+	return command.DerivedCommandHandoff{
+		Handle:        h.Handle,
+		WatchHandle:   h.WatchHandle,
+		WaitCondition: h.WaitCondition,
+		OutputCursor:  h.OutputCursor,
+	}, true, nil
+}
+
+func (a derivedCommandWatchAdapter) ReconcileShellJoin(ctx context.Context, tc tools.ToolContext, commandHandle string) error {
+	if !a.store.Configured() {
+		return nil
+	}
+	owner := watch.Owner{
+		ProjectID:   tc.Identity.ProjectID,
+		SessionID:   tc.Identity.SessionID,
+		WorkerJobID: tc.Identity.WorkerJobID,
+	}.Normalized()
+	return a.store.ReconcileShellJoin(ctx, owner, commandHandle)
 }

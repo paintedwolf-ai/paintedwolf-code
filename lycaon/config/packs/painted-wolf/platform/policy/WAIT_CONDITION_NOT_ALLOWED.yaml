@@ -5,6 +5,7 @@ on: tool.rejected
 selector:
   tools:
     - wait
+    - watch
 requires_facts: [paintedwolf.condition, paintedwolf.rejection_code, paintedwolf.wait_allowed_conditions, paintedwolf.tool_profile]
 when: paintedwolf.rejection_code == "WAIT_CONDITION_NOT_ALLOWED"
 effect: block

@@ -11,8 +11,9 @@ import (
 
 // HostSignal is the machine identity persisted on a host turn receipt.
 type HostSignal struct {
-	Kind api.MessageKind `json:"kind"`
-	ID   string          `json:"id"`
+	Kind              api.MessageKind `json:"kind"`
+	ID                string          `json:"id"`
+	TranscriptVisible bool            `json:"transcript_visible,omitempty"`
 }
 
 // Input is one user-facing or host-authored turn.

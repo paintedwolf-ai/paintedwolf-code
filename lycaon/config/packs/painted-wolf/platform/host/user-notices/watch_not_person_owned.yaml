@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Not a standing watch
+message: >-
+  This watch belongs to an agent session or worker job rather than a person.
+suggested_action: Keep the watch as a standing watch first, or manage it from its chat.
+scenarios:
+  - id: default
+    vars: {}

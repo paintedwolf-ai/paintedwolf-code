@@ -10,8 +10,11 @@ import (
 const maxProcessReports = 256
 
 type processReport struct {
-	digest string
-	exit   *bgprocess.ExitObservation
+	occurrenceID string
+	outcome      string
+	code         string
+	digest       string
+	exit         *bgprocess.ExitObservation
 }
 
 // processReports preserves completion digests for waits settled by reconciliation.

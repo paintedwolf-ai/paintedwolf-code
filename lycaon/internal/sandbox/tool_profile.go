@@ -17,13 +17,14 @@ type ToolProfile struct {
 	// StickyTools always load their schemas.
 	StickyTools map[string]bool
 	// DeferredTools load their schemas through request_tools.
-	DeferredTools  map[string]bool
-	DenyTools      []string
-	MCPDeny        []string
-	ReadGlobs      []string
-	WriteGlobs     []string
-	WaitConditions []string
-	CommandEffects toolcontract.CommandEffects
+	DeferredTools   map[string]bool
+	DenyTools       []string
+	MCPDeny         []string
+	ReadGlobs       []string
+	WriteGlobs      []string
+	WaitConditions  []string
+	WatchConditions []string
+	CommandEffects  toolcontract.CommandEffects
 }
 
 // ToolDeferred reports whether toolName loads on demand. Exact entries win
@@ -105,17 +106,18 @@ func (m *ToolMode) UnmarshalYAML(node *yaml.Node) error {
 }
 
 type toolProfileFile struct {
-	ID             string                            `yaml:"id"`
-	Description    string                            `yaml:"description"`
-	Tools          map[string]ToolMode               `yaml:"tools"`
-	DenyTools      []string                          `yaml:"deny_tools"`
-	MCPDeny        []string                          `yaml:"mcp_deny"`
-	ReadScope      string                            `yaml:"read_scope"`
-	WriteScope     string                            `yaml:"write_scope"`
-	ReadScopes     []string                          `yaml:"read_scopes"`
-	WriteScopes    []string                          `yaml:"write_scopes"`
-	WaitConditions []string                          `yaml:"wait_conditions"`
-	CommandEffects []toolcontract.CommandEffectClass `yaml:"command_effects"`
+	ID              string                            `yaml:"id"`
+	Description     string                            `yaml:"description"`
+	Tools           map[string]ToolMode               `yaml:"tools"`
+	DenyTools       []string                          `yaml:"deny_tools"`
+	MCPDeny         []string                          `yaml:"mcp_deny"`
+	ReadScope       string                            `yaml:"read_scope"`
+	WriteScope      string                            `yaml:"write_scope"`
+	ReadScopes      []string                          `yaml:"read_scopes"`
+	WriteScopes     []string                          `yaml:"write_scopes"`
+	WaitConditions  []string                          `yaml:"wait_conditions"`
+	WatchConditions []string                          `yaml:"watch_conditions"`
+	CommandEffects  []toolcontract.CommandEffectClass `yaml:"command_effects"`
 }
 
 // ParseToolProfile parses profile YAML and resolves read_scope / write_scope via scopes.
@@ -157,6 +159,9 @@ func ParseToolProfile(data []byte, scopes PathScopeRegistry) (ToolProfile, error
 	if err := validateWaitConditions(raw.ID, tools, raw.WaitConditions); err != nil {
 		return ToolProfile{}, err
 	}
+	if err := validateWatchConditions(raw.ID, tools, raw.WatchConditions); err != nil {
+		return ToolProfile{}, err
+	}
 	// Deferred profiles require request_tools.
 	if len(deferred) > 0 && !tools["request_tools"] {
 		tools["request_tools"] = true
@@ -166,24 +171,32 @@ func ParseToolProfile(data []byte, scopes PathScopeRegistry) (ToolProfile, error
 		sticky["request_tools"] = true
 	}
 	return ToolProfile{
-		ID:             raw.ID,
-		Description:    raw.Description,
-		Tools:          tools,
-		StickyTools:    sticky,
-		DeferredTools:  deferred,
-		DenyTools:      raw.DenyTools,
-		MCPDeny:        raw.MCPDeny,
-		ReadGlobs:      readGlobs,
-		WriteGlobs:     writeGlobs,
-		WaitConditions: append([]string(nil), raw.WaitConditions...),
-		CommandEffects: effects,
+		ID:              raw.ID,
+		Description:     raw.Description,
+		Tools:           tools,
+		StickyTools:     sticky,
+		DeferredTools:   deferred,
+		DenyTools:       raw.DenyTools,
+		MCPDeny:         raw.MCPDeny,
+		ReadGlobs:       readGlobs,
+		WriteGlobs:      writeGlobs,
+		WaitConditions:  append([]string(nil), raw.WaitConditions...),
+		WatchConditions: append([]string(nil), raw.WatchConditions...),
+		CommandEffects:  effects,
 	}, nil
 }
 
 var supportedWaitConditions = map[string]struct{}{
 	"next_worker_done": {}, "all_workers_idle": {}, "overlay_promote_pending": {},
-	"scan_done": {}, "process_done": {},
+	"scan_done": {}, "process_done": {}, "watch_match": {},
 	"http_ready": {}, "port_ready": {},
+}
+
+var supportedWatchConditions = map[string]struct{}{
+	"next_worker_done": {}, "all_workers_idle": {}, "overlay_promote_pending": {},
+	"worker_decision_needed": {}, "worker_failed": {},
+	"scan_done": {}, "process_done": {}, "process_output": {},
+	"http_ready": {}, "port_ready": {}, "file_change": {}, "git_ref": {}, "timer": {},
 }
 
 func validateWaitConditions(profileID string, tools map[string]bool, conditions []string) error {
@@ -198,6 +211,24 @@ func validateWaitConditions(profileID string, tools map[string]bool, conditions 
 		}
 		if _, duplicate := seen[condition]; duplicate {
 			return fmt.Errorf("profile %q repeats wait condition %q", profileID, condition)
+		}
+		seen[condition] = struct{}{}
+	}
+	return nil
+}
+
+func validateWatchConditions(profileID string, tools map[string]bool, conditions []string) error {
+	if len(conditions) > 0 && !tools["watch"] {
+		return fmt.Errorf("profile %q declares watch_conditions without the watch tool", profileID)
+	}
+	seen := make(map[string]struct{}, len(conditions))
+	for _, condition := range conditions {
+		condition = strings.TrimSpace(condition)
+		if _, ok := supportedWatchConditions[condition]; !ok {
+			return fmt.Errorf("profile %q has unknown watch condition %q", profileID, condition)
+		}
+		if _, duplicate := seen[condition]; duplicate {
+			return fmt.Errorf("profile %q repeats watch condition %q", profileID, condition)
 		}
 		seen[condition] = struct{}{}
 	}

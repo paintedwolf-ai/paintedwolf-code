@@ -27,6 +27,9 @@ func (r *processTable) beginDrainLocked(sessionID string) *sessionDrain {
 		r.unindexProjectProcessLocked(proc)
 		delete(r.workDirs, handle)
 		proc.discarded = true
+		if fn := r.onHandleEvicted; fn != nil {
+			go fn(sessionID, handle)
+		}
 	}
 	drain := &sessionDrain{procs: procs, done: make(chan struct{})}
 	if r.drains == nil {

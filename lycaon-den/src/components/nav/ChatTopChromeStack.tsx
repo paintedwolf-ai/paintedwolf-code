@@ -8,6 +8,8 @@ type Props = {
   spend?: SlotContent;
   /** Standing app and project notifications — the same stack as every stage. */
   notifications?: SlotContent;
+  /** Draft standing-watch proposals created in this chat. */
+  proposal?: SlotContent;
   /** Project verify-command suggestion. */
   verify?: SlotContent;
   /** Mediation and sandbox protection chrome. */
@@ -38,6 +40,12 @@ export function ChatTopChromeStack(props: Props) {
         present={props.notifications?.present() === true}
       >
         {props.notifications?.children()}
+      </ChatTopChromeSlot>
+      <ChatTopChromeSlot
+        slot="proposal"
+        present={props.proposal?.present() === true}
+      >
+        {props.proposal?.children()}
       </ChatTopChromeSlot>
       <ChatTopChromeSlot
         slot="verify"

@@ -373,6 +373,7 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 	}
 	body, _, screening := r.safeOutput(ctx, proc)
 	completion.Tail = screenedOrSuppressed(CutTail(body, r.ringBufferBytes), screening)
+	r.notifyWatchOutput(ctx, proc.SessionID, proc.Handle)
 	stamped := confine.StampRefusal(originTool, sessionID, confinement.Boundary, confine.RefusalContext{
 		MediatedNetwork:        confinement.Network(),
 		RemotePackageExecution: confinement.Report.RemotePackageExecution,

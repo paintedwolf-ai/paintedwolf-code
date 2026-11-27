@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -19,6 +20,7 @@ type Projector struct {
 	Evidence  Evidence
 	Sessions  *session.Host
 	Projects  project.Registry
+	Watches   *watch.Store
 }
 
 // New validates the projector's dependencies.
@@ -47,6 +49,19 @@ func (s *Projector) EnrichSession(ctx context.Context, sess *wire.Session) {
 			sess.UI = &wire.SessionUiState{}
 		}
 		sess.UI.Protection = protection
+	}
+	if s.Watches != nil && s.Watches.Standing() != nil {
+		if prov, found, exists, err := s.Watches.Standing().LookupChatProvenance(ctx, sess.ID); err == nil && found {
+			if sess.UI == nil {
+				sess.UI = &wire.SessionUiState{}
+			}
+			sess.UI.StandingWatch = &wire.SessionStandingWatchOrigin{
+				WatchID:   prov.WatchID,
+				WatchName: prov.WatchName,
+				RunID:     prov.RunID,
+				Deleted:   !exists,
+			}
+		}
 	}
 }
 

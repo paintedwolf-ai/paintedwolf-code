@@ -7,6 +7,10 @@ import { applyBriefingEvent } from "../../briefing/briefing-live.ts";
 import { receiveEditorDocumentEvent } from "../../files/documents/editor-document.ts";
 import { notifyArtifactChanged } from "../../chat/visual/artifact-change-store.ts";
 import { applyProjectBackgroundEvent } from "../../project/project-background-store.ts";
+import {
+  applyWatchRunUpdatedEvent,
+  applyWatchUpdatedEvent,
+} from "../../watches/watches-store.ts";
 import { fileSummariesEnabled, fileSummariesSettingKnown } from "../../settings/editor/file-summary-settings.ts";
 import type { TopicHandlers } from "../../api/events.ts";
 export const connectionSourceEvents: TopicHandlers = {
@@ -38,5 +42,11 @@ export const connectionSourceEvents: TopicHandlers = {
   },
   artifact: (ev) => {
     notifyArtifactChanged(ev);
+  },
+  "watch.updated": (ev) => {
+    applyWatchUpdatedEvent(ev);
+  },
+  "watch_run.updated": (ev) => {
+    applyWatchRunUpdatedEvent(ev);
   },
 };

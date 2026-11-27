@@ -1,0 +1,24 @@
+spec_version: "1.0"
+id: WATCH_EXPIRY_INVALID
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - watch
+requires_facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason]
+when: paintedwolf.rejection_code == "WATCH_EXPIRY_INVALID"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:watch
+message: Watch expiry is outside the allowed window
+what: '{{ paintedwolf.rejection_reason }}'
+cause: Explicit expires_at timestamps must be valid RFC 3339 instants at least 1 minute and at most 30 days ahead of creation.
+why: Very short horizons belong to wait(timeout_ms), and unbounded watches would outlive session retention.
+fix: Omit expires_at to use the 7-day default, pass an RFC 3339 timestamp between 1 minute and 30 days ahead, or call wait directly for sub-minute waits.
+instead: Do not pass past, sub-minute, or >30-day expiry timestamps
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      reason: expires_at must be between 1 minute and 30 days ahead
+      tool: watch

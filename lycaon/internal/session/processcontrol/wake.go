@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,14 +24,20 @@ func (m *Service) nudgeProcessWait(ctx context.Context, sessionID, handle string
 		return false
 	}
 	waits, nudges := m.waits, m.nudges
-	if waits == nil || nudges == nil || !waits.SessionSleepingOnProcess(sessionID, handle) {
+	if waits == nil || nudges == nil {
 		return false
 	}
 	if wake == anchor.ProcessRefused {
+		if !waits.SessionSleepingOnRefusal(sessionID, handle) {
+			return false
+		}
 		nudges.NudgeProcessRefused(ctx, sessionID, handle, env)
-	} else {
-		nudges.NudgeProcessFinished(ctx, sessionID, handle, env)
+		return true
 	}
+	if !waits.SessionSleepingOnProcess(sessionID, handle) {
+		return false
+	}
+	nudges.NudgeProcessFinished(ctx, sessionID, handle, env)
 	return true
 }
 
@@ -62,23 +69,85 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 			Confine: completion.Observation, IndexWatch: completion.IndexWatch,
 		})
 	}
-	m.processReports.publish(completion.SessionID, completion.Handle, processReport{digest: digest, exit: completion.ExitObservation})
+	handle := strings.TrimSpace(completion.Handle)
+	occID := strings.TrimSpace(completion.RunID)
+	if occID == "" {
+		occID = "process_done:" + handle + ":" + completion.FinishedAt.UTC().Format(time.RFC3339Nano)
+	}
+	outcome := "satisfied"
+	if completion.ExitCode != 0 || completion.Failure != nil || completion.BoundaryRefusal != "" {
+		outcome = "failed"
+	}
+	m.processReports.publish(completion.SessionID, completion.Handle, processReport{
+		occurrenceID: occID,
+		outcome:      outcome,
+		code:         completion.ProgramStop.Code,
+		digest:       digest,
+		exit:         completion.ExitObservation,
+	})
 	env := anchor.Envelope{
-		Subject:                 strings.TrimSpace(completion.Handle),
+		Subject:                 handle,
 		CommandCompletionDigest: digest,
 	}
 	if completion.ExitObservation != nil {
 		env.CommandExitObservation = completion.ExitObservation
 	}
-	if m.nudgeProcessWait(ctx, completion.SessionID, completion.Handle, anchor.ProcessFinished, env) {
-		return
+
+	fact := watch.ProcessCompletionFact{
+		OccurrenceID: occID,
+		Handle:       handle,
+		Outcome:      outcome,
+		Code:         completion.ProgramStop.Code,
+		Report:       digest,
 	}
+
+	if m.waits != nil && m.nudges != nil && m.waits.SessionSleepingOnProcess(completion.SessionID, completion.Handle) {
+		m.claimDirectProcessWait(ctx, completion.SessionID, occID, handle, fact)
+		if m.nudgeProcessWait(ctx, completion.SessionID, completion.Handle, anchor.ProcessFinished, env) {
+			return
+		}
+	}
+
+	if m.watches != nil {
+		pres, _ := m.watches.RecordProcessCompletion(ctx, completion.SessionID, fact)
+		if pres.TransferredKick {
+			m.dropQueuedProcessKick(completion.SessionID, handle)
+		}
+		if pres.Claimed {
+			completion.ExitObservation.Observe()
+			return
+		}
+	}
+
 	if completion.TerminationReason == bgprocess.TerminationStoppedByAgent ||
 		completion.ExitObservation.Observed() {
 		return
 	}
 	if sess == nil || !sess.IsWorkerChild() {
+		if m.watches != nil {
+			dec, err := watch.ClaimPresentation(ctx, m.watches, watch.SessionOwner(completion.SessionID), occID, watch.ClaimFallbackKick, false, "")
+			if err == nil && !dec.Granted {
+				return
+			}
+		}
 		m.Guidance.Emit(ctx, completion.SessionID, anchor.ProcessFinished, env)
+	}
+}
+
+func (m *Service) claimDirectProcessWait(ctx context.Context, sessionID, occID, handle string, fact watch.ProcessCompletionFact) {
+	if m.watches == nil {
+		return
+	}
+	dec, _ := watch.ClaimPresentation(ctx, m.watches, watch.SessionOwner(sessionID), occID, watch.ClaimDirectWait, true, "direct_wait:"+handle)
+	if dec.TransferredKick {
+		m.dropQueuedProcessKick(sessionID, handle)
+	}
+	_, _ = m.watches.RecordProcessCompletion(ctx, sessionID, fact)
+}
+
+func (m *Service) dropQueuedProcessKick(sessionID, handle string) {
+	if dropper, ok := m.Guidance.(SubjectDropper); ok {
+		dropper.DropSubject(sessionID, anchor.ProcessFinished, handle)
 	}
 }
 

@@ -219,13 +219,6 @@ export function projectBackgroundFor(projectId: string): ProjectBackgroundView {
   return published().get(id) ?? emptyView(id);
 }
 
-/** Reactive count of running background commands in a project for nav badges. */
-export function runningBackgroundCountFor(projectId: string): number {
-  const id = projectId.trim();
-  if (!id) return 0;
-  return published().get(id)?.runningCount ?? 0;
-}
-
 /** Applies a single `project_background` SSE event with revision reconciliation. */
 export function applyProjectBackgroundEvent(
   event: ProjectBackgroundEvent,

@@ -12,6 +12,7 @@ type ResourcePresence struct {
 	Terminals   bool
 	Pages       bool
 	HeldCalls   bool
+	Watches     bool
 }
 
 var (
@@ -96,6 +97,9 @@ func Implied(presence ResourcePresence) []string {
 	}
 	if presence.HeldCalls {
 		facts = append(facts, nativemanifest.ResourceFactHeldCalls)
+	}
+	if presence.Watches {
+		facts = append(facts, nativemanifest.ResourceFactWatches)
 	}
 	var out []string
 	seen := map[string]struct{}{}

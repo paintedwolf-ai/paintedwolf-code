@@ -48,17 +48,18 @@ var strictConfigRows = []strictCheck{
 		glob:  "packs/painted-wolf/*/tools/profiles/*.yaml",
 		decode: func(raw []byte) error {
 			var v struct {
-				ID             string                            `yaml:"id"`
-				Description    string                            `yaml:"description"`
-				Tools          map[string]sandbox.ToolMode       `yaml:"tools"`
-				DenyTools      []string                          `yaml:"deny_tools"`
-				MCPDeny        []string                          `yaml:"mcp_deny"`
-				ReadScope      string                            `yaml:"read_scope"`
-				WriteScope     string                            `yaml:"write_scope"`
-				ReadScopes     []string                          `yaml:"read_scopes"`
-				WriteScopes    []string                          `yaml:"write_scopes"`
-				WaitConditions []string                          `yaml:"wait_conditions"`
-				CommandEffects []toolcontract.CommandEffectClass `yaml:"command_effects"`
+				ID              string                            `yaml:"id"`
+				Description     string                            `yaml:"description"`
+				Tools           map[string]sandbox.ToolMode       `yaml:"tools"`
+				DenyTools       []string                          `yaml:"deny_tools"`
+				MCPDeny         []string                          `yaml:"mcp_deny"`
+				ReadScope       string                            `yaml:"read_scope"`
+				WriteScope      string                            `yaml:"write_scope"`
+				ReadScopes      []string                          `yaml:"read_scopes"`
+				WriteScopes     []string                          `yaml:"write_scopes"`
+				WaitConditions  []string                          `yaml:"wait_conditions"`
+				WatchConditions []string                          `yaml:"watch_conditions"`
+				CommandEffects  []toolcontract.CommandEffectClass `yaml:"command_effects"`
 			}
 			return config.DecodeYAML(raw, &v)
 		},

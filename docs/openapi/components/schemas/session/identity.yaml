@@ -376,6 +376,9 @@ components:
         protection:
           x-go-pointer: true
           $ref: "#/components/schemas/SessionProtectionState"
+        standing_watch:
+          x-go-pointer: true
+          $ref: "../watches.yaml#/components/schemas/SessionStandingWatchOrigin"
     SessionProtectionState:
       x-go-generate: true
       x-go-field-order: ["control_plane_reads_allowed", "additional_write_roots", "mediation_unavailable", "sandbox_bypass", "background_direct", "background_execution"]

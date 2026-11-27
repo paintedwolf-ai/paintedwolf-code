@@ -97,6 +97,12 @@ const (
 	// presentation invalidation. View owners refresh bounded state and rows;
 	// paths, queries, failures, and source content never appear in this event.
 	EventTopicSourceView EventTopic = "source_view"
+	// EventTopicWatchUpdated Project-scoped watch lifecycle, delivery, draft, or
+	// revision change for an agent watch or person-owned standing watch.
+	EventTopicWatchUpdated EventTopic = "watch.updated"
+	// EventTopicWatchRunUpdated Project-scoped standing-watch run creation,
+	// dispatch, hold, or terminal settlement.
+	EventTopicWatchRunUpdated EventTopic = "watch_run.updated"
 )
 
 var allEventTopicValues = []EventTopic{
@@ -136,6 +142,8 @@ var allEventTopicValues = []EventTopic{
 	EventTopicTurnLoad,
 	EventTopicChatVault,
 	EventTopicSourceView,
+	EventTopicWatchUpdated,
+	EventTopicWatchRunUpdated,
 }
 
 // AllEventTopicValues returns every EventTopic in vocab order.

@@ -108,7 +108,7 @@ func (m *Context) Build() promptloop.ContextDeps {
 		},
 		WritableSharedTemp: m.Profiles.WritableSharedTemp,
 		LoadedTools:        m.Loading.LoadedTools,
-		LiveResources: func(sessionID string) toolcontract.ResourcePresence {
+		LiveResources: func(ctx context.Context, sessionID string) toolcontract.ResourcePresence {
 			presence := toolcontract.ResourcePresence{}
 			if m != nil && m.Processes.Background != nil {
 				presence.CommandJobs = m.Processes.Background.HasPipelineHandles(sessionID)
@@ -119,6 +119,7 @@ func (m *Context) Build() promptloop.ContextDeps {
 			}
 			if m != nil {
 				presence.HeldCalls = m.Processes.Held.HasHandles(sessionID)
+				presence.Watches = m.Processes.HasActionableWatches(ctx, sessionID)
 			}
 			return presence
 		},

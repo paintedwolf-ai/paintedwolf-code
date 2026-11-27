@@ -661,6 +661,26 @@ paths:
     $ref: paths/source-views.yaml#/paths/~1v1~1projects~1{id}~1source~1views~1{view_id}~1presentations
   /v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}:
     $ref: paths/source-views.yaml#/paths/~1v1~1projects~1{id}~1source~1views~1{view_id}~1presentations~1{presentation_id}
+  /v1/projects/{id}/watches:
+    $ref: paths/watches.yaml#/paths/~1v1~1projects~1{id}~1watches
+  /v1/projects/{id}/watches/{watch_id}:
+    $ref: paths/watches.yaml#/paths/~1v1~1projects~1{id}~1watches~1{watch_id}
+  /v1/projects/{id}/watches/{watch_id}/pause:
+    $ref: paths/watches.yaml#/paths/~1v1~1projects~1{id}~1watches~1{watch_id}~1pause
+  /v1/projects/{id}/watches/{watch_id}/resume:
+    $ref: paths/watches.yaml#/paths/~1v1~1projects~1{id}~1watches~1{watch_id}~1resume
+  /v1/projects/{id}/watches/{watch_id}/run:
+    $ref: paths/watches.yaml#/paths/~1v1~1projects~1{id}~1watches~1{watch_id}~1run
+  /v1/projects/{id}/watches/{watch_id}/runs:
+    $ref: paths/watches.yaml#/paths/~1v1~1projects~1{id}~1watches~1{watch_id}~1runs
+  /v1/sessions/{id}/watches:
+    $ref: paths/watches.yaml#/paths/~1v1~1sessions~1{id}~1watches
+  /v1/sessions/{id}/watches/{watch_handle}:
+    $ref: paths/watches.yaml#/paths/~1v1~1sessions~1{id}~1watches~1{watch_handle}
+  /v1/sessions/{id}/watches/{watch_handle}/cancel:
+    $ref: paths/watches.yaml#/paths/~1v1~1sessions~1{id}~1watches~1{watch_handle}~1cancel
+  /v1/sessions/{id}/watches/{watch_handle}/keep:
+    $ref: paths/watches.yaml#/paths/~1v1~1sessions~1{id}~1watches~1{watch_handle}~1keep
 components:
   parameters:
     $ref: components/parameters.yaml#/components/parameters
@@ -1631,3 +1651,53 @@ components:
       $ref: components/schemas/workflow.yaml#/components/schemas/WorkflowTemplateParameter
     WorkflowTemplateSummary:
       $ref: components/schemas/workflow.yaml#/components/schemas/WorkflowTemplateSummary
+    WatchCalendarSchedule:
+      $ref: components/schemas/watches.yaml#/components/schemas/WatchCalendarSchedule
+    WatchCondition:
+      $ref: components/schemas/watches.yaml#/components/schemas/WatchCondition
+    WatchGate:
+      $ref: components/schemas/watches.yaml#/components/schemas/WatchGate
+    StandingWatchTarget:
+      $ref: components/schemas/watches.yaml#/components/schemas/StandingWatchTarget
+    StandingWatchOrigin:
+      $ref: components/schemas/watches.yaml#/components/schemas/StandingWatchOrigin
+    AgentStandingDraft:
+      $ref: components/schemas/watches.yaml#/components/schemas/AgentStandingDraft
+    OverlappingStandingWatch:
+      $ref: components/schemas/watches.yaml#/components/schemas/OverlappingStandingWatch
+    AgentWatchReceipt:
+      $ref: components/schemas/watches.yaml#/components/schemas/AgentWatchReceipt
+    AgentWatch:
+      $ref: components/schemas/watches.yaml#/components/schemas/AgentWatch
+    WatchRun:
+      $ref: components/schemas/watches.yaml#/components/schemas/WatchRun
+    StandingWatch:
+      $ref: components/schemas/watches.yaml#/components/schemas/StandingWatch
+    ProjectWatch:
+      $ref: components/schemas/watches.yaml#/components/schemas/ProjectWatch
+    ProjectWatchListResponse:
+      $ref: components/schemas/watches.yaml#/components/schemas/ProjectWatchListResponse
+    AgentWatchListResponse:
+      $ref: components/schemas/watches.yaml#/components/schemas/AgentWatchListResponse
+    WatchRunListResponse:
+      $ref: components/schemas/watches.yaml#/components/schemas/WatchRunListResponse
+    CreateStandingWatchRequest:
+      $ref: components/schemas/watches.yaml#/components/schemas/CreateStandingWatchRequest
+    UpdateStandingWatchRequest:
+      $ref: components/schemas/watches.yaml#/components/schemas/UpdateStandingWatchRequest
+    StandingWatchRevisionRequest:
+      $ref: components/schemas/watches.yaml#/components/schemas/StandingWatchRevisionRequest
+    UpdateWatchDeliveryRequest:
+      $ref: components/schemas/watches.yaml#/components/schemas/UpdateWatchDeliveryRequest
+    KeepWatchRequest:
+      $ref: components/schemas/watches.yaml#/components/schemas/KeepWatchRequest
+    KeepWatchResponse:
+      $ref: components/schemas/watches.yaml#/components/schemas/KeepWatchResponse
+    CancelWatchResponse:
+      $ref: components/schemas/watches.yaml#/components/schemas/CancelWatchResponse
+    SessionStandingWatchOrigin:
+      $ref: components/schemas/watches.yaml#/components/schemas/SessionStandingWatchOrigin
+    WatchEvent:
+      $ref: components/schemas/watches.yaml#/components/schemas/WatchEvent
+    WatchRunEvent:
+      $ref: components/schemas/watches.yaml#/components/schemas/WatchRunEvent

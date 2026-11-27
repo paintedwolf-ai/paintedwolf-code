@@ -75,6 +75,7 @@ type ProgramRuntime struct {
 	SharedTemp     SharedTempReviewer
 	SourceRuns     SourceRunRecorder
 	FailureTracker *CommandFailureTracker
+	DerivedWatches DerivedWatchRegistrar
 
 	mu        sync.Mutex
 	outputs   map[string]*invocation.ProgramOutputRetention
@@ -229,7 +230,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	}
 	outputs, scope, screening := run.capture.Outputs, run.capture.Scope, run.capture.Screening
 	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
-	ctx, err = jobs.BeginProgram(ctx, ProgramJobOrigin{Tool: run.tool, ToolCallID: tc.Identity.ToolCallID, RootSessionID: tc.ChatSessionID()})
+	ctx, err = jobs.BeginProgram(ctx, ProgramJobOrigin{Tool: run.tool, ToolCallID: tc.Identity.ToolCallID, RootSessionID: tc.ChatSessionID(), ToolContext: tc})
 	if err != nil {
 		return "", err
 	}

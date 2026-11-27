@@ -37,6 +37,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/visual"
+	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/internal/webindex"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerops"
@@ -154,6 +155,13 @@ type Storage struct {
 	storePath          string
 }
 
+type Watches struct {
+	projectRegistry project.Registry
+	responses       *httpio.Responder
+	sessionStore    sessionstore.SessionRepository
+	watches         *watch.Store
+}
+
 type Workers struct {
 	Git             *gitadmin.Handler
 	board           *board.SnapshotBuilder
@@ -179,6 +187,7 @@ func composeDomains(s *Server, deps Dependencies) {
 	s.Routes.HarnessProviders = &HarnessProviders{costTracker: deps.Providers.CostTracker, llmSvc: deps.Providers.LLM, responses: &s.responses}
 	s.Routes.LocalData = &LocalData{branches: deps.Workflow.Branches, extensionOwner: s.Admin.Extensions.Mutations.Owner, dataDir: s.dataDir, responses: &s.responses, sessions: s.sessions, sourceLedger: s.Sources.Workspace.SourceLedger, webIndex: deps.External.WebIndex, workerBranchRoot: s.workerBranchRoot, workers: deps.Workflow.Workers}
 	s.Routes.Storage = &Storage{dataDir: s.dataDir, database: deps.Core.Database, markRestorePending: s.markRestorePending, recovery: s.recovery, responses: &s.responses, storePath: s.storePath}
+	s.Routes.Watches = &Watches{projectRegistry: deps.Core.Projects, responses: &s.responses, sessionStore: deps.Core.Store.Sessions, watches: s.watches}
 	s.Routes.Workers = &Workers{Git: &s.Admin.Git, board: deps.Workflow.Board, projectRegistry: deps.Core.Projects, responses: &s.responses, sessionStore: deps.Core.Store.Sessions, workerCancel: deps.Workflow.WorkerCancel, workerOps: buildWorkerOps(deps), workers: deps.Workflow.Workers}
 	s.Routes.HarnessControl.HarnessPreparation = s.Routes.HarnessPreparation
 	s.Routes.HarnessControl.HarnessProviders = s.Routes.HarnessProviders

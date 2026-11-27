@@ -85,6 +85,53 @@ func (m *Service) LoopWake(ctx context.Context, id string) (*promptresult.Result
 	}, nil)
 }
 
+// AmbientWakeEligible checks session lifecycle, human input, stop/spend gates, and worker exclusion.
+func (m *Service) AmbientWakeEligible(ctx context.Context, id string) (eligible bool, retryable bool) {
+	if m == nil || m.sessionStore == nil || m.submissionStore == nil {
+		return false, false
+	}
+	sess, err := m.sessionStore.Get(ctx, id)
+	if err != nil || sess == nil || sess.IsWorkerChild() {
+		return false, false
+	}
+	if sess.Status != api.SessionStatusIdle {
+		return false, sess.Status == api.SessionStatusBusy || sess.Status == api.SessionStatusPreparing
+	}
+	if m.hostBlocked != nil && m.hostBlocked(ctx, id) {
+		return false, false
+	}
+	if m.Gate != nil && m.Gate.InProgress(ctx, id) {
+		return false, false
+	}
+	if queued, err := m.submissionStore.ListQueuedUserPromptSubmissions(ctx, id); err != nil || len(queued) > 0 {
+		return false, true
+	}
+	if m.queue != nil && len(m.queue.Snapshot(id).QueueItems) > 0 {
+		return false, true
+	}
+	if m.Spend != nil {
+		if err := m.Spend.Check(ctx, id, sess); err != nil {
+			return false, false
+		}
+	}
+	return true, false
+}
+
+// AmbientWatchWake admits and executes an ambient watch turn behind a stable batch receipt.
+func (m *Service) AmbientWatchWake(ctx context.Context, id, submissionID, text string, onAdmitted func() error) (*promptresult.Result, error) {
+	ctx = Detached(ctx)
+	ctx, release := m.LockDispatch(ctx, id)
+	defer release()
+	if eligible, _ := m.AmbientWakeEligible(ctx, id); !eligible {
+		return nil, nil
+	}
+	return m.HostTurnWithAdmission(ctx, id, store.PromptSubmissionOriginLoopWake, promptinput.Input{
+		SubmissionID: strings.TrimSpace(submissionID),
+		Text:         strings.TrimSpace(text),
+		HostSignal:   &promptinput.HostSignal{Kind: api.MessageKindHostLoopWake, ID: string(anchor.LoopWake)},
+	}, onAdmitted)
+}
+
 func (m *Service) Input(ctx context.Context, id string, in promptinput.Input) (*promptresult.Result, error) {
 	ctx, unlockDispatch := m.LockDispatch(ctx, id)
 	defer unlockDispatch()

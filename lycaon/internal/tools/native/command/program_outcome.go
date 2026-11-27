@@ -1,11 +1,20 @@
 package command
 
 import (
+	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// ProgramBackgroundJob carries the session handle, derived watch, and output cursor for an unjoined job.
+type ProgramBackgroundJob struct {
+	Handle        string                `json:"handle"`
+	WatchHandle   string                `json:"watch_handle,omitempty"`
+	WaitCondition *awaitstore.Condition `json:"wait_condition,omitempty"`
+	OutputCursor  int64                 `json:"output_cursor"`
+}
 
 // ProgramOutcome is the command tool's result for a settled program.
 type ProgramOutcome struct {
@@ -15,6 +24,7 @@ type ProgramOutcome struct {
 	DetailRef                string                           `json:"detail_ref"`
 	State                    string                           `json:"state"`
 	Verification             *ProgramVerification             `json:"verification,omitempty"`
+	BackgroundJobs           []ProgramBackgroundJob           `json:"background_jobs,omitempty"`
 	NonzeroExecutions        []ProgramExecutionOutcome        `json:"nonzero_executions,omitempty"`
 	OmittedNonzeroExecutions int                              `json:"omitted_nonzero_executions,omitempty"`
 	Status                   int                              `json:"status"`

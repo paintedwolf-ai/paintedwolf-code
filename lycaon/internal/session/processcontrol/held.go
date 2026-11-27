@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -25,8 +26,47 @@ func (m *Service) HandleHeldCallSettled(sessionID, handle string) {
 		"held_call_handle": status.Handle, "held_call_tool": status.Tool,
 		"held_call_outcome": string(status.Settled.Outcome),
 	}}
-	m.processReports.publish(sessionID, handle, processReport{digest: digest})
+	occID := "held_done:" + strings.TrimSpace(status.Handle)
+	m.processReports.publish(sessionID, handle, processReport{
+		occurrenceID: occID,
+		outcome:      string(status.Settled.Outcome),
+		digest:       digest,
+	})
+	if m.watches != nil {
+		_, _ = m.watches.RecordProcessDone(context.Background(), sessionID, watch.ProcessCompletionFact{
+			OccurrenceID: occID,
+			Handle:       strings.TrimSpace(status.Handle),
+			Outcome:      string(status.Settled.Outcome),
+			Report:       digest,
+		})
+	}
 	m.nudgeProcessWait(context.Background(), sessionID, handle, anchor.ProcessFinished, env)
+}
+
+// CompletedReport returns any retained completion report for handle.
+func (m *Service) CompletedReport(sessionID, handle string) (watch.ProcessCompletionFact, bool) {
+	if m == nil {
+		return watch.ProcessCompletionFact{}, false
+	}
+	rep, ok := m.processReports.lookup(sessionID, handle)
+	if !ok {
+		return watch.ProcessCompletionFact{}, false
+	}
+	occID := rep.occurrenceID
+	if occID == "" {
+		occID = "process_done:" + strings.TrimSpace(handle)
+	}
+	outcome := rep.outcome
+	if outcome == "" {
+		outcome = "satisfied"
+	}
+	return watch.ProcessCompletionFact{
+		OccurrenceID: occID,
+		Handle:       strings.TrimSpace(handle),
+		Outcome:      outcome,
+		Code:         rep.code,
+		Report:       rep.digest,
+	}, true
 }
 
 // HandleState answers for a background handle of either kind.

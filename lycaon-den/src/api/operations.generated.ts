@@ -33,6 +33,7 @@ export const API_OPERATIONS = {
   ] },
   cancelProjectPromotion: { method: "DELETE", path: "/v1/projects/{id}/promotion" },
   cancelSourceOperation: { method: "POST", path: "/v1/projects/{id}/source/operations/{operation_id}/cancel" },
+  cancelWatch: { method: "POST", path: "/v1/sessions/{id}/watches/{watch_handle}/cancel" },
   cancelWorker: { method: "POST", path: "/v1/workers/{id}/cancel" },
   cancelWorkflowRun: { method: "POST", path: "/v1/workflow-runs/{id}/cancel" },
   checkMcpProviders: { method: "POST", path: "/v1/mcp/providers/check", query: [
@@ -95,6 +96,7 @@ export const API_OPERATIONS = {
   ] },
   createSourcePresentation: { method: "POST", path: "/v1/projects/{id}/source/views/{view_id}/presentations" },
   createSourceView: { method: "POST", path: "/v1/projects/{id}/source/views" },
+  createStandingWatch: { method: "POST", path: "/v1/projects/{id}/watches" },
   deleteBlueprint: { method: "DELETE", path: "/v1/projects/{id}/blueprints/{blueprint_id}" },
   deleteDetectionPack: { method: "DELETE", path: "/v1/detection-packs/{pack_id}" },
   deleteExtensionMetaPack: { method: "DELETE", path: "/v1/extensions/meta-packs/{meta_pack_id}", query: [
@@ -128,6 +130,7 @@ export const API_OPERATIONS = {
   deleteProviderCredential: { method: "DELETE", path: "/v1/providers/{provider_id}/credential" },
   deleteScanner: { method: "DELETE", path: "/v1/scanners/{scanner_id}" },
   deleteSession: { method: "DELETE", path: "/v1/sessions/{id}" },
+  deleteStandingWatch: { method: "DELETE", path: "/v1/projects/{id}/watches/{watch_id}" },
   deleteWebResearchCredential: { method: "DELETE", path: "/v1/web-research/providers/{provider_id}/credential" },
   detachProjectRoot: { method: "DELETE", path: "/v1/projects/{id}/roots/{root_id}", query: [
     {"name":"force","type":"boolean"},
@@ -332,6 +335,7 @@ export const API_OPERATIONS = {
     {"name":"session_id","type":"string","required":true},
   ] },
   getProjectTrust: { method: "GET", path: "/v1/projects/{id}/trust" },
+  getProjectWatch: { method: "GET", path: "/v1/projects/{id}/watches/{watch_id}" },
   getReviewSettings: { method: "GET", path: "/v1/settings/review", query: [
     {"name":"project_id","type":"string"},
   ] },
@@ -361,6 +365,7 @@ export const API_OPERATIONS = {
   getVerifySettings: { method: "GET", path: "/v1/settings/verify", query: [
     {"name":"project_id","type":"string","required":true},
   ] },
+  getWatch: { method: "GET", path: "/v1/sessions/{id}/watches/{watch_handle}" },
   getWebResearchIndex: { method: "GET", path: "/v1/web-research/index" },
   getWebResearchProviders: { method: "GET", path: "/v1/web-research/providers" },
   getWebResearchSettings: { method: "GET", path: "/v1/settings/web-research" },
@@ -381,6 +386,7 @@ export const API_OPERATIONS = {
   installExtensionPack: { method: "POST", path: "/v1/extensions/packs" },
   invokeProjectCommand: { method: "POST", path: "/v1/projects/{id}/commands/{command_id}/invoke" },
   invokeSessionCommand: { method: "POST", path: "/v1/sessions/{id}/commands/{command_id}/invoke" },
+  keepWatch: { method: "POST", path: "/v1/sessions/{id}/watches/{watch_handle}/keep" },
   landGitWorktree: { method: "POST", path: "/v1/sessions/{id}/git-worktree/land" },
   launchBlueprint: { method: "POST", path: "/v1/projects/{id}/blueprints/{blueprint_id}/launch" },
   leaveEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/leave" },
@@ -493,6 +499,9 @@ export const API_OPERATIONS = {
     {"name":"mark_user_edits","type":"boolean"},
     {"name":"session_id","type":"string"},
   ] },
+  listProjectWatches: { method: "GET", path: "/v1/projects/{id}/watches", query: [
+    {"name":"owner","type":"string","enum":["agent","person","all"]},
+  ] },
   listProjects: { method: "GET", path: "/v1/projects", query: [
     {"name":"cursor","type":"string"},
     {"name":"limit","type":"integer","minimum":1,"maximum":200},
@@ -531,6 +540,11 @@ export const API_OPERATIONS = {
     {"name":"cursor","type":"string"},
     {"name":"limit","type":"integer","minimum":1,"maximum":100},
   ] },
+  listWatchRuns: { method: "GET", path: "/v1/projects/{id}/watches/{watch_id}/runs", query: [
+    {"name":"cursor","type":"string"},
+    {"name":"limit","type":"integer","minimum":1,"maximum":50},
+  ] },
+  listWatches: { method: "GET", path: "/v1/sessions/{id}/watches" },
   listWorkers: { method: "GET", path: "/v1/workers", query: [
     {"name":"cursor","type":"string"},
     {"name":"limit","type":"integer","minimum":1,"maximum":500},
@@ -562,6 +576,7 @@ export const API_OPERATIONS = {
   ] },
   openOutsideFile: { method: "POST", path: "/v1/projects/{id}/source/outside-files" },
   openProjectTrustReview: { method: "POST", path: "/v1/projects/{id}/trust/review" },
+  pauseStandingWatch: { method: "POST", path: "/v1/projects/{id}/watches/{watch_id}/pause" },
   pauseWorkflowRun: { method: "POST", path: "/v1/workflow-runs/{id}/pause" },
   persistWorkflow: { method: "POST", path: "/v1/sessions/{id}/workflows/{workflow_id}/persist" },
   previewEditorSecretMark: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/secret-spans/preview" },
@@ -643,6 +658,7 @@ export const API_OPERATIONS = {
     {"name":"session_id","type":"string"},
   ] },
   restoreRecoverySnapshot: { method: "POST", path: "/v1/backup/restore/recovery-snapshot" },
+  resumeStandingWatch: { method: "POST", path: "/v1/projects/{id}/watches/{watch_id}/resume" },
   resumeWorkflowRun: { method: "POST", path: "/v1/workflow-runs/{id}/resume" },
   retrySourceOperation: { method: "POST", path: "/v1/projects/{id}/source/operations/{operation_id}/retry" },
   revertEditorDocumentChange: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/changes/{change_id}/revert" },
@@ -653,6 +669,7 @@ export const API_OPERATIONS = {
   ] },
   revokeProjectManagedSecret: { method: "DELETE", path: "/v1/projects/{id}/secrets/{secret_id}" },
   rewindSession: { method: "POST", path: "/v1/sessions/{id}/rewind" },
+  runStandingWatchNow: { method: "POST", path: "/v1/projects/{id}/watches/{watch_id}/run" },
   saveEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/save", query: [
     {"name":"session_id","type":"string"},
   ] },
@@ -762,10 +779,12 @@ export const API_OPERATIONS = {
   updateSession: { method: "PATCH", path: "/v1/sessions/{id}" },
   updateSessionQueue: { method: "PATCH", path: "/v1/sessions/{id}/queue" },
   updateSourceChatLocation: { method: "PATCH", path: "/v1/projects/{id}/source/outside-locations/{location_id}" },
+  updateStandingWatch: { method: "PATCH", path: "/v1/projects/{id}/watches/{watch_id}" },
   updateTrustSettings: { method: "PATCH", path: "/v1/settings/project-trust" },
   updateVerifySettings: { method: "PATCH", path: "/v1/settings/verify", query: [
     {"name":"project_id","type":"string","required":true},
   ] },
+  updateWatchDelivery: { method: "PATCH", path: "/v1/sessions/{id}/watches/{watch_handle}" },
   updateWebResearchProvider: { method: "PATCH", path: "/v1/web-research/providers/{provider_id}" },
   updateWebResearchSettings: { method: "PATCH", path: "/v1/settings/web-research" },
   uploadAttachment: { method: "POST", path: "/v1/projects/{id}/attachments", query: [
@@ -805,6 +824,7 @@ export type OperationPathParameters = {
   cancelMcpOAuth: { provider_id: string | number; };
   cancelProjectPromotion: { id: string | number; };
   cancelSourceOperation: { id: string | number; operation_id: string | number; };
+  cancelWatch: { id: string | number; watch_handle: string | number; };
   cancelWorker: { id: string | number; };
   cancelWorkflowRun: { id: string | number; };
   checkMcpProviders: Record<string, never>;
@@ -840,6 +860,7 @@ export type OperationPathParameters = {
   createSessionArtifact: { id: string | number; };
   createSourcePresentation: { id: string | number; view_id: string | number; };
   createSourceView: { id: string | number; };
+  createStandingWatch: { id: string | number; };
   deleteBlueprint: { id: string | number; blueprint_id: string | number; };
   deleteDetectionPack: { pack_id: string | number; };
   deleteExtensionMetaPack: { meta_pack_id: string | number; };
@@ -857,6 +878,7 @@ export type OperationPathParameters = {
   deleteProviderCredential: { provider_id: string | number; };
   deleteScanner: { scanner_id: string | number; };
   deleteSession: { id: string | number; };
+  deleteStandingWatch: { id: string | number; watch_id: string | number; };
   deleteWebResearchCredential: { provider_id: string | number; };
   detachProjectRoot: { id: string | number; root_id: string | number; };
   detectFolder: Record<string, never>;
@@ -927,6 +949,7 @@ export type OperationPathParameters = {
   getProjectSourceStorage: { id: string | number; };
   getProjectSourceWalkSummary: { id: string | number; };
   getProjectTrust: { id: string | number; };
+  getProjectWatch: { id: string | number; watch_id: string | number; };
   getReviewSettings: Record<string, never>;
   getSecretIgnoreCandidate: { id: string | number; candidate_id: string | number; };
   getSecurityScannersSettings: Record<string, never>;
@@ -944,6 +967,7 @@ export type OperationPathParameters = {
   getSourceWorkspace: { id: string | number; };
   getTrustSettings: Record<string, never>;
   getVerifySettings: Record<string, never>;
+  getWatch: { id: string | number; watch_handle: string | number; };
   getWebResearchIndex: Record<string, never>;
   getWebResearchProviders: Record<string, never>;
   getWebResearchSettings: Record<string, never>;
@@ -957,6 +981,7 @@ export type OperationPathParameters = {
   installExtensionPack: Record<string, never>;
   invokeProjectCommand: { id: string | number; command_id: string | number; };
   invokeSessionCommand: { id: string | number; command_id: string | number; };
+  keepWatch: { id: string | number; watch_handle: string | number; };
   landGitWorktree: { id: string | number; };
   launchBlueprint: { id: string | number; blueprint_id: string | number; };
   leaveEditorDocument: { id: string | number; document_id: string | number; };
@@ -987,6 +1012,7 @@ export type OperationPathParameters = {
   listProjectSourceSymbols: { id: string | number; };
   listProjectSourceVersions: { id: string | number; };
   listProjectSourceWalk: { id: string | number; };
+  listProjectWatches: { id: string | number; };
   listProjects: Record<string, never>;
   listProviderKinds: Record<string, never>;
   listProviders: Record<string, never>;
@@ -999,6 +1025,8 @@ export type OperationPathParameters = {
   listSessionPreviews: { id: string | number; };
   listSessionWorkflowRuns: { id: string | number; };
   listSourceOperations: { id: string | number; };
+  listWatchRuns: { id: string | number; watch_id: string | number; };
+  listWatches: { id: string | number; };
   listWorkers: Record<string, never>;
   listWorkflowTemplates: Record<string, never>;
   listWorkflows: Record<string, never>;
@@ -1013,6 +1041,7 @@ export type OperationPathParameters = {
   openEditorDocument: { id: string | number; };
   openOutsideFile: { id: string | number; };
   openProjectTrustReview: { id: string | number; };
+  pauseStandingWatch: { id: string | number; watch_id: string | number; };
   pauseWorkflowRun: { id: string | number; };
   persistWorkflow: { id: string | number; workflow_id: string | number; };
   previewEditorSecretMark: { id: string | number; document_id: string | number; };
@@ -1066,6 +1095,7 @@ export type OperationPathParameters = {
   restoreProjectSourceCommitState: { id: string | number; commit_sha: string | number; };
   restoreProjectSourceVersion: { id: string | number; version_id: string | number; };
   restoreRecoverySnapshot: Record<string, never>;
+  resumeStandingWatch: { id: string | number; watch_id: string | number; };
   resumeWorkflowRun: { id: string | number; };
   retrySourceOperation: { id: string | number; operation_id: string | number; };
   revertEditorDocumentChange: { id: string | number; document_id: string | number; change_id: string | number; };
@@ -1074,6 +1104,7 @@ export type OperationPathParameters = {
   revokeMcpOAuth: { provider_id: string | number; };
   revokeProjectManagedSecret: { id: string | number; secret_id: string | number; };
   rewindSession: { id: string | number; };
+  runStandingWatchNow: { id: string | number; watch_id: string | number; };
   saveEditorDocument: { id: string | number; document_id: string | number; };
   search: Record<string, never>;
   searchChatContent: { id: string | number; message_id: string | number; };
@@ -1124,8 +1155,10 @@ export type OperationPathParameters = {
   updateSession: { id: string | number; };
   updateSessionQueue: { id: string | number; };
   updateSourceChatLocation: { id: string | number; location_id: string | number; };
+  updateStandingWatch: { id: string | number; watch_id: string | number; };
   updateTrustSettings: Record<string, never>;
   updateVerifySettings: Record<string, never>;
+  updateWatchDelivery: { id: string | number; watch_handle: string | number; };
   updateWebResearchProvider: { provider_id: string | number; };
   updateWebResearchSettings: Record<string, never>;
   uploadAttachment: { id: string | number; };

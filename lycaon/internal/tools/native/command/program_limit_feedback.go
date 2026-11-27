@@ -27,5 +27,10 @@ func writeLimitRefusal(w io.Writer, command, subject string, reject *toolrejecti
 			}
 		}
 	}
-	_, _ = fmt.Fprintf(w, "%s: %s: %s [%s]\n", command, subject, reason, reject.Code)
+	line := fmt.Sprintf("%s: %s: %s [%s]\n", command, subject, reason, reject.Code)
+	if hw, ok := w.(hostOriginWriter); ok {
+		_, _ = hw.WriteHost([]byte(line))
+		return
+	}
+	_, _ = io.WriteString(w, line)
 }

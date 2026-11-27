@@ -2,6 +2,7 @@ package loopwake
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
@@ -18,6 +19,7 @@ const (
 	WaitTriggerOverlayPromote WaitTrigger = "overlay_promote_pending"
 	WaitTriggerScanDone       WaitTrigger = "scan_done"
 	WaitTriggerProcessDone    WaitTrigger = "process_done"
+	WaitTriggerWatchMatch     WaitTrigger = "watch_match"
 	WaitTriggerHTTPReady      WaitTrigger = "http_ready"
 	WaitTriggerPortReady      WaitTrigger = "port_ready"
 	// WaitTriggerProgramDone ends a parked command call's wait. Only the host
@@ -70,6 +72,7 @@ var validWaitTriggers = map[WaitTrigger]struct{}{
 	WaitTriggerOverlayPromote: {},
 	WaitTriggerScanDone:       {},
 	WaitTriggerProcessDone:    {},
+	WaitTriggerWatchMatch:     {},
 	WaitTriggerHTTPReady:      {},
 	WaitTriggerPortReady:      {},
 }
@@ -183,6 +186,9 @@ type waitMatchInput struct {
 	// match it, so a wait follows a worker into its later rounds.
 	Worker         string
 	ProcessHandles []string
+	// RefusalHandles are commands watched through a watch, whose refusal
+	// alone ends the wait.
+	RefusalHandles []string
 	// WorkerHandles narrows next_worker_done to the named task ids.
 	WorkerHandles     []string
 	CycleIdle         bool
@@ -200,9 +206,11 @@ func waitEventMatches(triggers []WaitTrigger, in waitMatchInput) bool {
 	case anchor.ScanFinished:
 		_, ok := set[WaitTriggerScanDone]
 		return ok
-	case anchor.ProcessFinished, anchor.ProcessRefused:
+	case anchor.ProcessFinished:
 		_, ok := set[WaitTriggerProcessDone]
 		return ok && handleMatches(in.ProcessHandles, in.Subject)
+	case anchor.ProcessRefused:
+		return refusalEndsWait(set, in)
 	case anchor.WorkerRoundNotice, anchor.WorkerMessageReceived, anchor.WorkerPrerequisiteBlocked:
 		_, ok := runningWorkerCondition(set, in.WorkerHandles, in.workerHandle(in.Subject))
 		return ok
@@ -232,6 +240,15 @@ func waitEventMatches(triggers []WaitTrigger, in waitMatchInput) bool {
 	}
 }
 
+// refusalEndsWait reports a refusal by a process the wait names directly or
+// watches. The watch itself stays armed for the process's exit.
+func refusalEndsWait(set map[WaitTrigger]struct{}, in waitMatchInput) bool {
+	if _, ok := set[WaitTriggerProcessDone]; ok && handleMatches(in.ProcessHandles, in.Subject) {
+		return true
+	}
+	return slices.Contains(in.RefusalHandles, strings.TrimSpace(in.Subject))
+}
+
 // runningWorkerCondition finds the worker subscription a wake about running
 // job jobID resumes: a wait on that worker, or on all workers.
 func runningWorkerCondition(set map[WaitTrigger]struct{}, handles []string, jobID string) (WaitTrigger, bool) {
@@ -256,9 +273,7 @@ func waitConditionForWake(triggers []WaitTrigger, in waitMatchInput) (awaitstore
 		return awaitstore.Condition{Kind: string(WaitTriggerProcessDone), Handles: []string{in.Subject}}, ok
 	case anchor.ProcessRefused:
 		// A refusal wakes the waiter while the job continues running.
-		_, ok := set[WaitTriggerProcessDone]
-		ok = ok && handleMatches(in.ProcessHandles, in.Subject)
-		return awaitstore.Condition{Kind: string(WaitTriggerProcessDone), Handles: []string{in.Subject}, Outcome: "refused"}, ok
+		return awaitstore.Condition{Kind: string(WaitTriggerProcessDone), Handles: []string{in.Subject}, Outcome: "refused"}, refusalEndsWait(set, in)
 	case anchor.WorkerRoundNotice, anchor.WorkerMessageReceived, anchor.WorkerPrerequisiteBlocked:
 		// The worker has not finished, so the wait ends with what arrived, not as satisfied.
 		outcome := "notice"

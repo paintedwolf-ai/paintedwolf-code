@@ -147,3 +147,11 @@ func (m *Host) SetWorkerMessages(delivery assembly.MessageDeliveryRecorder) {
 	}
 	m.Coordinator.Assembly.MessageDelivery = delivery
 }
+
+// SetWatchDelivery sets how watch observations are reserved and committed per request.
+func (m *Host) SetWatchDelivery(delivery assembly.WatchDeliveryRecorder) {
+	if m == nil || m.Coordinator.Assembly == nil {
+		return
+	}
+	m.Coordinator.Assembly.WatchDelivery = delivery
+}

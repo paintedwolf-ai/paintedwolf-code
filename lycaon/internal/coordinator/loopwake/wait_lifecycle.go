@@ -2,6 +2,7 @@ package loopwake
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -264,6 +265,9 @@ func (l *Waits) runtimeWaitSubscription(sessionID string) (waitSubscription, boo
 	state := value.(*sessionSleep)
 	state.mu.Lock()
 	defer state.mu.Unlock()
+	if len(state.watchHandles) > 0 {
+		return waitSubscription{}, false
+	}
 	if len(state.waitTriggers) == 0 {
 		return waitSubscription{}, false
 	}
@@ -323,6 +327,21 @@ func (l *Waits) SessionSleepingOnProcess(sessionID, handle string) bool {
 		return false
 	}
 	return handleMatches(l.ActiveProcessHandles(sessionID), handle)
+}
+
+// SessionSleepingOnRefusal reports whether a refusal by handle ends the
+// session's wait: a wait on the process, or a watch on it.
+func (l *Waits) SessionSleepingOnRefusal(sessionID, handle string) bool {
+	if l.SessionSleepingOnProcess(sessionID, handle) {
+		return true
+	}
+	return l.IsSleeping(sessionID) && slices.Contains(l.activeRefusalHandles(sessionID), strings.TrimSpace(handle))
+}
+func (l *Waits) activeRefusalHandles(sessionID string) []string {
+	st := l.sleep.state(sessionID)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return append([]string(nil), st.refusalHandles...)
 }
 func (l *Waits) Triggers(sessionID string) []WaitTrigger {
 	st := l.sleep.state(sessionID)
