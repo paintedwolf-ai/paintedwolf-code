@@ -24,6 +24,7 @@ from catalog_feed_search.driver_adapters import (
 )
 from catalog_feed_search.driver_inprocess import (
     build_task_digest_argv,
+    extract_receipt_path,
     parse_receipt_and_go_json,
     run_inprocess_suite,
 )
@@ -890,6 +891,50 @@ class InProcessAndCLITests(unittest.TestCase):
             self.assertTrue(ok_res.pilot_matched)
             self.assertEqual(ok_res.source_digest, "3bb1464d22dd0a38a149d37610810e7a0324e8cf")
             self.assertEqual(ok_res.receipt_path, str(receipt_file))
+            self.assertEqual(ok_res.receipt_mode, "shared_batch_receipt")
+
+            # 4. Inline shared-batch receipt extraction (`passed; receipt /path/...json`).
+            inline_out = f"test:digest: passed; receipt {receipt_file}\n"
+            self.assertEqual(extract_receipt_path(inline_out), str(receipt_file))
+
+            # 5. Scoped non-batch run: freshly written last-run/go-test.json -> PASS; stale -> UNKNOWN.
+            last_run = artifact_dir / "last-run" / "go-test.json"
+            last_run.parent.mkdir(parents=True, exist_ok=True)
+            go_payload = "\n".join(
+                [
+                    json.dumps({"Action": "run", "Package": "p", "Test": "TestCodeBudget"}),
+                    json.dumps({"Action": "pass", "Package": "p", "Test": "TestCodeBudget"}),
+                    json.dumps({"Action": "pass", "Package": "p"}),
+                ]
+            ) + "\n"
+
+            def write_fresh(_argv, _cwd):
+                last_run.write_text(go_payload, encoding="utf-8")
+                return (0, "no receipt is written outside a shared batch.\n", "")
+
+            fresh_res = run_inprocess_suite(
+                REPO_ROOT,
+                "./internal/search",
+                pilot_test="TestCodeBudget",
+                last_run_go_json=last_run,
+                executor=write_fresh,
+            )
+            self.assertTrue(fresh_res.qualified)
+            self.assertEqual(fresh_res.verdict, "PASS")
+            self.assertEqual(fresh_res.receipt_mode, "last_run_go_json")
+            self.assertEqual(fresh_res.go_json_paths, (str(last_run),))
+
+            # Stale (unmodified) last-run/go-test.json MUST return UNKNOWN!
+            stale_res = run_inprocess_suite(
+                REPO_ROOT,
+                "./internal/search",
+                pilot_test="TestCodeBudget",
+                last_run_go_json=last_run,
+                executor=lambda _a, _c: (0, "no receipt is written outside a shared batch.\n", ""),
+            )
+            self.assertFalse(stale_res.qualified)
+            self.assertEqual(stale_res.verdict, "UNKNOWN")
+            self.assertEqual(stale_res.receipt_mode, "missing")
 
     def test_cli_controls_and_replay_subcommands(self) -> None:
         buf_ctrl = io.StringIO()
