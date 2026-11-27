@@ -47,7 +47,7 @@ def _run_cmd(app, sid, surface, cmd):
     return {
         'tool_call_id': call_id, 'command': cmd, 'outcome': raw_parsed.get('outcome'),
         'state': payload.get('state'), 'status': payload.get('status'),
-        'stdout': payload.get('stdout'), 'stdout_ref': payload.get('stdout_ref'),
+        'stdout': payload.get('stdout'), 'stderr': payload.get('stderr'), 'stdout_ref': payload.get('stdout_ref'),
         'truncated': payload.get('truncated'), 'outputs': outputs, 'stdout_window': stdout_win,
         'completed_effects': payload.get('completed_effects'),
         'rejection_code': code, 'rejection_details': details,
@@ -79,7 +79,7 @@ def run_m11_and_m02_replay(repo_root, out_path, engine_manifest=None, engine_bin
         m11_spill = _run_cmd(app, sid, surface, M11_SPILL_CMD)
         win = m11_spill['stdout_window'] or {}
         spill_path = win.get('output_path') or ''
-        m11_read_spill = _run_cmd(app, sid, surface, f"head -n 2 '{spill_path}'") if spill_path else None
+        m11_read_spill = _run_cmd(app, sid, surface, f"sed -n '1,2p' {spill_path}") if spill_path else None
         m11_after = _run_cmd(app, sid, surface, "printf 'm11-recovered-ok\\n' > ./m11_after.txt && cat ./m11_after.txt")
 
         # M02: malformed-quote refusal (zero side effects) -> immediate corrected call in same session.
