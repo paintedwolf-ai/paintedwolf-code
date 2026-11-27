@@ -617,13 +617,11 @@ func (r *NativeEngineRuntime) classifyNativeOutcome(
 		res.ExitCode = 1
 		res.CleanCompletion = false
 	case C.PW_PY_STATUS_CANCELED:
-		code := StopCancelled
 		reason := "execution canceled"
 		if execCtx.Err() == context.DeadlineExceeded {
-			code = StopTimeout
 			reason = "execution timed out"
 		}
-		latch.Trigger(TerminalStop{Code: code, Reason: reason})
+		latch.Trigger(TerminalStop{Code: StopCancelled, Reason: reason})
 		res.Stop = latch.Stop()
 		res.ExitCode = 1
 		res.CleanCompletion = false
