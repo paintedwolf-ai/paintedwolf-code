@@ -40,6 +40,13 @@ type gitFinding struct {
 
 func scanGitOneDoor(f *invariants.GoFile, inGitexec bool) []gitFinding {
 	var out []gitFinding
+	f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+		if isLookPathGit(call) {
+			out = append(out, gitFinding{call.Pos(), `LookPath("git")`})
+		} else if bin, ok := gitExecBinaryLiteral(call); ok && !inGitexec {
+			out = append(out, gitFinding{call.Pos(), "direct exec of " + bin})
+		}
+	})
 	completeReads := map[*ast.CompositeLit]bool{}
 	f.Funcs(func(fd *ast.FuncDecl) {
 		ast.Inspect(fd.Body, func(n ast.Node) bool {
@@ -49,12 +56,6 @@ func scanGitOneDoor(f *invariants.GoFile, inGitexec bool) []gitFinding {
 					if lit, ok := n.Results[0].(*ast.CompositeLit); ok && completeConfigReadArgv(lit) {
 						completeReads[lit] = true
 					}
-				}
-			case *ast.CallExpr:
-				if isLookPathGit(n) {
-					out = append(out, gitFinding{n.Pos(), `LookPath("git")`})
-				} else if bin, ok := gitExecBinaryLiteral(n); ok && !inGitexec {
-					out = append(out, gitFinding{n.Pos(), "direct exec of " + bin})
 				}
 			case *ast.CompositeLit:
 				if isForbiddenGitConfigArgv(n) && !completeReads[n] {
