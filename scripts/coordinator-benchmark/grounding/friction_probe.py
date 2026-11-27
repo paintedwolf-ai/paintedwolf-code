@@ -352,7 +352,7 @@ def probe_store_db(
                 for row in conn.execute("PRAGMA table_info(messages)").fetchall()
             }
             select_cols = ["id"]
-            for opt in ("grounding_json", "workflow_feedback_json", "host_signal_id", "kind"):
+            for opt in ("grounding_json", "workflow_feedback_json", "host_signal_id", "kind", "content"):
                 if opt in cols:
                     select_cols.append(opt)
             query = f"SELECT {', '.join(select_cols)} FROM messages WHERE session_id = ?"
@@ -378,6 +378,11 @@ def probe_store_db(
                     codes |= _extract_codes_from_json(row["workflow_feedback_json"])
                 if "host_signal_id" in cols and row["host_signal_id"]:
                     codes.add(str(row["host_signal_id"]).strip())
+                if "content" in cols and row["content"]:
+                    c_text = str(row["content"])
+                    for known_code in VALID_MID_TURN_NOTE_CODES | BREAKER_ADVISORY_CODES:
+                        if known_code in c_text:
+                            codes.add(known_code)
 
                 for code in codes:
                     if code in VALID_MID_TURN_NOTE_CODES:
@@ -407,14 +412,30 @@ def probe_store_db(
                             breaker_keys.add(f"event:{row['eid']}:{code}")
 
     for idx, ev in enumerate(sse_events):
-        ev_session = str(ev.get("session_id") or (ev.get("data") or {}).get("session_id") if isinstance(ev.get("data"), Mapping) else ev.get("session_id") or "")
+        data_obj = ev.get("data") if isinstance(ev.get("data"), Mapping) else {}
+        msg_obj = data_obj.get("message") if isinstance(data_obj.get("message"), Mapping) else {}
+        ev_session = str(
+            ev.get("session_id")
+            or data_obj.get("session_id")
+            or msg_obj.get("session_id")
+            or ""
+        )
         if ev_session and ev_session != session_id:
             continue
-        data_obj = ev.get("data") if isinstance(ev.get("data"), Mapping) else {}
-        ev_msg_id = str(ev.get("message_id") or data_obj.get("message_id") or "")
+        ev_msg_id = str(
+            ev.get("message_id")
+            or data_obj.get("message_id")
+            or msg_obj.get("id")
+            or ""
+        )
         ev_id = str(ev.get("event_id") or ev.get("id") or f"sse-{idx}")
         key_prefix = f"msg:{ev_msg_id}" if ev_msg_id else f"event:{ev_id}"
-        for code in _extract_codes_from_json(json.dumps(ev)):
+        ev_blob = json.dumps(ev)
+        ev_codes = _extract_codes_from_json(ev_blob)
+        for known_code in VALID_MID_TURN_NOTE_CODES | BREAKER_ADVISORY_CODES:
+            if known_code in ev_blob:
+                ev_codes.add(known_code)
+        for code in ev_codes:
             if code in VALID_MID_TURN_NOTE_CODES:
                 withheld_keys.add(f"{key_prefix}:{code}")
             if code in BREAKER_ADVISORY_CODES:
