@@ -422,7 +422,9 @@ def _execute_slot(
         return typed, {"d13_platform": plat, "blanket_xdg_data_write_allowed": False}, failures, None, None
 
     if slot_id == "A05-05":
-        target = app_dir / "tb08_a05_05_control_plane.txt"
+        control_plane_dir = app_dir / "config"
+        control_plane_dir.mkdir(parents=True, exist_ok=True)
+        target = control_plane_dir / "tb08_a05_05_control_plane.txt"
         target.unlink(missing_ok=True)
         pre = hash_file(target)
         typed = call_cmd(_py_write_cmd(target, "tamper\n"), checkpoint_policy="reject")
@@ -434,12 +436,18 @@ def _execute_slot(
         return typed, {"target": str(target), "pre": pre, "post": post, "unchanged": not post["exists"]}, failures, None, None
 
     if slot_id == "A05-06":
-        probe = app_dir / "store.db"
+        # smoke.py sets LYCAON_CONFIG_DIR = <app_dir>/config (protected by confine.CurrentControlPlane()),
+        # whereas store.db lives one level up at <app_dir>/store.db outside LYCAON_CONFIG_DIR.
+        # Seed a synthetic probe file inside <app_dir>/config and verify confined read is refused.
+        control_plane_dir = app_dir / "config"
+        control_plane_dir.mkdir(parents=True, exist_ok=True)
+        probe = control_plane_dir / "tb08_control_plane_read_probe.txt"
+        probe.write_text("tb08-control-plane-sentinel\n", encoding="utf-8")
         typed = call_cmd(_py_read_cmd(probe), checkpoint_policy="reject")
         flag_if_earlier_gate(typed, "OS sandbox control-plane read floor")
         if not _command_failed_or_refused(typed):
             failures.append({"rule_id": "a05_control_plane_read_allowed", "message": "Control-plane read was not refused."})
-        return typed, {"probe": str(probe), "d13_denied_dir_masked": host["d13_profile"]["denied_directory_is_masked"]}, failures, None, None
+        return typed, {"probe": str(probe), "control_plane_dir": str(control_plane_dir), "d13_denied_dir_masked": host["d13_profile"]["denied_directory_is_masked"]}, failures, None, None
 
     if slot_id == "A05-07":
         # D6-safe probe: synthetic non-existent key path inside ~/.ssh; never reads real credentials.
