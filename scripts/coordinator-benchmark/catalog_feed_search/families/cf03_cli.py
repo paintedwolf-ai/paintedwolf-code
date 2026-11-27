@@ -70,7 +70,7 @@ def run_cf03_cli(args: argparse.Namespace) -> int:
             rg_bin=args.rg_bin,
         )
 
-        with ManagedSidecar(Path(args.engine_bin), cfg_dir) as sidecar:
+        with ManagedSidecar(Path(args.engine_bin), cfg_dir, repo_root=repo_root) as sidecar:
             launch_receipt = {
                 "utc_started": sidecar.started_utc,
                 "pid": sidecar.proc.pid if sidecar.proc else 0,

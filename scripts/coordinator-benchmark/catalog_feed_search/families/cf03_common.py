@@ -45,11 +45,13 @@ class ManagedSidecar:
         binary_path: Path,
         config_dir: Path,
         *,
+        repo_root: Path | None = None,
         token: str | None = None,
         startup_timeout_s: float = 20.0,
     ) -> None:
         self.binary_path = Path(binary_path).resolve()
         self.config_dir = Path(config_dir).resolve()
+        self.repo_root = Path(repo_root).resolve() if repo_root is not None else None
         self.token = token or secrets.token_hex(24)
         self.startup_timeout_s = startup_timeout_s
         self.proc: subprocess.Popen[bytes] | None = None
@@ -73,10 +75,12 @@ class ManagedSidecar:
                 "LYCAON_LLM_MOCK": "1",
             }
         )
+        if self.repo_root is not None:
+            env["LYCAON_CONFIG_ROOT"] = str(self.repo_root / "lycaon")
         log_path = self.config_dir / "sidecar.log"
         self._log_file = open(log_path, "ab")
         self.proc = subprocess.Popen(
-            [str(self.binary_path), "serve"],
+            [str(self.binary_path), "serve", "--db", str(self.config_dir / "store.db")],
             env=env,
             stdout=self._log_file,
             stderr=subprocess.STDOUT,
@@ -97,7 +101,12 @@ class ManagedSidecar:
         health_url = f"{self.url}/health"
         while time.monotonic() < deadline:
             if self.proc is not None and self.proc.poll() is not None:
-                raise RuntimeError(f"lycaon-dev exited early with code {self.proc.returncode}")
+                log_tail = ""
+                try:
+                    log_tail = (self.config_dir / "sidecar.log").read_text(encoding="utf-8", errors="replace")[-1000:]
+                except OSError:
+                    pass
+                raise RuntimeError(f"lycaon-dev exited early with code {self.proc.returncode}: {log_tail}")
             try:
                 req = urllib.request.Request(health_url, method="GET")
                 with urllib.request.urlopen(req, timeout=1.0) as resp:
