@@ -231,7 +231,9 @@ def run_watch_boundary_case(
             sse.close()
         application.close(cleanup=False)
 
-    checkpoint_closed_store(app_dir / "store.db")
+    proc = getattr(application, "process", None)
+    if proc is not None:
+        checkpoint_closed_store(app_dir / "store.db", proc)
     storage_snap = StorageObserver(app_dir / "store.db").snapshot(session_id)
     committed_matching = sum(
         1
