@@ -5,11 +5,14 @@ package wea_test
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -67,8 +70,6 @@ func (b *barrier) Release() {
 	close(b.release)
 }
 
-// testOverlayDigest computes the SHA-256 digest of this test-only overlay file so
-// in-process lane receipts record the exact fixture code compiled alongside the product.
 func testOverlayDigest(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
@@ -83,14 +84,38 @@ func testOverlayDigest(t *testing.T) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func TestInProcessLaneRealStoreManualClockAndBarrier(t *testing.T) {
+func gitRev(t *testing.T, ref string) string {
+	t.Helper()
+	cmd := exec.Command("git", "rev-parse", ref)
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func countChatGrantsRO(t *testing.T, ctx context.Context, dbPath, grantID string) int {
+	t.Helper()
+	ro, err := db.OpenReadOnly(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("db.OpenReadOnly failed: %v", err)
+	}
+	defer ro.Close()
+	var n int
+	if err := ro.QueryRowContext(ctx, "SELECT COUNT(*) FROM chat_grants WHERE id = ?", grantID).Scan(&n); err != nil {
+		t.Fatalf("read-only chat_grants query failed: %v", err)
+	}
+	return n
+}
+
+func TestInProcessLaneChatGrantExpiryDependsOnManualClockAndBarrier(t *testing.T) {
 	ctx := t.Context()
 	overlaySHA := testOverlayDigest(t)
 	if len(overlaySHA) != 64 {
 		t.Fatalf("unexpected overlay digest length: %d", len(overlaySHA))
 	}
 
-	// Open the real SQLite store in an isolated temporary profile.
+	// Open the real migrated SQLite store in an isolated temporary profile.
 	dbPath := filepath.Join(t.TempDir(), "wea-inproc.db")
 	store, err := db.Open(dbPath)
 	if err != nil {
@@ -103,52 +128,93 @@ func TestInProcessLaneRealStoreManualClockAndBarrier(t *testing.T) {
 	}()
 
 	clk := newManualClock(time.Date(2026, 11, 27, 19, 0, 0, 0, time.UTC))
-	gate := newBarrier()
+	t0 := clk.Now()
+	expiresAt := t0.Add(10 * time.Minute)
+	nowStr := t0.Format(time.RFC3339)
 
-	commitDone := make(chan time.Time, 1)
+	// Read the migrated owner person ID and seed a real project + session to satisfy chat_grants foreign keys.
+	var ownerPersonID string
+	if err := store.QueryRowContext(ctx, `SELECT id FROM people WHERE role = 'owner' LIMIT 1`).Scan(&ownerPersonID); err != nil {
+		t.Fatalf("read owner person: %v", err)
+	}
+	if _, err := store.ExecContext(ctx,
+		`INSERT INTO projects (id, name, last_opened_at, created_at) VALUES ('proj-wea', 'WEA Fixture', ?, ?)`,
+		nowStr, nowStr,
+	); err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+	if _, err := store.ExecContext(ctx,
+		`INSERT INTO sessions (id, project_id, owner_person_id, root_session_id, mode, posture, created_at, updated_at, activity_at)
+		 VALUES ('sess-wea-inproc', 'proj-wea', ?, 'sess-wea-inproc', 'agent', 'build', ?, ?, ?)`,
+		ownerPersonID, nowStr, nowStr, nowStr,
+	); err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+
+	q := db.New(store)
+	const grantID = "grant-wea-expiring-001"
+	if err := q.UpsertChatGrant(ctx, db.UpsertChatGrantParams{
+		ChatSessionID: "sess-wea-inproc",
+		ID:            grantID,
+		CheckpointID:  "cp-wea-001",
+		DeltaJson:     `{"kind":"lease","scope":"chat"}`,
+		CreatedAt:     nowStr,
+		ExpiresAt:     sql.NullString{String: expiresAt.Format(time.RFC3339), Valid: true},
+	}); err != nil {
+		t.Fatalf("UpsertChatGrant failed: %v", err)
+	}
+
+	// Phase 1: Run DeleteExpiredChatGrants at t0 (before expiry) -> grant MUST remain persisted.
+	if err := q.DeleteExpiredChatGrants(ctx, sql.NullString{String: clk.Now().Format(time.RFC3339), Valid: true}); err != nil {
+		t.Fatalf("DeleteExpiredChatGrants(t0) failed: %v", err)
+	}
+	preCount := countChatGrantsRO(t, ctx, dbPath, grantID)
+	if preCount != 1 {
+		t.Fatalf("expected grant to persist before expiry at %s, got count=%d", t0.Format(time.RFC3339), preCount)
+	}
+
+	// Phase 2: Hold the expiry sweep on a deterministic barrier, advance manual clock past expiresAt,
+	// release the barrier, and verify the real store commits the deletion.
+	gate := newBarrier()
+	errCh := make(chan error, 1)
 	go func() {
 		if err := gate.Wait(ctx); err != nil {
+			errCh <- err
 			return
 		}
-		commitDone <- clk.Now()
+		errCh <- q.DeleteExpiredChatGrants(ctx, sql.NullString{String: clk.Now().Format(time.RFC3339), Valid: true})
 	}()
 
-	// Wait deterministically for the goroutine to hit the barrier, advance the manual clock,
-	// then release the barrier and verify the committed timestamp matches the advanced clock.
 	<-gate.entered
-	expectedCommitTime := clk.Advance(15 * time.Minute)
+	t1 := clk.Advance(15 * time.Minute)
 	gate.Release()
 
 	select {
-	case got := <-commitDone:
-		if !got.Equal(expectedCommitTime) {
-			t.Fatalf("commit timestamp mismatch: got %v, want %v", got, expectedCommitTime)
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("DeleteExpiredChatGrants(t1) failed: %v", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatalf("timed out waiting for barrier release")
+		t.Fatalf("timed out waiting for barrier-gated expiry sweep")
 	}
 
-	// Independently open the same SQLite store read-only via db.OpenReadOnly to verify D4 observer access.
-	ro, err := db.OpenReadOnly(ctx, dbPath)
-	if err != nil {
-		t.Fatalf("db.OpenReadOnly failed: %v", err)
-	}
-	defer ro.Close()
-
-	var tableCount int
-	if err := ro.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type='table'").Scan(&tableCount); err != nil {
-		t.Fatalf("read-only schema query failed: %v", err)
-	}
-	if tableCount == 0 {
-		t.Fatalf("expected migrated real store tables, got 0")
+	postCount := countChatGrantsRO(t, ctx, dbPath, grantID)
+	if postCount != 0 {
+		t.Fatalf("expected grant to expire after clock advanced to %s, got count=%d", t1.Format(time.RFC3339), postCount)
 	}
 
 	receipt := map[string]any{
-		"schema":              "wea-inproc-control-v1",
-		"lane":                "in-process",
-		"test_overlay_digest": overlaySHA,
-		"real_store_tables":   tableCount,
-		"manual_clock_commit": expectedCommitTime.Format(time.RFC3339),
+		"schema":                 "wea-inproc-control-v1",
+		"lane":                   "in-process",
+		"product_git_head":       gitRev(t, "HEAD"),
+		"product_git_tree":       gitRev(t, "HEAD^{tree}"),
+		"test_overlay_digest":    overlaySHA,
+		"grant_id":               grantID,
+		"manual_clock_t0":        t0.Format(time.RFC3339),
+		"expires_at":             expiresAt.Format(time.RFC3339),
+		"manual_clock_t1":        t1.Format(time.RFC3339),
+		"pre_expiry_grant_count": preCount,
+		"post_expiry_grant_count": postCount,
 	}
 	encoded, err := json.Marshal(receipt)
 	if err != nil {

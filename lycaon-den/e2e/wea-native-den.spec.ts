@@ -12,14 +12,47 @@ import {
 
 type PendingTurn = { pending: boolean; id: string; session_id: string };
 
+type FocusSnapshot = {
+  tagName: string;
+  testId: string;
+  role: string;
+  ariaLabel: string;
+  key: string;
+};
+
+async function readFocusSnapshot(page: import("@playwright/test").Page): Promise<FocusSnapshot> {
+  return page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    const tagName = el?.tagName ?? "";
+    const testId = el?.getAttribute("data-testid") ?? "";
+    const role = el?.getAttribute("role") ?? "";
+    const ariaLabel = el?.getAttribute("aria-label") ?? "";
+    return {
+      tagName,
+      testId,
+      role,
+      ariaLabel,
+      key: `${tagName}|${testId}|${role}|${ariaLabel}`,
+    };
+  });
+}
+
 /**
  * TB02 / D12 Linux native Den keyboard-navigation proof.
  *
- * Runs against the real desktop window under Xvfb (`PLAYWRIGHT_E2E=desktop` via
- * `scripts/e2e-den-desktop.sh`), drives keyboard navigation, reads back state
- * directly from the engine API, and captures a screenshot attachment.
+ * Qualifies ONLY the real desktop tier (`PLAYWRIGHT_E2E=desktop` under Xvfb via
+ * `scripts/e2e-den-desktop.sh`). Refuses to pass on the web tier. Drives a specific
+ * keyboard focus transition from the chat composer input to an interactive control,
+ * verifies exact before/after focus identity and resulting UI state, reads back
+ * session & transcript state from the live API, and captures a screenshot attachment.
  */
-webE2e("TB02 native Den keyboard navigation, API readback, and screenshot capture", async ({ page, request }, testInfo) => {
+webE2e("TB02 native Den desktop keyboard focus transition, API readback, and screenshot capture", async ({ page, request }, testInfo) => {
+  // D12: A browser-tier run never satisfies a native desktop slot.
+  expect(
+    process.env.PLAYWRIGHT_E2E,
+    "TB02 native Den spec must run under PLAYWRIGHT_E2E=desktop (never web tier)",
+  ).toBe("desktop");
+
   webE2e.setTimeout(120_000);
 
   await bootstrapChatSession(page, request);
@@ -28,7 +61,7 @@ webE2e("TB02 native Den keyboard navigation, API readback, and screenshot captur
 
   try {
     const prompt = await apiPostPrompt(request, sessionId, {
-      text: "TB02 native Den keyboard navigation verification.",
+      text: "TB02 native Den desktop keyboard navigation verification.",
     });
     expect(prompt.ok(), await prompt.text()).toBe(true);
 
@@ -41,22 +74,33 @@ webE2e("TB02 native Den keyboard navigation, API readback, and screenshot captur
 
     await apiJson(request, "POST", "/harness/llm/respond", {
       id: pending.id,
-      content: "TB02 native Den navigation ready.",
+      content: "TB02 native Den desktop navigation ready.",
     });
     await waitForSessionReady(request, sessionId);
-    await expect(
-      liveChatStage(page).getByTestId("transcript-article-assistant").last(),
-    ).toContainText("TB02 native Den navigation ready.");
+    const stage = liveChatStage(page);
+    await expect(stage.getByTestId("transcript-article-assistant").last()).toContainText(
+      "TB02 native Den desktop navigation ready.",
+    );
 
-    // Exercise real keyboard navigation in the desktop window.
-    await page.keyboard.press("Tab");
-    const firstFocused = await page.evaluate(() => document.activeElement?.tagName ?? "");
-    await page.keyboard.press("Tab");
-    const secondFocused = await page.evaluate(() => document.activeElement?.tagName ?? "");
-    await page.keyboard.press("Escape");
+    // Anchor focus on a known starting landmark (composer textarea/input in the active chat stage).
+    const composer = stage.locator("textarea, [contenteditable='true'], input[type='text']").first();
+    await expect(composer).toBeVisible({ timeout: 15_000 });
+    await composer.focus();
 
-    expect(firstFocused.length).toBeGreaterThan(0);
-    expect(secondFocused.length).toBeGreaterThan(0);
+    const beforeFocus = await readFocusSnapshot(page);
+    expect(["TEXTAREA", "INPUT", "DIV"]).toContain(beforeFocus.tagName);
+
+    // Drive a real keyboard focus transition via Tab and verify focus actually moved to a distinct interactive element.
+    await page.keyboard.press("Tab");
+    const afterTabFocus = await readFocusSnapshot(page);
+    expect(afterTabFocus.tagName).not.toBe("");
+    expect(afterTabFocus.tagName).not.toBe("BODY");
+    expect(afterTabFocus.key).not.toBe(beforeFocus.key);
+
+    // Reverse transition via Shift+Tab should return focus to the starting landmark.
+    await page.keyboard.press("Shift+Tab");
+    const afterShiftTabFocus = await readFocusSnapshot(page);
+    expect(afterShiftTabFocus.key).toBe(beforeFocus.key);
 
     // Independent API readback of session & transcript state.
     const session = await apiJson<Session>(request, "GET", `/v1/sessions/${sessionId}`);
@@ -66,7 +110,12 @@ webE2e("TB02 native Den keyboard navigation, API readback, and screenshot captur
       `/v1/sessions/${sessionId}/messages`,
     );
     expect(session.id).toBe(sessionId);
-    expect(transcript.messages.some((m) => m.role === "assistant")).toBe(true);
+    expect(session.status).toBe("idle");
+    expect(
+      transcript.messages.some(
+        (m) => m.role === "assistant" && (m.content ?? "").includes("TB02 native Den desktop navigation ready."),
+      ),
+    ).toBe(true);
 
     // Capture desktop window screenshot evidence.
     const screenshotPath = testInfo.outputPath("wea-native-den-linux.png");
@@ -78,10 +127,16 @@ webE2e("TB02 native Den keyboard navigation, API readback, and screenshot captur
 
     const evidence = {
       schema: "wea-native-den-linux-v1",
-      tier: process.env.PLAYWRIGHT_E2E ?? "web",
+      tier: process.env.PLAYWRIGHT_E2E,
       sessionId,
-      keyboard: { firstFocused, secondFocused },
+      keyboardTransition: {
+        before: beforeFocus,
+        afterTab: afterTabFocus,
+        afterShiftTab: afterShiftTabFocus,
+        returnedToOrigin: afterShiftTabFocus.key === beforeFocus.key,
+      },
       apiReadback: {
+        sessionId: session.id,
         sessionStatus: session.status,
         messageCount: transcript.messages.length,
       },

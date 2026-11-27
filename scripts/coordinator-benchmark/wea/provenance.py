@@ -3,7 +3,8 @@
 Unlike portable_command/provenance.py (which ties manifest HEAD to the evaluator checkout),
 wea/provenance.py strictly separates:
   - product_source: verified from --engine binary SHA-256, `go tool buildid`, `go version -m`,
-    and optional --engine-manifest JSON.
+    and optional --engine-manifest JSON (supports both flat manifest JSON and TB01 nested
+    `build-manifest.json`).
   - harness_source: git HEAD, tree SHA, branch, and dirty state of the harness checkout.
 """
 
@@ -79,6 +80,47 @@ def resolve_engine_manifest(
     return pathlib.Path(env_m).resolve() if env_m else None
 
 
+def _extract_manifest_entry(manifest_data: dict[str, Any], actual_sha: str, binary_name: str) -> dict[str, str]:
+    """Extract normalized manifest fields from either a flat manifest or TB01 nested build-manifest.json."""
+    builds = manifest_data.get("builds")
+    if isinstance(builds, dict) and builds:
+        # Prefer the build entry whose binary SHA-256 matches actual_sha; fall back to product_baseline.
+        chosen: dict[str, Any] | None = None
+        chosen_bin: dict[str, Any] | None = None
+        for entry in builds.values():
+            if not isinstance(entry, dict):
+                continue
+            bins = entry.get("binaries")
+            if not isinstance(bins, dict):
+                continue
+            cand = bins.get(binary_name) or bins.get("lycaon-dev")
+            if isinstance(cand, dict) and actual_sha and cand.get("sha256") == actual_sha:
+                chosen = entry
+                chosen_bin = cand
+                break
+        if chosen is None:
+            fallback = builds.get("product_baseline") or next(iter(builds.values()), None)
+            if isinstance(fallback, dict):
+                chosen = fallback
+                bins = fallback.get("binaries")
+                if isinstance(bins, dict):
+                    chosen_bin = bins.get(binary_name) or bins.get("lycaon-dev")
+        return {
+            "executable_sha256": str((chosen_bin or {}).get("sha256") or ""),
+            "go_build_id": str((chosen_bin or {}).get("go_build_id") or ""),
+            "git_head": str((chosen or {}).get("head") or (chosen or {}).get("git_head") or ""),
+            "git_tree": str((chosen or {}).get("tree") or (chosen or {}).get("git_tree") or ""),
+            "build_label": str((chosen or {}).get("label") or ""),
+        }
+    return {
+        "executable_sha256": str(manifest_data.get("executable_sha256") or manifest_data.get("sha256") or ""),
+        "go_build_id": str(manifest_data.get("go_build_id") or manifest_data.get("build_id") or ""),
+        "git_head": str(manifest_data.get("git_head") or manifest_data.get("product_git_head") or manifest_data.get("head") or ""),
+        "git_tree": str(manifest_data.get("git_tree") or manifest_data.get("product_git_tree") or manifest_data.get("tree") or ""),
+        "build_label": str(manifest_data.get("label") or ""),
+    }
+
+
 def inspect_product_source(
     root: pathlib.Path = REPO_ROOT,
     *,
@@ -119,6 +161,7 @@ def inspect_product_source(
     manifest_sha = ""
     manifest_sha_match: bool | None = None
     manifest_build_id_match: bool | None = None
+    extracted = {"executable_sha256": "", "go_build_id": "", "git_head": "", "git_tree": "", "build_label": ""}
     if manifest_path is not None and manifest_path.is_file():
         manifest_sha = file_sha256(manifest_path)
         try:
@@ -127,14 +170,15 @@ def inspect_product_source(
                 manifest_data = parsed
         except (OSError, ValueError):
             manifest_data = {}
-        expected_sha = str(manifest_data.get("executable_sha256") or manifest_data.get("sha256") or "")
+        extracted = _extract_manifest_entry(manifest_data, sha, binary.name)
+        expected_sha = extracted["executable_sha256"]
         manifest_sha_match = bool(exists and sha and expected_sha and expected_sha == sha)
-        expected_bid = str(manifest_data.get("go_build_id") or manifest_data.get("build_id") or "")
+        expected_bid = extracted["go_build_id"]
         if expected_bid:
             manifest_build_id_match = bool(build_id and expected_bid == build_id)
 
-    m_head = str(manifest_data.get("git_head") or manifest_data.get("product_git_head") or "")
-    m_tree = str(manifest_data.get("git_tree") or manifest_data.get("product_git_tree") or "")
+    m_head = extracted["git_head"]
+    m_tree = extracted["git_tree"]
     vcs_rev = vcs.get("vcs.revision", "")
     vcs_modified = vcs.get("vcs.modified", "")
 
@@ -162,6 +206,7 @@ def inspect_product_source(
         "vcs_modified": vcs_modified,
         "manifest_path": str(manifest_path) if manifest_path is not None else "",
         "manifest_sha256": manifest_sha,
+        "manifest_build_label": extracted["build_label"],
         "manifest_git_head": m_head,
         "manifest_git_tree": m_tree,
         "manifest_sha256_match": manifest_sha_match,

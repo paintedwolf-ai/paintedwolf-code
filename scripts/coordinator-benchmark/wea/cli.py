@@ -49,6 +49,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_mac.add_argument("--out", type=pathlib.Path, required=True)
     p_mac.add_argument("--api-url", required=True)
     p_mac.add_argument("--token", required=True)
+    p_mac.add_argument("--session-id", required=True)
+    p_mac.add_argument("--profile-dir", type=pathlib.Path, required=True)
+    p_mac.add_argument("--owned-pid", type=int, default=None)
     p_mac.add_argument("--launch-den", action="store_true")
 
     return parser
@@ -110,6 +113,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.out,
             api_url=args.api_url,
             token=args.token,
+            session_id=args.session_id,
+            profile_dir=args.profile_dir,
+            owned_pid=args.owned_pid,
             launch_den=args.launch_den,
             engine_bin=args.engine,
             engine_manifest=args.engine_manifest,

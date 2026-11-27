@@ -1,6 +1,6 @@
-"""All 12 WEA checker qualification controls + missing-instrumentation control (TB02).
+"""WEA checker qualification controls (TB02).
 
-7 injected-defect controls (MUST fail with their exact defect rule ID):
+10 injected-defect controls (MUST fail with their exact defect rule ID):
   1. wrong_author
   2. missing_landed_path
   3. landed_path_absent_from_result
@@ -8,28 +8,40 @@
   5. grant_matched_across_chats
   6. unrecorded_connection
   7. canary_in_record
+  8. empty_claimed_paths_with_real_change  (-> landed_path_absent_from_result)
+  9. unverified_source_witness             (-> unverified_source_witness)
+ 10. surplus_duplicate_connection          (-> unrecorded_connection)
 
 5 healthy/benign controls (MUST pass):
   1. healthy_lag
   2. late_card
   3. expected_refusal
   4. retention_gap
-  5. clean_rebase
+  5. clean_rebase (tied to exact combined expected bytes)
 
-Plus:
-  - missing_instrumentation (MUST yield verdict == "unknown", never "pass").
+2 missing-instrumentation controls (MUST yield verdict == "unknown"):
+  1. missing_instrumentation
+  2. missing_network_witness
 """
 
 from __future__ import annotations
 
 import copy
+import hashlib
 from typing import Any
 
 from wea.checker import check_evidence
 
 
+def _sha(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def make_healthy_baseline() -> dict[str, Any]:
     """Construct a complete, healthy WEA evidence bundle suitable for defect injection."""
+    pre_app = "line1\nline2\n"
+    post_app = "line1\nline2-edited\n"
+    pre_readme = "readme\n"
     return {
         "schema": "wea-evidence-v1",
         "slot_id": "ctrl-healthy-baseline",
@@ -49,20 +61,22 @@ def make_healthy_baseline() -> dict[str, Any]:
                 "dirty": False,
             },
         },
-        "required_observers": ["primary_pre_hashes", "primary_post_hashes", "observed_writers"],
+        "required_observers": ["primary_pre_hashes", "primary_post_hashes", "observed_writers", "network_connections"],
         "observer": {
             "instrumentation_complete": True,
-            "primary_pre_hashes": {"app.py": "1" * 64, "README.md": "2" * 64},
-            "primary_post_hashes": {"app.py": "3" * 64, "README.md": "2" * 64},
+            "primary_pre_hashes": {"app.py": _sha(pre_app), "README.md": _sha(pre_readme)},
+            "primary_post_hashes": {"app.py": _sha(post_app), "README.md": _sha(pre_readme)},
             "observed_writers": {"app.py": "agent"},
+            "network_witness": {"live_witness": True, "fixture_count": 1},
             "network_connections": [
                 {"address": "127.0.0.1:41234", "method": "GET", "path": "/ping"},
             ],
         },
         "product_records": {
             "worker_landing": {
-                "landed_paths": {"app.py": "3" * 64},
+                "landed_paths": {"app.py": _sha(post_app)},
                 "result_paths": ["app.py"],
+                "expected_post_hashes": {"app.py": _sha(post_app)},
                 "clean_rebase_paths": [],
             },
             "attributions": [
@@ -71,8 +85,10 @@ def make_healthy_baseline() -> dict[str, Any]:
             "edit_operations": [
                 {
                     "path": "app.py",
-                    "read_basis_sha256": "1" * 64,
-                    "disk_sha256_at_apply": "1" * 64,
+                    "read_basis_sha256": _sha(pre_app),
+                    "disk_sha256_at_apply": _sha(pre_app),
+                    "recorded_after_sha256": _sha(post_app),
+                    "expected_after_sha256": _sha(post_app),
                     "accepted": True,
                 },
             ],
@@ -98,7 +114,7 @@ def make_healthy_baseline() -> dict[str, Any]:
 
 
 def build_defect_controls() -> dict[str, tuple[dict[str, Any], str]]:
-    """Return all 7 injected-defect controls mapping control_name -> (evidence, expected_rule_id)."""
+    """Return all 10 injected-defect controls mapping control_name -> (evidence, expected_rule_id)."""
     controls: dict[str, tuple[dict[str, Any], str]] = {}
 
     # 1. wrong_author
@@ -119,7 +135,6 @@ def build_defect_controls() -> dict[str, tuple[dict[str, Any], str]]:
     # 4. stale_read_basis_accepted
     e = copy.deepcopy(make_healthy_baseline())
     e["product_records"]["edit_operations"][0]["read_basis_sha256"] = "0" * 64
-    e["product_records"]["edit_operations"][0]["disk_sha256_at_apply"] = "1" * 64
     e["product_records"]["edit_operations"][0]["accepted"] = True
     controls["stale_read_basis_accepted"] = (e, "stale_read_basis_accepted")
 
@@ -153,6 +168,23 @@ def build_defect_controls() -> dict[str, tuple[dict[str, Any], str]]:
     }
     controls["canary_in_record"] = (e, "canary_in_record")
 
+    # 8. empty_claimed_paths_with_real_change (fail-closed: empty result_paths MUST NOT skip check)
+    e = copy.deepcopy(make_healthy_baseline())
+    e["product_records"]["worker_landing"]["result_paths"] = []
+    controls["empty_claimed_paths_with_real_change"] = (e, "landed_path_absent_from_result")
+
+    # 9. unverified_source_witness (fail-closed: product_source.verified=False MUST fail)
+    e = copy.deepcopy(make_healthy_baseline())
+    e["provenance"]["product_source"]["verified"] = False
+    controls["unverified_source_witness"] = (e, "unverified_source_witness")
+
+    # 10. surplus_duplicate_connection (multiset cardinality: 2 observed vs 1 recorded MUST fail)
+    e = copy.deepcopy(make_healthy_baseline())
+    e["observer"]["network_connections"].append(
+        {"address": "127.0.0.1:41234", "method": "GET", "path": "/ping"}
+    )
+    controls["surplus_duplicate_connection"] = (e, "unrecorded_connection")
+
     return controls
 
 
@@ -170,12 +202,18 @@ def build_healthy_controls() -> dict[str, dict[str, Any]]:
     e["observer"]["late_card_arrived"] = True
     controls["late_card"] = e
 
-    # 3. expected_refusal (typed refusal + unchanged host bytes + passing adjacent positive control)
+    # 3. expected_refusal (typed refusal + unchanged host bytes + passing adjacent positive control + live empty witness)
     e = copy.deepcopy(make_healthy_baseline())
+    pos_sha = _sha("permitted-inside\n")
+    e["observer"]["network_connections"] = []
+    e["observer"]["network_witness"] = {"live_witness": True, "fixture_count": 1}
+    e["product_records"]["recorded_connections"] = []
     e["expected_refusal"] = {
         "typed_refusal_code": "SANDBOX_TRY_WRITE_ROOT",
         "host_target_unchanged": True,
         "adjacent_positive_control_passed": True,
+        "adjacent_positive_expected_sha256": pos_sha,
+        "adjacent_positive_actual_sha256": pos_sha,
     }
     controls["expected_refusal"] = e
 
@@ -191,10 +229,15 @@ def build_healthy_controls() -> dict[str, dict[str, Any]]:
     }
     controls["retention_gap"] = e
 
-    # 5. clean_rebase (concurrent unrelated primary-tree change cleanly rebased)
+    # 5. clean_rebase (non-overlapping outside edit + agent edit -> exact combined expected bytes verified)
     e = copy.deepcopy(make_healthy_baseline())
-    e["observer"]["primary_post_hashes"]["concurrent_other.txt"] = "7" * 64
-    e["product_records"]["worker_landing"]["clean_rebase_paths"] = ["concurrent_other.txt"]
+    base_shared = "header\nsection_a: orig\nsection_b: orig\n"
+    combined_shared = "header\nsection_a: outside-edit\nsection_b: agent-edit\n"
+    combined_sha = _sha(combined_shared)
+    e["observer"]["primary_pre_hashes"]["shared.txt"] = _sha(base_shared)
+    e["observer"]["primary_post_hashes"]["shared.txt"] = combined_sha
+    e["product_records"]["worker_landing"]["clean_rebase_paths"] = ["shared.txt"]
+    e["product_records"]["worker_landing"]["clean_rebase_expected_sha256"] = {"shared.txt": combined_sha}
     controls["clean_rebase"] = e
 
     return controls
@@ -207,8 +250,16 @@ def build_missing_instrumentation_control() -> dict[str, Any]:
     return e
 
 
+def build_missing_network_witness_control() -> dict[str, Any]:
+    """Build an evidence bundle with empty network_connections but NO live_witness (MUST yield unknown)."""
+    e = copy.deepcopy(make_healthy_baseline())
+    e["observer"]["network_connections"] = []
+    e["observer"].pop("network_witness", None)
+    return e
+
+
 def run_qualification_controls() -> dict[str, Any]:
-    """Execute all 12 qualification controls + missing-instrumentation control and verify every verdict."""
+    """Execute all qualification controls and verify every verdict and rule ID."""
     defect_results: dict[str, Any] = {}
     for name, (ev, expected_rule) in build_defect_controls().items():
         res = check_evidence(ev)
@@ -242,10 +293,19 @@ def run_qualification_controls() -> dict[str, Any]:
         "qualified": missing_res["verdict"] == "unknown",
     }
 
+    missing_nw_res = check_evidence(build_missing_network_witness_control())
+    missing_network_witness_control = {
+        "expected_verdict": "unknown",
+        "actual_verdict": missing_nw_res["verdict"],
+        "missing_instrumentation": missing_nw_res.get("missing_instrumentation", []),
+        "qualified": missing_nw_res["verdict"] == "unknown",
+    }
+
     all_passed = (
         all(r["qualified"] for r in defect_results.values())
         and all(r["qualified"] for r in healthy_results.values())
         and missing_control["qualified"]
+        and missing_network_witness_control["qualified"]
     )
     return {
         "schema": "wea-checker-controls-v1",
@@ -253,4 +313,5 @@ def run_qualification_controls() -> dict[str, Any]:
         "defect_controls": defect_results,
         "healthy_controls": healthy_results,
         "missing_instrumentation_control": missing_control,
+        "missing_network_witness_control": missing_network_witness_control,
     }

@@ -1,6 +1,7 @@
 """Independent observers for Workers, Edits, and Authority tracks (TB02 / D4).
 
 All SQLite reads use strict `?mode=ro` URI mode so observers never mutate product state.
+Binary SQLite BLOB values are converted to JSON-safe digest summaries (`__blob_len__`, `__blob_sha256__`).
 All filesystem hashes, diffs, and process-table reads run outside the product boundary.
 """
 
@@ -32,6 +33,7 @@ WORKERS_TABLES = (
 
 EDITS_TABLES = (
     "source_files",
+    "source_operations",
     "source_versions",
     "source_effects",
     "source_line_attr",
@@ -64,6 +66,13 @@ AUTHORITY_TABLES = (
 
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _json_safe_cell(val: Any) -> Any:
+    if isinstance(val, (bytes, bytearray, memoryview)):
+        raw = bytes(val)
+        return {"__blob_len__": len(raw), "__blob_sha256__": sha256_bytes(raw)}
+    return val
 
 
 def hash_file(path: str | pathlib.Path) -> dict[str, Any]:
@@ -152,7 +161,7 @@ def read_sqlite_tables_ro(
     session_id: str | None = None,
     row_limit: int = 2000,
 ) -> dict[str, Any]:
-    """Read selected tables from SQLite strictly via `?mode=ro` URI."""
+    """Read selected tables from SQLite strictly via `?mode=ro` URI, converting BLOBs to JSON-safe digests."""
     path = pathlib.Path(db_path).resolve()
     if not path.is_file():
         return {"available": False, "db_path": str(path), "present_tables": [], "rows": {}}
@@ -177,7 +186,10 @@ def read_sqlite_tables_ro(
                 cur = conn.execute(f"SELECT * FROM {quoted} WHERE session_id = ? LIMIT ?", (session_id, row_limit))
             else:
                 cur = conn.execute(f"SELECT * FROM {quoted} LIMIT ?", (row_limit,))
-            rows_by_table[table] = [dict(r) for r in cur.fetchall()]
+            rows_by_table[table] = [
+                {k: _json_safe_cell(r[k]) for k in r.keys()}
+                for r in cur.fetchall()
+            ]
     return {
         "available": True,
         "db_path": str(path),
@@ -368,11 +380,16 @@ class AuthorityObserver:
         }
         db_records = read_sqlite_tables_ro(self.db_path, AUTHORITY_TABLES, session_id=session_id)
         tool_results = read_tool_results_ro(self.db_path, session_id)
+        marked_fixtures = [
+            {**snap, "live_witness": True}
+            for snap in (network_fixtures or [])
+        ]
         return {
             "track": "authority",
             "host_fs": fs_changes,
             "host_processes": read_host_process_table(launched_pids),
-            "network_fixtures": list(network_fixtures or []),
+            "network_fixtures": marked_fixtures,
+            "network_witness": {"live_witness": bool(marked_fixtures), "fixture_count": len(marked_fixtures)},
             "approval_cards": list(approval_cards or []),
             "sqlite_records": db_records,
             "tool_results": tool_results,

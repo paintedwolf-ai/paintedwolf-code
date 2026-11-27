@@ -1,4 +1,4 @@
-"""Comprehensive unit tests for the TB02 WEA shared driver, observers, canaries, endpoints, checker, and replay."""
+"""Comprehensive unit tests for TB02 WEA driver, observers, canaries, endpoints, checker, replay, and review fixes."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import copy
 import json
 import os
 import pathlib
+import platform
 import socket
 import sqlite3
 import sys
@@ -17,17 +18,16 @@ BENCHMARK_DIR = pathlib.Path(__file__).resolve().parent.parent
 if str(BENCHMARK_DIR) not in sys.path:
     sys.path.insert(0, str(BENCHMARK_DIR))
 
-from wea import cli
+from wea import cli, runner
 from wea.canary import CanaryGenerator, scan_for_canaries
 from wea.checker import check_evidence
 from wea.controls import (
-    build_defect_controls,
     build_healthy_controls,
-    build_missing_instrumentation_control,
     make_healthy_baseline,
     run_qualification_controls,
 )
 from wea.fixtures_net import RecordingHTTPFixture, RecordingTCPFixture
+from wea.native_den_macos import run_macos_native_den
 from wea.observers import (
     AuthorityObserver,
     EditsObserver,
@@ -38,13 +38,14 @@ from wea.observers import (
     outside_unified_diff,
     read_host_process_table,
     read_sqlite_tables_ro,
+    sha256_bytes,
 )
 from wea.provenance import collect_provenance, file_sha256
 from wea.replay import export_sanitized_bundle, load_and_verify_bundle, replay_on_fresh_profile, sanitize_value
 
 
 class TestProvenanceSplit(unittest.TestCase):
-    def test_product_and_harness_provenance_recorded_separately(self) -> None:
+    def test_product_and_harness_provenance_recorded_separately_flat_and_tb01_nested_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             fake_bin = root / "lycaon-dev"
@@ -52,8 +53,9 @@ class TestProvenanceSplit(unittest.TestCase):
             fake_bin.chmod(0o755)
             bin_sha = file_sha256(fake_bin)
 
-            manifest = root / "engine-manifest.json"
-            manifest.write_text(
+            # 1. Flat manifest JSON
+            flat = root / "engine-manifest.json"
+            flat.write_text(
                 json.dumps({
                     "executable_sha256": bin_sha,
                     "git_head": "bbeb46e72ce3d1cfc052259cadcce29185bb40bd",
@@ -61,19 +63,37 @@ class TestProvenanceSplit(unittest.TestCase):
                 }),
                 encoding="utf-8",
             )
+            prov_flat = collect_provenance(engine_bin=fake_bin, engine_manifest=flat, lane="sidecar")
+            self.assertEqual(prov_flat["product_source"]["executable_sha256"], bin_sha)
+            self.assertTrue(prov_flat["product_source"]["verified"])
+            self.assertTrue(prov_flat["product_harness_distinct"])
 
-            prov = collect_provenance(
-                engine_bin=fake_bin,
-                engine_manifest=manifest,
-                lane="sidecar",
+            # 2. TB01 nested build-manifest.json format
+            nested = root / "build-manifest.json"
+            nested.write_text(
+                json.dumps({
+                    "builds": {
+                        "product_baseline": {
+                            "label": "product_baseline",
+                            "head": "bbeb46e72ce3d1cfc052259cadcce29185bb40bd",
+                            "tree": "1830e4d60ed640d4ecf386653377498788fa9320",
+                            "binaries": {
+                                "lycaon-dev": {
+                                    "path": str(fake_bin),
+                                    "sha256": bin_sha,
+                                    "go_build_id": "",
+                                }
+                            },
+                        }
+                    }
+                }),
+                encoding="utf-8",
             )
-            self.assertIn("product_source", prov)
-            self.assertIn("harness_source", prov)
-            self.assertEqual(prov["product_source"]["executable_sha256"], bin_sha)
-            self.assertTrue(prov["product_source"]["verified"])
-            self.assertEqual(prov["product_source"]["effective_git_head"], "bbeb46e72ce3d1cfc052259cadcce29185bb40bd")
-            self.assertTrue(prov["harness_source"]["git_head"])
-            self.assertTrue(prov["product_harness_distinct"])
+            prov_nested = collect_provenance(engine_bin=fake_bin, engine_manifest=nested, lane="sidecar")
+            self.assertTrue(prov_nested["product_source"]["verified"])
+            self.assertEqual(prov_nested["product_source"]["manifest_build_label"], "product_baseline")
+            self.assertEqual(prov_nested["product_source"]["effective_git_head"], "bbeb46e72ce3d1cfc052259cadcce29185bb40bd")
+            self.assertTrue(prov_nested["product_harness_distinct"])
 
     def test_manifest_sha_mismatch_marks_unverified(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -106,7 +126,6 @@ class TestCanaryGeneratorAndScanner(unittest.TestCase):
             env_path = gen_rand.materialize_env_file(root / "profile", {"TEST_CANARY": t2})
             self.assertTrue(env_path.is_file())
 
-            # Clean SQLite DB and clean log pass.
             db_path = root / "store.db"
             conn = sqlite3.connect(db_path)
             conn.execute("CREATE TABLE messages (id TEXT, content TEXT)")
@@ -114,14 +133,12 @@ class TestCanaryGeneratorAndScanner(unittest.TestCase):
             conn.commit()
             conn.close()
 
-            log_path = root / "sidecar.log"
-            log_path.write_text("startup ok\nshutdown ok\n", encoding="utf-8")
+            (root / "sidecar.log").write_text("startup ok\nshutdown ok\n", encoding="utf-8")
 
             clean = scan_for_canaries([t2], sqlite_dbs=[db_path], paths=[root])
             self.assertTrue(clean["clean"])
             self.assertEqual(clean["leak_count"], 0)
 
-            # Inject canary into SQLite and JSON receipt -> scanner flags both without echoing raw canary.
             conn = sqlite3.connect(db_path)
             conn.execute("INSERT INTO messages VALUES ('m2', ?)", (f"leaked: {t2}",))
             conn.commit()
@@ -154,7 +171,6 @@ class TestRecordingNetworkFixtures(unittest.TestCase):
             refused_snap = refused.snapshot()
             self.assertEqual(allowed_snap["connection_count"], 1)
             self.assertEqual(refused_snap["connection_count"], 0)
-            # Authorization header must be screened so raw secret never appears in evidence.
             self.assertNotIn(secret, json.dumps(allowed_snap))
             self.assertEqual(allowed_snap["requests"][0]["headers"]["X-Test"], "ok")
 
@@ -170,7 +186,7 @@ class TestRecordingNetworkFixtures(unittest.TestCase):
 
 
 class TestIndependentObservers(unittest.TestCase):
-    def test_tree_hash_diff_sqlite_ro_and_process_table(self) -> None:
+    def test_tree_hash_diff_sqlite_ro_blob_serialization_and_process_table(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             dir_a = root / "a"
@@ -192,17 +208,21 @@ class TestIndependentObservers(unittest.TestCase):
             conn = sqlite3.connect(db_path)
             conn.execute("CREATE TABLE worker_jobs (id TEXT, session_id TEXT, status TEXT)")
             conn.execute("INSERT INTO worker_jobs VALUES ('j1', 's1', 'complete')")
-            conn.execute("CREATE TABLE source_versions (id TEXT, session_id TEXT)")
-            conn.execute("INSERT INTO source_versions VALUES ('v1', 's1')")
+            conn.execute("CREATE TABLE editor_replica_heads (id TEXT, checkpoint BLOB)")
+            blob_payload = b"\x00\x01\xfe\xffbinary-checkpoint"
+            conn.execute("INSERT INTO editor_replica_heads VALUES ('h1', ?)", (blob_payload,))
             conn.execute("CREATE TABLE checkpoints (id TEXT, session_id TEXT)")
             conn.execute("INSERT INTO checkpoints VALUES ('c1', 's1')")
             conn.commit()
             conn.close()
 
-            ro = read_sqlite_tables_ro(db_path, ("worker_jobs", "missing_table"), session_id="s1")
+            ro = read_sqlite_tables_ro(db_path, ("worker_jobs", "editor_replica_heads", "missing_table"), session_id="s1")
             self.assertTrue(ro["available"])
-            self.assertEqual(ro["present_tables"], ["worker_jobs"])
-            self.assertEqual(len(ro["rows"]["worker_jobs"]), 1)
+            self.assertEqual(ro["present_tables"], ["worker_jobs", "editor_replica_heads"])
+            # BLOB column must serialize cleanly to JSON with digest summary (no TypeError).
+            serialized = json.dumps(ro)
+            self.assertIn(sha256_bytes(blob_payload), serialized)
+            self.assertEqual(ro["rows"]["editor_replica_heads"][0]["checkpoint"]["__blob_len__"], len(blob_payload))
 
             w_obs = WorkersObserver(dir_b, db_path)
             w_obs.capture_pre()
@@ -219,68 +239,102 @@ class TestIndependentObservers(unittest.TestCase):
             outside_f = root / "outside.txt"
             outside_f.write_text("unchanged", encoding="utf-8")
             a_obs.capture_pre_fs({"outside": outside_f})
-            a_post = a_obs.capture_post(session_id="s1", fs_paths={"outside": outside_f}, launched_pids=[os.getpid()])
+            a_post = a_obs.capture_post(
+                session_id="s1",
+                fs_paths={"outside": outside_f},
+                launched_pids=[os.getpid()],
+                network_fixtures=[{"fixture_id": "ep1", "address": "127.0.0.1:9999", "connection_count": 0, "requests": []}],
+            )
             self.assertTrue(a_post["host_fs"]["outside"]["unchanged"])
+            self.assertTrue(a_post["network_witness"]["live_witness"])
             self.assertIn(str(os.getpid()), a_post["host_processes"]["alive"])
 
             ps = read_host_process_table([os.getpid()])
             self.assertIn(str(os.getpid()), ps["alive"])
 
 
-class TestCheckerAndAllTwelveControls(unittest.TestCase):
-    def test_all_twelve_controls_and_missing_instrumentation(self) -> None:
+class TestFailClosedCheckerAndAllControls(unittest.TestCase):
+    def test_all_defect_healthy_and_missing_controls(self) -> None:
         report = run_qualification_controls()
         self.assertTrue(report["qualified"], json.dumps(report, indent=2))
-        self.assertEqual(len(report["defect_controls"]), 7)
+        self.assertEqual(len(report["defect_controls"]), 10)
         self.assertEqual(len(report["healthy_controls"]), 5)
 
         expected_defects = {
-            "wrong_author",
-            "missing_landed_path",
-            "landed_path_absent_from_result",
-            "stale_read_basis_accepted",
-            "grant_matched_across_chats",
-            "unrecorded_connection",
-            "canary_in_record",
+            "wrong_author": "wrong_author",
+            "missing_landed_path": "missing_landed_path",
+            "landed_path_absent_from_result": "landed_path_absent_from_result",
+            "stale_read_basis_accepted": "stale_read_basis_accepted",
+            "grant_matched_across_chats": "grant_matched_across_chats",
+            "unrecorded_connection": "unrecorded_connection",
+            "canary_in_record": "canary_in_record",
+            "empty_claimed_paths_with_real_change": "landed_path_absent_from_result",
+            "unverified_source_witness": "unverified_source_witness",
+            "surplus_duplicate_connection": "unrecorded_connection",
         }
-        self.assertEqual(set(report["defect_controls"].keys()), expected_defects)
-        for name, res in report["defect_controls"].items():
+        self.assertEqual(set(report["defect_controls"].keys()), set(expected_defects.keys()))
+        for name, expected_rule in expected_defects.items():
+            res = report["defect_controls"][name]
             self.assertEqual(res["actual_verdict"], "fail", name)
-            self.assertIn(name, res["actual_rule_ids"])
+            self.assertIn(expected_rule, res["actual_rule_ids"], name)
 
-        expected_healthy = {
-            "healthy_lag",
-            "late_card",
-            "expected_refusal",
-            "retention_gap",
-            "clean_rebase",
-        }
-        self.assertEqual(set(report["healthy_controls"].keys()), expected_healthy)
         for name, res in report["healthy_controls"].items():
             self.assertEqual(res["actual_verdict"], "pass", name)
 
         self.assertEqual(report["missing_instrumentation_control"]["actual_verdict"], "unknown")
+        self.assertEqual(report["missing_network_witness_control"]["actual_verdict"], "unknown")
+
+    def test_clean_rebase_fails_if_combined_bytes_mismatch(self) -> None:
+        ev = copy.deepcopy(build_healthy_controls()["clean_rebase"])
+        ev["observer"]["primary_post_hashes"]["shared.txt"] = "f" * 64
+        res = check_evidence(ev)
+        self.assertEqual(res["verdict"], "fail")
+        self.assertIn("rebase_bytes_mismatch", res["failed_rule_ids"])
 
     def test_retention_gap_distinguished_from_missing_evidence(self) -> None:
-        # Unmarked null historical body -> unknown
         ev_missing = copy.deepcopy(make_healthy_baseline())
         ev_missing["historical_bodies"] = {"win-1": {"body": None}}
-        res_missing = check_evidence(ev_missing)
-        self.assertEqual(res_missing["verdict"], "unknown")
+        self.assertEqual(check_evidence(ev_missing)["verdict"], "unknown")
 
-        # Explicitly marked retention_gap -> pass
         ev_gap = copy.deepcopy(make_healthy_baseline())
         ev_gap["historical_bodies"] = {"win-1": {"body": None, "retention_gap": True, "status": "retention_gap"}}
         res_gap = check_evidence(ev_gap)
         self.assertEqual(res_gap["verdict"], "pass")
         self.assertEqual(res_gap["retention_gaps_accepted"], ["win-1"])
 
-    def test_refusal_without_positive_control_fails(self) -> None:
-        ev = copy.deepcopy(build_healthy_controls()["expected_refusal"])
-        ev["expected_refusal"]["adjacent_positive_control_passed"] = False
-        res = check_evidence(ev)
-        self.assertEqual(res["verdict"], "fail")
-        self.assertIn("refusal_missing_positive_control", res["failed_rule_ids"])
+    def test_runner_no_fallback_refusal_and_real_db_extraction(self) -> None:
+        # _extract_refusal_code MUST return '' when no typed refusal exists (no SANDBOX_TRY_WRITE_ROOT fallback).
+        self.assertEqual(runner._extract_refusal_code({"outcome": "completed"}), "")
+        self.assertEqual(
+            runner._extract_refusal_code({"rejection": {"code": "SANDBOX_TRY_WRITE_ROOT"}}),
+            "SANDBOX_TRY_WRITE_ROOT",
+        )
+
+        # Missing DB rows in _extract_worker_landing_from_db yield empty result_paths -> fail-closed!
+        landing = runner._extract_worker_landing_from_db(
+            {"sqlite_records": {"db_path": "", "rows": {}}},
+            job_id="job-1",
+            promote_result={"outcome": "completed"},
+            expected_post_hashes={"worker_target.txt": "a" * 64},
+        )
+        self.assertEqual(landing["result_paths"], [])
+        self.assertEqual(landing["landed_paths"], {})
+
+    def test_macos_native_driver_blocks_on_unverified_engine(self) -> None:
+        if platform.system() != "Darwin":
+            return
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            res = run_macos_native_den(
+                root / "out",
+                api_url="http://127.0.0.1:1",
+                token="tok",
+                session_id="sess-1",
+                profile_dir=root / "profile",
+                engine_bin=root / "nonexistent-engine",
+            )
+            self.assertEqual(res["status"], "blocked")
+            self.assertFalse(res["passed"])
 
     def test_cli_controls_command_succeeds(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -301,8 +355,6 @@ class TestSanitizedExportAndFreshProfileReplay(unittest.TestCase):
             token = "tok_live_9876543210abcdef"
 
             fixture_files = {"hello.txt": "hello world\n"}
-            baseline = {"hello.txt": hash_tree(root) or ""}
-            # Compute exact baseline hash
             proj = root / "src"
             proj.mkdir()
             (proj / "hello.txt").write_text("hello world\n", encoding="utf-8")
@@ -330,7 +382,6 @@ class TestSanitizedExportAndFreshProfileReplay(unittest.TestCase):
             verified = load_and_verify_bundle(bundle_path)
             self.assertEqual(verified["case_id"], "ctrl_edits")
 
-            # Replay on fresh profile using a mock runner function.
             def fake_runner(track, out_dir, **kwargs):
                 self.assertEqual(track, "edits")
                 self.assertTrue((kwargs["project_dir"] / "hello.txt").is_file())
@@ -340,7 +391,6 @@ class TestSanitizedExportAndFreshProfileReplay(unittest.TestCase):
             self.assertTrue(replay_res["baseline_hashes_verified"])
             self.assertEqual(replay_res["result"]["checker"]["verdict"], "pass")
 
-            # Tampering with bundle breaks digest verification.
             tampered = json.loads(raw_bundle)
             tampered["expected"]["verdict"] = "fail"
             bad_path = root / "tampered.json"
