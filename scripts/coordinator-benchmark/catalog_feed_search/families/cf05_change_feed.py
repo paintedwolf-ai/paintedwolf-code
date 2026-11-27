@@ -85,37 +85,115 @@ def _reconcile_catalog_against_reference(
     boundary_config: BoundaryConfig | None,
     *,
     settle_wait_s: float = 30.0,
+    max_409_retries: int = 3,
 ) -> tuple[bool, CheckResult, dict[str, object]]:
-    settled, polls, summary = wait_catalog_settled(
-        client.driver,
-        project_id,
-        root_id,
-        max_wait_s=settle_wait_s,
-    )
-    if not settled:
-        return (
-            False,
-            CheckResult(Verdict.UNKNOWN, "catalog", reason="catalog did not settle before deadline"),
-            {"settled": False, "polls": polls, "summary": summary},
+    """Wait for catalog settlement and compare paginated index with reference_walk.
+
+    Decision 050: If paginated read hits HTTP 409 cursor_generation_expired while a
+    newer generation publishes, preserve the original 409, attempted generation,
+    and retry ONLY the reconciliation read from page 1. Classify repeatable
+    stable-generation 409s separately from changing-generation retries.
+    """
+    initial_409: dict[str, object] | None = None
+    cursor_recovery = "none"
+    attempts = 0
+    last_summary: dict[str, object] = {}
+    last_polls = 0
+    prev_rev: int | None = None
+
+    while attempts <= max_409_retries:
+        attempts += 1
+        settled, polls, summary = wait_catalog_settled(
+            client.driver,
+            project_id,
+            root_id,
+            max_wait_s=settle_wait_s,
         )
+        last_summary = summary
+        last_polls = polls
+        if not settled:
+            return (
+                False,
+                CheckResult(Verdict.UNKNOWN, "catalog", reason="catalog did not settle before deadline"),
+                {"settled": False, "polls": polls, "summary": summary, "initial_409": initial_409, "cursor_recovery": cursor_recovery},
+            )
+        cur_rev = int(summary["revision"]) if summary.get("revision") is not None else None
+        try:
+            prod = client.driver.walk_catalog_index(project_id, root_id)
+            if initial_409 is not None:
+                cursor_recovery = (
+                    "changing_generation_retry_succeeded"
+                    if (prev_rev is None or cur_rev != prev_rev)
+                    else "stable_generation_retry_succeeded"
+                )
+            break
+        except urllib.error.HTTPError as err:
+            body = ""
+            try:
+                body = err.read().decode("utf-8", errors="replace")[:500]
+            except Exception:
+                pass
+            if err.code != 409 or "cursor_generation_expired" not in body:
+                raise
+            if initial_409 is None:
+                initial_409 = {
+                    "http_status": err.code,
+                    "http_body": body,
+                    "attempted_revision": cur_rev,
+                    "attempt": attempts,
+                }
+            elif prev_rev is not None and cur_rev == prev_rev:
+                cursor_recovery = "stable_generation_expiration_defect"
+                return (
+                    False,
+                    CheckResult(Verdict.DEFECT, "catalog", reason="repeatable 409 cursor_generation_expired on stable generation"),
+                    {
+                        "settled": True,
+                        "polls": last_polls,
+                        "revision": cur_rev,
+                        "initial_409": initial_409,
+                        "cursor_recovery": cursor_recovery,
+                        "attempts": attempts,
+                    },
+                )
+            prev_rev = cur_rev
+            if attempts > max_409_retries:
+                cursor_recovery = "failed_to_converge_after_409_retries"
+                return (
+                    False,
+                    CheckResult(Verdict.DEFECT, "catalog", reason="catalog pagination failed to converge after 409 retries"),
+                    {
+                        "settled": True,
+                        "polls": last_polls,
+                        "revision": cur_rev,
+                        "initial_409": initial_409,
+                        "cursor_recovery": cursor_recovery,
+                        "attempts": attempts,
+                    },
+                )
+            time.sleep(0.5)
+
     ref_entries = [
         e
         for e in reference_walk(root_dir, boundary_config=boundary_config, include_hidden=True)
         if e.kind == "file"
     ]
     ref_items = walk_entries_to_catalog_items(ref_entries, root_id=root_id)
-    prod = client.driver.walk_catalog_index(project_id, root_id)
     res = check_catalog(ref_items, prod)
     return (
         res.verdict == Verdict.PASS,
         res,
         {
             "settled": True,
-            "polls": polls,
+            "polls": last_polls,
+            "revision": prod.generation_revision,
             "reference_count": len(ref_items),
             "product_count": len(prod.items),
             "missing_claims": list(res.missing_claims[:20]),
             "extra_claims": list(res.extra_claims[:20]),
+            "initial_409": initial_409,
+            "cursor_recovery": cursor_recovery,
+            "attempts": attempts,
         },
     )
 
@@ -373,23 +451,30 @@ def run_f02_instance(
     project_id, root_ids = client.driver.attach_project([root_dir])
     root_id = root_ids[0]
     try:
-        settled, _, _ = wait_catalog_settled(client.driver, project_id, root_id, max_wait_s=45.0)
+        settled, _, pre_summary = wait_catalog_settled(client.driver, project_id, root_id, max_wait_s=45.0)
         if not settled:
             return CaseOutcome(case.case_id, "F02", case.is_edge, "UNKNOWN", "initial catalog did not settle", [], int((time.monotonic() - t0) * 1000), {})
+        pre_storm_revision = int(pre_summary["revision"]) if pre_summary.get("revision") is not None else None
 
         sub = LiveSSESubscriber(client.base_url, client.token, project_id=project_id, client_id=f"f02-{case.case_id}")
         sub.start()
         try:
             if not sub.wait_ready(max_wait_s=10.0):
                 return CaseOutcome(case.case_id, "F02", case.is_edge, "UNKNOWN", "SSE readiness failed", [], int((time.monotonic() - t0) * 1000), {})
-            baseline_idx = len(sub.frames())
+            init_frames, init_seen = sub.wait_for_frames(
+                lambda fs: any(_is_initial_inventory_frame(f, project_id) for f in fs),
+                max_wait_s=3.0,
+            )
+            baseline_idx = len(init_frames) if init_seen else len(sub.frames())
 
-            # Execute storm!
+            # Execute storm and track touched path count for Decision 050 watermark audit
+            touched_paths_count = 0
             if case.storm_kind == "mass_create":
                 for i in range(case.write_count):
                     p = root_dir / f"storm_{i % 64:02d}" / f"c_{i:05d}.txt"
                     p.parent.mkdir(parents=True, exist_ok=True)
                     p.write_bytes(f"created {i}\n".encode("utf-8"))
+                touched_paths_count = case.write_count
             elif case.storm_kind == "mass_rename":
                 dst_root = root_dir / "moved_storm"
                 dst_root.mkdir(parents=True, exist_ok=True)
@@ -397,17 +482,21 @@ def run_f02_instance(
                     dst = dst_root / f"m_{i % 64:02d}" / p.name
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     os.replace(p, dst)
+                touched_paths_count = case.write_count * 2
             elif case.storm_kind == "mass_delete":
                 for p in init_paths[: case.write_count]:
                     if p.exists():
                         p.unlink()
+                touched_paths_count = case.write_count
             elif case.storm_kind == "branch_rewrite":
                 _git(root_dir, "checkout", "storm-branch")
+                touched_paths_count = case.write_count
             elif case.storm_kind == "overflow_fanout":
                 for i in range(case.write_count):
                     d = root_dir / f"fan_{i // 10:04d}"
                     d.mkdir(parents=True, exist_ok=True)
                     (d / f"f_{i:05d}.txt").write_bytes(f"fanout {i}\n".encode("utf-8"))
+                touched_paths_count = case.write_count
 
             sentinel.write_bytes(f"f02 sentinel after {case.case_id}\n".encode("utf-8"))
 
@@ -424,42 +513,80 @@ def run_f02_instance(
                 ),
                 max_wait_s=60.0,
             )
+            time.sleep(0.5)
+            all_frames = sub.frames()
         finally:
             sub.close()
 
-        post_frames = frames[baseline_idx:]
-        resync_seen = any(
-            f.get("topic") == "source_changed"
+        # Decision 050: strictly scope SSE frames to project_id and audit resync vs named coverage
+        scoped_frames = [
+            f
+            for f in all_frames[baseline_idx:]
+            if f.get("topic") == "source_changed"
             and isinstance(f.get("data"), dict)
-            and f["data"].get("resync") is True
-            for f in post_frames
-        )
+            and str(f["data"].get("project_id") or "") == project_id
+        ]
+        resync_frames = [f for f in scoped_frames if f["data"].get("resync") is True]
+        resync_seen = len(resync_frames) > 0
+        named_paths: set[str] = set()
+        for f in scoped_frames:
+            for ch in f["data"].get("changes") or []:
+                if isinstance(ch, dict) and str(ch.get("root_id") or root_id) == root_id:
+                    p = str(ch.get("path") or "").removeprefix("./")
+                    if p and p != DRAIN_SENTINEL_REL_PATH:
+                        named_paths.add(p)
 
-        # Wait briefly for watcher debounce + reconciliation to trigger catalog refresh
-        time.sleep(0.5)
         ok, cat_res, cat_details = _reconcile_catalog_against_reference(
             client, root_dir, project_id, root_id, boundary_config, settle_wait_s=90.0
         )
+        post_storm_revision = cat_details.get("revision")
+
+        # Decision 050: if no resync was emitted, named changes MUST cover the storm
+        defects: list[str] = []
+        if not ok:
+            defects.append(f"post-storm catalog mismatch: {cat_res.reason}")
+        if not resync_seen and len(named_paths) < touched_paths_count:
+            defects.append(
+                f"storm dropped paths without scoped resync: named={len(named_paths)} < touched={touched_paths_count}"
+            )
+        if not arrived and not scoped_frames:
+            defects.append("no scoped source_changed SSE frames arrived for storm")
+
+        # Decision 050: explicitly classify overflow limit proof vs batch-cap resync
+        overflow_coverage = "batch_cap_512_resync" if (resync_seen and case.write_count > 512) else "no_resync"
+        if case.storm_kind == "overflow_fanout":
+            overflow_coverage = (
+                "batch_cap_512_resync_kernel_watch_limit_unresolved"
+                if resync_seen
+                else "unresolved_no_resync"
+            )
+
         gaps = ["resync"] if resync_seen else []
-        verdict = (
-            ("PASS_DECLARED_GAP" if resync_seen else "PASS")
-            if ok
-            else cat_res.verdict.value
-        )
+        if defects:
+            verdict = "DEFECT"
+        else:
+            verdict = "PASS_DECLARED_GAP" if resync_seen else "PASS"
         return CaseOutcome(
             case_id=case.case_id,
             family="F02",
             is_edge=case.is_edge,
             verdict=verdict,
-            reason="" if ok else f"post-storm catalog mismatch: {cat_res.reason}",
+            reason="; ".join(defects),
             declared_gaps=gaps,
             elapsed_ms=int((time.monotonic() - t0) * 1000),
             details={
                 "storm_kind": case.storm_kind,
                 "write_count": case.write_count,
+                "touched_paths_count": touched_paths_count,
+                "pre_storm_revision": pre_storm_revision,
+                "post_storm_revision": post_storm_revision,
                 "sse_arrived": arrived,
                 "resync_seen": resync_seen,
-                "post_frame_count": len(post_frames),
+                "resync_frame_count": len(resync_frames),
+                "scoped_frame_count": len(scoped_frames),
+                "scoped_named_paths_count": len(named_paths),
+                "overflow_coverage": overflow_coverage,
+                "sample_scoped_frames": scoped_frames[:5],
                 "reconcile": cat_details,
             },
         )
