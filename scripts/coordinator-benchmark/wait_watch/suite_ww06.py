@@ -161,6 +161,32 @@ def _poll_storage(
     return guard.poll(_check, detail=detail)
 
 
+def _wait_session_idle(
+    app: RestartableSidecarApplication,
+    session_id: str,
+    *,
+    phase: str,
+    timeout_s: float,
+    dump_state: Any,
+) -> None:
+    """Wait until the session is idle and every prompt_submission has settled before cold-restarting."""
+    guard = TimerGuard(timeout_s, phase=phase, verdict="incomplete", dump_state=dump_state)
+
+    def _settled() -> bool:
+        try:
+            state = app.request(f"/v1/sessions/{session_id}")
+        except Exception:
+            return False
+        if not isinstance(state, dict) or state.get("status") != "idle":
+            return False
+        snap = StorageObserver(app.directory / "store.db", clock_domain="system").snapshot(session_id)
+        subs = snap.get("tables", {}).get("prompt_submissions") or []
+        active = [s for s in subs if s.get("status") not in {"completed", "failed", "interrupted", "canceled"}]
+        return len(active) == 0
+
+    guard.poll(_settled, detail=f"session {session_id} did not settle to idle before cold restart")
+
+
 def _pid_alive(pid: int | None) -> bool | None:
     if not pid or pid <= 0:
         return None
@@ -707,6 +733,13 @@ def _run_c21_budget_sidecar_restart(engine_bin: pathlib.Path, slot_dir: pathlib.
 
         turn2_end = driver.await_pending("c21:finish_turn2")
         driver.finish_turn(turn2_end, "Capacity filled before cold restart.")
+        _wait_session_idle(
+            app,
+            session_id,
+            phase="c21.wait_idle_before_restart",
+            timeout_s=timeout_s,
+            dump_state=driver._dump_state,
+        )
 
         # Check durable wake_admissions_json before restart.
         snap_before = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id)
@@ -764,6 +797,13 @@ def _run_c21_budget_sidecar_restart(engine_bin: pathlib.Path, slot_dir: pathlib.
 
         turn3_end = driver2.await_pending("c21:finish_turn3")
         driver2.finish_turn(turn3_end, "Verified budget persistence and slot reuse after restart.")
+        _wait_session_idle(
+            app,
+            session_id,
+            phase="c21.wait_idle_after_turn3",
+            timeout_s=timeout_s,
+            dump_state=driver2._dump_state,
+        )
 
         admission_obs.capture_http(app, session_id=session_id, project_id=project_id, submission_ids=[sub1, sub3])
         app.request(f"/v1/sessions/{session_id}/abort", {})
