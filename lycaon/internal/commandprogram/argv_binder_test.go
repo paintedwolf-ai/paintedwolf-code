@@ -267,3 +267,40 @@ func TestBoundArgvAccessorsAndReviewProjection(t *testing.T) {
 		t.Fatalf("grep -e --help: %v %+v", err, valueHelp)
 	}
 }
+
+func TestResolveCommandIndexMatchesCatalogAndZeroAllocs(t *testing.T) {
+	if _, ok, err := ResolveCommand(nil); err != nil || ok {
+		t.Fatalf("empty argv: ok=%v err=%v", ok, err)
+	}
+	catalog, err := toolcontract.LanguageV1()
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	for _, cmd := range catalog.Commands {
+		names := strings.Fields(cmd.Name)
+		if len(names) == 0 {
+			continue
+		}
+		spec, ok, err := ResolveCommand(argvFields(names...))
+		if err != nil || !ok || spec.Name != cmd.Name {
+			t.Fatalf("ResolveCommand(%v) = (%q, %v, %v), want %q", names, spec.Name, ok, err, cmd.Name)
+		}
+		for _, alias := range cmd.Aliases {
+			aliased := append([]string{alias}, names[1:]...)
+			spec, ok, err := ResolveCommand(argvFields(aliased...))
+			if err != nil || !ok || spec.Name != cmd.Name {
+				t.Fatalf("ResolveCommand(%v) = (%q, %v, %v), want %q", aliased, spec.Name, ok, err, cmd.Name)
+			}
+		}
+	}
+	fields := argvFields("basename", "item")
+	allocs := testing.AllocsPerRun(100, func() {
+		spec, ok, err := ResolveCommand(fields)
+		if err != nil || !ok || spec.Name != "basename" {
+			t.Fatalf("ResolveCommand(basename) = (%q, %v, %v)", spec.Name, ok, err)
+		}
+	})
+	if allocs != 0 {
+		t.Fatalf("ResolveCommand single-word lookup allocated %.1f times per run, want 0", allocs)
+	}
+}
