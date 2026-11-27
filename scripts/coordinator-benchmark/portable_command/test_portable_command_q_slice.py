@@ -93,9 +93,13 @@ class PortableCommandQSliceTests(unittest.TestCase):
             obs, _ = observe.build_observation(CASES['archive-create-extract'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=[{'program': CASES['archive-create-extract']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
             self.assertTrue(obs['facts']['real_bzip2_cross_decoder'] and obs['facts']['confined_archive_entries'] and obs['facts']['recoverable_publication'])
             self.assertEqual([e.get('path') for e in obs['effects']], ['bundle.tar.bz2', 'out', 'out/input.txt'])
-            ok, bindings = case_oracles.materialize_host_facts(CASES['hostile-archive']['setup']['host_facts'], proj)
+            hproj = root / 'hostile-proj'
+            base_hostile = materialize(CASES['hostile-archive'], hproj)
+            ok, bindings = case_oracles.materialize_host_facts(CASES['hostile-archive']['setup']['host_facts'], hproj)
             self.assertTrue(ok and bindings['archive_fixture']['injected'])
-            with zipfile.ZipFile(proj / 'hostile.zip') as zf:
+            self.assertTrue(artifacts.grade_artifacts(hproj, CASES['hostile-archive']))
+            self.assertEqual(artifacts.project_hashes(hproj), base_hostile)
+            with zipfile.ZipFile(hproj / 'hostile.zip') as zf:
                 self.assertEqual(zf.namelist(), ['../escape.txt'])
             audit_tmp = {
                 'invocation_program_executions': [
