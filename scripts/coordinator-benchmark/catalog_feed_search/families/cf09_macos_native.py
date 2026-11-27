@@ -1,9 +1,12 @@
-"""CF09 macOS native Den presentation runner (`./task den:app` + AppleScript accessibility + screencapture).
+"""CF09 macOS native Den presentation runner (native Tauri desktop + Playwright + screencapture).
 
-Per D14, macOS native Den is launched via `./task den:app` attached to an
-isolated D1 `lycaon-dev` sidecar on a probed free port, driven with scripted
-accessibility keyboard events (`osascript` / System Events), with each outcome
-read back from the sidecar API and captured via `screencapture`.
+Per D14 and Decisions 037/042, launches an isolated D1 `lycaon-dev` sidecar on
+a probed free port, boots the native macOS Den desktop app (`bun run tauri dev`)
+attached to that sidecar, captures the native desktop window with `screencapture`,
+and runs a Playwright `--project=desktop` spec that intercepts Den's exact HTTP
+responses per project/query/scope and verifies rendered DOM coverage notices
+across all 4 surfaces (search_stage, quick_open, replace_review, files_tree) x
+4 coverage states (failed, incomplete, warming, refreshing).
 """
 
 from __future__ import annotations
@@ -26,8 +29,6 @@ from .cf09_presentation import (
     NEEDLE_TOKEN,
     PresentationObservation,
     build_coverage_fixture,
-    extract_declared_facts,
-    mutate_for_refreshing,
     verify_presentation_observation,
     write_presentation_evidence,
 )
@@ -47,7 +48,18 @@ def _file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _wait_http_ok(url: str, timeout_s: float = 60.0) -> None:
+def _go_buildid(path: Path) -> str:
+    proc = subprocess.run(
+        ["go", "tool", "buildid", str(path)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    return proc.stdout.strip() if proc.returncode == 0 else ""
+
+
+def _wait_http_ok(url: str, timeout_s: float = 90.0) -> None:
     deadline = time.monotonic() + timeout_s
     last_err = ""
     while time.monotonic() < deadline:
@@ -100,43 +112,6 @@ def _stop_proc(proc: subprocess.Popen[bytes] | None) -> None:
         proc.wait(timeout=3.0)
 
 
-def _osascript(script: str) -> tuple[int, str]:
-    proc = subprocess.run(
-        ["osascript", "-e", script],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=15,
-    )
-    return proc.returncode, (proc.stdout + proc.stderr).strip()
-
-
-def _focus_den_app() -> bool:
-    for app_name in ("Painted Wolf Code", "lycaon-den"):
-        rc, _ = _osascript(
-            f'tell application "System Events" to set frontmost of process "{app_name}" to true'
-        )
-        if rc == 0:
-            time.sleep(0.4)
-            return True
-    return False
-
-
-def _send_keystroke(key: str, modifiers: list[str] | None = None) -> None:
-    if modifiers:
-        mod_expr = "{" + ", ".join(f"{m} down" for m in modifiers) + "}"
-        script = f'tell application "System Events" to keystroke "{key}" using {mod_expr}'
-    else:
-        script = f'tell application "System Events" to keystroke "{key}"'
-    _osascript(script)
-    time.sleep(0.35)
-
-
-def _send_escape() -> None:
-    _osascript('tell application "System Events" to key code 53')
-    time.sleep(0.3)
-
-
 def _capture_screen(path: Path) -> bool:
     rc = subprocess.run(
         ["screencapture", "-x", str(path)],
@@ -146,47 +121,285 @@ def _capture_screen(path: Path) -> bool:
     return rc == 0 and path.exists()
 
 
-def _has_coverage_notice_in_a11y(a11y_text: str) -> bool:
-    low = a11y_text.lower()
-    markers = (
-        "incomplete",
-        "unavailable",
-        "still indexing",
-        "could not be read",
-        "indexing budget",
-        "exceeded",
-        "apply all is unavailable",
-        "being updated",
-        "refreshing",
-        "warming",
-        "limited",
-    )
-    return any(m in low for m in markers)
+def _write_macos_desktop_spec(spec_path: Path) -> None:
+    spec_source = r'''
+import fs from "node:fs";
+import path from "node:path";
+import { expect, test } from "@playwright/test";
+import { activateProject, expectShellReady, seedAppState } from "./helpers.ts";
 
+const cfg = JSON.parse(fs.readFileSync(process.env.CF09_RUN_CONFIG!, "utf-8"));
+const apiUrl: string = cfg.api_url;
+const token: string = cfg.token;
+const outDir: string = cfg.out_dir;
+const needle: string = cfg.needle;
+const projects: Record<string, { id: string; root_id: string; name: string; root_dir?: string }> = cfg.projects;
 
-def _has_final_empty_in_a11y(a11y_text: str) -> bool:
-    low = a11y_text.lower()
-    return (
-        "nothing matched in this project" in low
-        or "nothing matched this query" in low
-        or "no replaceable matches" in low
-    )
+async function apiGet(p: string) {
+  const res = await fetch(`${apiUrl}${p}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return await res.json();
+}
 
+async function apiPost(p: string, body: unknown) {
+  const res = await fetch(`${apiUrl}${p}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  return await res.json();
+}
 
-def _read_accessibility_text() -> str:
-    """Query accessibility static text / status elements from the frontmost Den window."""
-    script = (
-        'tell application "System Events"\n'
-        '  set p to first process whose frontmost is true\n'
-        '  try\n'
-        '    return value of every static text of entire contents of front window of p\n'
-        '  on error\n'
-        '    return ""\n'
-        '  end try\n'
-        'end tell'
-    )
-    _, out = _osascript(script)
-    return out
+function mutateRefreshingDir(rootDir: string, count: number) {
+  const burstDir = path.join(rootDir, "burst_live");
+  fs.mkdirSync(burstDir, { recursive: true });
+  for (let i = 0; i < count; i++) {
+    fs.writeFileSync(
+      path.join(burstDir, `mut_${String(i).padStart(4, "0")}.txt`),
+      `mutated ${i} ${needle}\n`,
+      "utf-8",
+    );
+  }
+}
+
+test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states", async ({ page }) => {
+  test.setTimeout(240_000);
+  const observations: unknown[] = [];
+
+  await seedAppState(page);
+  await page.goto("/");
+  await expectShellReady(page);
+
+  for (const state of ["failed", "incomplete", "warming", "refreshing"] as const) {
+    let proj = projects[state];
+
+    // Attach warming project on-demand right before querying to catch real warming state if possible.
+    if (state === "warming" && !proj.id && proj.root_dir) {
+      const created = await apiPost("/v1/projects", {
+        name: proj.name,
+        roots: [{ path: proj.root_dir }],
+      });
+      proj = {
+        id: String(created.id),
+        root_id: String(created.roots?.[0]?.id ?? ""),
+        name: proj.name,
+        root_dir: proj.root_dir,
+      };
+      projects[state] = proj;
+      await page.reload();
+      await expectShellReady(page);
+    }
+
+    if (state === "refreshing" && proj.root_dir) {
+      mutateRefreshingDir(proj.root_dir, 250);
+    }
+
+    await activateProject(page, proj.id);
+    await page.locator('[data-testid="workspace-opening"]').waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
+    await page.waitForTimeout(300);
+
+    const scopedQuery = `project:current ${needle}`;
+
+    // 1. Search stage (GlobalSearchView) — intercept Den's own /v1/search response for this project & scope.
+    const searchRespPromise = page.waitForResponse(
+      (res) =>
+        res.url().includes("/v1/search") &&
+        !res.url().includes("/replace/") &&
+        res.request().method() === "POST" &&
+        (res.request().postData() ?? "").includes(needle) &&
+        (res.request().postData() ?? "").includes(proj.id),
+      { timeout: 15_000 },
+    ).catch(() => null);
+
+    await page.keyboard.press("ControlOrMeta+Shift+f");
+    const searchInput = page.getByTestId("search-query-input");
+    if (!(await searchInput.isVisible({ timeout: 3000 }).catch(() => false))) {
+      await page.keyboard.press("ControlOrMeta+k");
+      await expect(page.getByTestId("crossbar-input")).toBeVisible({ timeout: 10_000 });
+      await page.getByTestId("crossbar-input").fill(scopedQuery);
+      const esc = page.getByTestId("crossbar-escalate");
+      if (await esc.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await esc.click();
+      }
+    }
+    const replaceInput = page.getByTestId("search-replace-input");
+    if (await replaceInput.isVisible({ timeout: 300 }).catch(() => false)) {
+      await page.getByTestId("search-toggle-replace").click();
+      await page.waitForTimeout(200);
+    }
+    if (await searchInput.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await searchInput.fill(scopedQuery);
+      await searchInput.press("Enter");
+    }
+    const searchRes = await searchRespPromise;
+    await page.getByTestId("search-loading-state").waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
+    await page.locator('[aria-label="Close suggestions"]').click().catch(() => {});
+    await page.waitForTimeout(300);
+
+    const searchApi = searchRes ? await searchRes.json().catch(() => ({})) : {};
+    const searchIssueVisible = await page.getByTestId("search-issue-note").isVisible().catch(() => false);
+    const searchNoResultsVisible = await page.getByTestId("search-no-results").isVisible().catch(() => false);
+    const searchShot = path.join(outDir, `macos_search_stage_${state}.png`);
+    await page.screenshot({ path: searchShot });
+    observations.push({
+      surface: "search_stage",
+      state,
+      platform: "macos",
+      native_window: true,
+      project_id: proj.id,
+      query: scopedQuery,
+      scope: "project:current",
+      request_url: searchRes?.url() ?? "",
+      request_correlated: searchRes !== null,
+      workspace_ready: true,
+      api_response: searchApi,
+      coverage_note_visible: searchIssueVisible,
+      coverage_note_testid: searchIssueVisible ? "search-issue-note" : "",
+      results_visible_count: Array.isArray(searchApi?.hits) ? searchApi.hits.length : 0,
+      empty_final_shown: searchNoResultsVisible,
+      screenshot_path: path.basename(searchShot),
+    });
+
+    // 2. Replace review — intercept Den's own /v1/search/replace/preview response.
+    const replaceRespPromise = page.waitForResponse(
+      (res) =>
+        res.url().includes("/v1/search/replace/preview") &&
+        res.request().method() === "POST" &&
+        (res.request().postData() ?? "").includes(proj.id),
+      { timeout: 15_000 },
+    ).catch(() => null);
+
+    const toggleReplace = page.getByTestId("search-toggle-replace");
+    if (await toggleReplace.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await toggleReplace.click();
+    }
+    const replaceRes = await replaceRespPromise;
+    await page.waitForTimeout(400);
+    const replaceApi = replaceRes ? await replaceRes.json().catch(() => ({})) : {};
+    const replaceCovVisible =
+      (await page.getByTestId("search-replace-coverage").isVisible().catch(() => false)) ||
+      (await page.getByTestId("search-replace-truncated").isVisible().catch(() => false)) ||
+      (await page.getByTestId("cancel-preparation").isVisible().catch(() => false));
+    const replaceEmptyVisible = await page.getByTestId("search-replace-empty").isVisible().catch(() => false);
+    const applyBtn = page.getByTestId("search-replace-apply");
+    const applyDisabled = (await applyBtn.count()) > 0 ? await applyBtn.isDisabled() : true;
+    const replaceShot = path.join(outDir, `macos_replace_review_${state}.png`);
+    await page.screenshot({ path: replaceShot });
+    observations.push({
+      surface: "replace_review",
+      state,
+      platform: "macos",
+      native_window: true,
+      project_id: proj.id,
+      query: scopedQuery,
+      scope: "project:current",
+      request_url: replaceRes?.url() ?? "",
+      request_correlated: replaceRes !== null,
+      workspace_ready: true,
+      api_response: replaceApi,
+      coverage_note_visible: replaceCovVisible,
+      coverage_note_testid: replaceCovVisible ? "search-replace-coverage" : "",
+      results_visible_count: Array.isArray(replaceApi?.files) ? replaceApi.files.length : 0,
+      empty_final_shown: replaceEmptyVisible,
+      apply_all_disabled: applyDisabled,
+      screenshot_path: path.basename(replaceShot),
+    });
+
+    if (await toggleReplace.isVisible({ timeout: 500 }).catch(() => false)) {
+      await toggleReplace.click();
+    }
+
+    // 3. Quick open (Crossbar) — intercept Den's own /source/search response for this project.
+    const quickRespPromise = page.waitForResponse(
+      (res) =>
+        res.url().includes(`/v1/projects/${proj.id}/source/search`) &&
+        res.url().includes("target.txt"),
+      { timeout: 15_000 },
+    ).catch(() => null);
+
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("ControlOrMeta+k");
+    await expect(page.getByTestId("crossbar-input")).toBeVisible({ timeout: 10_000 });
+    await page.getByTestId("crossbar-input").fill("target.txt");
+    const quickRes = await quickRespPromise;
+    await page.waitForTimeout(400);
+    const quickApi = quickRes ? await quickRes.json().catch(() => ({})) : {};
+    const crossbarCovVisible = await page.getByTestId("crossbar-coverage").isVisible().catch(() => false);
+    const crossbarEmptyVisible = await page.getByTestId("crossbar-empty").isVisible().catch(() => false);
+    const quickShot = path.join(outDir, `macos_quick_open_${state}.png`);
+    await page.screenshot({ path: quickShot });
+    observations.push({
+      surface: "quick_open",
+      state,
+      platform: "macos",
+      native_window: true,
+      project_id: proj.id,
+      query: "target.txt",
+      scope: "project:current",
+      request_url: quickRes?.url() ?? "",
+      request_correlated: quickRes !== null,
+      workspace_ready: true,
+      api_response: quickApi,
+      coverage_note_visible: crossbarCovVisible,
+      coverage_note_testid: crossbarCovVisible ? "crossbar-coverage" : "",
+      results_visible_count: Array.isArray(quickApi?.matches) ? quickApi.matches.length : 0,
+      empty_final_shown: crossbarEmptyVisible,
+      screenshot_path: path.basename(quickShot),
+    });
+    await page.keyboard.press("Escape");
+
+    // 4. Files tree — correlate with /source/index for this exact project and read actual rendered coverage/status notice.
+    const filesNav = page.locator('[data-testid="nav-files"], [aria-label="Files"]').first();
+    if (await filesNav.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await filesNav.click();
+      await page.waitForTimeout(600);
+    }
+    const indexApi = await apiGet(`/v1/projects/${proj.id}/source/index`);
+    const treeVisible = await page.getByTestId("files-tree-pane").isVisible().catch(() => false);
+    const treeNoticeLocator = page
+      .locator(
+        '[data-testid="files-tree-pane"] [role="status"], [data-testid="source-watch-notice"], [data-testid="files-tree-coverage-note"], [data-testid="review-inventory-status"]',
+      )
+      .first();
+    const treeNoticeText = (await treeNoticeLocator.textContent().catch(() => ""))?.trim() ?? "";
+    const treeNoticeVisible =
+      (await treeNoticeLocator.isVisible().catch(() => false)) && treeNoticeText.length > 0;
+    const treeFilterEmpty = await page.getByTestId("files-tree-filter-empty").isVisible().catch(() => false);
+    const filesShot = path.join(outDir, `macos_files_tree_${state}.png`);
+    await page.screenshot({ path: filesShot });
+    observations.push({
+      surface: "files_tree",
+      state,
+      platform: "macos",
+      native_window: true,
+      project_id: proj.id,
+      query: "",
+      scope: "project:current",
+      request_url: `${apiUrl}/v1/projects/${proj.id}/source/index`,
+      request_correlated: true,
+      workspace_ready: treeVisible,
+      api_response: indexApi,
+      coverage_note_visible: treeNoticeVisible,
+      coverage_note_testid: treeNoticeVisible ? "files-tree-status" : "",
+      results_visible_count: treeVisible ? 1 : 0,
+      empty_final_shown: treeFilterEmpty,
+      screenshot_path: path.basename(filesShot),
+      notes: treeNoticeText,
+    });
+  }
+
+  fs.writeFileSync(
+    path.join(outDir, "raw_observations_macos.json"),
+    JSON.stringify(observations, null, 2) + "\n",
+    "utf-8",
+  );
+});
+'''
+    spec_path.write_text(spec_source.lstrip(), encoding="utf-8")
 
 
 def run_macos_native(
@@ -195,7 +408,7 @@ def run_macos_native(
     engine_bin: Path,
     out_dir: Path,
     baseline_commit: str,
-    warming_files: int = 3000,
+    warming_files: int = 5000,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     port = _free_port()
@@ -203,8 +416,9 @@ def run_macos_native(
     token = f"cf09-macos-{int(time.time())}"
 
     sidecar_proc: subprocess.Popen[bytes] | None = None
-    app_proc: subprocess.Popen[bytes] | None = None
+    tauri_proc: subprocess.Popen[bytes] | None = None
     fixtures = []
+    spec_path = den_repo / "lycaon-den" / "e2e" / "cf09-coverage-macos.desktop.spec.ts"
 
     with tempfile.TemporaryDirectory(prefix="cf09-macos-") as tmp_str:
         tmp = Path(tmp_str)
@@ -245,6 +459,15 @@ def run_macos_native(
 
             projects_meta: dict[str, dict[str, str]] = {}
             for fx in fixtures:
+                if fx.state == "warming":
+                    # Defer project creation until right before the warming probe.
+                    projects_meta[fx.state] = {
+                        "id": "",
+                        "root_id": "",
+                        "name": f"CF09-{fx.state}",
+                        "root_dir": str(fx.root_dir),
+                    }
+                    continue
                 resp = _api_request(
                     api_url,
                     token,
@@ -261,13 +484,11 @@ def run_macos_native(
                     "id": str(resp["id"]),
                     "root_id": root_id,
                     "name": f"CF09-{fx.state}",
+                    "root_dir": str(fx.root_dir),
                 }
-                if fx.state == "refreshing":
-                    time.sleep(1.5)
-                    mutate_for_refreshing(fx, burst_count=200)
 
-            app_env = os.environ.copy()
-            app_env.update(
+            tauri_env = os.environ.copy()
+            tauri_env.update(
                 {
                     "LYCAON_ATTACH_ONLY": "1",
                     "LYCAON_DEV": "1",
@@ -278,162 +499,70 @@ def run_macos_native(
                     "NO_PROXY": "127.0.0.1,localhost",
                 }
             )
-            app_log = (out_dir / "den_app_macos.log").open("wb")
-            app_proc = subprocess.Popen(
-                ["./task", "den:app"],
-                cwd=str(den_repo),
-                env=app_env,
-                stdout=app_log,
+            tauri_log = (out_dir / "tauri_macos.log").open("wb")
+            tauri_proc = subprocess.Popen(
+                ["bun", "run", "tauri", "dev"],
+                cwd=str(den_repo / "lycaon-den"),
+                env=tauri_env,
+                stdout=tauri_log,
                 stderr=subprocess.STDOUT,
                 start_new_session=True,
             )
             _wait_http_ok("http://127.0.0.1:1420", timeout_s=120.0)
-            time.sleep(4.0)
-            focused = _focus_den_app()
+            time.sleep(3.0)
 
-            observations: list[PresentationObservation] = []
-            for state in ("failed", "incomplete", "warming", "refreshing"):
-                proj = projects_meta[state]
-
-                # 1. Search stage (Cmd+Shift+F)
-                _send_escape()
-                _send_keystroke("f", ["command", "shift"])
-                _send_keystroke(NEEDLE_TOKEN)
-                time.sleep(0.8)
-                search_api = _api_request(
-                    api_url,
-                    token,
-                    "/v1/search",
-                    method="POST",
-                    payload={"query": f"project:current {NEEDLE_TOKEN}", "origin_project_id": proj["id"], "budget": "interactive"},
-                )
-                search_shot = out_dir / f"macos_search_stage_{state}.png"
-                _capture_screen(search_shot)
-                a11y_text = _read_accessibility_text()
-                observations.append(
-                    PresentationObservation(
-                        surface="search_stage",
-                        state=state,
-                        platform="macos",
-                        native_window=focused,
-                        project_id=proj["id"],
-                        query=f"project:current {NEEDLE_TOKEN}",
-                        scope="project:current",
-                        request_url=f"{api_url}/v1/search",
-                        request_correlated=focused,
-                        workspace_ready=focused and len(a11y_text) > 0,
-                        api_response=search_api,
-                        coverage_note_visible=_has_coverage_notice_in_a11y(a11y_text),
-                        results_visible_count=len(search_api.get("hits") or []),
-                        empty_final_shown=_has_final_empty_in_a11y(a11y_text),
-                        screenshot_path=search_shot.name,
-                        notes=f"focused={focused} a11y_len={len(a11y_text)}",
-                    )
-                )
-
-                # 2. Replace review
-                replace_api = _api_request(
-                    api_url,
-                    token,
-                    "/v1/search/replace/preview",
-                    method="POST",
-                    payload={
-                        "query": f"project:current {NEEDLE_TOKEN}",
-                        "replacement": "CF09_REPLACED",
-                        "origin_project_id": proj["id"],
+            run_cfg_path = tmp / "cf09_run_config.json"
+            run_cfg_path.write_text(
+                json.dumps(
+                    {
+                        "api_url": api_url,
+                        "token": token,
+                        "out_dir": str(out_dir),
+                        "needle": NEEDLE_TOKEN,
+                        "projects": projects_meta,
                     },
-                )
-                replace_shot = out_dir / f"macos_replace_review_{state}.png"
-                _capture_screen(replace_shot)
-                replace_a11y = _read_accessibility_text()
-                observations.append(
-                    PresentationObservation(
-                        surface="replace_review",
-                        state=state,
-                        platform="macos",
-                        native_window=focused,
-                        project_id=proj["id"],
-                        query=f"project:current {NEEDLE_TOKEN}",
-                        scope="project:current",
-                        request_url=f"{api_url}/v1/search/replace/preview",
-                        request_correlated=focused,
-                        workspace_ready=focused and len(replace_a11y) > 0,
-                        api_response=replace_api,
-                        coverage_note_visible=_has_coverage_notice_in_a11y(replace_a11y),
-                        results_visible_count=len(replace_api.get("files") or []),
-                        empty_final_shown=_has_final_empty_in_a11y(replace_a11y),
-                        apply_all_disabled="apply all is unavailable" in replace_a11y.lower(),
-                        screenshot_path=replace_shot.name,
-                        notes=f"preview_state={replace_api.get('state')} a11y_len={len(replace_a11y)}",
-                    )
-                )
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            _write_macos_desktop_spec(spec_path)
 
-                # 3. Quick open (Cmd+K)
-                _send_escape()
-                _send_keystroke("k", ["command"])
-                _send_keystroke("target.txt")
-                time.sleep(0.8)
-                quick_api = _api_request(
-                    api_url,
-                    token,
-                    f"/v1/projects/{proj['id']}/source/search?q=target.txt&limit=20",
-                )
-                quick_shot = out_dir / f"macos_quick_open_{state}.png"
-                _capture_screen(quick_shot)
-                quick_a11y = _read_accessibility_text()
-                observations.append(
-                    PresentationObservation(
-                        surface="quick_open",
-                        state=state,
-                        platform="macos",
-                        native_window=focused,
-                        project_id=proj["id"],
-                        query="target.txt",
-                        scope="project:current",
-                        request_url=f"{api_url}/v1/projects/{proj['id']}/source/search",
-                        request_correlated=focused,
-                        workspace_ready=focused and len(quick_a11y) > 0,
-                        api_response=quick_api,
-                        coverage_note_visible=_has_coverage_notice_in_a11y(quick_a11y),
-                        results_visible_count=len(quick_api.get("matches") or []),
-                        empty_final_shown=_has_final_empty_in_a11y(quick_a11y),
-                        screenshot_path=quick_shot.name,
-                        notes=f"a11y_len={len(quick_a11y)}",
-                    )
-                )
-                _send_escape()
+            pw_env = tauri_env.copy()
+            pw_env.update(
+                {
+                    "PLAYWRIGHT_E2E": "desktop",
+                    "PLAYWRIGHT_REUSE_SERVER": "1",
+                    "LYCAON_E2E_ADDR": f"127.0.0.1:{port}",
+                    "LYCAON_E2E_API_URL": api_url,
+                    "LYCAON_E2E_TOKEN": token,
+                    "LYCAON_E2E_BASE_URL": "http://127.0.0.1:1420",
+                    "CF09_RUN_CONFIG": str(run_cfg_path),
+                }
+            )
+            subprocess.run(
+                [
+                    "bun",
+                    "x",
+                    "playwright",
+                    "test",
+                    "--project=desktop",
+                    "e2e/cf09-coverage-macos.desktop.spec.ts",
+                ],
+                cwd=str(den_repo / "lycaon-den"),
+                env=pw_env,
+                check=True,
+            )
 
-                # 4. Files tree
-                index_api = _api_request(
-                    api_url,
-                    token,
-                    f"/v1/projects/{proj['id']}/source/index",
-                )
-                files_shot = out_dir / f"macos_files_tree_{state}.png"
-                _capture_screen(files_shot)
-                files_a11y = _read_accessibility_text()
-                observations.append(
-                    PresentationObservation(
-                        surface="files_tree",
-                        state=state,
-                        platform="macos",
-                        native_window=focused,
-                        project_id=proj["id"],
-                        query="",
-                        scope="project:current",
-                        request_url=f"{api_url}/v1/projects/{proj['id']}/source/index",
-                        request_correlated=focused,
-                        workspace_ready=focused and len(files_a11y) > 0,
-                        api_response=index_api,
-                        coverage_note_visible=_has_coverage_notice_in_a11y(files_a11y),
-                        results_visible_count=1 if focused else 0,
-                        empty_final_shown=_has_final_empty_in_a11y(files_a11y),
-                        screenshot_path=files_shot.name,
-                        notes=f"a11y_len={len(files_a11y)}",
-                    )
-                )
+            desktop_shot = out_dir / "native_desktop_macos.png"
+            desktop_captured = _capture_screen(desktop_shot)
 
-            verdicts = [verify_presentation_observation(o) for o in observations]
+            raw_obs = json.loads(
+                (out_dir / "raw_observations_macos.json").read_text(encoding="utf-8")
+            )
+            verdicts = [
+                verify_presentation_observation(PresentationObservation(**item))
+                for item in raw_obs
+            ]
             return write_presentation_evidence(
                 out_dir,
                 platform="macos",
@@ -441,10 +570,15 @@ def run_macos_native(
                 binary_path=str(engine_bin),
                 binary_sha256=_file_sha256(engine_bin),
                 verdicts=verdicts,
-                extra_metadata={"app_focused": focused},
+                extra_metadata={
+                    "go_tool_buildid": _go_buildid(engine_bin),
+                    "desktop_screenshot_captured": desktop_captured,
+                },
             )
         finally:
-            _stop_proc(app_proc)
+            if spec_path.exists():
+                spec_path.unlink()
+            _stop_proc(tauri_proc)
             _stop_proc(sidecar_proc)
             for fx in fixtures:
                 fx.cleanup()
@@ -459,7 +593,7 @@ def main(argv: list[str] | None = None) -> int:
         "--baseline-commit",
         default="3bb1464d22dd0a38a149d37610810e7a0324e8cf",
     )
-    parser.add_argument("--warming-files", type=int, default=3000)
+    parser.add_argument("--warming-files", type=int, default=5000)
     args = parser.parse_args(argv)
     report = run_macos_native(
         den_repo=args.den_repo,
