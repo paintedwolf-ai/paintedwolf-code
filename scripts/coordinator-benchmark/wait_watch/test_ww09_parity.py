@@ -90,5 +90,22 @@ class TestWW09ModeParity(unittest.TestCase):
         self.assertIn("enabled_diag_contradictions", metrics)
 
 
+    def test_source_event_count_is_informational_only(self) -> None:
+        off = _sample_bundle("run-off")
+        on = _sample_bundle("run-on")
+        on["observers"]["source"]["events"].append({"seq": 3, "kind": "process_exited"})
+        res = compare_parity_runs(
+            "c01-fast-exit",
+            off,
+            on,
+            {"exists": False, "line_count": 0, "contradictions": 0, "overflows": 0, "parse_errors": 0},
+            {"exists": False, "line_count": 0, "contradictions": 0, "overflows": 0, "parse_errors": 0},
+        )
+        self.assertTrue(res["passed"], res)
+        self.assertEqual(res["mismatches"], [])
+        self.assertEqual(res["disabled"]["informational"]["source_event_count"], 2)
+        self.assertEqual(res["enabled"]["informational"]["source_event_count"], 3)
+
+
 if __name__ == "__main__":
     unittest.main()

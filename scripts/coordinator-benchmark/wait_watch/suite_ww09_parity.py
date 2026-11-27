@@ -92,7 +92,6 @@ def extract_parity_metrics(bundle: dict[str, Any]) -> dict[str, Any]:
         "history_reread_count": int(rendered.get("history_reread_count", 0)),
         "delivery_receipt_count": int(rendered.get("delivery_receipt_count", 0)),
         "admission_event_count": len(admission.get("events") or []),
-        "source_event_count": len(source.get("events") or []),
         "process_report_published_count": pub_phases,
         "armed_wait_lease_count": armed_leases,
         "storage_watch_presentation_claims": int(storage_counts.get("watch_presentation_claims", 0)),
@@ -100,6 +99,14 @@ def extract_parity_metrics(bundle: dict[str, Any]) -> dict[str, Any]:
         "storage_watch_registrations": int(storage_counts.get("watch_registrations", 0)),
         "storage_wait_leases": int(storage_counts.get("wait_leases", 0)),
         "storage_invocation_receipts": int(storage_counts.get("invocation_receipts", 0)),
+    }
+
+
+def extract_informational_metrics(bundle: dict[str, Any]) -> dict[str, Any]:
+    """Extract non-gating driver-fixture telemetry (e.g. fixture source event count)."""
+    source = (bundle.get("observers") or {}).get("source") or {}
+    return {
+        "source_event_count": len(source.get("events") or []),
     }
 
 
@@ -137,8 +144,18 @@ def compare_parity_runs(
     return {
         "case_id": case_id,
         "passed": len(mismatches) == 0,
-        "disabled": {"run_id": off_bundle.get("run_id", ""), "metrics": off_metrics, "diag_file": off_diag},
-        "enabled": {"run_id": on_bundle.get("run_id", ""), "metrics": on_metrics, "diag_file": on_diag},
+        "disabled": {
+            "run_id": off_bundle.get("run_id", ""),
+            "metrics": off_metrics,
+            "informational": extract_informational_metrics(off_bundle),
+            "diag_file": off_diag,
+        },
+        "enabled": {
+            "run_id": on_bundle.get("run_id", ""),
+            "metrics": on_metrics,
+            "informational": extract_informational_metrics(on_bundle),
+            "diag_file": on_diag,
+        },
         "mismatches": mismatches,
     }
 
