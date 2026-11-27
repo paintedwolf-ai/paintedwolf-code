@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -134,6 +135,7 @@ func (l *toolBatch) toolContextForCall(ctx context.Context, sess *api.Session, b
 	refreshed.Turn.TurnPrograms = base.Turn.TurnPrograms
 	refreshed.Turn.TurnOfferedToolNames = slices.Clone(base.Turn.TurnOfferedToolNames)
 	refreshed.Turn.TurnOfferedToolSchemas = base.Turn.TurnOfferedToolSchemas
+	refreshed.Turn.Reader = base.Turn.Reader
 	refreshed.Source.ModelSourceContext = base.Source.ModelSourceContext
 	refreshed.Source.AskMode = base.Source.AskMode
 	refreshed.Source.ReadOnly = refreshed.Source.ReadOnly || base.Source.ReadOnly
@@ -201,6 +203,7 @@ func (l *toolBatch) executeToolCallsInTurn(
 		baseToolCtx.Turn.TurnPrograms = st.turnPrograms
 		baseToolCtx.Turn.TurnOfferedToolNames = slices.Clone(st.offeredToolNames)
 		baseToolCtx.Turn.TurnOfferedToolSchemas = st.offeredToolSchemas
+		baseToolCtx.Turn.Reader = st.reader
 		baseToolCtx.Source.ModelSourceContext = st.output.sourceContext
 		ctx = tools.WithAgentPolicy(ctx, st.output.policyCheck)
 	}
@@ -488,7 +491,7 @@ func (l *toolBatch) executeOneToolCall(
 	runCtx api.CoordinatorRunContext,
 	proseTurn bool,
 ) singleToolOutcome {
-	ctx = tools.WithCallReach(ctx, tools.TurnReach(toolCtx))
+	ctx = toolreach.WithRequest(ctx, tools.TurnReach(toolCtx))
 	if proseTurn && !workerProseAllowsTool(sess, tc.Name) {
 		return l.refuseToolCall(tc, assistantMessageID, l.Tools.rejectToolOccurrence(ctx, sess, tc, toolCtx, "TOOL_INVOKE_PROSE_TURN", nil))
 	}

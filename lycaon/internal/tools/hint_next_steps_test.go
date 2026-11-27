@@ -15,8 +15,8 @@ func hintRules(id string, steps ...oar.NextStep) *oar.RuleSet {
 }
 
 func TestHintNextStepsResolvesOnlyReachableSteps(t *testing.T) {
-	rules := hintRules("HINT", oar.NextStep{Tool: "recall", Say: "Recover with {{ call }}.", Otherwise: "Re-observe it."})
-	reachCtx := WithCallReach(t.Context(), toolreach.Offered([]string{"recall"}))
+	rules := hintRules("HINT", oar.NextStep{Tool: "recall", Say: "Recover with {% if load %}{{ load }}, then {% endif %}{{ call }}.", Otherwise: "Re-observe it."})
+	reachCtx := toolreach.WithRequest(t.Context(), toolreach.Offered([]string{"recall"}))
 	if got := HintNextSteps(reachCtx, rules, "HINT", nil); got != "Recover with `recall(…)`." {
 		t.Fatalf("reachable text = %q", got)
 	}
@@ -26,8 +26,8 @@ func TestHintNextStepsResolvesOnlyReachableSteps(t *testing.T) {
 }
 
 func TestHintNextStepsBindsInvocationTool(t *testing.T) {
-	rules := hintRules("REISSUE", oar.NextStep{Say: "Reissue with {{ call }}."})
-	ctx := WithCallReach(t.Context(), toolreach.Offered([]string{"read"}))
+	rules := hintRules("REISSUE", oar.NextStep{Say: "Reissue with {% if load %}{{ load }}, then {% endif %}{{ call }}."})
+	ctx := toolreach.WithRequest(t.Context(), toolreach.Offered([]string{"read"}))
 	if got := HintNextSteps(ctx, rules, "REISSUE", map[string]any{"tool": "read"}); got != "Reissue with `read(…)`." {
 		t.Fatalf("reissue text = %q", got)
 	}
@@ -48,8 +48,8 @@ func TestHintNextStepsEmptyWithoutRuleOrCatalog(t *testing.T) {
 }
 
 func TestHintNextStepsResolverDelegates(t *testing.T) {
-	rules := hintRules("HINT", oar.NextStep{Tool: "recall", Say: "Recover with {{ call }}."})
-	ctx := WithCallReach(t.Context(), toolreach.Offered([]string{"recall"}))
+	rules := hintRules("HINT", oar.NextStep{Tool: "recall", Say: "Recover with {% if load %}{{ load }}, then {% endif %}{{ call }}."})
+	ctx := toolreach.WithRequest(t.Context(), toolreach.Offered([]string{"recall"}))
 	if got := HintNextStepsResolver(rules)(ctx, "HINT", nil); got != "Recover with `recall(…)`." {
 		t.Fatalf("resolver text = %q", got)
 	}

@@ -12,11 +12,14 @@ import (
 	"github.com/lycaon/lycaon/internal/nativemanifest"
 )
 
+// shippedRetirements is the retirement catalog at the repository root.
+var shippedRetirements = filepath.Join("..", "..", "..", "schemas", "agent-public-retirements.json")
+
 func TestRunGeneratesAndChecksNativeToolContracts(t *testing.T) {
 	dir := t.TempDir()
 	outGo := filepath.Join(dir, "approval_tiers.generated.go")
 	outContractGo := filepath.Join(dir, "contracts.generated.go")
-	args := []string{"--out-go", outGo, "--out-contract-go", outContractGo}
+	args := []string{"--out-go", outGo, "--out-contract-go", outContractGo, "--retirements", shippedRetirements}
 	var output bytes.Buffer
 	if err := run(args, &output); err != nil {
 		t.Fatalf("run codegen: %v", err)
@@ -45,7 +48,7 @@ func TestRunGeneratesAndChecksNativeToolContracts(t *testing.T) {
 
 func TestRunRequiresBothOutputPaths(t *testing.T) {
 	err := run(nil, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "--out-go and --out-contract-go are required") {
+	if err == nil || !strings.Contains(err.Error(), "--out-go, --out-contract-go and --retirements are required") {
 		t.Fatalf("missing output paths error = %v", err)
 	}
 }
@@ -58,6 +61,7 @@ func TestRunReportsFlagAndOutputErrors(t *testing.T) {
 	err := run([]string{
 		"--out-go", filepath.Join(t.TempDir(), "approval_tiers.generated.go"),
 		"--out-contract-go", filepath.Join(t.TempDir(), "contracts.generated.go"),
+		"--retirements", shippedRetirements,
 	}, failingWriter{})
 	if !errors.Is(err, errWriteFailed) {
 		t.Fatalf("output error = %v", err)
@@ -187,6 +191,7 @@ func TestRunReturnsManifestValidationErrors(t *testing.T) {
 			args := []string{
 				"--out-go", filepath.Join(t.TempDir(), "approval_tiers.generated.go"),
 				"--out-contract-go", filepath.Join(t.TempDir(), "contracts.generated.go"),
+				"--retirements", shippedRetirements,
 			}
 			err = runWithManifest(args, &bytes.Buffer{}, func() (nativemanifest.Config, error) {
 				return cfg, nil

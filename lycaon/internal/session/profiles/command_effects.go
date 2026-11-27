@@ -31,13 +31,21 @@ func (m *Service) ForSession(ctx context.Context, sess *api.Session) []sandbox.T
 // Lookup failure closes only the new command surface; retained interfaces still
 // follow their existing owner and workflow policies.
 func (m *Service) ConstrainCommandProfiles(ctx context.Context, sessionID string, input []sandbox.ToolProfile) []sandbox.ToolProfile {
-	var allowed toolcontract.CommandEffects
+	var sess *api.Session
 	if m != nil && m.store != nil {
-		if sess, err := m.store.Get(ctx, sessionID); err == nil && sess != nil {
-			if registry, err := m.EffectivePostures(ctx, sess); err == nil {
-				if posture, err := registry.Get(sess.Posture); err == nil {
-					allowed = posture.CommandEffects
-				}
+		sess, _ = m.store.Get(ctx, sessionID)
+	}
+	return m.ConstrainSessionProfiles(ctx, sess, input)
+}
+
+// ConstrainSessionProfiles applies sess's posture restriction to input; a nil
+// session or an unresolved posture closes the command surface.
+func (m *Service) ConstrainSessionProfiles(ctx context.Context, sess *api.Session, input []sandbox.ToolProfile) []sandbox.ToolProfile {
+	var allowed toolcontract.CommandEffects
+	if m != nil && sess != nil {
+		if registry, err := m.EffectivePostures(ctx, sess); err == nil {
+			if posture, err := registry.Get(sess.Posture); err == nil {
+				allowed = posture.CommandEffects
 			}
 		}
 	}

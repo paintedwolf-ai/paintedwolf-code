@@ -54,7 +54,7 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 	}
 	transition := surface.ComputeModeTransition(previous, current, causes)
 
-	reader, err := e.turnReader(ctx, sess, frame, history, turn, rootCount)
+	reader, err := e.turnReader(ctx, sess, frame, history, turn)
 	if err != nil {
 		return "", err
 	}

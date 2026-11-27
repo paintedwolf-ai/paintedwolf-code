@@ -2,7 +2,7 @@
 
 This is a forced final turn{% if reason_text %} — {{ reason_text }}{% endif %}.
 {% if llm_timeout %}
-Your previous turn exceeded the time limit mid-generation and was **discarded** — nothing it streamed (text or tool calls) was kept, and files on disk are unchanged by it. If you were emitting one large command redirect, say so in the report and recommend the follow-up leg apply the change in chunks: create the file with a staged command redirect, then append bounded chunks.
+Your previous turn exceeded the time limit mid-generation and was **discarded** — nothing it streamed (text or tool calls) was kept, and files on disk are unchanged by it.{% if leg_command_mutation_capable %} If you were emitting one large command redirect, say so in the report and recommend the follow-up leg apply the change in chunks: create the file with a staged command redirect, then append bounded chunks.{% else %} State in the report what earlier observations already established and what a follow-up leg still needs to inspect or verify.{% endif %}
 {% endif %}
 {% include "partials/completion-envelope-only-turn.md" %}
 

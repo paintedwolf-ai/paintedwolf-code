@@ -119,6 +119,10 @@ type SymbolAllocation struct {
 }
 
 func (b SearchBudget) SymbolAllocation() SymbolAllocation {
-	wall := b.Wall()
+	return SymbolAllocationFor(b.Wall())
+}
+
+// SymbolAllocationFor splits one symbol leg's wall across its phases.
+func SymbolAllocationFor(wall time.Duration) SymbolAllocation {
 	return SymbolAllocation{Discovery: wall * 3 / 8, Abbreviation: wall / 8, Outline: wall / 2}
 }

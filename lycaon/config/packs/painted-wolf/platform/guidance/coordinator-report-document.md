@@ -9,10 +9,10 @@ Report fields need repair. To repair them, emit only the report fence; the host 
 {% endif %}{% if allowed_top_level_keys %}Allowed top-level report keys: {{ allowed_top_level_keys | join: ", " }}.
 Do not add any other keys. Omit optional fields with null or empty values.
 {% endif %}
-{% if document_issues %}Repair every listed defect together:
+Repair every listed defect together:
 {% for issue in document_issues %}- {{ issue.reason }}{% for offender in issue.offenders %}
   - {{ offender }}{% endfor %}
-{% endfor %}{% else %}Refused: {{ rejection_reason }}{% if offenders_sample %}: {{ offenders_sample }}{% if offenders_omitted %} +{{ offenders_omitted }} more{% endif %}{% endif %}{% endif %}
+{% endfor %}
 
 The host has kept your Markdown answer{% if pinned_body_chars %} ({{ pinned_body_chars }} characters){% endif %}. Do not repeat it. Return only a `json` report fence with these defects fixed. Each item in `findings` keeps a one-line `title`, and its `where` entries stay typed `{evidence, path, line, end_line, excerpt}`; `set_asides` keep their reasons; never report an open claim as resolved.
 {% if retained_document %}

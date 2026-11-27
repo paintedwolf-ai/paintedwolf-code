@@ -2,12 +2,15 @@ package promptloop
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -106,6 +109,12 @@ func NewPromptLoopForTest(deps PromptLoopDeps) *PromptLoop {
 	if deps.Context.Policy == nil && deps.Context.Tools != nil {
 		deps.Context.Policy = registryTestPolicy{metas: deps.Context.Tools.List()}
 	}
+	if deps.Context.HostFacts == nil {
+		deps.Context.HostFacts = testHostFacts
+	}
+	if deps.Context.SwapObservedSessionMode == nil {
+		deps.Context.SwapObservedSessionMode = observedModes()
+	}
 	if deps.Projection.UpdateMessage == nil {
 		deps.Projection.UpdateMessage = func(_ context.Context, _, _ string, _ api.Message) error { return nil }
 	}
@@ -131,4 +140,30 @@ func (p registryTestPolicy) ListForPrompt(context.Context, *api.Session, string)
 
 func (registryTestPolicy) EvaluateInvoke(context.Context, *api.Session, string, map[string]any) error {
 	return nil
+}
+
+// testHostFacts is a one-root session with the shipped profiles and web search on.
+func testHostFacts(_ context.Context, sess *api.Session) (prompts.HostFacts, error) {
+	profiles, err := sandbox.LoadToolProfiles()
+	if err != nil {
+		return prompts.HostFacts{}, err
+	}
+	mode := string(api.SessionModeAgent)
+	if sess != nil && sess.Mode == api.SessionModeAsk {
+		mode = string(api.SessionModeAsk)
+	}
+	return prompts.HostFacts{SessionMode: mode, Profiles: profiles, RootCount: 1, WebSearch: true}, nil
+}
+
+// observedModes stands in for the runtime's observed session modes.
+func observedModes() func(sessionID string, mode api.SessionMode) (api.SessionMode, bool) {
+	observed := &sync.Map{}
+	return func(sessionID string, mode api.SessionMode) (api.SessionMode, bool) {
+		prev, ok := observed.Swap(sessionID, mode)
+		if !ok {
+			return "", false
+		}
+		m, _ := prev.(api.SessionMode)
+		return m, m != ""
+	}
 }

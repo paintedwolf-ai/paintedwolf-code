@@ -44,7 +44,11 @@ func (e *turnContextAssembler) prependCoordinatorRunInject(
 		if archive := deps.WorkflowArchive; archive != nil {
 			gateFeedback = gateFeedback.WithWorkflowArchive(archive(ctx, sess.ID))
 		}
-		block, err := inject.RenderActiveWorkflowInject(ctx, deps.Injects, sess.ID, frame, deps.WorkflowHints, hintCodes, gateFeedback)
+		wfReader, err := e.surface.turnReader(ctx, sess, frame, history, turn)
+		if err != nil {
+			return nil, fmt.Errorf("active-workflow reader: %w", err)
+		}
+		block, err := inject.RenderActiveWorkflowInject(ctx, deps.Injects, wfReader, sess.ID, frame, deps.WorkflowHints, hintCodes, gateFeedback)
 		if err != nil {
 			return nil, fmt.Errorf("active-workflow inject (%s): %w", inject.ActiveWorkflowRenderStem(ctx, sess.ID), err)
 		}
@@ -69,7 +73,7 @@ func (e *turnContextAssembler) prependCoordinatorRunInject(
 		if len(spawnAgents) == 0 {
 			return out, nil
 		}
-		reader, err := e.surface.turnReader(ctx, sess, frame, history, turn, facts.RootCount)
+		reader, err := e.surface.turnReader(ctx, sess, frame, history, turn)
 		if err != nil {
 			return nil, fmt.Errorf("implement-spawn reader: %w", err)
 		}
@@ -88,12 +92,17 @@ func (e *turnContextAssembler) prependCoordinatorRunInject(
 func (e *turnContextAssembler) workerBoard(
 	ctx context.Context,
 	sess *api.Session,
+	frame inject.CoordinatorTurnFrame,
 	turn *TurnAssemblyScratch,
 ) (string, bool) {
 	if e == nil || e.deps.Board == nil {
 		return "", false
 	}
-	block, ok := e.deps.Board.WorkerBoard(ctx, sess)
+	var reader prompts.Reader
+	if e.surface != nil {
+		reader, _ = e.surface.workerTurnReader(ctx, sess, frame, turn)
+	}
+	block, ok := e.deps.Board.WorkerBoard(ctx, sess, reader)
 	if !ok {
 		return "", false
 	}
@@ -130,7 +139,7 @@ func (e *turnContextAssembler) prependTransitionInject(
 	if inj == nil {
 		return "", false
 	}
-	reader, err := e.surface.turnReader(ctx, sess, frame, history, turn, 0)
+	reader, err := e.surface.turnReader(ctx, sess, frame, history, turn)
 	if err != nil {
 		return "", false
 	}
@@ -150,11 +159,7 @@ func (e *turnContextAssembler) prependTransitionInject(
 	); err != nil {
 		return "", false
 	}
-	surfaceVars, err := prompts.Vars(reader, occ)
-	if err != nil {
-		return "", false
-	}
-	block, err := anchor.RenderInform(ctx, anchor.InjectTransition, anchor.MatchContext{Surface: "coordinator", SessionID: sess.ID}, inj, surfaceVars)
+	block, err := anchor.RenderInformWithReader(ctx, anchor.InjectTransition, anchor.MatchContext{Surface: "coordinator", SessionID: sess.ID}, inj, reader, occ)
 	if err != nil || strings.TrimSpace(block) == "" {
 		return "", false
 	}

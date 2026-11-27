@@ -6,7 +6,6 @@ import (
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/blobstore"
-	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/boot"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/captureprojection"
@@ -16,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/parse"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -28,7 +26,6 @@ import (
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerlane"
 	"github.com/lycaon/lycaon/internal/workerops"
-	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -70,18 +67,6 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 func (b *serveBuilder) registerCoordinatorTools() error {
 	if err := b.workerRuntime.RegisterPlanTools(b.execution.Host.Registry); err != nil {
 		return fmt.Errorf("blueprint worker plan tools: %w", err)
-	}
-	parseSvc := parse.NewDefaultService()
-	if err := parse.RegisterParseTools(b.execution.Host.Registry, parseSvc); err != nil {
-		return fmt.Errorf("parse tools: %w", err)
-	}
-	if err := workflowstatetools.RegisterStateTools(b.execution.Host.Registry, workflowstatetools.StateToolDeps{Runs: b.workflows.Store.Runs, Vars: b.workflows.Manager.Phases.Vars, Journal: b.workflows.Manager.Phases.Journal, Resolver: &b.workflows.Manager.Resolver, Starts: b.workflows.Manager.Starts, Controls: b.workflows.Manager.Controls, Scaffold: b.workflows.Manager.Blueprints.Scaffold,
-		Sessions: b.storage.Sessions.Sessions,
-	}); err != nil {
-		return fmt.Errorf("state tools: %w", err)
-	}
-	if err := blueprint.RegisterPlanTools(b.execution.Host.Registry, b.workflows.Blueprints); err != nil {
-		return fmt.Errorf("plan tools: %w", err)
 	}
 	waits := &awaitstore.Store{DB: b.storage.Database}
 	workerOps := &workerops.Service{

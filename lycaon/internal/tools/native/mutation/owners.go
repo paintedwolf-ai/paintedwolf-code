@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/lycaon/lycaon/internal/commandmode"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
@@ -171,38 +172,10 @@ func (o *Owners) SelectMode(argv commandprogram.Fields) (string, bool) {
 }
 
 func mutationMode(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) string {
-	hasOpt := func(key string) bool {
-		_, ok := bound.Last(key)
-		return ok
+	if mode, ok := commandmode.SelectMultiMode(spec, bound); ok {
+		return mode
 	}
-	switch spec.Name {
-	case "tar":
-		if hasOpt("-t") {
-			return "listing-or-stream-decode"
-		}
-		return "create-extract-compress-decompress-to-path"
-	case "zip", "unzip":
-		if hasOpt("-l") {
-			return "listing-or-stream-decode"
-		}
-		return "create-extract-compress-decompress-to-path"
-	case "gzip":
-		if hasOpt("-t") || hasOpt("-c") {
-			return "listing-or-stream-decode"
-		}
-		return "create-extract-compress-decompress-to-path"
-	case "gunzip":
-		if hasOpt("-c") || len(bound.Operands()) == 0 {
-			return "listing-or-stream-decode"
-		}
-		return "create-extract-compress-decompress-to-path"
-	case "code-rewrite", "patch":
-		if hasOpt("--dry-run") {
-			return "dry-run"
-		}
-		return "mutation"
-	}
-	if len(spec.Effects) > 0 {
+	if len(spec.Effects) == 1 {
 		return spec.Effects[0].Mode
 	}
 	return ""

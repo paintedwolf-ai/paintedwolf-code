@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/prompts"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -80,7 +81,7 @@ func (s *Handler) draftCommitMessage(ctx context.Context, dir, diff string) (str
 			Class:      llm.UtilityClassRequested,
 		})
 	}
-	system, err := guidance.RenderCatalog(ctx, guidance.UtilityCommitMessageSystemRef, nil)
+	system, err := prompts.RenderUtilityPrompt(ctx, guidance.UtilityCommitMessageSystemRef, nil)
 	if err != nil {
 		return "", err
 	}
