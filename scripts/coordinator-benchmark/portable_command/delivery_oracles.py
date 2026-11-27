@@ -43,10 +43,14 @@ def _resolve_source_path(src, project_dir):
     return raw.lstrip('./')
 
 
+DELIVERY_EVIDENCE_FACTS = {'delivery_owner_identity', 'exact_mapped_ranges', 'unseen_ranges_not_read_bases', 'no_conversational_read_base'}
+
+
 def extract_deliveries(case, audit, baseline_hashes, project_dir=None):
-    """Extract source-owner-confirmed deliveries from invocation_program_deliveries."""
+    """Extract source-owner-confirmed deliveries from invocation_program_deliveries for delivery-contract cases."""
+    has_delivery_contract = bool((case.get('expected') or {}).get('deliveries')) or bool(set(case.get('required_evidence') or ()) & DELIVERY_EVIDENCE_FACTS)
     rows = audit.get('invocation_program_deliveries') or []
-    if not rows:
+    if not rows or not has_delivery_contract:
         return [], {}
     revisions = (case.get('setup') or {}).get('revisions') or {}
     setup_files = (case.get('setup') or {}).get('files') or {}

@@ -236,6 +236,9 @@ class PortableCommandQSliceTests(unittest.TestCase):
             db.commit(); db.close()
             obs_q6_bad, _ = observe.build_observation(CASES['unseen-output-no-edit-base'], session_id='sess1234', identity=ident, project_dir=proj, db_path=db_q6, sidecar_log=log_path, baseline_hashes=base, turn_records=[{'program': 'cat ./input.txt', 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
             self.assertFalse(obs_q6_bad['facts']['unseen_ranges_not_read_bases'])
+            # Non-delivery cases (e.g. oar-option-correction) must keep deliveries=[] even when cat records a delivery row.
+            obs_oar, _ = observe.build_observation(CASES['oar-option-correction'], session_id='sess1234', identity=ident, project_dir=proj, db_path=db_q6, sidecar_log=log_path, baseline_hashes=base, turn_records=[{'program': 'cat ./input.txt', 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
+            self.assertEqual(obs_oar['deliveries'], [])
 
     def test_q20_bounded_visits_and_q21_confined_launch_controls(self):
         with tempfile.TemporaryDirectory() as tmp:
