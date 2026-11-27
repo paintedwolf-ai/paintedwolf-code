@@ -172,12 +172,10 @@ def run_watch_boundary_case(
         )
 
         # 1. Launch gated background command and register a real watch (collect or wake).
-        # For ambient-wake, mark the progress item complete ([x]) so implement posture settles the turn to idle.
         cmd_str = barrier.command_string(relative_to=project_dir, background=True)
-        todo_mark = "x" if delivery_mode == "wake" else " "
         _, _, handle = driver.call_command(
             cmd_str,
-            progress_update=f"- [{todo_mark}] Run WW09 {case_id} watch parity check",
+            progress_update=f"- [ ] Run WW09 {case_id} watch parity check",
         )
         barrier.wait_reached(timeout_s=min(10.0, timeout_s), dump_state=driver._dump_state)
         source_obs.record_event("command_launched", handle=handle)
@@ -209,8 +207,12 @@ def run_watch_boundary_case(
             next_req = driver.await_pending("ww09.collect.model_turn")
             driver.finish_turn(next_req, "Observed collected watch batch.")
         else:
-            # Finish current turn and wait for prompt_submissions to reach completed (idle session),
+            # Mark the progress step complete so implement posture settles the turn to idle,
             # then release barrier to trigger ambient wake turn (commitAmbientWakeAdmission).
+            driver.send_calls(
+                [{"name": "update_progress", "args": {"content": f"- [x] Run WW09 {case_id} watch parity check"}}],
+                phase="ww09.wake.complete_progress",
+            )
             idle_req = driver.await_pending("ww09.wake.finish_registration_turn")
             driver.finish_turn(idle_req, "Waiting for ambient watch wake.")
             _poll_storage_predicate(
