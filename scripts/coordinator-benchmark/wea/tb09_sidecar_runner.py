@@ -457,7 +457,7 @@ def _drive_model_prompt_with_secret_option(
     checkpoints, and wait until the turn settles (`idle` or `error`).
     """
     st_s, sess = _api_call(app, "/v1/sessions", {"project_id": project_id, "posture": "build"}, method="POST")
-    if st_s not in (200, 201):
+    if st_s not in (200, 201, 202):
         raise RuntimeError(f"create model session failed: {st_s} {sess}")
     sid = sess["id"]
     deadline = time.monotonic() + timeout_s
