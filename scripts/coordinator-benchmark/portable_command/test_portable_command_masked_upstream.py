@@ -35,7 +35,7 @@ def _write_db(path, *, published):
 class MaskedUpstreamFailureControlTests(unittest.TestCase):
     def _run_control(self, *, published, final_bytes):
         repo = pathlib.Path(__file__).resolve().parents[3]
-        suite = {c['id']: c for c in load_suite(repo / 'lycaon/test/fixtures/eval/portable-command/suite.json')}
+        suite = {c['id']: c for c in load_suite(repo / 'lycaon/test/fixtures/eval/portable-command/suite.json')['cases']}
         case = suite['masked-upstream-failure']
         with tempfile.TemporaryDirectory() as td:
             root = pathlib.Path(td)
