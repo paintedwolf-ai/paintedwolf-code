@@ -166,7 +166,7 @@ def _wait_session_idle(app: Any, session_id: str, phase: str, *, timeout_s: floa
 
 def _close_session_turn(app: Any, session_id: str, *, timeout_s: float = 20.0) -> None:
     """Cleanly close any pending manual-harness LLM turn on session_id before aborting/moving on."""
-    deadline = time.monotonic() + 3.0
+    deadline = time.monotonic() + 10.0
     while time.monotonic() < deadline:
         with contextlib.suppress(Exception):
             pend = app.request(f"/harness/llm/pending?session_id={urllib.parse.quote(session_id)}") or {}
@@ -1329,6 +1329,7 @@ def _run_a12_restart_slots(
         return receipts
 
     proj = _make_project(work_dir, "proj-a12")
+    proj_rev = _make_project(work_dir, "proj-a12-rev")
     app_dir = work_dir / "a12-app"
     outside_a12_pending = work_dir / "outside-a12-pending"
     outside_a12_pending.mkdir(parents=True, exist_ok=True)
@@ -1363,11 +1364,8 @@ def _run_a12_restart_slots(
             )
             _close_session_turn(app1, session_id)
 
-            # Separate session for A12-03 revoked grant so session_id's loopback_connect grant cannot overlap it.
-            sess_rev = app1.request("/v1/sessions", {"project_id": project_id, "posture": "build"})
-            session_rev_id = sess_rev["id"]
-            app1.request("/harness/model-limit", {"session_id": session_rev_id, "limit": 10})
-            _wait_session_idle(app1, session_rev_id, "a12 session_rev ready", timeout_s=60.0)
+            # Separate project+session via _open_session for A12-03 revoked grant so it is 100% isolated from session_id.
+            session_rev_id, _, _ = _open_session(app1, proj_rev)
             app1.request(f"/v1/sessions/{session_rev_id}/prompts", {"operation_id": str(uuid.uuid4()), "text": "A12 pre-restart revoked grant setup."})
             c_rev_boot1 = _call_with_checkpoint_inspect(
                 app1, session_rev_id, "command",
@@ -1503,6 +1501,7 @@ def _run_a12_restart_slots(
                 "boot1_asked": c_rev_boot1["checkpoint"]["asked"],
                 "boot1_rung": c_rev_boot1["checkpoint"]["rung"],
                 "boot1_outcome": c_rev_boot1["result"].get("outcome"),
+                "boot1_error": c_rev_boot1["result"].get("error"),
                 "revoked_before_restart": revoked_before_restart,
                 "revoked_grant_asked_after_restart": c_rev_after["checkpoint"]["asked"],
             },
