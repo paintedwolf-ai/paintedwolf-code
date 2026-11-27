@@ -308,15 +308,28 @@ def check_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
     fixture_conns = obs.get("network_connections")
     recorded_conns = prod.get("recorded_connections") or []
     if isinstance(fixture_conns, list):
-        obs_counts: Counter[tuple[Any, Any, Any]] = Counter(
-            (c.get("address"), c.get("method", ""), c.get("path", ""))
-            for c in fixture_conns
+        allowed_prod = [c for c in recorded_conns if c.get("allowed", True) is True]
+        # Transport-level witnesses from authz_events.external_access.endpoints carry (address)
+        # without HTTP method/path; HTTP-level witnesses carry (address, method, path).
+        transport_level = bool(allowed_prod) and all(
+            not c.get("method") and not c.get("path") for c in allowed_prod
         )
-        prod_counts: Counter[tuple[Any, Any, Any]] = Counter(
-            (c.get("address"), c.get("method", ""), c.get("path", ""))
-            for c in recorded_conns
-            if c.get("allowed", True) is True
-        )
+        if transport_level:
+            obs_counts: Counter[tuple[Any, Any, Any]] = Counter(
+                (c.get("address"), "", "") for c in fixture_conns
+            )
+            prod_counts: Counter[tuple[Any, Any, Any]] = Counter(
+                (c.get("address"), "", "") for c in allowed_prod
+            )
+        else:
+            obs_counts = Counter(
+                (c.get("address"), c.get("method", ""), c.get("path", ""))
+                for c in fixture_conns
+            )
+            prod_counts = Counter(
+                (c.get("address"), c.get("method", ""), c.get("path", ""))
+                for c in allowed_prod
+            )
         for key in sorted(set(obs_counts) | set(prod_counts)):
             obs_n = obs_counts.get(key, 0)
             prod_n = prod_counts.get(key, 0)

@@ -18,7 +18,6 @@ import re
 import sqlite3
 import subprocess
 import sys
-import urllib.parse
 import uuid
 from typing import Any
 
@@ -41,7 +40,6 @@ from wea.observers import (
 from wea.provenance import REPO_ROOT, collect_provenance, resolve_engine_binary
 from wea.replay import export_sanitized_bundle
 
-_URL_RE = re.compile(r"https?://127\.0\.0\.1:\d+[^\s'\"\\)]*")
 _CODE_LINE_RE = re.compile(r"\bCode:\s*([A-Z][A-Z0-9_]{2,})\b")
 
 
@@ -323,43 +321,65 @@ def _extract_edit_records_from_db(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Extract real author attribution, read basis, and after-version hash from SQLite + tool results.
 
-    `disk_sha256_at_apply` is passed from the independent host-side disk hash captured
-    immediately before the write (NEVER set equal to `read_basis_sha`).
+    Joins directly on the latest `source_versions` row for `rel_path` -> `source_effects` ->
+    `source_operations` (never picking an earlier `external` baseline row and never hardcoding
+    author or hashes). `disk_sha256_at_apply` is the independent host-side disk hash captured
+    immediately before the write.
     """
-    rows = (edits_obs.get("sqlite_records") or {}).get("rows") or {}
-    versions = [
-        v for v in (rows.get("source_versions") or [])
-        if str(v.get("path") or "").lstrip("./") == rel_path and (v.get("branch_id") or "") == ""
-    ]
-    versions.sort(key=lambda v: int(v.get("seq") or 0))
-    effects = [
-        ef for ef in (rows.get("source_effects") or [])
-        if str(ef.get("path") or "").lstrip("./") == rel_path
-    ]
-    effects.sort(key=lambda ef: int(ef.get("ordinal") or 0))
-    ops_by_id = {op["id"]: op for op in (rows.get("source_operations") or []) if op.get("id")}
-
     recorded_author = ""
     read_basis_sha = ""
     recorded_after_sha = ""
     version_id = ""
-    if effects:
-        latest_eff = effects[-1]
-        op = ops_by_id.get(latest_eff.get("operation_id") or "")
-        if op:
-            recorded_author = str(op.get("origin") or "")
-        ver_by_id = {v["id"]: v for v in versions if v.get("id")}
-        before_v = ver_by_id.get(latest_eff.get("before_version_id") or "")
-        after_v = ver_by_id.get(latest_eff.get("after_version_id") or "")
-        if before_v:
-            read_basis_sha = str(before_v.get("content_sha256") or "")
-        if after_v:
-            recorded_after_sha = str(after_v.get("content_sha256") or "")
-            version_id = str(after_v.get("id") or "")
-    elif len(versions) >= 2:
-        read_basis_sha = str(versions[-2].get("content_sha256") or "")
-        recorded_after_sha = str(versions[-1].get("content_sha256") or "")
-        version_id = str(versions[-1].get("id") or "")
+
+    db_path = pathlib.Path((edits_obs.get("sqlite_records") or {}).get("db_path") or "")
+    if db_path.is_file():
+        with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+            conn.row_factory = sqlite3.Row
+            ver_rows = conn.execute(
+                "SELECT id, seq, parent_version_id, operation_id, content_sha256 "
+                "FROM source_versions WHERE path = ? AND branch_id = '' ORDER BY seq DESC LIMIT 4",
+                (rel_path,),
+            ).fetchall()
+            if ver_rows:
+                latest_v = ver_rows[0]
+                version_id = str(latest_v["id"] or "")
+                recorded_after_sha = str(latest_v["content_sha256"] or "")
+
+                # Join exact effect producing latest_v -> source_operations.origin & before_version_id.
+                eff = conn.execute(
+                    "SELECT se.before_version_id, so.origin "
+                    "FROM source_effects se "
+                    "JOIN source_operations so ON so.id = se.operation_id "
+                    "WHERE se.after_version_id = ? "
+                    "ORDER BY se.ordinal DESC LIMIT 1",
+                    (version_id,),
+                ).fetchone()
+                if eff:
+                    recorded_author = str(eff["origin"] or "")
+                    if eff["before_version_id"]:
+                        bv = conn.execute(
+                            "SELECT content_sha256 FROM source_versions WHERE id = ?",
+                            (eff["before_version_id"],),
+                        ).fetchone()
+                        if bv:
+                            read_basis_sha = str(bv["content_sha256"] or "")
+                elif latest_v["operation_id"]:
+                    op = conn.execute(
+                        "SELECT origin FROM source_operations WHERE id = ?",
+                        (latest_v["operation_id"],),
+                    ).fetchone()
+                    if op:
+                        recorded_author = str(op["origin"] or "")
+
+                if not read_basis_sha and latest_v["parent_version_id"]:
+                    pv = conn.execute(
+                        "SELECT content_sha256 FROM source_versions WHERE id = ?",
+                        (latest_v["parent_version_id"],),
+                    ).fetchone()
+                    if pv:
+                        read_basis_sha = str(pv["content_sha256"] or "")
+                if not read_basis_sha and len(ver_rows) >= 2:
+                    read_basis_sha = str(ver_rows[1]["content_sha256"] or "")
 
     read_ok = isinstance(read_result, dict) and read_result.get("outcome") == "completed"
     write_ok = isinstance(write_result, dict) and write_result.get("outcome") == "completed"
@@ -387,44 +407,79 @@ def _extract_product_network_witnesses(
     allowed_call_id: str,
     allowed_tool_result: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Extract real destination-bearing product network witnesses from SQLite + tool_result_json.
+    """Extract typed product network witnesses strictly from structured endpoint records.
 
-    NEVER reads or copies addresses from the fixture observer! Extracts actual destination
-    URLs from `authz_events`, `invocation_receipts`, `command_invocations`, or `tool_result_json`.
+    Reads ONLY:
+      1. `authz_events` rows (`action IN ('mediated_endpoint', 'capability_applied')`,
+         `outcome == 'allowed'`) -> `detail_json.external_access.endpoints[]`
+      2. Typed `tool_result_json.external_access.endpoints[]` for `allowed_call_id` (only if
+         no `authz_events` mediated endpoint rows exist).
+
+    NEVER scans arbitrary strings for URLs, NEVER hardcodes HTTP methods, and NEVER
+    deduplicates repeated connections (expands by `attempts` per distinct event/invocation ID).
     """
     rows = (auth_obs.get("sqlite_records") or {}).get("rows") or {}
-    blobs: list[str] = []
-
-    for table in ("invocation_receipts", "command_invocations", "authz_events"):
-        for r in rows.get(table) or []:
-            if allowed_call_id and r.get("tool_call_id") not in {None, "", allowed_call_id}:
-                continue
-            status = str(r.get("status") or r.get("outcome") or "")
-            if status in {"rejected", "denied", "error", "failed"}:
-                continue
-            blobs.append(json.dumps(r))
-
-    if isinstance(allowed_tool_result, dict) and allowed_tool_result.get("outcome") == "completed":
-        blobs.append(json.dumps(allowed_tool_result))
-
-    seen: set[tuple[str, str, str]] = set()
     witnesses: list[dict[str, Any]] = []
-    for blob in blobs:
-        for match in _URL_RE.findall(blob):
-            parsed = urllib.parse.urlparse(match)
-            if not parsed.netloc:
+
+    for ev in rows.get("authz_events") or []:
+        if ev.get("action") not in {"mediated_endpoint", "capability_applied"}:
+            continue
+        if ev.get("outcome") != "allowed":
+            continue
+        raw_detail = ev.get("detail_json") or "{}"
+        try:
+            detail = json.loads(raw_detail) if isinstance(raw_detail, str) else raw_detail
+        except ValueError:
+            continue
+        if not isinstance(detail, dict):
+            continue
+        ea = detail.get("external_access")
+        if not isinstance(ea, dict):
+            continue
+        for ep in ea.get("endpoints") or ():
+            if not isinstance(ep, dict):
                 continue
-            key = (parsed.netloc, "GET", parsed.path or "/")
-            if key not in seen:
-                seen.add(key)
+            host = str(ep.get("host") or "").strip()
+            port = ep.get("port")
+            if not host or not isinstance(port, int) or port <= 0:
+                continue
+            attempts = max(1, int(ep.get("attempts") or 1))
+            for idx in range(attempts):
                 witnesses.append({
-                    "address": parsed.netloc,
-                    "method": "GET",
-                    "path": parsed.path or "/",
-                    "allowed": True,
-                    "tool_call_id": allowed_call_id,
-                    "source": "product_record",
+                    "address": f"{host}:{port}",
+                    "transport": str(ep.get("transport") or ""),
+                    "method": "",
+                    "path": "",
+                    "allowed": bool(ep.get("allowed", False)),
+                    "event_id": str(ev.get("id") or ""),
+                    "event_seq": ev.get("event_seq"),
+                    "attempt_index": idx + 1,
+                    "source": "authz_events.external_access.endpoints",
                 })
+
+    if not witnesses and isinstance(allowed_tool_result, dict):
+        ea = allowed_tool_result.get("external_access")
+        if isinstance(ea, dict):
+            for ep in ea.get("endpoints") or ():
+                if not isinstance(ep, dict):
+                    continue
+                host = str(ep.get("host") or "").strip()
+                port = ep.get("port")
+                if not host or not isinstance(port, int) or port <= 0:
+                    continue
+                attempts = max(1, int(ep.get("attempts") or 1))
+                for idx in range(attempts):
+                    witnesses.append({
+                        "address": f"{host}:{port}",
+                        "transport": str(ep.get("transport") or ""),
+                        "method": "",
+                        "path": "",
+                        "allowed": bool(ep.get("allowed", False)),
+                        "tool_call_id": allowed_call_id,
+                        "attempt_index": idx + 1,
+                        "source": "tool_result.external_access.endpoints",
+                    })
+
     return witnesses
 
 
@@ -492,7 +547,12 @@ def _ctrl_workers(
                 "scope": {"mode": "write", "paths": ["worker_target.txt"]},
             },
         )
-        job_id = str((task_res.get("dispatch") or {}).get("job_id") or "")
+        job_id = str(
+            ((task_res.get("invocation") or {}).get("evidence") or {}).get("ref")
+            or (task_res.get("dispatch") or {}).get("job_id")
+            or task_res.get("job_id")
+            or ""
+        )
         if not job_id:
             raise RuntimeError(f"task did not return a job_id: {task_res}")
 
@@ -789,12 +849,15 @@ def _ctrl_authority(
                 {"command": "python3 -B -c \"from pathlib import Path; Path('adjacent_allowed.txt').write_text('permitted-inside\\n')\""},
             )
 
-            # 3. Permitted HTTP fixture request (approve loopback checkpoint -> recorded by BOTH endpoint and product).
+            # 3. Permitted HTTP fixture request with explicit loopback_connect capability request.
             allowed_call_id, allowed_net_result, _ = _send_tool_call(
                 app,
                 session_id,
                 "command",
-                {"command": f"python3 -B -c \"import urllib.request; print(urllib.request.urlopen('{allowed_ep.base_url}/ping', timeout=5).read().decode())\""},
+                {
+                    "command": f"python3 -B -c \"import urllib.request; print(urllib.request.urlopen('{allowed_ep.base_url}/ping', timeout=5).read().decode())\"",
+                    "capability_request": {"loopback_connect": {}},
+                },
                 checkpoint_policy="approve_chat",
             )
 
@@ -803,7 +866,10 @@ def _ctrl_authority(
                 app,
                 session_id,
                 "command",
-                {"command": f"python3 -B -c \"import urllib.request; urllib.request.urlopen('{refused_ep.base_url}/ping', timeout=3).read()\""},
+                {
+                    "command": f"python3 -B -c \"import urllib.request; urllib.request.urlopen('{refused_ep.base_url}/ping', timeout=3).read()\"",
+                    "capability_request": {"loopback_connect": {}},
+                },
                 checkpoint_policy="reject",
             )
 

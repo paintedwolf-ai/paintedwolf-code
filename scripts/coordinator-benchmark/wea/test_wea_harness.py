@@ -293,21 +293,43 @@ class TestFailClosedCheckerAndAllControls(unittest.TestCase):
         self.assertEqual(res["verdict"], "fail")
         self.assertIn("edit_tool_not_completed", res["failed_rule_ids"])
 
-        # Product network witness extractor must ONLY extract destination URLs present in product records.
+        # Typed product network witness extractor reads ONLY authz_events.external_access.endpoints
+        # (no URL string scraping, no hardcoded GET, expands attempts without deduplicating).
         witnesses = runner._extract_product_network_witnesses(
-            {"sqlite_records": {"rows": {"invocation_receipts": [{"tool_call_id": "c1", "status": "completed", "args_json": "{\"command\":\"curl http://127.0.0.1:45555/ping\"}"}]}}},
+            {
+                "sqlite_records": {
+                    "rows": {
+                        "authz_events": [
+                            {
+                                "id": "ev-1",
+                                "event_seq": 3,
+                                "action": "mediated_endpoint",
+                                "outcome": "allowed",
+                                "detail_json": json.dumps({
+                                    "external_access": {
+                                        "endpoints": [
+                                            {"host": "127.0.0.1", "port": 45555, "transport": "http", "allowed": True, "attempts": 2}
+                                        ]
+                                    }
+                                }),
+                            }
+                        ]
+                    }
+                }
+            },
             allowed_call_id="c1",
             allowed_tool_result={"outcome": "completed"},
         )
-        self.assertEqual(len(witnesses), 1)
+        self.assertEqual(len(witnesses), 2)
         self.assertEqual(witnesses[0]["address"], "127.0.0.1:45555")
-        self.assertEqual(witnesses[0]["path"], "/ping")
+        self.assertEqual(witnesses[0]["event_id"], "ev-1")
+        self.assertEqual(witnesses[1]["attempt_index"], 2)
 
-        # Generic completed invocation without destination URL must NOT fabricate a connection witness.
+        # URL echoed in arbitrary command/args text MUST NOT be scraped as a connection witness.
         empty_witnesses = runner._extract_product_network_witnesses(
-            {"sqlite_records": {"rows": {"invocation_receipts": [{"tool_call_id": "c2", "status": "completed", "args_json": "{\"command\":\"echo ok\"}"}]}}},
+            {"sqlite_records": {"rows": {"invocation_receipts": [{"tool_call_id": "c2", "status": "completed", "args_json": "{\"command\":\"curl http://127.0.0.1:45555/ping\"}"}]}}},
             allowed_call_id="c2",
-            allowed_tool_result={"outcome": "completed"},
+            allowed_tool_result={"outcome": "completed", "content": "http://127.0.0.1:45555/ping"},
         )
         self.assertEqual(empty_witnesses, [])
 
