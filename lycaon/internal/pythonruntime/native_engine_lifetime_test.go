@@ -293,7 +293,7 @@ func TestNativeEngineServiceLifetimeConcurrentCloseAndDrain(t *testing.T) {
 				Mode: pythonruntime.ModeCode,
 				Code: "print('LOOP_READY', flush=True)\nwhile True:\n    pass\n",
 				Roots: []pythondocuments.HostRootConfig{
-					{Name: "workspace", HostPath: wsDir},
+					{ID: "workspace", Dir: wsDir},
 				},
 				Limits: pythonruntime.ResourceLimits{
 					MaxMemoryPages: 4096,
@@ -342,7 +342,7 @@ func TestNativeEngineServiceLifetimeConcurrentCloseAndDrain(t *testing.T) {
 					Mode: pythonruntime.ModeCode,
 					Code: "while True:\n    pass\n",
 					Roots: []pythondocuments.HostRootConfig{
-						{Name: "workspace", HostPath: wsDir},
+						{ID: "workspace", Dir: wsDir},
 					},
 					Limits: pythonruntime.ResourceLimits{
 						MaxMemoryPages: 4096,
@@ -405,7 +405,7 @@ func TestNativeEngineServiceLifetimeConcurrentCloseAndDrain(t *testing.T) {
 			Mode: pythonruntime.ModeCode,
 			Code: "print('before-close-ok')",
 			Roots: []pythondocuments.HostRootConfig{
-				{Name: "workspace", HostPath: wsDir},
+				{ID: "workspace", Dir: wsDir},
 			},
 		})
 		if err != nil || !res.CleanCompletion || !strings.Contains(res.Stdout, "before-close-ok") {
@@ -432,7 +432,7 @@ func TestNativeEngineServiceLifetimeConcurrentCloseAndDrain(t *testing.T) {
 			Mode: pythonruntime.ModeCode,
 			Code: "print('must-not-run')",
 			Roots: []pythondocuments.HostRootConfig{
-				{Name: "workspace", HostPath: wsDir},
+				{ID: "workspace", Dir: wsDir},
 			},
 		})
 		if svcErr == nil {
@@ -457,7 +457,7 @@ func TestNativeEngineServiceLifetimeConcurrentCloseAndDrain(t *testing.T) {
 					Mode: pythonruntime.ModeCode,
 					Code: "print(sum(range(1000)))",
 					Roots: []pythondocuments.HostRootConfig{
-						{Name: "workspace", HostPath: wsDir},
+						{ID: "workspace", Dir: wsDir},
 					},
 				})
 				if err != nil {
