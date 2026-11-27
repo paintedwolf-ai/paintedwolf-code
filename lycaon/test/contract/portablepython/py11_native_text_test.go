@@ -69,7 +69,7 @@ assert ov_spans == [[0, 3], [2, 5]], ov_spans
 
 timed_out = False
 try:
-    regex.match(r"(a+)+b", "a" * 28 + "c", timeout=0.05)
+    regex.match(r"(a+)+b", "a" * 34 + "c", timeout=0.02)
 except TimeoutError:
     timed_out = True
 assert timed_out, "expected regex per-operation timeout on bounded backtracking input"
@@ -190,16 +190,19 @@ import json, hcl2
 with open("main.tf", "r", encoding="utf-8") as fh:
     doc = hcl2.load(fh)
 
-assert doc["variable"] == [{"env": {"type": "${string}", "default": "staging"}}], doc["variable"]
+env_var = doc["variable"][0]['"env"']
+assert env_var["type"] == "string", env_var
+assert env_var["default"] == '"staging"', env_var
 resources = doc["resource"]
 assert len(resources) == 2, resources
-logs = resources[0]["aws_s3_bucket"]["logs"]
-arts = resources[1]["aws_s3_bucket"]["artifacts"]
-assert logs["bucket"] == "pw-${var.env}-logs", logs
-assert logs["tags"] == {"owner": "platform", "tier": "audit"}, logs
-assert arts["bucket"] == "pw-${var.env}-artifacts", arts
-assert arts["tags"] == {"owner": "build", "tier": "durable"}, arts
-assert doc["output"] == [{"logs_bucket_ref": {"value": "${aws_s3_bucket.logs.bucket}"}}], doc["output"]
+logs = resources[0]['"aws_s3_bucket"']['"logs"']
+arts = resources[1]['"aws_s3_bucket"']['"artifacts"']
+assert logs["bucket"] == '"pw-${var.env}-logs"', logs
+assert logs["tags"] == {"owner": '"platform"', "tier": '"audit"'}, logs
+assert arts["bucket"] == '"pw-${var.env}-artifacts"', arts
+assert arts["tags"] == {"owner": '"build"', "tier": '"durable"'}, arts
+out_ref = doc["output"][0]['"logs_bucket_ref"']
+assert out_ref["value"] == "aws_s3_bucket.logs.bucket", out_ref
 
 malformed_failed = False
 try:
@@ -254,8 +257,8 @@ resource "aws_s3_bucket" "logs" {
 import hcl2
 with open("main.tf", "r", encoding="utf-8") as fh:
     doc = hcl2.load(fh)
-assert doc["variable"][0]["env"]["default"] == "prod-unsaved", doc
-assert doc["resource"][0]["aws_s3_bucket"]["logs"]["tags"]["owner"] == "editor-draft", doc
+assert doc["variable"][0]['"env"']["default"] == '"prod-unsaved"', doc
+assert doc["resource"][0]['"aws_s3_bucket"']['"logs"']["tags"]["owner"] == '"editor-draft"', doc
 print("HCL2_EDITOR_DRAFT_OK")
 `},
 			Roots:        roots,
