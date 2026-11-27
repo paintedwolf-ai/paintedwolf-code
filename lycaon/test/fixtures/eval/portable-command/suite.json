@@ -401,7 +401,7 @@
         "stderr": "",
         "status": 1,
         "host_stop": null,
-        "complete": false,
+        "complete": true,
         "files": {
           "result.txt": "old\n"
         },
@@ -411,12 +411,33 @@
         "receipts": [
           {
             "operation": "external_exec",
-            "outcome": "failed",
+            "outcome": "completed",
             "status": 1,
             "publication_eligible": false
+          },
+          {
+            "operation": "write",
+            "outcome": "failed",
+            "status": 1,
+            "publication_eligible": false,
+            "path": "result.txt",
+            "accepted": false,
+            "published": false
           }
         ],
-        "effects": [],
+        "effects": [
+          {
+            "operation": "external_exec",
+            "outcome": "completed"
+          },
+          {
+            "operation": "write",
+            "outcome": "failed",
+            "path": "result.txt",
+            "accepted": false,
+            "published": false
+          }
+        ],
         "obligations": [],
         "deliveries": [],
         "closeout": "complete"

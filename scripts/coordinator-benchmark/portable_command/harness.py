@@ -135,6 +135,7 @@ def collect_raw_api(application, session_id, raw_dir, program_ids):
         receipt_docs[pid] = application.request(f'/v1/sessions/{session_id}/program-receipt-document?{q}', missing=True)
     save(raw_dir / 'program-receipts.json', prog_receipts)
     save(raw_dir / 'receipt-documents.json', receipt_docs)
+    return prog_receipts
 
 
 def case_digest(case):
@@ -257,7 +258,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
         application.request(f'/v1/sessions/{session_id}/abort', {})
         with contextlib.closing(sqlite3.connect(app_dir / 'store.db')) as db:
             pids = [r[0] for r in db.execute('SELECT p.id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE r.session_id=?', (session_id,)).fetchall()]
-        collect_raw_api(application, session_id, raw_dir, pids)
+        program_receipt_pages = collect_raw_api(application, session_id, raw_dir, pids)
         post_tool_lines = log_line_count(sidecar_path)
     except Exception as exc:
         save(out_dir / 'attempt.json', {'status': 'unmeasured', 'phase': 'execution', 'case_id': case['id'], 'session_id': session_id, 'error': str(exc), 'identity': identity})
@@ -282,7 +283,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
             case, session_id=session_id, identity=identity, project_dir=project_dir, db_path=app_dir / 'store.db',
             sidecar_log=sidecar_path, turn_records=turn_records, prelude_records=prelude_records,
             sidecar_window=window, extra_gaps=extra_gaps, baseline_hashes=baseline_hashes,
-            session_surface=session_surface, draft_bindings=draft_bindings, host_scope_binding=host_binding,
+            session_surface=session_surface, draft_bindings=draft_bindings, host_scope_binding=host_binding, program_receipt_pages=program_receipt_pages,
         )
         grade = grade_case(case, observation, project_dir, identity)
     except Exception as exc:
