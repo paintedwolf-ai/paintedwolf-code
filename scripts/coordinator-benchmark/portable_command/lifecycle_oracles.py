@@ -78,11 +78,13 @@ def probe_background_job_handles(application, session_id, db_path, *, project_di
         if h2:
             other_handle = h2[-1]
             application.request(f'/v1/sessions/{session_id}/prompts', {'operation_id': str(uuid.uuid4()), 'text': 'Cross-session Q16 refusal witness.'})
+            application.wait_for(lambda: smoke_workers.pending(application, session_id) is not None, 'prompt ready')
             c_cid, c_info = _read_handle_output(application, session_id, other_handle, send_calls)
             call_ids.append(c_cid)
             cross_refused = c_info['outcome'] == 'rejected'
             _settle_turn(application, session_id)
             application.request(f'/v1/sessions/{sid2}/prompts', {'operation_id': str(uuid.uuid4()), 'text': 'Cross-session Q16 own-session witness.'})
+            application.wait_for(lambda: smoke_workers.pending(application, sid2) is not None, 'prompt ready')
             _, own_info = _read_handle_output(application, sid2, other_handle, send_calls)
             other_usable = bool(own_info['outcome'] == 'completed' and own_info['returned_handle'] == other_handle and own_info['stdout'].startswith('other\n'))
             _settle_turn(application, sid2)
