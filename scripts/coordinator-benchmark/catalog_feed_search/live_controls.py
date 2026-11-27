@@ -1,4 +1,4 @@
-"""The three runbook live controls (settled catalog, live SSE write, path/line literal search)."""
+"""The three runbook live controls (settled catalog, project-scoped SSE + drain, literal search)."""
 
 from __future__ import annotations
 
@@ -19,6 +19,8 @@ from .generators import BoundaryConfig, TreeEntrySpec, TreeSpec, materialize_tre
 from .queries import CodeQuerySpec
 from .references import reference_search, reference_walk
 from .seeds import BASE_SEED_PRIMARY, ReplaySelector
+
+DRAIN_SENTINEL_REL_PATH = "src/.cfs-drain-sentinel.txt"
 
 
 @dataclass(frozen=True)
@@ -115,6 +117,25 @@ def _has_matching_change(
     return False
 
 
+def _retag_write_log(raw_log: WriteLog, root_id: str, seq_offset: int = 0) -> list[WriteLogEntry]:
+    return [
+        WriteLogEntry(
+            seq=e.seq + seq_offset,
+            clock_domain=e.clock_domain,
+            timestamp_ns=e.timestamp_ns,
+            op=e.op,
+            path=e.path,
+            new_path=e.new_path,
+            before_sha256=e.before_sha256,
+            after_sha256=e.after_sha256,
+            before_mode=e.before_mode,
+            after_mode=e.after_mode,
+            root_id=root_id,
+        )
+        for e in raw_log.entries
+    ]
+
+
 def run_live_control_change_feed(
     root_dir: Path,
     project_id: str,
@@ -122,59 +143,91 @@ def run_live_control_change_feed(
     sse_subscription: SSESubscription,
     *,
     rel_path: str = "src/control_write.txt",
+    sentinel_path: str = DRAIN_SENTINEL_REL_PATH,
+    ready_wait_s: float = 10.0,
+    observe_wait_s: float = 10.0,
+    drain_wait_s: float = 10.0,
     clock_fn: Callable[[], int] | None = None,
     clock_domain: str = "monotonic_ns",
 ) -> LiveControlResult:
-    """Control 2: open live /v1/events stream, wait for readiness barrier, write once, drain."""
+    """Control 2: project-scoped /v1/events stream, readiness barrier, primary write, sentinel drain."""
     sse_subscription.start()
     try:
-        ready = sse_subscription.wait_ready()
-        if not ready:
+        if not sse_subscription.wait_ready(max_wait_s=ready_wait_s):
             return LiveControlResult(
                 name="single_logged_write_once_in_change_stream",
                 passed=False,
-                check=CheckResult(Verdict.UNKNOWN, "feed", reason="SSE stream failed to open before write"),
+                check=CheckResult(Verdict.UNKNOWN, "feed", reason="SSE readiness deadline expired before write"),
                 evidence={"sse_ready": False},
             )
 
-        sel = ReplaySelector(BASE_SEED_PRIMARY, "CONTROL_FEED", 0)
-        script = ChangeScript(
-            selector=sel,
+        runner = ChangeRunner(clock_fn=clock_fn, clock_domain=clock_domain)
+        primary_script = ChangeScript(
+            selector=ReplaySelector(BASE_SEED_PRIMARY, "CONTROL_FEED", 0),
             ops=(ChangeOp("edit", rel_path, content=b"live control write payload\n"),),
         )
-        runner = ChangeRunner(clock_fn=clock_fn, clock_domain=clock_domain)
-        raw_log = runner.run(root_dir, script)
-        write_log = WriteLog(
-            clock_domain=raw_log.clock_domain,
-            entries=tuple(
-                WriteLogEntry(
-                    seq=e.seq,
-                    clock_domain=e.clock_domain,
-                    timestamp_ns=e.timestamp_ns,
-                    op=e.op,
-                    path=e.path,
-                    new_path=e.new_path,
-                    before_sha256=e.before_sha256,
-                    after_sha256=e.after_sha256,
-                    before_mode=e.before_mode,
-                    after_mode=e.after_mode,
-                    root_id=root_id,
-                )
-                for e in raw_log.entries
-            ),
-        )
+        primary_log = runner.run(root_dir, primary_script)
+        logged_entries = _retag_write_log(primary_log, root_id, seq_offset=0)
 
-        frames = sse_subscription.wait_for_frames(
-            lambda fs: _has_matching_change(fs, project_id, root_id, rel_path)
+        frames, arrived = sse_subscription.wait_for_frames(
+            lambda fs: _has_matching_change(fs, project_id, root_id, rel_path),
+            max_wait_s=observe_wait_s,
+        )
+        if not arrived:
+            return LiveControlResult(
+                name="single_logged_write_once_in_change_stream",
+                passed=False,
+                check=CheckResult(
+                    Verdict.UNKNOWN,
+                    "feed",
+                    reason="harness observation deadline expired before target change arrived",
+                ),
+                evidence={
+                    "sse_ready": True,
+                    "primary_arrived": False,
+                    "observed_frame_count": len(frames),
+                },
+            )
+
+        # Explicit causal drain boundary: execute a second sentinel write so any duplicate
+        # emission of the primary write in a subsequent batch is captured and flagged.
+        sentinel_script = ChangeScript(
+            selector=ReplaySelector(BASE_SEED_PRIMARY, "CONTROL_FEED_SENTINEL", 0),
+            ops=(ChangeOp("create", sentinel_path, content=b"drain sentinel\n"),),
+        )
+        sentinel_log = runner.run(root_dir, sentinel_script)
+        logged_entries.extend(_retag_write_log(sentinel_log, root_id, seq_offset=len(logged_entries)))
+
+        frames, drained = sse_subscription.wait_for_frames(
+            lambda fs: _has_matching_change(fs, project_id, root_id, sentinel_path),
+            max_wait_s=drain_wait_s,
         )
     finally:
         sse_subscription.close()
 
+    write_log = WriteLog(clock_domain=clock_domain, entries=tuple(logged_entries))
     answer = map_sse_source_changed_to_answer(
         frames,
         project_id=project_id,
         default_root_id=root_id,
     )
+    if not drained:
+        return LiveControlResult(
+            name="single_logged_write_once_in_change_stream",
+            passed=False,
+            check=CheckResult(
+                Verdict.UNKNOWN,
+                "feed",
+                reason="primary change arrived but sentinel drain boundary expired; cannot qualify exactly-once",
+            ),
+            evidence={
+                "sse_ready": True,
+                "primary_arrived": True,
+                "drain_boundary": "sentinel_deadline_expired",
+                "observed_event_count": len(answer.events),
+            },
+        )
+
     res = check_change_feed(write_log, answer)
     return LiveControlResult(
         name="single_logged_write_once_in_change_stream",
@@ -182,6 +235,8 @@ def run_live_control_change_feed(
         check=res,
         evidence={
             "sse_ready": True,
+            "primary_arrived": True,
+            "drain_boundary": "sentinel_write",
             "write_log": write_log.to_dict(),
             "observed_event_count": len(answer.events),
             "batch_ids": sorted({e.batch_id for e in answer.events}),
@@ -241,7 +296,7 @@ def build_live_control_fixture(root_dir: Path) -> None:
 def run_three_live_controls(
     driver: SidecarDriver,
     root_dir: Path,
-    sse_subscription: SSESubscription,
+    sse_factory: Callable[[str], SSESubscription],
     *,
     provenance: RunProvenance | None = None,
     out_dir: Path | None = None,
@@ -250,7 +305,7 @@ def run_three_live_controls(
     clock_fn: Callable[[], int] | None = None,
     clock_domain: str = "monotonic_ns",
 ) -> LiveControlsReport:
-    """Run all 3 runbook live controls and optionally emit a SHA-256 evidence manifest."""
+    """Run all 3 runbook live controls with a project-scoped SSE stream and SHA-256 manifest."""
     build_live_control_fixture(root_dir)
     project_id, root_ids = driver.attach_project([root_dir])
     root_id = root_ids[0] if root_ids else "root-0"
@@ -260,7 +315,7 @@ def run_three_live_controls(
         root_dir,
         project_id,
         root_id,
-        sse_subscription,
+        sse_factory(project_id),
         clock_fn=clock_fn,
         clock_domain=clock_domain,
     )

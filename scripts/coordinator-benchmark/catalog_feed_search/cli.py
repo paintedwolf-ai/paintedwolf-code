@@ -85,7 +85,6 @@ def _cmd_live_controls(args: argparse.Namespace) -> int:
     out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    sse_sub = LiveSSESubscriber(args.url, args.token, out_jsonl=out_dir / "sse_events.jsonl")
     with tempfile.TemporaryDirectory() as tmp:
         work_root = Path(tmp) / "fixture"
         provenance = collect_run_provenance(
@@ -99,7 +98,12 @@ def _cmd_live_controls(args: argparse.Namespace) -> int:
         report = run_three_live_controls(
             driver,
             work_root,
-            sse_sub,
+            lambda pid: LiveSSESubscriber(
+                args.url,
+                args.token,
+                project_id=pid,
+                out_jsonl=out_dir / "sse_events.jsonl",
+            ),
             provenance=provenance,
             out_dir=out_dir,
             rg_bin=args.rg_bin,

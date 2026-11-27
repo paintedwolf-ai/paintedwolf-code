@@ -26,7 +26,11 @@ from catalog_feed_search.driver_inprocess import build_task_digest_argv, parse_d
 from catalog_feed_search.driver_provenance import collect_run_provenance, file_sha256
 from catalog_feed_search.driver_sidecar import SidecarDriver
 from catalog_feed_search.driver_sse import LiveSSESubscriber
-from catalog_feed_search.live_controls import run_three_live_controls
+from catalog_feed_search.live_controls import (
+    DRAIN_SENTINEL_REL_PATH,
+    run_live_control_change_feed,
+    run_three_live_controls,
+)
 from catalog_feed_search.references import ReplaceFileResult, SearchHit
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -64,9 +68,10 @@ class StubTransport:
 
 
 class StubSSESubscription:
-    """Deterministic SSESubscription verifying readiness barrier ordering before writes."""
+    """Deterministic SSESubscription verifying project scope and readiness barrier before writes."""
 
-    def __init__(self, frames_after_write: list[dict[str, object]]) -> None:
+    def __init__(self, project_id: str, frames_after_write: list[dict[str, object]]) -> None:
+        self.project_id = project_id
         self._frames = frames_after_write
         self.started = False
         self.ready_checked = False
@@ -75,17 +80,17 @@ class StubSSESubscription:
     def start(self) -> None:
         self.started = True
 
-    def wait_ready(self) -> bool:
+    def wait_ready(self, max_wait_s: float = 10.0) -> bool:
         self.ready_checked = True
         return True
 
-    def wait_for_frames(self, predicate) -> list[dict[str, object]]:
-        return list(self._frames)
+    def wait_for_frames(self, predicate, max_wait_s: float = 10.0) -> tuple[list[dict[str, object]], bool]:
+        return list(self._frames), bool(predicate(self._frames))
 
     def frames(self) -> list[dict[str, object]]:
         return list(self._frames)
 
-    def close(self) -> None:
+    def close(self, max_wait_s: float = 3.0) -> None:
         self.closed = True
 
 
@@ -215,39 +220,43 @@ class D1WireContractAdapterTests(unittest.TestCase):
 
 
 class SidecarLiveSSESubscriberAndControlsTests(unittest.TestCase):
-    def test_real_live_sse_subscriber_readiness_barrier_and_frame_drain(self) -> None:
+    def test_real_live_sse_subscriber_project_scope_readiness_and_frame_drain(self) -> None:
         release_event = threading.Event()
+        seen_paths: list[str] = []
 
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:
+                seen_paths.append(self.path)
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.end_headers()
                 self.wfile.flush()
                 release_event.wait()
-                frame = json.dumps(
-                    {
-                        "id": "env-live-1",
-                        "topic": "source_changed",
-                        "data": {
-                            "project_id": "proj-1",
-                            "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                            "workspace_kind": "primary",
-                            "resync": False,
-                            "changes": [
-                                {
-                                    "root_id": "root-1",
-                                    "path": "src/control_write.txt",
-                                    "op": "write",
-                                    "origin": "external",
-                                    "changed_at": "2026-11-27T19:00:00Z",
-                                }
-                            ],
-                        },
-                    }
-                )
-                self.wfile.write(f"data: {frame}\n\n".encode("utf-8"))
-                self.wfile.flush()
+                # Only deliver project-scoped events matching the requested project_id.
+                if "project_id=proj-1" in self.path:
+                    frame = json.dumps(
+                        {
+                            "id": "env-live-1",
+                            "topic": "source_changed",
+                            "data": {
+                                "project_id": "proj-1",
+                                "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                "workspace_kind": "primary",
+                                "resync": False,
+                                "changes": [
+                                    {
+                                        "root_id": "root-1",
+                                        "path": "src/control_write.txt",
+                                        "op": "write",
+                                        "origin": "external",
+                                        "changed_at": "2026-11-27T19:00:00Z",
+                                    }
+                                ],
+                            },
+                        }
+                    )
+                    self.wfile.write(f"data: {frame}\n\n".encode("utf-8"))
+                    self.wfile.flush()
 
             def log_message(self, format: str, *args) -> None:
                 return
@@ -259,19 +268,127 @@ class SidecarLiveSSESubscriberAndControlsTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 jsonl = Path(tmp) / "events.jsonl"
-                sub = LiveSSESubscriber(f"http://127.0.0.1:{port}", "tok", out_jsonl=jsonl)
+                sub = LiveSSESubscriber(
+                    f"http://127.0.0.1:{port}",
+                    "tok",
+                    project_id="proj-1",
+                    out_jsonl=jsonl,
+                )
                 sub.start()
                 self.assertTrue(sub.wait_ready())
-                # Release frame ONLY AFTER readiness barrier succeeded.
                 release_event.set()
-                frames = sub.wait_for_frames(lambda fs: len(fs) >= 1)
+                frames, matched = sub.wait_for_frames(lambda fs: len(fs) >= 1)
                 sub.close()
+                self.assertTrue(matched)
                 self.assertEqual(len(frames), 1)
                 self.assertEqual(frames[0]["id"], "env-live-1")
+                self.assertTrue(any("project_id=proj-1" in p for p in seen_paths), seen_paths)
                 self.assertTrue(jsonl.is_file())
         finally:
             server.shutdown()
             server.server_close()
+
+    def test_live_sse_missing_event_exits_cleanly_as_unknown(self) -> None:
+        stop_server_stream = threading.Event()
+
+        class SilentKeepaliveHandler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                self.wfile.write(b": keepalive\n\n")
+                self.wfile.flush()
+                stop_server_stream.wait()
+
+            def log_message(self, format: str, *args) -> None:
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), SilentKeepaliveHandler)
+        port = server.server_address[1]
+        srv_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        srv_thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / "src").mkdir()
+                (root / "src/control_write.txt").write_bytes(b"init\n")
+                sub = LiveSSESubscriber(
+                    f"http://127.0.0.1:{port}",
+                    "tok",
+                    project_id="proj-silent",
+                )
+                ticks = iter([10, 20])
+                res = run_live_control_change_feed(
+                    root,
+                    "proj-silent",
+                    "root-1",
+                    sub,
+                    ready_wait_s=2.0,
+                    observe_wait_s=0.1,
+                    drain_wait_s=0.1,
+                    clock_fn=lambda: next(ticks),
+                    clock_domain="manual",
+                )
+                self.assertFalse(res.passed)
+                self.assertEqual(res.check.verdict, Verdict.UNKNOWN)
+                self.assertFalse(res.evidence["primary_arrived"])
+        finally:
+            stop_server_stream.set()
+            server.shutdown()
+            server.server_close()
+
+    def test_sentinel_drain_boundary_catches_duplicate_in_later_batch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "src").mkdir()
+            (root / "src/control_write.txt").write_bytes(b"init\n")
+            sub = StubSSESubscription(
+                "proj-1",
+                [
+                    {
+                        "id": "batch-1",
+                        "topic": "source_changed",
+                        "data": {
+                            "project_id": "proj-1",
+                            "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            "resync": False,
+                            "changes": [{"root_id": "root-1", "path": "src/control_write.txt", "op": "write"}],
+                        },
+                    },
+                    {
+                        "id": "batch-2",
+                        "topic": "source_changed",
+                        "data": {
+                            "project_id": "proj-1",
+                            "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            "resync": False,
+                            "changes": [{"root_id": "root-1", "path": "src/control_write.txt", "op": "write"}],
+                        },
+                    },
+                    {
+                        "id": "batch-3",
+                        "topic": "source_changed",
+                        "data": {
+                            "project_id": "proj-1",
+                            "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            "resync": False,
+                            "changes": [{"root_id": "root-1", "path": DRAIN_SENTINEL_REL_PATH, "op": "create"}],
+                        },
+                    },
+                ],
+            )
+            ticks = iter([10, 20, 30])
+            res = run_live_control_change_feed(
+                root,
+                "proj-1",
+                "root-1",
+                sub,
+                clock_fn=lambda: next(ticks),
+                clock_domain="manual",
+            )
+            self.assertFalse(res.passed)
+            self.assertEqual(res.check.verdict, Verdict.DEFECT)
+            self.assertEqual(res.evidence["drain_boundary"], "sentinel_write")
 
     def test_sidecar_browse_is_dir_catalog_index_draft_put_and_three_live_controls(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -392,41 +509,69 @@ class SidecarLiveSSESubscriberAndControlsTests(unittest.TestCase):
                 d1_commit="3bb1464d22dd0a38a149d37610810e7a0324e8cf",
                 clock_domain="manual",
             )
-            sse_sub = StubSSESubscription(
-                [
-                    {
-                        "id": "env-1",
-                        "topic": "source_changed",
-                        "data": {
-                            "project_id": "proj-1",
-                            "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                            "workspace_kind": "primary",
-                            "resync": False,
-                            "changes": [
-                                {
-                                    "root_id": "root-1",
-                                    "path": "src/control_write.txt",
-                                    "op": "write",
-                                    "origin": "external",
-                                    "changed_at": "2026-11-27T19:00:00Z",
-                                }
-                            ],
+            created_subs: list[StubSSESubscription] = []
+
+            def sse_factory(pid: str) -> StubSSESubscription:
+                sub = StubSSESubscription(
+                    pid,
+                    [
+                        {
+                            "id": "env-1",
+                            "topic": "source_changed",
+                            "data": {
+                                "project_id": pid,
+                                "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                "workspace_kind": "primary",
+                                "resync": False,
+                                "changes": [
+                                    {
+                                        "root_id": "root-1",
+                                        "path": "src/control_write.txt",
+                                        "op": "write",
+                                        "origin": "external",
+                                        "changed_at": "2026-11-27T19:00:00Z",
+                                    }
+                                ],
+                            },
                         },
-                    }
-                ]
-            )
-            ticks = iter([100, 200])
+                        {
+                            "id": "env-2",
+                            "topic": "source_changed",
+                            "data": {
+                                "project_id": pid,
+                                "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                "workspace_kind": "primary",
+                                "resync": False,
+                                "changes": [
+                                    {
+                                        "root_id": "root-1",
+                                        "path": DRAIN_SENTINEL_REL_PATH,
+                                        "op": "create",
+                                        "origin": "external",
+                                        "changed_at": "2026-11-27T19:00:01Z",
+                                    }
+                                ],
+                            },
+                        },
+                    ],
+                )
+                created_subs.append(sub)
+                return sub
+
+            ticks = iter([100, 200, 300])
             report = run_three_live_controls(
                 driver,
                 fixture_dir,
-                sse_sub,
+                sse_factory,
                 provenance=provenance,
                 out_dir=out_dir,
                 clock_fn=lambda: next(ticks),
                 clock_domain="manual",
             )
             self.assertTrue(report.all_passed, report.to_dict())
-            self.assertTrue(sse_sub.started and sse_sub.ready_checked and sse_sub.closed)
+            self.assertEqual(len(created_subs), 1)
+            self.assertEqual(created_subs[0].project_id, "proj-1")
+            self.assertTrue(created_subs[0].started and created_subs[0].ready_checked and created_subs[0].closed)
             self.assertEqual(report.controls[0].evidence["projection"], "catalog")
             self.assertEqual(report.controls[0].evidence["generation_revision"], 7)
 
