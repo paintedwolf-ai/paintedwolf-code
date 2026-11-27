@@ -43,7 +43,7 @@ func coldLeg(root string) PlanLeg {
 
 func TestCodeExecutorReportsWarmingRootWhenWallExpires(t *testing.T) {
 	root, catalog, _ := coldRoot(t)
-	exec := &CodeExecutor{catalog: catalog, wallBudget: 50 * time.Millisecond}
+	exec := &CodeExecutor{catalog: catalog, legDeadline: expiredCodeLegDeadline}
 	report, err := exec.Run(t.Context(), coldLeg(root))
 	testutil.FailErr(t, "run code leg", err)
 	issues := report.CoverageIssues(ExecutorCode)
@@ -63,7 +63,7 @@ func TestCodeExecutorJoinsColdBuildForTheWall(t *testing.T) {
 	root, catalog, release := coldRoot(t)
 	const held = 500 * time.Millisecond
 	time.AfterFunc(held, release)
-	report, err := (&CodeExecutor{catalog: catalog}).Run(t.Context(), coldLeg(root))
+	report, err := (&CodeExecutor{catalog: catalog, legDeadline: unboundedCodeLegDeadline}).Run(t.Context(), coldLeg(root))
 	testutil.FailErr(t, "run code leg", err)
 	if got := hitPathsOfKind(report.Hits, HitKindCode); !contains(got, "a.txt") || report.Code.WarmingRoots != 0 || report.Code.GenerationWait < held {
 		t.Fatalf("hits = %v report = %+v, want a.txt after joining the build", got, report)

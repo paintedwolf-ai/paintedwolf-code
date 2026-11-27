@@ -33,6 +33,8 @@ type CodeExecutor struct {
 	rerank decide.Reranker
 	// wallBudget overrides the budget's wall clock; zero uses the budget's.
 	wallBudget time.Duration
+	// legDeadline injects the leg's deadline context in tests; nil in production.
+	legDeadline func(ctx context.Context, leg *CodePlanLeg) (context.Context, context.CancelFunc)
 }
 
 func (e *CodeExecutor) legWallBudget(leg *CodePlanLeg) time.Duration {
@@ -43,6 +45,13 @@ func (e *CodeExecutor) legWallBudget(leg *CodePlanLeg) time.Duration {
 		return leg.Wall
 	}
 	return leg.Budget.Wall()
+}
+
+func (e *CodeExecutor) bindLegContext(ctx context.Context, leg *CodePlanLeg) (context.Context, context.CancelFunc) {
+	if e.legDeadline != nil {
+		return e.legDeadline(ctx, leg)
+	}
+	return context.WithTimeout(ctx, e.legWallBudget(leg))
 }
 
 // NewCodeExecutor returns a CodeExecutor on the process catalog.
@@ -92,7 +101,7 @@ func (e *CodeExecutor) Run(ctx context.Context, leg PlanLeg) (ExecutorReport, er
 	if leg.Code.Candidates {
 		return e.discoverCandidates(ctx, leg.Code, paths, spec)
 	}
-	legCtx, cancel := context.WithTimeout(ctx, e.legWallBudget(leg.Code))
+	legCtx, cancel := e.bindLegContext(ctx, leg.Code)
 	defer cancel()
 	wallEnd, _ := legCtx.Deadline()
 

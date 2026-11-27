@@ -553,6 +553,14 @@ func TestCodeExecutorFindsEditsUnderStaleGeneration(t *testing.T) {
 	}
 }
 
+func unboundedCodeLegDeadline(ctx context.Context, _ *CodePlanLeg) (context.Context, context.CancelFunc) {
+	return context.WithDeadline(ctx, time.Now().Add(time.Hour))
+}
+
+func expiredCodeLegDeadline(ctx context.Context, _ *CodePlanLeg) (context.Context, context.CancelFunc) {
+	return context.WithDeadline(ctx, time.Unix(0, 0))
+}
+
 // A warm root whose scan cannot finish inside the budget reports a timeout
 // and keeps what it found.
 func TestCodeExecutorTimeBudgetReportsPartial(t *testing.T) {
@@ -566,7 +574,7 @@ func TestCodeExecutorTimeBudgetReportsPartial(t *testing.T) {
 	}
 	runCodeLeg(t, leg)
 	exec := NewCodeExecutor(decide.Reranker{})
-	exec.wallBudget = time.Nanosecond
+	exec.legDeadline = expiredCodeLegDeadline
 	report, err := exec.Run(context.Background(), PlanLeg{Code: leg})
 	testutil.FailErr(t, "run code leg", err)
 	if !report.TimedOut {
