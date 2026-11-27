@@ -196,8 +196,14 @@ def main():
         run_git(main_repo, "worktree", "add", "-q", str(linked_wt), "-b", "wt-branch")
         wt_head_before = run_git(linked_wt, "rev-parse", "HEAD").strip()
 
-        proj_wt = app.request("/v1/projects", {"roots": [{"path": str(linked_wt)}]})
+        proj_wt = app.request(
+            "/v1/projects",
+            {"roots": [{"path": str(main_repo)}, {"path": str(linked_wt)}]},
+        )
+        main_root_id = resolve_root_id(proj_wt, main_repo)
         wt_root_id = resolve_root_id(proj_wt, linked_wt)
+        if not wt_root_id or wt_root_id == main_root_id:
+            raise RuntimeError(f"linked worktree root id did not resolve distinctly: main={main_root_id!r} wt={wt_root_id!r}")
         s2 = start_session(proj_wt["id"], wt_root_id, "Exercise M05 linked Git worktree read and commit.")
         send_tool_calls(
             app, s2, [{"name": "update_progress", "args": {"content": "- [ ] Commit wt.txt in linked worktree"}}], surface={}
@@ -231,6 +237,7 @@ def main():
         )
         report["cases"]["linked-git-worktree"] = {
             "session_id": s2,
+            "main_root_id": main_root_id,
             "wt_root_id": wt_root_id,
             "git_status": git_status,
             "git_commit": git_commit,
