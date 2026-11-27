@@ -8,7 +8,10 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { createRequire } from "node:module";
+
+const require = createRequire(path.join(process.cwd(), "package.json"));
+const { chromium } = require("@playwright/test");
 
 function arg(name) {
   const idx = process.argv.indexOf(name);
