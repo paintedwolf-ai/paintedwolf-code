@@ -114,10 +114,11 @@ def main():
               f"or set {change_report.BASE_ENV} to the commit this change builds on.")
         return 2
     code, reports = run_suites(artifact_root(ROOT) / "budgets", change_set(scope, inspect))
-    tree = change_report.git(ROOT, 'rev-parse', 'HEAD^{tree}').stdout.strip()
+    tree = None
     if 'maintainability' in reports:
         report = reports['maintainability']
         source = os.environ.get('GITHUB_SHA') or change_report.git(ROOT, 'rev-parse', 'HEAD').stdout.strip()
+        tree = change_report.git(ROOT, 'rev-parse', 'HEAD^{tree}').stdout.strip()
         seal(report, source, tree, scope.base)
         (artifact_root(ROOT) / 'budgets' / 'reports' / 'maintainability.json').write_text(json.dumps(report) + '\n')
     findings, failed = [], code != 0
@@ -128,6 +129,8 @@ def main():
         suite, suite_failed = suite_findings(name, reports[name])
         findings += suite
         failed = failed or suite_failed
+    if tree is None:
+        tree = change_report.git(ROOT, 'rev-parse', 'HEAD^{tree}').stdout.strip()
     findings += memory_budgets.findings(ROOT, artifact_root(ROOT), tree)
     header = scope.describe() + (f"; inspecting {', '.join(inspect)}" if inspect else "")
     change_report.emit(ROOT, "Budgets", header, findings, failed)
