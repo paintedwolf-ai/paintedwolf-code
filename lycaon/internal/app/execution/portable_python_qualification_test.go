@@ -758,6 +758,33 @@ func TestPortablePythonCombinedCommandAndOAR(t *testing.T) {
 	))
 	outPytest, err := runCmd("implement", "", []string{"command"}, "pytest -q")
 	testutil.FailErr(t, "run managed pytest via command tool", err)
+	// On hardened macOS (wazero interpreter), pytest import can exceed the
+	// synchronous command parking threshold (~30s) and return state="running"
+	// with a handle; poll command_output until completion.
+	var parked struct {
+		State  string `json:"state"`
+		Handle string `json:"handle"`
+	}
+	if json.Unmarshal([]byte(outPytest), &parked) == nil && parked.State == "running" && parked.Handle != "" {
+		deadline := time.Now().Add(180 * time.Second)
+		for time.Now().Before(deadline) {
+			time.Sleep(1 * time.Second)
+			polled, pollErr := fixture.Invoke(t, ctx, "command_output", map[string]any{"handle": parked.Handle}, func(callCtx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+				tc.Identity.Agent = "implement"
+				tc.Turn.TurnOfferedToolNames = []string{"command", "command_output"}
+				tc.Host.SessionScratchDir = scratchDir
+				return rt.Host.Registry.Run(callCtx, "command_output", args, tc)
+			})
+			testutil.FailErr(t, "poll parked managed pytest via command_output", pollErr)
+			outPytest = polled
+			var nextState struct {
+				State string `json:"state"`
+			}
+			if json.Unmarshal([]byte(polled), &nextState) != nil || nextState.State != "running" {
+				break
+			}
+		}
+	}
 	if !strings.Contains(outPytest, "1 passed") {
 		t.Fatalf("expected managed pytest via command tool to pass, got: %q", outPytest)
 	}
