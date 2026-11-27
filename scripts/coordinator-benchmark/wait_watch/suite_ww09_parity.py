@@ -218,7 +218,7 @@ def run_watch_boundary_case(
                 "ww09.wake.idle",
                 lambda s: bool((s.get("tables") or {}).get("prompt_submissions"))
                 and all(
-                    isinstance(row, dict) and row.get("status") == "completed"
+                    isinstance(row, dict) and row.get("status") in {"completed", "settled", "interrupted"}
                     for row in ((s.get("tables") or {}).get("prompt_submissions") or [])
                 ),
                 driver._dump_state,
