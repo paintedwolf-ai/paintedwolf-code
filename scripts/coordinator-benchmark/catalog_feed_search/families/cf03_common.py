@@ -108,7 +108,7 @@ class ManagedSidecar:
         raise TimeoutError(f"lycaon-dev did not become healthy at {health_url} within {self.startup_timeout_s}s")
 
     def driver(self) -> SidecarDriver:
-        return SidecarDriver(HTTPTransport(self.url, self.token, timeout_s=30.0))
+        return SidecarDriver(HTTPTransport(self.url, self.token))
 
     def stop(self) -> None:
         """Stop ONLY the exact PID we launched."""

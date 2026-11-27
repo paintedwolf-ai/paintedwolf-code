@@ -172,8 +172,13 @@ class TestCF03Families(unittest.TestCase):
         self.driver = SidecarDriver(self.transport)
 
     def test_pick_free_port_and_cli_parser(self) -> None:
+        from catalog_feed_search.families.cf03_common import ManagedSidecar
+
         port = pick_free_port()
         self.assertGreater(port, 0)
+        sc = ManagedSidecar(Path("/tmp/nonexistent-bin"), Path("/tmp/nonexistent-cfg"), token="tok")
+        sc.url = f"http://127.0.0.1:{port}"
+        self.assertIsInstance(sc.driver(), SidecarDriver)
         parser = build_parser()
         args = parser.parse_args(["--engine-bin", "/tmp/bin", "--out-dir", "/tmp/out", "--families", "K01,K02"])
         self.assertEqual(args.families, "K01,K02")
