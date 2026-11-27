@@ -9,6 +9,8 @@ import (
 )
 
 func TestObserveApprovalResolutionWEAParityAndRevalidation(t *testing.T) {
+	plan1 := &ApprovalPlan{ID: "cp-1", ActionDigest: "sha256:action-1"}
+	plan2 := &ApprovalPlan{ID: "cp-2", ActionDigest: "sha256:action-1"}
 	option := ApprovalOption{
 		ID:    "allow_chat",
 		Kind:  ApprovalOptionLease,
@@ -29,12 +31,12 @@ func TestObserveApprovalResolutionWEAParityAndRevalidation(t *testing.T) {
 
 	// Disabled: 0 allocs/op.
 	restoreOff := cmddiag.SetObserver(cmddiag.NewObserver(cmddiag.Config{Enabled: false}))
-	if observeApprovalResolutionWEA("11111111-2222-3333-4444-555555555555", "cp-1", option, approved) {
+	if observeApprovalResolutionWEA("11111111-2222-3333-4444-555555555555", "cp-1", plan1, option, approved) {
 		restoreOff()
 		t.Fatal("expected false when diagnostics disabled")
 	}
 	allocs := testing.AllocsPerRun(100, func() {
-		_ = observeApprovalResolutionWEA("11111111-2222-3333-4444-555555555555", "cp-1", option, approved)
+		_ = observeApprovalResolutionWEA("11111111-2222-3333-4444-555555555555", "cp-1", plan1, option, approved)
 	})
 	restoreOff()
 	if allocs != 0 {
@@ -57,10 +59,10 @@ func TestObserveApprovalResolutionWEAParityAndRevalidation(t *testing.T) {
 	restoreOn := cmddiag.SetObserver(obs)
 	defer restoreOn()
 
-	if !observeApprovalResolutionWEA("11111111-2222-3333-4444-555555555555", "cp-1", option, refused) {
+	if !observeApprovalResolutionWEA("11111111-2222-3333-4444-555555555555", "cp-1", plan1, option, refused) {
 		t.Fatal("expected refusal observation to enqueue")
 	}
-	if !observeApprovalResolutionWEA("11111111-2222-3333-4444-555555555555", "cp-2", option, approved) {
+	if !observeApprovalResolutionWEA("11111111-2222-3333-4444-555555555555", "cp-2", plan2, option, approved) {
 		t.Fatal("expected superseding approval observation to enqueue")
 	}
 	obs.Close()

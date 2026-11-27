@@ -1,20 +1,35 @@
 package editordoc
 
 import (
+	"context"
 	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/observability/cmddiag"
+	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
-const weaMaxEditDiagItems = 64
+const (
+	weaMaxEditDiagItems    = 64
+	weaMaxRetainedVersions = 8
+)
+
+type editDiagRef struct {
+	projectID   string
+	fileID      string
+	operationID string
+	heldVerID   string
+	path        string
+}
 
 // observeAcceptedAgentEditsWEA emits a bounded WEA edit observation after
 // ApplyAgentEdits commits. It reads actual owning read-basis records from
-// a.agentReads without fabricating qualifying reads or companion version rows.
-// Where an independent owner witness (read record or persisted version row) is
-// unavailable at this seam, it marks the observation incomplete instead of
-// self-confirming. Zero overhead when diagnostics are disabled.
+// a.agentReads and, when sourceledger.History is configured, performs a bounded
+// deferred read (via cmddiag.ObserveTask) of the retained sourceledger.Version
+// attribution on the async worker goroutine. Where an independent owner witness
+// is unavailable, it marks the observation incomplete instead of fabricating
+// matching facts. Zero overhead when diagnostics are disabled.
 func (a *AgentService) observeAcceptedAgentEditsWEA(batch []*agentAcceptance, results []*AgentEditResult) bool {
 	if !cmddiag.Enabled() || a == nil || len(batch) == 0 {
 		return false
@@ -22,6 +37,7 @@ func (a *AgentService) observeAcceptedAgentEditsWEA(batch []*agentAcceptance, re
 	limit := min(len(batch), weaMaxEditDiagItems)
 	readBases := make([]cmddiag.WEAReadBasisFact, 0, limit)
 	editEffects := make([]cmddiag.WEAEditEffectFact, 0, limit)
+	refs := make([]editDiagRef, 0, limit)
 	missingReadWitness := false
 
 	var sessionID, projectID, invocationID string
@@ -67,20 +83,23 @@ func (a *AgentService) observeAcceptedAgentEditsWEA(batch []*agentAcceptance, re
 			missingReadWitness = true
 		}
 
-		versionID := ""
+		heldVerID := ""
 		if i < len(results) && results[i] != nil {
-			versionID = strings.TrimSpace(results[i].HeldVersionID)
+			heldVerID = strings.TrimSpace(results[i].HeldVersionID)
 		}
-		// Record only persisted effect authorship; never hardcode author kind
-		// or fabricate a companion FileVersions row from the same input.
 		authorID := strings.TrimSpace(d.authorship.toolCallID)
 		if authorID == "" {
 			authorID = strings.TrimSpace(d.authorship.sessionID)
 		}
+		authorKind := ""
+		if item.mutation != nil {
+			authorKind = string(api.SourceChangeOriginAgent)
+		}
 
+		opID := strings.TrimSpace(in.OperationID)
 		editEffects = append(editEffects, cmddiag.WEAEditEffectFact{
-			EffectID:            strings.TrimSpace(in.OperationID),
-			VersionID:           versionID,
+			EffectID:            opID,
+			VersionID:           heldVerID,
 			SessionID:           sess,
 			InvocationID:        inv,
 			Path:                d.Path,
@@ -90,24 +109,91 @@ func (a *AgentService) observeAcceptedAgentEditsWEA(batch []*agentAcceptance, re
 			RebasedCleanly:      rebased,
 			RebasedFromRevision: basisRev,
 			AuthorID:            authorID,
-			SourceRef:           cmddiag.DigestReference("edit_effect", in.OperationID),
+			AuthorKind:          authorKind,
+			SourceRef:           cmddiag.DigestReference("edit_effect", opID),
+		})
+		refs = append(refs, editDiagRef{
+			projectID:   strings.TrimSpace(d.ProjectID),
+			fileID:      strings.TrimSpace(d.FileID),
+			operationID: opID,
+			heldVerID:   heldVerID,
+			path:        d.Path,
 		})
 	}
 
 	if len(editEffects) == 0 {
 		return false
 	}
-	return cmddiag.ObserveWEA(cmddiag.WEAObservation{
-		SessionID:                 sessionID,
-		ProjectID:                 projectID,
-		InvocationID:              invocationID,
-		ScopeKey:                  editEffects[0].EffectID,
-		Settled:                   true,
-		Truncated:                 len(batch) > limit,
-		ReadWitnessUnavailable:    missingReadWitness,
-		VersionWitnessUnavailable: true, // Persisted version row is owned by sourceledger, not fabricated here.
-		ReadBases:                 readBases,
-		EditEffects:               editEffects,
+
+	baseObs := cmddiag.WEAObservation{
+		SessionID:              sessionID,
+		ProjectID:              projectID,
+		InvocationID:           invocationID,
+		ScopeKey:               editEffects[0].EffectID,
+		Settled:                true,
+		Truncated:              len(batch) > limit,
+		ReadWitnessUnavailable: missingReadWitness,
+		ReadBases:              readBases,
+		EditEffects:            editEffects,
+	}
+
+	var history *sourceledger.History
+	if a.s != nil {
+		history = a.s.history
+	}
+	if history == nil {
+		baseObs.VersionWitnessUnavailable = true
+		return cmddiag.ObserveWEA(baseObs)
+	}
+
+	// Perform a bounded deferred read of retained version attribution on the
+	// async diagnostics worker so zero DB queries run on the caller goroutine.
+	return cmddiag.ObserveTask(cmddiag.Task{
+		SessionID:  sessionID,
+		ProgramID:  baseObs.ScopeKey,
+		ToolCallID: invocationID,
+		Fetch: func(ctx context.Context) (cmddiag.Observation, error) {
+			obs := baseObs
+			var versions []cmddiag.WEAFileVersionFact
+			for _, ref := range refs {
+				if ref.projectID == "" || ref.fileID == "" {
+					continue
+				}
+				page, err := history.QueryFileVersions(ctx, ref.projectID, ref.fileID, weaMaxRetainedVersions, 0)
+				if err != nil {
+					continue
+				}
+				for _, ver := range page.Versions {
+					if (ref.heldVerID != "" && ver.ID == ref.heldVerID) ||
+						(ref.operationID != "" && (ver.OperationID == ref.operationID || ver.EffectID == ref.operationID)) {
+						verAuthor := strings.TrimSpace(ver.ToolCallID)
+						if verAuthor == "" {
+							verAuthor = strings.TrimSpace(ver.SessionID)
+						}
+						effectID := strings.TrimSpace(ver.OperationID)
+						if effectID == "" {
+							effectID = strings.TrimSpace(ver.EffectID)
+						}
+						versions = append(versions, cmddiag.WEAFileVersionFact{
+							VersionID:  ver.ID,
+							EffectID:   effectID,
+							SessionID:  ver.SessionID,
+							WorkerID:   ver.JobID,
+							Path:       ver.Path,
+							AuthorID:   verAuthor,
+							AuthorKind: string(ver.Origin),
+							SourceRef:  cmddiag.DigestReference("sourceledger_version", ver.ID),
+						})
+						break
+					}
+				}
+			}
+			obs.FileVersions = versions
+			if len(versions) == 0 {
+				obs.VersionWitnessUnavailable = true
+			}
+			return cmddiag.WrapWEAObservation(obs), nil
+		},
 	})
 }
 

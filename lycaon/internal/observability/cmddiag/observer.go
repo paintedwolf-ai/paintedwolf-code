@@ -62,6 +62,7 @@ type Observer struct {
 	wg               sync.WaitGroup
 	closeOnce        sync.Once
 	seen             map[dedupKey]int
+	weaCache         *weaCorrelator
 	enqueued         atomic.Int64
 	dropped          atomic.Int64
 	emitted          atomic.Int64
@@ -103,6 +104,7 @@ func NewObserver(cfg Config) *Observer {
 		workerCancel: workerCancel,
 		queue:        make(chan workItem, capacity),
 		seen:         make(map[dedupKey]int),
+		weaCache:     newWEACorrelator(),
 	}
 	obs.wg.Add(1)
 	go obs.run()
@@ -224,6 +226,10 @@ func (o *Observer) run() {
 			obs = fetched
 		} else if item.obs != nil {
 			obs = *item.obs
+		}
+		if obs.WEA != nil && o.weaCache != nil {
+			correlated := o.weaCache.correlate(*obs.WEA)
+			obs.WEA = &correlated
 		}
 		for _, finding := range Evaluate(obs, o.now()) {
 			o.emitDedup(finding)

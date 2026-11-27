@@ -435,9 +435,12 @@ func (b *egressBrokerT) reportDialOutcome(token string, ep egressproxy.Endpoint,
 	if token == "" || ep.Host == "" {
 		return
 	}
+	var connectedCmd EgressCommand
+	connected := false
 	b.mu.Lock()
-	defer b.mu.Unlock()
-	if _, attributed := b.tokens[token]; !attributed {
+	cmd, attributed := b.tokens[token]
+	if !attributed {
+		b.mu.Unlock()
 		return
 	}
 	for i := range b.egress[token] {
@@ -448,11 +451,17 @@ func (b *egressBrokerT) reportDialOutcome(token string, ep egressproxy.Endpoint,
 		if dialErr == nil {
 			h.DialError = ""
 			h.Outcome = "connected"
+			connectedCmd = cmd
+			connected = true
 		} else {
 			h.DialError = dialErrorLabel(dialErr)
 			h.Outcome = "connect_failed"
 		}
-		return
+		break
+	}
+	b.mu.Unlock()
+	if connected {
+		observeBrokerConnectionWEA(connectedCmd, ep)
 	}
 }
 

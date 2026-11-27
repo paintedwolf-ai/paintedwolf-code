@@ -2,25 +2,22 @@ package egressgate
 
 import (
 	"strings"
-	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/observability/cmddiag"
 )
 
-var egressWEADiagSeq atomic.Int64
-
 // observeEgressDecisionWEA emits ONLY the real owning policy/decision record
 // (EgressDecisions) for an attributed egress gate decision. It deliberately
-// does NOT fabricate ObservedConnections: actual connection observations must
-// come independently from the transport or broker observer.
+// does NOT fabricate ObservedConnections: actual connection observations come
+// independently from the transport/broker observer in internal/confine.
 // When diagnostics are disabled, this returns immediately with zero allocations.
 func observeEgressDecisionWEA(cmd confine.EgressCommand, destination string, allowed bool) bool {
 	if !cmddiag.Enabled() {
 		return false
 	}
 	sess := strings.TrimSpace(cmd.SessionID)
-	dest := strings.TrimSpace(destination)
+	dest := strings.ToLower(strings.TrimSpace(destination))
 	if sess == "" || dest == "" {
 		return false
 	}
@@ -31,7 +28,7 @@ func observeEgressDecisionWEA(cmd confine.EgressCommand, destination string, all
 	if inv == "" {
 		inv = sess
 	}
-	seq := egressWEADiagSeq.Add(1)
+	seq := cmddiag.NextWEASeq()
 	destDigest := cmddiag.DigestReference("egress", dest)
 	decID := cmddiag.DigestReference("egress_decision", sess, inv, dest)
 

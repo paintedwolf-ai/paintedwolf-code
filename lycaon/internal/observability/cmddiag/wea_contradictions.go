@@ -3,8 +3,140 @@ package cmddiag
 import (
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 )
+
+var weaGlobalSeq atomic.Int64
+
+// NextWEASeq returns a strictly monotonic cross-package sequence number for
+// ordering independently owned WEA decisions, grants, effects, and connections.
+func NextWEASeq() int64 {
+	return weaGlobalSeq.Add(1)
+}
+
+const weaMaxCorrelatedFacts = 256
+
+// weaCorrelator is a bounded, single-goroutine cache owned by an enabled
+// Observer. It joins independently emitted authority plans/grants with settled
+// effects, and independently emitted egress decisions with broker/transport
+// connection observations, without any package fabricating companion facts.
+type weaCorrelator struct {
+	plans     map[string]WEAApprovalPlanFact
+	planOrder []string
+
+	grants     map[string]WEAGrantFact
+	grantOrder []string
+
+	egressByDest map[string][]WEAEgressDecisionFact
+	egressOrder  []string
+}
+
+func newWEACorrelator() *weaCorrelator {
+	return &weaCorrelator{
+		plans:        make(map[string]WEAApprovalPlanFact),
+		grants:       make(map[string]WEAGrantFact),
+		egressByDest: make(map[string][]WEAEgressDecisionFact),
+	}
+}
+
+func (c *weaCorrelator) correlate(obs WEAObservation) WEAObservation {
+	for _, p := range obs.ApprovalPlans {
+		if p.ApprovalPlanID == "" {
+			continue
+		}
+		if _, exists := c.plans[p.ApprovalPlanID]; !exists {
+			if len(c.planOrder) >= weaMaxCorrelatedFacts {
+				delete(c.plans, c.planOrder[0])
+				c.planOrder = c.planOrder[1:]
+			}
+			c.planOrder = append(c.planOrder, p.ApprovalPlanID)
+		}
+		c.plans[p.ApprovalPlanID] = p
+	}
+	for _, g := range obs.Grants {
+		if g.GrantID == "" {
+			continue
+		}
+		if _, exists := c.grants[g.GrantID]; !exists {
+			if len(c.grantOrder) >= weaMaxCorrelatedFacts {
+				delete(c.grants, c.grantOrder[0])
+				c.grantOrder = c.grantOrder[1:]
+			}
+			c.grantOrder = append(c.grantOrder, g.GrantID)
+		}
+		c.grants[g.GrantID] = g
+	}
+	for _, dec := range obs.EgressDecisions {
+		dest := strings.TrimSpace(dec.DestinationRef)
+		if dest == "" {
+			continue
+		}
+		list := c.egressByDest[dest]
+		if len(list) == 0 {
+			if len(c.egressOrder) >= weaMaxCorrelatedFacts {
+				delete(c.egressByDest, c.egressOrder[0])
+				c.egressOrder = c.egressOrder[1:]
+			}
+			c.egressOrder = append(c.egressOrder, dest)
+		}
+		if len(list) >= 16 {
+			list = list[1:]
+		}
+		c.egressByDest[dest] = append(list, dec)
+	}
+
+	if len(obs.AuthorityEffects) > 0 {
+		havePlan := make(map[string]struct{}, len(obs.ApprovalPlans))
+		for _, p := range obs.ApprovalPlans {
+			havePlan[p.ApprovalPlanID] = struct{}{}
+		}
+		haveGrant := make(map[string]struct{}, len(obs.Grants))
+		for _, g := range obs.Grants {
+			haveGrant[g.GrantID] = struct{}{}
+		}
+		for _, eff := range obs.AuthorityEffects {
+			if eff.ApprovalPlanID != "" {
+				if _, ok := havePlan[eff.ApprovalPlanID]; !ok {
+					if p, found := c.plans[eff.ApprovalPlanID]; found {
+						obs.ApprovalPlans = append(obs.ApprovalPlans, p)
+						havePlan[eff.ApprovalPlanID] = struct{}{}
+					}
+				}
+			}
+			if eff.GrantID != "" {
+				if _, ok := haveGrant[eff.GrantID]; !ok {
+					if g, found := c.grants[eff.GrantID]; found {
+						obs.Grants = append(obs.Grants, g)
+						haveGrant[eff.GrantID] = struct{}{}
+					}
+				}
+			}
+		}
+	}
+
+	if len(obs.ObservedConnections) > 0 {
+		seenDec := make(map[string]struct{}, len(obs.EgressDecisions))
+		for _, d := range obs.EgressDecisions {
+			if d.DecisionID != "" {
+				seenDec[d.DecisionID] = struct{}{}
+			}
+		}
+		for _, conn := range obs.ObservedConnections {
+			dest := strings.TrimSpace(conn.DestinationRef)
+			for _, d := range c.egressByDest[dest] {
+				if d.DecisionID != "" {
+					if _, dup := seenDec[d.DecisionID]; dup {
+						continue
+					}
+					seenDec[d.DecisionID] = struct{}{}
+				}
+				obs.EgressDecisions = append(obs.EgressDecisions, d)
+			}
+		}
+	}
+	return obs
+}
 
 // Independent RuleIDs for Workers, Edits, and Authority (WEA) ordinary-development
 // contradiction diagnostics (TB11).
@@ -21,13 +153,13 @@ const (
 // Workers, Edits, and Authority tracks, joined strictly by stable identities
 // and event ordering (never prose).
 type WEAObservation struct {
-	SessionID       string `json:"session_id,omitempty"`
-	ProjectID       string `json:"project_id,omitempty"`
-	DeviceID        string `json:"device_id,omitempty"`
-	WorkerID        string `json:"worker_id,omitempty"`
-	JobID           string `json:"job_id,omitempty"`
-	ResultHandle    string `json:"result_handle,omitempty"`
-	InvocationID    string `json:"invocation_id,omitempty"`
+	SessionID                 string `json:"session_id,omitempty"`
+	ProjectID                 string `json:"project_id,omitempty"`
+	DeviceID                  string `json:"device_id,omitempty"`
+	WorkerID                  string `json:"worker_id,omitempty"`
+	JobID                     string `json:"job_id,omitempty"`
+	ResultHandle              string `json:"result_handle,omitempty"`
+	InvocationID              string `json:"invocation_id,omitempty"`
 	ScopeKey                  string `json:"scope_key,omitempty"`
 	Settled                   bool   `json:"settled"`
 	RetentionGapped           bool   `json:"retention_gapped,omitempty"`
