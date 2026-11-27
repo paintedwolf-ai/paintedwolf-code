@@ -3,6 +3,8 @@ package watch
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -140,7 +142,7 @@ func TestWatchDiagProductionHookWrongRecipientAtDeliveryBoundary(t *testing.T) {
 	}
 }
 
-func TestWatchDiagProductionHookDuplicateCommittedPresentationAtDeliveryBoundary(t *testing.T) {
+func TestWatchDiagProductionHookDuplicateCommittedDeliverySeparateFromClaims(t *testing.T) {
 	store, _, database, owner := openTestWatchStore(t)
 
 	obs := watchdiag.NewObserver(watchdiag.Config{Enabled: true, QueueCapacity: 16, ReportCapacity: 16})
@@ -196,26 +198,57 @@ func TestWatchDiagProductionHookDuplicateCommittedPresentationAtDeliveryBoundary
 	obs.Close()
 
 	rep := obs.Report()
-	found := false
+	foundDupDelivery := false
+	foundDupClaim := false
 	for _, f := range rep.Findings {
-		if f.RuleID == watchdiag.RuleDuplicateCommittedPresentation && f.Disposition == watchdiag.DispositionContradiction {
-			found = true
+		if f.RuleID == watchdiag.RuleDuplicateCommittedDelivery && f.Disposition == watchdiag.DispositionContradiction {
+			foundDupDelivery = true
+		}
+		if f.RuleID == watchdiag.RuleDuplicateCommittedPresentation {
+			foundDupClaim = true
 		}
 	}
-	if !found {
-		t.Fatalf("expected duplicate_committed_presentation contradiction from delivery boundary, got %+v", rep.Findings)
+	if !foundDupDelivery {
+		t.Fatalf("expected duplicate_committed_delivery contradiction from delivery boundary, got %+v", rep.Findings)
+	}
+	if foundDupClaim {
+		t.Fatalf("expected delivery-row duplicate to stay separate from presentation claims, got %+v", rep.Findings)
 	}
 }
 
-func TestWatchDiagProductionHookWatchTurnPastStopFenceOnConsumerPath(t *testing.T) {
-	store, clk, _, owner := openTestWatchStore(t)
+func TestWatchDiagHistoricalStopFencePreservedAfterSessionResume(t *testing.T) {
+	store, clk, database, owner := openTestWatchStore(t)
+
+	// Block the observer worker briefly so we can clear stopped_at (session resume)
+	// before the async Fetch executes, proving historical fence preservation.
+	gate := make(chan struct{})
+	var closeGateOnce sync.Once
+	closeGate := func() { closeGateOnce.Do(func() { close(gate) }) }
+	entered := make(chan struct{})
 
 	obs := watchdiag.NewObserver(watchdiag.Config{Enabled: true, QueueCapacity: 16, ReportCapacity: 16})
 	restore := watchdiag.SetObserver(obs)
 	t.Cleanup(func() {
+		closeGate()
 		restore()
 		obs.Close()
 	})
+
+	// Occupy the single observer worker until we clear stopped_at.
+	if !obs.SubmitTask(watchdiag.Task{
+		SessionID: owner.SessionID,
+		Fetch: func(ctx context.Context) (watchdiag.Observation, error) {
+			close(entered)
+			select {
+			case <-gate:
+			case <-ctx.Done():
+			}
+			return watchdiag.Observation{}, nil
+		},
+	}) {
+		t.Fatal("blocker task should enqueue")
+	}
+	<-entered
 
 	rec, err := store.Register(t.Context(), RegisterRequest{
 		Owner:      owner,
@@ -234,17 +267,21 @@ func TestWatchDiagProductionHookWatchTurnPastStopFenceOnConsumerPath(t *testing.
 		t.Fatal("expected wake match")
 	}
 
-	// Reserve the ambient wake batch before Stop.
 	batch, _, hasWork, err := prepareAmbientWakeBatch(t.Context(), store, owner.SessionID, clk.Now())
 	testutil.FailErr(t, "prepare ambient wake batch", err)
 	if !hasWork {
 		t.Fatal("expected reserved ambient wake batch")
 	}
 
-	// Commit Stop fence durably, then advance clock and simulate a bypassed post-fence consumer admission.
 	testutil.FailErr(t, "fence session", store.FenceSessions(t.Context(), []string{owner.SessionID}))
 	clk.Advance(2 * time.Second)
 	testutil.FailErr(t, "commit post-fence ambient wake", commitAmbientWakeAdmission(t.Context(), store, owner.SessionID, batch.DeliveryID))
+
+	// Resume session (clear stopped_at) BEFORE releasing the async diagnostic worker.
+	_, err = database.ExecContext(t.Context(), `UPDATE watch_session_state SET stopped_at = NULL WHERE session_id = ?`, owner.SessionID)
+	testutil.FailErr(t, "clear stopped_at to simulate session resume", err)
+
+	closeGate()
 	obs.Close()
 
 	rep := obs.Report()
@@ -255,7 +292,90 @@ func TestWatchDiagProductionHookWatchTurnPastStopFenceOnConsumerPath(t *testing.
 		}
 	}
 	if !found {
-		t.Fatalf("expected watch_turn_past_stop_fence contradiction on consumer path, got %+v", rep.Findings)
+		t.Fatalf("expected watch_turn_past_stop_fence contradiction preserved across resume, got %+v", rep.Findings)
+	}
+}
+
+func TestWatchDiagEnabledBackpressureDoesNotBlockDeliveryAndReportsOverflow(t *testing.T) {
+	store, _, _, owner := openTestWatchStore(t)
+
+	gate := make(chan struct{})
+	var closeGateOnce sync.Once
+	closeGate := func() { closeGateOnce.Do(func() { close(gate) }) }
+	entered := make(chan struct{})
+
+	obs := watchdiag.NewObserver(watchdiag.Config{
+		Enabled:        true,
+		QueueCapacity:  1,
+		ReportCapacity: 16,
+	})
+	restore := watchdiag.SetObserver(obs)
+	t.Cleanup(func() {
+		closeGate()
+		restore()
+		obs.Close()
+	})
+
+	// Hold the diagnostic reader goroutine on gate.
+	if !obs.SubmitTask(watchdiag.Task{
+		SessionID: owner.SessionID,
+		Fetch: func(ctx context.Context) (watchdiag.Observation, error) {
+			close(entered)
+			select {
+			case <-gate:
+			case <-ctx.Done():
+			}
+			return watchdiag.Observation{}, nil
+		},
+	}) {
+		t.Fatal("blocker task should enqueue")
+	}
+	<-entered
+
+	// While the diagnostic reader is held, commit 5 real collect deliveries;
+	// every CommitCollectBatch must complete without blocking.
+	for i := 0; i < 5; i++ {
+		handle := fmt.Sprintf("cmd-bp-%d", i)
+		rec, err := store.Register(t.Context(), RegisterRequest{
+			Owner:      owner,
+			Delivery:   DeliveryCollect,
+			Conditions: []awaitstore.Condition{{Kind: ConditionProcessDone, Handles: []string{handle}}},
+		})
+		testutil.FailErr(t, "register collect watch", err)
+		_, ok, err := store.RecordMatch(t.Context(), rec.WatchID, MatchInput{
+			SourceKind:   ConditionProcessDone,
+			OccurrenceID: fmt.Sprintf("occ-bp-%d", i),
+			Outcome:      "satisfied",
+			Evidence:     map[string]any{"handle": handle, "iter": i},
+		}, nil)
+		testutil.FailErr(t, "record match", err)
+		if !ok {
+			t.Fatalf("expected match %d recorded", i)
+		}
+		batch, hasMatches, err := ReserveCollectBatch(t.Context(), store, owner, fmt.Sprintf("req-bp-%d", i))
+		testutil.FailErr(t, "reserve collect batch", err)
+		if !hasMatches {
+			t.Fatalf("expected reserved batch %d", i)
+		}
+		testutil.FailErr(t, "commit collect batch under diagnostic backpressure", CommitCollectBatch(t.Context(), store, owner.SessionID, batch.DeliveryID))
+	}
+
+	closeGate()
+	obs.Close()
+
+	stats := obs.Stats()
+	if stats.Dropped == 0 {
+		t.Fatalf("expected bounded queue drops under held diagnostic reader, got stats=%+v", stats)
+	}
+	rep := obs.Report()
+	sawOverflow := false
+	for _, f := range rep.Findings {
+		if f.RuleID == watchdiag.RuleCaptureOverflow && f.Disposition == watchdiag.DispositionOverflow && f.DroppedCount == stats.Dropped {
+			sawOverflow = true
+		}
+	}
+	if !sawOverflow {
+		t.Fatalf("expected capture_overflow finding with dropped_count=%d, got %+v", stats.Dropped, rep.Findings)
 	}
 }
 

@@ -14,7 +14,13 @@ func Evaluate(obs Observation, now time.Time) []Finding {
 		now = time.Now().UTC()
 	}
 	var out []Finding
+	if f, ok := checkObservationIncomplete(obs, now); ok {
+		out = append(out, sanitizeFinding(f))
+	}
 	if f, ok := checkWrongRecipient(obs, now); ok {
+		out = append(out, sanitizeFinding(f))
+	}
+	if f, ok := checkDuplicateCommittedDelivery(obs, now); ok {
 		out = append(out, sanitizeFinding(f))
 	}
 	if f, ok := checkDuplicateCommittedPresentation(obs, now); ok {
@@ -27,6 +33,98 @@ func Evaluate(obs Observation, now time.Time) []Finding {
 		out = append(out, sanitizeFinding(f))
 	}
 	return out
+}
+
+func checkObservationIncomplete(obs Observation, now time.Time) (Finding, bool) {
+	if !obs.Truncated && strings.TrimSpace(obs.IncompleteReason) == "" {
+		return Finding{}, false
+	}
+	reason := strings.TrimSpace(obs.IncompleteReason)
+	if reason == "" {
+		reason = "truncated_watch_observation"
+	}
+	f := baseFinding(obs, now, RuleObservationLoss, DispositionIncomplete)
+	f.Reason = reason
+	f.Expected = map[string]any{"complete_watch_observation": true, "truncated": false}
+	f.Observed = map[string]any{"truncated": obs.Truncated, "incomplete_reason": reason}
+	return f, true
+}
+
+func checkDuplicateCommittedDelivery(obs Observation, now time.Time) (Finding, bool) {
+	grouped := make(map[presentationIdentity][]DeliveryFact)
+	var order []presentationIdentity
+
+	for _, d := range obs.Deliveries {
+		if !d.Committed {
+			continue
+		}
+		watchKey := strings.TrimSpace(firstNonEmpty(d.WatchID, d.Handle, obs.WatchID, obs.Handle))
+		occKey := strings.TrimSpace(d.OccurrenceID)
+		if watchKey == "" || occKey == "" {
+			continue
+		}
+		key := presentationIdentity{watchKey: watchKey, occurrenceKey: occKey}
+		if _, exists := grouped[key]; !exists {
+			order = append(order, key)
+		}
+		grouped[key] = append(grouped[key], d)
+	}
+
+	var sources []SourceRef
+	var dupGroups, maxCommits int
+	var firstKey presentationIdentity
+
+	for _, key := range order {
+		items := grouped[key]
+		if len(items) <= 1 {
+			continue
+		}
+		if dupGroups == 0 {
+			firstKey = key
+		}
+		dupGroups++
+		if len(items) > maxCommits {
+			maxCommits = len(items)
+		}
+		for _, d := range items {
+			sources = append(sources, SourceRef{
+				SessionID:    firstNonEmpty(d.RoutedSessionID, d.OwnerSessionID, obs.SessionID),
+				WorkerJobID:  firstNonEmpty(d.RoutedWorkerJobID, d.OwnerWorkerJobID, obs.WorkerJobID),
+				WatchID:      firstNonEmpty(d.WatchID, obs.WatchID),
+				Handle:       firstNonEmpty(d.Handle, obs.Handle),
+				OccurrenceID: d.OccurrenceID,
+				EvidenceRef:  firstNonEmpty(d.EvidenceRef, d.DeliveryID),
+				OwningSource: resolveOwningSource(d.OwningSource, firstClock(d.ClockDomain, obs.ClockDomain), "watch_delivery", "delivery_boundary_commit"),
+			})
+		}
+	}
+
+	if dupGroups == 0 {
+		return Finding{}, false
+	}
+
+	first := sources[0]
+	f := baseFinding(obs, now, RuleDuplicateCommittedDelivery, DispositionContradiction)
+	f.SessionID = firstNonEmpty(first.SessionID, f.SessionID)
+	f.WorkerJobID = firstNonEmpty(first.WorkerJobID, f.WorkerJobID)
+	f.WatchID = firstNonEmpty(first.WatchID, f.WatchID)
+	f.Handle = firstNonEmpty(first.Handle, f.Handle)
+	f.OccurrenceID = first.OccurrenceID
+	f.EvidenceRef = first.EvidenceRef
+	f.OwningSource = first.OwningSource
+	f.Sources = sources
+	f.Reason = "duplicate_committed_delivery_rows"
+	f.Expected = map[string]any{
+		"max_committed_deliveries_per_occurrence": 1,
+		"watch_key":      firstKey.watchKey,
+		"occurrence_key": firstKey.occurrenceKey,
+	}
+	f.Observed = map[string]any{
+		"duplicate_groups":        dupGroups,
+		"max_committed_count":     maxCommits,
+		"total_committed_records": len(sources),
+	}
+	return f, true
 }
 
 func baseFinding(obs Observation, now time.Time, rule RuleID, disp Disposition) Finding {

@@ -212,9 +212,19 @@ func CommitCollectBatch(ctx context.Context, s *Store, sessionID, deliveryID str
 	}
 	var watchIDs []string
 	_ = json.Unmarshal([]byte(watchIDsJSON), &watchIDs)
+	var regOwners map[string]regOwnerFact
 	for _, wID := range watchIDs {
 		reg, err := loadRegistrationByIDTx(ctx, tx, wID)
 		if err == nil {
+			if regOwners == nil {
+				regOwners = make(map[string]regOwnerFact, len(watchIDs))
+			}
+			regOwners[reg.WatchID] = regOwnerFact{
+				watchID:     reg.WatchID,
+				handle:      reg.Handle,
+				sessionID:   reg.Owner.SessionID,
+				workerJobID: reg.Owner.WorkerJobID,
+			}
 			if err := releaseCompletedOneShotSlotTx(ctx, tx, &reg, nowStr); err != nil {
 				return err
 			}
@@ -232,7 +242,7 @@ func CommitCollectBatch(ctx context.Context, s *Store, sessionID, deliveryID str
 		for _, m := range batch.Matches {
 			_ = MarkPresentationAdmitted(ctx, s, owner, m.OccurrenceID, deliveryID)
 		}
-		observeCommittedDeliveryBoundary(ctx, s, sessionID, workerJobID, deliveryID, "collected_frame", false, watchIDs, batch, s.clock.Now().UTC())
+		observeCommittedDeliveryBoundary(s, sessionID, workerJobID, deliveryID, "collected_frame", false, regOwners, nil, batch, s.clock.Now().UTC())
 	}
 	return nil
 }

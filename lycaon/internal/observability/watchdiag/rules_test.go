@@ -325,6 +325,38 @@ func TestEvaluateInjectedContradictions(t *testing.T) {
 			t.Fatalf("expected timestamp stop fence contradiction, got %+v", findings)
 		}
 	})
+	t.Run("duplicate_committed_delivery_separate_from_presentations", func(t *testing.T) {
+		obs := cleanWatchObservation(base)
+		obs.Deliveries = append(obs.Deliveries, DeliveryFact{
+			DeliveryID:      "deliv-dup-2",
+			WatchID:         "watch-clean-1",
+			Handle:          "bg-proc-1",
+			OccurrenceID:    "process_done:bg-proc-1",
+			OwnerSessionID:  obs.SessionID,
+			RoutedSessionID: obs.SessionID,
+			Terminal:        true,
+			Committed:       true,
+			RequiresReport:  true,
+			CommittedAt:     base.Add(3 * time.Second),
+			CommittedSeq:    25,
+			ClockDomain:     ClockDomainManual,
+			EvidenceRef:     "ev-deliv-2",
+		})
+		findings := Evaluate(obs, evalAt)
+		if len(findings) != 1 || findings[0].RuleID != RuleDuplicateCommittedDelivery || findings[0].Disposition != DispositionContradiction {
+			t.Fatalf("expected duplicate_committed_delivery contradiction, got %+v", findings)
+		}
+	})
+
+	t.Run("truncated_or_incomplete_observation_reports_incomplete", func(t *testing.T) {
+		obs := cleanWatchObservation(base)
+		obs.Truncated = true
+		obs.IncompleteReason = "committed_deliveries_scan_truncated"
+		findings := Evaluate(obs, evalAt)
+		if len(findings) != 1 || findings[0].RuleID != RuleObservationLoss || findings[0].Disposition != DispositionIncomplete {
+			t.Fatalf("expected observation_loss incomplete finding, got %+v", findings)
+		}
+	})
 }
 
 func TestEvaluateZeroFalsePositivesOnBenignEvents(t *testing.T) {

@@ -343,15 +343,28 @@ func commitAmbientWakeAdmission(ctx context.Context, s *Store, sessionID, delive
 	}
 	var watchIDs []string
 	_ = json.Unmarshal([]byte(watchIDsJSON), &watchIDs)
+	var regOwners map[string]regOwnerFact
 	for _, wID := range watchIDs {
 		if reg, err := loadRegistrationByIDTx(ctx, tx, wID); err == nil {
+			if regOwners == nil {
+				regOwners = make(map[string]regOwnerFact, len(watchIDs))
+			}
+			regOwners[reg.WatchID] = regOwnerFact{
+				watchID:     reg.WatchID,
+				handle:      reg.Handle,
+				sessionID:   reg.Owner.SessionID,
+				workerJobID: reg.Owner.WorkerJobID,
+			}
 			_ = releaseCompletedOneShotSlotTx(ctx, tx, &reg, nowStr)
 		}
 	}
 
 	var rawStamps string
+	var stopFenceSeq int64
+	var stoppedAtRaw sql.NullString
 	_ = tx.QueryRowContext(ctx,
-		`SELECT wake_admissions_json FROM watch_session_state WHERE session_id = ?`, sessionID).Scan(&rawStamps)
+		`SELECT wake_admissions_json, stop_fence_seq, stopped_at FROM watch_session_state WHERE session_id = ?`, sessionID).
+		Scan(&rawStamps, &stopFenceSeq, &stoppedAtRaw)
 	kept, _ := checkHourlyWakeBudget(rawStamps, now)
 	kept = append(kept, nowStr)
 	stampsBytes, err := json.Marshal(kept)
@@ -366,12 +379,13 @@ func commitAmbientWakeAdmission(ctx context.Context, s *Store, sessionID, delive
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	historicalFence := parseHistoricalStopFence(sessionID, stopFenceSeq, stoppedAtRaw, diagClockDomain(s.clock))
 	var batch CollectedBatch
 	if json.Unmarshal([]byte(payloadJSON), &batch) == nil {
 		for _, m := range batch.Matches {
 			_ = MarkPresentationAdmitted(ctx, s, SessionOwner(sessionID), m.OccurrenceID, deliveryID)
 		}
-		observeCommittedDeliveryBoundary(ctx, s, sessionID, "", deliveryID, "ambient_wake", true, watchIDs, batch, now.UTC())
+		observeCommittedDeliveryBoundary(s, sessionID, "", deliveryID, "ambient_wake", true, regOwners, historicalFence, batch, now.UTC())
 	}
 	return nil
 }

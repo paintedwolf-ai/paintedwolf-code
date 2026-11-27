@@ -33,6 +33,7 @@ type RuleID string
 
 const (
 	RuleWrongRecipient                 RuleID = "wrong_recipient"
+	RuleDuplicateCommittedDelivery     RuleID = "duplicate_committed_delivery"
 	RuleDuplicateCommittedPresentation RuleID = "duplicate_committed_presentation"
 	RuleTerminalDeliveryBeforeReport   RuleID = "terminal_delivery_before_report"
 	RuleWatchTurnPastStopFence         RuleID = "watch_turn_past_stop_fence"
@@ -106,6 +107,8 @@ type Observation struct {
 	LagPending        bool                   `json:"lag_pending,omitempty"`
 	CoalescedCount    int                    `json:"coalesced_count,omitempty"`
 	ReconnectRepaint  bool                   `json:"reconnect_repaint,omitempty"`
+	Truncated         bool                   `json:"truncated,omitempty"`
+	IncompleteReason  string                 `json:"incomplete_reason,omitempty"`
 	Deliveries        []DeliveryFact         `json:"deliveries,omitempty"`
 	Presentations     []PresentationFact     `json:"presentations,omitempty"`
 	PublicationPhases []PublicationPhaseFact `json:"publication_phases,omitempty"`

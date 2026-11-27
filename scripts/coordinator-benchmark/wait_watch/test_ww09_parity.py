@@ -106,6 +106,24 @@ class TestWW09ModeParity(unittest.TestCase):
         self.assertEqual(res["disabled"]["informational"]["source_event_count"], 2)
         self.assertEqual(res["enabled"]["informational"]["source_event_count"], 3)
 
+    def test_collect_and_ambient_wake_delivery_counts_enforced(self) -> None:
+        off = _sample_bundle("run-off")
+        on = _sample_bundle("run-on")
+        off["observers"]["storage"]["tables"]["watch_deliveries"] = [
+            {"destination_kind": "ambient_wake", "state": "committed"},
+        ]
+        on["observers"]["storage"]["tables"]["watch_deliveries"] = []
+        res = compare_parity_runs(
+            "ww09-watch-ambient-wake",
+            off,
+            on,
+            {"exists": False, "line_count": 0, "contradictions": 0, "overflows": 0, "parse_errors": 0},
+            {"exists": False, "line_count": 0, "contradictions": 0, "overflows": 0, "parse_errors": 0},
+        )
+        self.assertFalse(res["passed"])
+        metrics = [m["metric"] for m in res["mismatches"]]
+        self.assertIn("committed_ambient_wake_deliveries", metrics)
+
 
 if __name__ == "__main__":
     unittest.main()
