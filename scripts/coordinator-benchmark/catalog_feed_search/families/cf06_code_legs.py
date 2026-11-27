@@ -333,8 +333,11 @@ def run_s03_sidecar(
     stop_event = threading.Event()
     write_counter = [0]
 
+    stage_dir = work_root / "s03_stage"
+    stage_dir.mkdir(parents=True, exist_ok=True)
+
     def _atomic_write(path: Path, text: str) -> None:
-        tmp = path.with_suffix(".tmp")
+        tmp = stage_dir / f"{path.name}.tmp"
         tmp.write_text(text, encoding="utf-8")
         tmp.replace(path)
 
