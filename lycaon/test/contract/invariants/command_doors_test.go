@@ -75,6 +75,18 @@ func TestBB10CommandDoorInvariants(t *testing.T) {
 			want:  passes,
 		},
 		{
+			name: "i13_clean_unrelated_same_named_receiver",
+			rule: readRule,
+			files: with(readClean, map[string]string{
+				"lycaon/internal/commandprogram/eval.go": "package commandprogram\n\n" +
+					"type localTracker struct{}\n\n" +
+					"func (localTracker) RememberAgentRead() {}\n" +
+					"func (localTracker) RememberAgentReadSpans() {}\n\n" +
+					"func Eval(t localTracker) { t.RememberAgentRead(); t.RememberAgentReadSpans() }\n",
+			}),
+			want: passes,
+		},
+		{
 			name: "i13_seeded_direct_read_credit_in_command_runtime",
 			rule: readRule,
 			files: with(readClean, map[string]string{

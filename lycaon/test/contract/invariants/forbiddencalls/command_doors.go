@@ -2,10 +2,13 @@ package forbiddencalls
 
 import (
 	"go/ast"
+	"go/types"
 	"slices"
 
 	"github.com/lycaon/lycaon/test/contract/invariants"
 )
+
+const toolsPkg = "github.com/lycaon/lycaon/internal/tools"
 
 var commandExternalStartRefs = map[string][]string{
 	"github.com/lycaon/lycaon/internal/exec": {
@@ -16,23 +19,9 @@ var commandExternalStartRefs = map[string][]string{
 	"os/exec": {"Command", "CommandContext"},
 }
 
-var commandReadCreditMethods = []string{"RememberAgentRead", "RememberAgentReadSpans"}
-
-func enclosingReceiverMethod(fn *ast.FuncDecl) string {
-	if fn == nil {
-		return ""
-	}
-	if fn.Recv == nil || len(fn.Recv.List) == 0 {
-		return fn.Name.Name
-	}
-	expr := fn.Recv.List[0].Type
-	if star, ok := expr.(*ast.StarExpr); ok {
-		expr = star.X
-	}
-	if ident, ok := expr.(*ast.Ident); ok {
-		return ident.Name + "." + fn.Name.Name
-	}
-	return fn.Name.Name
+var commandReadCreditMethods = map[string]bool{
+	"(" + toolsPkg + ".EditorDocuments).RememberAgentRead":      true,
+	"(" + toolsPkg + ".EditorDocuments).RememberAgentReadSpans": true,
 }
 
 var commandDoors = []invariants.Invariant{{
@@ -55,7 +44,7 @@ var commandDoors = []invariants.Invariant{{
 				if !slices.Contains(commandExternalStartRefs[pkg], name) {
 					return
 				}
-				if enclosingReceiverMethod(f.EnclosingFunc(sel.Pos())) == "ExternalStages.Launch" {
+				if fn := f.EnclosingFunc(sel.Pos()); fn != nil && invariants.FuncName(fn) == "ExternalStages.Launch" {
 					return
 				}
 				r.Report("%s uses %s outside ExternalStages.Launch: external process starts must route through ExternalStages.Launch",
@@ -73,16 +62,26 @@ var commandDoors = []invariants.Invariant{{
 		invariants.Decl("internal/tools", "EditorDocuments"),
 	},
 	Check: func(r *invariants.Run) {
-		for _, f := range r.GoFiles(invariants.Production, "internal/commandprogram", "internal/tools/native/command") {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
-				sel, ok := n.(*ast.SelectorExpr)
-				if !ok || !slices.Contains(commandReadCreditMethods, sel.Sel.Name) {
+		for _, pkg := range r.TypedPackages("internal/commandprogram", "internal/tools/native/command") {
+			for _, f := range pkg.Files {
+				ast.Inspect(f.AST, func(n ast.Node) bool {
+					sel, ok := n.(*ast.SelectorExpr)
+					if !ok {
+						return true
+					}
+					ts := pkg.Info.Selections[sel]
+					if ts == nil {
+						return true
+					}
+					fn, ok := ts.Obj().(*types.Func)
+					if !ok || !commandReadCreditMethods[fn.FullName()] {
+						return true
+					}
+					r.Report("%s calls %s directly: Portable Command read credit must route through tools.RememberCommandSourceDelivery",
+						f.Site(sel.Pos()), fn.FullName())
 					return true
-				}
-				r.Report("%s calls %s directly: Portable Command read credit must route through tools.RememberCommandSourceDelivery",
-					f.Site(sel.Pos()), sel.Sel.Name)
-				return true
-			})
+				})
+			}
 		}
 	},
 }}
