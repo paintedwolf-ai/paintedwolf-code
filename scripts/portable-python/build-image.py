@@ -582,6 +582,36 @@ def apply_wasi_package_patches(packages_root: Path) -> list[dict[str, str]]:
                     "reason": "Treat sys.platform == 'wasi' like emscripten/win32 in get_user_id() so tmp_path fixture works without os.getuid()",
                 }
             )
+
+    # Patch 2: sympy 1.14.0 sympy/external/gmpy.py imports ctypes.c_long/sizeof
+    # solely to compute LONG_MAX, but wasm32-wasi CPython omits _ctypes/libffi.
+    # Use stdlib struct.calcsize('l') which is exact on every platform.
+    gmpy_py = packages_root / "sympy" / "external" / "gmpy.py"
+    if gmpy_py.is_file():
+        old_imp = "from ctypes import c_long, sizeof"
+        old_max = "LONG_MAX = (1 << (8*sizeof(c_long) - 1)) - 1"
+        text = gmpy_py.read_text(encoding="utf-8")
+        if old_imp in text and old_max in text:
+            updated_text = text.replace(old_imp, "import struct as _struct", 1).replace(
+                old_max, "LONG_MAX = (1 << (8*_struct.calcsize('l') - 1)) - 1", 1
+            )
+            gmpy_py.write_text(updated_text, encoding="utf-8")
+            for dist_info in packages_root.glob("sympy-*.dist-info"):
+                rec = dist_info / "RECORD"
+                if rec.is_file():
+                    h, sz = record_hash(gmpy_py)
+                    lines = rec.read_text(encoding="utf-8").splitlines()
+                    updated = [
+                        f"sympy/external/gmpy.py,{h},{sz}" if l.startswith("sympy/external/gmpy.py,") else l
+                        for l in lines
+                    ]
+                    rec.write_text("\n".join(updated) + "\n", encoding="utf-8")
+            patches.append(
+                {
+                    "target": "packages/sympy/external/gmpy.py",
+                    "reason": "Compute LONG_MAX via stdlib struct.calcsize('l') instead of ctypes.sizeof(c_long) so SymPy imports cleanly on wasm32-wasi without _ctypes",
+                }
+            )
     return patches
 
 
@@ -862,10 +892,11 @@ def main() -> None:
     applied_patches = apply_wasi_package_patches(packages_dir)
     for p in applied_patches:
         print(f"[patch] {p['target']}: {p['reason']}")
-        # Recompute tree_sha256 for pytest if patched
+        # Recompute tree_sha256 for any patched distribution using its RECORD file
         for md in manifest_dists:
-            if md["normalized_name"] == "pytest" and p["target"].startswith("packages/_pytest/"):
-                # Re-hash using its RECORD file
+            if (md["normalized_name"] == "pytest" and p["target"].startswith("packages/_pytest/")) or (
+                md["normalized_name"] == "sympy" and p["target"].startswith("packages/sympy/")
+            ):
                 rec_path = packages_dir / md["dist_info_path"].removeprefix("packages/") / "RECORD"
                 rel_files = [
                     line.split(",", 1)[0]
