@@ -60,6 +60,55 @@ func (s *Service) OpenText(ctx context.Context, projectID string, branch sourceb
 	return d, true, nil
 }
 
+// DirtyRootDraft is a bounded root-scoped projection of one dirty editor buffer.
+type DirtyRootDraft struct {
+	Path  string
+	Draft string
+}
+
+// DirtyDraftsForRoot returns dirty drafts for a single (projectID, branch,
+// rootID), projecting only (path, draft) with SQL-level root/branch filtering
+// and bounded by maxDocs and maxBytes per draft.
+func (s *Service) DirtyDraftsForRoot(ctx context.Context, projectID string, branch sourcebranch.ID, rootID string, maxDocs int, maxBytes int64) ([]DirtyRootDraft, error) {
+	if s == nil || s.store == nil {
+		return nil, nil
+	}
+	rootID = strings.TrimSpace(rootID)
+	if rootID == "" || maxDocs <= 0 {
+		return nil, nil
+	}
+	p, err := s.projectBranch(ctx, strings.TrimSpace(projectID), branch)
+	if err != nil {
+		return nil, err
+	}
+	targetBranch := p.BranchForRoot(rootID)
+	query := `SELECT path, draft FROM editor_documents WHERE project_id = ? AND branch_id = ? AND root_id = ? AND dirty = 1`
+	args := []any{p.ID, targetBranch, rootID}
+	if maxBytes > 0 {
+		query += ` AND length(CAST(draft AS BLOB)) <= ?`
+		args = append(args, maxBytes)
+	}
+	query += ` ORDER BY path, id LIMIT ?`
+	args = append(args, maxDocs)
+	rows, err := s.store.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []DirtyRootDraft
+	for rows.Next() {
+		var item DirtyRootDraft
+		if err := rows.Scan(&item.Path, &item.Draft); err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DirtyDocuments lists documents holding unsaved edits, including deleted files.
 func (s *Service) DirtyDocuments(ctx context.Context, projectID string, branch sourcebranch.ID) ([]*Document, error) {
 	if s == nil || s.store == nil {

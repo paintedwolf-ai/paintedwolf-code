@@ -60,7 +60,7 @@ func (s *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		httpio.WriteJSON(w, http.StatusOK, page)
 		return
 	}
-	svc := s.searchService(true)
+	svc := s.searchService(r)
 	origin := strings.TrimSpace(req.OriginProjectID)
 	if !s.searchOriginExists(w, r, origin) {
 		return
@@ -152,11 +152,12 @@ func searchRequestScopeForCaller(r *http.Request, req wire.SearchRequest) (strin
 	if err != nil {
 		return "", err
 	}
+	sessionID := strings.TrimSpace(r.URL.Query().Get("session_id"))
 	caller, ok := people.Caller(r.Context())
-	if !ok {
+	if !ok && sessionID == "" {
 		return base, nil
 	}
-	return base + "|caller:" + caller.ID + ":" + string(caller.Role), nil
+	return base + "|caller:" + caller.ID + ":" + string(caller.Role) + "|session:" + sessionID, nil
 }
 
 func searchResponsePage(response wire.SearchResponse, generation uint64, offset, limit int, scope string) (wire.SearchResponse, error) {

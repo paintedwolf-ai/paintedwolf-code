@@ -3,8 +3,10 @@ package searchadmin
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/project"
@@ -164,35 +166,59 @@ func searchProjectDisplayName(p *project.Project) string {
 }
 
 // searchService reads the evidence index through the host database.
-// When includeDrafts is true, the code leg overlays dirty editor buffers
-// visible to the authorized caller in ctx (never used for exports or
-// unauthorized callers).
-func (s *Handler) searchService(includeDrafts bool) *search.Service {
+// When r is non-nil (interactive HandleSearch), the code leg overlays dirty
+// editor buffers visible to the authorized caller and workspace resolved from r
+// (never used for exports or unauthorized callers).
+func (s *Handler) searchService(r *http.Request) *search.Service {
 	var drafts search.CodeDraftProvider
-	if includeDrafts && s.editorDocuments != nil {
-		drafts = s.authorizedCodeDrafts()
+	if r != nil && s.editorDocuments != nil {
+		drafts = s.authorizedCodeDrafts(r)
 	}
 	return search.NewServiceWithDrafts(s.database, s.rerank, s.symbolExecutor, drafts)
 }
 
-// authorizedCodeDrafts resolves dirty trunk editor drafts strictly from the
-// authorized caller context. A project ID or root ID alone never authorizes
-// reading a dirty draft, and worker-branch or cross-project drafts are excluded.
-func (s *Handler) authorizedCodeDrafts() search.CodeDraftProvider {
-	return func(ctx context.Context, projectID, rootID string) ([]search.CodeDraft, error) {
+// authorizedCodeDrafts resolves dirty editor drafts strictly from the
+// authorized caller and workspace scope of r (matching normal editor scope
+// admission via requestscope.ResolveSessionProject). A project ID or root ID
+// alone never authorizes reading a dirty draft, callers acting in another
+// workspace/worktree do not see trunk drafts, and queries are bounded to one
+// (projectID, branch, rootID).
+func (s *Handler) authorizedCodeDrafts(r *http.Request) search.CodeDraftProvider {
+	sessionID := strings.TrimSpace(r.URL.Query().Get("session_id"))
+	return func(ctx context.Context, projectID, rootID string, maxDocs int, maxBytes int64) ([]search.CodeDraft, error) {
 		caller, ok := people.Caller(ctx)
 		if !ok || !people.MayInvoke(caller, "openEditorDocument") {
 			return nil, nil
 		}
-		docs, err := s.editorDocuments.DirtyDocuments(ctx, projectID, sourcebranch.Trunk)
+		p, err := s.projectRegistry.Get(ctx, strings.TrimSpace(projectID))
+		if err != nil || p == nil {
+			return nil, nil
+		}
+		if sessionID != "" {
+			if s.sessionStore == nil {
+				return nil, nil
+			}
+			scoped, err := requestscope.ResolveSessionProject(s.sessionStore, ctx, p, sessionID)
+			if err != nil {
+				// Invalid, cross-project, or stale workspace session never falls back to trunk drafts.
+				return nil, nil
+			}
+			// A session bound to a separate worktree workspace does not share trunk drafts.
+			if scoped.Binding != nil || scoped.Project.WorkspaceID() != p.WorkspaceID() {
+				return nil, nil
+			}
+			p = scoped.Project
+		}
+		branch := p.BranchForRoot(rootID)
+		if branch != sourcebranch.Trunk {
+			return nil, nil
+		}
+		docs, err := s.editorDocuments.DirtyDraftsForRoot(ctx, p.ID, branch, rootID, maxDocs, maxBytes)
 		if err != nil || len(docs) == 0 {
 			return nil, err
 		}
 		out := make([]search.CodeDraft, 0, len(docs))
 		for _, d := range docs {
-			if d == nil || !d.Dirty || d.ProjectID != projectID || d.RootID != rootID || d.BranchID != sourcebranch.Trunk {
-				continue
-			}
 			out = append(out, search.CodeDraft{Path: d.Path, Content: d.Draft})
 		}
 		return out, nil

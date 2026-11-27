@@ -189,23 +189,22 @@ func (e *CodeExecutor) rootDrafts(ctx context.Context, gen codeGeneration, paths
 	if e.drafts == nil || gen.ephemeral {
 		return nil
 	}
-	list, err := e.drafts(ctx, gen.root.ProjectID, gen.rootID)
+	list, err := e.drafts(ctx, gen.root.ProjectID, gen.rootID, codeDraftOverlayMaxDocs, spec.maxBytes)
 	if err != nil || len(list) == 0 {
 		return nil
 	}
 	out := make(map[string]string, len(list))
 	for _, d := range list {
-		rel, ok := normalizeDraftRelPath(d.Path)
-		if !ok {
+		if !validExactDraftRelPath(d.Path) {
 			continue
 		}
-		if underDependencyDir(rel, spec.lineExcludes) || !paths.allowsCode(rel) {
+		if underDependencyDir(d.Path, spec.lineExcludes) || !paths.allowsCode(d.Path) {
 			continue
 		}
 		if spec.maxBytes > 0 && int64(len(d.Content)) > spec.maxBytes {
 			continue
 		}
-		out[rel] = d.Content
+		out[d.Path] = d.Content
 	}
 	if len(out) == 0 {
 		return nil

@@ -2,6 +2,7 @@ package searchadmin
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -22,13 +24,34 @@ import (
 	catalogtest "github.com/lycaon/lycaon/internal/testsetup/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"log/slog"
 )
+
+type stubSearchSessions struct {
+	sessions map[string]*wire.Session
+	bindings map[string]*store.WorktreeBinding
+}
+
+func (s *stubSearchSessions) Get(_ context.Context, id string) (*wire.Session, error) {
+	if sess, ok := s.sessions[id]; ok {
+		return sess, nil
+	}
+	return nil, store.ErrSessionNotFound
+}
+
+func (s *stubSearchSessions) GetWorktreeBinding(_ context.Context, id string) (*store.WorktreeBinding, bool, error) {
+	b, ok := s.bindings[id]
+	return b, ok, nil
+}
+
+func (s *stubSearchSessions) ResolveEffectiveMode(context.Context, string) (store.RootAuthority, error) {
+	return store.RootAuthority{}, nil
+}
 
 type draftSearchFixture struct {
 	*searchFixture
-	editors *editordoc.Service
-	owner   people.Person
+	editors  *editordoc.Service
+	sessions *stubSearchSessions
+	owner    people.Person
 }
 
 func newDraftSearchFixture(t *testing.T) *draftSearchFixture {
@@ -39,11 +62,16 @@ func newDraftSearchFixture(t *testing.T) *draftSearchFixture {
 	editors := editordoc.New(editordoc.NewStore(database), ledger, ledger.History, projects)
 	t.Cleanup(func() { _ = editors.Close(context.Background()) })
 
+	sessions := &stubSearchSessions{
+		sessions: map[string]*wire.Session{},
+		bindings: map[string]*store.WorktreeBinding{},
+	}
 	responses := &httpio.Responder{Logger: slog.New(slog.DiscardHandler)}
 	f := &searchFixture{database: database, projects: projects}
 	f.handler = New(responses, Dependencies{
 		Database:        database,
 		Projects:        projects,
+		SessionStore:    sessions,
 		EditorDocuments: editors,
 		SourceMutations: projectsource.NewSourceMutationService(database, ledger),
 		ChatAffiliation: func(*http.Request) (string, int) { return "", 0 },
@@ -56,6 +84,7 @@ func newDraftSearchFixture(t *testing.T) *draftSearchFixture {
 	return &draftSearchFixture{
 		searchFixture: f,
 		editors:       editors,
+		sessions:      sessions,
 		owner:         testutil.HostOwner(),
 	}
 }
@@ -69,12 +98,12 @@ func (f *draftSearchFixture) postAs(t *testing.T, ctx context.Context, path, bod
 	return rec
 }
 
-func (f *draftSearchFixture) searchCode(t *testing.T, ctx context.Context, projectID, query string) wire.SearchResponse {
+func (f *draftSearchFixture) searchCode(t *testing.T, ctx context.Context, endpoint, projectID, query string, budget wire.SearchBudget) wire.SearchResponse {
 	t.Helper()
-	rec := f.postAs(t, ctx, "/v1/search", jsonBody(t, wire.SearchRequest{
+	rec := f.postAs(t, ctx, endpoint, jsonBody(t, wire.SearchRequest{
 		Query:           query,
 		OriginProjectID: projectID,
-		Budget:          wire.SearchBudgetComplete,
+		Budget:          budget,
 	}))
 	return decodeOK[wire.SearchResponse](t, rec)
 }
@@ -84,7 +113,7 @@ func TestSearchCodeOverlaysAuthorizedEditorDraftsAndRespectsLifecycleAndIsolatio
 	ownerCtx := people.WithCaller(t.Context(), f.owner)
 	guestCtx := people.WithCaller(t.Context(), people.Person{ID: "person-guest", Role: wire.PersonRole("guest")})
 
-	// Project A with two roots (primary root + secondary root) and Project B.
+	// Project A with two roots (primary + secondary) and Project B.
 	dirA1 := t.TempDir()
 	dirA2 := t.TempDir()
 	draftDiskBytes := []byte("disk_only_original_s02\n")
@@ -106,6 +135,9 @@ func TestSearchCodeOverlaysAuthorizedEditorDraftsAndRespectsLifecycleAndIsolatio
 	projB := f.addProject(t, "proj-b", "root-b", map[string]string{
 		"other.txt": "proj_b_saved_token\n",
 	})
+	// Register a session belonging to Project B (another workspace) and a trunk session for Project A.
+	f.sessions.sessions["sess-proj-a-trunk"] = &wire.Session{ID: "sess-proj-a-trunk", ProjectID: projA.ID}
+	f.sessions.sessions["sess-other-workspace"] = &wire.Session{ID: "sess-other-workspace", ProjectID: projB.ID}
 
 	// Open and dirty draft_target.txt in Project A, root 0 (disk stays unchanged).
 	doc, err := f.editors.Open(t.Context(), projA, "draft_target.txt", projA.Roots[0].ID, "", "window-1", nil)
@@ -116,7 +148,7 @@ func TestSearchCodeOverlaysAuthorizedEditorDraftsAndRespectsLifecycleAndIsolatio
 			OperationID:      uuid.NewString(),
 			ExpectedRevision: doc.Revision,
 		},
-		Content: "unsaved_draft_s02_token\n",
+		Content: "unsaved_draft_s02_token line_one\nunsaved_draft_s02_token line_two\n",
 		EOL:     "lf",
 	})
 	testutil.FailErr(t, "dirty draft_target.txt", err)
@@ -124,16 +156,40 @@ func TestSearchCodeOverlaysAuthorizedEditorDraftsAndRespectsLifecycleAndIsolatio
 		t.Fatal("expected draft_target.txt to be dirty")
 	}
 
-	// 1. Authorized owner finds dirty draft token AND does NOT see stale disk token.
-	draftResp := f.searchCode(t, ownerCtx, projA.ID, "project:current kind:code unsaved_draft_s02_token")
-	if len(draftResp.Hits) != 1 || draftResp.Hits[0].Path != "draft_target.txt" || draftResp.Hits[0].RootID != projA.Roots[0].ID {
-		t.Fatalf("authorized draft search = %+v, want 1 hit at draft_target.txt", draftResp.Hits)
+	// 1. Authorized owner with DEFAULT interactive Den search budget finds dirty
+	// draft hits, paginates across pages, and sees 0 hits for overwritten disk text.
+	page1Req := wire.SearchRequest{
+		Query:           "project:current kind:code unsaved_draft_s02_token",
+		OriginProjectID: projA.ID,
+		Limit:           1,
+		// Omitted budget exercises the default interactive Den budget.
 	}
-	staleResp := f.searchCode(t, ownerCtx, projA.ID, "project:current kind:code disk_only_original_s02")
+	page1 := decodeOK[wire.SearchResponse](t, f.postAs(t, ownerCtx, "/v1/search?session_id=sess-proj-a-trunk", jsonBody(t, page1Req)))
+	if len(page1.Hits) != 1 || page1.Hits[0].Path != "draft_target.txt" || page1.NextCursor == "" {
+		t.Fatalf("interactive page 1 = %+v, want 1 hit at draft_target.txt + next_cursor", page1)
+	}
+	page2Req := page1Req
+	page2Req.Cursor = page1.NextCursor
+	page2 := decodeOK[wire.SearchResponse](t, f.postAs(t, ownerCtx, "/v1/search?session_id=sess-proj-a-trunk", jsonBody(t, page2Req)))
+	if len(page2.Hits) != 1 || page2.Hits[0].Path != "draft_target.txt" || page2.Hits[0].Line == page1.Hits[0].Line {
+		t.Fatalf("interactive page 2 = %+v, want distinct second draft line hit", page2)
+	}
+
+	// Cross-workspace and unauthorized callers MUST NOT replay page1.NextCursor.
+	requireErrorCode(t, f.postAs(t, ownerCtx, "/v1/search?session_id=sess-other-workspace", jsonBody(t, page2Req)), wire.ApiErrorCodeInvalidPageCursor)
+	requireErrorCode(t, f.postAs(t, guestCtx, "/v1/search?session_id=sess-proj-a-trunk", jsonBody(t, page2Req)), wire.ApiErrorCodeInvalidPageCursor)
+	requireErrorCode(t, f.postAs(t, t.Context(), "/v1/search?session_id=sess-proj-a-trunk", jsonBody(t, page2Req)), wire.ApiErrorCodeInvalidPageCursor)
+
+	// Authorized person acting in ANOTHER workspace sees 0 trunk draft hits.
+	otherWsResp := f.searchCode(t, ownerCtx, "/v1/search?session_id=sess-other-workspace", projA.ID, "project:current kind:code unsaved_draft_s02_token", wire.SearchBudgetInteractive)
+	if len(otherWsResp.Hits) != 0 {
+		t.Fatalf("authorized person in another workspace saw trunk dirty draft: %+v", otherWsResp.Hits)
+	}
+
+	staleResp := f.searchCode(t, ownerCtx, "/v1/search", projA.ID, "project:current kind:code disk_only_original_s02", wire.SearchBudgetInteractive)
 	if len(staleResp.Hits) != 0 {
 		t.Fatalf("stale disk token leaked through dirty draft: %+v", staleResp.Hits)
 	}
-	// Disk bytes remain untouched.
 	afterDisk, err := os.ReadFile(filepath.Join(dirA1, "draft_target.txt"))
 	testutil.FailErr(t, "read disk draft_target.txt", err)
 	if string(afterDisk) != string(draftDiskBytes) {
@@ -141,13 +197,12 @@ func TestSearchCodeOverlaysAuthorizedEditorDraftsAndRespectsLifecycleAndIsolatio
 	}
 
 	// 2. Positive saved control in same project & root.
-	savedResp := f.searchCode(t, ownerCtx, projA.ID, "project:current kind:code saved_s02_positive_control")
+	savedResp := f.searchCode(t, ownerCtx, "/v1/search", projA.ID, "project:current kind:code saved_s02_positive_control", wire.SearchBudgetInteractive)
 	if len(savedResp.Hits) != 1 || savedResp.Hits[0].Path != "saved_control.txt" {
 		t.Fatalf("saved control = %+v, want 1 hit at saved_control.txt", savedResp.Hits)
 	}
 
-	// 3. New dirty path (not in settled catalog generation & absent on disk) is
-	// included within the code-search boundary and respects path filters.
+	// 3. New dirty path (absent from catalog & disk) included within code-search boundary.
 	newPath := filepath.Join(dirA1, "new_unsaved_draft.txt")
 	testutil.FailErr(t, "seed new_unsaved_draft.txt", os.WriteFile(newPath, []byte("seed\n"), 0o600))
 	absentDoc, err := f.editors.Open(t.Context(), projA, "new_unsaved_draft.txt", projA.Roots[0].ID, "", "window-1", nil)
@@ -163,34 +218,32 @@ func TestSearchCodeOverlaysAuthorizedEditorDraftsAndRespectsLifecycleAndIsolatio
 		EOL:     "lf",
 	})
 	testutil.FailErr(t, "dirty absent draft", err)
-	newDraftResp := f.searchCode(t, ownerCtx, projA.ID, "project:current kind:code brand_new_absent_draft_token")
+	newDraftResp := f.searchCode(t, ownerCtx, "/v1/search", projA.ID, "project:current kind:code brand_new_absent_draft_token", wire.SearchBudgetComplete)
 	if len(newDraftResp.Hits) != 1 || newDraftResp.Hits[0].Path != "new_unsaved_draft.txt" {
 		t.Fatalf("new absent draft search = %+v, want 1 hit at new_unsaved_draft.txt", newDraftResp.Hits)
 	}
-	// Respects path filter boundary.
-	filteredNewResp := f.searchCode(t, ownerCtx, projA.ID, "project:current kind:code path:saved_control.txt brand_new_absent_draft_token")
+	filteredNewResp := f.searchCode(t, ownerCtx, "/v1/search", projA.ID, "project:current kind:code path:saved_control.txt brand_new_absent_draft_token", wire.SearchBudgetComplete)
 	if len(filteredNewResp.Hits) != 0 {
 		t.Fatalf("absent draft bypassed path filter: %+v", filteredNewResp.Hits)
 	}
 
 	// 4. Negative controls: missing caller, non-owner caller, other project, other root, export.
-	noCallerResp := f.searchCode(t, t.Context(), projA.ID, "project:current kind:code unsaved_draft_s02_token")
+	noCallerResp := f.searchCode(t, t.Context(), "/v1/search", projA.ID, "project:current kind:code unsaved_draft_s02_token", wire.SearchBudgetComplete)
 	if len(noCallerResp.Hits) != 0 {
 		t.Fatalf("unauthenticated caller saw dirty draft: %+v", noCallerResp.Hits)
 	}
-	guestResp := f.searchCode(t, guestCtx, projA.ID, "project:current kind:code unsaved_draft_s02_token")
+	guestResp := f.searchCode(t, guestCtx, "/v1/search", projA.ID, "project:current kind:code unsaved_draft_s02_token", wire.SearchBudgetComplete)
 	if len(guestResp.Hits) != 0 {
 		t.Fatalf("guest caller saw dirty draft: %+v", guestResp.Hits)
 	}
-	otherProjResp := f.searchCode(t, ownerCtx, projB.ID, "project:current kind:code unsaved_draft_s02_token")
+	otherProjResp := f.searchCode(t, ownerCtx, "/v1/search", projB.ID, "project:current kind:code unsaved_draft_s02_token", wire.SearchBudgetComplete)
 	if len(otherProjResp.Hits) != 0 {
 		t.Fatalf("project B saw project A dirty draft: %+v", otherProjResp.Hits)
 	}
-	otherRootResp := f.searchCode(t, ownerCtx, projA.ID, "project:current kind:code path:root2_file.txt unsaved_draft_s02_token")
+	otherRootResp := f.searchCode(t, ownerCtx, "/v1/search", projA.ID, "project:current kind:code path:root2_file.txt unsaved_draft_s02_token", wire.SearchBudgetComplete)
 	if len(otherRootResp.Hits) != 0 {
 		t.Fatalf("root 2 path filter saw root 1 dirty draft: %+v", otherRootResp.Hits)
 	}
-	// Export must NOT leak unsaved draft bytes.
 	exportRec := f.postAs(t, ownerCtx, "/v1/search/export", jsonBody(t, wire.SearchExportRequest{
 		Query:           "project:current kind:code unsaved_draft_s02_token",
 		OriginProjectID: projA.ID,
@@ -220,7 +273,7 @@ func TestSearchCodeOverlaysAuthorizedEditorDraftsAndRespectsLifecycleAndIsolatio
 		EOL:     "lf",
 	})
 	testutil.FailErr(t, "dirty worker draft", err)
-	workerLeakResp := f.searchCode(t, ownerCtx, projA.ID, "project:current kind:code worker_only_isolated_draft_token")
+	workerLeakResp := f.searchCode(t, ownerCtx, "/v1/search", projA.ID, "project:current kind:code worker_only_isolated_draft_token", wire.SearchBudgetComplete)
 	if len(workerLeakResp.Hits) != 0 {
 		t.Fatalf("worker-branch dirty draft leaked into trunk search: %+v", workerLeakResp.Hits)
 	}
@@ -232,16 +285,14 @@ func TestSearchCodeOverlaysAuthorizedEditorDraftsAndRespectsLifecycleAndIsolatio
 		ExpectedRevision: doc.Revision,
 	})
 	testutil.FailErr(t, "discard draft", err)
-	afterDiscardDraft := f.searchCode(t, ownerCtx, projA.ID, "project:current kind:code unsaved_draft_s02_token")
+	afterDiscardDraft := f.searchCode(t, ownerCtx, "/v1/search", projA.ID, "project:current kind:code unsaved_draft_s02_token", wire.SearchBudgetComplete)
 	if len(afterDiscardDraft.Hits) != 0 {
 		t.Fatalf("discarded draft token still matched: %+v", afterDiscardDraft.Hits)
 	}
-	afterDiscardDisk := f.searchCode(t, ownerCtx, projA.ID, "project:current kind:code disk_only_original_s02")
+	afterDiscardDisk := f.searchCode(t, ownerCtx, "/v1/search", projA.ID, "project:current kind:code disk_only_original_s02", wire.SearchBudgetComplete)
 	if len(afterDiscardDisk.Hits) != 1 || afterDiscardDisk.Hits[0].Path != "draft_target.txt" {
 		t.Fatalf("discard did not restore disk visibility: %+v", afterDiscardDisk.Hits)
 	}
-
-	// Re-edit and save: search finds saved token and disk holds it.
 	doc, err = f.editors.ReplaceSnapshot(t.Context(), doc.ID, projA.ID, editordoc.SnapshotReplacement{
 		DocumentCommand: editordoc.DocumentCommand{
 			ClientID:         "window-1",
@@ -257,8 +308,61 @@ func TestSearchCodeOverlaysAuthorizedEditorDraftsAndRespectsLifecycleAndIsolatio
 	if savedDoc.Dirty {
 		t.Fatal("expected saved document to be clean")
 	}
-	afterSaveResp := f.searchCode(t, ownerCtx, projA.ID, "project:current kind:code saved_after_edit_s02_token")
+	afterSaveResp := f.searchCode(t, ownerCtx, "/v1/search", projA.ID, "project:current kind:code saved_after_edit_s02_token", wire.SearchBudgetComplete)
 	if len(afterSaveResp.Hits) != 1 || afterSaveResp.Hits[0].Path != "draft_target.txt" {
 		t.Fatalf("saved token not found after save: %+v", afterSaveResp.Hits)
+	}
+}
+
+func TestSearchCodeDraftRespectsHiddenAndDependencyExclusionBoundaries(t *testing.T) {
+	f := newDraftSearchFixture(t)
+	ownerCtx := people.WithCaller(t.Context(), f.owner)
+
+	dir := t.TempDir()
+	testutil.FailErr(t, "write visible file", os.WriteFile(filepath.Join(dir, "visible.txt"), []byte("visible_saved_control\n"), 0o600))
+	testutil.FailErr(t, "write hidden file", os.WriteFile(filepath.Join(dir, ".hidden_draft.txt"), []byte("hidden_disk_seed\n"), 0o600))
+	testutil.FailErr(t, "mkdir node_modules", os.MkdirAll(filepath.Join(dir, "node_modules"), 0o700))
+	testutil.FailErr(t, "write node_modules file", os.WriteFile(filepath.Join(dir, "node_modules", "dep.txt"), []byte("dep_disk_seed\n"), 0o600))
+
+	proj, err := f.projects.Create(t.Context(), project.CreateParams{
+		Name:  "proj-exclusions",
+		Roots: []project.AttachRootParams{{Path: dir, Label: "root-excl"}},
+	})
+	testutil.FailErr(t, "create proj", err)
+	testutil.FailErr(t, "settle index", catalogtest.AwaitIndex(t.Context(), sourcecatalog.Process(), proj.ID, sourcecatalog.Root{ID: proj.Roots[0].ID, Path: proj.Roots[0].Path}))
+
+	// Dirty hidden file (no positive path filter) and node_modules file MUST stay excluded.
+	hidDoc, err := f.editors.Open(t.Context(), proj, ".hidden_draft.txt", proj.Roots[0].ID, "", "window-1", nil)
+	testutil.FailErr(t, "open hidden file", err)
+	_, err = f.editors.ReplaceSnapshot(t.Context(), hidDoc.ID, proj.ID, editordoc.SnapshotReplacement{
+		DocumentCommand: editordoc.DocumentCommand{
+			ClientID:         "window-1",
+			OperationID:      uuid.NewString(),
+			ExpectedRevision: hidDoc.Revision,
+		},
+		Content: "hidden_dirty_secret_token\n",
+		EOL:     "lf",
+	})
+	testutil.FailErr(t, "dirty hidden file", err)
+	hidResp := f.searchCode(t, ownerCtx, "/v1/search", proj.ID, "project:current kind:code hidden_dirty_secret_token", wire.SearchBudgetComplete)
+	if len(hidResp.Hits) != 0 {
+		t.Fatalf("excluded hidden draft leaked into default code search: %+v", hidResp.Hits)
+	}
+
+	depDoc, err := f.editors.Open(t.Context(), proj, "node_modules/dep.txt", proj.Roots[0].ID, "", "window-1", nil)
+	testutil.FailErr(t, "open dep file", err)
+	_, err = f.editors.ReplaceSnapshot(t.Context(), depDoc.ID, proj.ID, editordoc.SnapshotReplacement{
+		DocumentCommand: editordoc.DocumentCommand{
+			ClientID:         "window-1",
+			OperationID:      uuid.NewString(),
+			ExpectedRevision: depDoc.Revision,
+		},
+		Content: "dep_dirty_excluded_token\n",
+		EOL:     "lf",
+	})
+	testutil.FailErr(t, "dirty dep file", err)
+	depResp := f.searchCode(t, ownerCtx, "/v1/search", proj.ID, "project:current kind:code dep_dirty_excluded_token", wire.SearchBudgetComplete)
+	if len(depResp.Hits) != 0 {
+		t.Fatalf("excluded dependency draft leaked into default code search: %+v", depResp.Hits)
 	}
 }

@@ -30,7 +30,7 @@ func (s *Handler) HandleExportSearchResults(w http.ResponseWriter, r *http.Reque
 		s.responses.Fail(w, wire.ApiErrorCodeSearchExportInvalidFormat, "format must be jsonl, csv, or sarif")
 		return
 	}
-	svc := s.searchService(false)
+	svc := s.searchService(nil)
 	origin := strings.TrimSpace(req.OriginProjectID)
 	if !s.searchOriginExists(w, r, origin) {
 		return

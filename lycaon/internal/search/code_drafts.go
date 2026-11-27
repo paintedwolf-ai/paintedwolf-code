@@ -2,9 +2,12 @@ package search
 
 import (
 	"context"
-	"path"
 	"strings"
 )
+
+// codeDraftOverlayMaxDocs bounds how many dirty editor drafts are projected
+// for a single searched root in one code-search leg.
+const codeDraftOverlayMaxDocs = 256
 
 // CodeDraft is an authorized caller's unsaved editor buffer for one path
 // inside a searched project root.
@@ -13,20 +16,22 @@ type CodeDraft struct {
 	Content string
 }
 
-// CodeDraftProvider returns active dirty editor drafts visible to ctx for one
-// (projectID, rootID) pair. Implementations must derive caller and workspace
-// authorization from ctx rather than trusting project or root IDs alone.
-type CodeDraftProvider func(ctx context.Context, projectID, rootID string) ([]CodeDraft, error)
+// CodeDraftProvider returns bounded active dirty editor drafts visible to ctx
+// for one (projectID, rootID) pair. Implementations must derive caller and
+// workspace authorization from ctx/request rather than trusting IDs alone.
+type CodeDraftProvider func(ctx context.Context, projectID, rootID string, maxDocs int, maxBytes int64) ([]CodeDraft, error)
 
-func normalizeDraftRelPath(raw string) (string, bool) {
-	rel := strings.ReplaceAll(strings.TrimSpace(raw), "\\", "/")
-	rel = strings.TrimPrefix(rel, "./")
-	if rel == "" || strings.HasPrefix(rel, "/") {
-		return "", false
+// validExactDraftRelPath validates a root-relative POSIX path without trimming
+// whitespace or rewriting literal backslashes, preserving exact filename
+// identity so distinct POSIX filenames cannot collide.
+func validExactDraftRelPath(rel string) bool {
+	if rel == "" || strings.ContainsRune(rel, '\x00') || strings.HasPrefix(rel, "/") {
+		return false
 	}
-	cleaned := path.Clean(rel)
-	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
-		return "", false
+	for _, seg := range strings.Split(rel, "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return false
+		}
 	}
-	return cleaned, true
+	return true
 }
