@@ -13,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/portablepython"
 	"github.com/lycaon/lycaon/internal/pythonadmission"
 	"github.com/lycaon/lycaon/internal/pythondocuments"
-	"github.com/lycaon/lycaon/internal/pythonevidence"
 	"github.com/lycaon/lycaon/internal/pythonruntime"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -29,7 +28,7 @@ func newNativeQualService(t *testing.T, receiptDir string) *portablepython.Servi
 		ScratchRoot: t.TempDir(),
 	}
 	if receiptDir != "" {
-		sink, err := pythonevidence.NewFileReceiptStore(receiptDir)
+		sink, err := portablepython.NewFileReceiptStore(receiptDir)
 		contractcheck.FailErr(t, "create FileReceiptStore", err)
 		cfg.ReceiptSink = sink
 	}
@@ -200,10 +199,10 @@ func TestNativeQual_SixFrozenWorkloads(t *testing.T) {
 		if !resp.CleanCompletion || strings.TrimSpace(resp.Stdout) != "UNSAVED_DRAFT_42" {
 			t.Fatalf("expected UNSAVED_DRAFT_42, got stdout=%q clean=%v", resp.Stdout, resp.CleanCompletion)
 		}
-		reopened, err := pythonevidence.NewFileReceiptStore(receiptDir)
+		reopened, err := portablepython.NewFileReceiptStore(receiptDir)
 		contractcheck.FailErr(t, "reopen FileReceiptStore", err)
-		recs, err := reopened.ListExecutions("sess-resumed")
-		contractcheck.FailErr(t, "list persisted executions", err)
+		recs, err := reopened.LoadExecutions()
+		contractcheck.FailErr(t, "load persisted executions", err)
 		if len(recs) == 0 {
 			t.Fatal("expected persisted execution receipt after reopening store")
 		}
@@ -230,7 +229,7 @@ except OSError as e:
 			Roots: roots, MutationDoor: native.NewPythonMutationDoor(tools.ToolContext{}, roots),
 			Policy: func(_ context.Context, op pythonruntime.ReachedOperation) pythonadmission.PolicyDecision {
 				if op.Target.RelPath == "blocked.txt" {
-					return pythonadmission.PolicyDecision{Kind: pythonruntime.DecisionDeny, Condition: pythonadmission.ConditionDenied, Reason: "blocked by qualification policy"}
+					return pythonadmission.PolicyDecision{Kind: pythonruntime.DecisionDeny, Condition: pythonadmission.ConditionEffectDenied, Reason: "blocked by qualification policy"}
 				}
 				return pythonadmission.PolicyDecision{Kind: pythonruntime.DecisionAllow}
 			},
@@ -324,9 +323,11 @@ func TestNativeQual_LifecycleAndIsolationMatrix(t *testing.T) {
 		}
 		go func() {
 			for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-				if pending := broker.PendingLeases(); len(pending) > 0 {
-					_ = broker.Approve(pending[0].LeaseID, "reviewer")
-					return
+				for _, l := range broker.Registry().List() {
+					if l.State == pythonadmission.LeasePending {
+						_ = broker.Approve(l.LeaseID, "reviewer")
+						return
+					}
 				}
 			}
 		}()
