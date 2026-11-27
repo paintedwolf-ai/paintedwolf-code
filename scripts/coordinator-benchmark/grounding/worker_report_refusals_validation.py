@@ -44,8 +44,10 @@ def _run_worker_job(
     sidecar: IsolatedSidecarProcess,
     trace_log: pathlib.Path,
     inject_bad_first_report: bool,
+    ignore_sessions: set[str],
 ) -> dict[str, Any]:
     root_sid = client.create_session(project_id, posture="build")["id"]
+    ignore_sessions.add(root_sid)
     client.wait_session_ready(root_sid)
     client.send_prompt(root_sid, "Dispatch a repo researcher to survey app.go.")
 
@@ -85,8 +87,9 @@ def _run_worker_job(
                     pend["id"],
                     tool_calls=[{"id": str(uuid.uuid4()), "name": "wait", "args": {"timeout_ms": 15000, "conditions": [{"kind": "next_worker_done"}]}}],
                 )
-            elif psid:
+            elif psid and psid not in ignore_sessions:
                 child_sid = psid
+                ignore_sessions.add(child_sid)
                 child_req = pend
                 break
         time.sleep(0.15)
@@ -147,8 +150,9 @@ def _run_worker_job(
             ],
         )
 
-    # Wait for root to resume (meaning worker completed)
-    client.wait_pending(root_sid, timeout=180.0)
+    # Wait for root to resume (meaning worker completed) and consume its pending turn
+    root_resume = client.wait_pending(root_sid, timeout=180.0)
+    client.respond(root_resume["id"], content="Worker completed.")
     refusals = probe_worker_report_refusals(sidecar.store_db_path, child_sid)
     d10_child = probe_store_db(sidecar.store_db_path, child_sid, trace_log_path=trace_log)
     return {
@@ -187,8 +191,9 @@ def run_worker_refusals_validation(
         pid = client.create_project(workspace)["id"]
         trace_log = sidecar.log_path
 
-        charged = _run_worker_job(client, project_id=pid, sidecar=sidecar, trace_log=trace_log, inject_bad_first_report=True)
-        zero = _run_worker_job(client, project_id=pid, sidecar=sidecar, trace_log=trace_log, inject_bad_first_report=False)
+        seen: set[str] = set()
+        charged = _run_worker_job(client, project_id=pid, sidecar=sidecar, trace_log=trace_log, inject_bad_first_report=True, ignore_sessions=seen)
+        zero = _run_worker_job(client, project_id=pid, sidecar=sidecar, trace_log=trace_log, inject_bad_first_report=False, ignore_sessions=seen)
 
     charged_ok = (
         charged["worker_report_refusals"]["worker_report_refusals"] == 1
