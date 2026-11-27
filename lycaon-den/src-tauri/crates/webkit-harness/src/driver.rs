@@ -11,12 +11,15 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{msg_send, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSEvent, NSEventMask, NSWindow,
-    NSWindowStyleMask,
+    NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSEvent, NSEventMask,
+    NSWindow, NSWindowStyleMask,
 };
 use objc2_core_foundation::{CFRetained, CGPoint};
 use objc2_core_graphics::{CGEvent, CGEventField, CGEventType, CGMouseButton, CGScrollEventUnit};
-use objc2_foundation::{NSDate, NSDefaultRunLoopMode, NSError, NSPoint, NSRect, NSSize, NSString, NSURL, NSURLRequest};
+use objc2_foundation::{
+    NSData, NSDate, NSDefaultRunLoopMode, NSDictionary, NSError, NSPoint, NSRect, NSSize, NSString,
+    NSURL, NSURLRequest,
+};
 use objc2_web_kit::{
     WKUserScript, WKUserScriptInjectionTime, WKWebView, WKWebViewConfiguration, WKWebsiteDataStore,
 };
@@ -166,6 +169,108 @@ impl Driver {
         // SAFETY: a WKWebView testing SPI that returns a string.
         let text: Option<Retained<NSString>> = unsafe { msg_send![&*self.web, _scrollingTreeAsText] };
         text.map(|text| text.to_string()).unwrap_or_default()
+    }
+
+    /// Sends a real native keyDown + keyUp NSEvent to the owned NSWindow through `sendEvent:`.
+    pub fn send_key(&self, key_code: u16, chars: &str) {
+        const NS_EVENT_TYPE_KEY_DOWN: usize = 10;
+        const NS_EVENT_TYPE_KEY_UP: usize = 11;
+        let ev_cls = objc2::runtime::AnyClass::get(c"NSEvent").expect("NSEvent class");
+        let win_num = self.window.windowNumber();
+        let ns_chars = NSString::from_str(chars);
+        let location = NSPoint::new(10.0, 10.0);
+        let nil_ctx: *const AnyObject = std::ptr::null();
+        for ev_type in [NS_EVENT_TYPE_KEY_DOWN, NS_EVENT_TYPE_KEY_UP] {
+            // SAFETY: AppKit +[NSEvent keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:]
+            let event: Option<Retained<NSEvent>> = unsafe {
+                msg_send![
+                    ev_cls,
+                    keyEventWithType: ev_type,
+                    location: location,
+                    modifierFlags: 0usize,
+                    timestamp: 0.0f64,
+                    windowNumber: win_num,
+                    context: nil_ctx,
+                    characters: &*ns_chars,
+                    charactersIgnoringModifiers: &*ns_chars,
+                    isARepeat: false,
+                    keyCode: key_code
+                ]
+            };
+            let event = event.expect("key NSEvent");
+            self.app.sendEvent(&event);
+            self.spin(Duration::from_millis(40));
+        }
+    }
+
+    /// Captures a real native PNG screenshot of the owned WKWebView to `dest`.
+    pub fn capture_png(&self, dest: &std::path::Path) -> Result<usize, String> {
+        const NS_BITMAP_IMAGE_FILE_TYPE_PNG: usize = 4;
+        let slot: Rc<RefCell<Option<Result<Vec<u8>, String>>>> = Rc::new(RefCell::new(None));
+        let sink = Rc::clone(&slot);
+        let done = RcBlock::new(move |image: *mut AnyObject, error: *mut NSError| {
+            if !error.is_null() {
+                // SAFETY: WebKit provides a valid NSError pointer when non-null.
+                let err_ref = unsafe { &*error };
+                *sink.borrow_mut() = Some(Err(format!("takeSnapshot error: {err_ref:?}")));
+                return;
+            }
+            // SAFETY: WebKit provides a valid NSImage pointer when error is null.
+            let Some(img) = (unsafe { image.as_ref() }) else {
+                *sink.borrow_mut() = Some(Err("takeSnapshot returned null image".into()));
+                return;
+            };
+            // SAFETY: NSImage responds to TIFFRepresentation.
+            let tiff: Option<Retained<NSData>> = unsafe { msg_send![img, TIFFRepresentation] };
+            let Some(tiff) = tiff else {
+                *sink.borrow_mut() = Some(Err("NSImage TIFFRepresentation returned nil".into()));
+                return;
+            };
+            let Some(rep_cls) = objc2::runtime::AnyClass::get(c"NSBitmapImageRep") else {
+                *sink.borrow_mut() = Some(Err("NSBitmapImageRep class unavailable".into()));
+                return;
+            };
+            // SAFETY: NSBitmapImageRep +imageRepWithData: accepts NSData.
+            let rep: Option<Retained<AnyObject>> =
+                unsafe { msg_send![rep_cls, imageRepWithData: &*tiff] };
+            let Some(rep) = rep else {
+                *sink.borrow_mut() = Some(Err("NSBitmapImageRep imageRepWithData returned nil".into()));
+                return;
+            };
+            let props: Retained<NSDictionary<NSString, AnyObject>> = NSDictionary::new();
+            // SAFETY: NSBitmapImageRep -representationUsingType:properties: with PNG (4).
+            let png_data: Option<Retained<NSData>> = unsafe {
+                msg_send![&*rep, representationUsingType: NS_BITMAP_IMAGE_FILE_TYPE_PNG, properties: &*props]
+            };
+            let Some(data) = png_data else {
+                *sink.borrow_mut() = Some(Err("PNG representation returned nil".into()));
+                return;
+            };
+            *sink.borrow_mut() = Some(Ok(data.to_vec()));
+        });
+
+        let nil_cfg: *const AnyObject = std::ptr::null();
+        // SAFETY: WKWebView -takeSnapshotWithConfiguration:completionHandler: with nil config.
+        unsafe {
+            let _: () = msg_send![&*self.web, takeSnapshotWithConfiguration: nil_cfg, completionHandler: &*done];
+        }
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while slot.borrow().is_none() && Instant::now() < deadline {
+            self.spin(Duration::from_millis(20));
+        }
+        let bytes = slot
+            .borrow_mut()
+            .take()
+            .ok_or_else(|| "timed out waiting for WKWebView snapshot".to_string())??;
+        if bytes.is_empty() {
+            return Err("captured PNG was empty".into());
+        }
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+        }
+        std::fs::write(dest, &bytes).map_err(|e| format!("write {}: {e}", dest.display()))?;
+        Ok(bytes.len())
     }
 
     /// Sends one notch of `lines` (positive scrolls up) at `point` in window
