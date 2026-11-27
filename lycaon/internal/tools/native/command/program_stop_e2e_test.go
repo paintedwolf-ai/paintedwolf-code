@@ -383,9 +383,9 @@ func TestProgramIndividualJobStopPreservesSiblingAndParent(t *testing.T) {
 	}()
 
 	var jobHandles []string
-	testutil.WaitFor(t, "two & jobs active", func() bool {
+	testutil.WaitFor(t, "two & jobs active and sleep timers armed", func() bool {
 		active := reg.ActiveJobs(f.Session)
-		if len(active) == 2 {
+		if len(active) == 2 && len(clock.TimersDue()) >= 3 {
 			jobHandles = []string{active[0].Handle, active[1].Handle}
 			return true
 		}
@@ -415,7 +415,10 @@ func TestProgramIndividualJobStopPreservesSiblingAndParent(t *testing.T) {
 		}
 	}
 
-	// Advance clock past 300s so the sibling & job completes normally and the parent program finishes cleanly!
+	// Confirm the surviving sibling sleep timer is armed before advancing past 300s.
+	testutil.WaitFor(t, "sibling sleep timer armed", func() bool {
+		return len(clock.TimersDue()) >= 1
+	})
 	clock.Advance(300 * toolcontract.ProgramInlineWait)
 	stSib, stoppedSib, err := reg.Lifecycle.Wait(t.Context(), f.Session, jobHandles[1])
 	testutil.FailErr(t, "wait sibling job", err)
@@ -450,33 +453,21 @@ func TestProgramInterruptKeepsBackgroundJobAndStopCancelsApproval(t *testing.T) 
 		}()
 
 		var jobHandle string
-		testutil.WaitFor(t, "background job registered", func() bool {
+		testutil.WaitFor(t, "background job and timers armed", func() bool {
 			jobs := registry.ActiveJobs(f.Session)
-			if len(jobs) == 1 {
+			if len(jobs) == 1 && len(clock.TimersDue()) >= 3 {
 				jobHandle = jobs[0].Handle
 				return true
 			}
 			return false
 		})
 
-		// Interrupt the foreground only; the background & job must survive.
-		testutil.WaitFor(t, "foreground interrupted", func() bool {
-			progs := f.Programs(t)
-			return len(progs) > 0
-		})
-		// Promote to parked or interrupt directly via supervisor: use clock to stay inline and interrupt.
-		// Look up the live program ID from the recorder.
-		var progID string
-		testutil.WaitFor(t, "program id visible", func() bool {
-			// Advance clock to promote to continued handle so we get ProgramID cleanly, OR read from active programs.
-			return true
-		})
 		clock.Advance(toolcontract.ProgramInlineWait)
 		got := testutil.Receive(t, "continued program", done)
 		testutil.FailErr(t, "continue program", got.err)
 		var running command.RunningProgramResult
 		testutil.FailErr(t, "decode running", json.Unmarshal([]byte(got.content), &running))
-		progID = running.ProgramID
+		progID := running.ProgramID
 
 		if !f.Runtime.Supervisor.Interrupt(progID) {
 			t.Fatal("Interrupt returned false for active foreground")
