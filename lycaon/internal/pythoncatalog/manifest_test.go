@@ -99,13 +99,15 @@ func TestDefaultLaunchManifestRoundTripAndRoster(t *testing.T) {
 		"license-expression": "license_expression",
 		"graphql-core":       "graphql",
 		"tinycss2":           "tinycss2",
+		"regex":              "regex",
+		"python-hcl2":        "hcl2",
 	}
 	if len(wantPublic) != LaunchPublicDistributionCount {
 		t.Fatalf("wantPublic len = %d, want %d", len(wantPublic), LaunchPublicDistributionCount)
 	}
-	for _, omitted := range []string{"yamllint", "regex", "python-hcl2"} {
+	for _, omitted := range []string{"yamllint"} {
 		if _, ok := parsed.FindDistribution(omitted); ok {
-			t.Fatalf("%q must not be in the PY11-Pure launch roster", omitted)
+			t.Fatalf("%q must not be in the PY11 launch roster", omitted)
 		}
 	}
 	for distName, wantImport := range wantPublic {
