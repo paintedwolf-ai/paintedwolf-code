@@ -4,7 +4,7 @@ import sqlite3
 import tempfile
 import unittest
 
-from portable_command.contracts import load_catalog, load_suite
+from portable_command.contracts import load_suite
 from portable_command.grading import grade_case
 from portable_command.observe import build_observation
 
