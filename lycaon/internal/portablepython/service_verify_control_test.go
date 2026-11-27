@@ -13,52 +13,16 @@ import (
 	"github.com/lycaon/lycaon/internal/pythonruntime"
 )
 
-// minimalWASIProcExitWasm is a valid 1-import Wasm module importing
-// wasi_snapshot_preview1.proc_exit (matching pythonruntime's DefaultWASIImportPolicy).
-func minimalWASIProcExitWasm() []byte {
-	encodeU32 := func(v uint32) []byte {
-		var out []byte
-		for {
-			b := byte(v & 0x7f)
-			v >>= 7
-			if v != 0 {
-				b |= 0x80
-			}
-			out = append(out, b)
-			if v == 0 {
-				break
-			}
-		}
-		return out
-	}
-	section := func(id byte, payload []byte) []byte {
-		out := []byte{id}
-		out = append(out, encodeU32(uint32(len(payload)))...)
-		return append(out, payload...)
-	}
-	str := func(s string) []byte {
-		out := encodeU32(uint32(len(s)))
-		return append(out, []byte(s)...)
-	}
-
-	// Type 0: (i32) -> ()
-	typePayload := []byte{0x01, 0x60, 0x01, 0x7f, 0x00}
-	// Import: wasi_snapshot_preview1.proc_exit (func type 0)
-	importPayload := []byte{0x01}
-	importPayload = append(importPayload, str("wasi_snapshot_preview1")...)
-	importPayload = append(importPayload, str("proc_exit")...)
-	importPayload = append(importPayload, 0x00, 0x00)
-
-	wasm := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
-	wasm = append(wasm, section(1, typePayload)...)
-	wasm = append(wasm, section(2, importPayload)...)
-	return wasm
+// minimalValidWasm is a valid empty Wasm module (0 imports) so NewService
+// passes EnforceImportAudit=true without requiring a full 38 MB python.wasm.
+func minimalValidWasm() []byte {
+	return []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
 }
 
 func buildSyntheticServiceImage(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	wasmBytes := minimalWASIProcExitWasm()
+	wasmBytes := minimalValidWasm()
 	if err := os.WriteFile(filepath.Join(dir, "python.wasm"), wasmBytes, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -116,14 +80,6 @@ func buildSyntheticServiceImage(t *testing.T) string {
 				Public:         true,
 				Imports:        []string{"demo"},
 				DistInfoPath:   "packages/demo-1.0.0.dist-info",
-			},
-		},
-		WasmImports: []pythonruntime.WasmImportSpec{
-			{
-				Module:      "wasi_snapshot_preview1",
-				Name:        "proc_exit",
-				Kind:        "function",
-				Disposition: "allow",
 			},
 		},
 	}
