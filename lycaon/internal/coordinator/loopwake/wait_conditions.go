@@ -9,6 +9,7 @@ import (
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
+	"github.com/lycaon/lycaon/internal/watch"
 )
 
 func parseWaitRequest(args map[string]any) (waitRequest, error) {
@@ -74,14 +75,17 @@ func resolveConditions(raw any) (waitSubscription, error) {
 			return waitSubscription{}, fmt.Errorf("each wait condition must be an object")
 		}
 		kind, _ := obj["kind"].(string)
-		trigger := WaitTrigger(strings.TrimSpace(kind))
-		if _, allowed := validWaitTriggers[trigger]; !allowed || trigger == WaitTriggerTimer {
-			return waitSubscription{}, fmt.Errorf("unsupported wait condition %q", kind)
+		trimmedKind := strings.TrimSpace(kind)
+		trigger := WaitTrigger(trimmedKind)
+		if trimmedKind != watch.ConditionWatchMatch {
+			if _, allowed := validWaitTriggers[trigger]; !allowed || trigger == WaitTriggerTimer {
+				return waitSubscription{}, fmt.Errorf("unsupported wait condition %q", kind)
+			}
 		}
 		if err := validateConditionShape(trigger, obj); err != nil {
 			return waitSubscription{}, err
 		}
-		condition := awaitstore.Condition{Kind: string(trigger)}
+		condition := awaitstore.Condition{Kind: trimmedKind}
 		if rawHandles, present := obj["handles"]; present {
 			parsed, err := ResolveProcessHandlesArgs(rawHandles)
 			if err != nil {
@@ -91,6 +95,9 @@ func resolveConditions(raw any) (waitSubscription, error) {
 			if trigger == WaitTriggerProcessDone {
 				handles = append(handles, parsed...)
 			}
+		}
+		if trimmedKind == watch.ConditionWatchMatch && (len(condition.Handles) == 0 || len(condition.Handles) > watch.MaxAlternatives) {
+			return waitSubscription{}, fmt.Errorf("watch_match requires 1 to 8 handles")
 		}
 		switch trigger {
 		case WaitTriggerHTTPReady:
@@ -109,17 +116,23 @@ func resolveConditions(raw any) (waitSubscription, error) {
 			WaitTriggerScanDone, WaitTriggerProcessDone, WaitTriggerProgramDone:
 		}
 		conditions = append(conditions, condition)
-		triggers = append(triggers, trigger)
+		if trimmedKind != watch.ConditionWatchMatch {
+			triggers = append(triggers, trigger)
+		}
 	}
 	return waitSubscription{
 		Conditions: conditions, Triggers: ensureTimerBackstop(triggers),
 		ProcessHandles: normalizeProcessHandles(handles), WorkerHandles: workerHandlesFromConditions(conditions),
+		WatchHandles:       watchHandlesFromConditions(conditions),
 		ExplicitConditions: true,
 	}, nil
 }
 
 func validateConditionShape(trigger WaitTrigger, obj map[string]any) error {
 	allowed := map[string]bool{"kind": true}
+	if string(trigger) == watch.ConditionWatchMatch {
+		allowed["handles"] = true
+	}
 	switch trigger {
 	case WaitTriggerProcessDone, WaitTriggerNextWorkerDone:
 		allowed["handles"] = true
@@ -236,6 +249,9 @@ func triggersFromConditions(conditions []awaitstore.Condition) ([]WaitTrigger, [
 	triggers := make([]WaitTrigger, 0, len(conditions)+1)
 	var handles []string
 	for _, condition := range conditions {
+		if condition.Kind == watch.ConditionWatchMatch {
+			continue
+		}
 		triggers = append(triggers, WaitTrigger(condition.Kind))
 		if condition.Kind == string(WaitTriggerProcessDone) {
 			handles = append(handles, condition.Handles...)

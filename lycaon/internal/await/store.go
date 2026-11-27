@@ -217,12 +217,18 @@ func (s *Store) ForSession(ctx context.Context, sessionID string) (Lease, bool, 
 
 // LatestResumeCandidate returns the latest completed or interrupted wait.
 func (s *Store) LatestResumeCandidate(ctx context.Context, sessionID string) (Lease, bool, error) {
+	return s.LatestResumeCandidateForOwner(ctx, sessionID, "")
+}
+
+// LatestResumeCandidateForOwner returns the latest completed or interrupted wait scoped to the caller.
+func (s *Store) LatestResumeCandidateForOwner(ctx context.Context, sessionID, workerJobID string) (Lease, bool, error) {
 	if s == nil || s.DB == nil {
 		return Lease{}, false, nil
 	}
 	lease, err := scanLease(s.DB.QueryRowContext(ctx, `SELECT `+leaseColumns+`
-		FROM wait_leases WHERE session_id = ? AND status IN ('resolved', 'interrupted', 'timed_out')
-		ORDER BY resolved_at DESC, id DESC LIMIT 1`, strings.TrimSpace(sessionID)))
+		FROM wait_leases WHERE session_id = ? AND COALESCE(worker_job_id, '') = ?
+		  AND status IN ('resolved', 'interrupted', 'timed_out')
+		ORDER BY resolved_at DESC, id DESC LIMIT 1`, strings.TrimSpace(sessionID), strings.TrimSpace(workerJobID)))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Lease{}, false, nil
 	}

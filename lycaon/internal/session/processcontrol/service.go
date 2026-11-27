@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -38,6 +39,7 @@ type Service struct {
 	store          Sessions
 	waits          Waits
 	nudges         Nudges
+	watches        *watch.Store
 	processReports processReports
 }
 
@@ -53,6 +55,7 @@ func (s *Service) Observe(sessionID, handle string) {
 }
 
 func (s *Service) SetLoop(waits Waits, nudges Nudges) { s.waits, s.nudges = waits, nudges }
+func (s *Service) SetWatches(watches *watch.Store)    { s.watches = watches }
 func (s *Service) Run(ctx context.Context, spec heldcall.Spec, fn heldcall.Func) (heldcall.Outcome, error) {
 	if s.Held == nil {
 		settled := fn(ctx)

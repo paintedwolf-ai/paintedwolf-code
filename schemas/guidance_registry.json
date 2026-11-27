@@ -3441,6 +3441,12 @@
       "emit": "guard:wait",
       "summary": "A durable readiness probe cannot contain a detected secret."
     },
+    "WATCH_HANDLE_UNKNOWN": {
+      "branch_instruction": "Do not pass a command handle, PID, or worker name where a watch handle is required",
+      "category": "recoverable",
+      "emit": "guard:wait",
+      "summary": "Handle {{ paintedwolf.handle }} does not name a watch owned by this session or worker job."
+    },
     "WEAK_CREDENTIAL_LITERAL": {
       "branch_instruction": "Check whether this value is a credential. Use protected generation or input when needed; continue when the value is ordinary data or an intentionally weak fixture.",
       "category": "informational",

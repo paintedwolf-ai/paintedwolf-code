@@ -8,6 +8,7 @@ import (
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -26,9 +27,10 @@ type WaitSubscriptionsDeps struct {
 type WaitSubscriptions struct {
 	Policy *HostWakePolicy
 
-	depsMu    sync.RWMutex
-	deps      WaitSubscriptionsDeps
-	waitStore *awaitstore.Store
+	depsMu     sync.RWMutex
+	deps       WaitSubscriptionsDeps
+	waitStore  *awaitstore.Store
+	watchStore *watch.Store
 	// parkedPrograms holds each session's parked command call.
 	parkedPrograms    sync.Map
 	lostProgramResult func(ctx context.Context, sessionID, programID string) (string, error)

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -26,7 +27,32 @@ func (m *Service) HandleHeldCallSettled(sessionID, handle string) {
 		"held_call_outcome": string(status.Settled.Outcome),
 	}}
 	m.processReports.publish(sessionID, handle, processReport{digest: digest})
+	if m.watches != nil {
+		_, _ = m.watches.RecordProcessDone(context.Background(), sessionID, watch.ProcessCompletionFact{
+			OccurrenceID: "held_done:" + strings.TrimSpace(status.Handle),
+			Handle:       strings.TrimSpace(status.Handle),
+			Outcome:      string(status.Settled.Outcome),
+			Report:       digest,
+		})
+	}
 	m.nudgeProcessWait(context.Background(), sessionID, handle, anchor.ProcessFinished, env)
+}
+
+// CompletedReport returns any retained completion report for handle.
+func (m *Service) CompletedReport(sessionID, handle string) (watch.ProcessCompletionFact, bool) {
+	if m == nil {
+		return watch.ProcessCompletionFact{}, false
+	}
+	rep, ok := m.processReports.lookup(sessionID, handle)
+	if !ok {
+		return watch.ProcessCompletionFact{}, false
+	}
+	return watch.ProcessCompletionFact{
+		OccurrenceID: "process_done:" + strings.TrimSpace(handle),
+		Handle:       strings.TrimSpace(handle),
+		Outcome:      "satisfied",
+		Report:       rep.digest,
+	}, true
 }
 
 // HandleState answers for a background handle of either kind.

@@ -28,6 +28,7 @@ type sessionSleep struct {
 	waitTriggers     []WaitTrigger
 	processHandles   []string
 	workerHandles    []string
+	watchHandles     []string
 	// mover identifies who may end the sleep.
 	mover SleepMover
 	// caller is the tool call that parked the session, if one did.
@@ -64,6 +65,7 @@ type sleepArm struct {
 	triggers       []WaitTrigger
 	processHandles []string
 	workerHandles  []string
+	watchHandles   []string
 	mover          SleepMover
 	caller         waitCaller
 }
