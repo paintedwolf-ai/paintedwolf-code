@@ -411,14 +411,37 @@ func TestSharedAnalysisRepeatedRunsPreserveFindingsAndLoadOnce(t *testing.T) {
 		t.Fatalf("corpus.Stats() = %+v, want GoParses=1 TypeChecks=1", stats)
 	}
 
-	// Also confirm shared contractcheck.LoadGoASTCorpus returns identical ASTs
-	// and file sets across repeated calls in one process.
+	// Also confirm shared contractcheck.LoadGoASTCorpus reuses the underlying
+	// FileSet, parsed ASTs, paths, and observable positions across repeated
+	// calls in one process, while permitting distinct lightweight view wrappers.
 	firstAST, err := contractcheck.LoadGoASTCorpus(corpus.Path("lycaon/test/contract/sample"))
 	contractcheck.FailErr(t, "first LoadGoASTCorpus", err)
 	secondAST, err := contractcheck.LoadGoASTCorpus(corpus.Path("lycaon/test/contract/sample"))
 	contractcheck.FailErr(t, "second LoadGoASTCorpus", err)
-	if firstAST != secondAST || len(firstAST.Files()) != 1 {
-		t.Fatalf("expected shared cached GoCorpus with 1 file, got same=%v len=%d", firstAST == secondAST, len(firstAST.Files()))
+	firstFiles, secondFiles := firstAST.Files(), secondAST.Files()
+	if firstAST.Fset == nil || firstAST.Fset != secondAST.Fset {
+		t.Fatalf("expected shared token.FileSet across repeated LoadGoASTCorpus calls")
+	}
+	if len(firstFiles) != 1 || len(secondFiles) != 1 || firstFiles[0].Rel != secondFiles[0].Rel || firstFiles[0].AST != secondFiles[0].AST {
+		t.Fatalf("expected reused parsed AST and path across repeated LoadGoASTCorpus calls: first=%d (%s) second=%d (%s) sameAST=%v",
+			len(firstFiles), firstFiles[0].Rel, len(secondFiles), secondFiles[0].Rel, firstFiles[0].AST == secondFiles[0].AST)
+	}
+	findGC := func(g *testcorpus.GoCorpus) []string {
+		var locs []string
+		for _, f := range g.Files() {
+			ast.Inspect(f.AST, func(n ast.Node) bool {
+				if sel, ok := n.(*ast.SelectorExpr); ok && sel.Sel.Name == "GC" {
+					pos := g.Fset.Position(sel.Pos())
+					locs = append(locs, fmt.Sprintf("%s:%d", f.Rel, pos.Line))
+				}
+				return true
+			})
+		}
+		return locs
+	}
+	firstLocs, secondLocs := findGC(firstAST), findGC(secondAST)
+	if len(firstLocs) != 1 || !slices.Equal(firstLocs, secondLocs) {
+		t.Fatalf("expected identical seeded GC findings across repeated LoadGoASTCorpus calls: first=%v second=%v", firstLocs, secondLocs)
 	}
 }
 
