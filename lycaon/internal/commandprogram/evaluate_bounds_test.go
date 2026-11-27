@@ -53,6 +53,42 @@ func TestPipelineKeepsEveryProducerOutcome(t *testing.T) {
 	}
 }
 
+func TestPipelineStageRedirectUsesAllProducerOutcomes(t *testing.T) {
+	cases := []struct {
+		name      string
+		program   string
+		status    int
+		content   string
+		abandoned bool
+	}{
+		{"upstream failure preserves existing bytes", "echo old > result; fail 3 | cat > result", 3, "old\n", true},
+		{"eligible stages publish", "echo new | cat > result", 0, "new\n", false},
+		{"comparison status permits an empty publication", "echo old > result; echo new | grep missing > result", 1, "", false},
+		{"expected early consumer closure permits publication", "cat <<EOF | head -n 1 > result\none\ntwo\nthree\nEOF\n", 0, "one\n", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newEvalFixture(t)
+			out, err := f.run(t, t.Context(), tc.program)
+			testutil.FailErr(t, "evaluate staged pipeline", err)
+			content, published := f.publication.published["result"]
+			if out.Stop != nil || out.Status != tc.status || !published || content != tc.content ||
+				slices.Contains(f.publication.abandoned, "result") != tc.abandoned {
+				t.Fatalf("status=%d stop=%+v published=%v abandoned=%v", out.Status, out.Stop, f.publication.published, f.publication.abandoned)
+			}
+		})
+	}
+}
+
+func TestPipelineStageRedirectKeepsPublicationFailureInStatus(t *testing.T) {
+	f := newEvalFixture(t)
+	out, err := f.run(t, t.Context(), "echo new | cat > publish-failed; echo $? ${PIPESTATUS[@]}")
+	testutil.FailErr(t, "evaluate failing publication", err)
+	if out.Stop != nil || f.stdout.String() != "1 0 1\n" {
+		t.Fatalf("stop=%+v stdout=%q", out.Stop, f.stdout.String())
+	}
+}
+
 func TestPipelineExternalClosureIsNotNativeClosure(t *testing.T) {
 	f := newEvalFixture(t)
 	out, err := f.run(t, t.Context(), "external -- yes | head -n 1")
