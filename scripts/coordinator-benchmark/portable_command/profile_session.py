@@ -102,6 +102,30 @@ def has_refusal_source_span(details):
     return False
 
 
+def explicit_effect_certainty(audit, payload, *, program_id=None, expected_ops=None, require_nonempty=False):
+    """Verify explicit 'none' effect_certainty across a complete, matching program receipt set."""
+    if not isinstance(payload, dict):
+        return False
+    if payload.get('completed_effects', 0) != 0 or payload.get('uncertain_effects', 0) != 0:
+        return False
+    progs = audit.get('invocation_programs') or []
+    pid = program_id or payload.get('program_id') or (progs[-1]['id'] if progs else None)
+    all_execs = [
+        e for e in (audit.get('invocation_program_executions') or ())
+        if not ((e.get('operation_id') or '').startswith('program ') and not e.get('native_command'))
+    ]
+    if pid is not None and any(e.get('program_id') != pid for e in all_execs if program_id is None):
+        return False
+    execs = [e for e in all_execs if pid is None or e.get('program_id') == pid]
+    if require_nonempty and not execs:
+        return False
+    if isinstance(payload.get('executed_children'), int) and len(execs) != payload['executed_children']:
+        return False
+    if expected_ops is not None and len(execs) != len(expected_ops):
+        return False
+    return all(e.get('effect_certainty') == 'none' for e in execs)
+
+
 def has_no_mutating_remedy(feedback):
     text = (feedback or '').lower()
     return bool(text) and not any(bad in text for bad in ('use write', 'use edit', 'sed -i', 'run rm '))
@@ -126,12 +150,12 @@ def inspect_readonly_authority(case, *, session_surface, project_dir, audit, rec
     span_ok = has_refusal_source_span(merged)
     no_mut_remedy = has_no_mutating_remedy(feedback) and mutation_tools_absent
     execs = audit['invocation_program_executions']
-    zero_effects_ok = bool(
-        (last_payload or {}).get('completed_effects', 0) == 0
-        and (last_payload or {}).get('uncertain_effects', 0) == 0
-        and all(e.get('effect_certainty') in {None, '', 'none'} for e in execs)
-        and (baseline_hashes is None or final_hashes == baseline_hashes)
+    exp_receipts = (case.get('expected') or {}).get('receipts') or ()
+    certainty_ok = explicit_effect_certainty(
+        audit, last_payload or {}, expected_ops=exp_receipts if exp_receipts else None,
+        require_nonempty=bool(exp_receipts),
     )
+    zero_effects_ok = bool(certainty_ok and (baseline_hashes is None or final_hashes == baseline_hashes))
     ro_code = code in {'COMMAND_EFFECT_NOT_ALLOWED', 'COMMAND_OPERATION_NOT_ALLOWED'}
     facts = {
         'readonly_profile': readonly_ok,
@@ -153,7 +177,7 @@ def inspect_readonly_authority(case, *, session_surface, project_dir, audit, rec
             recovery = {
                 **recovery, 'cause': 'readonly_profile', 'remedy': 'readonly_or_closeout' if no_mut_remedy else '',
                 'zero_program_effects': False, 'whole_program_resubmit_allowed': False,
-                'effect_certainty_required': True, 'source_span_required': span_ok,
+                'effect_certainty_required': certainty_ok, 'source_span_required': span_ok,
             }
         elif case['id'] == 'oar-unavailable-remedy':
             recovery = {

@@ -1209,7 +1209,7 @@
       },
       "turns": [
         {
-          "program": "printf 'a\\nb\\n' | head -n 1",
+          "program": "printf 'a\\n%131072s\\n' b | head -n 1",
           "expected_outcome": "completed"
         }
       ],
@@ -1824,13 +1824,14 @@
       "turns": [
         {
           "program": "unzip ./hostile.zip -d ./out",
-          "expected_outcome": "rejected"
+          "expected_outcome": "rejected",
+          "expected_rejection": "EXTRACT_ZIP_SLIP"
         }
       ],
       "expected": {
-        "stdout": "",
-        "stderr": "",
-        "status": 2,
+        "stdout": "Archive:  ./hostile.zip\n",
+        "stderr": "unzip: EXTRACT_ZIP_SLIP [EXTRACT_ZIP_SLIP]\n",
+        "status": 1,
         "host_stop": "rejected",
         "complete": false,
         "files": {
@@ -1839,12 +1840,14 @@
           }
         },
         "absent": [
-          "escape.txt"
+          "escape.txt",
+          "out"
         ],
         "receipts": [
           {
             "operation": "unzip",
-            "outcome": "rejected"
+            "outcome": "rejected",
+            "status": 1
           }
         ],
         "effects": [],
@@ -2568,21 +2571,58 @@
       "turns": [
         {
           "program": "touch ./never",
+          "expected_rejection": "PROGRESS_MISSING",
           "expected_outcome": "rejected"
+        },
+        {
+          "structured_tool": "update_progress",
+          "arguments": {
+            "content": "- [ ] Create ./never"
+          },
+          "program": "update_progress",
+          "expected_outcome": "completed"
+        },
+        {
+          "program": "touch ./never",
+          "requires_fresh_invocation": true,
+          "expected_outcome": "completed"
         }
       ],
       "expected": {
         "stdout": "",
         "stderr": "",
-        "status": 2,
-        "host_stop": "rejected",
-        "complete": false,
-        "files": {},
-        "absent": [
-          "never"
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {
+          "never": ""
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "touch",
+            "outcome": "refused",
+            "status": 1
+          },
+          {
+            "operation": "update_progress",
+            "outcome": "completed"
+          },
+          {
+            "operation": "touch",
+            "outcome": "completed"
+          }
         ],
-        "receipts": [],
-        "effects": [],
+        "effects": [
+          {
+            "operation": "update_progress",
+            "outcome": "completed"
+          },
+          {
+            "operation": "touch",
+            "outcome": "completed"
+          }
+        ],
         "obligations": [],
         "deliveries": [],
         "recovery": {
@@ -2596,7 +2636,7 @@
           "source_span_required": false,
           "owner_code": "PROGRESS_MISSING"
         },
-        "closeout": "blocked"
+        "closeout": "complete"
       },
       "allowed_partial": [],
       "required_evidence": [
@@ -3214,12 +3254,7 @@
         "complete": true,
         "files": {},
         "absent": [],
-        "receipts": [
-          {
-            "operation": "true",
-            "outcome": "completed"
-          }
-        ],
+        "receipts": [],
         "effects": [],
         "obligations": [],
         "deliveries": [],

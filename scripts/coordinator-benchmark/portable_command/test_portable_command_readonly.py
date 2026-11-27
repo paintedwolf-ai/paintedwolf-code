@@ -32,12 +32,13 @@ class PortableCommandReadonlyAuthorityTests(unittest.TestCase):
             db_path, log_path, proj, base = self._env(root, 'read-only-static-refusal')
             db = sqlite3.connect(db_path)
             db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','rejected',1)")
-            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','rejected',2,'COMMAND_EFFECT_NOT_ALLOWED')")
+            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','rejected',1,'COMMAND_OPERATION_NOT_ALLOWED')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e1','p1',1,'read','cat','filesystem','completed','none'), ('e2','p1',2,'delete','rm','filesystem','refused','none')")
             payload = {
-                'program_id': 'p1', 'state': 'rejected', 'status': 2, 'completed_effects': 0, 'uncertain_effects': 0,
-                'refusal': {'code': 'COMMAND_EFFECT_NOT_ALLOWED', 'feedback': 'worker_readonly forbids mutation; inspect only.', 'details': {'source_line': 1}},
+                'program_id': 'p1', 'state': 'rejected', 'status': 1, 'executed_children': 2, 'completed_effects': 0, 'uncertain_effects': 0,
+                'refusal': {'code': 'COMMAND_OPERATION_NOT_ALLOWED', 'feedback': 'worker_readonly forbids mutation; inspect only.', 'details': {'source_line': 1}},
             }
-            db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (json.dumps({'outcome': 'rejected', 'codes': ['COMMAND_EFFECT_NOT_ALLOWED'], 'content': '[command#1]\n' + json.dumps(payload)}),))
+            db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (json.dumps({'outcome': 'rejected', 'codes': ['COMMAND_OPERATION_NOT_ALLOWED'], 'content': '[command#1]\n' + json.dumps(payload)}),))
             db.commit(); db.close()
             obs, audit = observe.build_observation(
                 CASES['read-only-static-refusal'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj,
@@ -123,8 +124,9 @@ class PortableCommandReadonlyAuthorityTests(unittest.TestCase):
             db_o, log_o, proj_o, base_o = self._env(root, 'oar-unavailable-remedy')
             db = sqlite3.connect(db_o)
             db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','rejected',1)")
-            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','rejected',2,'COMMAND_EFFECT_NOT_ALLOWED')")
-            p_oar = {'program_id': 'p1', 'state': 'rejected', 'status': 2, 'completed_effects': 0, 'uncertain_effects': 0,
+            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','rejected',1,'COMMAND_EFFECT_NOT_ALLOWED')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e1','p1',1,'sed','sed','filesystem','refused','none')")
+            p_oar = {'program_id': 'p1', 'state': 'rejected', 'status': 1, 'executed_children': 1, 'completed_effects': 0, 'uncertain_effects': 0,
                      'refusal': {'code': 'COMMAND_EFFECT_NOT_ALLOWED', 'feedback': 'plan_review_readonly cannot modify files; report limitation.', 'details': {'source_line': 1}}}
             db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (json.dumps({'outcome': 'rejected', 'codes': ['COMMAND_EFFECT_NOT_ALLOWED'], 'content': '[command#1]\n' + json.dumps(p_oar)}),))
             db.commit(); db.close()
@@ -180,3 +182,46 @@ class PortableCommandReadonlyAuthorityTests(unittest.TestCase):
             # Negative control (c): workflow init creating non-blueprint file raises ValueError.
             with self.assertRaises(ValueError):
                 profile_session.validate_workflow_init_artifacts(pre_hashes, {**post_init, 'sneaky.txt': 'a' * 64})
+
+    def test_authority_effect_certainty_rejects_missing_mismatched_and_unknown_receipts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            db_d, log_d, proj_d, base_d = self._env(root, 'read-only-dynamic-refusal')
+            payload = {
+                'program_id': 'p1', 'state': 'rejected', 'status': 1, 'executed_children': 2,
+                'completed_effects': 0, 'uncertain_effects': 0,
+                'refusal': {'code': 'COMMAND_OPERATION_NOT_ALLOWED', 'feedback': 'explore_readonly cannot delete.', 'details': {'operation_source_line': 1}},
+            }
+            msg = json.dumps({'outcome': 'rejected', 'codes': ['COMMAND_OPERATION_NOT_ALLOWED'], 'content': '[command#1]\n' + json.dumps(payload)})
+            def run_with_execs(rows):
+                if db_d.exists():
+                    db_d.unlink()
+                create_audit_db(db_d)
+                db = sqlite3.connect(db_d)
+                db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','rejected',1)")
+                db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','rejected',1,'COMMAND_OPERATION_NOT_ALLOWED')")
+                for row in rows:
+                    db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES (?,?,?,?,?,?,?,?)", row)
+                db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (msg,))
+                db.commit(); db.close()
+                obs, _ = observe.build_observation(
+                    CASES['read-only-dynamic-refusal'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj_d,
+                    db_path=db_d, sidecar_log=log_d, baseline_hashes=base_d, session_surface=self._surface('explore_readonly'),
+                    turn_records=[{'program': CASES['read-only-dynamic-refusal']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}],
+                    prelude_records=[],
+                )
+                return obs
+            # Positive control: complete matching 2-row receipt set with explicit 'none' certainty.
+            obs_ok = run_with_execs([('e1', 'p1', 1, 'read', 'cat', 'filesystem', 'completed', 'none'), ('e2', 'p1', 2, 'delete', 'rm', 'filesystem', 'refused', 'none')])
+            self.assertTrue(obs_ok['recovery']['effect_certainty_required'])
+            # 1) Missing receipt (only 1 of 2 executed_children).
+            obs_missing = run_with_execs([('e1', 'p1', 1, 'read', 'cat', 'filesystem', 'completed', 'none')])
+            self.assertFalse(obs_missing['recovery']['effect_certainty_required'])
+            # 2) Mismatched receipt (wrong program_id 'p-other').
+            obs_mismatch = run_with_execs([('e1', 'p1', 1, 'read', 'cat', 'filesystem', 'completed', 'none'), ('e2', 'p-other', 2, 'delete', 'rm', 'filesystem', 'refused', 'none')])
+            self.assertFalse(obs_mismatch['recovery']['effect_certainty_required'])
+            # 3) Unknown / blank / missing effect_certainty.
+            for bad_cert in ('unknown', '', None):
+                obs_bad = run_with_execs([('e1', 'p1', 1, 'read', 'cat', 'filesystem', 'completed', 'none'), ('e2', 'p1', 2, 'delete', 'rm', 'filesystem', 'refused', bad_cert)])
+                self.assertFalse(obs_bad['recovery']['effect_certainty_required'], f'bad_cert={bad_cert!r}')
+                self.assertFalse(obs_bad['facts'].get('zero_program_effects'), f'bad_cert={bad_cert!r}')

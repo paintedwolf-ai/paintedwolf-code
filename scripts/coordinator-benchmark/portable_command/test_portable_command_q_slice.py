@@ -1,4 +1,5 @@
 """Focused unit controls for Q11, Q18, Q19, Q20, Q21, and Q22 audit and repository oracles."""
+import hashlib
 import io
 import json
 import os
@@ -28,30 +29,44 @@ class PortableCommandQSliceTests(unittest.TestCase):
         case = CASES['first-mutation-missing-progress']
         with tempfile.TemporaryDirectory() as tmp:
             db_path, log_path, proj = self._base_env(pathlib.Path(tmp))
+            (proj / 'never').write_text('')
+            prog_sha = hashlib.sha256(b'touch ./never').hexdigest()
             db = sqlite3.connect(db_path)
-            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','rejected',1)")
-            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','rejected',2,'PROGRESS_MISSING')")
-            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e1','p1',1,'touch','touch','filesystem','refused','none')")
-            payload = {
-                'program_id': 'p1', 'detail_ref': 'output:program-source:p1', 'state': 'rejected', 'status': 2,
-                'stop_code': 'PROGRESS_MISSING', 'completed_effects': 0, 'uncertain_effects': 0, 'replay_available': False,
+            db.execute("ALTER TABLE invocation_program_executions ADD COLUMN status_code INTEGER DEFAULT 0")
+            db.execute("CREATE TABLE invocation_program_sources (program_id TEXT, source_unit_id TEXT, source_id TEXT, revision TEXT, sha256 TEXT)")
+            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','rejected',1), ('r2','sess1234','c2','update_progress','progress','completed',1), ('r3','sess1234','c3','command','processes','completed',1)")
+            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','rejected',1,'PROGRESS_MISSING'), ('p2','r3','completed',0,'')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,status_code,effect_certainty) VALUES ('e1','p1',1,'touch','touch','filesystem','refused',1,'none'), ('e2','p2',1,'touch','touch','filesystem','completed',0,'completed')")
+            db.execute("INSERT INTO invocation_program_sources VALUES ('p1','u1','inline','1',?)", (prog_sha,))
+            db.execute("INSERT INTO invocation_program_outputs VALUES ('o1','p1','e1','source','output:program-source:p1',1,0,'touch ./never',0,1,?,'')", (prog_sha,))
+            payload1 = {
+                'program_id': 'p1', 'detail_ref': 'output:program-source:p1', 'state': 'rejected', 'status': 1, 'executed_children': 1,
+                'stderr': 'touch: PROGRESS_MISSING [PROGRESS_MISSING]\n', 'stop_code': 'PROGRESS_MISSING',
+                'completed_effects': 0, 'uncertain_effects': 0, 'replay_available': False,
                 'refusal': {'code': 'PROGRESS_MISSING', 'details': {'expected_form': 'update_progress'}},
             }
-            db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (json.dumps({'outcome': 'rejected', 'codes': ['PROGRESS_MISSING'], 'content': '[command#1]\n' + json.dumps(payload)}),))
+            payload3 = {'program_id': 'p2', 'state': 'completed', 'status': 0, 'stdout': '', 'stderr': ''}
+            db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?), ('m2','sess1234',2,'tool','c2',?), ('m3','sess1234',3,'tool','c3',?)", (
+                json.dumps({'outcome': 'rejected', 'codes': ['PROGRESS_MISSING'], 'content': '[command#1]\n' + json.dumps(payload1)}),
+                json.dumps({'outcome': 'completed', 'content': 'progress updated'}),
+                json.dumps({'outcome': 'completed', 'content': '[command#2]\n' + json.dumps(payload3)}),
+            ))
             db.commit(); db.close()
-            obs, audit = observe.build_observation(
-                case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj,
-                db_path=db_path, sidecar_log=log_path, baseline_hashes={},
-                turn_records=[{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}],
-                prelude_records=[],
-            )
+            turns = [
+                {'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']},
+                {'program': case['turns'][1]['program'], 'command_call_id': 'c2', 'call_ids': ['c2']},
+                {'program': case['turns'][2]['program'], 'command_call_id': 'c3', 'call_ids': ['c3']},
+            ]
+            ident = {'git_head': 'a' * 40}
+            obs, audit = observe.build_observation(case, session_id='sess1234', identity=ident, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=turns, prelude_records=[])
             self.assertEqual(audit['observation_gaps'], [])
-            self.assertTrue(obs['facts']['missing_progress_owner_code'])
-            self.assertTrue(obs['facts']['zero_program_effects'])
-            self.assertEqual(obs['recovery']['cause'], 'missing_progress')
-            self.assertEqual(obs['recovery']['remedy'], 'update_progress')
-            self.assertTrue(obs['recovery']['zero_program_effects'] and obs['recovery']['effect_certainty_required'])
-            self.assertTrue(obs['facts']['validated_resubmission_reference'])
+            self.assertTrue(grading.grade_case(case, obs, proj, ident)['passed'])
+            # Negative control: prefix-only detail_ref without matching source sha256 MUST fail validated_resubmission_reference.
+            db = sqlite3.connect(db_path)
+            db.execute("UPDATE invocation_program_sources SET sha256=? WHERE program_id='p1'", ('0' * 64,))
+            db.commit(); db.close()
+            obs_bad, _ = observe.build_observation(case, session_id='sess1234', identity=ident, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=turns, prelude_records=[])
+            self.assertFalse(obs_bad['facts']['validated_resubmission_reference'])
 
     def test_q21_external_argv_disk_provenance_and_confined_launch_gap(self):
         case = CASES['external-argv']

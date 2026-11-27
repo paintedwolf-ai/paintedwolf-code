@@ -1,4 +1,5 @@
 """Case-specific setup/oracle helpers for Q11, Q18, Q19, Q20, Q21, and Q22."""
+import hashlib
 import pathlib
 import subprocess
 import tarfile
@@ -7,7 +8,7 @@ from portable_command.contracts import bytes_value, fixture_path
 from portable_command.delivery_oracles import extract_deliveries, inspect_edit_and_bounds
 from portable_command.lifecycle_oracles import inspect_temp_handoff_and_jobs
 from portable_command.live import MODEL_FIELDS, SOURCE_FIELDS, freeze_plan, load_live_manifest, summarize_slots
-from portable_command.profile_session import inspect_readonly_authority
+from portable_command.profile_session import explicit_effect_certainty, inspect_readonly_authority
 
 
 def _run_git(project_dir, *args):
@@ -185,25 +186,39 @@ def verify_paired_manifest_contract(case, identity):
     }
 
 
-def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, receipts, effects, audit, recovery, last_payload, final_hashes, baseline_hashes, sidecar=None, session_surface=None, last_raw=None, no_external_launch=False):
+def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, receipts, effects, audit, recovery, last_payload, final_hashes, baseline_hashes, sidecar=None, session_surface=None, last_raw=None, no_external_launch=False, first_rejected=None, turn_records=None):
     """Collect Q05, Q06, Q11, Q18, Q19, Q20, Q21, and Q22 facts from SQLite audit rows, sidecar log, and repo state."""
     execs = audit['invocation_program_executions']
     pins = audit['invocation_program_revision_pins']
     deliveries, delivery_facts = extract_deliveries(case, audit, baseline_hashes, project_dir=project_dir)
     facts = dict(delivery_facts)
     if recovery and recovery.get('owner_code') == 'PROGRESS_MISSING':
-        all_refused = bool(execs) and all(e.get('state') in {'refused', 'rejected'} and e.get('effect_certainty') in {None, '', 'none'} for e in execs)
-        zero_ok = bool(all_refused and last_payload.get('completed_effects', 0) == 0 and last_payload.get('uncertain_effects', 0) == 0)
-        ref_details = (last_payload.get('refusal') or {}).get('details') if isinstance(last_payload.get('refusal'), dict) else {}
+        rej_payload = first_rejected[0] if first_rejected else last_payload
+        rej_pid = first_rejected[2] if first_rejected else (rej_payload or {}).get('program_id')
+        rej_execs = [e for e in execs if not rej_pid or e.get('program_id') == rej_pid]
+        zero_ok = bool(explicit_effect_certainty(audit, rej_payload or {}, program_id=rej_pid, require_nonempty=True)
+                       and all(e.get('state') in {'refused', 'rejected'} for e in rej_execs))
+        ref_details = ((rej_payload or {}).get('refusal') or {}).get('details') if isinstance((rej_payload or {}).get('refusal'), dict) else {}
         remedy = 'update_progress' if (
             isinstance(ref_details, dict) and 'progress' in str(ref_details.get('expected_form') or '').lower()
         ) else recovery.get('remedy', '')
-        recovery = {**recovery, 'cause': 'missing_progress', 'remedy': remedy}
+        turn0_prog = (turn_records[0].get('program') if turn_records else '') or ''
+        prog_sha = hashlib.sha256(turn0_prog.encode('utf-8')).hexdigest() if turn0_prog else ''
+        sources = audit.get('invocation_program_sources') or []
+        source_matched = any(s.get('program_id') == rej_pid and s.get('sha256') == prog_sha for s in sources)
+        dref = (rej_payload or {}).get('detail_ref') or ''
+        outputs = audit.get('invocation_program_outputs') or []
+        source_record_ok = bool(dref) and any(o.get('program_id') == rej_pid and o.get('reference') == dref for o in outputs)
+        fresh_write_ok = bool(
+            len(audit.get('invocation_programs') or ()) >= 2
+            and any(e.get('program_id') != rej_pid and e.get('state') == 'completed' and e.get('effect_certainty') == 'completed' for e in execs)
+        )
+        resubmit_ok = bool(zero_ok and (rej_payload or {}).get('replay_available') is False and source_matched and source_record_ok and (fresh_write_ok or len(turn_records or ()) == 1))
+        recovery = {**recovery, 'cause': 'missing_progress', 'remedy': remedy, 'whole_program_resubmit_allowed': resubmit_ok}
         if zero_ok:
             recovery = {**recovery, 'zero_program_effects': True, 'effect_certainty_required': True}
-            facts['zero_program_effects'] = baseline_hashes is None or final_hashes == baseline_hashes
-        if (last_payload.get('detail_ref') or '').startswith('output:program-source:') and last_payload.get('replay_available') is False:
-            facts['validated_resubmission_reference'] = True
+            facts['zero_program_effects'] = True if fresh_write_ok else (baseline_hashes is None or final_hashes == baseline_hashes)
+        facts['validated_resubmission_reference'] = resubmit_ok
     if not (case.get('setup') or {}).get('files'):
         prog_sources = audit.get('invocation_program_sources') or []
         if prog_sources and all(len(s.get('sha256') or '') == 64 for s in prog_sources):
@@ -212,11 +227,9 @@ def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, rece
     if ext_ids and any(p.get('basis') == 'declared_at_launch' and p.get('execution_id') in ext_ids and len(p.get('disk_sha256') or '') == 64 for p in pins):
         facts['disk_provenance'] = True
     if recovery and recovery.get('owner_code'):
-        no_escape = not (pathlib.Path(project_dir).parent / 'escape.txt').exists()
-        all_refused = all(e.get('state') in {'refused', 'rejected'} and e.get('effect_certainty') in {None, '', 'none'} for e in execs)
-        zero_ok = bool(recovery.get('zero_program_effects') or (
-            all_refused and last_payload.get('completed_effects', 0) == 0 and last_payload.get('uncertain_effects', 0) == 0
-        ))
+        root_p = pathlib.Path(project_dir)
+        no_escape = not (root_p.parent / 'escape.txt').exists() and not (root_p / 'escape.txt').exists() and not (root_p / 'out').exists()
+        zero_ok = bool(recovery.get('zero_program_effects') or explicit_effect_certainty(audit, last_payload or {}, require_nonempty=bool(execs)))
         facts['no_outside_effect'] = bool(zero_ok and no_escape and (baseline_hashes is None or final_hashes == baseline_hashes))
         if any(tok in recovery['owner_code'].lower() for tok in ('zip', 'traversal', 'escape', 'archive', 'path')):
             facts['zip_slip_refused'] = True
