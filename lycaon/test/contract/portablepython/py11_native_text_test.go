@@ -160,7 +160,7 @@ regex.match(r"(a+)+b", "a" * 34 + "c")
 			},
 		})
 		contractcheck.FailErr(t, "execute fuel-bounded regex", err)
-		if resp.CleanCompletion || resp.Stop == nil || resp.Stop.Reason != pythonruntime.StopReasonGuestWorkExceeded {
+		if resp.CleanCompletion || resp.Stop == nil || resp.Stop.Code != pythonruntime.StopWorkLimitExceeded {
 			t.Fatalf("expected fuel exhaustion stop, got clean=%v exit=%d stop=%+v stderr=%q",
 				resp.CleanCompletion, resp.ExitCode, resp.Stop, resp.Stderr)
 		}
