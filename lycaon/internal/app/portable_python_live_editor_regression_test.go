@@ -101,7 +101,7 @@ func TestPortablePythonLiveEditorSubdirectoryAndExistingFileEdit(t *testing.T) {
 				SourceWorkspaceKind: wire.SourceWorkspaceKindProject,
 				ActiveRootID:        rootID,
 				SourceLedger:        appInst.Server.Sources.Workspace.SourceLedger,
-				EditorDocuments:     editorDocumentsAdapter{service: appInst.Server.Sources.Workspace.EditorDocuments},
+				EditorDocuments:     editorDocumentsAdapter{service: appInst.Server.Sources.Workspace.Watch.EditorDocuments},
 				Roots: []projectroot.RootRef{{
 					ID:    rootID,
 					Label: "main",
@@ -113,10 +113,10 @@ func TestPortablePythonLiveEditorSubdirectoryAndExistingFileEdit(t *testing.T) {
 
 	runPy := func(callID, code string) portablepython.ToolResponse {
 		t.Helper()
-		raw, err := appInst.Tools.Registry.Execute(ctx, mkTC(callID), "python", map[string]any{
+		raw, err := appInst.ToolRegistry.Run(ctx, "python", map[string]any{
 			"mode": "code",
 			"code": code,
-		})
+		}, mkTC(callID))
 		testutil.FailErr(t, "execute python "+callID, err)
 		var resp portablepython.ToolResponse
 		testutil.FailErr(t, "decode tool response "+callID, json.Unmarshal([]byte(raw), &resp))
