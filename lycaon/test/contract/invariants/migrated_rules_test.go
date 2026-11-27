@@ -22,6 +22,7 @@ func TestSourceRecorderAssertionRule(t *testing.T) {
 		{"unrelated recorder", "_ = events.Recorder.(Events)", passes},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			files := map[string]string{
 				"lycaon/internal/fixture/source.go": "package fixture\nfunc check() { _ = tc.Source.SourceLedger; " + tc.body + " }",
 			}
@@ -137,6 +138,7 @@ func (r *RegistrySummarizer) completeUtility() { r.beginLaneCall(); defer r.endL
 		{"mentions lane end without calling it", llm, "r.beginLaneCall(); r.endLaneCall()", "r.beginLaneCall(); _ = r.endLaneCall"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			changed := strings.Replace(files[tc.file], tc.before, tc.after, 1)
 			if changed == files[tc.file] {
 				t.Fatalf("fixture did not contain %q", tc.before)
