@@ -471,7 +471,6 @@ func (e *py09RevisionEditorBridge) PublishDraft(
 				Target:           pythonruntime.CanonicalTarget{Namespace: pythonruntime.NamespaceWorkspace, RootID: rootID, Branch: branch, RelPath: relPath},
 				ExpectedRevision: baseRev.DocumentRevision,
 				ActualRevision:   d.Revision,
-				Reason:           "editor draft revision changed concurrently",
 			},
 		}
 	}
@@ -614,7 +613,7 @@ print("CAUGHT_PUBLICATION_OK")
 		contractcheck.FailErr(t, "LoadAdmissions", err)
 		foundPersistedDynamic := false
 		for _, a := range adms {
-			if strings.Contains(a.Target, "missing/dynamic_probe.txt") {
+			if strings.Contains(a.Record.Target.RelPath, "missing/dynamic_probe.txt") {
 				foundPersistedDynamic = true
 				break
 			}
