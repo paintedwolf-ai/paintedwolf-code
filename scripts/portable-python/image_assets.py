@@ -106,6 +106,26 @@ def write_third_party_notices(
                 f"- {f['family']} {f['style']} ({f['license']}) at {f['guest_path']} "
                 f"(license text: {f['license_path']}) — {f['source_url']}"
             )
+    lgpl_dists = [
+        d for d in sorted(manifest_dists, key=lambda x: x["normalized_name"])
+        if "LGPL" in d.get("license", "").upper()
+    ]
+    if lgpl_dists:
+        lines.extend([
+            "",
+            "LGPL-3.0 Guest-Library Distribution & Source Availability:",
+            "  The Portable Python WASI guest image is distributed separately from host",
+            "  sidecar binaries (e.g. Git, OpenGrep). The following guest Python libraries",
+            "  are licensed under the GNU Lesser General Public License v3:",
+        ])
+        for d in lgpl_dists:
+            lines.append(f"  - {d['name']} {d['version']} ({d['license']}) — {d['source_url']}")
+        lines.extend([
+            "  Complete corresponding source archives, license texts, copyright notices,",
+            "  local patches (including the fpdf2 WASI URL-loader refusal patch), build",
+            "  scripts, and recipient relink/rebuild instructions are provided with the",
+            "  release artifacts and in scripts/portable-python/LGPL_COMPLIANCE.md.",
+        ])
     lines.append("")
     out = image_dir / "THIRD_PARTY_NOTICES.txt"
     out.write_text("\n".join(lines), encoding="utf-8")

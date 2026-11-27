@@ -62,9 +62,51 @@ func TestDefaultLaunchManifestRoundTripAndRoster(t *testing.T) {
 		"sympy":           "sympy",
 		"Pillow":          "PIL",
 		"lxml":            "lxml.etree",
-		"python-docx":     "docx",
-		"python-pptx":     "pptx",
-		"fpdf2":           "fpdf",
+		"python-docx":        "docx",
+		"python-pptx":        "pptx",
+		"fpdf2":              "fpdf",
+		"pathspec":           "pathspec",
+		"networkx":           "networkx",
+		"unidiff":            "unidiff",
+		"croniter":           "croniter",
+		"PyJWT":              "jwt",
+		"python-dotenv":      "dotenv",
+		"ftfy":               "ftfy",
+		"sqlparse":           "sqlparse",
+		"xmltodict":          "xmltodict",
+		"jmespath":           "jmespath",
+		"toml":               "toml",
+		"tomli":              "tomli",
+		"pytest-mock":        "pytest_mock",
+		"freezegun":          "freezegun",
+		"Faker":              "faker",
+		"Markdown":           "markdown",
+		"markdownify":        "markdownify",
+		"html5lib":           "html5lib",
+		"xlrd":               "xlrd",
+		"filetype":           "filetype",
+		"pytz":               "pytz",
+		"icalendar":          "icalendar",
+		"tabulate":           "tabulate",
+		"pygal":              "pygal",
+		"tqdm":               "tqdm",
+		"colorama":           "colorama",
+		"termcolor":          "termcolor",
+		"rich":               "rich",
+		"click":              "click",
+		"univers":            "univers",
+		"jproperties":        "jproperties",
+		"license-expression": "license_expression",
+		"graphql-core":       "graphql",
+		"tinycss2":           "tinycss2",
+	}
+	if len(wantPublic) != LaunchPublicDistributionCount {
+		t.Fatalf("wantPublic len = %d, want %d", len(wantPublic), LaunchPublicDistributionCount)
+	}
+	for _, omitted := range []string{"yamllint", "regex", "python-hcl2"} {
+		if _, ok := parsed.FindDistribution(omitted); ok {
+			t.Fatalf("%q must not be in the PY11-Pure launch roster", omitted)
+		}
 	}
 	for distName, wantImport := range wantPublic {
 		dist, ok := parsed.FindDistribution(distName)
