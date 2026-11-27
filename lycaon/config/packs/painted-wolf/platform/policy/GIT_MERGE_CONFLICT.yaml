@@ -1,0 +1,21 @@
+spec_version: "1.0"
+id: GIT_MERGE_CONFLICT
+kind: policy
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "GIT_MERGE_CONFLICT"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:git_merge_conflict
+message: Git stopped on merge conflicts
+what: The Git operation stopped because the repository has merge conflicts.
+cause: Conflicting changes are present in the working tree.
+why: Git does not continue while conflicted files are unresolved.
+fix: Inspect the repository status, resolve the conflicted files within the task's authority, and make a fresh request.
+instead: Keep the current repository state until the conflicts are resolved.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      tool: command
+      profile: coordinator

@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/jsonshape"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -29,6 +30,7 @@ var retiredCloseoutWords = []string{"citations fence", "cited_evidence", "cited_
 type closeoutContract struct {
 	loop     *PromptLoop
 	selected *oar.Decision
+	rules    *oar.RuleSet
 	fired    []string
 	friction int
 	accepted int
@@ -62,7 +64,7 @@ func newCloseoutContract(t *testing.T) *closeoutContract {
 			LineRanges: []evidence.LineRange{{Start: 1, End: 5}}},
 		{Handle: "web#1", Kind: "web", Shape: evidence.ShapeURL, SourceTool: "fetch_url", URL: "https://example.test/seen"},
 	})
-	c := &closeoutContract{}
+	c := &closeoutContract{rules: rules}
 	c.loop = NewPromptLoopForTest(PromptLoopDeps{
 		Closeout: CloseoutDeps{
 			HintConfig:     hints,
@@ -96,8 +98,8 @@ func newCloseoutContract(t *testing.T) *closeoutContract {
 					c.noted = append(c.noted, code)
 					return 1, ""
 				},
-				RenderHostKick: func(ctx context.Context, id string, data map[string]any) (string, error) {
-					return engine.RenderKick(ctx, id, data)
+				RenderHostKick: func(ctx context.Context, reader prompts.Reader, id string, data map[string]any) (string, error) {
+					return engine.RenderKick(ctx, reader, id, data)
 				}},
 		},
 		Projection: ProjectionDeps{
@@ -142,6 +144,7 @@ func (c *closeoutContract) drive(t *testing.T, surface, content string, reportPh
 	frame := testReportFrame()
 	frame.Runtime.ReportDocumentEnabled = reportPhase
 	st := &promptLoopTurnState{coordinatorFrame: frame, draftSlotID: "slot", draftSlotAppended: true, turnStreamState: turnStreamState{offeredToolNames: []string{"read"}}, turnBatchState: turnBatchState{turnTools: []string{"read"}}}
+	st.reader = testCoordinatorReader(t, st.offeredToolNames...)
 	sess := &api.Session{ID: "contract-" + t.Name(), WorkspacePath: t.TempDir()}
 	assistant := api.Message{ID: "slot", Role: api.MessageRoleAssistant, Content: content}
 	read, err := c.loop.Closeout.readCloseoutDraft(t.Context(), sess, surface, st, history, assistant)
@@ -257,7 +260,7 @@ func kickVariables(t *testing.T, ref string) map[string]bool {
 // AC-COMPAT-08: a repair kick reads exactly what the real path sends it. A name the
 // builder never sends renders as a silent fallback, which is how a retired form or an
 // empty document reaches the model. A key the kick does not read must belong to the
-// facts the refusal's policy copy reads, or to the builder both kicks share.
+// facts the closeout refusals' policy declares or reads, or to the builder both kicks share.
 func TestRepairKicksReadWhatTheRealPathSends(t *testing.T) {
 	const documentContent = "Done [read#1:2].\n\n```json\n{\"headline\":\"H\",\"cited_evidence\":[{\"evidence\":\"read#1\"}]}\n```"
 	for _, tc := range []struct {
@@ -273,11 +276,15 @@ func TestRepairKicksReadWhatTheRealPathSends(t *testing.T) {
 			c := newCloseoutContract(t)
 			var sent map[string]any
 			engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-			c.loop.Closeout.Deps.RenderHostKick = func(ctx context.Context, id string, data map[string]any) (string, error) {
+			c.loop.Closeout.Deps.RenderHostKick = func(ctx context.Context, reader prompts.Reader, id string, data map[string]any) (string, error) {
 				if id == tc.kick {
-					sent = data
+					if merged, err := prompts.Vars(reader, data); err == nil {
+						sent = merged
+					} else {
+						sent = data
+					}
 				}
-				return engine.RenderKick(ctx, id, data)
+				return engine.RenderKick(ctx, reader, id, data)
 			}
 			c.drive(t, "implement_synthesis", tc.content, tc.reportPhase, contractHistory(tc.content))
 			if sent == nil {
@@ -289,7 +296,10 @@ func TestRepairKicksReadWhatTheRealPathSends(t *testing.T) {
 					t.Errorf("%s reads %q, which the real path does not send (sent %v)", tc.kick, name, slices.Sorted(maps.Keys(sent)))
 				}
 			}
-			policyFacts := guidance.GroundingHintData([]string{"offender"}, evidence.Ledger{})
+			if c.selected == nil {
+				t.Fatalf("%s rendered without a selected refusal", tc.kick)
+			}
+			policyFacts := refusalCopyFacts(t, c.rules, c.selected.Rule)
 			for name := range sent {
 				if _, isPolicyFact := policyFacts[name]; !reads[name] && !isPolicyFact && !slices.Contains(tc.sharedOnly, name) && !prompts.IsDeclaredOrReservedReaderFact(name) {
 					t.Errorf("%s is sent %q and does not read it", tc.kick, name)
@@ -297,6 +307,33 @@ func TestRepairKicksReadWhatTheRealPathSends(t *testing.T) {
 			}
 		})
 	}
+}
+
+// refusalCopyFacts are the occurrence facts the rules on the selected
+// refusal's anchor declare in requires_facts or bind in their copy, by kick data
+// name. One builder feeds that anchor, and the observation picks which rule fires.
+func refusalCopyFacts(t *testing.T, rules *oar.RuleSet, ruleID string) map[string]bool {
+	t.Helper()
+	selected, ok := rules.Get(ruleID)
+	if !ok {
+		t.Fatalf("refusal rule %q is not loaded", ruleID)
+	}
+	out := map[string]bool{}
+	add := func(name string) { out[strings.TrimPrefix(name, "paintedwolf.")] = true }
+	for _, rule := range rules.OnAnchor(selected.Anchor) {
+		for _, name := range rule.RequiresFacts {
+			add(name)
+		}
+		c := rule.Copy
+		for _, member := range []string{c.Title, c.What, c.Cause, c.Why, c.Fix, c.Instead, c.Message} {
+			bindings, err := oarcore.ParseCopy(member)
+			testutil.FailErr(t, "parse "+rule.ID+" copy", err)
+			for _, b := range bindings {
+				add(b.Name)
+			}
+		}
+	}
+	return out
 }
 
 // AC-CLO-13: a retired fence member is refused by name on the document budget, and
@@ -406,6 +443,7 @@ func TestRepeatedOffenderExhausts(t *testing.T) {
 	frame := testReportFrame()
 	frame.Runtime.ReportDocumentEnabled = false
 	st := &promptLoopTurnState{coordinatorFrame: frame, draftSlotID: "slot", draftSlotAppended: true, turnStreamState: turnStreamState{offeredToolNames: []string{"read"}}, turnBatchState: turnBatchState{turnTools: []string{"read"}}}
+	st.reader = testCoordinatorReader(t, st.offeredToolNames...)
 	sess := &api.Session{ID: "contract-repeat", WorkspacePath: t.TempDir()}
 	assistant := api.Message{ID: "slot", Role: api.MessageRoleAssistant, Content: content}
 	read, err := c.loop.Closeout.readCloseoutDraft(t.Context(), sess, "implement_synthesis", st, contractHistory(content), assistant)
@@ -506,6 +544,7 @@ func TestCloseoutDocumentDefectRefusedBeforeCitations(t *testing.T) {
 	st := &promptLoopTurnState{
 		coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnBatchState: turnBatchState{turnTools: []string{"read"}},
 	}
+	st.reader = testCoordinatorReader(t, st.offeredToolNames...)
 	ledger := evidence.Ledger{
 		Handles: map[string]evidence.Record{
 			"read#1": {Handle: "read#1", Kind: "read", Path: "src/a.go", Body: []string{"package main"}},
@@ -624,6 +663,7 @@ func TestCloseoutReportUsesOnePolicyOccurrence(t *testing.T) {
 				},
 			})
 			st := &promptLoopTurnState{draftSlotID: "draft", draftSlotAppended: true, turnBatchState: turnBatchState{turnTools: []string{"command"}}}
+			st.reader = testCoordinatorReader(t, st.offeredToolNames...)
 			read := markdownRead(tc.body+" ["+tc.evidence+"]", false)
 			out, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), sess, sess.ID, tc.surface, st, history, history[2], read)
 			testutil.FailErr(t, "check report", err)

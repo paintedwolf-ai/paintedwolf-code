@@ -1,6 +1,8 @@
 ---
 name: write-workflow
 description: Author and validate workflow phases, gates, human decisions, and durable orchestration.
+metadata:
+  authoring_reference: "true"
 ---
 
 # Write a project workflow

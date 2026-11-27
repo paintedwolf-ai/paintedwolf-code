@@ -379,7 +379,7 @@ func TestAppendWorkerSummaryCarriesStructuredDecisionRequest(t *testing.T) {
 	if id := kicks.TakePendingKickIDUnless(parent.ID, nil); id != "coordinator-worker-task-finished" {
 		t.Fatalf("staged worker decision guidance = %q", id)
 	}
-	nudge, _, ok, err := kicks.RenderPendingNudge(ctx, parent.ID, kick.CoordinatorKickRenderContext{})
+	nudge, _, ok, err := kicks.RenderPendingNudge(ctx, parent.ID, kick.CoordinatorKickRenderContext{Reader: hostRequestReader(t, mgr, parent)})
 	testutil.FailErr(t, "render worker decision", err)
 	if !ok {
 		t.Fatal("worker decision did not produce guidance")
@@ -824,4 +824,12 @@ func bindWorkerFixture(t *testing.T, database db.Handle, jobID, branch, primary 
 	if merge != "" {
 		testutil.FailErr(t, "set fixture merge status", jobs.SetMergeStatus(t.Context(), jobID, merge))
 	}
+}
+
+// hostRequestReader projects sess's next request through the host.
+func hostRequestReader(t *testing.T, mgr *session.Host, sess *api.Session) prompts.Reader {
+	t.Helper()
+	reader, err := mgr.Coordinator.Context.NextRequestReader(t.Context(), sess, nil)
+	testutil.FailErr(t, "next request reader", err)
+	return reader
 }

@@ -3,8 +3,9 @@ package promptloop
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/tooloutput"

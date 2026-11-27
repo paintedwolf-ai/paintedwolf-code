@@ -2,6 +2,8 @@ package workerexecution
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
@@ -75,6 +77,7 @@ type Service struct {
 	WorkspaceCheck workercompletion.WorkspaceChangeChecker
 	pipeline       *oar.GuardPipeline
 	decisions      Decisions
+	requestReader  func(ctx context.Context, sess *api.Session, history []api.Message) (prompts.Reader, error)
 }
 
 func New(sessionStore Sessions, evidenceStore Evidence, workspace Workspace, gate Admission, guidance Guidance, limits Limits, router *llm.StaticModelRouter, peers PeerServices) *Service {
@@ -84,8 +87,51 @@ func (m *Service) SessionByID(ctx context.Context, id string) (*api.Session, err
 	return m.sessionStore.Get(ctx, id)
 }
 func (m *Service) SetPromptEngine(engine prompts.PromptTemplateEngine) { m.prompts = engine }
-func (m *Service) SetContext(context assembly.WorkerContextBuilder)    { m.workerContext = context }
-func (m *Service) SetDecisions(decisions Decisions)                    { m.decisions = decisions }
+
+// SetRequestReader installs the projection of a child session's next request.
+func (m *Service) SetRequestReader(reader func(context.Context, *api.Session, []api.Message) (prompts.Reader, error)) {
+	m.requestReader = reader
+}
+
+// WorkerRequestReader projects the first request of a worker of agentType
+// under parentID: the existing child session when childSessionID names one,
+// otherwise the child the spawn would create.
+func (m *Service) WorkerRequestReader(ctx context.Context, parentID, childSessionID, agentType string) (prompts.Reader, error) {
+	if m == nil || m.requestReader == nil {
+		return prompts.Reader{}, fmt.Errorf("worker request reader not configured")
+	}
+	if id := strings.TrimSpace(childSessionID); id != "" {
+		return m.NextRequestReader(ctx, id, nil)
+	}
+	parent, err := m.sessionStore.Get(ctx, strings.TrimSpace(parentID))
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	child := &api.Session{
+		ProjectID:       parent.ProjectID,
+		ParentSessionID: parent.ID,
+		AgentType:       strings.TrimSpace(agentType),
+		Mode:            parent.Mode,
+		Posture:         parent.Posture,
+		WorkspacePath:   parent.WorkspacePath,
+		WorkspaceRootID: parent.WorkspaceRootID,
+	}
+	return m.requestReader(ctx, child, nil)
+}
+
+// NextRequestReader projects the next model request of sessionID.
+func (m *Service) NextRequestReader(ctx context.Context, sessionID string, history []api.Message) (prompts.Reader, error) {
+	if m == nil || m.requestReader == nil {
+		return prompts.Reader{}, fmt.Errorf("worker request reader not configured")
+	}
+	sess, err := m.sessionStore.Get(ctx, sessionID)
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	return m.requestReader(ctx, sess, history)
+}
+func (m *Service) SetContext(context assembly.WorkerContextBuilder) { m.workerContext = context }
+func (m *Service) SetDecisions(decisions Decisions)                 { m.decisions = decisions }
 func (m *Service) SetEvaluation(check workercompletion.WorkspaceChangeChecker, hints *guidance.HintConfig, pipeline *oar.GuardPipeline) {
 	m.WorkspaceCheck = check
 	m.workflowHints = hints

@@ -2,11 +2,12 @@ package session
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolreach"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -41,7 +42,7 @@ func TestSandboxRecoveryRoutesDeclaredCapabilityFacts(t *testing.T) {
 					if state == "failed" {
 						obs.FailedStages = []string{"fixture"}
 					}
-					out, facts := mgr.ToolPolicy.AfterTool(tools.WithCallReach(t.Context(), toolreach.Offered([]string{tool})), &api.Session{ID: t.Name()}, tool, map[string]any{}, "{}", 1, guidance.ToolResultFacts{Confine: obs})
+					out, facts := mgr.ToolPolicy.AfterTool(toolreach.WithRequest(t.Context(), toolreach.Offered([]string{tool})), &api.Session{ID: t.Name()}, tool, map[string]any{}, "{}", 1, guidance.ToolResultFacts{Confine: obs})
 					if state == "succeeded" {
 						if facts.HasCode(tc.code) {
 							t.Fatalf("absorbed refusal acquired retry guidance: %s", out)
@@ -100,7 +101,7 @@ func TestInterfaceStateRefusalsNeverRecommendHostExecution(t *testing.T) {
 				if !running {
 					obs.FailedStages = []string{"python3 -m http.server 8765"}
 				}
-				_, facts := mgr.ToolPolicy.AfterTool(tools.WithCallReach(t.Context(), toolreach.Offered([]string{"command"})), &api.Session{ID: t.Name()}, "command", map[string]any{}, "{}", 1, guidance.ToolResultFacts{Confine: obs})
+				_, facts := mgr.ToolPolicy.AfterTool(toolreach.WithRequest(t.Context(), toolreach.Offered([]string{"command"})), &api.Session{ID: t.Name()}, "command", map[string]any{}, "{}", 1, guidance.ToolResultFacts{Confine: obs})
 				if facts.HasCode("SANDBOX_TRY_HOST_EXECUTION") || facts.HasCode("SANDBOX_TRY_CAPABILITIES") {
 					t.Errorf("probes %b listener=%v running=%v: host execution or a multi-capability recovery delivered", mask, withListener, running)
 				}
@@ -129,7 +130,7 @@ func TestSandboxRecoveryPreservesRunningJobDependency(t *testing.T) {
 			obs := confine.Observation{Applied: true, Running: true, Refusals: confine.SandboxRefusals{
 				Witness: confine.WitnessKernel, Refusals: []confine.SandboxRefusal{{Operation: "file-read-data", Target: "/protected/input", Grant: "/protected/input", Layer: confine.FloorReadKeyMaterial, Recovery: confine.RecoverReadPath}},
 			}}
-			ctx := tools.WithCallReach(t.Context(), toolreach.Offered(names))
+			ctx := toolreach.WithRequest(t.Context(), toolreach.Offered(names))
 			out, facts := mgr.ToolPolicy.AfterTool(ctx, &api.Session{ID: t.Name()}, "command", map[string]any{}, "{}", 1, guidance.ToolResultFacts{Confine: obs})
 			if !facts.HasCode("SANDBOX_TRY_READ_PATH") || !strings.Contains(out, "Do not start replacement work while this job is running") {
 				t.Fatalf("running refusal lost its dependency: %s", out)
@@ -155,7 +156,7 @@ func TestOptionalProtectedReadNoticePreservesSuccessfulCommand(t *testing.T) {
 			{Operation: "file-read-data", Target: path, Grant: path, Layer: confine.FloorReadKeyMaterial, Recovery: confine.RecoverReadPath},
 		}},
 	}}
-	ctx := tools.WithCallReach(t.Context(), toolreach.Offered([]string{"command"}))
+	ctx := toolreach.WithRequest(t.Context(), toolreach.Offered([]string{"command"}))
 	out, facts := mgr.ToolPolicy.AfterTool(ctx, sess, "command", nil, original, 1, raised)
 	if !facts.Succeeded() || !slices.Equal(facts.Codes, []string{code}) || invocation.SettlementIsolation(nil, facts.Codes) != nil {
 		t.Fatalf("successful command became an isolation stop: %+v", facts)

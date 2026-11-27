@@ -64,19 +64,6 @@ func FirstJSONValue(content string) (string, bool) {
 	return out, true
 }
 
-// First returns the first ```json fenced payload in content, if any.
-func First(content string) (string, bool) {
-	match := fenceRE.FindStringSubmatch(content)
-	if len(match) < 2 {
-		return "", false
-	}
-	payload := strings.TrimSpace(match[1])
-	if payload == "" {
-		return "", false
-	}
-	return payload, true
-}
-
 // EnvelopeOnly reports whether content is exclusively one JSON payload — bare JSON
 // or a single markdown fence with no surrounding prose. valid parses a candidate;
 // callers supply domain-specific decode.

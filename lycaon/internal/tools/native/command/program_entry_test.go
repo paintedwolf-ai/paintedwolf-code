@@ -15,8 +15,12 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/programtest"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -517,4 +521,124 @@ func TestProgramEntryStatesTheSettledRun(t *testing.T) {
 			t.Fatalf("%s stated %+v, want %s", c.program, out.SourceRun, c.verdict)
 		}
 	}
+}
+
+func TestProgramRuntimeOutputWindowFollowsActorSedAdmission(t *testing.T) {
+	var big strings.Builder
+	for i := 1; i <= 500; i++ {
+		fmt.Fprintf(&big, "line-%04d: abcdefghijklmnopqrstuvwxyz0123456789\n", i)
+	}
+	payload := big.String()
+
+	newSedFixture := func(t *testing.T) *programFixture {
+		t.Helper()
+		return &programFixture{programtest.New(t, programtest.Options{
+			Natives: func(string) map[string]command.NativeOperation {
+				return map[string]command.NativeOperation{"sed": {Tool: "sed", ClosedForms: true}}
+			},
+		})}
+	}
+
+	t.Run("command offered and sed admitted", func(t *testing.T) {
+		f := newSedFixture(t)
+		testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(f.Dir, "big.txt"), []byte(payload), 0o644))
+		f.Context = func(_ string, tc *tools.ToolContext) {
+			tc.Host.ModelContextWindow = 16384
+			tc.Turn.TurnOfferedToolNames = []string{"command"}
+			tc.Turn.TurnOfferedToolSchemas = promptstest.ProjectedToolSchemas(t, "command")
+		}
+		out, err := f.call(t, t.Context(), "external -- /bin/cat big.txt")
+		testutil.FailErr(t, "run cat big.txt", err)
+		res := decodeOutcome(t, out)
+		if !strings.Contains(res.Stdout, "@output/") || !strings.Contains(res.Stdout, "(sed -n '") {
+			t.Fatalf("expected saved path and sed continuation when sed is admitted, got:\n%s", res.Stdout)
+		}
+	})
+
+	t.Run("unprojected turn context omits sed without stock fallback", func(t *testing.T) {
+		f := newSedFixture(t)
+		testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(f.Dir, "big.txt"), []byte(payload), 0o644))
+		f.Context = func(_ string, tc *tools.ToolContext) {
+			tc.Host.ModelContextWindow = 16384
+		}
+		out, err := f.call(t, t.Context(), "external -- /bin/cat big.txt")
+		testutil.FailErr(t, "run cat big.txt without turn projection", err)
+		res := decodeOutcome(t, out)
+		if !strings.Contains(res.Stdout, "@output/") || strings.Contains(res.Stdout, "sed -n") {
+			t.Fatalf("unprojected turn must retain saved path and omit sed continuation:\n%s", res.Stdout)
+		}
+	})
+
+	t.Run("command offered with missing or narrowed command schema", func(t *testing.T) {
+		for label, schemas := range map[string]map[string]map[string]any{
+			"missing":  nil,
+			"narrowed": {"command": {"type": "object", "properties": map[string]any{}}},
+		} {
+			f := newSedFixture(t)
+			testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(f.Dir, "big.txt"), []byte(payload), 0o644))
+			f.Context = func(_ string, tc *tools.ToolContext) {
+				tc.Host.ModelContextWindow = 16384
+				tc.Turn.TurnOfferedToolNames = []string{"command"}
+				tc.Turn.TurnOfferedToolSchemas = schemas
+			}
+			out, err := f.call(t, t.Context(), "external -- /bin/cat big.txt")
+			testutil.FailErr(t, "run cat big.txt ("+label+")", err)
+			res := decodeOutcome(t, out)
+			if !strings.Contains(res.Stdout, "@output/") {
+				t.Fatalf("%s schema lost saved path:\n%s", label, res.Stdout)
+			}
+			if strings.Contains(res.Stdout, "sed -n") {
+				t.Fatalf("%s schema leaked sed continuation:\n%s", label, res.Stdout)
+			}
+		}
+	})
+
+	t.Run("command offered and sed denied", func(t *testing.T) {
+		f := newSedFixture(t)
+		testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(f.Dir, "big.txt"), []byte(payload), 0o644))
+		classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandExternalExec)
+		testutil.FailErr(t, "compile profile effects", err)
+		deniedBoundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{
+			ID:             "sed_denied",
+			Tools:          map[string]bool{"command": true, "verify": true},
+			DenyTools:      []string{"sed"},
+			CommandEffects: classes,
+		}})
+		f.Runtime.Boundary = deniedBoundary
+		f.Runtime.Executor = toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(deniedBoundary), f.Runtime.Registry, "sed_denied")
+		f.Context = func(_ string, tc *tools.ToolContext) {
+			tc.Identity.Agent = "sed_denied"
+			tc.Host.ModelContextWindow = 16384
+			tc.Turn.TurnOfferedToolNames = []string{"command"}
+		}
+		out, err := f.call(t, t.Context(), "external -- /bin/cat big.txt")
+		testutil.FailErr(t, "run cat big.txt with sed denied", err)
+		res := decodeOutcome(t, out)
+		if !strings.Contains(res.Stdout, "@output/") {
+			t.Fatalf("expected saved path preserved when sed is denied, got:\n%s", res.Stdout)
+		}
+		if strings.Contains(res.Stdout, "sed -n") {
+			t.Fatalf("sed-denied runtime leaked sed continuation:\n%s", res.Stdout)
+		}
+	})
+
+	t.Run("command not offered on turn", func(t *testing.T) {
+		f := newSedFixture(t)
+		testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(f.Dir, "big.txt"), []byte(payload), 0o644))
+		f.Context = func(_ string, tc *tools.ToolContext) {
+			tc.Host.ModelContextWindow = 16384
+			tc.Turn.TurnOfferedToolNames = []string{"verify"}
+		}
+		out, err := f.Invoke(t, t.Context(), "verify", map[string]any{"command": "external -- /bin/cat big.txt"}, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+			return f.Runtime.Run(ctx, "verify", args, tc)
+		})
+		testutil.FailErr(t, "run verify cat big.txt without command offered", err)
+		res := decodeOutcome(t, out)
+		if !strings.Contains(res.Stdout, "@output/") {
+			t.Fatalf("expected saved path preserved when command is unoffered, got:\n%s", res.Stdout)
+		}
+		if strings.Contains(res.Stdout, "sed -n") {
+			t.Fatalf("command-unoffered runtime leaked sed continuation:\n%s", res.Stdout)
+		}
+	})
 }

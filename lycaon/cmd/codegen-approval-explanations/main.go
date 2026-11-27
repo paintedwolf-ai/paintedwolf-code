@@ -351,14 +351,6 @@ var entrySpecs = map[string]spec{
 		allow:   "advancing workflow phases",
 		vars:    map[string]any{"project": "my-app"},
 	},
-	"workflow_user_feedback": {
-		tier:    "irreversible",
-		what:    "Record user feedback on the active workflow.",
-		who:     "The workflow run — feedback may influence later phases.",
-		ifWrong: "Recorded feedback persists on the run.",
-		allow:   "recording workflow feedback",
-		vars:    map[string]any{"project": "my-app"},
-	},
 }
 
 func fatal(err error) {

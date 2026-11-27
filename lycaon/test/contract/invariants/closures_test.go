@@ -1,6 +1,7 @@
 package invariants_test
 
 import (
+	"github.com/lycaon/lycaon/test/contract/invariants/invariantstest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,24 +34,24 @@ func (m failureModes) run(t *testing.T) {
 	for name, tc := range map[string]struct {
 		rule   invariants.Invariant
 		corpus func(t *testing.T) *invariants.Corpus
-		want   outcome
+		want   invariantstest.Outcome
 	}{
-		"clean":            {rule: m.rule, corpus: tree(m.clean), want: passes},
-		"seeded violation": {rule: m.rule, corpus: tree(m.seeded), want: violates},
-		"renamed anchor":   {rule: m.rule, corpus: tree(m.renamed), want: missesAnchor},
-		"stale exemption":  {rule: stale, corpus: tree(m.clean), want: staleExemption},
-		"empty corpus":     {rule: m.rule, corpus: m.empty, want: fails},
-		"unreadable file":  {rule: m.unreadable, corpus: tree(m.unreadableFiles), want: fails},
+		"clean":            {rule: m.rule, corpus: tree(m.clean), want: invariantstest.Passes},
+		"seeded violation": {rule: m.rule, corpus: tree(m.seeded), want: invariantstest.Violates},
+		"renamed anchor":   {rule: m.rule, corpus: tree(m.renamed), want: invariantstest.MissesAnchor},
+		"stale exemption":  {rule: stale, corpus: tree(m.clean), want: invariantstest.StaleExemption},
+		"empty corpus":     {rule: m.rule, corpus: m.empty, want: invariantstest.Fails},
+		"unreadable file":  {rule: m.unreadable, corpus: tree(m.unreadableFiles), want: invariantstest.Fails},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			expect(t, invariants.Evaluate(tc.corpus(t), tc.rule), tc.want, 0)
+			invariantstest.Expect(t, invariants.Evaluate(tc.corpus(t), tc.rule), tc.want, 0)
 		})
 	}
 }
 
 func tree(files map[string]string) func(t *testing.T) *invariants.Corpus {
-	return func(t *testing.T) *invariants.Corpus { return fixture(t, files) }
+	return func(t *testing.T) *invariants.Corpus { return invariantstest.Fixture(t, files) }
 }
 
 const vendorDir = "lycaon/config/runtime/scanners/rules/vendor"
@@ -59,18 +60,18 @@ func TestVendorPinFailsClosed(t *testing.T) {
 	t.Parallel()
 	clean := map[string]string{vendorDir + "/x/rules/rule.yaml": "rules: []\n"}
 	failureModes{
-		rule:  rule(t, vendorpin.Family, "scan-rule-trees-hold-only-regular-files"),
+		rule:  invariantstest.Rule(t, vendorpin.Family, "scan-rule-trees-hold-only-regular-files"),
 		clean: clean,
 		// A nested .git turns the catalog into a submodule pointer.
-		seeded:  with(clean, map[string]string{vendorDir + "/x/.git/HEAD": "ref: refs/heads/main\n"}),
+		seeded:  invariantstest.With(clean, map[string]string{vendorDir + "/x/.git/HEAD": "ref: refs/heads/main\n"}),
 		renamed: map[string]string{"lycaon/config/runtime/scanners/rules/vendored/x/rule.yaml": "rules: []\n"},
 		empty: func(t *testing.T) *invariants.Corpus {
-			corpus := fixture(t, map[string]string{"lycaon/config/runtime/scanners/rules/README.md": "rules\n"})
+			corpus := invariantstest.Fixture(t, map[string]string{"lycaon/config/runtime/scanners/rules/README.md": "rules\n"})
 			contractcheck.FailErr(t, "create the vendor directory", os.MkdirAll(filepath.Join(corpus.Root(), filepath.FromSlash(vendorDir)), 0o755))
 			return corpus
 		},
-		// A tree git cannot read fails the tracked-files rule.
-		unreadable:      rule(t, vendorpin.Family, "scan-rule-files-are-tracked"),
+		// A tree git cannot read invariantstest.Fails the tracked-files rule.
+		unreadable:      invariantstest.Rule(t, vendorpin.Family, "scan-rule-files-are-tracked"),
 		unreadableFiles: clean,
 	}.run(t)
 }
@@ -86,7 +87,7 @@ func diagnosticsSource(severity string) string {
 func TestEnumClosureFailsClosed(t *testing.T) {
 	t.Parallel()
 	clean := map[string]string{diagnostics: diagnosticsSource("diagnosticSeverity")}
-	extension := rule(t, enumclosure.Family, "extension-diagnostics-are-registered-and-graded")
+	extension := invariantstest.Rule(t, enumclosure.Family, "extension-diagnostics-are-registered-and-graded")
 	failureModes{
 		rule:  extension,
 		clean: clean,
@@ -97,7 +98,7 @@ func TestEnumClosureFailsClosed(t *testing.T) {
 		empty: tree(map[string]string{diagnostics: "package extpacks\n\nconst CodeA = \"a\"\n\n" +
 			"var allDiagnosticCodes = []string{CodeA}\n\nvar diagnosticSeverity = map[string]string{CodeA: \"error\"}\n"}),
 		unreadable:      extension,
-		unreadableFiles: with(clean, map[string]string{"lycaon/internal/extpacks/broken.go": "package extpacks\n\nfunc broken( {\n"}),
+		unreadableFiles: invariantstest.With(clean, map[string]string{"lycaon/internal/extpacks/broken.go": "package extpacks\n\nfunc broken( {\n"}),
 	}.run(t)
 }
 
@@ -117,17 +118,17 @@ func TestDenSourceFailsClosed(t *testing.T) {
 		"docs/guide.md":                     "Open Settings → General → Display.\n",
 		"lycaon/config/packs/p/guidance.md": "See Settings → Cost.\n",
 	}
-	pointers := rule(t, densource.Family, "settings-pointers-name-real-sections")
+	pointers := invariantstest.Rule(t, densource.Family, "settings-pointers-name-real-sections")
 	failureModes{
 		rule:    pointers,
 		clean:   clean,
-		seeded:  with(clean, map[string]string{"docs/guide.md": "Open Settings → Nowhere to look.\n"}),
-		renamed: with(clean, map[string]string{navModel: "", "lycaon-den/src/settings/nav.ts": navSections}),
+		seeded:  invariantstest.With(clean, map[string]string{"docs/guide.md": "Open Settings → Nowhere to look.\n"}),
+		renamed: invariantstest.With(clean, map[string]string{navModel: "", "lycaon-den/src/settings/nav.ts": navSections}),
 		// No copy under the stock packs: the selection is empty.
 		empty: tree(map[string]string{navModel: navSections, "docs/guide.md": "Open Settings → Cost.\n"}),
 		// A navigation model that parses to too few labels ends the check.
 		unreadable:      pointers,
-		unreadableFiles: with(clean, map[string]string{navModel: `{ label: "General" }`}),
+		unreadableFiles: invariantstest.With(clean, map[string]string{navModel: `{ label: "General" }`}),
 	}.run(t)
 }
 
@@ -140,15 +141,15 @@ func TestClosureFailsClosed(t *testing.T) {
 		"scripts/debug-session.sh": "#!/bin/sh\necho capturing\n",
 		"scripts/debug-capture.sh": "#!/bin/sh\necho done\n",
 	}
-	scripts := rule(t, closure.Family, "capture-scripts-name-only-catalog-files")
+	scripts := invariantstest.Rule(t, closure.Family, "capture-scripts-name-only-catalog-files")
 	failureModes{
 		rule:       scripts,
 		clean:      clean,
-		seeded:     with(clean, map[string]string{"scripts/debug-capture.sh": "#!/bin/sh\necho > bogus-capture.jsonl\n"}),
-		renamed:    with(clean, map[string]string{debugPaths: "package debugpaths\n\nfunc Catalog() {}\n"}),
-		empty:      tree(with(clean, map[string]string{"scripts/debug-capture.sh": ""})),
+		seeded:     invariantstest.With(clean, map[string]string{"scripts/debug-capture.sh": "#!/bin/sh\necho > bogus-capture.jsonl\n"}),
+		renamed:    invariantstest.With(clean, map[string]string{debugPaths: "package debugpaths\n\nfunc Catalog() {}\n"}),
+		empty:      tree(invariantstest.With(clean, map[string]string{"scripts/debug-capture.sh": ""})),
 		unreadable: scripts,
-		unreadableFiles: with(clean, map[string]string{
+		unreadableFiles: invariantstest.With(clean, map[string]string{
 			"lycaon/internal/debugpaths/broken.go": "package debugpaths\n\nfunc broken( {\n",
 		}),
 	}.run(t)
@@ -169,16 +170,16 @@ var readerFactsTree = map[string]string{
 func TestPromptVarsThroughVarsFailsClosed(t *testing.T) {
 	t.Parallel()
 	failureModes{
-		rule:  bare(rule(t, forbiddencalls.Family, "prompt-vars-through-vars")),
+		rule:  invariantstest.Bare(invariantstest.Rule(t, forbiddencalls.Family, "prompt-vars-through-vars")),
 		clean: readerFactsTree,
-		seeded: with(readerFactsTree, map[string]string{
+		seeded: invariantstest.With(readerFactsTree, map[string]string{
 			"lycaon/internal/kick/render.go": "package kick\n\nimport \"github.com/lycaon/lycaon/internal/prompts\"\n\nfunc render(r prompts.Reader) map[string]any { return r.Facts() }\n",
 		}),
-		renamed: with(readerFactsTree, map[string]string{
+		renamed: invariantstest.With(readerFactsTree, map[string]string{
 			promptsDir + "reader_facts_vocab.go": strings.ReplaceAll(readerFactsTree[promptsDir+"reader_facts_vocab.go"], "func Vars(", "func Variables("),
 		}),
 		empty:           tree(nil),
-		unreadable:      bare(rule(t, forbiddencalls.Family, "prompt-vars-through-vars")),
-		unreadableFiles: with(readerFactsTree, map[string]string{promptsDir + "broken.go": "package prompts\n\nfunc broken( {\n"}),
+		unreadable:      invariantstest.Bare(invariantstest.Rule(t, forbiddencalls.Family, "prompt-vars-through-vars")),
+		unreadableFiles: invariantstest.With(readerFactsTree, map[string]string{promptsDir + "broken.go": "package prompts\n\nfunc broken( {\n"}),
 	}.run(t)
 }

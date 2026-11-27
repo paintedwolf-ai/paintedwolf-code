@@ -14,5 +14,5 @@
 {% endif %}{% endfor %}{% if root_omitted_count > 0 %}{{ root_omitted_count }} folders omitted; use workspace tools for the complete set.
 {% endif %}Use @<label>/path to address a specific folder.
 {% endif %}{% for line in lines %}{{ line.text }}
-{% endfor %}{% if workers_omitted > 0 %}Workers omitted: {{ workers_omitted }} older workers{% if profile_has_pack_board %} — call `pack_board` for full pages{% endif %}.
+{% endfor %}{% if workers_omitted > 0 %}Workers omitted: {{ workers_omitted }} older workers{% if profile_has_pack_board %} — call `pack_board` for full pages{% elif profile_can_request.pack_board %} — load the board tool via `request_tools(need="pack_board")` for full pages{% endif %}.
 {% endif %}

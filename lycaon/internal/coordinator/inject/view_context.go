@@ -11,8 +11,8 @@ import (
 )
 
 // RenderViewContextBlock renders guidance/view-context.md for the view a
-// prompt carried. readOffered is the current surface's answer.
-func RenderViewContextBlock(ctx context.Context, renderer *prompts.InjectRenderer, sessionID string, view api.ViewContext, readOffered bool) string {
+// prompt carried.
+func RenderViewContextBlock(ctx context.Context, renderer *prompts.InjectRenderer, sessionID string, view api.ViewContext) string {
 	if renderer == nil {
 		return ""
 	}
@@ -32,7 +32,7 @@ func RenderViewContextBlock(ctx context.Context, renderer *prompts.InjectRendere
 	for _, f := range view.Findings {
 		findings = append(findings, map[string]any{"rule_id": f.RuleID, "level": string(f.Level), "location": locationText(f.Location)})
 	}
-	vars := map[string]any{"editors": editors, "diffs": diffs, "findings": findings, "read_offered": readOffered, "folder": "", "search_query": "", "search_hit": ""}
+	vars := map[string]any{"editors": editors, "diffs": diffs, "findings": findings, "folder": "", "search_query": "", "search_hit": ""}
 	if view.Folder != nil {
 		vars["folder"] = view.Folder.DisplayPath
 	}

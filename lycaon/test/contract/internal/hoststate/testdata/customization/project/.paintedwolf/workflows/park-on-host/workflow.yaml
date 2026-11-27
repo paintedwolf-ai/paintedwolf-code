@@ -1,0 +1,12 @@
+id: fixture-park-on-host
+version: 1.0.0
+name: Fixture park on host
+trigger: /fixture-park-on-host
+request:
+  question: What should this phase work on?
+phases:
+  - id: bound
+    activity_label: Working
+    coordinator_surface: await_host
+    surface_template: agents/coordinator-surface-orchestrate.md
+    mode_refs: [implement-park]
