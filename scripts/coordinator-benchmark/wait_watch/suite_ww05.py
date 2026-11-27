@@ -64,23 +64,54 @@ def _write_json(path: pathlib.Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _resolve_root_label(application: Any, project_id: str, project_dir: pathlib.Path) -> str:
-    """Query /v1/projects/<id> to discover the exact attached root label for file_change / git_ref."""
+def _resolve_root_label(
+    application: Any,
+    project_id: str,
+    root_id: str,
+    project_dir: pathlib.Path,
+) -> str:
+    """Resolve an authorized root label or root_id accepted by watch file_change / git_ref."""
     try:
-        proj = application.request(f"/v1/projects/{project_id}")
-        roots = proj.get("roots") or []
-        for root in roots:
-            if not isinstance(root, dict):
+        listing = application.request("/v1/projects", missing=True)
+        projects = listing.get("projects") if isinstance(listing, dict) else (listing if isinstance(listing, list) else [])
+        for proj in projects or []:
+            if not isinstance(proj, dict) or proj.get("id") != project_id:
                 continue
-            label = str(root.get("label") or "").strip().lstrip("@")
-            if label:
-                return label
-            rid = str(root.get("id") or "").strip()
-            if rid:
-                return rid
+            for root in proj.get("roots") or []:
+                if not isinstance(root, dict):
+                    continue
+                label = str(root.get("label") or "").strip().lstrip("@")
+                if label:
+                    return label
+                rid = str(root.get("id") or "").strip()
+                if rid:
+                    return rid
     except Exception:
         pass
+    if root_id:
+        return root_id
     return project_dir.name
+
+
+def _assert_watch_accepted(
+    watch_res: dict[str, Any] | None,
+    watch_parsed: dict[str, Any],
+    *,
+    phase: str,
+    driver: WaitWatchDriver,
+) -> tuple[str, str]:
+    """Fail fast with exact tool result diagnostics if watch registration was rejected."""
+    outcome = (watch_res or {}).get("outcome")
+    watch_id = str(watch_parsed.get("watch_id") or "").strip()
+    watch_handle = str(watch_parsed.get("handle") or "").strip()
+    if outcome == "rejected" or not watch_id:
+        raise BarrierTimeoutError(
+            f"watch registration rejected or missing watch_id during {phase}: {json.dumps(watch_res)[:500]}",
+            phase=phase,
+            verdict="incomplete",
+            diagnostics={"watch_result": watch_res, "watch_parsed": watch_parsed, **driver._dump_state()},
+        )
+    return watch_handle, watch_id
 
 
 def _extract_watch_match_text(pending_payload: dict[str, Any]) -> str:
@@ -249,16 +280,15 @@ def run_c14_cursor_burst_wrap(
     script_path.write_text(
         "import json, os, pathlib, sys, time\n"
         "root = pathlib.Path(__file__).resolve().parent\n"
-        f"sys.stdout.write({pre_reg_line!r})\n"
-        "sys.stdout.flush()\n"
+        f"os.write(1, {pre_reg_line.encode('utf-8')!r})\n"
+        "time.sleep(0.25)\n"
         "(root / 'reached.tmp').write_text(json.dumps({'pid': os.getpid(), 'ts_ns': time.time_ns()}), encoding='utf-8')\n"
         "os.replace(root / 'reached.tmp', root / 'reached')\n"
         "deadline = time.monotonic() + 60\n"
         "while not (root / 'release').is_file():\n"
         "    if time.monotonic() >= deadline: sys.exit(124)\n"
         "    time.sleep(0.05)\n"
-        f"sys.stdout.write({burst_payload!r})\n"
-        "sys.stdout.flush()\n"
+        f"os.write(1, {burst_payload.encode('utf-8')!r})\n"
         "(root / 'burst_done.tmp').write_text('ok', encoding='utf-8')\n"
         "os.replace(root / 'burst_done.tmp', root / 'burst_done')\n"
         "while not (root / 'exit_gate').is_file():\n"
@@ -311,7 +341,7 @@ def run_c14_cursor_burst_wrap(
         )
 
         _, cmd_res, cmd_handle = driver.call_command(
-            "python3 -B .ww05-c14/burst_writer.py &",
+            "python3 -u -B .ww05-c14/burst_writer.py &",
             progress_update="- [ ] Launch C14 burst writer",
         )
         source_obs.record_event("command_launched", handle=cmd_handle, outcome=(cmd_res or {}).get("outcome"))
@@ -323,22 +353,32 @@ def run_c14_cursor_burst_wrap(
         source_obs.record_event("pre_reg_written", handle=cmd_handle, bytes=len(pre_reg_line))
 
         # 1. Register cursor=0 catch-up watch (must immediately catch up pre-reg bytes).
-        _, _, catchup_parsed = driver.call_watch({
+        _, catchup_res, catchup_parsed = driver.call_watch({
             "conditions": [{"kind": "process_output", "handle": cmd_handle, "cursor": 0}],
         })
+        catchup_handle, _ = _assert_watch_accepted(catchup_res, catchup_parsed, phase="c14.catchup_watch", driver=driver)
         catchup_pending = int(catchup_parsed.get("pending_matches") or 0)
-        source_obs.record_event("catchup_watch_registered", handle=catchup_parsed.get("handle"), pending=catchup_pending)
+        source_obs.record_event("catchup_watch_registered", handle=catchup_handle, pending=catchup_pending)
 
         # 2. Register live repeating process_output watch starting at current cursor, then park on it.
-        _, _, live_parsed = driver.call_watch({
+        _, live_res, live_parsed = driver.call_watch({
             "conditions": [{"kind": "process_output", "handle": cmd_handle}],
             "repeat": True,
         })
-        watch_id = str(live_parsed.get("watch_id") or "")
-        wait_cond = live_parsed.get("wait_condition") or {"kind": "watch_match", "handles": [live_parsed.get("handle", "")]}
-        source_obs.record_event("live_output_watch_registered", watch_id=watch_id, handle=live_parsed.get("handle"))
+        live_handle, watch_id = _assert_watch_accepted(live_res, live_parsed, phase="c14.live_watch", driver=driver)
+        wait_cond = live_parsed.get("wait_condition") or {"kind": "watch_match", "handles": [live_handle]}
+        source_obs.record_event("live_output_watch_registered", watch_id=watch_id, handle=live_handle)
 
-        driver.call_wait([wait_cond], until_complete=False, timeout_ms=int(timeout_s * 1000), reason="C14 output burst")
+        _, wait_res, wait_parsed = driver.call_wait(
+            [wait_cond], until_complete=False, timeout_ms=int(timeout_s * 1000), reason="C14 output burst"
+        )
+        if (wait_res or {}).get("outcome") == "rejected":
+            raise BarrierTimeoutError(
+                f"C14 wait rejected: {json.dumps(wait_res)[:500]}",
+                phase="c14.wait_rejected",
+                verdict="incomplete",
+                diagnostics={"wait_result": wait_res, **driver._dump_state()},
+            )
         _confirm_parked_lease(app_dir / "store.db", sse_path, session_id, timeout_s, driver._dump_state)
 
         # Release burst gate and wait for resumed pending model turn.
@@ -463,10 +503,10 @@ def run_c15_file_attribution(
         application.ready()
         sse = SSECollector(application.url, application.token, sse_path)
         sse.start()
-        session_id, project_id, _, _ = create_isolated_session(
+        session_id, project_id, root_id, _ = create_isolated_session(
             application, project_dir, {"profile": "implement", "turns": [1, 2, 3]}
         )
-        root_label = _resolve_root_label(application, project_id, project_dir)
+        root_label = _resolve_root_label(application, project_id, root_id, project_dir)
         submission_id = str(uuid.uuid4())
         application.request(
             f"/v1/sessions/{session_id}/prompts",
@@ -481,16 +521,24 @@ def run_c15_file_attribution(
             sse_path=sse_path,
         )
 
-        _, _, watch_parsed = driver.call_watch({
+        _, watch_res, watch_parsed = driver.call_watch({
             "conditions": [{"kind": "file_change", "root": root_label, "path": "watched.txt"}],
             "repeat": True,
         })
-        watch_handle = str(watch_parsed.get("handle") or "")
-        watch_id = str(watch_parsed.get("watch_id") or "")
+        watch_handle, watch_id = _assert_watch_accepted(watch_res, watch_parsed, phase="c15.file_watch", driver=driver)
         wait_cond = watch_parsed.get("wait_condition") or {"kind": "watch_match", "handles": [watch_handle]}
         source_obs.record_event("file_watch_registered", watch_id=watch_id, handle=watch_handle, root=root_label)
 
-        driver.call_wait([wait_cond], until_complete=False, timeout_ms=int(timeout_s * 1000), reason="C15 external file write")
+        _, wait_res, _ = driver.call_wait(
+            [wait_cond], until_complete=False, timeout_ms=int(timeout_s * 1000), reason="C15 external file write"
+        )
+        if (wait_res or {}).get("outcome") == "rejected":
+            raise BarrierTimeoutError(
+                f"C15 wait rejected: {json.dumps(wait_res)[:500]}",
+                phase="c15.wait_rejected",
+                verdict="incomplete",
+                diagnostics={"wait_result": wait_res, **driver._dump_state()},
+            )
         _confirm_parked_lease(app_dir / "store.db", sse_path, session_id, timeout_s, driver._dump_state)
 
         # Perform independent external write on disk.
@@ -612,10 +660,10 @@ def run_c16_git_ref(
         application.ready()
         sse = SSECollector(application.url, application.token, sse_path)
         sse.start()
-        session_id, project_id, _, _ = create_isolated_session(
+        session_id, project_id, root_id, _ = create_isolated_session(
             application, project_dir, {"profile": "implement", "turns": [1, 2, 3]}
         )
-        root_label = _resolve_root_label(application, project_id, project_dir)
+        root_label = _resolve_root_label(application, project_id, root_id, project_dir)
         submission_id = str(uuid.uuid4())
         application.request(
             f"/v1/sessions/{session_id}/prompts",
@@ -630,16 +678,24 @@ def run_c16_git_ref(
             sse_path=sse_path,
         )
 
-        _, _, watch_parsed = driver.call_watch({
+        _, watch_res, watch_parsed = driver.call_watch({
             "conditions": [{"kind": "git_ref", "root": root_label, "ref": "refs/heads/main"}],
             "repeat": True,
         })
-        watch_handle = str(watch_parsed.get("handle") or "")
-        watch_id = str(watch_parsed.get("watch_id") or "")
+        watch_handle, watch_id = _assert_watch_accepted(watch_res, watch_parsed, phase="c16.git_watch", driver=driver)
         wait_cond = watch_parsed.get("wait_condition") or {"kind": "watch_match", "handles": [watch_handle]}
         source_obs.record_event("git_watch_registered", watch_id=watch_id, handle=watch_handle, baseline_oid=oid1)
 
-        driver.call_wait([wait_cond], until_complete=False, timeout_ms=int(timeout_s * 1000), reason="C16 git ref advance")
+        _, wait_res, _ = driver.call_wait(
+            [wait_cond], until_complete=False, timeout_ms=int(timeout_s * 1000), reason="C16 git ref advance"
+        )
+        if (wait_res or {}).get("outcome") == "rejected":
+            raise BarrierTimeoutError(
+                f"C16 wait rejected: {json.dumps(wait_res)[:500]}",
+                phase="c16.wait_rejected",
+                verdict="incomplete",
+                diagnostics={"wait_result": wait_res, **driver._dump_state()},
+            )
         _confirm_parked_lease(app_dir / "store.db", sse_path, session_id, timeout_s, driver._dump_state)
 
         rec = git_fixture.release(message="ww05 c16 advance main")
@@ -829,17 +885,19 @@ def run_c17_timer_sidecar_restart(
             sse_path=sse1_path,
         )
 
-        _, _, watch_parsed = driver1.call_watch({
-            "conditions": [{"kind": "timer", "delay_ms": 4000}],
+        _, watch_res, watch_parsed = driver1.call_watch({
+            "conditions": [{"kind": "timer", "delay_ms": 8000}],
             "delivery": "wake",
         })
-        watch_handle = str(watch_parsed.get("handle") or "")
-        watch_id = str(watch_parsed.get("watch_id") or "")
-        source_obs.record_event("timer_watch_armed", watch_id=watch_id, handle=watch_handle, delay_ms=4000, pre_pid=pre_pid)
+        watch_handle, watch_id = _assert_watch_accepted(watch_res, watch_parsed, phase="c17.timer_watch", driver=driver1)
+        source_obs.record_event("timer_watch_armed", watch_id=watch_id, handle=watch_handle, delay_ms=8000, pre_pid=pre_pid)
 
         post_watch_req = driver1.await_pending("c17:finish_before_restart")
         driver1.finish_turn(post_watch_req, "Timer watch armed; ready for sidecar restart.")
-        time.sleep(0.3)
+        TimerGuard(timeout_s, phase="c17.wait_pre_restart_settled", dump_state=driver1._dump_state).poll(
+            lambda: application.submission_settled(session_id, submission_id),
+            detail="pre-restart submission did not settle to idle",
+        )
 
         # Phase 2: Restart sidecar in-place against the existing app_dir, store.db, config, and token.
         sse1.close()
