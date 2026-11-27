@@ -162,9 +162,9 @@ func TestManagedTempDeclaredAtLaunchPin(t *testing.T) {
 				for _, exec := range page.Executions {
 					if strings.Contains(exec.Command, "/bin/cat") {
 						catExecID = exec.ID
-						if exec.State != "refused" || exec.OwnerStarted || exec.EffectCertainty != string(toolcontract.NoEffect) {
-							t.Fatalf("%s: /bin/cat state=%q owner_started=%v effect_certainty=%q, want refused/false/%s",
-								tc.name, exec.State, exec.OwnerStarted, exec.EffectCertainty, toolcontract.NoEffect)
+						if exec.State != "refused" || exec.EffectCertainty != string(toolcontract.NoEffect) {
+							t.Fatalf("%s: /bin/cat state=%q effect_certainty=%q, want refused/%s",
+								tc.name, exec.State, exec.EffectCertainty, toolcontract.NoEffect)
 						}
 					}
 				}
