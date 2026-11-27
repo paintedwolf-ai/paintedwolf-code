@@ -4,11 +4,19 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
+import pathlib
 import unittest
+from collections import Counter
 from typing import Any
 
 from wea.controls import make_healthy_baseline
 from wea.tb07_approvals import H1_PROGRAM_STATE_LIMIT_BYTES, TB07_SLOTS, check_tb07_evidence
+from wea.tb07_sidecar_runner import (
+    EXPECTED_SIDECAR_COUNTS_BY_FAMILY,
+    TB07_SIDECAR_SLOT_SPECS,
+    _build_receipt,
+)
 
 
 def _sha(text: str) -> str:
@@ -236,6 +244,73 @@ class TestTB07ApprovalsChecker(unittest.TestCase):
         res3 = check_tb07_evidence(ev3)
         self.assertEqual(res3["verdict"], "fail")
         self.assertIn("corrupt_grant_replayed_on_restart", res3["failed_rule_ids"])
+
+
+class TestTB07InProcManifestAndSidecarRunner(unittest.TestCase):
+    def test_inproc_manifest_covers_all_9_ledger_slots_and_real_go_selectors(self) -> None:
+        wea_dir = pathlib.Path(__file__).resolve().parent
+        repo_root = wea_dir.parent.parent.parent
+        manifest_path = wea_dir / "tb07_inproc_manifest.json"
+        self.assertTrue(manifest_path.is_file(), "tb07_inproc_manifest.json must exist")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(manifest["card"], "TB07")
+        self.assertEqual(manifest["lane"], "in-process")
+        self.assertEqual(manifest["product_baseline"]["git_head"], "bbeb46e72ce3d1cfc052259cadcce29185bb40bd")
+        self.assertEqual(manifest["total_inproc_slots"], 9)
+        self.assertEqual(len(manifest["slots"]), 9)
+
+        counts = Counter(slot["family"] for slot in manifest["slots"])
+        self.assertEqual(dict(counts), {"A02": 2, "A04": 4, "A12": 3})
+
+        overlay_sources = ""
+        for rel in manifest["test_only_overlays"]:
+            p = repo_root / rel
+            self.assertTrue(p.is_file(), f"overlay file missing: {rel}")
+            overlay_sources += p.read_text(encoding="utf-8") + "\n"
+
+        slot_ids = set()
+        for slot in manifest["slots"]:
+            self.assertNotIn(slot["slot_id"], slot_ids)
+            slot_ids.add(slot["slot_id"])
+            top_fn = slot["go_test_selector"].lstrip("^").rstrip("$").split("/")[0]
+            self.assertIn(f"func {top_fn}(", overlay_sources, f"missing Go test {top_fn}")
+
+    def test_sidecar_slot_schedule_matches_39_ledger_slots(self) -> None:
+        self.assertEqual(len(TB07_SIDECAR_SLOT_SPECS), 39)
+        counts = Counter(s["family"] for s in TB07_SIDECAR_SLOT_SPECS)
+        self.assertEqual(dict(counts), EXPECTED_SIDECAR_COUNTS_BY_FAMILY)
+        self.assertEqual(len({s["slot_id"] for s in TB07_SIDECAR_SLOT_SPECS}), 39)
+
+    def test_sidecar_receipt_schema_and_fail_closed_unverified_provenance(self) -> None:
+        spec = TB07_SIDECAR_SLOT_SPECS[0]
+        prov_ok = {
+            "product_source": {"verified": True, "effective_git_head": "bbeb46e72ce3d1cfc052259cadcce29185bb40bd"},
+            "harness_source": {"git_head": "7a61cae5dbbdb0ec4023189617fa8cd6e8eb4924"},
+        }
+        rec = _build_receipt(
+            spec=spec,
+            prov=prov_ok,
+            typed_result={"outcome": "completed"},
+            independent_observation={"hash_match": True},
+            passed=True,
+        )
+        for key in ("slot_id", "family", "lane", "product_source", "harness_source", "typed_result", "independent_observation", "verdict"):
+            self.assertIn(key, rec)
+        self.assertEqual(rec["lane"], "sidecar")
+        self.assertEqual(rec["verdict"], "pass")
+
+        prov_unverified = copy.deepcopy(prov_ok)
+        prov_unverified["product_source"]["verified"] = False
+        rec_fail = _build_receipt(
+            spec=spec,
+            prov=prov_unverified,
+            typed_result={"outcome": "completed"},
+            independent_observation={"hash_match": True},
+            passed=True,
+        )
+        self.assertEqual(rec_fail["verdict"], "fail")
+        self.assertIn("unverified_source_witness", rec_fail["failure_reasons"])
 
 
 if __name__ == "__main__":
