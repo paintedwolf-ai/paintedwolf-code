@@ -200,7 +200,7 @@ test.describe.serial("portable command desktop smoke", () => {
       await expect(liveChatStage(page).getByTestId("transcript-article-assistant").last()).toContainText("Desktop portable command completed: alpha.");
 
       const { card: settledCard } = await openFoldedCommand(page);
-      await expect(settledCard).toContainText("executions", { timeout: 15_000 });
+      await expect(settledCard).toHaveAttribute("data-status", "done", { timeout: 15_000 });
       const settledReceiptLink = settledCard.getByTestId("action-link-receipt");
       await expect(settledReceiptLink).toBeVisible({ timeout: 15_000 });
       await settledReceiptLink.click();
@@ -223,7 +223,7 @@ test.describe.serial("portable command desktop smoke", () => {
       await reloadToSession(page, project.id, sessionId);
 
       const { card: reloadedCard } = await openFoldedCommand(page);
-      await expect(reloadedCard).toContainText("executions", { timeout: 15_000 });
+      await expect(reloadedCard).toHaveAttribute("data-status", "done", { timeout: 15_000 });
       const reloadedReceiptLink = reloadedCard.getByTestId("action-link-receipt");
       await expect(reloadedReceiptLink).toBeVisible({ timeout: 15_000 });
       await reloadedReceiptLink.click();
@@ -237,7 +237,7 @@ test.describe.serial("portable command desktop smoke", () => {
       await reloadedCard.locator(":scope > .den-transcript-disclosure-header").click();
       await expect(reloadedCard).toHaveAttribute("data-expanded", "false");
       await expandDisclosure(reloadedCard);
-      await expect(reloadedCard).toContainText("executions", { timeout: 15_000 });
+      await expect(reloadedCard).toHaveAttribute("data-status", "done", { timeout: 15_000 });
       await expect(reloadedCard.getByTestId("action-link-receipt")).toBeVisible({ timeout: 15_000 });
       await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
       await recorder.drain();
