@@ -679,6 +679,51 @@ def _strip_leading_delivery_tags(text: str) -> str:
     return "".join(lines[idx:])
 
 
+def _extract_delivered_read_bytes(delivered_text: str) -> bytes:
+    """Derive independent delivered source bytes strictly from `tool_result.content` (Decision 016).
+
+    NEVER reads or substitutes bytes from the fixture file on disk.
+    Preserves blank lines and exact clipped ends (including absence of a trailing newline).
+    """
+    stripped = _strip_leading_delivery_tags(delivered_text)
+    source_text = stripped
+    try:
+        envelope = json.loads(stripped)
+        if isinstance(envelope, Mapping) and isinstance(envelope.get("stdout"), str):
+            source_text = envelope["stdout"]
+    except (TypeError, ValueError):
+        pass
+
+    if not source_text:
+        return b""
+
+    lines = source_text.splitlines(keepends=True)
+    out_parts: list[str] = []
+    for ln in lines:
+        eol = ""
+        if ln.endswith("\r\n"):
+            core, eol = ln[:-2], "\r\n"
+        elif ln.endswith("\n"):
+            core, eol = ln[:-1], "\n"
+        elif ln.endswith("\r"):
+            core, eol = ln[:-1], "\r"
+        else:
+            core = ln
+        nm = _NUMBERED_LINE_RE.match(core)
+        out_parts.append((nm.group("rest") if nm else core) + eol)
+    return "".join(out_parts).encode("utf-8")
+
+
+def _safe_fixture_file(ws_path: pathlib.Path | None, rel_path: str) -> pathlib.Path | None:
+    """Resolve `rel_path` strictly inside `ws_path`, rejecting any traversal outside fixture root."""
+    if ws_path is None or not rel_path:
+        return None
+    candidate = (ws_path / rel_path).resolve()
+    if not _is_within(candidate, ws_path):
+        return None
+    return candidate if candidate.is_file() else None
+
+
 def _format_independent_command_body(delivered_text: str) -> bytes:
     """Derive independent command#1 body from delivered tool_result.content.
 
@@ -1058,29 +1103,41 @@ def run_scripted_session(
                     rec_source_rev = source_revision
                 else:
                     rec_shape = "file_region" if handle_path else ""
-                    fixture_file = (ws_path / handle_path) if (ws_path and handle_path) else None
+                    fixture_file = _safe_fixture_file(ws_path, handle_path)
+                    # Decision 016: Derive delivered bytes strictly from `tool_result.content`,
+                    # NEVER substituting bytes from the fixture file on disk!
+                    rec_bytes = _extract_delivered_read_bytes(delivered_text)
+                    delivered_for_range = rec_bytes.decode("utf-8", errors="replace")
+                    # Preserve numbered lines for numbering check if present in stdout/body
+                    stripped_env = _strip_leading_delivery_tags(delivered_text)
+                    try:
+                        env_obj = json.loads(stripped_env)
+                        range_probe_text = (
+                            env_obj["stdout"]
+                            if isinstance(env_obj, Mapping) and isinstance(env_obj.get("stdout"), str)
+                            else stripped_env
+                        )
+                    except (TypeError, ValueError):
+                        range_probe_text = stripped_env
+
                     ranges, line_numbered, printed_other = _derive_actual_range_and_numbering(
-                        delivered_text,
+                        range_probe_text,
                         delivery_tags=handle_tags,
                         fixture_file=fixture_file,
                     )
-                    # Attribute exact fixture file bytes covered by the delivered range
-                    if fixture_file is not None and fixture_file.is_file():
+                    # Only attribute fixture source_revision when delivered bytes actually match
+                    # the admitted fixture file (never mask a divergence!).
+                    rec_source_rev = source_revision
+                    if fixture_file is not None and ranges:
                         file_bytes = fixture_file.read_bytes()
-                        rec_source_rev = hashlib.sha256(file_bytes).hexdigest()
-                        if ranges:
-                            f_lines = file_bytes.decode("utf-8", errors="replace").splitlines(keepends=True)
-                            selected = [
-                                f_lines[ln_no - 1]
-                                for rng in ranges
-                                for ln_no in range(rng.start, min(rng.end, len(f_lines)) + 1)
-                            ]
-                            rec_bytes = "".join(selected).encode("utf-8")
-                        else:
-                            rec_bytes = file_bytes
-                    else:
-                        rec_source_rev = source_revision
-                        rec_bytes = delivered_text.encode("utf-8")
+                        f_lines = file_bytes.decode("utf-8", errors="replace").splitlines(keepends=True)
+                        expected_slice = "".join(
+                            f_lines[ln_no - 1]
+                            for rng in ranges
+                            for ln_no in range(rng.start, min(rng.end, len(f_lines)) + 1)
+                        ).encode("utf-8")
+                        if rec_bytes == expected_slice:
+                            rec_source_rev = hashlib.sha256(file_bytes).hexdigest()
 
                 delivery_records.append(
                     DeliveryRecord(

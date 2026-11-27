@@ -1978,5 +1978,147 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
                 )
 
 
+    def test_d016_independent_delivered_bytes_and_clipped_blank_lines(self) -> None:
+        """Decision 016 controls: (a) tampered delivered bytes fail parity; (b) blank+clipped preserved."""
+        from grounding.sidecar_driver import _extract_delivered_read_bytes, _safe_fixture_file
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = pathlib.Path(tmp)
+            workspace = tmp_path / "workspace"
+            workspace.mkdir()
+            sample_source = "package sample\n\nfunc Hello() {}\n"
+            (workspace / "sample.go").write_text(sample_source, encoding="utf-8")
+            sample_source_sha = hashlib.sha256(sample_source.encode("utf-8")).hexdigest()
+
+            # Path traversal outside workspace MUST be rejected
+            self.assertIsNone(_safe_fixture_file(workspace, "../../etc/passwd"))
+
+            db_path = tmp_path / "store.db"
+            with contextlib.closing(sqlite3.connect(db_path)) as conn:
+                conn.execute(
+                    "CREATE TABLE evidence_records (session_id TEXT, handle TEXT, kind TEXT, shape TEXT, "
+                    "path TEXT, url TEXT, line_ranges TEXT, content_blob_sha256 TEXT, marks_untrusted INTEGER, superseded_by TEXT)"
+                )
+                conn.execute(
+                    "CREATE TABLE messages (id TEXT PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, "
+                    "grounding_json TEXT, workflow_feedback_json TEXT, host_signal_id TEXT, kind TEXT)"
+                )
+                conn.execute(
+                    "INSERT INTO evidence_records VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        "sess-tm",
+                        "read#1",
+                        "read",
+                        "file_region",
+                        "sample.go",
+                        "",
+                        json.dumps(
+                            {
+                                "v": 1,
+                                "ranges": [{"start": 1, "end": 3}],
+                                "source_delivery": {"source": {"SHA256": sample_source_sha}},
+                            }
+                        ),
+                        sample_source_sha,
+                        0,
+                        None,
+                    ),
+                )
+                conn.execute(
+                    "INSERT INTO messages VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    ("m1", "sess-tm", "assistant", "Done [read#1:3].", json.dumps({"traced": True}), "", "", ""),
+                )
+                conn.commit()
+
+            # Control (a): Fixture file + durable product record both contain value A (`Hello`),
+            # while actual delivered body in tool_result.content contains value B (`Tampered`) -> MUST FAIL!
+            tampered_state: dict[str, int] = {"turn": 0}
+            tampered_stdout = "     1\tpackage sample\n     2\t\n     3\tfunc Tampered() {}\n"
+            tampered_body = (
+                "[read#1 sample.go:1-3]\n"
+                + json.dumps({"program_id": "p1", "state": "completed", "status_code": 0, "stdout": tampered_stdout})
+            )
+
+            class TamperedHandler(BaseHTTPRequestHandler):
+                def log_message(self, _fmt: str, *_args: object) -> None:
+                    return
+
+                def do_GET(self) -> None:  # noqa: N802
+                    if urllib.parse.urlparse(self.path).path == "/harness/llm/pending":
+                        if tampered_state["turn"] == 0:
+                            payload = {"id": "tm-1", "messages": [{"role": "user", "content": "cat -n sample.go"}]}
+                        else:
+                            payload = {
+                                "id": "tm-2",
+                                "messages": [
+                                    {
+                                        "id": "msg-tm-1",
+                                        "role": "tool",
+                                        "evidence_handles": ["read#1"],
+                                        "tool_result": {
+                                            "tool_call_id": "call-tm-1",
+                                            "tool_name": "command",
+                                            "content": tampered_body,
+                                        },
+                                    }
+                                ],
+                            }
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.end_headers()
+                        self.wfile.write(json.dumps(payload).encode("utf-8"))
+                        return
+                    self.send_response(404)
+                    self.end_headers()
+
+                def do_POST(self) -> None:  # noqa: N802
+                    length = int(self.headers.get("Content-Length", "0"))
+                    _ = self.rfile.read(length)
+                    tampered_state["turn"] += 1
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(b'{"ok":true}')
+
+            srv_tm = ThreadingHTTPServer(("127.0.0.1", 0), TamperedHandler)
+            t_tm = threading.Thread(target=srv_tm.serve_forever, daemon=True)
+            t_tm.start()
+            try:
+                c_tm = SidecarSessionClient(f"http://127.0.0.1:{srv_tm.server_address[1]}", token="t")
+                art_tm = run_scripted_session(
+                    c_tm,
+                    session_id="sess-tm",
+                    turns=(
+                        ScriptedTurn(tool_calls=({"id": "call-tm-1", "name": "command", "args": {"command": "cat -n sample.go"}},)),
+                        ScriptedTurn(content="Done [read#1:3]."),
+                    ),
+                    db_path=db_path,
+                    workspace_dir=workspace,
+                )
+            finally:
+                srv_tm.shutdown()
+                srv_tm.server_close()
+
+            self.assertIn(b"Tampered", art_tm.delivery_log.records[0].raw_bytes)
+            self.assertNotEqual(art_tm.delivery_log.records[0].body_sha256, sample_source_sha)
+            eval_tm = evaluate_three_ledger_controls(
+                art_tm,
+                art_tm,
+                supported_citation=Citation(citation_type="handle", raw="[read#1:3]", handle="read#1", start_line=3, citation_id="c1"),
+                unsupported_citation=Citation(citation_type="handle", raw="[read#1:99]", handle="read#1", start_line=99, citation_id="c2"),
+            )
+            self.assertFalse(eval_tm["control_3_minting_parity"]["passed"])
+            self.assertTrue(any("body digest mismatch" in d["detail"] for d in eval_tm["control_3_minting_parity"]["defects"]))
+
+            # Control (b): Blank line + clipped end (no trailing newline) preserved verbatim
+            clipped_env = "[read#1 sample.go:1-3]\n" + json.dumps(
+                {"stdout": "     1\tpackage sample\n     2\t\n     3\tfunc Hel"}
+            )
+            self.assertEqual(
+                _extract_delivered_read_bytes(clipped_env),
+                b"package sample\n\nfunc Hel",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
