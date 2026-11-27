@@ -445,6 +445,12 @@ def _build_v01_fixtures() -> dict[str, GB03SlotFixture]:
         ),
         expectations=(
             CitationExpectation(
+                Citation("handle", "[command#1]", handle="command#1", citation_id="v01-07-c0"),
+                "grounded",
+                "matched",
+                expected_supporting_handles=("command#1",),
+            ),
+            CitationExpectation(
                 Citation("handle", '[command#1 "FAIL internal/app"]', handle="command#1", excerpt="FAIL internal/app", citation_id="v01-07-c1"),
                 "grounded",
                 "matched",
@@ -457,6 +463,10 @@ def _build_v01_fixtures() -> dict[str, GB03SlotFixture]:
                 expected_reason="excerpt_mismatch",
             ),
         ),
+        metadata={
+            "three_way_opaque_excerpt_contrast": True,
+            "decision_034_occurrence_sensitive": True,
+        },
     )
 
     # V01-08: git error outcome receipt
