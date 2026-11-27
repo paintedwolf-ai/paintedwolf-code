@@ -91,7 +91,8 @@ def inspect_live_witnesses(case, *, project_dir, audit, receipts, effects, last_
         c_idle, c_after = wm.get('exec_count_at_idle'), wm.get('exec_count_after_wait')
         after_absent = not (proj / 'after').exists()
         active_child_ok = (
-            wm.get('abort_barrier') == 'active_child_started'
+            wm.get('abort_barrier') in {'active_child_started', 'active_child_running_verified'}
+            and wm.get('aborted_child_running_pre_abort', True) is True
             and wm.get('aborted_child_started') is True
             and wm.get('aborted_child_invoked') is True
             and wm.get('aborted_child_certainty') == 'none'
