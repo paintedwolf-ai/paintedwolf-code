@@ -732,12 +732,20 @@ def _ctrl_workers(
                 app,
                 child_sid,
                 "complete_leg",
-                {"summary": "Updated worker_target.txt.", "status": "complete"},
+                {
+                    "leg_status": "complete",
+                    "brief": "Updated worker_target.txt.",
+                    "objectives_met": ["worker_target.txt contains the landed line."],
+                },
             )
         else:
             app.request("/harness/llm/respond", {"id": child_done["id"], "content": "Updated worker_target.txt."})
 
         def _worker_settled() -> bool:
+            # If the worker requests a final prose closeout turn after complete_leg, answer it.
+            pend = app.request(f"/harness/llm/pending?session_id={urllib.parse.quote(child_sid)}")
+            if pend.get("pending") and pend.get("session_id") == child_sid:
+                app.request("/harness/llm/respond", {"id": pend["id"], "content": "Updated worker_target.txt."})
             with contextlib.closing(sqlite3.connect((app_dir / "store.db").resolve().as_uri() + "?mode=ro", uri=True)) as db:
                 row = db.execute(
                     "SELECT status, merge_status, error, failure_json FROM worker_jobs WHERE id=?",
