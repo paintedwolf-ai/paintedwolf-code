@@ -3,7 +3,6 @@ package command
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -262,36 +261,6 @@ func (d *ProgramDispatcher) NativeBound(name string) bool {
 
 func (d *ProgramDispatcher) BaseEnvironment() []string {
 	return d.run.baseEnv
-}
-
-// GapLaunchable reports whether a native name may run as its installed
-// program: a request that names one, found by the launch's own lookup.
-func (d *ProgramDispatcher) GapLaunchable(request commandprogram.OperationRequest) bool {
-	if len(request.Argv) == 0 || request.Argv[0].Value == "external" {
-		return false
-	}
-	// A closed owner's unsupported forms refuse wherever they are bound.
-	if d.natives[request.Argv[0].Value].ClosedForms {
-		return false
-	}
-	return (ExternalStages{ToolContext: d.run.tc, Cwd: d.paths.Cwd(), BaseEnvironment: d.run.baseEnv}).Installed(request.Argv[0].Value, request.Environment)
-}
-
-// unsupportedForm is the native gap a typed unsupported-form refusal names;
-// other refusals (operand errors, policy) are not gaps and never fall back.
-func unsupportedForm(spec toolcontract.CommandSpecification, cause error) *toolcontract.NativeGap {
-	code, form := "", ""
-	var argv *commandprogram.ArgvError
-	if errors.As(cause, &argv) {
-		code, form = argv.Code, argv.Word
-	} else if reject := toolrejection.AsToolReject(cause); reject != nil {
-		code = reject.Code
-		form, _ = reject.Data["word"].(string)
-	}
-	if code != "COMMAND_OPTION_UNSUPPORTED" && code != "COMMAND_NATIVE_FORM_UNSUPPORTED" {
-		return nil
-	}
-	return &toolcontract.NativeGap{Command: spec.Name, Code: code, Form: form}
 }
 
 type trackingWriter struct {

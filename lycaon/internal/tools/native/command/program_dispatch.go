@@ -28,9 +28,9 @@ import (
 // directory frame and returns the reviewed form; it runs nothing.
 type NativeOperation struct {
 	Tool string
-	// ClosedForms keeps unsupported owner forms as typed refusals instead of
-	// launching an installed program with different authority.
+	// ClosedForms keeps unsupported owner forms as typed refusals instead of launching externally.
 	ClosedForms bool
+	DisallowGap func(commandprogram.Fields) bool
 	// SecretSlots are the review argument slots where this command form
 	// carries managed-secret references to its owner; elsewhere they refuse.
 	SecretSlots []string
