@@ -1,7 +1,7 @@
 steps:
   - tool: "instruct_worker"
-    say: "If implementation work remains on that worker, call {{ call }} to instruct the same worker to make the change and deliver observed artifact evidence."
+    say: "If implementation work remains on that worker, call {% if load %}{{ load }}, then {% endif %}{{ call }} to instruct the same worker to make the change and deliver observed artifact evidence."
   - tool: "task"
     args:
       agent_type: "path-explorer"
-    say: "Use {{ call }} only when separate path discovery is still needed."
+    say: "Use {% if load %}{{ load }}, then {% endif %}{{ call }} only when separate path discovery is still needed."

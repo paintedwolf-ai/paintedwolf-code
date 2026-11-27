@@ -16,7 +16,7 @@ func CoordinatorTools(_ context.Context, _ *api.Session, profileID string) ([]to
 	var metas []tools.ToolMeta
 	for _, name := range []string{
 		"task", "read", "grep", "write", "edit", "replace_lines", "pack_board",
-		"state_start", "workflow_catalog_summaries",
+		"state_start", "workflow_catalog_summaries", "update_progress",
 	} {
 		metas = append(metas, tools.ToolMeta{Name: name})
 	}

@@ -98,18 +98,16 @@ func (b SourceChangeBrief) OtherMayIncludeWorkingSet() bool {
 	return b.OtherWorkingSet || (len(b.Files) > 0 && b.Files[len(b.Files)-1].WorkingSet)
 }
 
-// RenderSourceChangesBlock renders guidance/source-changes.md via Binding stem.
-// When renderer is nil, returns empty (fail closed — no Go prose builder).
-// sourceHistoryOffered is the current surface's: the record is fixed at turn
-// open, but it restates on later surfaces that may not have the tool.
+// RenderSourceChangesBlock renders guidance/source-changes.md via Binding stem
+// against the active turn Reader.
 func RenderSourceChangesBlock(
 	ctx context.Context,
 	renderer *prompts.InjectRenderer,
+	reader prompts.Reader,
 	sessionID string,
 	brief SourceChangeBrief,
-	sourceHistoryOffered bool,
 ) string {
-	if renderer == nil || brief.Empty() {
+	if renderer == nil || !reader.Valid() || brief.Empty() {
 		return ""
 	}
 	citable := false
@@ -131,13 +129,12 @@ func RenderSourceChangesBlock(
 			"detail": g.Detail, "at": g.At,
 		})
 	}
-	block, err := anchor.RenderInform(
+	block, err := anchor.RenderInformWithReader(
 		ctx, anchor.InjectSourceChanges, anchor.MatchContext{Surface: "coordinator", SessionID: sessionID},
-		renderer, map[string]any{
+		renderer, reader, map[string]any{
 			"files": files, "git": git, "other_files": brief.OtherFiles,
 			"other_effects": brief.OtherEffects, "truncated": brief.Truncated, "own_truncated": brief.OwnTruncated,
 			"other_may_include_working_set": brief.OtherMayIncludeWorkingSet(),
-			"source_history_offered":        sourceHistoryOffered,
 			"citable":                       citable,
 		},
 	)

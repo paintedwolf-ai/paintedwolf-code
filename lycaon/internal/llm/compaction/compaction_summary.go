@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/jsonfence"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -137,7 +138,11 @@ func renderContinuation(ctx context.Context, summary compactionSummary, sources 
 	for _, s := range sources {
 		rows = append(rows, s.templateVars())
 	}
-	out, err := guidance.RenderGuidance(ctx, guidance.CompactionContinuationRecordRef, map[string]any{
+	reach := toolreach.FromContext(ctx)
+	if !recallAvailable || !reach.Known() {
+		reach = toolreach.Offered(nil)
+	}
+	out, err := guidance.RenderGuidanceWithReach(ctx, reach, guidance.CompactionContinuationRecordRef, map[string]any{
 		"level":               summary.Level,
 		"summary_through_ord": summary.SummaryThroughOrd,
 		"through_ord":         summary.ThroughOrd,
@@ -151,7 +156,6 @@ func renderContinuation(ctx context.Context, summary compactionSummary, sources 
 		"recorded_details":    details,
 		"recorded_omitted":    omitted,
 		"recorded_clipped":    clipped,
-		"recall_available":    recallAvailable,
 	})
 	if err != nil {
 		return "", err

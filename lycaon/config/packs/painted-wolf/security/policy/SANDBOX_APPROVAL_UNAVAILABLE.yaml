@@ -3,18 +3,30 @@ id: SANDBOX_APPROVAL_UNAVAILABLE
 kind: policy
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason]
+requires_facts: [paintedwolf.approval_expired, paintedwolf.approval_refused_automatically, paintedwolf.approval_stopped_by_host, paintedwolf.approval_stopped_by_user, paintedwolf.rejection_code, paintedwolf.rejection_reason]
 when: paintedwolf.rejection_code == "SANDBOX_APPROVAL_UNAVAILABLE"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox_approval
 message: capability approval was unavailable
-what: The requested capability could not reach its approval boundary.
-cause: '{% if paintedwolf.rejection_reason %}{{ paintedwolf.rejection_reason }}{% else %}The host did not install the reviewed authority on this invocation.{% endif %}'
-why: This is an approval-path failure, not a security verdict about the requested effect.
-fix: Retry after the approval surface is available, or use an invocation that stays within the authority already installed.
-instead: Branch on Code; do not report the requested effect as forbidden
+what: The requested capability was not approved, and no person declined it.
+cause: '{% if paintedwolf.approval_refused_automatically %}A host approval policy refused the request without asking a person.{% else %}{% if paintedwolf.approval_stopped_by_user %}The person stopped the run before deciding the request.{% else %}{% if paintedwolf.approval_stopped_by_host %}The session stopped before anyone decided the request.{% else %}{% if paintedwolf.approval_expired %}The request expired before anyone decided it.{% else %}{% if paintedwolf.rejection_reason %}{{ paintedwolf.rejection_reason }}{% else %}The host did not install the reviewed authority on this invocation.{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}'
+why: '{% if paintedwolf.approval_refused_automatically %}No person reviewed this request, so it says nothing about what the person would decide.{% else %}This is an approval-path failure, not a security verdict about the requested effect.{% endif %}'
+fix: '{% if paintedwolf.approval_refused_automatically %}Use an invocation that stays within the authority already installed; the same request meets the same policy.{% else %}{% if paintedwolf.approval_stopped_by_user %}Wait for new user direction before requesting this authority again.{% else %}Retry after the approval surface is available, or use an invocation that stays within the authority already installed.{% endif %}{% endif %}'
+instead: '{% if paintedwolf.approval_refused_automatically %}Branch on Code; report the policy refusal, not a decision by the person{% else %}Branch on Code; do not report the requested effect as forbidden{% endif %}'
 x-paintedwolf-scenarios:
   - id: default
     vars:
       reason: approval did not install authority
+  - id: refused_automatically
+    vars:
+      approval_refused_automatically: true
+  - id: stopped_by_user
+    vars:
+      approval_stopped_by_user: true
+  - id: stopped_by_host
+    vars:
+      approval_stopped_by_host: true
+  - id: expired
+    vars:
+      approval_expired: true

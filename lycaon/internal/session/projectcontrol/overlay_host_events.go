@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -42,9 +43,17 @@ func (m *Service) PromoteOverlay(ctx context.Context, sessionID, overlayID strin
 		return out, err
 	}
 	defer m.admission.MaybePromote(context.WithoutCancel(ctx), sessionID)
-	banners, bErr := guidance.RenderOverlayRebaseConflictBanners(ctx, overlayID, out.Rebased)
-	if bErr != nil {
-		return out, bErr
+	var banners string
+	if len(out.Rebased) > 0 {
+		reach := toolreach.FromContext(ctx)
+		if !reach.Known() {
+			reach = toolreach.Offered(nil)
+		}
+		var bErr error
+		banners, bErr = guidance.RenderOverlayRebaseConflictBanners(ctx, reach, overlayID, out.Rebased)
+		if bErr != nil {
+			return out, bErr
+		}
 	}
 	if err := m.AppendHostEvent(ctx, sessionID, hostmarker.OverlayPromoteEventPrefix, out, banners); err != nil {
 		return out, err

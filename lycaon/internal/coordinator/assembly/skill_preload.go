@@ -5,10 +5,26 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (e *turnContextAssembler) skillProcedureWithTool(ctx context.Context, sess *api.Session, profileID string) (api.Message, string, bool) {
+func (e *turnContextAssembler) skillGuidanceReader(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, history []api.Message, turn *TurnAssemblyScratch) (prompts.Reader, bool) {
+	if turn != nil && turn.Reader.Valid() {
+		return turn.Reader, true
+	}
+	if e == nil || e.surface == nil || sess == nil {
+		return prompts.Reader{}, false
+	}
+	if sess.IsWorkerChild() {
+		r, err := e.surface.workerTurnReader(ctx, sess, frame, turn)
+		return r, err == nil && r.Valid()
+	}
+	r, err := e.surface.turnReader(ctx, sess, frame, history, turn)
+	return r, err == nil && r.Valid()
+}
+
+func (e *turnContextAssembler) skillProcedureWithTool(ctx context.Context, sess *api.Session, profileID string, frame inject.CoordinatorTurnFrame, history []api.Message, turn *TurnAssemblyScratch) (api.Message, string, bool) {
 	deps := e.deps
 	if deps.SkillPreload == nil || deps.Injects == nil || sess == nil {
 		return api.Message{}, "", false
@@ -17,7 +33,11 @@ func (e *turnContextAssembler) skillProcedureWithTool(ctx context.Context, sess 
 	if preload == nil || strings.TrimSpace(preload.Body) == "" {
 		return api.Message{}, "", false
 	}
-	block, err := inject.RenderSkillProcedureBlock(ctx, deps.Injects, sess.ID, profileID, *preload)
+	reader, ok := e.skillGuidanceReader(ctx, sess, frame, history, turn)
+	if !ok {
+		return api.Message{}, "", false
+	}
+	block, err := inject.RenderSkillProcedureBlock(ctx, deps.Injects, reader, sess.ID, profileID, *preload)
 	if err != nil || block == "" {
 		return api.Message{}, "", false
 	}
@@ -27,7 +47,7 @@ func (e *turnContextAssembler) skillProcedureWithTool(ctx context.Context, sess 
 
 // skillPointerInject names, in one line, the skill a turn's first loadable
 // tool call fitted without reading it. A read skill supersedes the pointer.
-func (e *turnContextAssembler) skillPointerInject(ctx context.Context, sess *api.Session, profileID string) (api.Message, bool) {
+func (e *turnContextAssembler) skillPointerInject(ctx context.Context, sess *api.Session, profileID string, frame inject.CoordinatorTurnFrame, history []api.Message, turn *TurnAssemblyScratch) (api.Message, bool) {
 	deps := e.deps
 	if deps.SkillPointer == nil || deps.Injects == nil || sess == nil {
 		return api.Message{}, false
@@ -39,7 +59,11 @@ func (e *turnContextAssembler) skillPointerInject(ctx context.Context, sess *api
 	if pointer == nil {
 		return api.Message{}, false
 	}
-	block, err := inject.RenderSkillPointerBlock(ctx, deps.Injects, sess.ID, profileID, *pointer)
+	reader, ok := e.skillGuidanceReader(ctx, sess, frame, history, turn)
+	if !ok {
+		return api.Message{}, false
+	}
+	block, err := inject.RenderSkillPointerBlock(ctx, deps.Injects, reader, sess.ID, profileID, *pointer)
 	if err != nil || block == "" {
 		return api.Message{}, false
 	}
@@ -50,7 +74,7 @@ func (e *turnContextAssembler) skillPointerInject(ctx context.Context, sess *api
 // interleaveSkillGuidance anchors a turn's preloaded skill procedure or pointer
 // in history at the turn opener or the triggering tool batch, so it remains at
 // one fixed position in the cached prefix and compacts with history.
-func (e *turnContextAssembler) interleaveSkillGuidance(ctx context.Context, sess *api.Session, profileID string, messages []api.Message) []api.Message {
+func (e *turnContextAssembler) interleaveSkillGuidance(ctx context.Context, sess *api.Session, profileID string, frame inject.CoordinatorTurnFrame, history []api.Message, turn *TurnAssemblyScratch, messages []api.Message) []api.Message {
 	if len(messages) == 0 {
 		return messages
 	}
@@ -58,9 +82,9 @@ func (e *turnContextAssembler) interleaveSkillGuidance(ctx context.Context, sess
 	if openerIdx < 0 {
 		return messages
 	}
-	block, tool, ok := e.skillProcedureWithTool(ctx, sess, profileID)
+	block, tool, ok := e.skillProcedureWithTool(ctx, sess, profileID, frame, history, turn)
 	if !ok {
-		block, ok = e.skillPointerInject(ctx, sess, profileID)
+		block, ok = e.skillPointerInject(ctx, sess, profileID, frame, history, turn)
 		if !ok {
 			return messages
 		}

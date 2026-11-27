@@ -9,9 +9,9 @@ import (
 
 func TestAgentsMDIndexRemainsPinnedAcrossRequests(t *testing.T) {
 	engine := &AssemblyEngine{}
-	engine.SetDeps(AssemblyDeps{AgentsMDIndex: func(context.Context, *api.Session) (api.Message, bool) {
+	engine.SetDeps(withTestTurnReader(AssemblyDeps{AgentsMDIndex: func(context.Context, *api.Session) (api.Message, bool) {
 		return api.Message{Role: api.MessageRoleSystem, Content: "session index"}, true
-	}})
+	}}))
 	turn := &TurnAssemblyScratch{}
 	for range 3 {
 		messages := testTurnContext(engine).agentsMDIndexInject(t.Context(), &api.Session{ID: "session"}, turn)

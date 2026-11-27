@@ -7,6 +7,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// CodeApprovalRuleDenied is the rejection code for an action a deny rule refused.
+const CodeApprovalRuleDenied = "APPROVAL_RULE_DENIED"
+
 // ApprovalRuleMatch is one policy rule that governed an approval decision.
 type ApprovalRuleMatch struct {
 	Category string `json:"category"`

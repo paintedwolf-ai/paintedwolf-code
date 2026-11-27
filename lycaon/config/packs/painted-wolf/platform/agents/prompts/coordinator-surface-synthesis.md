@@ -3,7 +3,7 @@
 
 Read-only survey on the project tree — no product writes, no worker dispatch.
 
-- **Read:** {% for g in read_globs %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
+- **Read:** `{{ read_globs|join:"`, `" }}`
 
 ### Rules
 

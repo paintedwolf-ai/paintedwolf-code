@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/commandmode"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/textsearch"
@@ -162,20 +163,13 @@ func (o *Owners) SelectMode(argv commandprogram.Fields) (string, bool) {
 	return EffectMode(bound), true
 }
 
-// EffectMode names the catalog effect mode a bound form selects, for the
-// dispatcher's per-operation admission: find -delete needs write and recovery,
-// find -exec needs its bound child effect set, every other form reads.
+// EffectMode names the catalog effect mode a bound form selects.
 func EffectMode(argv commandprogram.BoundArgv) string {
 	if argv.Command != "find" {
 		return "always"
 	}
-	if _, ok := argv.Last("-delete"); ok {
-		return "-delete"
-	}
-	if _, ok := argv.Last("-exec"); ok {
-		return "-exec"
-	}
-	return "default-predicates-print"
+	mode, _ := commandmode.FindMode(argv)
+	return mode
 }
 
 // Prepared is one bound utility invocation. InvokeOwner matches
@@ -272,53 +266,8 @@ func searchPathTargets(bound commandprogram.BoundArgv) []commandprogram.PathTarg
 	return targets
 }
 
-// bindSearchArgv binds argv through CatalogBinder, preserving a signed numeric
-// argument after BSD's "find ... -depth -N" as an operand rather than an
-// unknown option flag.
 func bindSearchArgv(spec toolcontract.CommandSpecification, argv commandprogram.Fields) (commandprogram.BoundArgv, error) {
-	if spec.Name != "find" {
-		return commandprogram.CatalogBinder{}.Bind(spec, argv)
-	}
-	var rewritten commandprogram.Fields
-	var restore map[int]string
-	for i := 1; i+1 < len(argv); i++ {
-		if argv[i].Value == "--" {
-			break
-		}
-		next := argv[i+1].Value
-		if argv[i].Value == "-depth" && len(next) > 1 && next[0] == '-' && isASCIIDigits(next[1:]) {
-			if rewritten == nil {
-				rewritten = append(commandprogram.Fields(nil), argv...)
-				restore = map[int]string{}
-			}
-			restore[i+1] = next
-			rewritten[i+1].Value = "+" + next[1:]
-		}
-	}
-	if rewritten == nil {
-		return commandprogram.CatalogBinder{}.Bind(spec, argv)
-	}
-	bound, err := commandprogram.CatalogBinder{}.Bind(spec, rewritten)
-	for i := range bound.Items {
-		if op := bound.Items[i].Operand; op != nil {
-			for _, orig := range restore {
-				if op.Value == "+"+orig[1:] {
-					op.Value = orig
-					break
-				}
-			}
-		}
-	}
-	return bound, err
-}
-
-func isASCIIDigits(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return s != ""
+	return commandmode.BindSearchArgv(spec, argv)
 }
 
 // InvokeOwner runs the bound utility once and settles its producer outcome.

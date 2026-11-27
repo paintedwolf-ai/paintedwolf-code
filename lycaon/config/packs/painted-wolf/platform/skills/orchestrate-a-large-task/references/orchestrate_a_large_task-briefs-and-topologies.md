@@ -26,12 +26,12 @@ Every row above names what to count — components, root causes, configuration g
 
 ## Dependencies and shared agreements
 
-Name dependencies in the dispatch fields rather than hoping waves line up:
+{% if profile_has_task %}Name dependencies in the dispatch fields rather than hoping waves line up:
 
 - `after_workers` — the consumer worker starts only after each listed producer worker delivers a complete result and its write changes land. A producer sent back for corrections holds its consumers until it delivers again. Use it for stages that build on landed output, and do not combine it with `scope.base_overlay_id`.
 - `scope.base_overlay_id` — stacks a fresh write worker on a pending result handle so both workers edit the same line of work; the base result must still promote for the stack to land.
 {% if profile_has_instruct_worker %}- Follow-up for an existing worker goes through `instruct_worker`, not `task`: the worker keeps its conversation and workspace, so it is not a way to pick up a sibling's new edits before they land.{% endif %}
-- `shared_context` — up to 8192 bytes of interface agreements copied to each collaborating worker; give every collaborator the same text so their interfaces cannot diverge.
+- `shared_context` — up to 8192 bytes of interface agreements copied to each collaborating worker; give every collaborator the same text so their interfaces cannot diverge.{% else %}Report dependencies and shared interface agreements to the parent, which names them in the dispatch fields.{% endif %}
 
 ## Self-contained worker brief
 

@@ -21,7 +21,7 @@ rules:
       stub_invalid: true
     then:
       deny:
-        tools: [state_start, state_close, state_update]
+        tools: [state_start]
         code: SPEC_POSTURE_STATE_FORBIDDEN
         phase_required: "1"
         phase_required_name: Research depth (stub blueprint)
@@ -35,7 +35,7 @@ rules:
       stub_valid: true
     then:
       deny:
-        tools: [state_start, state_close]
+        tools: [state_start]
         code: SPEC_POSTURE_STATE_FORBIDDEN
         phase_required: "2"
         phase_required_name: Research tasks

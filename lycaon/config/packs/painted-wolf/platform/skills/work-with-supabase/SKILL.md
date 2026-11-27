@@ -7,7 +7,7 @@ metadata:
 
 # Work with Supabase
 
-Use this workflow for local Supabase development and schema changes. On a process start that runs the CLI, declare `supabase-cli` in `capability_request.host_resources`. Local-stack calls also declare the engine id (`docker` or `podman`) and `loopback_connect` for the stack ports; remote `db push` and linked diffs follow reach-a-network-service.
+Use this workflow for local Supabase development and schema changes. On a process start that runs the CLI, declare `supabase-cli` in `capability_request.host_resources`. Local-stack calls also declare the engine id (`docker` or `podman`){% if runner_loopback_connect_tools %} and `loopback_connect` for the stack ports{% endif %}; remote `db push` and linked diffs follow reach-a-network-service.
 
 Two commands here are destructive and easy to run by reflex. **`supabase db reset` drops the local database and replays migrations from scratch** — every local row is gone. **`supabase db push` applies migrations to the *linked remote project*,** which may be a real environment with real data. Before either, confirm which project is linked.
 
