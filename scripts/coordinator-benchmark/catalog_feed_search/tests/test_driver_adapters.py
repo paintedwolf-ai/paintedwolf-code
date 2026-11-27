@@ -7,9 +7,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
 import json
 from pathlib import Path
+import sys
 import tempfile
 import threading
 import unittest
+
+_BENCHMARK_DIR = str(Path(__file__).resolve().parents[2])
+if _BENCHMARK_DIR not in sys.path:
+    sys.path.insert(0, _BENCHMARK_DIR)
 
 from catalog_feed_search import cli
 from catalog_feed_search.checker import ScopedSearchHit, check_search

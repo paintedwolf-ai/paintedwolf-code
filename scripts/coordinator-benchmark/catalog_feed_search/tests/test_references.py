@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+import sys
 import tempfile
 import unittest
+
+_BENCHMARK_DIR = str(Path(__file__).resolve().parents[2])
+if _BENCHMARK_DIR not in sys.path:
+    sys.path.insert(0, _BENCHMARK_DIR)
 
 from catalog_feed_search.generators import (
     BoundaryConfig,

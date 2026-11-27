@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
+
+_BENCHMARK_DIR = str(Path(__file__).resolve().parents[2])
+if _BENCHMARK_DIR not in sys.path:
+    sys.path.insert(0, _BENCHMARK_DIR)
 
 from catalog_feed_search.change_runner import ChangeOp, ChangeScript, WriteLog, WriteLogEntry
 from catalog_feed_search.checker import (
