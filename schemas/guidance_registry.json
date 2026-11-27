@@ -1086,6 +1086,12 @@
       "emit": "guard:git_internals_write",
       "summary": "Cannot write {{ paintedwolf.path }} — repository git internals ({{ paintedwolf.class }}) are not writable via native tools."
     },
+    "GIT_MERGE_CONFLICT": {
+      "branch_instruction": "Keep the current repository state until the conflicts are resolved.",
+      "category": "recoverable",
+      "emit": "guard:git_merge_conflict",
+      "summary": "The Git operation stopped because the repository has merge conflicts."
+    },
     "GIT_NO_REPOSITORY_ON_WRITE_LEG": {
       "branch_instruction": "Committed history belongs to a read-scoped leg or the coordinator on the primary tree.",
       "category": "informational",
@@ -1726,6 +1732,12 @@
       "emit": "guard:optional_protected_read",
       "summary": "The command exited successfully with protected reads withheld at {{ paintedwolf.optional_read_paths }}."
     },
+    "ORCHESTRATE_POSTURE_NO_PLAN_WRITER": {
+      "branch_instruction": "Use an implementer or researcher agent.",
+      "category": "recoverable",
+      "emit": "rule:orchestrate",
+      "summary": "This orchestrate session cannot start the plan writer."
+    },
     "OUTBOUND_SECRET_DENIED": {
       "branch_instruction": "Preserve the withheld value; use an authorized redacted request or report the blocked send",
       "category": "recoverable",
@@ -1878,6 +1890,12 @@
       "category": "recoverable",
       "emit": "guard:policy_write_request",
       "summary": "A persistent terminal cannot carry instruction-file write approval."
+    },
+    "POSTURE_UNKNOWN": {
+      "branch_instruction": "Continue after the session has a registered posture.",
+      "category": "recoverable",
+      "emit": "rule:coordinator",
+      "summary": "The host could not find the rules for this session's posture."
     },
     "PRESENT_IMAGE_UNOBSERVED": {
       "branch_instruction": "Present captures with `[artifact:\u003cid\u003e]`; embed only an image URL that was fetched in this chat",
@@ -3380,6 +3398,12 @@
       "category": "recoverable",
       "emit": "guard:verify",
       "summary": "verify settled as unverifiable. Confinement stopped the check, so the host has no verdict about the work."
+    },
+    "VET_POSTURE_DELEGATION_FORBIDDEN": {
+      "branch_instruction": "Review and report; delegate changes from a build session.",
+      "category": "recoverable",
+      "emit": "rule:vet",
+      "summary": "This vet session cannot delegate work to workers."
     },
     "VIDEO_BYTES_EXCEEDED": {
       "branch_instruction": "Branch on Code VIDEO_BYTES_EXCEEDED; view a shorter or smaller copy",

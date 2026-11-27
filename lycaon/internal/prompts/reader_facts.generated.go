@@ -315,7 +315,7 @@ type ReaderFacts struct {
 
 // Map flattens the typed reader facts and family maps into a template variable map.
 func (f ReaderFacts) Map() map[string]any {
-	out := make(map[string]any, 96+len(f.ProfileHas)+len(f.AgentHasSkill))
+	out := make(map[string]any, 95+len(f.ProfileHas)+len(f.AgentHasSkill))
 	out["agent_tools"] = f.AgentTools
 	out["can_any_git_read"] = f.CanAnyGitRead
 	out["can_ask_user_secret"] = f.CanAskUserSecret
