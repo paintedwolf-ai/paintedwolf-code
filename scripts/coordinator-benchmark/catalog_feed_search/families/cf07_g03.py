@@ -73,35 +73,43 @@ def run_g03_sidecar(
 
         pid, rids = sidecar.driver.attach_project([repo_dir])
         wait_catalog_settled(sidecar.driver, pid, rids[0], max_wait_s=15.0)
+        batch_size = 20
+        for batch_start in range(0, instances, batch_size):
+            batch_end = min(instances, batch_start + batch_size)
+            session = AgentToolSession(sidecar, pid)
+            try:
+                for idx in range(batch_start, batch_end):
+                    rng = seed_rng(base_seed, "G03", idx)
+                    tool = "rg" if rng.randint(0, 1) == 1 else "grep"
+                    if idx % 2 == 0:
+                        pat = UNSUPPORTED_PCRE_PATTERNS[rng.randint(0, len(UNSUPPORTED_PCRE_PATTERNS) - 1)]
+                        cmd = f"{tool} -P {shlex.quote(pat)} input.txt"
+                        expected_code = "GREP_REGEX_UNSUPPORTED"
+                        allow_partial = False
+                    else:
+                        if rng.randint(0, 3) == 0:
+                            cmd = f"{tool} -P {shlex.quote('(a+)+b')} input.txt"
+                            allow_partial = True
+                        else:
+                            pat = "a" * (520 + rng.randint(0, 180))
+                            cmd = f"{tool} {shlex.quote(pat)} input.txt"
+                            allow_partial = False
+                        expected_code = "GREP_MATCH_BUDGET"
+
+                    call = session.invoke_tool("command", {"command": cmd})
+                    ev = evaluate_g03_refusal(call, expected_code=expected_code, allow_partial_stdout=allow_partial)
+                    verdict_counts[str(ev["verdict"])] += 1
+                    for g in call.declared_gaps:
+                        gap_counts[g] += 1
+                    if call.declared_gaps and len(gap_samples) < 10:
+                        gap_samples.append({"instance": idx, "command": cmd, "call": call.to_dict()})
+                    if ev["verdict"] == "DEFECT" and len(defects) < 10:
+                        defects.append({"instance": idx, "command": cmd, "evaluation": ev, "call": call.to_dict()})
+            finally:
+                session.close()
+
         session = AgentToolSession(sidecar, pid)
         try:
-            for idx in range(instances):
-                rng = seed_rng(base_seed, "G03", idx)
-                tool = "rg" if rng.randint(0, 1) == 1 else "grep"
-                if idx % 2 == 0:
-                    pat = UNSUPPORTED_PCRE_PATTERNS[rng.randint(0, len(UNSUPPORTED_PCRE_PATTERNS) - 1)]
-                    cmd = f"{tool} -P {shlex.quote(pat)} input.txt"
-                    expected_code = "GREP_REGEX_UNSUPPORTED"
-                    allow_partial = False
-                else:
-                    if rng.randint(0, 3) == 0:
-                        cmd = f"{tool} -P {shlex.quote('(a+)+b')} input.txt"
-                        allow_partial = True
-                    else:
-                        pat = "a" * (520 + rng.randint(0, 180))
-                        cmd = f"{tool} {shlex.quote(pat)} input.txt"
-                        allow_partial = False
-                    expected_code = "GREP_MATCH_BUDGET"
-
-                call = session.invoke_tool("command", {"command": cmd})
-                ev = evaluate_g03_refusal(call, expected_code=expected_code, allow_partial_stdout=allow_partial)
-                verdict_counts[str(ev["verdict"])] += 1
-                for g in call.declared_gaps:
-                    gap_counts[g] += 1
-                if call.declared_gaps and len(gap_samples) < 10:
-                    gap_samples.append({"instance": idx, "command": cmd, "call": call.to_dict()})
-                if ev["verdict"] == "DEFECT" and len(defects) < 10:
-                    defects.append({"instance": idx, "command": cmd, "evaluation": ev, "call": call.to_dict()})
 
             # 2 hand-written edges
             edge_specs = [

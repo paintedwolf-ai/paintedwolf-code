@@ -139,44 +139,47 @@ def run_g01_sidecar(
         materialize_tree(spec0, tree_dir)
         project_id, root_ids = sidecar.driver.attach_project([tree_dir])
         wait_catalog_settled(sidecar.driver, project_id, root_ids[0], max_wait_s=15.0)
-        session = AgentToolSession(sidecar, project_id)
+        writer = _MovingTreeWriter(tree_dir, seed_int=selector0.derived_seed)
+        writer.start()
         try:
-            writer = _MovingTreeWriter(tree_dir, seed_int=selector0.derived_seed)
-            writer.start()
-            try:
-                sample_files = [e.path for e in spec0.entries if e.kind == "file"]
-                fallback_file = sample_files[0] if sample_files else "moving/churn_0.txt"
-                for idx in range(instances):
-                    rng = seed_rng(base_seed, "G01", idx)
-                    route = G01_COMMANDS[idx % len(G01_COMMANDS)]
-                    # Perform an instance-specific mutation before each probe.
-                    inst_rel = f"moving/inst_{idx % 25}.txt"
-                    inst_abs = tree_dir / inst_rel
-                    inst_abs.parent.mkdir(parents=True, exist_ok=True)
-                    inst_abs.write_text(f"alpha inst_{idx} r={rng.randint(1, 9999)}\n", encoding="utf-8")
+            sample_files = [e.path for e in spec0.entries if e.kind == "file"]
+            fallback_file = sample_files[0] if sample_files else "moving/churn_0.txt"
+            batch_size = 20
+            for batch_start in range(0, instances, batch_size):
+                batch_end = min(instances, batch_start + batch_size)
+                session = AgentToolSession(sidecar, project_id)
+                try:
+                    for idx in range(batch_start, batch_end):
+                        rng = seed_rng(base_seed, "G01", idx)
+                        route = G01_COMMANDS[idx % len(G01_COMMANDS)]
+                        # Perform an instance-specific mutation before each probe.
+                        inst_rel = f"moving/inst_{idx % 25}.txt"
+                        inst_abs = tree_dir / inst_rel
+                        inst_abs.parent.mkdir(parents=True, exist_ok=True)
+                        inst_abs.write_text(f"alpha inst_{idx} r={rng.randint(1, 9999)}\n", encoding="utf-8")
 
-                    cmd = _command_for_route(route, inst_rel if route == "wc" else fallback_file)
-                    writes_before = len(writer.writes)
-                    call = session.invoke_tool("command", {"command": cmd})
-                    mutated = len(writer.writes) >= writes_before
-                    ev = evaluate_g01_observation(
-                        route,
-                        call,
-                        cold_no_complete_gen=False,
-                        tree_mutated_during_call=mutated,
-                    )
-                    verdict_counts[str(ev["verdict"])] += 1
-                    route_stats[route][str(ev["verdict"])] += 1
-                    for g in call.declared_gaps:
-                        gap_counts[g] += 1
-                    if call.declared_gaps and len(gap_samples) < 12:
-                        gap_samples.append({"instance": idx, "route": route, "call": call.to_dict()})
-                    if ev["verdict"] == "DEFECT" and len(defects) < 10:
-                        defects.append({"instance": idx, "evaluation": ev, "call": call.to_dict()})
-            finally:
-                writer.stop()
+                        cmd = _command_for_route(route, inst_rel if route == "wc" else fallback_file)
+                        writes_before = len(writer.writes)
+                        call = session.invoke_tool("command", {"command": cmd})
+                        mutated = len(writer.writes) >= writes_before
+                        ev = evaluate_g01_observation(
+                            route,
+                            call,
+                            cold_no_complete_gen=False,
+                            tree_mutated_during_call=mutated,
+                        )
+                        verdict_counts[str(ev["verdict"])] += 1
+                        route_stats[route][str(ev["verdict"])] += 1
+                        for g in call.declared_gaps:
+                            gap_counts[g] += 1
+                        if call.declared_gaps and len(gap_samples) < 12:
+                            gap_samples.append({"instance": idx, "route": route, "call": call.to_dict()})
+                        if ev["verdict"] == "DEFECT" and len(defects) < 10:
+                            defects.append({"instance": idx, "evaluation": ev, "call": call.to_dict()})
+                finally:
+                    session.close()
         finally:
-            session.close()
+            writer.stop()
 
         # 4 hand-written edges + G01-INC-03 cold boundary (2,000-entry tree queried immediately at completed_generation=0).
         cold_dir = tmp_path / "cold_2000_repo"

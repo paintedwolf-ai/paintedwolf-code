@@ -103,6 +103,10 @@ def run_cf07_sidecar_suite(
                 fam_path = out_dir / f"{fam.lower()}_sidecar.json"
                 fam_path.write_text(json.dumps(rep, indent=2) + "\n", encoding="utf-8")
                 artifact_files[f"{fam.lower()}_sidecar"] = fam_path
+                sys.stderr.write(
+                    f"[CF07] finished {fam}: executed={rep['executed_instances']} verdicts={rep['verdict_counts']}\n"
+                )
+                sys.stderr.flush()
 
             summary = {
                 "card": "CF07",
