@@ -107,6 +107,7 @@ def _write_desktop_spec(spec_path: Path) -> None:
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { activateProject, expectShellReady, seedAppState } from "./helpers.ts";
 
 const cfg = JSON.parse(fs.readFileSync(process.env.CF09_RUN_CONFIG!, "utf-8"));
 const apiUrl: string = cfg.api_url;
@@ -134,26 +135,18 @@ async function apiPost(p: string, body: unknown) {
   return await res.json();
 }
 
-async function waitShell(page: Page) {
-  await expect(page.getByTestId("shell")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId("shell")).toHaveAttribute("data-sidecar-status", "connected", { timeout: 30_000 });
-}
-
 test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async ({ page }) => {
   test.setTimeout(240_000);
   const observations: unknown[] = [];
 
+  await seedAppState(page);
   await page.goto("/");
-  await waitShell(page);
+  await expectShellReady(page);
 
   for (const state of ["failed", "incomplete", "warming", "refreshing"] as const) {
     const proj = projects[state];
-    // Activate project via URL / sidebar click
-    const projectBtn = page.locator(`[data-project-id="${proj.id}"]`).first();
-    if (await projectBtn.count()) {
-      await projectBtn.click();
-      await page.waitForTimeout(400);
-    }
+    await activateProject(page, proj.id);
+    await page.waitForTimeout(400);
 
     // 1. Search stage (GlobalSearchView)
     await page.keyboard.press("ControlOrMeta+Shift+f");
