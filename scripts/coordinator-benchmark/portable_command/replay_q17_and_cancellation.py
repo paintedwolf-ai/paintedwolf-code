@@ -31,10 +31,8 @@ def _pick_free_port():
         s.bind(('127.0.0.1', 0))
         return s.getsockname()[1]
 
-
 def sha256_bytes(data):
     return hashlib.sha256(data).hexdigest()
-
 
 def sha256_file(path):
     p = pathlib.Path(path)
@@ -136,7 +134,6 @@ def _run_cmd(app, sid, surface, cmd, *, cap_req=None):
 def _wait_idle(app, sid):
     app.wait_for(lambda: app.request('/v1/sessions/' + sid)['status'] == 'idle', 'session idle')
 
-
 def _open_session(app, project_id):
     sid = app.request('/v1/sessions', {'project_id': project_id, 'posture': 'build'})['id']
     app.request('/harness/model-limit', {'session_id': sid, 'limit': 20})
@@ -208,7 +205,8 @@ def run_q17_and_cancellation(repo_root, out_path, engine_manifest=None, engine_b
         send_tool_calls(app, cancel_sid, [{'name': 'update_progress', 'args': {'content': '- [ ] Run cancellation witness'}}], surface=surface)
         req = app.wait_for(lambda: smoke_workers.pending(app, cancel_sid), 'cancellation turn', cancel_sid)
         cancel_call_id = str(uuid.uuid4())
-        app.request('/harness/llm/respond', {'id': req['id'], 'tool_calls': [{'id': cancel_call_id, 'name': 'command', 'args': {'command': 'while true; do :; done'}}]})
+        # Native `sleep 0.25` (< 10s park threshold) keeps the `:` loop live for mid-loop /abort.
+        app.request('/harness/llm/respond', {'id': req['id'], 'tool_calls': [{'id': cancel_call_id, 'name': 'command', 'args': {'command': 'while true; do :; sleep 0.25; done'}}]})
 
         def loop_started():
             with contextlib.closing(sqlite3.connect(app_dir / 'store.db')) as db:
