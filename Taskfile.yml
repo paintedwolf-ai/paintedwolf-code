@@ -393,6 +393,11 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/fuzz-short.sh smoke
 
+  test:fuzz:findings:
+    desc: Fail if the fuzz-findings branch has any open finding not committed byte-identically in this tree
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/fuzz-findings.sh {{.CLI_ARGS}}
+
   test:failed:
     desc: Replay the latest failed Go run with its source, flags, and test environment
     cmds:

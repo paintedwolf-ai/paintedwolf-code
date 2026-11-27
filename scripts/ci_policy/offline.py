@@ -25,7 +25,8 @@ def main():
     # Pass identities separately so no source path or lane name becomes shell text.
     arguments = [sys.executable, 'scripts/ci_verification.py', 'run', *sys.argv[1:]]
     invocation = command(arguments, os.getuid(), os.getgid())
-    environment = {**os.environ, 'GOPROXY': 'off', 'GOSUMDB': 'off', 'CARGO_NET_OFFLINE': 'true', 'NPM_CONFIG_OFFLINE': 'true'}
+    environment = {**os.environ, 'GOPROXY': 'off', 'GOSUMDB': 'off', 'CARGO_NET_OFFLINE': 'true',
+                   'NPM_CONFIG_OFFLINE': 'true', 'PW_FUZZ_FINDINGS_OFFLINE': '1'}
     environment.pop('GH_TOKEN', None)
     environment.pop('GITHUB_TOKEN', None)
     return subprocess.call(invocation, env=environment)
