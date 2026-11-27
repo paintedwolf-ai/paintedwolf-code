@@ -8,7 +8,7 @@ import time
 
 from artifact_paths import artifact_root
 from ci_policy.evidence import failure_signature
-from ci_policy import retained_go_failures
+from ci_policy import memory_budgets, retained_go_failures
 
 ROOT = Path(__file__).resolve().parents[2]
 EXCERPT_LINES = 60
@@ -153,7 +153,21 @@ def report(status):
         failure["signature"] = failure_signature(failure)
     (root / "ci").mkdir(parents=True, exist_ok=True)
     (root / "ci" / "failures.json").write_text(json.dumps(found, indent=2) + "\n")
-    (root / "ci" / "source.json").write_text(json.dumps(source(), indent=2) + "\n")
+    src = source()
+    (root / "ci" / "source.json").write_text(json.dumps(src, indent=2) + "\n")
+    measured_obs, unavailable_obs = memory_budgets.latest_observations(root, src["tree"])
+    if measured_obs or unavailable_obs:
+        lanes = sorted({obs["lane"] for obs in measured_obs.values()} | set(unavailable_obs))
+        memory_payload = {
+            "schema_version": 1,
+            "source_sha": src["sha"],
+            "source_tree": src["tree"],
+            "status": status,
+            "lanes": lanes,
+            "observations": [obs for _, obs in sorted(measured_obs.items())],
+            "unavailable": unavailable_obs,
+        }
+        (root / "ci" / "memory.json").write_text(json.dumps(memory_payload, indent=2) + "\n")
     if record:
         record["passed_stages"] = passed_stages(root)
         path.write_text(json.dumps(record, indent=2) + "\n")
