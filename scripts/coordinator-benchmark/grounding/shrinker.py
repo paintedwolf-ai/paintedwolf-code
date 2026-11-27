@@ -109,10 +109,19 @@ class ShrunkArtifact:
                 "session_id": self.minimized.scope.session_id,
                 "worker_leg": self.minimized.scope.worker_leg,
                 "permitted_legs": sorted(self.minimized.scope.permitted_legs),
+                "dispatched_legs": dict(self.minimized.scope.dispatched_legs),
                 "round_id": self.minimized.scope.round_id,
                 "intent_window": self.minimized.scope.intent_window,
-                "permitted_artifacts": sorted(self.minimized.scope.permitted_artifacts),
+                "cited_results_handles": sorted(self.minimized.scope.cited_results_handles),
+                "workspace_refreshed": self.minimized.scope.workspace_refreshed,
+                "invalidated_rounds": sorted(self.minimized.scope.invalidated_rounds),
+                "permitted_artifacts": (
+                    sorted(self.minimized.scope.permitted_artifacts)
+                    if self.minimized.scope.permitted_artifacts is not None
+                    else None
+                ),
                 "platform": self.minimized.scope.platform,
+                "filesystem_case_sensitive": self.minimized.scope.filesystem_case_sensitive,
             },
             "delivery_log": self.minimized.delivery_log.to_dict(),
             "citation": cit_dict,
@@ -139,14 +148,22 @@ class ShrunkArtifact:
         seed_raw = data.get("seed")
         seed = SeedIdentity.from_dict(seed_raw) if seed_raw else None
         scope_raw = data["scope"]
+        raw_perm_art = scope_raw.get("permitted_artifacts")
         scope = PermittedScope(
             session_id=scope_raw["session_id"],
             worker_leg=scope_raw.get("worker_leg", ""),
             permitted_legs=frozenset(scope_raw.get("permitted_legs", ())),
+            dispatched_legs=scope_raw.get("dispatched_legs", {}),
             round_id=scope_raw.get("round_id", ""),
             intent_window=scope_raw.get("intent_window", ""),
-            permitted_artifacts=frozenset(scope_raw.get("permitted_artifacts", ())),
+            cited_results_handles=frozenset(scope_raw.get("cited_results_handles", ())),
+            workspace_refreshed=bool(scope_raw.get("workspace_refreshed", False)),
+            invalidated_rounds=frozenset(scope_raw.get("invalidated_rounds", ())),
+            permitted_artifacts=(
+                frozenset(raw_perm_art) if raw_perm_art is not None else None
+            ),
             platform=scope_raw.get("platform", "linux"),
+            filesystem_case_sensitive=scope_raw.get("filesystem_case_sensitive"),
         )
         log = DeliveryLog.from_dict(data["delivery_log"])
         cit_raw = data.get("citation")

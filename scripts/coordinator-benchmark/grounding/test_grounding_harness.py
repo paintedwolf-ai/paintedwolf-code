@@ -19,6 +19,7 @@ from grounding.generators import (
     BASE_SEEDS,
     R06_VARIATIONS,
     R07_MUTATIONS,
+    generate_path_case_contrast,
     generate_r04,
     generate_r06,
     generate_r07,
@@ -743,6 +744,498 @@ class TestSelectorsManifest(unittest.TestCase):
         f3 = next(f for f in GB01_FINDINGS if f.finding_id == "F3")
         for assertion in DECISION_005_V04_ASSERTIONS:
             self.assertIn(assertion, f3.assertions)
+
+
+class TestDecision007ReviewFixes(unittest.TestCase):
+    """Comprehensive tests for GB02-R1 through GB02-R6 and generator enhancements."""
+
+    def setUp(self) -> None:
+        self.scope = PermittedScope(
+            session_id="sess-root",
+            worker_leg="",
+            round_id="round-1",
+            intent_window="intent-1",
+        )
+
+    # --- GB02-R1: Verdict join, support verification, exact typed verdicts ---
+
+    def test_r1_misbound_resolved_handle_and_reanchored_line_fail(self) -> None:
+        rec1 = _make_read_record(handle="read#1", session_id="sess-root")
+        rec2 = _make_read_record(handle="read#2", path="internal/other.go", session_id="sess-root")
+        log = DeliveryLog(records=(rec1, rec2))
+        cit = Citation(citation_type="handle", raw="[read#1:11]", handle="read#1", start_line=11, citation_id="c1")
+
+        # Misbound resolved_handle: product claims read#2 for a read#1:11 citation -> MUST FAIL
+        bad_handle = SurfaceOutcome(
+            surface="coordinator_closeout",
+            verdicts=(ProductVerdict(citation_id="c1", verdict="matched", resolved_handle="read#2"),),
+            records=(_matching_product_record(rec1), _matching_product_record(rec2)),
+        )
+        res = check_slot(log, [cit], self.scope, bad_handle)
+        self.assertFalse(res.passed)
+        self.assertEqual(res.defects[0].kind, "false_accept")
+        self.assertIn("Misbound resolved_handle", res.defects[0].detail)
+
+        # Misbound reanchored_line -> MUST FAIL
+        cit_reanchor = Citation(
+            citation_type="handle",
+            raw='[read#1:10 "return nil"]',
+            handle="read#1",
+            start_line=10,
+            excerpt="return nil",
+            citation_id="c1",
+        )
+        bad_reanchor = SurfaceOutcome(
+            surface="coordinator_closeout",
+            verdicts=(ProductVerdict(citation_id="c1", verdict="matched", resolved_handle="read#1", reanchored_line=12),),
+            records=(_matching_product_record(rec1), _matching_product_record(rec2)),
+        )
+        res_re = check_slot(log, [cit_reanchor], self.scope, bad_reanchor)
+        self.assertFalse(res_re.passed)
+        self.assertEqual(res_re.defects[0].kind, "false_accept")
+        self.assertIn("Misbound reanchored_line", res_re.defects[0].detail)
+
+    def test_r1_reordered_missing_duplicate_and_exact_typed_verdicts(self) -> None:
+        rec1 = _make_read_record(handle="read#1", session_id="sess-root", line_numbered=True)
+        rec2 = _make_read_record(
+            handle="read#2",
+            path="internal/unnumbered.go",
+            raw_bytes=b"alpha\nbeta\ngamma\n",
+            ranges=(LineRange(10, 12),),
+            line_numbered=False,
+            session_id="sess-root",
+        )
+        log = DeliveryLog(records=(rec1, rec2))
+        c1 = Citation(citation_type="handle", raw="[read#1:11]", handle="read#1", start_line=11, citation_id="occ-1")
+        c2 = Citation(citation_type="handle", raw="[read#2:11]", handle="read#2", start_line=11, citation_id="occ-2")
+        recs = (_matching_product_record(rec1), _matching_product_record(rec2))
+
+        # Reordered verdicts join by occurrence_id and PASS (including exact typed verdicts!)
+        reordered = SurfaceOutcome(
+            surface="coordinator_closeout",
+            verdicts=(
+                ProductVerdict(citation_id="occ-2", verdict="traced", resolved_handle="read#2"),
+                ProductVerdict(citation_id="occ-1", verdict="matched", resolved_handle="read#1"),
+            ),
+            records=recs,
+        )
+        res_ok = check_slot(log, [c1, c2], self.scope, reordered, assert_exact_verdicts=True)
+        self.assertTrue(res_ok.passed, res_ok.defects)
+
+        # Wrong exact typed verdict in R02/R03 mode (matched instead of traced) fails
+        wrong_exact = SurfaceOutcome(
+            surface="coordinator_closeout",
+            verdicts=(
+                ProductVerdict(citation_id="occ-1", verdict="matched", resolved_handle="read#1"),
+                ProductVerdict(citation_id="occ-2", verdict="matched", resolved_handle="read#2"),
+            ),
+            records=recs,
+        )
+        res_exact_fail = check_slot(log, [c1, c2], self.scope, wrong_exact, assert_exact_verdicts=True)
+        self.assertFalse(res_exact_fail.passed)
+        self.assertIn("Exact typed verdict mismatch", res_exact_fail.defects[0].detail)
+
+        # Missing verdict fails
+        missing = SurfaceOutcome(
+            surface="coordinator_closeout",
+            verdicts=(ProductVerdict(citation_id="occ-1", verdict="matched", resolved_handle="read#1"),),
+            records=recs,
+        )
+        res_missing = check_slot(log, [c1, c2], self.scope, missing)
+        self.assertFalse(res_missing.passed)
+        self.assertTrue(any("Missing product verdict" in d.detail for d in res_missing.defects))
+
+        # Duplicate verdict fails
+        dup = SurfaceOutcome(
+            surface="coordinator_closeout",
+            verdicts=(
+                ProductVerdict(citation_id="occ-1", verdict="matched", resolved_handle="read#1"),
+                ProductVerdict(citation_id="occ-1", verdict="matched", resolved_handle="read#1"),
+                ProductVerdict(citation_id="occ-2", verdict="traced", resolved_handle="read#2"),
+            ),
+            records=recs,
+        )
+        res_dup = check_slot(log, [c1, c2], self.scope, dup)
+        self.assertFalse(res_dup.passed)
+        self.assertTrue(any("Duplicate product verdict" in d.detail for d in res_dup.defects))
+
+    # --- GB02-R2: Evidence comparison, empty vs missing body, duplicates, defect preservation ---
+
+    def test_r2_missing_body_vs_empty_body_and_duplicate_records(self) -> None:
+        rec = _make_read_record(handle="read#1", session_id="sess-root")
+        log = DeliveryLog(records=(rec,))
+        cit = Citation(citation_type="handle", raw="[read#1:11]", handle="read#1", start_line=11, citation_id="c1")
+
+        # Clearing both raw_bytes and body_sha256 for a nonempty delivered body MUST flag recording_defect
+        cleared_body = ProductRecord(
+            handle=rec.handle,
+            kind=rec.kind,
+            session_id=rec.session_id,
+            worker_leg=rec.worker_leg,
+            source_revision=rec.source_revision,
+            delivered_ranges=rec.delivered_ranges,
+            body_sha256="",
+            raw_bytes=None,
+            path=rec.path,
+        )
+        outcome_cleared = SurfaceOutcome(
+            surface="coordinator_closeout",
+            verdicts=(ProductVerdict(citation_id="c1", verdict="matched", resolved_handle="read#1"),),
+            records=(cleared_body,),
+        )
+        res_cleared = check_slot(log, [cit], self.scope, outcome_cleared, require_friction=True)
+        self.assertFalse(res_cleared.passed)
+        # Known defect classification preserved even when friction instrumentation is missing!
+        self.assertEqual(res_cleared.status, "fail")
+        self.assertEqual(res_cleared.defects[0].kind, "recording_defect")
+        self.assertIn("missing body bytes", res_cleared.defects[0].detail)
+        self.assertTrue(res_cleared.missing_instrumentation)
+
+        # Explicitly empty delivered body with raw_bytes=b"" passes
+        empty_rec = _make_read_record(
+            handle="command#1",
+            kind="command",
+            path="",
+            ranges=(),
+            raw_bytes=b"",
+            line_numbered=False,
+            session_id="sess-root",
+        )
+        empty_prod = ProductRecord(
+            handle="command#1",
+            kind="command",
+            session_id="sess-root",
+            worker_leg="",
+            source_revision="rev-1",
+            raw_bytes=b"",
+        )
+        res_empty = check_slot(
+            DeliveryLog(records=(empty_rec,)),
+            [],
+            self.scope,
+            SurfaceOutcome(surface="coordinator_closeout", records=(empty_prod,)),
+        )
+        self.assertTrue(res_empty.passed, res_empty.defects)
+
+        # Duplicate identical product records MUST flag recording_defect
+        prod = _matching_product_record(rec)
+        dup_outcome = SurfaceOutcome(
+            surface="coordinator_closeout",
+            verdicts=(ProductVerdict(citation_id="c1", verdict="matched", resolved_handle="read#1"),),
+            records=(prod, prod),
+        )
+        res_dup = check_slot(log, [cit], self.scope, dup_outcome)
+        self.assertFalse(res_dup.passed)
+        self.assertTrue(any("Duplicate product record identity" in d.detail for d in res_dup.defects))
+
+    # --- GB02-R3: Dispatch identity, round boundary, cited_results, refresh, URL isolation ---
+
+    def test_r3_dispatch_legs_child_sessions_and_host_assembled_union(self) -> None:
+        root_rec = _make_read_record(handle="read#1", path="root.go", session_id="sess-root", worker_leg="")
+        leg_a_rec = _make_read_record(handle="read#1", path="leg_a.go", session_id="sess-child-a", worker_leg="")
+        leg_b_rec = _make_read_record(handle="read#1", path="leg_b.go", session_id="sess-child-b", worker_leg="")
+        unauth_rec = _make_read_record(handle="read#1", path="unauth.go", session_id="sess-child-c", worker_leg="")
+        parent_url = _make_read_record(
+            handle="web#1",
+            kind="web",
+            path="",
+            ranges=(),
+            url="https://parent.example.test/doc",
+            raw_bytes=b"parent web",
+            session_id="sess-root",
+            worker_leg="",
+        )
+        log = DeliveryLog(records=(root_rec, leg_a_rec, leg_b_rec, unauth_rec, parent_url))
+
+        parent_scope = PermittedScope(
+            session_id="sess-root",
+            worker_leg="",
+            dispatched_legs={"leg-a": "sess-child-a", "leg-b": "sess-child-b"},
+            round_id="round-1",
+            intent_window="intent-1",
+        )
+
+        # Same ordinal read#1 in parent, leg-a, and leg-b each resolve unambiguously
+        r_root = resolve_citation(log, Citation(citation_type="handle_path", handle="read#1", path="root.go", start_line=11), parent_scope)
+        r_a = resolve_citation(log, Citation(citation_type="handle_path", handle="leg-a:read#1", path="leg_a.go", start_line=11), parent_scope)
+        r_b = resolve_citation(log, Citation(citation_type="handle_path", handle="leg-b:read#1", path="leg_b.go", start_line=11), parent_scope)
+        self.assertEqual((r_root.verdict_class, r_root.supporting_handles), ("grounded", ("read#1",)))
+        self.assertEqual((r_a.verdict_class, r_a.supporting_handles), ("grounded", ("leg-a:read#1",)))
+        self.assertEqual((r_b.verdict_class, r_b.supporting_handles), ("grounded", ("leg-b:read#1",)))
+
+        # Unauthorized child leg-c is rejected
+        r_unauth = resolve_citation(log, Citation(citation_type="handle", handle="leg-c:read#1", start_line=11), parent_scope)
+        self.assertEqual(r_unauth.verdict_class, "ungrounded")
+        self.assertEqual(r_unauth.reason, "wrong_leg")
+
+        # Worker in sess-child-a CANNOT borrow parent's URL evidence
+        worker_scope = PermittedScope(session_id="sess-child-a", worker_leg="leg-a", round_id="round-1")
+        r_worker_url = resolve_citation(log, Citation(citation_type="url", url="https://parent.example.test/doc"), worker_scope)
+        self.assertEqual(r_worker_url.verdict_class, "ungrounded")
+        self.assertEqual(r_worker_url.reason, "url_not_observed")
+
+        # Host-assembled closeout allows true scoped union (read#1, leg-a:read#1) and rejects leg-c:read#1
+        ok_assembled = SurfaceOutcome(
+            surface="coordinator_closeout",
+            traced=False,
+            host_assembled=True,
+            attached_handles=("read#1", "leg-a:read#1"),
+        )
+        self.assertTrue(check_slot(log, [], parent_scope, ok_assembled, check_records=False).passed)
+
+        bad_assembled = SurfaceOutcome(
+            surface="coordinator_closeout",
+            traced=False,
+            host_assembled=True,
+            attached_handles=("read#1", "leg-c:read#1"),
+        )
+        res_bad_asm = check_slot(log, [], parent_scope, bad_assembled, check_records=False)
+        self.assertFalse(res_bad_asm.passed)
+        self.assertEqual(res_bad_asm.defects[0].kind, "false_accept")
+
+    def test_r3_prior_round_cited_results_and_refresh_invalidation(self) -> None:
+        r1 = _make_read_record(handle="read#1", round_id="round-1", session_id="sess-w", worker_leg="leg-a")
+        log = DeliveryLog(records=(r1,))
+        cit = Citation(citation_type="handle", handle="read#1", start_line=11)
+
+        # Active round-2 without cited_results -> prior-round file handle MUST NOT pass
+        scope_r2 = PermittedScope(session_id="sess-w", worker_leg="leg-a", round_id="round-2")
+        v_blocked = resolve_citation(log, cit, scope_r2)
+        self.assertEqual(v_blocked.verdict_class, "ungrounded")
+        self.assertEqual(v_blocked.reason, "prior_round_source_evidence")
+
+        # Explicitly listed in cited_results -> allowed as historical provenance
+        scope_cited = PermittedScope(
+            session_id="sess-w",
+            worker_leg="leg-a",
+            round_id="round-2",
+            cited_results_handles=frozenset({"read#1"}),
+        )
+        v_cited = resolve_citation(log, cit, scope_cited)
+        self.assertEqual(v_cited.verdict_class, "grounded")
+        self.assertEqual(v_cited.reason, "cited_results_historical")
+
+        # Workspace refresh invalidates stale source observations even if in cited_results
+        scope_refreshed = PermittedScope(
+            session_id="sess-w",
+            worker_leg="leg-a",
+            round_id="round-2",
+            cited_results_handles=frozenset({"read#1"}),
+            workspace_refreshed=True,
+        )
+        v_invalid = resolve_citation(log, cit, scope_refreshed)
+        self.assertEqual(v_invalid.verdict_class, "ungrounded")
+        self.assertEqual(v_invalid.reason, "stale_round_invalidated")
+
+    # --- GB02-R4: Artifact permissions (None vs empty set vs permitted vs absent) ---
+
+    def test_r4_artifact_permissions_present_denied_empty_set_and_absent(self) -> None:
+        art_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        art_rec = _make_read_record(
+            handle="artifact#1",
+            kind="artifact",
+            path="",
+            ranges=(),
+            artifact_id=art_id,
+            raw_bytes=b"PNG",
+            line_numbered=False,
+            session_id="sess-root",
+        )
+        log = DeliveryLog(records=(art_rec,))
+        cit_present = Citation(citation_type="artifact", artifact_id=art_id)
+        cit_absent = Citation(citation_type="artifact", artifact_id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+
+        # 1. Present and permitted (explicit permit set)
+        s_permitted = PermittedScope(session_id="sess-root", permitted_artifacts=frozenset({art_id}))
+        self.assertEqual(resolve_citation(log, cit_present, s_permitted).verdict_class, "grounded")
+
+        # 2. Present and unrestricted (permitted_artifacts=None)
+        s_none = PermittedScope(session_id="sess-root", permitted_artifacts=None)
+        self.assertEqual(resolve_citation(log, cit_present, s_none).verdict_class, "grounded")
+
+        # 3. Present and DENIED by explicitly empty permit set frozenset()
+        s_empty = PermittedScope(session_id="sess-root", permitted_artifacts=frozenset())
+        v_denied = resolve_citation(log, cit_present, s_empty)
+        self.assertEqual(v_denied.verdict_class, "ungrounded")
+        self.assertEqual(v_denied.reason, "artifact_not_permitted")
+
+        # 4. Absent artifact
+        v_absent = resolve_citation(log, cit_absent, s_none)
+        self.assertEqual(v_absent.verdict_class, "ungrounded")
+        self.assertEqual(v_absent.reason, "artifact_absent")
+
+    # --- GB02-R5: Wording result attachment diff + unknown preserves defects ---
+
+    def test_r5_wording_attachment_change_and_defect_preservation_with_unknown(self) -> None:
+        r1 = _make_read_record(handle="read#1", session_id="sess-root")
+        r2 = _make_read_record(handle="read#2", path="internal/other.go", session_id="sess-root")
+        log = DeliveryLog(records=(r1, r2))
+        recs = (_matching_product_record(r1), _matching_product_record(r2))
+        f0 = FrictionCounters()
+        f1 = FrictionCounters(host_assembled_closeouts=1)
+
+        # Changing attached_handles from ("read#1",) to ("read#2",) between wordings MUST fail,
+        # AND a later wording missing friction counters MUST NOT discard the established defect!
+        outcomes = [
+            SurfaceOutcome(
+                surface="coordinator_closeout",
+                wording="confident",
+                records=recs,
+                traced=False,
+                host_assembled=True,
+                attached_handles=("read#1",),
+                friction_before=f0,
+                friction_after=f1,
+            ),
+            SurfaceOutcome(
+                surface="coordinator_closeout",
+                wording="hedged",
+                records=recs,
+                traced=False,
+                host_assembled=True,
+                attached_handles=("read#2",),
+                friction_before=f0,
+                friction_after=f1,
+            ),
+            SurfaceOutcome(
+                surface="coordinator_closeout",
+                wording="completion_asserting",
+                records=recs,
+                traced=False,
+                host_assembled=True,
+                attached_handles=("read#1",),
+                friction_before=None,  # Missing instrumentation on 3rd wording
+                friction_after=None,
+            ),
+        ]
+        res = check_wording_triad(log, [], self.scope, outcomes, require_friction=True)
+        self.assertFalse(res.passed)
+        self.assertEqual(res.status, "fail")
+        self.assertTrue(any(d.kind == "wording_defect" for d in res.defects))
+        self.assertIn("completion_asserting", res.missing_instrumentation)
+
+        # Per-wording delivery log drift is also flagged
+        drifted_logs = {
+            "confident": log,
+            "hedged": DeliveryLog(records=(r1,)),
+            "completion_asserting": log,
+        }
+        res_drift = check_wording_triad(
+            drifted_logs,
+            [],
+            self.scope,
+            [
+                SurfaceOutcome(surface="coordinator_closeout", wording="confident", records=recs, traced=False, host_assembled=True, attached_handles=("read#1",)),
+                SurfaceOutcome(surface="coordinator_closeout", wording="hedged", records=(_matching_product_record(r1),), traced=False, host_assembled=True, attached_handles=("read#1",)),
+                SurfaceOutcome(surface="coordinator_closeout", wording="completion_asserting", records=recs, traced=False, host_assembled=True, attached_handles=("read#1",)),
+            ],
+        )
+        self.assertFalse(res_drift.passed)
+        self.assertTrue(any(d.kind == "recording_defect" for d in res_drift.defects))
+
+    # --- GB02-R6: Inclusive range vs point re-anchoring & meaningful-excerpt floor ---
+
+    def test_r6_uncovered_range_with_unique_excerpt_rejected_and_floor_enforced(self) -> None:
+        rec = _make_read_record(
+            handle="read#1",
+            raw_bytes=b"10: func Run() error {\n11:     return nil\n12: }\n",
+            ranges=(LineRange(10, 12),),
+            session_id="sess-root",
+        )
+        log = DeliveryLog(records=(rec,))
+
+        # Range 11-100 with unique excerpt "return nil" MUST be rejected (13-100 undelivered!)
+        uncovered_range = resolve_citation(
+            log,
+            Citation(
+                citation_type="handle",
+                raw='[read#1:11-100 "return nil"]',
+                handle="read#1",
+                start_line=11,
+                end_line=100,
+                excerpt="return nil",
+            ),
+            self.scope,
+        )
+        self.assertEqual(uncovered_range.verdict_class, "ungrounded")
+        self.assertEqual(uncovered_range.reason, "uncovered_range")
+
+        # Valid inclusive range 10-12 with matching excerpt inside span -> grounded
+        valid_range = resolve_citation(
+            log,
+            Citation(
+                citation_type="handle",
+                raw='[read#1:10-12 "return nil"]',
+                handle="read#1",
+                start_line=10,
+                end_line=12,
+                excerpt="return nil",
+            ),
+            self.scope,
+        )
+        self.assertEqual(valid_range.verdict_class, "grounded")
+
+        # Valid single-point correction (line 10 -> re-anchored to 11 via unique excerpt) -> grounded
+        point_fix = resolve_citation(
+            log,
+            Citation(
+                citation_type="handle",
+                raw='[read#1:10 "return nil"]',
+                handle="read#1",
+                start_line=10,
+                excerpt="return nil",
+            ),
+            self.scope,
+        )
+        self.assertEqual(point_fix.verdict_class, "grounded")
+        self.assertEqual(point_fix.reanchored_line, 11)
+
+        # Meaningful-excerpt floor: tiny 1-2 char excerpt rejected
+        below_floor = resolve_citation(
+            log,
+            Citation(
+                citation_type="handle",
+                raw='[read#1:12 "}"]',
+                handle="read#1",
+                start_line=12,
+                excerpt="}",
+            ),
+            self.scope,
+        )
+        self.assertEqual(below_floor.verdict_class, "ungrounded")
+        self.assertEqual(below_floor.reason, "excerpt_below_floor")
+
+    # --- Platform path-case & R04 spans ---
+
+    def test_platform_path_case_and_r04_exact_spans(self) -> None:
+        darwin_case = generate_path_case_contrast("20261127", 0, platform="darwin")
+        linux_case = generate_path_case_contrast("20261127", 0, platform="linux")
+        self.assertEqual(
+            resolve_citation(darwin_case.delivery_log, darwin_case.citation, darwin_case.scope).verdict_class,
+            "grounded",
+        )
+        self.assertEqual(
+            resolve_citation(linux_case.delivery_log, linux_case.citation, linux_case.scope).verdict_class,
+            "ungrounded",
+        )
+
+        # R04 exact source spans and HTTP(S) link syntax vs destination_observed distinction
+        saw_observed_link = False
+        saw_unobserved_link = False
+        for idx in range(30):
+            r04 = generate_r04("20261127", idx)
+            self.assertEqual(len(r04.spans), r04.total_spans)
+            for span in r04.spans:
+                self.assertEqual(r04.markdown[span.start : span.end], span.text)
+                if span.node_kind == "citation_http_link":
+                    self.assertTrue(span.is_citation_attempt)
+                    self.assertTrue(span.syntax_valid)
+                    if span.destination_observed is True:
+                        saw_observed_link = True
+                    elif span.destination_observed is False:
+                        saw_unobserved_link = True
+        self.assertTrue(saw_observed_link)
+        self.assertTrue(saw_unobserved_link)
 
 
 if __name__ == "__main__":

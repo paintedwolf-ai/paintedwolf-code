@@ -84,6 +84,9 @@ class DeliveryRecord:
     printed_other_numbers, session_id, worker_leg, round_id, intent_window,
     source_revision, handle, kind, path, url, artifact_id, call_id,
     fixture_provenance, superseded_by, model_visible.
+
+    Optional `shape` and `trust` fields support full contracted evidence-shape
+    comparison (GB02-R2) while defaulting cleanly for 21-field payloads.
     """
 
     tool: str
@@ -107,6 +110,8 @@ class DeliveryRecord:
     fixture_provenance: str
     superseded_by: str = ""
     model_visible: bool = True
+    shape: str = ""
+    trust: str = "trusted"
 
     def __post_init__(self) -> None:
         if isinstance(self.raw_bytes, str):
@@ -132,6 +137,10 @@ class DeliveryRecord:
     def is_superseded(self) -> bool:
         return bool(self.superseded_by)
 
+    @property
+    def identity_key(self) -> tuple[str, str, str]:
+        return (self.session_id, self.worker_leg, self.handle)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "tool": self.tool,
@@ -155,6 +164,8 @@ class DeliveryRecord:
             "fixture_provenance": self.fixture_provenance,
             "superseded_by": self.superseded_by,
             "model_visible": self.model_visible,
+            "shape": self.shape,
+            "trust": self.trust,
         }
 
     @classmethod
@@ -183,6 +194,8 @@ class DeliveryRecord:
             fixture_provenance=str(data["fixture_provenance"]),
             superseded_by=str(data.get("superseded_by", "")),
             model_visible=bool(data.get("model_visible", True)),
+            shape=str(data.get("shape", "")),
+            trust=str(data.get("trust", "trusted")),
         )
 
 
@@ -217,7 +230,13 @@ class DeliveryLog:
     def with_records(self, records: Sequence[DeliveryRecord]) -> DeliveryLog:
         return DeliveryLog(records=tuple(records), readable=self.readable)
 
-    def by_handle(self, handle: str, *, session_id: str | None = None, worker_leg: str | None = None) -> list[DeliveryRecord]:
+    def by_handle(
+        self,
+        handle: str,
+        *,
+        session_id: str | None = None,
+        worker_leg: str | None = None,
+    ) -> list[DeliveryRecord]:
         matches = []
         for rec in self.records:
             if rec.handle != handle:
@@ -228,6 +247,35 @@ class DeliveryLog:
                 continue
             matches.append(rec)
         return matches
+
+    def normalized_fingerprint(self) -> tuple[Any, ...]:
+        """Return a deterministic normalized fingerprint for cross-wording equivalence checks."""
+        return (
+            self.readable,
+            tuple(
+                sorted(
+                    (
+                        r.session_id,
+                        r.worker_leg,
+                        r.round_id,
+                        r.intent_window,
+                        r.handle,
+                        r.kind,
+                        r.shape,
+                        r.path,
+                        r.url,
+                        r.artifact_id,
+                        r.delivered_ranges,
+                        r.body_sha256,
+                        r.source_revision,
+                        r.trust,
+                        r.superseded_by,
+                        r.model_visible,
+                    )
+                    for r in self.records
+                )
+            ),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -276,6 +324,7 @@ class ProductRecord:
     url: str = ""
     artifact_id: str = ""
     round_id: str = ""
+    shape: str = ""
     trust: str = "trusted"
     superseded_by: str = ""
 
@@ -284,6 +333,14 @@ class ProductRecord:
             object.__setattr__(self, "delivered_ranges", tuple(self.delivered_ranges))
         if self.raw_bytes is not None and not self.body_sha256:
             object.__setattr__(self, "body_sha256", sha256_bytes(self.raw_bytes))
+
+    @property
+    def identity_key(self) -> tuple[str, str, str]:
+        return (self.session_id, self.worker_leg, self.handle)
+
+    def has_body_evidence(self) -> bool:
+        """Distinguish an empty body (raw_bytes=b'') from missing body evidence."""
+        return self.raw_bytes is not None or bool(self.body_sha256)
 
     def effective_body_sha256(self) -> str:
         if self.body_sha256:
@@ -306,7 +363,13 @@ class ProductVerdict:
 
     def __post_init__(self) -> None:
         if self.verdict not in ALL_VERDICTS:
-            raise ValueError(f"Unknown product verdict {self.verdict!r}; expected one of {sorted(ALL_VERDICTS)}")
+            raise ValueError(
+                f"Unknown product verdict {self.verdict!r}; expected one of {sorted(ALL_VERDICTS)}"
+            )
+
+    @property
+    def occurrence_id(self) -> str:
+        return self.citation_id
 
     @property
     def is_grounded(self) -> bool:
@@ -333,7 +396,9 @@ class FrictionCounters:
         ):
             val = getattr(self, name)
             if type(val) is not int or val < 0:
-                raise ValueError(f"FrictionCounters.{name} must be a non-negative int, got {val!r}")
+                raise ValueError(
+                    f"FrictionCounters.{name} must be a non-negative int, got {val!r}"
+                )
 
     def delta(self, before: FrictionCounters) -> FrictionCounters:
         """Compute non-negative counter delta (self - before)."""

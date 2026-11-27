@@ -9,9 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 import posixpath
 import re
-from typing import Iterable
+from typing import Iterable, Mapping
 
-from .delivery_log import DeliveryLog, DeliveryRecord, LineRange
+from .delivery_log import DeliveryLog, DeliveryRecord
 
 
 CITATION_TYPES: frozenset[str] = frozenset(
@@ -34,6 +34,9 @@ SOURCE_CHANGE_KIND: str = "source_change"
 
 # Opaque command kind without numbered file delivery does not index printed paths.
 OPAQUE_COMMAND_KINDS: frozenset[str] = frozenset({"command"})
+
+# Meaningful-span floor for excerpts (GB02-R6 / docs/grounding.md).
+MIN_MEANINGFUL_EXCERPT_CHARS: int = 3
 
 _HANDLE_RE = re.compile(r"^(?:(?P<leg>[A-Za-z0-9._-]+):)?(?P<kind>[a-z][a-z0-9_]*)#(?P<ord>[1-9]\d*)$")
 _NUMBERED_PREFIX_RE = re.compile(r"^\s*\d+(?:\s*[:|]\s?|\t)")
@@ -68,6 +71,10 @@ class Citation:
             object.__setattr__(self, "handle", bare)
 
     @property
+    def occurrence_id(self) -> str:
+        return self.citation_id
+
+    @property
     def names_handle(self) -> bool:
         return bool(self.handle)
 
@@ -75,30 +82,103 @@ class Citation:
     def has_coordinate(self) -> bool:
         return self.start_line is not None
 
+    @property
+    def is_multi_line_range(self) -> bool:
+        return (
+            self.start_line is not None
+            and self.end_line is not None
+            and self.end_line > self.start_line
+        )
+
 
 @dataclass(frozen=True)
 class PermittedScope:
-    """Execution and provenance boundary for resolving a citation."""
+    """Execution, dispatch, and provenance boundary for resolving a citation.
+
+    Models observation owner session and viewer scope separately (GB02-R3):
+    - `session_id`: the viewer's own session ID.
+    - `worker_leg`: empty for coordinator/root, or the worker's leg name.
+    - `dispatched_legs`: mapping `leg_id -> child_session_id` for child legs
+      dispatched by this viewer (stored as sorted tuple of pairs for immutability).
+    - `permitted_legs`: legacy convenience set of same-session leg names when
+      `dispatched_legs` is not explicitly supplied.
+    - `round_id`: active round boundary for current-source evidence.
+    - `cited_results_handles`: prior-round handles explicitly permitted as
+      historical provenance (`cited_results`) unless invalidated by refresh.
+    - `workspace_refreshed`: when True, invalidates stale prior-round source observations.
+    - `invalidated_rounds`: explicit set of rounds invalidated by refresh/rejection.
+    - `permitted_artifacts`: `None` means no restriction supplied; an empty set
+      `frozenset()` explicitly denies ALL artifacts (GB02-R4).
+    - `platform`: `"linux"` (case-sensitive ext4) or `"macos"`/`"darwin"` (case-insensitive APFS).
+    - `filesystem_case_sensitive`: optional explicit override; defaults from `platform`.
+    """
 
     session_id: str
     worker_leg: str = ""
     permitted_legs: frozenset[str] = frozenset()
+    dispatched_legs: tuple[tuple[str, str], ...] = ()
     round_id: str = ""
     intent_window: str = ""
-    permitted_artifacts: frozenset[str] = frozenset()
+    cited_results_handles: frozenset[str] = frozenset()
+    workspace_refreshed: bool = False
+    invalidated_rounds: frozenset[str] = frozenset()
+    permitted_artifacts: frozenset[str] | None = None
     platform: str = "linux"
+    filesystem_case_sensitive: bool | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.permitted_legs, frozenset):
             object.__setattr__(self, "permitted_legs", frozenset(self.permitted_legs))
-        if not isinstance(self.permitted_artifacts, frozenset):
-            object.__setattr__(self, "permitted_artifacts", frozenset(self.permitted_artifacts))
-        if self.platform not in {"linux", "macos"}:
+        if isinstance(self.dispatched_legs, Mapping):
+            object.__setattr__(
+                self,
+                "dispatched_legs",
+                tuple(sorted((str(k), str(v)) for k, v in self.dispatched_legs.items())),
+            )
+        elif not isinstance(self.dispatched_legs, tuple):
+            object.__setattr__(
+                self,
+                "dispatched_legs",
+                tuple(sorted((str(k), str(v)) for k, v in self.dispatched_legs)),
+            )
+        if not isinstance(self.cited_results_handles, frozenset):
+            object.__setattr__(
+                self, "cited_results_handles", frozenset(self.cited_results_handles)
+            )
+        if not isinstance(self.invalidated_rounds, frozenset):
+            object.__setattr__(
+                self, "invalidated_rounds", frozenset(self.invalidated_rounds)
+            )
+        if self.permitted_artifacts is not None and not isinstance(
+            self.permitted_artifacts, frozenset
+        ):
+            object.__setattr__(
+                self, "permitted_artifacts", frozenset(self.permitted_artifacts)
+            )
+        if self.platform not in {"linux", "macos", "darwin"}:
             raise ValueError(f"Unsupported platform {self.platform!r}")
 
     @property
+    def viewer_session_id(self) -> str:
+        return self.session_id
+
+    @property
+    def active_round_id(self) -> str:
+        return self.round_id
+
+    @property
+    def dispatched_leg_map(self) -> dict[str, str]:
+        return dict(self.dispatched_legs)
+
+    @property
+    def all_permitted_legs(self) -> frozenset[str]:
+        return self.permitted_legs | frozenset(self.dispatched_leg_map.keys())
+
+    @property
     def case_insensitive_paths(self) -> bool:
-        return self.platform == "macos"
+        if self.filesystem_case_sensitive is not None:
+            return not self.filesystem_case_sensitive
+        return self.platform in {"macos", "darwin"}
 
 
 @dataclass(frozen=True)
@@ -155,7 +235,6 @@ def _delivered_line_map(record: DeliveryRecord) -> list[tuple[int, str, str]]:
     """Return ordered list of (true_line_number, raw_line, content_line) for a record."""
     text = _normalize_newlines(record.raw_text)
     raw_lines = text.split("\n")
-    # Drop single trailing empty split element produced by a final newline
     if raw_lines and raw_lines[-1] == "" and text.endswith("\n"):
         raw_lines = raw_lines[:-1]
 
@@ -181,10 +260,16 @@ def _range_covered(record: DeliveryRecord, start: int, end: int) -> bool:
     return any(rng.contains_range(start, end) for rng in record.delivered_ranges)
 
 
+def _excerpt_meets_floor(excerpt: str) -> bool:
+    """Check the meaningful-span floor for a cited excerpt (GB02-R6)."""
+    stripped = "".join(_normalize_newlines(excerpt).split())
+    return len(stripped) >= MIN_MEANINGFUL_EXCERPT_CHARS
+
+
 def _find_contiguous_excerpt_matches(
     record: DeliveryRecord, excerpt: str
-) -> list[int]:
-    """Find all starting true line numbers where `excerpt` matches a contiguous span.
+) -> list[tuple[int, int]]:
+    """Find all (start_line, end_line) spans where `excerpt` matches contiguously.
 
     Multiline excerpts must match one contiguous span within this single observation,
     preserving blank lines and clipping (R03). Mixed CRLF/LF line endings are
@@ -202,12 +287,11 @@ def _find_contiguous_excerpt_matches(
     if not line_entries or len(exc_lines) > len(line_entries):
         return []
 
-    matches: list[int] = []
+    matches: list[tuple[int, int]] = []
     span_len = len(exc_lines)
 
     for idx in range(len(line_entries) - span_len + 1):
         window = line_entries[idx : idx + span_len]
-        # Verify true line numbers are contiguous inside the observation
         contiguous = all(
             window[i + 1][0] == window[i][0] + 1 for i in range(span_len - 1)
         )
@@ -223,33 +307,29 @@ def _find_contiguous_excerpt_matches(
                 or needle in raw_l
                 or (needle_stripped and needle_stripped in content_l)
             ):
-                matches.append(window[0][0])
+                matches.append((window[0][0], window[0][0]))
         else:
             ok = True
             for offset, exc_line in enumerate(exc_lines):
                 raw_l, content_l = window[offset][1], window[offset][2]
                 if exc_line == "":
-                    # Blank lines must be preserved strictly (R03)
                     if content_l.strip() != "":
                         ok = False
                         break
                 elif offset == 0:
-                    # First line may be a suffix/substring (clipping preserved)
                     if exc_line not in content_l and exc_line.strip() not in content_l and exc_line not in raw_l:
                         ok = False
                         break
                 elif offset == span_len - 1:
-                    # Last line may be a prefix/substring (clipping preserved)
                     if exc_line not in content_l and exc_line.strip() not in content_l and exc_line not in raw_l:
                         ok = False
                         break
                 else:
-                    # Interior lines must match the full line content (allowing outer whitespace tolerance)
                     if exc_line != content_l and exc_line.strip() != content_l.strip() and exc_line != raw_l:
                         ok = False
                         break
             if ok:
-                matches.append(window[0][0])
+                matches.append((window[0][0], window[-1][0]))
 
     return matches
 
@@ -280,24 +360,46 @@ def _evaluate_coordinate_and_excerpt(
 
     # Case 1: Excerpt supplied (with or without line coordinate)
     if excerpt:
+        if not _excerpt_meets_floor(excerpt):
+            return (False, "unverifiable", "excerpt_below_floor", None, None, "", False)
+
         matches = _find_contiguous_excerpt_matches(record, excerpt)
         if not matches:
             return (False, "unverifiable", "excerpt_mismatch", None, None, "", False)
         if start_line is None:
             return (True, "matched", "verified_excerpt", None, None, "", False)
-        # Line coordinate AND excerpt both supplied
+
         assert effective_end is not None
-        if _range_covered(record, start_line, effective_end) and start_line in matches:
+        if effective_end < start_line:
+            return (False, "unverifiable", "invalid_line_range", None, None, "", False)
+
+        # GB02-R6: Keep inclusive multi-line range strictly separate from single-point re-anchoring.
+        if effective_end > start_line:
+            if not _range_covered(record, start_line, effective_end):
+                return (False, "unverifiable", "uncovered_range", None, None, "", False)
+            # Excerpt must fall within the exact cited inclusive range [start_line, effective_end].
+            in_bounds = [
+                (m_start, m_end)
+                for m_start, m_end in matches
+                if m_start >= start_line and m_end <= effective_end
+            ]
+            if in_bounds:
+                return (True, "matched", "exact_match", None, None, "", False)
+            return (False, "unverifiable", "excerpt_outside_cited_range", None, None, "", False)
+
+        # Single-coordinate (start_line == effective_end) + excerpt
+        match_starts = [m_start for m_start, _ in matches]
+        if _range_covered(record, start_line, start_line) and start_line in match_starts:
             return (True, "matched", "exact_match", None, None, "", False)
-        # Re-anchor rule (Decision 002 R03/R06/R07): wrong/uncovered line re-anchors
-        # ONLY when the excerpt matches uniquely (1 match) within the permitted observation.
-        if len(matches) == 1:
-            return (True, "matched", "reanchored_excerpt", matches[0], None, "", False)
+        # Single-point re-anchoring ONLY when the excerpt matches uniquely (1 match)
+        # and the matched span is fully within delivered_ranges.
+        if len(matches) == 1 and _range_covered(record, matches[0][0], matches[0][1]):
+            return (True, "matched", "reanchored_excerpt", matches[0][0], None, "", False)
         return (False, "unverifiable", "excerpt_ambiguous", None, None, "", False)
 
     # Case 2: Coordinate only, no excerpt
     assert start_line is not None and effective_end is not None
-    if not _range_covered(record, start_line, effective_end):
+    if effective_end < start_line or not _range_covered(record, start_line, effective_end):
         return (False, "unverifiable", "uncovered_range", None, None, "", False)
 
     # Decision 004 F3 & Decision 005: printed_other_numbers without an excerpt.
@@ -306,9 +408,6 @@ def _evaluate_coordinate_and_excerpt(
             raw_citation.strip() in record.delivery_tags
         )
         if is_copied_host_tag:
-            # Decision 005: copied host-issued delivery tag formats the true coverage
-            # and is a contract-valid citation; keep observed_product_rule identifiable
-            # so sidecar execution decides whether runtime agrees or flags a candidate false reject.
             return (
                 True,
                 "matched",
@@ -318,8 +417,6 @@ def _evaluate_coordinate_and_excerpt(
                 "printed_other_numbers_rejects_unexcerpted_coord",
                 True,
             )
-        # Un-excerpted counted coordinate: D1 product rule rejects (unverifiable),
-        # while contract phrasing for traced coordinates is kept distinct.
         return (
             False,
             "unverifiable",
@@ -335,16 +432,55 @@ def _evaluate_coordinate_and_excerpt(
     return (True, "traced", "traced_range", None, None, "", False)
 
 
+def _record_belongs_to_viewer_own_scope(record: DeliveryRecord, scope: PermittedScope) -> bool:
+    return record.session_id == scope.session_id and record.worker_leg == scope.worker_leg
+
+
+def _record_belongs_to_dispatched_leg(
+    record: DeliveryRecord, target_leg: str, scope: PermittedScope
+) -> bool:
+    """Check if `record` belongs to `target_leg` under dispatch identity (GB02-R3)."""
+    leg_map = scope.dispatched_leg_map
+    if target_leg in leg_map:
+        child_session = leg_map[target_leg]
+        return record.session_id == child_session and record.worker_leg in {"", target_leg}
+    if target_leg in scope.permitted_legs:
+        return record.session_id == scope.session_id and record.worker_leg == target_leg
+    return False
+
+
 def _is_in_leg_scope(record: DeliveryRecord, target_leg: str, scope: PermittedScope) -> bool:
-    if record.session_id != scope.session_id:
-        return False
     if not record.model_visible:
         return False
     if target_leg:
-        if target_leg != scope.worker_leg and target_leg not in scope.permitted_legs:
-            return False
-        return record.worker_leg == target_leg
-    return record.worker_leg == scope.worker_leg
+        if target_leg == scope.worker_leg and scope.worker_leg:
+            return _record_belongs_to_viewer_own_scope(record, scope)
+        return _record_belongs_to_dispatched_leg(record, target_leg, scope)
+    return _record_belongs_to_viewer_own_scope(record, scope)
+
+
+def _record_in_viewer_union(record: DeliveryRecord, scope: PermittedScope) -> tuple[bool, str]:
+    """Return (in_union, canonical_display_handle) for a record in viewer's permitted union."""
+    if not record.model_visible:
+        return (False, "")
+    if _record_belongs_to_viewer_own_scope(record, scope):
+        return (True, record.handle)
+    for leg in sorted(scope.all_permitted_legs):
+        if _record_belongs_to_dispatched_leg(record, leg, scope):
+            return (True, f"{leg}:{record.handle}")
+    return (False, "")
+
+
+def permitted_union_handles(log: DeliveryLog, scope: PermittedScope) -> frozenset[str]:
+    """Return the true scoped union of model-visible display handles (GB02-R3)."""
+    if not log.readable:
+        return frozenset()
+    handles: set[str] = set()
+    for rec in log.records:
+        in_union, display = _record_in_viewer_union(rec, scope)
+        if in_union:
+            handles.add(display)
+    return frozenset(handles)
 
 
 def _is_file_region_record(record: DeliveryRecord) -> bool:
@@ -355,6 +491,22 @@ def _is_file_region_record(record: DeliveryRecord) -> bool:
     if record.kind in OPAQUE_COMMAND_KINDS and not record.delivered_ranges:
         return False
     return bool(record.delivered_ranges)
+
+
+def _check_round_currency(record: DeliveryRecord, scope: PermittedScope) -> tuple[bool, str]:
+    """Enforce worker round boundary, `cited_results`, and refresh invalidation (GB02-R3)."""
+    if not scope.active_round_id or not record.round_id:
+        return (True, "")
+    if record.round_id == scope.active_round_id:
+        return (True, "")
+    # Prior-round file-region observation:
+    if _is_file_region_record(record):
+        if scope.workspace_refreshed or record.round_id in scope.invalidated_rounds:
+            return (False, "stale_round_invalidated")
+        if record.handle in scope.cited_results_handles:
+            return (True, "cited_results_historical")
+        return (False, "prior_round_source_evidence")
+    return (True, "")
 
 
 def _scoped_current_file_records(
@@ -370,7 +522,7 @@ def _scoped_current_file_records(
             continue
         if rec.is_superseded:
             continue
-        if scope.round_id and rec.round_id and rec.round_id != scope.round_id:
+        if scope.active_round_id and rec.round_id and rec.round_id != scope.active_round_id:
             continue
         if kind is not None and rec.kind != kind:
             continue
@@ -391,13 +543,10 @@ def has_citable_observation(log: DeliveryLog, scope: PermittedScope) -> bool | N
     if not log.readable:
         return None
     for rec in log.records:
-        if rec.session_id != scope.session_id:
-            continue
-        if not rec.model_visible:
+        in_union, _ = _record_in_viewer_union(rec, scope)
+        if not in_union:
             continue
         if scope.intent_window and rec.intent_window != scope.intent_window:
-            continue
-        if rec.worker_leg and rec.worker_leg != scope.worker_leg and rec.worker_leg not in scope.permitted_legs:
             continue
         if rec.kind == SOURCE_CHANGE_KIND or rec.kind in MEDIATED_CONTACT_KINDS:
             continue
@@ -410,21 +559,23 @@ def is_recallable(record: DeliveryRecord) -> bool:
     return record.kind != SOURCE_CHANGE_KIND and record.kind not in MEDIATED_CONTACT_KINDS
 
 
-def _handle_exists_outside_scope(log: DeliveryLog, handle: str, target_leg: str, scope: PermittedScope) -> str | None:
+def _handle_exists_outside_scope(
+    log: DeliveryLog, handle: str, target_leg: str, scope: PermittedScope
+) -> str | None:
     """Detect whether a handle exists only in a forbidden leg or session."""
     for rec in log.records:
         if rec.handle != handle:
             continue
+        if _is_in_leg_scope(rec, target_leg, scope):
+            continue
+        if target_leg:
+            if target_leg != scope.worker_leg and target_leg not in scope.all_permitted_legs:
+                return "wrong_leg"
+            return "wrong_leg"
         if rec.session_id != scope.session_id:
             return "wrong_session"
-        if target_leg:
-            if target_leg != scope.worker_leg and target_leg not in scope.permitted_legs:
-                return "wrong_leg"
-            if rec.worker_leg != target_leg:
-                return "wrong_leg"
-        else:
-            if rec.worker_leg != scope.worker_leg:
-                return "wrong_leg"
+        if rec.worker_leg != scope.worker_leg:
+            return "wrong_leg"
     return None
 
 
@@ -435,12 +586,7 @@ def _attempt_stale_ordinal_binding(
     scope: PermittedScope,
     parsed_kind: str,
 ) -> ReferenceVerdict | None:
-    """Bind a stale ordinal ONLY when structured fields uniquely identify a current record.
-
-    Distinguishes permitted binding of a stale ordinal from a wrong-leg or
-    wrong-observation reference (Decision 002 R03/R06/R07).
-    """
-    # Without a path or coordinate/excerpt, a stale bare handle cannot be bound.
+    """Bind a stale ordinal ONLY when structured fields uniquely identify a current record."""
     if not citation.path and not citation.has_coordinate and not citation.excerpt:
         return None
 
@@ -451,24 +597,25 @@ def _attempt_stale_ordinal_binding(
             rec_path = normalize_path(rec.path, case_insensitive=scope.case_insensitive_paths)
             if rec_path != norm_cited_path:
                 continue
-        supported, _exact, _reason, _reanchor, _contract, _rule, _disputed = _evaluate_coordinate_and_excerpt(
+        supported, *_ = _evaluate_coordinate_and_excerpt(
             rec, citation.start_line, citation.end_line, citation.excerpt, raw_citation=citation.raw
         )
         if supported:
             candidates.append(rec)
 
+    prefix = f"{target_leg}:" if target_leg else ""
     if len(candidates) == 1:
         return ReferenceVerdict(
             verdict_class="grounded",
             expected_exact_verdict="bound",
-            supporting_handles=(candidates[0].handle,),
+            supporting_handles=(f"{prefix}{candidates[0].handle}",),
             reason="bound_stale_ordinal",
         )
     if len(candidates) > 1:
         return ReferenceVerdict(
             verdict_class="ambiguous",
             expected_exact_verdict="ambiguous",
-            supporting_handles=tuple(r.handle for r in candidates),
+            supporting_handles=tuple(f"{prefix}{r.handle}" for r in candidates),
             reason="ambiguous_stale_ordinal",
         )
     return None
@@ -520,8 +667,7 @@ def _resolve_handle(
             reason="mediated_contact_only",
         )
 
-    # Check if target leg is even permitted
-    if target_leg and target_leg != scope.worker_leg and target_leg not in scope.permitted_legs:
+    if target_leg and target_leg != scope.worker_leg and target_leg not in scope.all_permitted_legs:
         return ReferenceVerdict(
             verdict_class="ungrounded",
             expected_exact_verdict="unverifiable",
@@ -551,8 +697,21 @@ def _resolve_handle(
             reason="unknown_handle",
         )
 
-    # Exact handle found in scope; never substitute another observation if path/body contradicts (V03).
     rec = exact_matches[0]
+    display_handle = f"{target_leg}:{rec.handle}" if target_leg else rec.handle
+
+    # GB02-R3: Enforce round currency, cited_results, and refresh invalidation for own worker evidence
+    if not target_leg or target_leg == scope.worker_leg:
+        round_ok, round_reason = _check_round_currency(rec, scope)
+        if not round_ok:
+            return ReferenceVerdict(
+                verdict_class="ungrounded",
+                expected_exact_verdict="unverifiable",
+                reason=round_reason,
+            )
+    else:
+        round_reason = ""
+
     if rec.kind == SOURCE_CHANGE_KIND:
         if citation.path or citation.has_coordinate or citation.excerpt:
             return ReferenceVerdict(
@@ -563,7 +722,7 @@ def _resolve_handle(
         return ReferenceVerdict(
             verdict_class="grounded",
             expected_exact_verdict="matched",
-            supporting_handles=(rec.handle,),
+            supporting_handles=(display_handle,),
             reason="source_change_brief_row",
         )
 
@@ -581,11 +740,12 @@ def _resolve_handle(
         rec, citation.start_line, citation.end_line, citation.excerpt, raw_citation=citation.raw
     )
     if supported:
+        final_reason = round_reason or reason
         return ReferenceVerdict(
             verdict_class="grounded",
             expected_exact_verdict=exact_v,
-            supporting_handles=(rec.handle,),
-            reason=reason,
+            supporting_handles=(display_handle,),
+            reason=final_reason,
             reanchored_line=reanchor,
             contract_reading_verdict=contract_v,
             observed_product_rule=obs_rule,
@@ -643,6 +803,7 @@ def _resolve_path_coord(
         elif first_failure is None:
             first_failure = (reason, contract_v, obs_rule, disputed)
 
+    prefix = f"{citation.worker_leg}:" if citation.worker_leg else ""
     if len(supported_results) == 1:
         rec, exact_v, reason, reanchor, contract_v, obs_rule, disputed = supported_results[0]
         if exact_v == "matched" and citation.path != rec.path:
@@ -652,7 +813,7 @@ def _resolve_path_coord(
         return ReferenceVerdict(
             verdict_class="grounded",
             expected_exact_verdict=exact_v,
-            supporting_handles=(rec.handle,),
+            supporting_handles=(f"{prefix}{rec.handle}",),
             reason=reason,
             reanchored_line=reanchor,
             contract_reading_verdict=contract_v,
@@ -664,7 +825,7 @@ def _resolve_path_coord(
         return ReferenceVerdict(
             verdict_class="ambiguous",
             expected_exact_verdict="ambiguous",
-            supporting_handles=tuple(r.handle for r, *_ in supported_results),
+            supporting_handles=tuple(f"{prefix}{r.handle}" for r, *_ in supported_results),
             reason="ambiguous_multiple_records",
         )
 
@@ -690,37 +851,44 @@ def _resolve_url(
             reason="empty_url",
         )
 
-    admitted_matches: list[DeliveryRecord] = []
+    admitted_matches: list[str] = []
     contact_only_hit = False
 
     for rec in log.records:
-        if rec.session_id != scope.session_id:
-            continue
-        if rec.worker_leg and rec.worker_leg != scope.worker_leg and rec.worker_leg not in scope.permitted_legs:
-            continue
         if rec.url != target_url:
             continue
+        # Check whether record is in viewer's permitted union (own session or dispatched child leg).
+        # A worker NEVER borrows parent URL evidence (GB02-R3).
+        in_own = _record_belongs_to_viewer_own_scope(rec, scope)
+        matched_leg = ""
+        if not in_own:
+            for leg in sorted(scope.all_permitted_legs):
+                if _record_belongs_to_dispatched_leg(rec, leg, scope):
+                    matched_leg = leg
+                    break
+        if not in_own and not matched_leg:
+            continue
+
         if rec.kind in MEDIATED_CONTACT_KINDS:
-            # GB01 Finding F2: dialed_host#, retrieved_host#, audited_host# NEVER grant URL citation support.
             contact_only_hit = True
             continue
         if not rec.model_visible:
             continue
         if rec.kind in ADMITTED_URL_KINDS:
-            admitted_matches.append(rec)
+            admitted_matches.append(f"{matched_leg}:{rec.handle}" if matched_leg else rec.handle)
 
     if len(admitted_matches) == 1:
         return ReferenceVerdict(
             verdict_class="grounded",
             expected_exact_verdict="matched",
-            supporting_handles=(admitted_matches[0].handle,),
+            supporting_handles=(admitted_matches[0],),
             reason="url_observed",
         )
     if len(admitted_matches) > 1:
         return ReferenceVerdict(
             verdict_class="grounded",
             expected_exact_verdict="matched",
-            supporting_handles=tuple(r.handle for r in admitted_matches),
+            supporting_handles=tuple(admitted_matches),
             reason="url_observed_multiple",
         )
     if contact_only_hit:
@@ -746,35 +914,35 @@ def _resolve_artifact(
             expected_exact_verdict="unverifiable",
             reason="empty_artifact_id",
         )
-    if scope.permitted_artifacts and art_id not in scope.permitted_artifacts:
+
+    matches: list[str] = []
+    for rec in log.records:
+        if rec.artifact_id != art_id:
+            continue
+        in_union, display = _record_in_viewer_union(rec, scope)
+        if in_union:
+            matches.append(display)
+
+    if not matches:
+        return ReferenceVerdict(
+            verdict_class="ungrounded",
+            expected_exact_verdict="unverifiable",
+            reason="artifact_absent",
+        )
+
+    # GB02-R4: None means unrestricted; an explicitly empty set denies all artifacts.
+    if scope.permitted_artifacts is not None and art_id not in scope.permitted_artifacts:
         return ReferenceVerdict(
             verdict_class="ungrounded",
             expected_exact_verdict="unverifiable",
             reason="artifact_not_permitted",
         )
 
-    matches = [
-        rec
-        for rec in log.records
-        if rec.session_id == scope.session_id
-        and rec.model_visible
-        and rec.artifact_id == art_id
-        and (
-            rec.worker_leg == scope.worker_leg
-            or rec.worker_leg in scope.permitted_legs
-        )
-    ]
-    if matches:
-        return ReferenceVerdict(
-            verdict_class="grounded",
-            expected_exact_verdict="matched",
-            supporting_handles=tuple(r.handle for r in matches),
-            reason="artifact_present",
-        )
     return ReferenceVerdict(
-        verdict_class="ungrounded",
-        expected_exact_verdict="unverifiable",
-        reason="artifact_absent",
+        verdict_class="grounded",
+        expected_exact_verdict="matched",
+        supporting_handles=tuple(matches),
+        reason="artifact_present",
     )
 
 

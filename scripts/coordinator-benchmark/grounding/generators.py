@@ -3,6 +3,12 @@
 Uses base seeds '20261127' and '3bb1464d' combined with family ID and instance
 index so every generated instance is 100% deterministic and replayable across
 hosts and Python versions.
+
+Decision 007 enhancements:
+- Explicit platform ('linux' case-sensitive ext4 vs 'darwin'/'macos' case-insensitive
+  APFS) and filesystem path-case behavior in R06/R07 and path-case contrast cases.
+- R04 carries exact source spans `(start, end)` and node classifications, separating
+  ordinary HTTP(S) link syntax from whether the destination URL was observed.
 """
 from __future__ import annotations
 
@@ -53,12 +59,14 @@ class SeedIdentity:
     base_seed: str
     family_id: str
     instance_index: int
+    platform: str = "linux"
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "base_seed": self.base_seed,
             "family_id": self.family_id,
             "instance_index": self.instance_index,
+            "platform": self.platform,
         }
 
     @classmethod
@@ -67,7 +75,21 @@ class SeedIdentity:
             base_seed=str(data["base_seed"]),
             family_id=str(data["family_id"]),
             instance_index=int(data["instance_index"]),
+            platform=str(data.get("platform", "linux")),
         )
+
+
+@dataclass(frozen=True)
+class R04Span:
+    """Exact character span and node classification within generated R04 Markdown."""
+
+    start: int
+    end: int
+    text: str
+    node_kind: str
+    is_citation_attempt: bool
+    syntax_valid: bool = True
+    destination_observed: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -82,6 +104,7 @@ class GeneratedV02Case:
 class GeneratedR04Case:
     seed: SeedIdentity
     markdown: str
+    spans: tuple[R04Span, ...]
     expected_citation_spans: tuple[str, ...]
     literal_or_prose_spans: tuple[str, ...]
     oversized_inline_nodes: tuple[str, ...]
@@ -142,7 +165,6 @@ def generate_v02(base_seed: str, instance_index: int) -> GeneratedV02Case:
     raw = body.encode("utf-8")[:4000]
     if not raw:
         raw = b"x"
-    # Keep only markers that survived truncation (always >= 1 since first marker is < 200B)
     surviving = tuple(m for m in markers if m.encode("utf-8") in raw)
     if not surviving:
         fallback = "[read#1 a.go:1]"
@@ -158,86 +180,120 @@ def generate_v02(base_seed: str, instance_index: int) -> GeneratedV02Case:
 
 
 def generate_r04(base_seed: str, instance_index: int) -> GeneratedR04Case:
-    """R04: Markdown with valid citation forms, look-alikes, literal contexts, and >4096B node."""
+    """R04: Markdown with valid citation forms, look-alikes, literal contexts, and >4096B node.
+
+    Every emitted node is tracked with its exact `(start, end)` character span and
+    classification so repeated textual forms cannot hide a missed span. Ordinary
+    HTTP(S) links are classified as valid link syntax (`is_citation_attempt=True`)
+    separately from whether their destination URL was observed (`destination_observed`).
+    """
     rng = random.Random(derive_seed(base_seed, "R04", instance_index))
     include_oversized = (instance_index % 17 == 0)
     span_count = rng.randint(2, 12 if include_oversized else 40)
 
-    valid_forms = [
-        "[read#3]",
-        "[leg-a:read#3]",
-        "[task#1]",
-        "[source_change#1]",
-        "[read#3:42]",
-        "[read#3:42-58]",
-        '[read#3:42 "if err != nil"]',
-        "[internal/a.go:42]",
-        '["docs/design notes.md":12]',
-        "[read#3:42, leg-a:grep#2:18]",
-        "[RFC 9110](https://example.test/spec)",
-        "<https://example.test/observed>",
-        "[auth.go](internal/auth.go#L42)",
-        "[auth.go](source://root-id/internal/auth.go#L42)",
-        "[verify: targeted - unit tests passed]",
-        "[artifact:123e4567-e89b-12d3-a456-426614174000]",
+    # (text, node_kind, is_citation_attempt, syntax_valid, destination_observed)
+    valid_forms: list[tuple[str, str, bool, bool, bool | None]] = [
+        ("[read#3]", "citation_handle", True, True, None),
+        ("[leg-a:read#3]", "citation_handle", True, True, None),
+        ("[task#1]", "citation_handle", True, True, None),
+        ("[source_change#1]", "citation_handle", True, True, None),
+        ("[read#3:42]", "citation_handle_coord", True, True, None),
+        ("[read#3:42-58]", "citation_handle_range", True, True, None),
+        ('[read#3:42 "if err != nil"]', "citation_handle_excerpt", True, True, None),
+        ("[internal/a.go:42]", "citation_path_coord", True, True, None),
+        ('["docs/design notes.md":12]', "citation_quoted_path_coord", True, True, None),
+        ("[read#3:42, leg-a:grep#2:18]", "citation_group", True, True, None),
+        ("[RFC 9110](https://example.test/spec)", "citation_http_link", True, True, True),
+        ("<https://example.test/observed>", "citation_http_autolink", True, True, True),
+        ("[Unobserved Ref](https://example.test/unobserved)", "citation_http_link", True, True, False),
+        ("[auth.go](internal/auth.go#L42)", "citation_workspace_link", True, True, None),
+        ("[auth.go](source://root-id/internal/auth.go#L42)", "citation_workspace_link", True, True, None),
+        ("[verify: targeted - unit tests passed]", "citation_verify", True, True, None),
+        ("[artifact:123e4567-e89b-12d3-a456-426614174000]", "citation_artifact", True, True, None),
     ]
 
-    lookalikes_and_literals = [
-        "arr[0]",
-        "items[idx]",
-        "[v1.2.3]",
-        "[pr#123]",
-        "[standard link](https://example.test/plain)",
-        "`[read#99:1]`",
-        "\\[read#88:2\\]",
-        "<!-- [read#77:3] -->",
-        "    [read#66:4]  # indented code",
-        "```\n[read#55:5]\n```",
+    lookalikes_and_literals: list[tuple[str, str, bool, bool, bool | None]] = [
+        ("arr[0]", "prose_index", False, True, None),
+        ("items[idx]", "prose_index", False, True, None),
+        ("[v1.2.3]", "prose_version", False, True, None),
+        ("[pr#123]", "prose_unknown_kind", False, True, None),
+        ("[a.go:42:10]", "malformed_near_miss", True, False, None),
+        ("`[read#99:1]`", "literal_inline_code", False, True, None),
+        ("\\[read#88:2\\]", "literal_escaped_bracket", False, True, None),
+        ("<!-- [read#77:3] -->", "literal_html_comment", False, True, None),
+        ("    [read#66:4]  # indented code", "literal_indented_code", False, True, None),
+        ("```\n[read#55:5]\n```", "literal_code_fence", False, True, None),
     ]
 
-    parts: list[str] = []
-    expected_citations: list[str] = []
-    literals: list[str] = []
-    oversized: list[str] = []
+    segments: list[tuple[str, R04Span]] = []
+
+    def _build_markdown(segs: list[tuple[str, R04Span]]) -> tuple[str, tuple[R04Span, ...]]:
+        buf: list[str] = []
+        recorded: list[R04Span] = []
+        cursor = 0
+        for idx, (line_text, proto) in enumerate(segs):
+            if idx > 0:
+                buf.append("\n")
+                cursor += 1
+            rel_start = line_text.index(proto.text)
+            abs_start = cursor + rel_start
+            abs_end = abs_start + len(proto.text)
+            recorded.append(
+                R04Span(
+                    start=abs_start,
+                    end=abs_end,
+                    text=proto.text,
+                    node_kind=proto.node_kind,
+                    is_citation_attempt=proto.is_citation_attempt,
+                    syntax_valid=proto.syntax_valid,
+                    destination_observed=proto.destination_observed,
+                )
+            )
+            buf.append(line_text)
+            cursor += len(line_text)
+        return "".join(buf), tuple(recorded)
 
     if include_oversized:
         big_excerpt = "x" * 4120
         big_node = f'[read#3:42 "{big_excerpt}"]'
-        parts.append(big_node)
-        oversized.append(big_node)
+        segments.append(
+            (
+                big_node,
+                R04Span(0, len(big_node), big_node, "oversized_inline_node", True, False, None),
+            )
+        )
 
     for _ in range(span_count - (1 if include_oversized else 0)):
         if rng.random() < 0.5:
-            span = rng.choice(valid_forms)
-            expected_citations.append(span)
-            parts.append(f"Claim verified at {span}.")
+            text, kind, is_cit, syn_ok, dest_obs = rng.choice(valid_forms)
+            line = f"Claim verified at {text}."
         else:
-            span = rng.choice(lookalikes_and_literals)
-            literals.append(span)
-            if span.startswith("    ") or span.startswith("```"):
-                parts.append(f"\n{span}\n")
+            text, kind, is_cit, syn_ok, dest_obs = rng.choice(lookalikes_and_literals)
+            if text.startswith("    ") or text.startswith("```"):
+                line = f"\n{text}\n"
             else:
-                parts.append(f"Prose example {span} stays literal.")
+                line = f"Prose example {text} stays literal."
+        segments.append((line, R04Span(0, len(text), text, kind, is_cit, syn_ok, dest_obs)))
 
-    markdown = "\n".join(parts)
-    # Enforce 1-6000 byte range while preserving oversized node if included
-    if len(markdown.encode("utf-8")) > 6000:
-        while len(markdown.encode("utf-8")) > 6000 and len(parts) > 1:
-            removed = parts.pop()
-            if expected_citations and expected_citations[-1] in removed:
-                expected_citations.pop()
-            elif literals and literals[-1] in removed:
-                literals.pop()
-            markdown = "\n".join(parts)
+    markdown, spans = _build_markdown(segments)
+    while len(markdown.encode("utf-8")) > 6000 and len(segments) > 1:
+        segments.pop()
+        markdown, spans = _build_markdown(segments)
 
-    total = len(expected_citations) + len(literals) + len(oversized)
+    expected_citations = tuple(
+        s.text for s in spans if s.is_citation_attempt and s.node_kind != "oversized_inline_node"
+    )
+    literals = tuple(s.text for s in spans if not s.is_citation_attempt)
+    oversized = tuple(s.text for s in spans if s.node_kind == "oversized_inline_node")
+
     return GeneratedR04Case(
         seed=SeedIdentity(base_seed, "R04", instance_index),
         markdown=markdown,
-        expected_citation_spans=tuple(expected_citations),
-        literal_or_prose_spans=tuple(literals),
-        oversized_inline_nodes=tuple(oversized),
-        total_spans=total,
+        spans=spans,
+        expected_citation_spans=expected_citations,
+        literal_or_prose_spans=literals,
+        oversized_inline_nodes=oversized,
+        total_spans=len(spans),
     )
 
 
@@ -286,6 +342,7 @@ def generate_r06(
     instance_index: int,
     *,
     variation: str | None = None,
+    platform: str = "linux",
 ) -> GeneratedR06Case:
     """R06: Delivery log (1-30 deliveries) + supported citation across 8 variations."""
     rng = random.Random(derive_seed(base_seed, "R06", instance_index))
@@ -302,7 +359,7 @@ def generate_r06(
         worker_leg="",
         round_id=round_id,
         intent_window=intent_window,
-        platform="linux",
+        platform=platform,
     )
 
     if chosen == "path_normalization":
@@ -329,11 +386,19 @@ def generate_r06(
             call_id="call-target",
             fixture_provenance="host",
         )
+        # On case-insensitive darwin/macos APFS, path-case variation is valid;
+        # on case-sensitive linux ext4, normalize dot-segments preserving case.
+        cited_path = (
+            "./Internal/Core/../Core/Engine.go"
+            if scope.case_insensitive_paths
+            else "./internal/core/../core/engine.go"
+        )
         citation = Citation(
             citation_type="path_coord",
-            raw="[./internal/core/../core/engine.go:11]",
-            path="./internal/core/../core/engine.go",
+            raw=f"[{cited_path}:11]",
+            path=cited_path,
             start_line=11,
+            citation_id="c1",
         )
     elif chosen == "stale_ordinal":
         path = "internal/auth/token.go"
@@ -359,7 +424,6 @@ def generate_r06(
             call_id="call-target",
             fixture_provenance="host",
         )
-        # Stale ordinal read#999 with exact path + line + excerpt uniquely binds to read#1
         citation = Citation(
             citation_type="handle_path",
             raw='[read#999 internal/auth/token.go:21 "return true"]',
@@ -367,6 +431,7 @@ def generate_r06(
             path=path,
             start_line=21,
             excerpt="return true",
+            citation_id="c1",
         )
     elif chosen == "quoted_space_path":
         path = "docs/design notes.md"
@@ -397,6 +462,7 @@ def generate_r06(
             raw='["docs/design notes.md":2]',
             path='"docs/design notes.md"',
             start_line=2,
+            citation_id="c1",
         )
     elif chosen == "non_ascii_path":
         path = "src/café_naïve_日本語.py"
@@ -427,6 +493,7 @@ def generate_r06(
             raw=f"[{path}:6]",
             path=path,
             start_line=6,
+            citation_id="c1",
         )
     elif chosen == "mixed_crlf_lf_excerpt":
         path = "src/windows_file.txt"
@@ -459,6 +526,7 @@ def generate_r06(
             start_line=1,
             end_line=2,
             excerpt="alpha_line\nbeta_line",
+            citation_id="c1",
         )
     elif chosen == "long_line":
         path = "src/long_line.go"
@@ -491,6 +559,7 @@ def generate_r06(
             handle="read#1",
             start_line=1,
             excerpt=long_token[:80],
+            citation_id="c1",
         )
     elif chosen == "whitespace":
         path = "src/indent.py"
@@ -522,6 +591,7 @@ def generate_r06(
             handle="read#1",
             start_line=14,
             excerpt="   return value + 1  ",
+            citation_id="c1",
         )
     else:  # range_as_single_lines
         path = "src/range.go"
@@ -554,6 +624,7 @@ def generate_r06(
             path=path,
             start_line=single_line,
             end_line=single_line,
+            citation_id="c1",
         )
 
     records = [target] + _make_filler_records(
@@ -564,7 +635,7 @@ def generate_r06(
         intent_window=intent_window,
     )
     return GeneratedR06Case(
-        seed=SeedIdentity(base_seed, "R06", instance_index),
+        seed=SeedIdentity(base_seed, "R06", instance_index, platform=platform),
         variation=chosen,
         delivery_log=DeliveryLog(records=tuple(records)),
         citation=citation,
@@ -577,6 +648,7 @@ def generate_r07(
     instance_index: int,
     *,
     mutation: str | None = None,
+    platform: str = "linux",
 ) -> GeneratedR07Case:
     """R07: Delivery log (1-30 deliveries) + near-truth citation across 6 mutations."""
     rng = random.Random(derive_seed(base_seed, "R07", instance_index))
@@ -593,7 +665,7 @@ def generate_r07(
         worker_leg="",
         round_id=round_id,
         intent_window=intent_window,
-        platform="linux",
+        platform=platform,
     )
     working_tree_only: tuple[str, ...] = ()
 
@@ -628,6 +700,7 @@ def generate_r07(
             raw=f"[read#1:{outside_line}]",
             handle="read#1",
             start_line=outside_line,
+            citation_id="c1",
         )
     elif chosen == "excerpt_from_other_observation":
         rec1 = DeliveryRecord(
@@ -679,6 +752,7 @@ def generate_r07(
             handle="read#1",
             start_line=1,
             excerpt="gamma_other_obs",
+            citation_id="c1",
         )
     elif chosen == "undelivered_working_tree_content":
         path = "internal/live.go"
@@ -711,6 +785,7 @@ def generate_r07(
             path=path,
             start_line=3,
             excerpt="undelivered_working_tree_secret",
+            citation_id="c1",
         )
     elif chosen == "url_query_fragment_redirect_mismatch":
         observed_url = "https://example.test/docs/spec"
@@ -746,6 +821,7 @@ def generate_r07(
             citation_type="url",
             raw=f"<{bad_url}>",
             url=bad_url,
+            citation_id="c1",
         )
     elif chosen == "wrong_leg_or_chat_handle":
         wrong_session = rng.random() < 0.5
@@ -776,6 +852,7 @@ def generate_r07(
             raw="[read#1:1]",
             handle="read#1",
             start_line=1,
+            citation_id="c1",
         )
     else:  # absent_artifact
         target = DeliveryRecord(
@@ -804,6 +881,7 @@ def generate_r07(
             citation_type="artifact",
             raw="[artifact:99999999-9999-9999-9999-999999999999]",
             artifact_id="99999999-9999-9999-9999-999999999999",
+            citation_id="c1",
         )
 
     records.extend(
@@ -817,10 +895,77 @@ def generate_r07(
         )
     )
     return GeneratedR07Case(
-        seed=SeedIdentity(base_seed, "R07", instance_index),
+        seed=SeedIdentity(base_seed, "R07", instance_index, platform=platform),
         mutation=chosen,
         delivery_log=DeliveryLog(records=tuple(records)),
         citation=citation,
         scope=scope,
         working_tree_only_lines=working_tree_only,
+    )
+
+
+def generate_path_case_contrast(
+    base_seed: str,
+    instance_index: int,
+    *,
+    platform: str,
+) -> GeneratedR06Case | GeneratedR07Case:
+    """Explicit platform/filesystem path-case contrast (`Src/Main.go` vs `src/main.go`).
+
+    - On `darwin`/`macos` (case-insensitive APFS): expected `grounded` (R06).
+    - On `linux` (case-sensitive ext4): expected `ungrounded` (R07).
+    """
+    session_id = f"sess-case-{platform}-{instance_index}"
+    scope = PermittedScope(
+        session_id=session_id,
+        worker_leg="",
+        round_id="round-1",
+        intent_window="intent-1",
+        platform=platform,
+    )
+    target = DeliveryRecord(
+        tool="read_file",
+        arguments={"path": "src/main.go", "start_line": 1, "end_line": 2},
+        raw_bytes=b"1: package main\n2: func main() {}\n",
+        delivered_ranges=(LineRange(1, 2),),
+        delivery_tags=("[read#1 src/main.go:1-2]",),
+        line_numbered=True,
+        printed_other_numbers=False,
+        session_id=session_id,
+        worker_leg="",
+        round_id="round-1",
+        intent_window="intent-1",
+        source_revision="rev-1",
+        handle="read#1",
+        kind="read",
+        path="src/main.go",
+        url="",
+        artifact_id="",
+        call_id="call-case",
+        fixture_provenance="host",
+    )
+    citation = Citation(
+        citation_type="path_coord",
+        raw="[Src/Main.go:2]",
+        path="Src/Main.go",
+        start_line=2,
+        citation_id="c1",
+    )
+    log = DeliveryLog(records=(target,))
+    if scope.case_insensitive_paths:
+        return GeneratedR06Case(
+            seed=SeedIdentity(base_seed, "R06", instance_index, platform=platform),
+            variation="path_normalization",
+            delivery_log=log,
+            citation=citation,
+            scope=scope,
+            expected_verdict_class="grounded",
+        )
+    return GeneratedR07Case(
+        seed=SeedIdentity(base_seed, "R07", instance_index, platform=platform),
+        mutation="path_case_mismatch",
+        delivery_log=log,
+        citation=citation,
+        scope=scope,
+        expected_verdict_class="ungrounded",
     )
