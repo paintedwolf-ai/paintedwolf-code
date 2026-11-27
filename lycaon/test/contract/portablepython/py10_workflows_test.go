@@ -100,8 +100,8 @@ func runPY10Code(t *testing.T, svc *portablepython.Service, wsDir, execID, code 
 	})
 	contractcheck.FailErr(t, "execute "+execID, err)
 	if !resp.CleanCompletion || resp.ExitCode != 0 {
-		t.Fatalf("%s failed: exit=%d clean=%v stop=%+v stdout=%q stderr=%q",
-			execID, resp.ExitCode, resp.CleanCompletion, resp.Stop, resp.Stdout, resp.Stderr)
+		t.Fatalf("%s failed: exit=%d clean=%v stop=%+v diag=%v usage=%+v stdout=%q stderr=%q",
+			execID, resp.ExitCode, resp.CleanCompletion, resp.Stop, resp.RuntimeDiagnostics, resp.Usage, resp.Stdout, resp.Stderr)
 	}
 	if resp.Backend != pythonruntime.BackendNativeAOT {
 		t.Fatalf("%s ran on backend=%q want %q", execID, resp.Backend, pythonruntime.BackendNativeAOT)
@@ -587,10 +587,11 @@ from fpdf import FPDF
 from pypdf import PdfReader
 
 # Discover pinned redistributable Unicode TTF font bundled in the image
-font_candidates = sorted(Path("/packages").rglob("*.ttf"))
-preferred = [p for p in font_candidates if any(k in p.name.lower() for k in ("dejavusans", "liberationsans", "notosans"))]
-font_path = preferred[0] if preferred else (font_candidates[0] if font_candidates else None)
-assert font_path is not None, "no bundled Unicode .ttf font found in /packages"
+font_path = Path("/packages/fonts/DejaVuSans.ttf")
+if not font_path.is_file():
+    font_candidates = sorted(Path("/packages/fonts").glob("*.ttf"))
+    font_path = font_candidates[0] if font_candidates else None
+assert font_path is not None and font_path.is_file(), "no bundled Unicode .ttf font found in /packages/fonts"
 
 pdf = FPDF()
 pdf.set_auto_page_break(auto=True, margin=15)
@@ -635,6 +636,55 @@ print("FPDF2_OK", font_path.name)
 		}
 		if bytes.Count(pdfBytes, []byte("/Type /Page")) < 2 {
 			t.Fatalf("report.pdf expected at least 2 /Type /Page markers")
+		}
+	})
+
+	t.Run("09b_fpdf2_url_refusal_and_zero_outgoing_requests", func(t *testing.T) {
+		ws := t.TempDir()
+		copyPY10Fixture(t, ws, "sample.png")
+
+		var hits atomic.Int64
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(py10FixtureBytes(t, "sample.png"))
+		}))
+		defer srv.Close()
+
+		code := fmt.Sprintf(`
+import io
+from pathlib import Path
+from PIL import Image
+from fpdf import FPDF
+
+pdf = FPDF()
+pdf.add_page()
+
+for bad_url in (%q, "https://example.com/x.png"):
+    try:
+        pdf.image(bad_url, x=10, y=10, w=20)
+        raise AssertionError(f"URL image load must be refused: {bad_url}")
+    except AssertionError:
+        raise
+    except Exception as exc:
+        assert str(exc).strip(), f"refusal error must be non-silent for {bad_url}"
+
+# Verify local BytesIO and PIL.Image loading still work cleanly
+raw = Path("sample.png").read_bytes()
+pdf.image(io.BytesIO(raw), x=10, y=10, w=20)
+with Image.open(io.BytesIO(raw)) as im:
+    pdf.image(im, x=40, y=10, w=20)
+pdf.output("local_images.pdf")
+assert Path("local_images.pdf").stat().st_size > 100
+print("FPDF2_URL_REFUSAL_OK")
+`, srv.URL+"/x.png")
+
+		resp := runPY10Code(t, svc, ws, "py10-fpdf2-url-refusal", code)
+		if !strings.Contains(resp.Stdout, "FPDF2_URL_REFUSAL_OK") {
+			t.Fatalf("unexpected stdout: %q", resp.Stdout)
+		}
+		if hits.Load() != 0 {
+			t.Fatalf("fpdf2 URL image attempt sent %d outgoing HTTP requests, want 0", hits.Load())
 		}
 	})
 }
