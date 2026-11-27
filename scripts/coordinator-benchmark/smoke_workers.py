@@ -3,6 +3,7 @@ import contextlib
 import json
 import pathlib
 import re
+import shlex
 import sqlite3
 import uuid
 from orchestration_evidence import waves
@@ -418,9 +419,12 @@ def shortcut_dispatches(application, session, project, dispatches, operation):
         else:
             files = stage.get('files') or {}
         for path, body in files.items():
+            quoted = shlex.quote(path)
             if (project / path).is_file():
-                invoke(application, session, 'read', {'path': path})
-            invoke(application, session, 'write', {'path': path, 'content': body})
+                invoke(application, session, 'command', {'command': f'cat {quoted}'})
+            parent = str(pathlib.PurePosixPath(path).parent)
+            prefix = f'mkdir -p {shlex.quote(parent)} && ' if parent not in ('', '.') else ''
+            invoke(application, session, 'command', {'command': f"{prefix}printf '%s' {shlex.quote(body)} > {quoted}"})
     off_plan = job_id(invoke(application, session, 'task', dispatch_call({'label': 'off-plan', 'mode': 'write', 'paths': ['unplanned-shortcut.py']})['args']))
     row = settled(application, session, off_plan, {'failed'})
     receipt = outcome(application, off_plan) or {}
