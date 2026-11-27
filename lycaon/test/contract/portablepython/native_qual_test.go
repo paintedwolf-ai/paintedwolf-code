@@ -24,6 +24,9 @@ func newNativeQualService(t *testing.T, receiptDir string) *portablepython.Servi
 	if os.Getenv("PW_REQUIRE_NATIVE_QUAL") == "1" && strings.TrimSpace(os.Getenv(portablepython.EnvImageDir)) != "" {
 		t.Fatalf("%s must be UNSET during installed-product qualification", portablepython.EnvImageDir)
 	}
+	if root := strings.TrimSpace(os.Getenv("PW_QUAL_ENGINE_ROOT")); root != "" && strings.TrimSpace(os.Getenv("LYCAON_ENGINE_ROOT")) == "" {
+		t.Setenv("LYCAON_ENGINE_ROOT", root)
+	}
 	cfg := portablepython.ServiceConfig{
 		ScratchRoot: t.TempDir(),
 	}
