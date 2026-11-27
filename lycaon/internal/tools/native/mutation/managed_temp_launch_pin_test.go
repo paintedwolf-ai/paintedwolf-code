@@ -1,0 +1,186 @@
+package mutation_test
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/programtest"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/tools/native/mutation"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+)
+
+func managedTempLaunchFixture(t *testing.T) *programtest.Fixture {
+	t.Helper()
+	return programtest.New(t, programtest.Options{Owners: func(ports programtest.OwnerPorts) func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		boundary := ports.Boundary
+		mutations, err := mutation.NewOwners(native.ExecutionRevisions{Boundary: boundary}, ports.Recorder, mutation.Operations{
+			Write: &native.WriteTool{Boundary: boundary}, Delete: &native.DeleteTool{Boundary: boundary},
+			Move: &native.MoveTool{Boundary: boundary}, Copy: &native.CopyTool{Boundary: boundary},
+			Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary},
+			Chown: &native.ChownTool{Boundary: boundary}, Times: &native.TimesTool{Boundary: boundary},
+			Extract: &native.ExtractArchiveTool{Boundary: boundary},
+		})
+		testutil.FailErr(t, "mutation operations", err)
+		return func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, admission tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+			program := *mutations
+			program.Revisions.Memory, program.Admission = memory, admission
+			program.ManagedTemps = mutation.NewManagedTempTracker()
+			owners := &program
+			natives := map[string]command.NativeOperation{}
+			for _, name := range []string{"mktemp"} {
+				tool, _ := owners.Operation(name)
+				natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+					prepared, err := owners.Prepare(mutation.Program{Paths: frame}, request)
+					if err != nil {
+						return command.NativePrepared{}, err
+					}
+					return command.NativePrepared{Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+				}}
+			}
+			return command.ProgramOwners{
+				DeclareLaunch: owners.DeclareLaunchInputs,
+				Natives:       natives,
+				Publication: func(admit tools.CommandOutputAdmission) commandprogram.OutputPublication {
+					return &mutation.Publication{Owners: owners, Program: mutation.Program{Paths: paths}, Tools: tc, Admission: admit}
+				},
+				Redirections: func(frame *projectpaths.ProgramPaths, admit tools.CommandOutputAdmission) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
+					publication := &mutation.Publication{Owners: owners, Program: mutation.Program{Paths: frame}, Tools: tc, Admission: admit}
+					return publication, publication
+				},
+			}, nil
+		}
+	}})
+}
+
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
+
+func TestManagedTempDeclaredAtLaunchPin(t *testing.T) {
+	t.Run("expected_provenance_on_managed_temp_handoff", func(t *testing.T) {
+		f := managedTempLaunchFixture(t)
+		raw, err := f.Call(t, t.Context(), `p=$(mktemp); printf 'same\n' > "$p"; external -- /bin/cat "$p"`)
+		testutil.FailErr(t, "run managed-temp handoff", err)
+		outcome := decodeMutationOutcome(t, raw)
+		if outcome.Status != 0 || outcome.Refusal != nil || outcome.Stdout != "same\n" {
+			t.Fatalf("handoff outcome = %+v", outcome)
+		}
+
+		page, err := f.Recorder.ReadProgramPage(t.Context(), f.Session, outcome.ProgramID, "", 50)
+		testutil.FailErr(t, "read handoff receipts", err)
+		var catExecID string
+		for _, exec := range page.Executions {
+			if strings.Contains(exec.Command, "/bin/cat") {
+				catExecID = exec.ID
+				if exec.EffectCertainty != string(toolcontract.EffectAttempted) {
+					t.Fatalf("external launch effect_certainty = %q, want %q", exec.EffectCertainty, toolcontract.EffectAttempted)
+				}
+			}
+		}
+		if catExecID == "" {
+			t.Fatalf("missing external /bin/cat execution in %+v", page.Executions)
+		}
+
+		rows, err := f.Database.QueryContext(t.Context(),
+			`SELECT role, mode, basis, root_id, path, disk_sha256, representation, content_sha256, content_bytes FROM invocation_program_revision_pins WHERE execution_id = ?`,
+			catExecID)
+		testutil.FailErr(t, "query launch revision pins", err)
+		defer func() { _ = rows.Close() }()
+		count := 0
+		wantDigest := sha256Hex("same\n")
+		for rows.Next() {
+			count++
+			var role, mode, basis, rootID, path, diskSHA, rep, contentSHA string
+			var size int64
+			testutil.FailErr(t, "scan launch pin", rows.Scan(&role, &mode, &basis, &rootID, &path, &diskSHA, &rep, &contentSHA, &size))
+			if role != string(toolcontract.SourceRevision) || mode != string(toolcontract.PublishedDiskRevision) || basis != string(toolcontract.DeclaredAtLaunch) || rootID != "" || !strings.HasPrefix(path, f.ScratchDir) || diskSHA != wantDigest || rep != string(toolcontract.OriginalEncodedBytes) || contentSHA != wantDigest || size != 5 {
+				t.Fatalf("unexpected launch pin: role=%q mode=%q basis=%q root=%q path=%q disk=%q rep=%q content=%q size=%d",
+					role, mode, basis, rootID, path, diskSHA, rep, contentSHA, size)
+			}
+		}
+		testutil.FailErr(t, "iterate launch pins", rows.Err())
+		if count != 1 {
+			t.Fatalf("declared_at_launch pins for /bin/cat = %d, want 1", count)
+		}
+	})
+
+	t.Run("rejected_replacement_even_with_identical_bytes", func(t *testing.T) {
+		f := managedTempLaunchFixture(t)
+		// /bin/sh unlinks the original managed-temp inode and creates a brand-new
+		// physical file with identical bytes; the subsequent external launch must
+		// refuse with COMMAND_REVISION_CONFLICT rather than hashing the replacement.
+		script := `p=$(mktemp); printf 'same\n' > "$p"; external -- /bin/sh -c 'rm -f "$1" && printf "same\n" > "$1"' _ "$p"; external -- /bin/cat "$p"`
+		raw, err := f.Call(t, t.Context(), script)
+		testutil.FailErr(t, "run replaced managed-temp launch", err)
+		outcome := decodeMutationOutcome(t, raw)
+		if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_REVISION_CONFLICT" {
+			t.Fatalf("replaced temp launch = %+v, want COMMAND_REVISION_CONFLICT", outcome)
+		}
+		if outcome.Stdout != "" {
+			t.Fatalf("replaced temp launch ran /bin/cat: stdout=%q", outcome.Stdout)
+		}
+
+		page, err := f.Recorder.ReadProgramPage(t.Context(), f.Session, outcome.ProgramID, "", 50)
+		testutil.FailErr(t, "read replacement refusal receipts", err)
+		var catExecID string
+		for _, exec := range page.Executions {
+			if strings.Contains(exec.Command, "/bin/cat") {
+				catExecID = exec.ID
+				if exec.State != "refused" {
+					t.Fatalf("replaced /bin/cat state = %q, want refused", exec.State)
+				}
+			}
+		}
+		if catExecID == "" {
+			t.Fatalf("missing refused /bin/cat execution in %+v", page.Executions)
+		}
+		var pins int
+		testutil.FailErr(t, "count pins on refused replacement", f.Database.QueryRowContext(t.Context(),
+			`SELECT count(*) FROM invocation_program_revision_pins WHERE execution_id = ?`, catExecID).Scan(&pins))
+		if pins != 0 {
+			t.Fatalf("forged %d launch pins on replaced managed-temp file", pins)
+		}
+	})
+
+	t.Run("generic_non_managed_argv_not_classified", func(t *testing.T) {
+		f := managedTempLaunchFixture(t)
+		testutil.FailErr(t, "write plain project file", os.WriteFile(filepath.Join(f.Dir, "plain.txt"), []byte("hello\n"), 0o600))
+		raw, err := f.Call(t, t.Context(), `p=$(mktemp); printf 'tmp\n' > "$p"; external -- /bin/cat plain.txt`)
+		testutil.FailErr(t, "run external with generic argv", err)
+		outcome := decodeMutationOutcome(t, raw)
+		if outcome.Status != 0 || outcome.Refusal != nil || outcome.Stdout != "hello\n" {
+			t.Fatalf("generic argv outcome = %+v", outcome)
+		}
+
+		page, err := f.Recorder.ReadProgramPage(t.Context(), f.Session, outcome.ProgramID, "", 50)
+		testutil.FailErr(t, "read generic argv receipts", err)
+		var catExecID string
+		for _, exec := range page.Executions {
+			if strings.Contains(exec.Command, "/bin/cat") {
+				catExecID = exec.ID
+			}
+		}
+		if catExecID == "" {
+			t.Fatalf("missing /bin/cat execution in %+v", page.Executions)
+		}
+		var pins int
+		testutil.FailErr(t, "count pins on generic argv", f.Database.QueryRowContext(t.Context(),
+			`SELECT count(*) FROM invocation_program_revision_pins WHERE execution_id = ?`, catExecID).Scan(&pins))
+		if pins != 0 {
+			t.Fatalf("generic non-managed argv produced %d launch pins, want 0", pins)
+		}
+	})
+}
