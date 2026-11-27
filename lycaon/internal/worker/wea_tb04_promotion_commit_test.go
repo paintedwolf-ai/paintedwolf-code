@@ -119,7 +119,14 @@ func tb04CopyDirFiles(t *testing.T, src, dst string) {
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
 		}
-		return os.WriteFile(target, raw, 0o644)
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(target, raw, info.Mode().Perm()); err != nil {
+			return err
+		}
+		return os.Chtimes(target, info.ModTime(), info.ModTime())
 	})
 	testutil.FailErr(t, "tb04CopyDirFiles", err)
 }
@@ -199,11 +206,18 @@ func (f *tb04SQLFixture) seedPendingWorker(
 ) (string, string) {
 	t.Helper()
 	ctx := t.Context()
+	var rootID string
+	testutil.FailErr(t, "lookup project root id", f.sqlDB.QueryRowContext(
+		ctx, `SELECT id FROM project_roots WHERE project_id = ? AND path = ? LIMIT 1`,
+		testdbseed.DefaultProjectID, f.primary,
+	).Scan(&rootID))
+
 	_, err := f.svcs.Queue.Enqueue(ctx, api.WorkerTask{
 		ID:              jobID,
 		ParentSessionID: f.parent,
 		ProjectID:       testdbseed.DefaultProjectID,
 		WorkspacePath:   f.primary,
+		WorkspaceRootID: rootID,
 		AgentType:       "implementer",
 		Prompt:          "tb04 work " + jobID,
 		Brief:           "tb04 brief " + jobID,
@@ -223,8 +237,8 @@ func (f *tb04SQLFixture) seedPendingWorker(
 
 	branch := filepath.Join(f.dataDir, "worker-branches", jobID)
 	tb04CopyDirFiles(t, f.primary, branch)
-	baselinePath := testbaseline.Durable(t, "root", f.sqlDB, jobID, f.primary)
-	testbaseline.RecordBranch(t, "root", f.primary, branch)
+	baselinePath := testbaseline.Durable(t, rootID, f.sqlDB, jobID, f.primary)
+	testbaseline.RecordBranch(t, rootID, f.primary, branch)
 
 	bound, err := f.svcs.Queue.store.SetWorkerWorkspace(ctx, jobID, branch, baselinePath)
 	testutil.FailErr(t, "bind workspace "+jobID, err)
