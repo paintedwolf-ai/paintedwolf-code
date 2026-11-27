@@ -59,28 +59,32 @@ func (c *capturingLLMClient) firstCoordinatorRequest() (modelcall.CompletionRequ
 }
 
 type variantPromptMetrics struct {
-	Variant                  string `json:"variant"`
-	TotalRequestBytes        int    `json:"total_request_bytes"`
-	MessagesBytes            int    `json:"messages_bytes"`
-	SystemTextBytes          int    `json:"system_text_bytes"`
-	ToolsBytes               int    `json:"tools_bytes"`
-	ToolCount                int    `json:"tool_count"`
-	PythonToolOffered        bool   `json:"python_tool_offered"`
-	CommandToolOffered       bool   `json:"command_tool_offered"`
-	PythonToolSchemaBytes    int    `json:"python_tool_schema_bytes"`
-	VerbatimDescriptionCount int    `json:"verbatim_description_count"`
+	Variant                   string `json:"variant"`
+	TotalRequestBytes         int    `json:"total_request_bytes"`
+	MessagesBytes             int    `json:"messages_bytes"`
+	StandingSystemPromptBytes int    `json:"standing_system_prompt_bytes"`
+	TurnInjectSystemBytes     int    `json:"turn_inject_system_bytes"`
+	TotalSystemTextBytes      int    `json:"total_system_text_bytes"`
+	ToolsBytes                int    `json:"tools_bytes"`
+	ToolCount                 int    `json:"tool_count"`
+	PythonToolOffered         bool   `json:"python_tool_offered"`
+	CommandToolOffered        bool   `json:"command_tool_offered"`
+	PythonToolSchemaBytes     int    `json:"python_tool_schema_bytes"`
+	VerbatimDescriptionCount  int    `json:"verbatim_description_count"`
 }
 
 type matchedPromptDeltaReport struct {
-	Offered                  variantPromptMetrics `json:"offered"`
-	Loadable                 variantPromptMetrics `json:"loadable"`
-	Absent                   variantPromptMetrics `json:"absent"`
-	StandingSystemDeltaBytes int                  `json:"standing_system_delta_bytes"`
-	LoadableSystemDeltaBytes int                  `json:"loadable_system_delta_bytes"`
-	OfferedToolsDeltaBytes   int                  `json:"offered_tools_delta_bytes"`
-	LoadableToolsDeltaBytes  int                  `json:"loadable_tools_delta_bytes"`
-	OfferedTotalDeltaBytes   int                  `json:"offered_total_delta_bytes"`
-	LoadableTotalDeltaBytes  int                  `json:"loadable_total_delta_bytes"`
+	Offered                    variantPromptMetrics `json:"offered"`
+	Loadable                   variantPromptMetrics `json:"loadable"`
+	Absent                     variantPromptMetrics `json:"absent"`
+	StandingPromptDeltaBytes   int                  `json:"standing_prompt_delta_bytes"`
+	LoadableStandingDeltaBytes int                  `json:"loadable_standing_delta_bytes"`
+	TurnInjectDeltaBytes       int                  `json:"turn_inject_delta_bytes"`
+	LoadableTurnInjectDelta    int                  `json:"loadable_turn_inject_delta_bytes"`
+	OfferedToolsDeltaBytes     int                  `json:"offered_tools_delta_bytes"`
+	LoadableToolsDeltaBytes    int                  `json:"loadable_tools_delta_bytes"`
+	OfferedTotalDeltaBytes     int                  `json:"offered_total_delta_bytes"`
+	LoadableTotalDeltaBytes    int                  `json:"loadable_total_delta_bytes"`
 }
 
 // TestPortablePythonMatchedModelRequestDelta boots the real composed app.Build
@@ -145,15 +149,17 @@ func TestPortablePythonMatchedModelRequestDelta(t *testing.T) {
 	absent := measure("absent", absentYAML)
 
 	report := matchedPromptDeltaReport{
-		Offered:                  offered,
-		Loadable:                 loadable,
-		Absent:                   absent,
-		StandingSystemDeltaBytes: offered.SystemTextBytes - absent.SystemTextBytes,
-		LoadableSystemDeltaBytes: loadable.SystemTextBytes - absent.SystemTextBytes,
-		OfferedToolsDeltaBytes:   offered.ToolsBytes - absent.ToolsBytes,
-		LoadableToolsDeltaBytes:  loadable.ToolsBytes - absent.ToolsBytes,
-		OfferedTotalDeltaBytes:   offered.TotalRequestBytes - absent.TotalRequestBytes,
-		LoadableTotalDeltaBytes:  loadable.TotalRequestBytes - absent.TotalRequestBytes,
+		Offered:                    offered,
+		Loadable:                   loadable,
+		Absent:                     absent,
+		StandingPromptDeltaBytes:   offered.StandingSystemPromptBytes - absent.StandingSystemPromptBytes,
+		LoadableStandingDeltaBytes: loadable.StandingSystemPromptBytes - absent.StandingSystemPromptBytes,
+		TurnInjectDeltaBytes:       offered.TurnInjectSystemBytes - absent.TurnInjectSystemBytes,
+		LoadableTurnInjectDelta:    loadable.TurnInjectSystemBytes - absent.TurnInjectSystemBytes,
+		OfferedToolsDeltaBytes:     offered.ToolsBytes - absent.ToolsBytes,
+		LoadableToolsDeltaBytes:    loadable.ToolsBytes - absent.ToolsBytes,
+		OfferedTotalDeltaBytes:     offered.TotalRequestBytes - absent.TotalRequestBytes,
+		LoadableTotalDeltaBytes:    loadable.TotalRequestBytes - absent.TotalRequestBytes,
 	}
 
 	rawReport, err := json.MarshalIndent(report, "", "  ")
@@ -172,8 +178,11 @@ func TestPortablePythonMatchedModelRequestDelta(t *testing.T) {
 	if absent.PythonToolOffered || !absent.CommandToolOffered {
 		t.Fatalf("absent variant must omit python while keeping command: %+v", absent)
 	}
-	if report.StandingSystemDeltaBytes != 0 {
-		t.Fatalf("standing prompt / system text delta (offered - absent) = %d bytes, want 0", report.StandingSystemDeltaBytes)
+	if report.StandingPromptDeltaBytes != 0 {
+		t.Fatalf("standing system prompt delta (offered - absent) = %d bytes, want 0", report.StandingPromptDeltaBytes)
+	}
+	if report.LoadableStandingDeltaBytes != 0 {
+		t.Fatalf("standing system prompt delta (loadable - absent) = %d bytes, want 0", report.LoadableStandingDeltaBytes)
 	}
 	if offered.VerbatimDescriptionCount != 1 {
 		t.Fatalf("offered verbatim description count = %d, want 1", offered.VerbatimDescriptionCount)
@@ -198,20 +207,29 @@ func computePromptMetrics(t *testing.T, variant string, req modelcall.Completion
 	}{Messages: req.Messages, Tools: req.Tools})
 	testutil.FailErr(t, "marshal total request "+variant, err)
 
-	sysBytes := 0
+	standingBytes := 0
+	injectBytes := 0
+	sawFirstSystem := false
 	for _, m := range req.Messages {
 		if m.Role == wire.MessageRoleSystem {
-			sysBytes += len(m.Content)
+			if !sawFirstSystem {
+				standingBytes = len(m.Content)
+				sawFirstSystem = true
+			} else {
+				injectBytes += len(m.Content)
+			}
 		}
 	}
 
 	m := variantPromptMetrics{
-		Variant:           variant,
-		TotalRequestBytes: len(totalBytes),
-		MessagesBytes:     len(msgBytes),
-		SystemTextBytes:   sysBytes,
-		ToolsBytes:        len(toolsBytes),
-		ToolCount:         len(req.Tools),
+		Variant:                   variant,
+		TotalRequestBytes:         len(totalBytes),
+		MessagesBytes:             len(msgBytes),
+		StandingSystemPromptBytes: standingBytes,
+		TurnInjectSystemBytes:     injectBytes,
+		TotalSystemTextBytes:      standingBytes + injectBytes,
+		ToolsBytes:                len(toolsBytes),
+		ToolCount:                 len(req.Tools),
 	}
 	for _, tool := range req.Tools {
 		if tool.Name == "command" {
