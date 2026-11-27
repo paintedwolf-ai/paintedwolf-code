@@ -399,6 +399,51 @@ def _api_call(app: Any, path: str, body: Any = None, *, method: str | None = Non
         return exc.code, parsed
 
 
+_SECRET_OPTION_IDS = frozenset({"send_unchanged", "send_redacted", "track_and_replace"})
+
+
+def extract_secret_card(cp: dict[str, Any]) -> dict[str, Any] | None:
+    """Detect and normalize a real `secret_screen` checkpoint from `GET /v1/sessions/{id}/checkpoints`.
+
+    On the wire (`ToolApprovalPayload`), outbound secret-screening cards are represented via
+    `tool_approval.plan.subject.kind == "secret"` and secret options (`send_unchanged`,
+    `send_redacted`, `track_and_replace`) rather than a top-level `secret_screen` field.
+    """
+    payload = cp.get("tool_approval") or {}
+    plan = payload.get("plan") or {}
+    subject = plan.get("subject") or {}
+    options = [o for o in (plan.get("options") or []) if isinstance(o, dict)]
+    option_ids = {str(o.get("id") or "") for o in options}
+    legacy_ss = payload.get("secret_screen")
+    is_secret = (
+        legacy_ss is not None
+        or subject.get("kind") == "secret"
+        or bool(option_ids & _SECRET_OPTION_IDS)
+    )
+    if not is_secret:
+        return None
+
+    targets = subject.get("targets") or []
+    target0 = targets[0] if targets and isinstance(targets[0], dict) else {}
+    details = target0.get("details") if isinstance(target0.get("details"), dict) else {}
+    pres = plan.get("presentation") if isinstance(plan.get("presentation"), dict) else {}
+    ss_dict = legacy_ss if isinstance(legacy_ss, dict) else {}
+
+    can_track = any(o.get("id") == "track_and_replace" and not o.get("disabled") for o in options)
+    can_redact = any(o.get("id") == "send_redacted" and not o.get("disabled") for o in options)
+    return {
+        "checkpoint_id": cp.get("id"),
+        "subject_kind": subject.get("kind"),
+        "surface": ss_dict.get("surface") or details.get("surface") or pres.get("action"),
+        "destination_label": ss_dict.get("destination_label") or details.get("destination") or target0.get("label"),
+        "destination_kind": ss_dict.get("destination_kind") or details.get("destination_kind"),
+        "rule_id": ss_dict.get("rule_id") or details.get("rule_id"),
+        "can_redact": ss_dict["can_redact"] if "can_redact" in ss_dict else can_redact,
+        "can_track": ss_dict["can_track"] if "can_track" in ss_dict else can_track,
+        "offered_option_ids": sorted(option_ids),
+    }
+
+
 def _answer_secret_checkpoint(app: Any, session_id: str, cp: dict[str, Any], option: str) -> dict[str, Any]:
     """Answer a real pending secret-screen checkpoint with the requested option."""
     payload = cp.get("tool_approval") or {}
@@ -499,18 +544,9 @@ def _drive_model_prompt_with_secret_option(
             if not cp_id or cp_id in seen_cp_ids:
                 continue
             seen_cp_ids.add(cp_id)
-            payload = cp.get("tool_approval") or {}
-            ss = payload.get("secret_screen")
-            if ss is not None:
-                secret_cards_seen.append({
-                    "checkpoint_id": cp_id,
-                    "surface": ss.get("surface"),
-                    "destination_label": ss.get("destination_label"),
-                    "destination_kind": ss.get("destination_kind"),
-                    "rule_id": ss.get("rule_id"),
-                    "can_redact": ss.get("can_redact"),
-                    "can_track": ss.get("can_track"),
-                })
+            card = extract_secret_card(cp)
+            if card is not None:
+                secret_cards_seen.append(card)
                 answer_info = _answer_secret_checkpoint(app, sid, cp, option)
             else:
                 _api_call(
@@ -588,17 +624,9 @@ def _send_http_request_with_secret_option(
             if payload.get("tool_call_id") not in (None, "", call_id):
                 continue
             seen_cp_ids.add(cp_id)
-            ss = payload.get("secret_screen")
-            if ss is not None:
-                secret_cards.append({
-                    "checkpoint_id": cp_id,
-                    "surface": ss.get("surface"),
-                    "destination_label": ss.get("destination_label"),
-                    "destination_kind": ss.get("destination_kind"),
-                    "rule_id": ss.get("rule_id"),
-                    "can_redact": ss.get("can_redact"),
-                    "can_track": ss.get("can_track"),
-                })
+            card = extract_secret_card(cp)
+            if card is not None:
+                secret_cards.append(card)
                 answer_info = _answer_secret_checkpoint(app, session_id, cp, option)
             else:
                 # Approve loopback capability once so the call reaches the outbound secret screen.

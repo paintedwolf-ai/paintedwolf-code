@@ -26,6 +26,7 @@ from wea.tb09_sidecar_runner import (
     _restart_application,
     build_parser,
     build_slot_receipt,
+    extract_secret_card,
     mint_detectable_canary,
 )
 
@@ -322,6 +323,43 @@ class TestTB09Secrets(unittest.TestCase):
         )
         self.assertEqual(rec["verdict"], "blocked")
         self.assertTrue(rec["canary_scan"]["clean"])
+
+    def test_extract_secret_card_recognizes_wire_approval_plan_subject_secret(self) -> None:
+        cp_model = {
+            "id": "cp-model-1",
+            "tool_approval": {
+                "plan": {
+                    "subject": {
+                        "kind": "secret",
+                        "title": "Review detected credential",
+                        "targets": [{"kind": "secret", "label": "TB09 primary", "details": {"surface": "model_request", "destination": "TB09 primary", "rule_id": "gitleaks:github-pat"}}],
+                    },
+                    "options": [
+                        {"id": "track_and_replace", "disabled": False},
+                        {"id": "send_redacted", "disabled": False},
+                        {"id": "send_unchanged", "disabled": False},
+                    ],
+                },
+            },
+        }
+        card = extract_secret_card(cp_model)
+        self.assertIsNotNone(card)
+        assert card is not None
+        self.assertEqual(card["subject_kind"], "secret")
+        self.assertEqual(card["surface"], "model_request")
+        self.assertTrue(card["can_track"])
+        self.assertTrue(card["can_redact"])
+
+        cp_loopback = {
+            "id": "cp-loopback-1",
+            "tool_approval": {
+                "plan": {
+                    "subject": {"kind": "action", "title": "Allow loopback"},
+                    "options": [{"id": "approve_current_action", "disabled": False}],
+                },
+            },
+        }
+        self.assertIsNone(extract_secret_card(cp_loopback))
 
 
 if __name__ == "__main__":
