@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -117,41 +118,66 @@ func TestManagedTempDeclaredAtLaunchPin(t *testing.T) {
 		}
 	})
 
-	t.Run("rejected_replacement_even_with_identical_bytes", func(t *testing.T) {
-		f := managedTempLaunchFixture(t)
-		// /bin/sh unlinks the original managed-temp inode and creates a brand-new
-		// physical file with identical bytes; the subsequent external launch must
-		// refuse with COMMAND_REVISION_CONFLICT rather than hashing the replacement.
-		script := `p=$(mktemp); printf 'same\n' > "$p"; external -- /bin/sh -c 'rm -f "$1" && printf "same\n" > "$1"' _ "$p"; external -- /bin/cat "$p"`
-		raw, err := f.Call(t, t.Context(), script)
-		testutil.FailErr(t, "run replaced managed-temp launch", err)
-		outcome := decodeMutationOutcome(t, raw)
-		if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_REVISION_CONFLICT" {
-			t.Fatalf("replaced temp launch = %+v, want COMMAND_REVISION_CONFLICT", outcome)
+	t.Run("changed_or_type_swapped_managed_inputs_refuse_without_launch", func(t *testing.T) {
+		cases := []struct {
+			name   string
+			mutate string
+		}{
+			{"replaced_with_identical_bytes", `rm -f "$1" && printf "same\n" > "$1"`},
+			{"swapped_with_symlink_to_identical_bytes", `target="${1}.target"; printf "same\n" > "$target" && rm -f "$1" && ln -s "$target" "$1"`},
+			{"swapped_with_dangling_symlink", `rm -f "$1" && ln -s "${1}.missing" "$1"`},
+			{"replaced_with_directory", `rm -f "$1" && mkdir "$1"`},
+			{"mutated_in_place", `printf "changed\n" > "$1"`},
 		}
-		if outcome.Stdout != "" {
-			t.Fatalf("replaced temp launch ran /bin/cat: stdout=%q", outcome.Stdout)
-		}
-
-		page, err := f.Recorder.ReadProgramPage(t.Context(), f.Session, outcome.ProgramID, "", 50)
-		testutil.FailErr(t, "read replacement refusal receipts", err)
-		var catExecID string
-		for _, exec := range page.Executions {
-			if strings.Contains(exec.Command, "/bin/cat") {
-				catExecID = exec.ID
-				if exec.State != "refused" {
-					t.Fatalf("replaced /bin/cat state = %q, want refused", exec.State)
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				f := managedTempLaunchFixture(t)
+				var launches atomic.Int64
+				configure := f.Configure
+				f.Configure = func(tctx *tools.ToolContext) {
+					if configure != nil {
+						configure(tctx)
+					}
+					tctx.Source.RecordViewProcess = func(int) error {
+						launches.Add(1)
+						return nil
+					}
 				}
-			}
-		}
-		if catExecID == "" {
-			t.Fatalf("missing refused /bin/cat execution in %+v", page.Executions)
-		}
-		var pins int
-		testutil.FailErr(t, "count pins on refused replacement", f.Database.QueryRowContext(t.Context(),
-			`SELECT count(*) FROM invocation_program_revision_pins WHERE execution_id = ?`, catExecID).Scan(&pins))
-		if pins != 0 {
-			t.Fatalf("forged %d launch pins on replaced managed-temp file", pins)
+				script := `p=$(mktemp); printf 'same\n' > "$p"; external -- /bin/sh -c '` + tc.mutate + `' _ "$p"; external -- /bin/cat "$p"`
+				raw, err := f.Call(t, t.Context(), script)
+				testutil.FailErr(t, "run "+tc.name, err)
+				outcome := decodeMutationOutcome(t, raw)
+				if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_REVISION_CONFLICT" {
+					t.Fatalf("%s: outcome = %+v, want COMMAND_REVISION_CONFLICT", tc.name, outcome)
+				}
+				if outcome.Stdout != "" {
+					t.Fatalf("%s: /bin/cat produced stdout=%q", tc.name, outcome.Stdout)
+				}
+				if got := launches.Load(); got != 1 {
+					t.Fatalf("%s: launch spy recorded %d launches, want 1 (mutator only; /bin/cat must not launch)", tc.name, got)
+				}
+				page, err := f.Recorder.ReadProgramPage(t.Context(), f.Session, outcome.ProgramID, "", 50)
+				testutil.FailErr(t, "read "+tc.name+" receipts", err)
+				var catExecID string
+				for _, exec := range page.Executions {
+					if strings.Contains(exec.Command, "/bin/cat") {
+						catExecID = exec.ID
+						if exec.State != "refused" || exec.EffectCertainty != string(toolcontract.NoEffect) {
+							t.Fatalf("%s: /bin/cat state=%q effect_certainty=%q, want refused/%s",
+								tc.name, exec.State, exec.EffectCertainty, toolcontract.NoEffect)
+						}
+					}
+				}
+				if catExecID == "" {
+					t.Fatalf("%s: missing refused /bin/cat execution in %+v", tc.name, page.Executions)
+				}
+				var pins int
+				testutil.FailErr(t, "count pins on "+tc.name, f.Database.QueryRowContext(t.Context(),
+					`SELECT count(*) FROM invocation_program_revision_pins WHERE execution_id = ?`, catExecID).Scan(&pins))
+				if pins != 0 {
+					t.Fatalf("%s: forged %d launch pins on changed managed-temp input", tc.name, pins)
+				}
+			})
 		}
 	})
 
