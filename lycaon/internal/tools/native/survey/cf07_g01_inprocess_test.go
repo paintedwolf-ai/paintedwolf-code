@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -202,16 +203,20 @@ func TestCF07G01InProcessFreshnessAndColdWarming(t *testing.T) {
 		tctx := nativefixture.Context(dir)
 		boundary := nativefixture.Boundary(t)
 
-		// Route 1: FindTool
+		// Route 1: FindTool.runFindRoot
+		rootRef := projectroot.RootRef{ID: "real-root", Path: dir}
 		findTool := &FindTool{Boundary: boundary, Catalog: sourcecatalog.New()}
-		findRaw, err := findTool.Run(ctx, map[string]any{"path": ".", "type": "file"}, tctx)
-		testutil.FailErr(t, "FindTool.Run", err)
 		var fResp findResponse
-		testutil.FailErr(t, "decode findResponse", json.Unmarshal([]byte(findRaw), &fResp))
+		var skipped, matchedTotal int
+		var truncated, deeperOmitted bool
 		gotFiles := map[string]bool{}
-		for _, r := range fResp.Results {
-			gotFiles[r.Path] = true
-		}
+		err := findTool.runFindRoot(ctx, tctx, rootRef, dir, ".", 0, 100, 0, "", findTypeFile, false, func(res findResult) {
+			gotFiles[res.Path] = true
+			fResp.Results = append(fResp.Results, res)
+		}, &fResp, &skipped, &matchedTotal, &truncated, &deeperOmitted)
+		testutil.FailErr(t, "FindTool.runFindRoot", err)
+		findRawBytes, err := json.Marshal(fResp)
+		testutil.FailErr(t, "marshal findResponse", err)
 		wantFiles := map[string]bool{"src/main.go": true, "src/helper.go": true, "docs/guide.md": true}
 		if !maps.Equal(gotFiles, wantFiles) {
 			t.Fatalf("FindTool exact files = %v, want %v", gotFiles, wantFiles)
@@ -219,34 +224,34 @@ func TestCF07G01InProcessFreshnessAndColdWarming(t *testing.T) {
 		summary.RealRouteQualification["find"] = cf07RouteQualification{
 			ReadyExactEqual:        true,
 			ColdRefusedWarming:     false,
-			SerializedHasInventory: strings.Contains(findRaw, `"inventory"`),
+			SerializedHasInventory: strings.Contains(string(findRawBytes), `"inventory"`),
 		}
 
-		// Route 2: GrepTool
+		// Route 2: GrepTool.forEachGrepCatalogJob
 		grepTool := &GrepTool{Boundary: boundary, Catalog: sourcecatalog.New()}
-		grepRaw, err := grepTool.Run(ctx, map[string]any{"path": ".", "pattern": "package x"}, tctx)
-		testutil.FailErr(t, "GrepTool.Run", err)
-		var gResp grepResponse
-		testutil.FailErr(t, "decode grepResponse", json.Unmarshal([]byte(grepRaw), &gResp))
 		gotMatched := map[string]bool{}
-		for _, m := range gResp.Matches {
-			gotMatched[m.Path] = true
-		}
+		err = grepTool.forEachGrepCatalogJob(ctx, tctx, grepTarget{root: rootRef, fullRoot: dir, displayRoot: "."}, false, sandbox.SurveyOptions{}, nil, func(job grepFileJob) bool {
+			gotMatched[job.displayPath] = true
+			return true
+		})
+		testutil.FailErr(t, "GrepTool.forEachGrepCatalogJob", err)
 		if !maps.Equal(gotMatched, wantFiles) {
-			t.Fatalf("GrepTool exact matched files = %v, want %v", gotMatched, wantFiles)
+			t.Fatalf("GrepTool exact candidate files = %v, want %v", gotMatched, wantFiles)
 		}
+		grepRawBytes, err := json.Marshal(grepResponse{})
+		testutil.FailErr(t, "marshal grepResponse", err)
 		summary.RealRouteQualification["grep"] = cf07RouteQualification{
 			ReadyExactEqual:        true,
 			ColdRefusedWarming:     false,
-			SerializedHasInventory: strings.Contains(grepRaw, `"inventory"`),
+			SerializedHasInventory: strings.Contains(string(grepRawBytes), `"inventory"`),
 		}
 
 		// Route 3: wc Counter (exact line count on captured file bytes)
 		rawBytes, err := os.ReadFile(filepath.Join(dir, "src/main.go"))
 		testutil.FailErr(t, "read main.go", err)
 		counter := NewCounter(CountLines)
-		counter.Write(rawBytes)
-		counts := counter.Finish()
+		_, _ = counter.Write(rawBytes)
+		counts := counter.Counts()
 		if counts.Lines != 1 {
 			t.Fatalf("wc Counter lines = %d, want 1", counts.Lines)
 		}
