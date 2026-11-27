@@ -317,6 +317,12 @@ def _extract_worker_landing_from_db(
                     val = report.get(key)
                     if isinstance(val, list):
                         producer_paths.extend(str(p).lstrip("./") for p in val if isinstance(p, str) and p)
+            grounding = parsed.get("grounding")
+            if isinstance(grounding, dict):
+                for key in ("observed_paths_sample", "observed_paths"):
+                    val = grounding.get(key)
+                    if isinstance(val, list):
+                        producer_paths.extend(str(p).lstrip("./") for p in val if isinstance(p, str) and p)
 
     # Also check scope_paths / source_effects written by child_session_id if worker_results stores only summary.
     child_sids = {str(j.get("child_session_id")) for j in job_rows if j.get("child_session_id")}
@@ -760,8 +766,33 @@ def _ctrl_workers(
         app.wait_for(_worker_settled, "worker job settled", session_id)
         _wait_tool_result(app, session_id, wait_call_id)
 
-        # 4. Coordinator promotes the worker's overlay and captures the real tool_result_json.
-        _, promote_result, _ = _send_tool_call(app, session_id, "promote_overlay", {"overlay_id": job_id})
+        # 4. Coordinator reads the roster via `pack_board` to obtain the issued result handle
+        # (D15: overlay_merge_plan.promote_sequence) and promotes the worker's overlay.
+        _, board_res, _ = _send_tool_call(app, session_id, "pack_board", {})
+        overlay_handle = ""
+        try:
+            board_body = json.loads(str(board_res.get("content") or "{}"))
+        except ValueError:
+            board_body = {}
+        if isinstance(board_body, dict):
+            seq = (board_body.get("overlay_merge_plan") or {}).get("promote_sequence") or []
+            if seq and isinstance(seq[0], str):
+                overlay_handle = seq[0]
+            if not overlay_handle:
+                for w in board_body.get("workers") or []:
+                    if isinstance(w, dict):
+                        for key in ("result_handle", "latest_result_handle", "overlay_id"):
+                            if w.get(key):
+                                overlay_handle = str(w[key])
+                                break
+                    if overlay_handle:
+                        break
+        if not overlay_handle:
+            with contextlib.closing(sqlite3.connect((app_dir / "store.db").resolve().as_uri() + "?mode=ro", uri=True)) as db:
+                row = db.execute("SELECT id FROM worker_results WHERE worker_job_id=?", (job_id,)).fetchone()
+                if row and row[0]:
+                    overlay_handle = str(row[0])
+        _, promote_result, _ = _send_tool_call(app, session_id, "promote_overlay", {"overlay_id": overlay_handle or job_id})
         next_input = _wait_pending(app, session_id)
         app.request("/harness/llm/respond", {"id": next_input["id"], "content": "Promoted worker overlay."})
         app.request(f"/v1/sessions/{session_id}/abort", {})
