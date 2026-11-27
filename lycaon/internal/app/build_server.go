@@ -56,6 +56,7 @@ func (b *serveBuilder) wireRuntimeServices() error {
 		return err
 	}
 	b.sessions.Manager.SetBackgroundRegistry(b.interactions.Processes)
+	wireProcessOutputWatchProducer(b, b.watchStore())
 	b.sessions.Manager.SetHeldCalls(b.interactions.Calls)
 	b.sessions.Manager.SetPageRegistry(b.interactions.Pages)
 	if err := b.interactions.RegisterTools(b.execution.Host.Registry, b.boards.BrowserPool); err != nil {
