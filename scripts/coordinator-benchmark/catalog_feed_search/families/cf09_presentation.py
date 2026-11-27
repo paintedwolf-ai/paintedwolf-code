@@ -148,6 +148,35 @@ class CoverageFixture:
                 pass
 
 
+def populate_large_tree(root: Path, file_count: int = 30000, *, include_needle: bool = True) -> int:
+    """Create a multi-directory synthetic tree large enough for a real warming/refreshing window."""
+    root.mkdir(parents=True, exist_ok=True)
+    written = 0
+    if include_needle:
+        healthy = root / "healthy"
+        healthy.mkdir(parents=True, exist_ok=True)
+        (healthy / "target.txt").write_text(
+            f"line1: {NEEDLE_TOKEN}\nline2: large_tree\n",
+            encoding="utf-8",
+        )
+        written = 1
+
+    per_dir = 50
+    dirs = max(1, (file_count - written + per_dir - 1) // per_dir)
+    payload = b"module file content for catalog indexing\n"
+    for d in range(dirs):
+        sub = root / f"pkg_{d // 25:02d}" / f"mod_{d:04d}"
+        sub.mkdir(parents=True, exist_ok=True)
+        for f in range(per_dir):
+            if written >= file_count:
+                break
+            (sub / f"f_{f:02d}.txt").write_bytes(payload)
+            written += 1
+        if written >= file_count:
+            break
+    return written
+
+
 def build_coverage_fixture(
     base_dir: Path,
     state: str,
@@ -208,24 +237,19 @@ def build_coverage_fixture(
             file_count=11,
         )
 
-    # warming and refreshing both use a multi-directory synthetic tree.
-    # For warming, queries run immediately on first attach; for refreshing,
-    # queries run immediately after a burst mutation on a settled tree.
-    dirs = max(1, warming_file_count // 40)
-    written = 1
-    for d in range(dirs):
-        sub = root / f"pkg_{d // 20:02d}" / f"mod_{d:04d}"
-        sub.mkdir(parents=True, exist_ok=True)
-        for f in range(40):
-            if written >= warming_file_count:
-                break
-            (sub / f"f_{f:02d}.txt").write_text(
-                f"module {d} file {f}\n", encoding="utf-8"
-            )
-            written += 1
-        if written >= warming_file_count:
-            break
+    if state == "warming":
+        # Keep the primary root small so the project workspace becomes 100% ready
+        # immediately; fresh large roots are attached per-surface AFTER the UI is open.
+        return CoverageFixture(
+            state=state,
+            root_dir=root,
+            needle_file=needle_file,
+            file_count=1,
+        )
 
+    # refreshing uses a settled large tree mutated across many subdirectories right
+    # after each target UI surface is already open.
+    written = populate_large_tree(root, file_count=warming_file_count, include_needle=False) + 1
     return CoverageFixture(
         state=state,
         root_dir=root,

@@ -31,6 +31,7 @@ from .cf09_presentation import (
     build_coverage_fixture,
     classify_files_tree_notice,
     mutate_for_refreshing,
+    populate_large_tree,
     verify_presentation_observation,
     write_presentation_evidence,
 )
@@ -116,13 +117,7 @@ const token: string = cfg.token;
 const outDir: string = cfg.out_dir;
 const needle: string = cfg.needle;
 const projects: Record<string, { id: string; root_id: string; name: string; root_dir?: string }> = cfg.projects;
-
-async function apiGet(p: string) {
-  const res = await fetch(`${apiUrl}${p}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return await res.json();
-}
+const warmingRoots: Record<string, string> = cfg.warming_roots ?? {};
 
 async function apiPost(p: string, body: unknown) {
   const res = await fetch(`${apiUrl}${p}`, {
@@ -134,6 +129,27 @@ async function apiPost(p: string, body: unknown) {
     body: JSON.stringify(body),
   });
   return await res.json();
+}
+
+async function attachWarmingRoot(projectId: string, rootPath: string): Promise<string> {
+  if (!rootPath) return "";
+  const resp = await apiPost(`/v1/projects/${projectId}/roots`, { path: rootPath });
+  return String(resp?.id ?? resp?.root?.id ?? "");
+}
+
+function mutateRefreshingTree(rootDir: string | undefined, round: number) {
+  if (!rootDir) return;
+  for (let d = 0; d < 40; d++) {
+    const sub = path.join(rootDir, `pkg_${String(Math.floor(d / 25)).padStart(2, "0")}`, `mod_${String(d).padStart(4, "0")}`);
+    fs.mkdirSync(sub, { recursive: true });
+    for (let f = 0; f < 10; f++) {
+      fs.writeFileSync(
+        path.join(sub, `refresh_r${round}_${f}.txt`),
+        `refresh round=${round} dir=${d} file=${f} ${needle}\n`,
+        "utf-8",
+      );
+    }
+  }
 }
 
 test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async ({ page }) => {
@@ -166,17 +182,7 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
 
     const scopedQuery = `project:current ${needle}`;
 
-    // 1. Search stage (GlobalSearchView) — intercept Den's own /v1/search response for this project & scope.
-    const searchRespPromise = page.waitForResponse(
-      (res) =>
-        res.url().includes("/v1/search") &&
-        !res.url().includes("/replace/") &&
-        res.request().method() === "POST" &&
-        (res.request().postData() ?? "").includes(needle) &&
-        (res.request().postData() ?? "").includes(proj.id),
-      { timeout: 15_000 },
-    ).catch(() => null);
-
+    // 1. Search stage (GlobalSearchView) — prepare UI FIRST, then trigger fresh warming root or refresh burst.
     await page.keyboard.press("ControlOrMeta+Shift+f");
     const searchInput = page.getByTestId("search-query-input");
     if (!(await searchInput.isVisible({ timeout: 3000 }).catch(() => false))) {
@@ -196,6 +202,25 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
     }
     if (await searchInput.isVisible({ timeout: 5000 }).catch(() => false)) {
       await searchInput.fill(scopedQuery);
+    }
+
+    if (state === "warming") {
+      await attachWarmingRoot(proj.id, warmingRoots.search_stage);
+    } else if (state === "refreshing") {
+      mutateRefreshingTree(proj.root_dir, 1);
+    }
+
+    const searchRespPromise = page.waitForResponse(
+      (res) =>
+        res.url().includes("/v1/search") &&
+        !res.url().includes("/replace/") &&
+        res.request().method() === "POST" &&
+        (res.request().postData() ?? "").includes(needle) &&
+        (res.request().postData() ?? "").includes(proj.id),
+      { timeout: 15_000 },
+    ).catch(() => null);
+
+    if (await searchInput.isVisible({ timeout: 5000 }).catch(() => false)) {
       await searchInput.press("Enter");
     }
     const searchRes = await searchRespPromise;
@@ -228,7 +253,12 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
       screenshot_path: path.basename(searchShot),
     });
 
-    // 2. Replace review (GlobalSearchView replace mode) — intercept Den's own /v1/search/replace/preview response.
+    // 2. Replace review (GlobalSearchView replace mode) — trigger fresh warming root or refresh burst while Search stage is already open.
+    if (state === "warming") {
+      await attachWarmingRoot(proj.id, warmingRoots.replace_review);
+    } else if (state === "refreshing") {
+      mutateRefreshingTree(proj.root_dir, 2);
+    }
     const replaceRespPromise = page.waitForResponse(
       (res) =>
         res.url().includes("/v1/search/replace/preview") &&
@@ -278,17 +308,21 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
       await toggleReplace.click();
     }
 
-    // 3. Quick open (Crossbar) — intercept Den's own /source/search response for this project.
+    // 3. Quick open (Crossbar) — open Crossbar FIRST, then trigger fresh warming root or refresh burst.
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("ControlOrMeta+k");
+    await expect(page.getByTestId("crossbar-input")).toBeVisible({ timeout: 10_000 });
+    if (state === "warming") {
+      await attachWarmingRoot(proj.id, warmingRoots.quick_open);
+    } else if (state === "refreshing") {
+      mutateRefreshingTree(proj.root_dir, 3);
+    }
     const quickRespPromise = page.waitForResponse(
       (res) =>
         res.url().includes(`/v1/projects/${proj.id}/source/search`) &&
         res.url().includes("target.txt"),
       { timeout: 15_000 },
     ).catch(() => null);
-
-    await page.keyboard.press("Escape");
-    await page.keyboard.press("ControlOrMeta+k");
-    await expect(page.getByTestId("crossbar-input")).toBeVisible({ timeout: 10_000 });
     await page.getByTestId("crossbar-input").fill("target.txt");
     const quickRes = await quickRespPromise;
     await page.waitForTimeout(400);
@@ -317,8 +351,14 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
     });
     await page.keyboard.press("Escape");
 
-    // 4. Files tree — correlate with Den's own /source/index response for this project
-    // and scope both coverage notice & retry button to the selected root's summary card.
+    // 4. Files tree — open Files FIRST, then trigger fresh warming root or refresh burst and correlate with Den's own /source/index response.
+    const filesNav = page.locator('[data-testid="nav-files"], [aria-label="Files"]').first();
+    if (await filesNav.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await filesNav.click();
+      await page.waitForTimeout(400);
+    }
+    let selectedRootId = proj.root_id;
+    let selectedRootDir = proj.root_dir ?? "";
     const indexRespPromise = page.waitForResponse(
       (res) =>
         res.url().includes(`/v1/projects/${proj.id}/source/index`) &&
@@ -326,10 +366,16 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
         res.ok(),
       { timeout: 6_000 },
     ).catch(() => null);
-    const filesNav = page.locator('[data-testid="nav-files"], [aria-label="Files"]').first();
-    if (await filesNav.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await filesNav.click();
-      await page.waitForTimeout(600);
+    if (state === "warming" && warmingRoots.files_tree) {
+      const newRootId = await attachWarmingRoot(proj.id, warmingRoots.files_tree);
+      if (newRootId) {
+        selectedRootId = newRootId;
+        selectedRootDir = warmingRoots.files_tree;
+      }
+      await page.waitForTimeout(300);
+    } else if (state === "refreshing") {
+      mutateRefreshingTree(proj.root_dir, 4);
+      await page.waitForTimeout(300);
     }
     const freshIndexRes = await indexRespPromise;
     let correlatedIndex = latestSourceIndexByProject.get(proj.id) ?? null;
@@ -342,9 +388,9 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
     }
     const treeVisible = await page.getByTestId("files-tree-pane").isVisible().catch(() => false);
     const rootSummaries = page.getByTestId("files-root-summary");
-    const rootSummary = proj.root_dir
+    const rootSummary = selectedRootDir
       ? rootSummaries.filter({
-          has: page.getByTestId("files-root-summary-path").filter({ hasText: proj.root_dir }),
+          has: page.getByTestId("files-root-summary-path").filter({ hasText: selectedRootDir }),
         }).first()
       : rootSummaries.first();
     const rootSummaryVisible = await rootSummary.isVisible({ timeout: 1500 }).catch(() => false);
@@ -380,7 +426,7 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
       platform: "linux",
       native_window: true,
       project_id: proj.id,
-      selected_root_id: proj.root_id,
+      selected_root_id: selectedRootId,
       query: "",
       scope: "project:current",
       request_url: correlatedIndex?.url ?? "",
@@ -440,6 +486,13 @@ def run_linux_native(
                 fixtures.append(
                     build_coverage_fixture(fx_dir, st, warming_file_count=warming_files)
                 )
+            # Pre-build 4 fresh unattached large roots so each warming surface attaches its own
+            # real work window AFTER the workspace and surface UI are already ready.
+            warming_roots: dict[str, str] = {}
+            for surf in SURFACES:
+                wdir = (fx_dir / f"cf09_warming_{surf}").resolve()
+                populate_large_tree(wdir, file_count=warming_files, include_needle=True)
+                warming_roots[surf] = str(wdir)
 
             sidecar_env = os.environ.copy()
             sidecar_env.update(
@@ -486,9 +539,14 @@ def run_linux_native(
                     "root_dir": str(fx.root_dir),
                 }
                 if fx.state == "refreshing":
-                    # Wait briefly for initial index then mutate to trigger refreshing.
-                    time.sleep(1.5)
-                    mutate_for_refreshing(fx, burst_count=200)
+                    # Wait for the large refreshing tree to settle BEFORE Playwright mutates it.
+                    settle_deadline = time.monotonic() + 30.0
+                    while time.monotonic() < settle_deadline:
+                        idx = _api_request(api_url, token, f"/v1/projects/{resp['id']}/source/index")
+                        cov = idx.get("coverage") or []
+                        if cov and all(r.get("discovery_complete") is True for r in cov if isinstance(r, dict)):
+                            break
+                        time.sleep(0.25)
 
             xvfb_proc = subprocess.Popen(
                 ["Xvfb", display, "-screen", "0", "1440x900x24", "-nolisten", "tcp"],
@@ -539,6 +597,7 @@ def run_linux_native(
                         "out_dir": str(out_dir),
                         "needle": NEEDLE_TOKEN,
                         "projects": projects_meta,
+                        "warming_roots": warming_roots,
                     },
                     indent=2,
                 ),
@@ -634,7 +693,7 @@ def main(argv: list[str] | None = None) -> int:
         "--baseline-commit",
         default="3bb1464d22dd0a38a149d37610810e7a0324e8cf",
     )
-    parser.add_argument("--warming-files", type=int, default=3000)
+    parser.add_argument("--warming-files", type=int, default=30000)
     args = parser.parse_args(argv)
     report = run_linux_native(
         den_repo=args.den_repo,
