@@ -424,10 +424,6 @@ type RuntimeConfig struct {
 	WasmBytes               []byte
 	ImageDir                string
 	Manifest                *ImageManifest
-	// VerifiedImage optionally carries an unforgeable single-construction proof
-	// returned by VerifyImageResult for (ImageDir, Manifest). When nil or
-	// mismatched, constructors independently run full VerifyImage.
-	VerifiedImage           *VerifiedImage
 	ImportPolicy            []WasmImportSpec
 	EnforceImportAudit      bool
 	UseTrustedBootstrap     bool

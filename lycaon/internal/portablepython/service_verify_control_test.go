@@ -94,32 +94,47 @@ func buildSyntheticServiceImage(t *testing.T) string {
 }
 
 // TestNewServiceFreshVerificationNoCrossServiceCache proves that each fresh
-// NewService construction independently verifies the image on disk (no
-// cross-service trusted cache or mutable-path shortcut).
+// NewService and NewVerifiedRuntime construction independently verifies the
+// image on disk even when reusing the exact same ServiceConfig / RuntimeConfig
+// struct after a staged-image change (no reusable proof token or cache).
 func TestNewServiceFreshVerificationNoCrossServiceCache(t *testing.T) {
 	ctx := context.Background()
 	imgDir := buildSyntheticServiceImage(t)
 
-	svc1, err := NewService(ctx, ServiceConfig{
+	svcCfg := ServiceConfig{
 		ImageDir: imgDir,
 		Backend:  pythonruntime.BackendWazeroInterpreter,
-	})
+	}
+	svc1, err := NewService(ctx, svcCfg)
 	if err != nil {
 		t.Fatalf("first NewService on clean image failed: %v", err)
+	}
+	rtCfg := pythonruntime.RuntimeConfig{
+		Backend:            pythonruntime.BackendWazeroInterpreter,
+		ImageDir:           imgDir,
+		Manifest:           svc1.RuntimeManifest(),
+		EnforceImportAudit: true,
 	}
 	if err := svc1.Close(ctx); err != nil {
 		t.Fatalf("Close svc1: %v", err)
 	}
+	rt1, err := pythonruntime.NewVerifiedRuntime(ctx, rtCfg)
+	if err != nil {
+		t.Fatalf("first NewVerifiedRuntime on clean image failed: %v", err)
+	}
+	if err := rt1.Close(ctx); err != nil {
+		t.Fatalf("Close rt1: %v", err)
+	}
 
-	// Tamper with a package file between Service constructions.
+	// Tamper with a package file between constructions and reuse exact configs.
 	if err := os.WriteFile(filepath.Join(imgDir, "packages", "demo", "__init__.py"), []byte("X = 2\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewService(ctx, ServiceConfig{
-		ImageDir: imgDir,
-		Backend:  pythonruntime.BackendWazeroInterpreter,
-	}); err == nil || !strings.Contains(err.Error(), "packages_root tree sha256 mismatch") {
-		t.Fatalf("second NewService after .py tamper must fail closed, got: %v", err)
+	if _, err := NewService(ctx, svcCfg); err == nil || !strings.Contains(err.Error(), "packages_root tree sha256 mismatch") {
+		t.Fatalf("reusing ServiceConfig after .py tamper must fail closed, got: %v", err)
+	}
+	if _, err := pythonruntime.NewVerifiedRuntime(ctx, rtCfg); err == nil || !strings.Contains(err.Error(), "packages_root tree sha256 mismatch") {
+		t.Fatalf("reusing RuntimeConfig with NewVerifiedRuntime after .py tamper must fail closed, got: %v", err)
 	}
 
 	// Restore .py and plant a forbidden host native binary.
@@ -129,10 +144,10 @@ func TestNewServiceFreshVerificationNoCrossServiceCache(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(imgDir, "evil.so"), []byte("ELF"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewService(ctx, ServiceConfig{
-		ImageDir: imgDir,
-		Backend:  pythonruntime.BackendWazeroInterpreter,
-	}); err == nil || !strings.Contains(err.Error(), "host native binaries forbidden") {
-		t.Fatalf("NewService after planting .so must fail closed, got: %v", err)
+	if _, err := NewService(ctx, svcCfg); err == nil || !strings.Contains(err.Error(), "host native binaries forbidden") {
+		t.Fatalf("reusing ServiceConfig after planting .so must fail closed, got: %v", err)
+	}
+	if _, err := pythonruntime.NewVerifiedRuntime(ctx, rtCfg); err == nil || !strings.Contains(err.Error(), "host native binaries forbidden") {
+		t.Fatalf("reusing RuntimeConfig with NewVerifiedRuntime after planting .so must fail closed, got: %v", err)
 	}
 }

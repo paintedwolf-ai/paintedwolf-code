@@ -48,7 +48,11 @@ type NativeEngineRuntime struct {
 // via the pythonnative adapter, performs the fail-closed pw_py_engine_identity()
 // + image pairing handshake, and initializes the engine. It fails explicitly
 // when native capability is unavailable and NEVER silently falls back to wazero.
-func NewNativeEngineRuntime(_ context.Context, cfg RuntimeConfig) (Runtime, error) {
+func NewNativeEngineRuntime(ctx context.Context, cfg RuntimeConfig) (Runtime, error) {
+	return newNativeEngineRuntime(ctx, cfg, nil)
+}
+
+func newNativeEngineRuntime(_ context.Context, cfg RuntimeConfig, verified *verifiedImage) (Runtime, error) {
 	goos, goarch := pythonnative.HostPlatform()
 	if !pythonnative.NativeAOTSupported() {
 		return nil, &NativeEngineVerificationError{
@@ -136,11 +140,11 @@ func NewNativeEngineRuntime(_ context.Context, cfg RuntimeConfig) (Runtime, erro
 		EngineDir:             engineDir,
 		ImageDir:              cfg.ImageDir,
 		ImageManifest:         cfg.Manifest,
-		VerifiedImage:         cfg.VerifiedImage,
 		ReportedIdentity:      reported,
 		GOOS:                  goos,
 		GOARCH:                goarch,
 		verifiedEngineLibPath: libPath,
+		skipImageVerify:       verified != nil,
 	})
 	if err != nil {
 		lib.Close()

@@ -18,11 +18,11 @@ type HandshakeVerificationInput struct {
 	EngineDir             string
 	ImageDir              string
 	ImageManifest         *ImageManifest
-	VerifiedImage         *VerifiedImage
 	ReportedIdentity      *NativeEngineIdentity
 	GOOS                  string
 	GOARCH                string
 	verifiedEngineLibPath string
+	skipImageVerify       bool
 }
 
 // VerifyNativeEngineHandshake performs complete fail-closed verification BEFORE
@@ -143,14 +143,12 @@ func VerifyNativeEngineHandshake(in HandshakeVerificationInput) (*NativeEngineId
 			Message: fmt.Sprintf("engine/image skew: engine import_inventory_sha256 %s != image %s", id.ImportInventorySHA256, in.ImageManifest.ImportInventorySHA256),
 		}
 	}
-	if strings.TrimSpace(in.ImageDir) != "" {
-		if !in.VerifiedImage.matches(in.ImageDir, in.ImageManifest) {
-			if err := VerifyImage(in.ImageDir, in.ImageManifest); err != nil {
-				return nil, &NativeEngineVerificationError{
-					Stage:   "image",
-					Message: "paired portable python image failed integrity/bytecode verification",
-					Err:     err,
-				}
+	if strings.TrimSpace(in.ImageDir) != "" && !in.skipImageVerify {
+		if err := VerifyImage(in.ImageDir, in.ImageManifest); err != nil {
+			return nil, &NativeEngineVerificationError{
+				Stage:   "image",
+				Message: "paired portable python image failed integrity/bytecode verification",
+				Err:     err,
 			}
 		}
 	}

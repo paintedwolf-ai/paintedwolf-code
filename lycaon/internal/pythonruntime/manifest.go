@@ -146,104 +146,15 @@ func (m *ImageManifest) Validate() error {
 	return nil
 }
 
-// VerifiedImage is an unforgeable, single-construction proof returned by
-// VerifyImageResult for a specific (imageDir, manifest) pair. It is never
-// cached globally or across Service constructions; callers outside
-// pythonruntime cannot synthesize a verified instance.
-type VerifiedImage struct {
+// verifiedImage is a strictly private, single-call verification result
+// produced by verifyImageInternal and consumed immediately inside
+// NewVerifiedRuntime. It is never exported, cached, or returned to callers.
+type verifiedImage struct {
 	imageDir   string
 	manifest   *ImageManifest
 	wasmPath   string
 	wasmSHA256 string
 	wasmBytes  []byte
-	snapshot   verifiedManifestSnapshot
-	verified   bool
-}
-
-type verifiedManifestSnapshot struct {
-	imageID               string
-	wasmPath              string
-	wasmSHA256            string
-	meteredWasmSHA256     string
-	stdlibPath            string
-	stdlibSHA256          string
-	packagesRoot          string
-	packagesTreeSHA256    string
-	importInventorySHA256 string
-	hasBytecode           bool
-	bytecodeMode          string
-	bytecodeMagic         string
-	bytecodeCount         int
-	bytecodeTreeSHA256    string
-}
-
-func snapshotManifest(m *ImageManifest) verifiedManifestSnapshot {
-	if m == nil {
-		return verifiedManifestSnapshot{}
-	}
-	s := verifiedManifestSnapshot{
-		imageID:               m.ImageID,
-		wasmPath:              m.Interpreter.WasmPath,
-		wasmSHA256:            strings.ToLower(strings.TrimSpace(m.Interpreter.WasmSHA256)),
-		meteredWasmSHA256:     strings.ToLower(strings.TrimSpace(m.Interpreter.MeteredWasmSHA256)),
-		stdlibPath:            m.Interpreter.StdlibPath,
-		stdlibSHA256:          strings.ToLower(strings.TrimSpace(m.Interpreter.StdlibSHA256)),
-		packagesRoot:          m.PackagesRoot,
-		packagesTreeSHA256:    strings.ToLower(strings.TrimSpace(m.PackagesTreeSHA256)),
-		importInventorySHA256: strings.ToLower(strings.TrimSpace(m.ImportInventorySHA256)),
-	}
-	if m.Bytecode != nil {
-		s.hasBytecode = true
-		s.bytecodeMode = m.Bytecode.InvalidationMode
-		s.bytecodeMagic = strings.ToLower(strings.TrimSpace(m.Bytecode.MagicHex))
-		s.bytecodeCount = m.Bytecode.PycCount
-		s.bytecodeTreeSHA256 = strings.ToLower(strings.TrimSpace(m.Bytecode.PycTreeSHA256))
-	}
-	return s
-}
-
-// ImageDir returns the cleaned absolute image directory that was verified.
-func (v *VerifiedImage) ImageDir() string {
-	if v == nil {
-		return ""
-	}
-	return v.imageDir
-}
-
-// Manifest returns the manifest that was verified.
-func (v *VerifiedImage) Manifest() *ImageManifest {
-	if v == nil {
-		return nil
-	}
-	return v.manifest
-}
-
-// WasmSHA256 returns the verified lowercase hex SHA-256 digest of python.wasm.
-func (v *VerifiedImage) WasmSHA256() string {
-	if v == nil {
-		return ""
-	}
-	return v.wasmSHA256
-}
-
-// WasmBytes returns the verified bytes of python.wasm read during
-// VerifyImageResult.
-func (v *VerifiedImage) WasmBytes() []byte {
-	if v == nil {
-		return nil
-	}
-	return v.wasmBytes
-}
-
-func (v *VerifiedImage) matches(imageDir string, manifest *ImageManifest) bool {
-	if v == nil || !v.verified || manifest == nil {
-		return false
-	}
-	absDir, err := filepath.Abs(imageDir)
-	if err != nil || absDir != v.imageDir {
-		return false
-	}
-	return v.snapshot == snapshotManifest(manifest)
 }
 
 // VerifyImage checks that the image directory matches manifest digests for
@@ -254,14 +165,7 @@ func VerifyImage(dir string, manifest *ImageManifest) error {
 	return err
 }
 
-// VerifyImageResult performs the full fail-closed image verification and
-// returns a single-construction VerifiedImage carrying the verified python.wasm
-// bytes and an unexported verification token for same-construction handoff.
-func VerifyImageResult(dir string, manifest *ImageManifest) (*VerifiedImage, error) {
-	return verifyImageInternal(dir, manifest, true)
-}
-
-func verifyImageInternal(dir string, manifest *ImageManifest, retainWasmBytes bool) (*VerifiedImage, error) {
+func verifyImageInternal(dir string, manifest *ImageManifest, retainWasmBytes bool) (*verifiedImage, error) {
 	if err := manifest.Validate(); err != nil {
 		return nil, err
 	}
@@ -446,14 +350,12 @@ func verifyImageInternal(dir string, manifest *ImageManifest, retainWasmBytes bo
 		return nil, fmt.Errorf("host native binaries forbidden in WASI image: %s", strings.Join(nativeBinaries, ", "))
 	}
 
-	return &VerifiedImage{
+	return &verifiedImage{
 		imageDir:   absDir,
 		manifest:   manifest,
 		wasmPath:   wasmPath,
 		wasmSHA256: strings.ToLower(wasmDigest),
 		wasmBytes:  wasmBytes,
-		snapshot:   snapshotManifest(manifest),
-		verified:   true,
 	}, nil
 }
 

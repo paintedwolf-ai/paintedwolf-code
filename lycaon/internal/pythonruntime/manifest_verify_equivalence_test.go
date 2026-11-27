@@ -258,20 +258,20 @@ func buildSyntheticVerifiedImage(t *testing.T) (string, *ImageManifest, []byte) 
 }
 
 func TestVerifyImageCoalescedEquivalenceAndTamperControls(t *testing.T) {
-	t.Run("clean image matches legacy reference and returns verified wasm bytes", func(t *testing.T) {
+	t.Run("clean image matches legacy reference and retains verified wasm bytes privately", func(t *testing.T) {
 		dir, im, wasmBytes := buildSyntheticVerifiedImage(t)
 		if err := legacyVerifyImageReference(dir, im); err != nil {
 			t.Fatalf("legacy reference failed on clean image: %v", err)
 		}
-		v, err := VerifyImageResult(dir, im)
+		if err := VerifyImage(dir, im); err != nil {
+			t.Fatalf("VerifyImage failed on clean image: %v", err)
+		}
+		v, err := verifyImageInternal(dir, im, true)
 		if err != nil {
-			t.Fatalf("VerifyImageResult failed on clean image: %v", err)
+			t.Fatalf("verifyImageInternal failed on clean image: %v", err)
 		}
-		if !bytes.Equal(v.WasmBytes(), wasmBytes) {
-			t.Fatalf("VerifiedImage.WasmBytes mismatch")
-		}
-		if !v.matches(dir, im) {
-			t.Fatalf("VerifiedImage.matches returned false for identical (dir, manifest)")
+		if !bytes.Equal(v.wasmBytes, wasmBytes) {
+			t.Fatalf("verifiedImage.wasmBytes mismatch")
 		}
 	})
 
@@ -376,36 +376,38 @@ func TestVerifyImageCoalescedEquivalenceAndTamperControls(t *testing.T) {
 	}
 }
 
-func TestVerifyNativeEngineHandshakeVerifiedImageControls(t *testing.T) {
-	dirA, imA, _ := buildSyntheticVerifiedImage(t)
-	dirB, imB, _ := buildSyntheticVerifiedImage(t)
-
-	vA, err := VerifyImageResult(dirA, imA)
-	if err != nil {
-		t.Fatalf("VerifyImageResult(dirA): %v", err)
-	}
-
-	// Forged (unverified) struct must never match.
-	forged := &VerifiedImage{imageDir: dirA, manifest: imA}
-	if forged.matches(dirA, imA) {
-		t.Fatal("forged VerifiedImage with verified=false must not match")
-	}
-
-	// Valid token for dirA must not match dirB.
-	if vA.matches(dirB, imB) {
-		t.Fatal("VerifiedImage for dirA must not match dirB")
-	}
-
-	// Mutating manifest after VerifyImageResult must invalidate the token.
-	imMutated := *imA
-	imMutated.ImageID = "different-id"
-	if vA.matches(dirA, &imMutated) {
-		t.Fatal("VerifiedImage must not match a mutated ImageManifest")
-	}
-
-	// Standalone VerifyNativeEngineHandshake alternate-entry control:
-	// without a matching VerifiedImage token, tampering MUST fail closed at stage "image".
+func TestPrivateVerificationReuseAndAlternateEntryControls(t *testing.T) {
 	ctx := context.Background()
+
+	// Build a valid synthetic image whose python.wasm is a valid 8-byte empty Wasm module
+	// so NewVerifiedRuntime can construct a real Wazero runtime end-to-end.
+	dirA, imA, _ := buildSyntheticVerifiedImage(t)
+	validWasm := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
+	if err := os.WriteFile(filepath.Join(dirA, "python.wasm"), validWasm, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wasmSum := sha256.Sum256(validWasm)
+	imA.Interpreter.WasmSHA256 = hex.EncodeToString(wasmSum[:])
+
+	// 1. Construct a runtime via NewVerifiedRuntime using a reusable RuntimeConfig struct.
+	rtCfg := RuntimeConfig{
+		Backend:            BackendWazeroInterpreter,
+		ImageDir:           dirA,
+		Manifest:           imA,
+		EnforceImportAudit: true,
+	}
+	rt1, err := NewVerifiedRuntime(ctx, rtCfg)
+	if err != nil {
+		t.Fatalf("initial NewVerifiedRuntime on clean image failed: %v", err)
+	}
+	if err := rt1.Close(ctx); err != nil {
+		t.Fatalf("Close rt1: %v", err)
+	}
+	if len(rtCfg.WasmBytes) != 0 {
+		t.Fatalf("NewVerifiedRuntime must not leak or mutate caller RuntimeConfig.WasmBytes")
+	}
+
+	// 2. Set up a paired synthetic native engine handshake fixture for alternate-entry control.
 	fx := createEngineTestFixture(t)
 	workDir := t.TempDir()
 	m, err := SelectEngineRelease(ctx, SelectEngineReleaseRequest{
@@ -444,8 +446,8 @@ func TestVerifyNativeEngineHandshakeVerifiedImageControls(t *testing.T) {
 		ImportInventorySHA256: ExpectedNativeEngineImportInventorySHA256,
 	}
 
-	// Clean standalone call succeeds.
-	if _, err := VerifyNativeEngineHandshake(HandshakeVerificationInput{
+	// Clean standalone handshake passes.
+	handshakeIn := HandshakeVerificationInput{
 		BundledManifest:  m,
 		EngineDir:        engineDir,
 		ImageDir:         dirA,
@@ -453,41 +455,29 @@ func TestVerifyNativeEngineHandshakeVerifiedImageControls(t *testing.T) {
 		ReportedIdentity: goodID,
 		GOOS:             goos,
 		GOARCH:           goarch,
-	}); err != nil {
+	}
+	if _, err := VerifyNativeEngineHandshake(handshakeIn); err != nil {
 		t.Fatalf("clean standalone VerifyNativeEngineHandshake failed: %v", err)
 	}
 
-	// Tamper dirA on disk, then verify standalone calls (nil, forged, and wrong-dir token) all fail closed.
+	// 3. Tamper dirA on disk, then attempt to reuse the EXACT SAME RuntimeConfig
+	// and HandshakeVerificationInput structs: every public entry point MUST fail closed.
 	if err := os.WriteFile(filepath.Join(dirA, "packages", "alpha", "__init__.py"), []byte("TAMPERED = 1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	vB, err := VerifyImageResult(dirB, imB)
-	if err != nil {
-		t.Fatalf("VerifyImageResult(dirB): %v", err)
+
+	if _, err := NewVerifiedRuntime(ctx, rtCfg); err == nil || !strings.Contains(err.Error(), "packages_root tree sha256 mismatch") {
+		t.Fatalf("reusing RuntimeConfig with NewVerifiedRuntime after tamper must fail closed, got: %v", err)
 	}
-	for _, tc := range []struct {
-		name  string
-		token *VerifiedImage
-	}{
-		{name: "standalone nil VerifiedImage", token: nil},
-		{name: "forged unverified VerifiedImage", token: &VerifiedImage{imageDir: dirA, manifest: imA}},
-		{name: "valid token from different imageDir", token: vB},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := VerifyNativeEngineHandshake(HandshakeVerificationInput{
-				BundledManifest:  m,
-				EngineDir:        engineDir,
-				ImageDir:         dirA,
-				ImageManifest:    imA,
-				VerifiedImage:    tc.token,
-				ReportedIdentity: goodID,
-				GOOS:             goos,
-				GOARCH:           goarch,
-			})
-			var ve *NativeEngineVerificationError
-			if !errors.As(err, &ve) || ve.Stage != "image" {
-				t.Fatalf("expected fail-closed stage=image error, got %v", err)
-			}
-		})
+	if _, err := VerifyNativeEngineHandshake(handshakeIn); err == nil {
+		t.Fatal("reusing HandshakeVerificationInput after tamper must fail closed")
+	} else {
+		var ve *NativeEngineVerificationError
+		if !errors.As(err, &ve) || ve.Stage != "image" {
+			t.Fatalf("expected fail-closed stage=image error, got %v", err)
+		}
+	}
+	if err := VerifyImage(dirA, imA); err == nil || !strings.Contains(err.Error(), "packages_root tree sha256 mismatch") {
+		t.Fatalf("standalone VerifyImage after tamper must fail closed, got: %v", err)
 	}
 }
