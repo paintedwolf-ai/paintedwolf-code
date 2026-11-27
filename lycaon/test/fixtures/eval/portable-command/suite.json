@@ -2644,30 +2644,33 @@
       },
       "turns": [
         {
-          "program": "while true; do :; done",
-          "expected_outcome": "cancelled"
+          "program": "while true; do :; sleep 0.5; done; printf 'after\\n' > ./after",
+          "expected_outcome": "interrupted",
+          "expected_rejection": "TOOL_OWNER_INTERRUPTED"
         }
       ],
       "expected": {
         "stdout": "",
         "stderr": "",
-        "status": 2,
-        "host_stop": "cancelled",
+        "status": 130,
+        "host_stop": "interrupted",
         "complete": false,
         "files": {},
-        "absent": [],
+        "absent": [
+          "after"
+        ],
         "receipts": [
           {
-            "operation": ":",
+            "operation": "sleep",
             "outcome": "completed"
           },
           {
-            "operation": ":",
+            "operation": "sleep",
             "outcome": "completed"
           },
           {
-            "operation": ":",
-            "outcome": "completed"
+            "operation": "sleep",
+            "outcome": "interrupted"
           }
         ],
         "effects": [],

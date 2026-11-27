@@ -17,6 +17,7 @@ from portable_command.case_oracles import materialize_git_setup, materialize_hos
 from portable_command.contracts import DIRECTORY, ROOT, load_suite, materialize
 from portable_command.grading import grade_case
 from portable_command.handle_await import await_running_handle
+from portable_command.cancel_witness import run_cancellation_turn
 from portable_command.lifecycle_oracles import prepare_cross_session_job_handle, probe_background_job_handles
 from portable_command.live_witness_driver import WITNESS_CASE_IDS, LiveWitnessContext
 from portable_command.observe import build_observation, file_sha256, source_identity
@@ -245,9 +246,13 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
             elif 'progress_update' in turn: batch, envelope_mode = [{'name': 'command', 'args': {'command': turn['program'], 'progress_update': turn['progress_update']}}], 'native_command_envelope'
             else: batch, envelope_mode = [{'name': 'command', 'args': {'command': turn['program']}}], 'command_only'
             if witness is not None: batch = witness.rewrite_batch(batch)
-            results = send_tool_calls(application, session_id, batch, surface=session_surface)
+            results, witness_meta = (
+                run_cancellation_turn(application, session_id, project_id, app_dir / 'store.db', session_surface, send_tool_calls, turn['program'])
+                if case['id'] == 'cancellation' and app_factory is smoke.Application
+                else (send_tool_calls(application, session_id, batch, surface=session_surface), witness_meta)
+            )
             call_ids = [cid for cid, _ in results]
-            await_meta = await_running_handle(application, session_id, results[-1][1], send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface))
+            await_meta = await_running_handle(application, session_id, results[-1][1], send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface)) if case['id'] != 'cancellation' else None
             job_probe = probe_background_job_handles(application, session_id, app_dir / 'store.db', other_job=other_job, send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface)) if case['id'] == 'owned-background-state' and app_factory is smoke.Application else None
             verify_ids = [cid for cid, _ in send_tool_calls(application, session_id, [{'name': 'verify', 'args': {'command': 'python3 -B -m unittest discover'}}], surface=session_surface)] if 'verification_source_match' in (case.get('required_evidence') or ()) and app_factory is smoke.Application else []
             await_ids = ((await_meta['wait_call_ids'] + await_meta['output_call_ids']) if await_meta else []) + (job_probe['call_ids'] if job_probe else []) + verify_ids
@@ -261,17 +266,14 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
         application.request(f'/v1/sessions/{session_id}/abort', {})
         with contextlib.closing(sqlite3.connect(app_dir / 'store.db')) as db:
             pids = [r[0] for r in db.execute('SELECT p.id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE r.session_id=?', (session_id,)).fetchall()]
-        program_receipt_pages = collect_raw_api(application, session_id, raw_dir, pids)
-        post_tool_lines = log_line_count(sidecar_path)
+        program_receipt_pages, post_tool_lines = collect_raw_api(application, session_id, raw_dir, pids), log_line_count(sidecar_path)
     except Exception as exc:
-        save(out_dir / 'attempt.json', {'status': 'unmeasured', 'phase': 'execution', 'case_id': case['id'], 'session_id': session_id, 'error': str(exc), 'identity': identity})
-        raise
+        save(out_dir / 'attempt.json', {'status': 'unmeasured', 'phase': 'execution', 'case_id': case['id'], 'session_id': session_id, 'error': str(exc), 'identity': identity}); raise
     finally:
         if witness is not None: witness.cleanup()
         if sse is not None: sse.close()
         application.close(cleanup=False)
-    window = {'pre_prompt_lines': pre_prompt_lines, 'post_tool_lines': post_tool_lines, 'post_close_lines': log_line_count(sidecar_path)}
-    save(raw_dir / 'window.json', window)
+    window = {'pre_prompt_lines': pre_prompt_lines, 'post_tool_lines': post_tool_lines, 'post_close_lines': log_line_count(sidecar_path)}; save(raw_dir / 'window.json', window)
     eff_posture = session_surface.get('effective_posture', '')
     extra_gaps = [g for g, cond in (
         ('profile_binding_approximate', case.get('profile', 'implement') != 'implement' and not session_surface.get('declared_profile_bound')),
@@ -289,8 +291,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
         )
         grade = grade_case(case, observation, project_dir, identity)
     except Exception as exc:
-        save(out_dir / 'attempt.json', {'status': 'unmeasured', 'phase': 'observation', 'case_id': case['id'], 'session_id': session_id, 'error': str(exc), 'identity': identity})
-        raise
+        save(out_dir / 'attempt.json', {'status': 'unmeasured', 'phase': 'observation', 'case_id': case['id'], 'session_id': session_id, 'error': str(exc), 'identity': identity}); raise
     save(out_dir / 'observation.json', observation); save(out_dir / 'grade.json', grade)
     save(raw_dir / 'db-audit.json', audit_bundle)
     save(raw_dir / 'filesystem.json', {'baseline': baseline_hashes, 'final': project_hashes(project_dir), 'revision_aliases': revision_aliases})
