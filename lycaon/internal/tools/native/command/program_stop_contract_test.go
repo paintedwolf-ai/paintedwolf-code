@@ -252,3 +252,111 @@ func TestDisposeSessionPreservesChatDeletedReasonOnHeldJobs(t *testing.T) {
 		t.Fatalf("disposed job reason = %v, want chat_deleted", got)
 	}
 }
+
+// TestProgramExplicitStopOverlappingSessionTeardown exercises explicit program
+// handle Stop overlapping with DisposeSession, verifying one terminal outcome
+// per handle, no duplicate settlement, no stranded waiter, and sibling isolation.
+func TestProgramExplicitStopOverlappingSessionTeardown(t *testing.T) {
+	completed := make(chan bgprocess.Completion, 4)
+	registry := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{
+		Complete: func(_ context.Context, c bgprocess.Completion) { completed <- c },
+	})
+	t.Cleanup(func() { _ = registry.Lifecycle.Close(context.Background()) })
+	supervisor := &ProgramSupervisor{Background: registry}
+
+	ownedJobs := supervisor.Jobs("sess-overlap", "proj-1")
+	siblingJobs := supervisor.Jobs("sess-sibling", "proj-1")
+	admitted, err := ownedJobs.BeginProgram(t.Context(), ProgramJobOrigin{Tool: "command", ToolCallID: "call-ov", RootSessionID: "sess-overlap"})
+	testutil.FailErr(t, "begin owned program", err)
+	sibAdmitted, err := siblingJobs.BeginProgram(t.Context(), ProgramJobOrigin{Tool: "command", ToolCallID: "call-sib", RootSessionID: "sess-sibling"})
+	testutil.FailErr(t, "begin sibling program", err)
+
+	heldStarted := make(chan struct{})
+	releaseCleanup := make(chan struct{})
+	var releaseOnce sync.Once
+	unlock := func() { releaseOnce.Do(func() { close(releaseCleanup) }) }
+	t.Cleanup(unlock)
+
+	root := toolcontract.OperationInvocation{SessionID: "sess-overlap", Identity: toolcontract.ExecutionIdentity{ProgramID: "prog-overlap", ExecutionID: "root"}}
+	var jobHandle string
+	fgDone := make(chan error, 1)
+	go func() {
+		_, runErr := supervisor.RunProgram(admitted, root, func(runCtx context.Context) (toolcontract.ProducerResult, error) {
+			started, startErr := supervisor.StartJob(runCtx, root, "held-overlap", func(jobCtx context.Context, _ string, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+				noteJobNative(jobCtx, []string{"held-overlap"})
+				close(heldStarted)
+				<-jobCtx.Done()
+				<-releaseCleanup
+				return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted}, jobCtx.Err()
+			})
+			if startErr != nil {
+				return toolcontract.ProducerResult{}, startErr
+			}
+			jobHandle = started.Handle
+			<-runCtx.Done()
+			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted}, runCtx.Err()
+		})
+		fgDone <- runErr
+	}()
+	testutil.AwaitClosed(t, "held job started", heldStarted)
+
+	// Start a sibling held job in another session to verify teardown isolation.
+	sibStarted := make(chan struct{})
+	sibRelease := make(chan struct{})
+	t.Cleanup(func() { close(sibRelease) })
+	sibRoot := toolcontract.OperationInvocation{SessionID: "sess-sibling", Identity: toolcontract.ExecutionIdentity{ProgramID: "prog-sib", ExecutionID: "root"}}
+	_, err = supervisor.RunProgram(sibAdmitted, sibRoot, func(runCtx context.Context) (toolcontract.ProducerResult, error) {
+		_, startErr := supervisor.StartJob(runCtx, sibRoot, "sib-job", func(jobCtx context.Context, _ string, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			noteJobNative(jobCtx, []string{"sib-job"})
+			close(sibStarted)
+			select {
+			case <-sibRelease:
+				return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted}, nil
+			case <-jobCtx.Done():
+				return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted}, jobCtx.Err()
+			}
+		})
+		return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted}, startErr
+	})
+	testutil.FailErr(t, "start sibling job", err)
+	testutil.AwaitClosed(t, "sibling job started", sibStarted)
+
+	var settleCalls atomic.Int32
+	settled := make(chan bool, 2)
+	supervisor.AfterJobs("prog-overlap", func(stopped bool) {
+		settleCalls.Add(1)
+		settled <- stopped
+	})
+
+	// Race explicit StopProgram and DisposeSession concurrently.
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		supervisor.StopProgram("prog-overlap", bgprocess.TerminationStoppedByUser)
+	}()
+	disposeErr := make(chan error, 1)
+	go func() {
+		defer wg.Done()
+		disposeErr <- supervisor.DisposeSession(t.Context(), "sess-overlap")
+	}()
+
+	// Wait for foreground unwind, then release held job cleanup so both callers converge.
+	<-fgDone
+	unlock()
+	wg.Wait()
+	testutil.FailErr(t, "dispose session", <-disposeErr)
+
+	if !testutil.Receive(t, "AfterJobs settled", settled) {
+		t.Fatal("expected stopped=true on AfterJobs settlement")
+	}
+	if settleCalls.Load() != 1 {
+		t.Fatalf("AfterJobs settled %d times, want 1", settleCalls.Load())
+	}
+	if registry.HasRunning("sess-overlap") {
+		t.Fatalf("sess-overlap still has running jobs after stop+dispose (handle=%s)", jobHandle)
+	}
+	if !registry.HasRunning("sess-sibling") {
+		t.Fatal("sibling session job was unexpectedly stopped by sess-overlap teardown")
+	}
+}

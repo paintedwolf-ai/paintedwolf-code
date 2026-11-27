@@ -363,12 +363,74 @@ func TestProgramStopIsolationAndAccessChecks(t *testing.T) {
 	if st2 != 0 || stopped2 || stOther != 0 || stoppedOther {
 		t.Fatalf("siblings altered: p2=(%d,%t) other=(%d,%t)", st2, stopped2, stOther, stoppedOther)
 	}
+
+	t.Run("individual_job_stop_preserves_sibling_job_and_program", func(t *testing.T) {
+		reg := bgprocess.NewRegistry(bgprocess.Config{MaxBackground: 4}, bgprocess.Hooks{})
+		reg.Output.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
+		t.Cleanup(func() { _ = reg.Lifecycle.Close(context.Background()) })
+		f := programtest.New(t, programtest.Options{Session: "session-jobs-iso", Background: reg})
+		clock := programtest.NewManualClock()
+		f.Runtime.Clock = clock
+
+		done := make(chan callResult, 1)
+		go func() {
+			s, e := f.Call(t, t.Context(), "sleep 300 & sleep 300 & wait %1; printf 'after1:%s\\n' \"$?\"; wait %2; printf 'after2:%s\\n' \"$?\"")
+			done <- callResult{s, e}
+		}()
+
+		var jobHandles []string
+		testutil.WaitFor(t, "two & jobs active", func() bool {
+			active := reg.ActiveJobs(f.Session)
+			if len(active) == 2 {
+				jobHandles = []string{active[0].Handle, active[1].Handle}
+				return true
+			}
+			return false
+		})
+		clock.Advance(toolcontract.ProgramInlineWait)
+		got := testutil.Receive(t, "continued parent program", done)
+		testutil.FailErr(t, "continue parent", got.err)
+		var running command.RunningProgramResult
+		testutil.FailErr(t, "decode parent", json.Unmarshal([]byte(got.content), &running))
+
+		// Stop ONLY the first & job via command_stop; sibling & job and parent program keep authority.
+		_, err := runCommandStopTool(t, reg, f.Session, jobHandles[0])
+		testutil.FailErr(t, "stop first job", err)
+		_, stoppedFirst, err := reg.Lifecycle.Wait(t.Context(), f.Session, jobHandles[0])
+		testutil.FailErr(t, "wait first job", err)
+		if !stoppedFirst {
+			t.Fatal("first job did not settle as stopped")
+		}
+
+		// Sibling & job and parent program must both still be running.
+		for _, keep := range []string{jobHandles[1], running.Handle} {
+			snap, snapErr := reg.Snapshot(t.Context(), f.Session, keep, 1024)
+			testutil.FailErr(t, "snapshot surviving "+keep, snapErr)
+			if snap.HasExit {
+				t.Fatalf("handle %s unexpectedly exited when sibling job stopped", keep)
+			}
+		}
+
+		// Advance clock past 300s so the sibling & job completes normally and the parent program finishes cleanly!
+		clock.Advance(300 * toolcontract.ProgramInlineWait)
+		stSib, stoppedSib, err := reg.Lifecycle.Wait(t.Context(), f.Session, jobHandles[1])
+		testutil.FailErr(t, "wait sibling job", err)
+		stParent, stoppedParent, err := reg.Lifecycle.Wait(t.Context(), f.Session, running.Handle)
+		testutil.FailErr(t, "wait parent program", err)
+		if stSib != 0 || stoppedSib || stParent != 0 || stoppedParent {
+			t.Fatalf("sibling/parent altered: sib=(%d,%t) parent=(%d,%t)", stSib, stoppedSib, stParent, stoppedParent)
+		}
+		stdout, _ := continuationStreams(t, f, running.Handle)
+		if !strings.Contains(stdout, "after2:0\n") {
+			t.Fatalf("parent stdout = %q, expected sibling wait to exit 0", stdout)
+		}
+	})
 }
 
 // TestProgramInterruptKeepsBackgroundJobAndStopCancelsApproval covers:
-// 1. Foreground interrupt leaves an existing & job usable and independently stoppable.
-// 2. Explicit program Stop while a child awaits approval releases the wait and
-//    a subsequent approval cannot launch the pending operation.
+//  1. Foreground interrupt leaves an existing & job usable and independently stoppable.
+//  2. Explicit program Stop while a child awaits approval releases the wait and
+//     a subsequent approval cannot launch the pending operation.
 func TestProgramInterruptKeepsBackgroundJobAndStopCancelsApproval(t *testing.T) {
 	t.Run("foreground_interrupt_keeps_background_job", func(t *testing.T) {
 		registry := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
@@ -638,11 +700,11 @@ func TestProgramStopExternalTreeAndNativeJob(t *testing.T) {
 }
 
 // TestProgramStopEffectsAndCleanupSettlement verifies:
-// - An earlier committed file write and its receipt survive Stop.
-// - A later statement's marker is prevented.
-// - Immediate acknowledgment reports running while an admitted child is held at cleanup.
-// - After cleanup finishes, terminal receipt, command_output, process exit event,
-//   exit code, reason, and owner-reported EffectCertainty agree.
+//   - An earlier committed file write and its receipt survive Stop.
+//   - A later statement's marker is prevented.
+//   - Immediate acknowledgment reports running while an admitted child is held at cleanup.
+//   - After cleanup finishes, terminal receipt, command_output, process exit event,
+//     exit code, reason, and owner-reported EffectCertainty agree.
 func TestProgramStopEffectsAndCleanupSettlement(t *testing.T) {
 	completed := make(chan bgprocess.Completion, 2)
 	events := make(chan api.BackgroundProcessEvent, 16)
