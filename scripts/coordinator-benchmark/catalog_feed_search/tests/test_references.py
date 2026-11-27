@@ -19,6 +19,8 @@ from catalog_feed_search.generators import (
 from catalog_feed_search.queries import CodeQuerySpec, ReplaceSpec
 from catalog_feed_search.references import (
     PRODUCT_DIFFERENCES,
+    SUPPORTED_REPLACE_ENCODINGS,
+    UnsupportedEncodingError,
     capture_rg_version,
     reference_file_lookup,
     reference_replace,
@@ -173,6 +175,95 @@ class ReferenceSearchAndReplaceTests(unittest.TestCase):
             self.assertEqual(res.resulting_bytes, expected)
             self.assertEqual(res.before_sha256, hashlib.sha256(original).hexdigest())
             self.assertEqual(res.after_sha256, hashlib.sha256(expected).hexdigest())
+
+    def test_capture_expansion_longest_name_and_braced_syntax(self) -> None:
+        sel = ReplaySelector(BASE_SEED_PRIMARY, "R03", 1)
+        spec = TreeSpec(selector=sel, entries=(TreeEntrySpec("src/sample.txt", "file", b"alpha_12\n"),))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            materialize_tree(spec, root)
+
+            # Longest-name rule (Go regexp.ExpandString / ripgrep 15.x): $2_ is unknown name -> empty.
+            unbraced = reference_replace(
+                root,
+                ReplaceSpec(
+                    pattern=r"(alpha)_([0-9]{1,2})",
+                    replacement="rewritten_$2_$1",
+                    regex=True,
+                ),
+            )
+            self.assertEqual(unbraced["src/sample.txt"].resulting_bytes, b"rewritten_alpha\n")
+
+            # Brace-delimited ${2} followed by _ expands group 2 cleanly.
+            braced = reference_replace(
+                root,
+                ReplaceSpec(
+                    pattern=r"(alpha)_([0-9]{1,2})",
+                    replacement="rewritten_${2}_$1",
+                    regex=True,
+                ),
+            )
+            self.assertEqual(braced["src/sample.txt"].resulting_bytes, b"rewritten_12_alpha\n")
+
+    def test_reference_replace_preserves_utf8_and_utf16_boms_and_rejects_unsupported(self) -> None:
+        self.assertEqual(
+            SUPPORTED_REPLACE_ENCODINGS,
+            ("utf-8", "utf-8-bom", "utf-16-le-bom", "utf-16-be-bom"),
+        )
+        sel = ReplaySelector(BASE_SEED_PRIMARY, "R03", 2)
+        spec = TreeSpec(
+            selector=sel,
+            entries=(
+                TreeEntrySpec("u8.txt", "file", b"alpha\n"),
+                TreeEntrySpec("u8bom.txt", "file", b"\xef\xbb\xbfalpha\n"),
+                TreeEntrySpec("u16le.txt", "file", b"\xff\xfe" + "alpha\n".encode("utf-16-le")),
+                TreeEntrySpec("u16be.txt", "file", b"\xfe\xff" + "alpha\r\n".encode("utf-16-be")),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            materialize_tree(spec, root)
+            rep = reference_replace(root, ReplaceSpec(pattern="alpha", replacement="beta", regex=False))
+
+            self.assertEqual(rep["u8.txt"].encoding, "utf-8")
+            self.assertEqual(rep["u8.txt"].resulting_bytes, b"beta\n")
+
+            self.assertEqual(rep["u8bom.txt"].encoding, "utf-8-bom")
+            self.assertEqual(rep["u8bom.txt"].resulting_bytes, b"\xef\xbb\xbfbeta\n")
+
+            self.assertEqual(rep["u16le.txt"].encoding, "utf-16-le-bom")
+            self.assertEqual(rep["u16le.txt"].resulting_bytes, b"\xff\xfe" + "beta\n".encode("utf-16-le"))
+
+            self.assertEqual(rep["u16be.txt"].encoding, "utf-16-be-bom")
+            self.assertEqual(rep["u16be.txt"].resulting_bytes, b"\xfe\xff" + "beta\r\n".encode("utf-16-be"))
+
+        # Unsupported encoding (UTF-32LE BOM) raises explicitly instead of corrupting bytes.
+        from catalog_feed_search.references import _detect_and_decode_for_replace
+
+        with self.assertRaises(UnsupportedEncodingError):
+            _detect_and_decode_for_replace(b"\xff\xfe\x00\x00a\x00\x00\x00", "u32.txt")
+
+    def test_legal_posix_backslash_filename_preserved_end_to_end(self) -> None:
+        sel = ReplaySelector(BASE_SEED_PRIMARY, "K04", 0)
+        bs_name = "foo\\bar.txt"
+        spec = TreeSpec(selector=sel, entries=(TreeEntrySpec(bs_name, "file", b"alpha_1\n"),))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            materialize_tree(spec, root)
+
+            walked = reference_walk(root)
+            self.assertEqual([e.path for e in walked], [bs_name])
+
+            searched = reference_search(root, CodeQuerySpec(form="literal", pattern="alpha"))
+            self.assertEqual(searched.matched_files(), {bs_name})
+
+            replaced = reference_replace(root, ReplaceSpec(pattern="alpha", replacement="beta"))
+            self.assertIn(bs_name, replaced)
+            self.assertEqual(replaced[bs_name].resulting_bytes, b"beta_1\n")
+
+            lookup_hits = reference_file_lookup([bs_name], "foo\\bar")
+            self.assertEqual([h.path for h in lookup_hits], [bs_name])
+            self.assertEqual(lookup_hits[0].tier, 0)
 
 
 class ReferenceFileLookupTests(unittest.TestCase):

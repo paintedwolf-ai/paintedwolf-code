@@ -170,7 +170,7 @@ class QueryGeneratorTests(unittest.TestCase):
         rep_groups = generate_replace_spec(BASE_SEED_PRIMARY, "R03", 1, with_groups=True)
         self.assertTrue(rep_groups.regex)
         self.assertIn("$1", rep_groups.replacement)
-        self.assertIn("$2", rep_groups.replacement)
+        self.assertIn("${2}", rep_groups.replacement)
 
         rep_lit = generate_replace_spec(BASE_SEED_PRIMARY, "R03", 1, with_groups=False)
         self.assertFalse(rep_lit.regex)

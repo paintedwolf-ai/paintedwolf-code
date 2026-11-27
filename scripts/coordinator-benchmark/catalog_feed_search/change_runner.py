@@ -84,10 +84,12 @@ class WriteLogEntry:
     after_sha256: str | None
     before_mode: int | None = None
     after_mode: int | None = None
+    root_id: str = "root-0"
 
     def to_dict(self) -> dict[str, object]:
         return {
             "seq": self.seq,
+            "root_id": self.root_id,
             "clock_domain": self.clock_domain,
             "timestamp_ns": self.timestamp_ns,
             "op": self.op,

@@ -14,31 +14,36 @@ from catalog_feed_search.checker import (
     EXTENDED_D4_GAPS,
     CatalogItem,
     DeclaredGap,
+    FeedEvent,
     GapSummaryTracker,
     ProductCatalogAnswer,
     ProductFeedAnswer,
+    ProductReplaceAnswer,
     ProductSearchAnswer,
+    ReplaceFileObservation,
     ScopedSearchHit,
     Verdict,
     check_catalog,
     check_change_feed,
+    check_feed_batch_effects,
+    check_replace,
     check_search,
 )
 from catalog_feed_search.controls import run_all_controls, run_broken_reference_proof
 from catalog_feed_search.generators import TreeEntrySpec, TreeSpec
 from catalog_feed_search.queries import CodeQuerySpec
-from catalog_feed_search.references import SearchHit
+from catalog_feed_search.references import ReplaceFileResult, SearchHit
 from catalog_feed_search.seeds import BASE_SEED_PRIMARY, ReplaySelector
 from catalog_feed_search.shrinker import FailingInstance, ddmin, shrink_instance
 
 
 class ControlsAndProofTests(unittest.TestCase):
-    def test_all_eleven_runbook_checker_controls_pass(self) -> None:
+    def test_all_runbook_and_rework_checker_controls_pass(self) -> None:
         report = run_all_controls()
-        self.assertEqual(len(report.outcomes), 11)
+        self.assertEqual(len(report.outcomes), 16)
         negatives = [o for o in report.outcomes if o.kind == "negative"]
         positives = [o for o in report.outcomes if o.kind == "positive"]
-        self.assertEqual(len(negatives), 7)
+        self.assertEqual(len(negatives), 12)
         self.assertEqual(len(positives), 4)
         for outcome in report.outcomes:
             self.assertTrue(
@@ -47,7 +52,7 @@ class ControlsAndProofTests(unittest.TestCase):
             )
         self.assertTrue(report.all_passed)
         payload = report.to_dict()
-        self.assertEqual(payload["passed"], 11)
+        self.assertEqual(payload["passed"], 16)
 
     def test_deliberately_broken_reference_proof_catches_shrinks_and_replays(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -249,6 +254,58 @@ class D4AndDecision006CheckerTests(unittest.TestCase):
             ),
         )
         self.assertEqual(bad_reconcile.verdict, Verdict.DEFECT)
+
+    def test_decision_009_duplicates_multi_root_replace_count_only_and_feed_scope(self) -> None:
+        # 1. Duplicate catalog entry -> DEFECT.
+        ref_cat = (CatalogItem("a.txt", "file", "root-0"),)
+        dup_cat = check_catalog(ref_cat, ProductCatalogAnswer(items=(ref_cat[0], ref_cat[0])))
+        self.assertEqual(dup_cat.verdict, Verdict.DEFECT)
+
+        # 2. Multi-root replace with identical relative path never collides, and duplicate obs -> DEFECT.
+        r0 = ReplaceFileResult("src/a.txt", "b0", "a0", b"x", 1, True, root_id="root-0")
+        r1 = ReplaceFileResult("src/a.txt", "b1", "a1", b"y", 1, True, root_id="root-1")
+        ref_multi = {("root-0", "src/a.txt"): r0, ("root-1", "src/a.txt"): r1}
+        obs0 = ReplaceFileObservation("src/a.txt", root_id="root-0", applied=True, observed_sha256="a0")
+        obs1 = ReplaceFileObservation("src/a.txt", root_id="root-1", applied=True, observed_sha256="a1")
+        self.assertEqual(check_replace(ref_multi, ProductReplaceAnswer(files=(obs0, obs1))).verdict, Verdict.PASS)
+        self.assertEqual(check_replace(ref_multi, ProductReplaceAnswer(files=(obs0, obs0, obs1))).verdict, Verdict.DEFECT)
+
+        # 3. Count-only files_skipped with skipped_count >= missing but NO path evidence -> UNKNOWN.
+        h1 = ScopedSearchHit(SearchHit("src/a.txt", 1, 1, 0, 5, "alpha", "alpha\n"), "root-0", "code")
+        h2 = ScopedSearchHit(SearchHit("src/b.txt", 1, 1, 0, 5, "alpha", "alpha\n"), "root-0", "code")
+        res_unknown_count = check_search(
+            (h1, h2),
+            ProductSearchAnswer(
+                hits=(),
+                declared_gaps=(DeclaredGap("files_skipped", root_id="root-0", skipped_count=2),),
+            ),
+        )
+        self.assertEqual(res_unknown_count.verdict, Verdict.UNKNOWN)
+
+        # 4. Feed ordering, batch/effect separation, and wrong-root gap rejection.
+        log = WriteLog(
+            "manual",
+            (
+                WriteLogEntry(1, "manual", 10, "create", "a.txt", None, None, "h1", root_id="root-0"),
+                WriteLogEntry(2, "manual", 20, "edit", "b.txt", None, "h0", "h2", root_id="root-0"),
+            ),
+        )
+        out_of_order = check_change_feed(
+            log,
+            ProductFeedAnswer(
+                events=(
+                    FeedEvent("b.txt", "b1", op="edit", root_id="root-0"),
+                    FeedEvent("a.txt", "b1", op="create", root_id="root-0"),
+                ),
+                claims_ordering=True,
+            ),
+        )
+        self.assertEqual(out_of_order.verdict, Verdict.DEFECT)
+
+        missing_effect = check_feed_batch_effects(
+            ProductFeedAnswer(events=(FeedEvent("a.txt", "b1", op="create", effect_id=None),))
+        )
+        self.assertEqual(missing_effect.verdict, Verdict.DEFECT)
 
 
 class ShrinkerUnitTests(unittest.TestCase):

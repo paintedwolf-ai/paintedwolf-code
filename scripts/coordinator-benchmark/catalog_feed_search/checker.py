@@ -1,4 +1,4 @@
-"""D4 Differential Checker with Decision 006 typed gaps and strict scope attribution."""
+"""D4 Differential Checker with Decision 006/009 typed gaps, multiplicity, and strict attribution."""
 
 from __future__ import annotations
 
@@ -17,7 +17,6 @@ class Verdict(str, Enum):
     UNKNOWN = "UNKNOWN"
 
 
-# Original D4 declared gaps (decisions.md).
 CORE_D4_GAPS: frozenset[str] = frozenset(
     {
         "catalog_incomplete",
@@ -47,7 +46,6 @@ EXTENDED_D4_GAPS: frozenset[str] = frozenset(
 
 ALL_D4_GAPS: frozenset[str] = CORE_D4_GAPS | EXTENDED_D4_GAPS
 
-# Supported domains for each typed gap reason.
 GAP_DOMAIN_SUPPORT: dict[str, frozenset[str]] = {
     "catalog_incomplete": frozenset({"catalog", "search", "replace"}),
     "catalog_warming": frozenset({"catalog", "search", "replace"}),
@@ -69,10 +67,20 @@ GAP_DOMAIN_SUPPORT: dict[str, frozenset[str]] = {
 
 SYMBOL_ONLY_GAPS: frozenset[str] = frozenset({"symbol_pending", "symbol_budget"})
 
+# Compatible feed observation operations for each logged write operation.
+COMPATIBLE_FEED_OPS: dict[str, frozenset[str]] = {
+    "create": frozenset({"create", "change"}),
+    "edit": frozenset({"edit", "modify", "write", "change"}),
+    "atomic_replace": frozenset({"atomic_replace", "edit", "modify", "rename", "write", "change"}),
+    "rename": frozenset({"rename", "move", "create", "delete", "change"}),
+    "delete": frozenset({"delete", "remove", "change"}),
+    "chmod": frozenset({"chmod", "attrib", "metadata", "change"}),
+}
+
 
 @dataclass(frozen=True)
 class DeclaredGap:
-    """Typed coverage or freshness gap declared by a product answer (D4 + Decision 006)."""
+    """Typed coverage or freshness gap declared by a product answer (D4 + Decisions 006/009)."""
 
     reason: str
     root_id: str | None = None
@@ -126,6 +134,8 @@ class FeedEvent:
     batch_id: str
     op: str = "change"
     effect_id: str | None = None
+    root_id: str = "root-0"
+    seq: int | None = None
 
 
 @dataclass(frozen=True)
@@ -137,6 +147,9 @@ class ProductFeedAnswer:
     reconciled_walk: tuple[CatalogItem, ...] | None = None
     reference_post_walk: tuple[CatalogItem, ...] | None = None
     instrumentation_complete: bool = True
+    claims_operation: bool = True
+    claims_ordering: bool = False
+    claims_batch_effect: bool = False
 
 
 @dataclass(frozen=True)
@@ -201,8 +214,9 @@ def _gap_covers_item(
     root_id: str,
     leg: str | None,
     path: str | None,
+    missing_files_in_gap_scope: int = 0,
 ) -> tuple[bool, str | None]:
-    """Return (covered, unknown_or_error_reason) enforcing Decision 006 scope rules."""
+    """Return (covered, unknown_reason) enforcing strict root, leg, and path attribution."""
     if gap.reason not in ALL_D4_GAPS:
         return False, None
     if domain not in GAP_DOMAIN_SUPPORT.get(gap.reason, frozenset()):
@@ -221,15 +235,43 @@ def _gap_covers_item(
     if gap.leg is not None and leg is not None and gap.leg != leg:
         return False, None
 
-    # Strict file attribution for files_skipped.
-    if gap.reason == "files_skipped":
-        if gap.paths:
-            if path is None or path not in gap.paths:
-                return False, None
-        elif gap.skipped_count is None or gap.skipped_count <= 0:
+    # Strict path attribution: ANY gap carrying specific paths ONLY excuses those paths.
+    if gap.paths:
+        if path is None or path not in gap.paths:
             return False, None
+        return True, None
+
+    # Count-only files_skipped without path evidence (Decision 009):
+    # - If skipped_count is missing/non-positive or strictly smaller than the number of
+    #   distinct missing files in scope -> does NOT cover (DEFECT).
+    # - If skipped_count >= distinct missing files in scope but no path evidence exists ->
+    #   attribution is unverifiable -> UNKNOWN (never blindly PASS_DECLARED_GAP).
+    if gap.reason == "files_skipped":
+        if gap.skipped_count is None or gap.skipped_count <= 0:
+            return False, None
+        if missing_files_in_gap_scope > gap.skipped_count:
+            return False, None
+        return False, (
+            f"files_skipped count-only gap (skipped_count={gap.skipped_count}) lacks "
+            "path attribution for missing files"
+        )
 
     return True, None
+
+
+def _count_missing_files_in_gap_scope(
+    gap: DeclaredGap,
+    missing_items: list[tuple[str, str | None, str]],
+) -> int:
+    """Count distinct (root_id, path) omissions falling within gap's root/leg scope."""
+    distinct: set[tuple[str, str]] = set()
+    for r, lg, p in missing_items:
+        if gap.root_id is not None and gap.root_id != r:
+            continue
+        if gap.leg is not None and lg is not None and gap.leg != lg:
+            continue
+        distinct.add((r, p))
+    return len(distinct)
 
 
 def _validate_result_limit_gap(
@@ -248,12 +290,14 @@ def _validate_result_limit_gap(
         for h in reference_hits
         if (gap.root_id is None or h.root_id == gap.root_id)
         and (gap.leg is None or h.leg == gap.leg)
+        and (not gap.paths or h.hit.path in gap.paths)
     ]
     scoped_prod = [
         h
         for h in product_hits
         if (gap.root_id is None or h.root_id == gap.root_id)
         and (gap.leg is None or h.leg == gap.leg)
+        and (not gap.paths or h.hit.path in gap.paths)
     ]
     if len(scoped_prod) > len(scoped_ref):
         return False, "result_limit retained more hits than reference"
@@ -300,12 +344,18 @@ def check_catalog(
         return CheckResult(Verdict.UNKNOWN, "catalog", reason="missing instrumentation")
 
     ref_map = {(i.root_id, i.path): i for i in reference_items}
-    prod_map = {(i.root_id, i.path): i for i in answer.items}
     declared_names = tuple(dict.fromkeys(g.reason for g in answer.declared_gaps))
 
-    # Step 1: Extra or wrong claims -> always DEFECT, never excused by declared gaps.
+    # Step 1a: Detect duplicate catalog entries by (root_id, path).
+    prod_counts = Counter((i.root_id, i.path) for i in answer.items)
+    wrong: list[str] = [
+        f"duplicate_catalog_entry:{r}:{p} observed={c}"
+        for (r, p), c in sorted(prod_counts.items())
+        if c > 1
+    ]
+
+    prod_map = {(i.root_id, i.path): i for i in answer.items}
     extra = sorted(f"{r}:{p}" for (r, p) in prod_map if (r, p) not in ref_map)
-    wrong: list[str] = []
     for key, prod_item in sorted(prod_map.items()):
         ref_item = ref_map.get(key)
         if ref_item is None:
@@ -322,21 +372,30 @@ def check_catalog(
             extra_claims=tuple(extra),
             wrong_claims=tuple(wrong),
             declared_gaps=declared_names,
-            reason="answer claims entries or metadata the reference does not show",
+            reason="answer claims extra, duplicate, or wrong catalog entries",
         )
 
-    # Step 2 & 3: Missing claims -> check strict scope-attributed gaps.
+    # Step 2 & 3: Missing claims -> strict scope-attributed gaps.
     missing_keys = sorted(k for k in ref_map if k not in prod_map)
     if not missing_keys:
         return CheckResult(Verdict.PASS, "catalog", declared_gaps=declared_names)
 
+    missing_triples = [(r, None, p) for r, p in missing_keys]
     accounted: list[str] = []
     unaccounted: list[str] = []
     unknown_reasons: list[str] = []
     for root_id, path in missing_keys:
         matched_gap: str | None = None
         for gap in answer.declared_gaps:
-            ok, err = _gap_covers_item(gap, domain="catalog", root_id=root_id, leg=None, path=path)
+            scope_missing = _count_missing_files_in_gap_scope(gap, missing_triples)
+            ok, err = _gap_covers_item(
+                gap,
+                domain="catalog",
+                root_id=root_id,
+                leg=None,
+                path=path,
+                missing_files_in_gap_scope=scope_missing,
+            )
             if ok:
                 matched_gap = gap.reason
                 break
@@ -348,7 +407,7 @@ def check_catalog(
             unaccounted.append(f"{root_id}:{path}")
 
     if unaccounted:
-        if unknown_reasons and not accounted:
+        if unknown_reasons and len(unknown_reasons) >= len(unaccounted):
             return CheckResult(
                 Verdict.UNKNOWN,
                 "catalog",
@@ -374,6 +433,31 @@ def check_catalog(
     )
 
 
+def check_feed_batch_effects(answer: ProductFeedAnswer) -> CheckResult:
+    """Verify batch/effect identity claims separately from path membership (Decision 009)."""
+    if not answer.instrumentation_complete:
+        return CheckResult(Verdict.UNKNOWN, "feed_batch_effect", reason="missing instrumentation")
+    wrong: list[str] = []
+    seen_effects: set[str] = set()
+    for idx, ev in enumerate(answer.events):
+        if not ev.batch_id:
+            wrong.append(f"missing_batch_id:{ev.root_id}:{ev.path}[{idx}]")
+        if not ev.effect_id:
+            wrong.append(f"missing_effect_id:{ev.root_id}:{ev.path}[{idx}]")
+        elif ev.effect_id in seen_effects:
+            wrong.append(f"duplicate_effect_id:{ev.effect_id}")
+        else:
+            seen_effects.add(ev.effect_id)
+    if wrong:
+        return CheckResult(
+            Verdict.DEFECT,
+            "feed_batch_effect",
+            wrong_claims=tuple(wrong),
+            reason="batch or effect identity missing or duplicated",
+        )
+    return CheckResult(Verdict.PASS, "feed_batch_effect")
+
+
 def check_change_feed(
     write_log: WriteLog,
     answer: ProductFeedAnswer,
@@ -383,32 +467,68 @@ def check_change_feed(
         return CheckResult(Verdict.UNKNOWN, "feed", reason="missing instrumentation")
 
     declared_names = tuple(dict.fromkeys(g.reason for g in answer.declared_gaps))
-    logged_paths = write_log.touched_paths()
-    observed_paths = {e.path for e in answer.events}
 
-    # Step 1a: Unlogged path claimed in stream -> DEFECT.
-    extra = sorted(observed_paths - logged_paths)
-    # Step 1b: Duplicated change for a single logged write -> DEFECT.
-    # Coalesced bursts (fewer events than writes for the same path) are valid;
-    # MORE events than logged writes for a path (or duplicate effect_id) is a DEFECT.
-    logged_counts = Counter()
+    # Build per-(root_id, path) ground truth: count, allowed ops, and seq bounds.
+    logged_counts: Counter[tuple[str, str]] = Counter()
+    logged_ops: dict[tuple[str, str], set[str]] = {}
+    logged_first_seq: dict[tuple[str, str], int] = {}
+    logged_last_seq: dict[tuple[str, str], int] = {}
+
     for entry in write_log.entries:
-        logged_counts[entry.path] += 1
+        keys = [(entry.root_id, entry.path)]
         if entry.new_path:
-            logged_counts[entry.new_path] += 1
+            keys.append((entry.root_id, entry.new_path))
+        for k in keys:
+            logged_counts[k] += 1
+            logged_ops.setdefault(k, set()).add(entry.op)
+            if k not in logged_first_seq:
+                logged_first_seq[k] = entry.seq
+            logged_last_seq[k] = entry.seq
 
-    observed_counts = Counter(e.path for e in answer.events)
+    logged_keys = set(logged_counts)
+    observed_keys = {(e.root_id, e.path) for e in answer.events}
+
+    # Step 1a: Unlogged (root_id, path) claimed in stream -> DEFECT.
+    extra = sorted(f"{r}:{p}" for (r, p) in (observed_keys - logged_keys))
+
+    # Step 1b: Duplicated change, invalid/unrelated op, duplicate/missing effect_id, ordering.
+    observed_counts = Counter((e.root_id, e.path) for e in answer.events)
     wrong: list[str] = []
-    for path, count in sorted(observed_counts.items()):
-        if path in logged_counts and count > logged_counts[path]:
-            wrong.append(f"duplicated_change:{path} observed={count} logged={logged_counts[path]}")
+    for (r, p), count in sorted(observed_counts.items()):
+        if (r, p) in logged_counts and count > logged_counts[(r, p)]:
+            wrong.append(f"duplicated_change:{r}:{p} observed={count} logged={logged_counts[(r, p)]}")
 
     seen_effects: set[str] = set()
-    for ev in answer.events:
+    prev_max_seq = 0
+    for idx, ev in enumerate(answer.events):
+        key = (ev.root_id, ev.path)
+        if answer.claims_batch_effect:
+            if not ev.batch_id:
+                wrong.append(f"missing_batch_id:{ev.root_id}:{ev.path}[{idx}]")
+            if not ev.effect_id:
+                wrong.append(f"missing_effect_id:{ev.root_id}:{ev.path}[{idx}]")
         if ev.effect_id is not None:
             if ev.effect_id in seen_effects:
                 wrong.append(f"duplicate_effect_id:{ev.effect_id}")
             seen_effects.add(ev.effect_id)
+
+        if key in logged_ops and (answer.claims_operation or ev.op):
+            allowed: set[str] = set()
+            for lop in logged_ops[key]:
+                allowed.update(COMPATIBLE_FEED_OPS.get(lop, {lop}))
+            if ev.op not in allowed:
+                wrong.append(
+                    f"incompatible_op:{ev.root_id}:{ev.path} observed={ev.op} "
+                    f"logged={sorted(logged_ops[key])}"
+                )
+
+        if answer.claims_ordering and key in logged_last_seq:
+            if logged_last_seq[key] < prev_max_seq:
+                wrong.append(
+                    f"out_of_order_event:{ev.root_id}:{ev.path} "
+                    f"last_seq={logged_last_seq[key]}<prev={prev_max_seq}"
+                )
+            prev_max_seq = max(prev_max_seq, logged_first_seq[key])
 
     if extra or wrong:
         return CheckResult(
@@ -417,21 +537,67 @@ def check_change_feed(
             extra_claims=tuple(extra),
             wrong_claims=tuple(wrong),
             declared_gaps=declared_names,
-            reason="feed claimed unlogged or duplicated changes",
+            reason="feed claimed unlogged, duplicated, out-of-order, or incompatible-op changes",
         )
 
-    # Step 2 & 3: Missing logged paths.
-    missing = sorted(logged_paths - observed_paths)
-    if not missing:
+    # Step 2 & 3: Missing logged (root_id, path) entries -> strict scope-attributed gaps & resync.
+    missing_keys = sorted(logged_keys - observed_keys)
+    if not missing_keys:
         return CheckResult(Verdict.PASS, "feed", declared_gaps=declared_names)
 
-    has_resync = any(g.reason == "resync" and g.verifiable for g in answer.declared_gaps)
-    if has_resync:
+    missing_triples = [(r, None, p) for r, p in missing_keys]
+    accounted: list[str] = []
+    unaccounted: list[str] = []
+    unknown_reasons: list[str] = []
+    resync_gaps_used: list[DeclaredGap] = []
+
+    for root_id, path in missing_keys:
+        matched_gap: DeclaredGap | None = None
+        for gap in answer.declared_gaps:
+            scope_missing = _count_missing_files_in_gap_scope(gap, missing_triples)
+            ok, err = _gap_covers_item(
+                gap,
+                domain="feed",
+                root_id=root_id,
+                leg=None,
+                path=path,
+                missing_files_in_gap_scope=scope_missing,
+            )
+            if ok:
+                matched_gap = gap
+                break
+            if err:
+                unknown_reasons.append(err)
+        if matched_gap is not None:
+            accounted.append(matched_gap.reason)
+            if matched_gap.reason == "resync":
+                resync_gaps_used.append(matched_gap)
+        else:
+            unaccounted.append(f"{root_id}:{path}")
+
+    if unaccounted:
+        if unknown_reasons and len(unknown_reasons) >= len(unaccounted):
+            return CheckResult(
+                Verdict.UNKNOWN,
+                "feed",
+                missing_claims=tuple(unaccounted),
+                declared_gaps=declared_names,
+                reason="; ".join(dict.fromkeys(unknown_reasons)),
+            )
+        return CheckResult(
+            Verdict.DEFECT,
+            "feed",
+            missing_claims=tuple(unaccounted),
+            declared_gaps=declared_names,
+            reason="missed logged change(s) without an in-scope declared resync or feed gap",
+        )
+
+    if resync_gaps_used:
         if answer.reconciled_walk is None or answer.reference_post_walk is None:
             return CheckResult(
                 Verdict.UNKNOWN,
                 "feed",
-                missing_claims=tuple(missing),
+                missing_claims=tuple(f"{r}:{p}" for r, p in missing_keys),
                 declared_gaps=declared_names,
                 reason="resync declared without reconciled walk evidence",
             )
@@ -443,42 +609,20 @@ def check_change_feed(
             return CheckResult(
                 Verdict.DEFECT,
                 "feed",
-                missing_claims=tuple(missing),
+                missing_claims=tuple(f"{r}:{p}" for r, p in missing_keys),
                 extra_claims=reconciled_check.extra_claims,
                 wrong_claims=reconciled_check.wrong_claims,
                 declared_gaps=declared_names,
                 reason="resync declared but reconciled catalog disagrees with reference walk",
             )
-        return CheckResult(
-            Verdict.PASS_DECLARED_GAP,
-            "feed",
-            missing_claims=tuple(missing),
-            declared_gaps=declared_names,
-            accounted_gaps=("resync",),
-            reason="resync declared and reconciled catalog matches reference walk",
-        )
-
-    other_feed_gaps = [
-        g.reason
-        for g in answer.declared_gaps
-        if g.verifiable and "feed" in GAP_DOMAIN_SUPPORT.get(g.reason, frozenset())
-    ]
-    if other_feed_gaps:
-        return CheckResult(
-            Verdict.PASS_DECLARED_GAP,
-            "feed",
-            missing_claims=tuple(missing),
-            declared_gaps=declared_names,
-            accounted_gaps=tuple(dict.fromkeys(other_feed_gaps)),
-            reason="missed feed paths accounted by declared feed gap",
-        )
 
     return CheckResult(
-        Verdict.DEFECT,
+        Verdict.PASS_DECLARED_GAP,
         "feed",
-        missing_claims=tuple(missing),
+        missing_claims=tuple(f"{r}:{p}" for r, p in missing_keys),
         declared_gaps=declared_names,
-        reason="missed logged change(s) without declared resync or feed gap",
+        accounted_gaps=tuple(dict.fromkeys(accounted)),
+        reason="missed feed paths accounted by in-scope declared gap/resync",
     )
 
 
@@ -486,31 +630,51 @@ def check_search(
     reference_hits: tuple[ScopedSearchHit, ...],
     answer: ProductSearchAnswer,
 ) -> CheckResult:
-    """Compare product search hits against reference search in strict D4 + Decision 006 order."""
+    """Compare product search hits against reference search in strict D4 + Decisions 006/009 order."""
     if not answer.instrumentation_complete:
         return CheckResult(Verdict.UNKNOWN, "search", reason="missing instrumentation")
 
     declared_names = tuple(dict.fromkeys(g.reason for g in answer.declared_gaps))
-    ref_by_key = {h.key(): h for h in reference_hits}
-    prod_by_key = {h.key(): h for h in answer.hits}
+    ref_counts = Counter(h.key() for h in reference_hits)
+    prod_counts = Counter(h.key() for h in answer.hits)
 
-    # Step 1: Extra / stale hits -> always DEFECT, never excused by declared gaps.
-    extra = sorted(h.label() for k, h in prod_by_key.items() if k not in ref_by_key)
-    if extra:
+    # Step 1: Extra / stale hits OR unexpected duplicate hits -> always DEFECT (never excused).
+    extra: list[str] = []
+    wrong: list[str] = []
+    seen_prod: set[tuple[str, str, str, int, int, int, str]] = set()
+    for h in answer.hits:
+        k = h.key()
+        if k in seen_prod:
+            continue
+        seen_prod.add(k)
+        if k not in ref_counts:
+            extra.append(h.label())
+        elif prod_counts[k] > ref_counts[k]:
+            wrong.append(f"duplicate_hit:{h.label()} observed={prod_counts[k]} expected={ref_counts[k]}")
+
+    if extra or wrong:
         return CheckResult(
             Verdict.DEFECT,
             "search",
-            extra_claims=tuple(extra),
+            extra_claims=tuple(sorted(extra)),
+            wrong_claims=tuple(sorted(wrong)),
             declared_gaps=declared_names,
-            reason="search answer contains stale or extra hit(s) not in reference",
+            reason="search answer contains stale, extra, or duplicate hit(s)",
         )
 
-    # Step 2 & 3: Missing hits.
-    missing_hits = [h for h in reference_hits if h.key() not in prod_by_key]
+    # Step 2 & 3: Missing hits (respecting multiplicity).
+    missing_hits: list[ScopedSearchHit] = []
+    remaining_prod = Counter(prod_counts)
+    for h in reference_hits:
+        k = h.key()
+        if remaining_prod[k] > 0:
+            remaining_prod[k] -= 1
+        else:
+            missing_hits.append(h)
+
     if not missing_hits:
         return CheckResult(Verdict.PASS, "search", declared_gaps=declared_names)
 
-    # Validate result_limit contracts up front if present.
     for gap in answer.declared_gaps:
         if gap.reason == "result_limit":
             ok, msg = _validate_result_limit_gap(gap, reference_hits, answer.hits)
@@ -523,7 +687,6 @@ def check_search(
                     reason=msg,
                 )
 
-    # Validate index_warming <-> time_budget interplay (Decision 006).
     missing_roots = {h.root_id for h in missing_hits}
     ok_warm, warm_msg = _validate_index_warming_interplay(answer.declared_gaps, missing_roots)
     if not ok_warm:
@@ -535,37 +698,44 @@ def check_search(
             reason=warm_msg,
         )
 
+    missing_triples = [(h.root_id, h.leg, h.hit.path) for h in missing_hits]
     accounted: list[str] = []
     unaccounted: list[str] = []
-    unknown_reasons: list[str] = []
+    unknown_for_missing: list[str] = []
+
     for hit in missing_hits:
         matched_gap: str | None = None
+        hit_unknown: str | None = None
         for gap in answer.declared_gaps:
+            scope_missing = _count_missing_files_in_gap_scope(gap, missing_triples)
             ok, err = _gap_covers_item(
                 gap,
                 domain="search",
                 root_id=hit.root_id,
                 leg=hit.leg,
                 path=hit.hit.path,
+                missing_files_in_gap_scope=scope_missing,
             )
             if ok:
                 matched_gap = gap.reason
                 break
-            if err:
-                unknown_reasons.append(err)
+            if err and hit_unknown is None:
+                hit_unknown = err
         if matched_gap:
             accounted.append(matched_gap)
         else:
             unaccounted.append(hit.label())
+            if hit_unknown is not None:
+                unknown_for_missing.append(hit_unknown)
 
     if unaccounted:
-        if unknown_reasons and not accounted:
+        if len(unknown_for_missing) == len(unaccounted):
             return CheckResult(
                 Verdict.UNKNOWN,
                 "search",
                 missing_claims=tuple(unaccounted),
                 declared_gaps=declared_names,
-                reason="; ".join(dict.fromkeys(unknown_reasons)),
+                reason="; ".join(dict.fromkeys(unknown_for_missing)),
             )
         return CheckResult(
             Verdict.DEFECT,
@@ -585,40 +755,60 @@ def check_search(
     )
 
 
+def _normalize_replace_reference(
+    reference_results: dict[str, ReplaceFileResult] | dict[tuple[str, str], ReplaceFileResult],
+) -> dict[tuple[str, str], ReplaceFileResult]:
+    out: dict[tuple[str, str], ReplaceFileResult] = {}
+    for key, val in reference_results.items():
+        if isinstance(key, tuple):
+            out[(key[0], key[1])] = val
+        else:
+            out[(val.root_id, key)] = val
+    return out
+
+
 def check_replace(
-    reference_results: dict[str, ReplaceFileResult],
+    reference_results: dict[str, ReplaceFileResult] | dict[tuple[str, str], ReplaceFileResult],
     answer: ProductReplaceAnswer,
 ) -> CheckResult:
-    """Compare product replace outcomes against reference byte-spliced replacement (R02/R03)."""
+    """Compare product replace outcomes against reference replacement keyed by (root_id, path)."""
     if not answer.instrumentation_complete:
         return CheckResult(Verdict.UNKNOWN, "replace", reason="missing instrumentation")
 
     declared_names = tuple(dict.fromkeys(g.reason for g in answer.declared_gaps))
-    obs_by_path = {f.path: f for f in answer.files}
+    ref_map = _normalize_replace_reference(reference_results)
 
-    extra = sorted(p for p in obs_by_path if p not in reference_results)
-    wrong: list[str] = []
+    # Detect duplicate (root_id, path) observations.
+    obs_counts = Counter((f.root_id, f.path) for f in answer.files)
+    wrong: list[str] = [
+        f"duplicate_replace_observation:{r}:{p} observed={c}"
+        for (r, p), c in sorted(obs_counts.items())
+        if c > 1
+    ]
+
+    obs_by_key = {(f.root_id, f.path): f for f in answer.files}
+    extra = sorted(f"{r}:{p}" for (r, p) in obs_by_key if (r, p) not in ref_map)
     missing_paths: list[tuple[str, str]] = []
 
-    for path, obs in sorted(obs_by_path.items()):
-        ref = reference_results.get(path)
+    for (root_id, path), obs in sorted(obs_by_key.items()):
+        ref = ref_map.get((root_id, path))
         if ref is None:
             continue
         if obs.drifted_before_apply:
             expected_drifted = obs.drifted_sha256 or obs.expected_before_sha256
             if obs.applied or not obs.refused_drift:
-                wrong.append(f"overwritten_drifted_file:{path}")
+                wrong.append(f"overwritten_drifted_file:{root_id}:{path}")
             elif obs.observed_sha256 != expected_drifted:
-                wrong.append(f"drifted_file_not_byte_identical:{path}")
+                wrong.append(f"drifted_file_not_byte_identical:{root_id}:{path}")
         else:
             if obs.applied and obs.observed_sha256 != ref.after_sha256:
-                wrong.append(f"replace_hash_mismatch:{path}")
+                wrong.append(f"replace_hash_mismatch:{root_id}:{path}")
             elif not obs.applied:
-                missing_paths.append((obs.root_id, path))
+                missing_paths.append((root_id, path))
 
-    for path in sorted(reference_results):
-        if path not in obs_by_path:
-            missing_paths.append(("root-0", path))
+    for root_id, path in sorted(ref_map):
+        if (root_id, path) not in obs_by_key:
+            missing_paths.append((root_id, path))
 
     if extra or wrong:
         return CheckResult(
@@ -627,27 +817,50 @@ def check_replace(
             extra_claims=tuple(extra),
             wrong_claims=tuple(wrong),
             declared_gaps=declared_names,
-            reason="replace mutated an extra/drifted file or produced wrong bytes",
+            reason="replace mutated an extra/duplicate/drifted file or produced wrong bytes",
         )
 
     if not missing_paths:
         return CheckResult(Verdict.PASS, "replace", declared_gaps=declared_names)
 
+    missing_triples = [(r, None, p) for r, p in missing_paths]
     accounted: list[str] = []
     unaccounted: list[str] = []
+    unknown_for_missing: list[str] = []
     for root_id, path in missing_paths:
         matched: str | None = None
+        miss_unknown: str | None = None
         for gap in answer.declared_gaps:
-            ok, _ = _gap_covers_item(gap, domain="replace", root_id=root_id, leg=None, path=path)
+            scope_missing = _count_missing_files_in_gap_scope(gap, missing_triples)
+            ok, err = _gap_covers_item(
+                gap,
+                domain="replace",
+                root_id=root_id,
+                leg=None,
+                path=path,
+                missing_files_in_gap_scope=scope_missing,
+            )
             if ok:
                 matched = gap.reason
                 break
+            if err and miss_unknown is None:
+                miss_unknown = err
         if matched:
             accounted.append(matched)
         else:
             unaccounted.append(f"{root_id}:{path}")
+            if miss_unknown is not None:
+                unknown_for_missing.append(miss_unknown)
 
     if unaccounted:
+        if len(unknown_for_missing) == len(unaccounted):
+            return CheckResult(
+                Verdict.UNKNOWN,
+                "replace",
+                missing_claims=tuple(unaccounted),
+                declared_gaps=declared_names,
+                reason="; ".join(dict.fromkeys(unknown_for_missing)),
+            )
         return CheckResult(
             Verdict.DEFECT,
             "replace",

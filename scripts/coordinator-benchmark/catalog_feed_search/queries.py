@@ -327,7 +327,7 @@ def generate_replace_spec(
     if with_groups:
         return ReplaceSpec(
             pattern=f"({tok})_([0-9]{{1,2}})",
-            replacement="rewritten_$2_$1",
+            replacement="rewritten_${2}_$1",
             regex=True,
             case_sensitive=False,
             whole_word=False,

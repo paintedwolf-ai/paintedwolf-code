@@ -337,6 +337,78 @@ def run_all_controls() -> ControlSuiteReport:
         ),
     )
 
+    # --- DECISION 009 REGRESSION CONTROLS (counterexamples must yield DEFECT/UNKNOWN) ---
+
+    # R1. Duplicate search hit must yield DEFECT (multiplicity preserved).
+    record(
+        "duplicate_search_hit",
+        "negative",
+        Verdict.DEFECT,
+        check_search((ref_hits[0],), ProductSearchAnswer(hits=(ref_hits[0], ref_hits[0]))),
+    )
+
+    # R2. Two missing files + count-only files_skipped(skipped_count=1) -> DEFECT.
+    record(
+        "files_skipped_count_insufficient",
+        "negative",
+        Verdict.DEFECT,
+        check_search(
+            ref_hits,
+            ProductSearchAnswer(
+                hits=(),
+                declared_gaps=(DeclaredGap(reason="files_skipped", root_id="root-0", skipped_count=1),),
+            ),
+        ),
+    )
+
+    # R3. Path-scoped time_budget(paths=("src/a.txt",)) must NOT excuse missing src/b.txt -> DEFECT.
+    record(
+        "path_scoped_time_budget_mismatch",
+        "negative",
+        Verdict.DEFECT,
+        check_search(
+            ref_hits,
+            ProductSearchAnswer(
+                hits=(),
+                declared_gaps=(
+                    DeclaredGap(reason="time_budget", root_id="root-0", paths=("src/a.txt",)),
+                ),
+            ),
+        ),
+    )
+
+    # R4. Feed events with unrelated-op -> DEFECT.
+    record(
+        "feed_unrelated_op",
+        "negative",
+        Verdict.DEFECT,
+        check_change_feed(
+            ref_log,
+            ProductFeedAnswer(
+                events=(
+                    FeedEvent(path="src/a.txt", batch_id="b1", op="unrelated-op"),
+                    FeedEvent(path="src/b.txt", batch_id="b1", op="unrelated-op"),
+                )
+            ),
+        ),
+    )
+
+    # R5. Empty feed + executor_error scoped to unrelated root/path -> DEFECT.
+    record(
+        "feed_wrong_scope_executor_error",
+        "negative",
+        Verdict.DEFECT,
+        check_change_feed(
+            ref_log,
+            ProductFeedAnswer(
+                events=(),
+                declared_gaps=(
+                    DeclaredGap(reason="executor_error", root_id="root-other", paths=("unrelated.txt",)),
+                ),
+            ),
+        ),
+    )
+
     return ControlSuiteReport(outcomes=tuple(outcomes))
 
 

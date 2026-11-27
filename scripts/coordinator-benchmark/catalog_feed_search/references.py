@@ -304,7 +304,7 @@ def reference_search(
         if event.get("type") != "match":
             continue
         data = event["data"]
-        rel_path = str(data["path"]["text"]).removeprefix("./").replace("\\", "/")
+        rel_path = str(data["path"]["text"]).removeprefix("./")
         if not _matches_path_filters(rel_path, query.path_filters):
             continue
         line_number = int(data["line_number"])
@@ -335,6 +335,18 @@ def reference_search(
     )
 
 
+SUPPORTED_REPLACE_ENCODINGS: tuple[str, ...] = (
+    "utf-8",
+    "utf-8-bom",
+    "utf-16-le-bom",
+    "utf-16-be-bom",
+)
+
+
+class UnsupportedEncodingError(ValueError):
+    """Raised when reference_replace encounters an encoding outside SUPPORTED_REPLACE_ENCODINGS."""
+
+
 @dataclass(frozen=True)
 class ReplaceFileResult:
     """Independent byte-spliced replacement result for one file."""
@@ -345,6 +357,59 @@ class ReplaceFileResult:
     resulting_bytes: bytes
     match_count: int
     changed: bool
+    root_id: str = "root-0"
+    encoding: str = "utf-8"
+
+
+def _detect_and_decode_for_replace(raw: bytes, rel_path: str) -> tuple[str, bytes, str, str]:
+    """Detect BOM/encoding, decode to text, and return (encoding_name, bom_bytes, codec, text).
+
+    Ripgrep 15.x strips BOMs and transcodes BOM-marked UTF-16 to UTF-8 internally, so
+    match offsets in `rg --json` are UTF-8 byte offsets against the BOM-stripped text.
+    """
+    if raw.startswith(b"\xff\xfe\x00\x00") or raw.startswith(b"\x00\x00\xfe\xff"):
+        raise UnsupportedEncodingError(f"UTF-32 encoding is not in SUPPORTED_REPLACE_ENCODINGS: {rel_path}")
+    if raw.startswith(b"\xef\xbb\xbf"):
+        bom = b"\xef\xbb\xbf"
+        try:
+            return "utf-8-bom", bom, "utf-8", raw[3:].decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise UnsupportedEncodingError(f"invalid UTF-8 after BOM in {rel_path}: {exc}") from exc
+    if raw.startswith(b"\xff\xfe"):
+        bom = b"\xff\xfe"
+        try:
+            return "utf-16-le-bom", bom, "utf-16-le", raw[2:].decode("utf-16-le")
+        except UnicodeDecodeError as exc:
+            raise UnsupportedEncodingError(f"invalid UTF-16LE in {rel_path}: {exc}") from exc
+    if raw.startswith(b"\xfe\xff"):
+        bom = b"\xfe\xff"
+        try:
+            return "utf-16-be-bom", bom, "utf-16-be", raw[2:].decode("utf-16-be")
+        except UnicodeDecodeError as exc:
+            raise UnsupportedEncodingError(f"invalid UTF-16BE in {rel_path}: {exc}") from exc
+    try:
+        return "utf-8", b"", "utf-8", raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise UnsupportedEncodingError(f"unsupported or non-UTF-8 encoding in {rel_path}: {exc}") from exc
+
+
+def _resolve_capture_group(
+    name: str,
+    match: re.Match[bytes] | None,
+    compiled: re.Pattern[bytes],
+) -> bytes:
+    if match is None or not name:
+        return b""
+    if name.isdigit():
+        idx = int(name)
+        if idx <= (match.lastindex or 0):
+            val = match.group(idx)
+            return val if val is not None else b""
+        return b""
+    if name in compiled.groupindex:
+        val = match.group(name)
+        return val if val is not None else b""
+    return b""
 
 
 def _expand_replacement_bytes(
@@ -352,7 +417,14 @@ def _expand_replacement_bytes(
     match_bytes: bytes,
     compiled: re.Pattern[bytes] | None,
 ) -> bytes:
-    """Expand numbered capture groups ($1, $2, ..., $0) and escaped $$ into bytes."""
+    """Expand replacement text using shared Go regexp.ExpandString / ripgrep 15.x syntax.
+
+    Rules:
+    - `$$` -> literal `$`
+    - `${N}` / `${name}` -> capture group N or named group (empty if unknown)
+    - `$ident` (longest `[A-Za-z0-9_]+`) -> numbered/named group if known, else empty
+      (e.g. `$2_` parses `2_` as one unknown name and expands to empty, matching Go & rg).
+    """
     if compiled is None:
         return replacement.encode("utf-8")
     m = compiled.fullmatch(match_bytes)
@@ -362,22 +434,28 @@ def _expand_replacement_bytes(
     out: list[bytes] = []
     i = 0
     rep = replacement
-    while i < len(rep):
+    n = len(rep)
+    while i < n:
         ch = rep[i]
-        if ch == "$" and i + 1 < len(rep):
+        if ch == "$" and i + 1 < n:
             nxt = rep[i + 1]
             if nxt == "$":
                 out.append(b"$")
                 i += 2
                 continue
-            if nxt.isdigit():
+            if nxt == "{":
+                close = rep.find("}", i + 2)
+                if close != -1:
+                    name = rep[i + 2 : close]
+                    out.append(_resolve_capture_group(name, m, compiled))
+                    i = close + 1
+                    continue
+            if nxt.isalnum() or nxt == "_":
                 j = i + 1
-                while j < len(rep) and rep[j].isdigit():
+                while j < n and (rep[j].isalnum() or rep[j] == "_"):
                     j += 1
-                group_idx = int(rep[i + 1 : j])
-                if m is not None and group_idx <= (m.lastindex or 0):
-                    val = m.group(group_idx)
-                    out.append(val if val is not None else b"")
+                name = rep[i + 1 : j]
+                out.append(_resolve_capture_group(name, m, compiled))
                 i = j
                 continue
         out.append(ch.encode("utf-8"))
@@ -391,8 +469,12 @@ def reference_replace(
     *,
     rg_bin: str = "rg",
     include_hidden: bool = False,
+    root_id: str = "root-0",
 ) -> dict[str, ReplaceFileResult]:
-    """Compute reference replacement by splicing bytes at ripgrep's exact match ranges (D3)."""
+    """Compute reference replacement by splicing UTF-8 bytes at ripgrep's exact match ranges (D3).
+
+    Preserves encoding, BOM, and LF/CRLF line endings across SUPPORTED_REPLACE_ENCODINGS.
+    """
     query = CodeQuerySpec(
         form="regex" if spec.regex else "literal",
         pattern=spec.pattern,
@@ -415,17 +497,21 @@ def reference_replace(
     for rel_path, file_hits in sorted(hits_by_file.items()):
         raw = (Path(root) / rel_path).read_bytes()
         before_sha = hashlib.sha256(raw).hexdigest()
+        enc_name, bom, codec, decoded_text = _detect_and_decode_for_replace(raw, rel_path)
+        utf8_bytes = decoded_text.encode("utf-8")
+
         chunks: list[bytes] = []
         cursor = 0
         for hit in sorted(file_hits, key=lambda h: (h.byte_offset, h.byte_end)):
             if hit.byte_offset < cursor:
                 continue
-            chunks.append(raw[cursor : hit.byte_offset])
-            matched = raw[hit.byte_offset : hit.byte_end]
+            chunks.append(utf8_bytes[cursor : hit.byte_offset])
+            matched = utf8_bytes[hit.byte_offset : hit.byte_end]
             chunks.append(_expand_replacement_bytes(spec.replacement, matched, compiled))
             cursor = hit.byte_end
-        chunks.append(raw[cursor:])
-        out_bytes = b"".join(chunks)
+        chunks.append(utf8_bytes[cursor:])
+        spliced_text = b"".join(chunks).decode("utf-8")
+        out_bytes = bom + spliced_text.encode(codec)
         after_sha = hashlib.sha256(out_bytes).hexdigest()
         results[rel_path] = ReplaceFileResult(
             path=rel_path,
@@ -434,6 +520,8 @@ def reference_replace(
             resulting_bytes=out_bytes,
             match_count=len(file_hits),
             changed=(out_bytes != raw),
+            root_id=root_id,
+            encoding=enc_name,
         )
     return results
 
@@ -511,7 +599,7 @@ def reference_file_lookup(paths: list[str], query_text: str) -> list[FileLookupH
         return []
     hits: list[FileLookupHit] = []
     for path in paths:
-        norm = path.replace("\\", "/")
+        norm = path.removeprefix("./")
         lower_path = norm.lower()
         slash_idx = lower_path.rfind("/")
         base_start = slash_idx + 1
