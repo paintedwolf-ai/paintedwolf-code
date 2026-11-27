@@ -356,8 +356,8 @@ func TestPY10_PairedBaseline(t *testing.T) {
 		roots := []pythondocuments.HostRootConfig{{ID: "ws-paired", Dir: ws}}
 		door := native.NewPythonMutationDoor(tools.ToolContext{}, roots)
 		req := portablepython.ToolRequest{
-			ExecutionID:  fmt.Sprintf("paired-%s-%s-%d", def.name, mode, idx),
-			CallID:       fmt.Sprintf("call-%s-%s-%d", def.name, mode, idx),
+			ExecutionID:  fmt.Sprintf("paired-%s-%s-%s-%d", receipt.Label, def.name, mode, idx),
+			CallID:       fmt.Sprintf("call-%s-%s-%s-%d", receipt.Label, def.name, mode, idx),
 			SessionID:    "sess-paired-baseline",
 			Actor:        "coordinator",
 			View:         "primary",
