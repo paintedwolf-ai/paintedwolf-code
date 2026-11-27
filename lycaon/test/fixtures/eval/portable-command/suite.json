@@ -934,7 +934,7 @@
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
+        "stderr": "sed: ./AGENTS.md: The captured revision could not be used at AGENTS.md. Publication at this path was refused [COMMAND_REVISION_CONFLICT]\n",
         "status": 2,
         "host_stop": "conflict",
         "complete": false,
@@ -948,7 +948,12 @@
             "outcome": "rejected"
           }
         ],
-        "effects": [],
+        "effects": [
+          {
+            "operation": "sed",
+            "outcome": "rejected"
+          }
+        ],
         "obligations": [],
         "deliveries": [],
         "recovery": {
@@ -1002,14 +1007,15 @@
       "turns": [
         {
           "program": "printf 'next\\n' > ./dir/input.txt && printf 'RAN\\n' > ./marker.txt",
-          "expected_outcome": "incomplete"
+          "expected_outcome": "rejected",
+          "expected_rejection": "COMMAND_PUBLICATION_PENDING"
         }
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
+        "stderr": ">: ./dir/input.txt: The publication did not complete; the accepted edit remains retained [COMMAND_PUBLICATION_PENDING]\n",
         "status": 2,
-        "host_stop": "incomplete",
+        "host_stop": "rejected",
         "complete": false,
         "files": {
           "dir/input.txt": "old\n",
@@ -1025,7 +1031,7 @@
           },
           {
             "operation": "write",
-            "outcome": "failed",
+            "outcome": "refused",
             "path": "dir/input.txt",
             "accepted": true,
             "published": false
@@ -1034,7 +1040,7 @@
         "effects": [
           {
             "operation": "write",
-            "outcome": "failed",
+            "outcome": "refused",
             "path": "dir/input.txt",
             "accepted": true,
             "published": false
@@ -1070,15 +1076,15 @@
       "turns": [
         {
           "program": "printf 'first\\n' > ./first.txt && curl -fsS -d payload \"$FIXTURE_HTTP\" && touch ./never",
-          "expected_outcome": "interrupted"
+          "expected_outcome": "completed"
         }
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
-        "status": 2,
-        "host_stop": "interrupted",
-        "complete": false,
+        "stderr": "curl: (52) Empty reply from server\n",
+        "status": 52,
+        "host_stop": null,
+        "complete": true,
         "files": {
           "first.txt": "first\n"
         },
@@ -1099,7 +1105,7 @@
           },
           {
             "operation": "http_request",
-            "outcome": "interrupted",
+            "outcome": "failed",
             "effect_certainty": "unknown"
           }
         ],
@@ -1113,7 +1119,7 @@
           },
           {
             "operation": "http_request",
-            "outcome": "interrupted",
+            "outcome": "failed",
             "effect_certainty": "unknown",
             "recipient": "fixture-http"
           }
@@ -1130,7 +1136,7 @@
           "effect_certainty_required": true,
           "source_span_required": false
         },
-        "closeout": "blocked"
+        "closeout": "complete"
       },
       "allowed_partial": [
         "first.txt"

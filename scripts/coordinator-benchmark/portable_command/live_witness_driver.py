@@ -207,23 +207,21 @@ class LiveWitnessContext:
             self._poller.start()
         elif self.cid == 'listener-rebind':
             self.port = _pick_free_port()
-            wdir = (self.out_dir / 'witness-bin').resolve()
-            wdir.mkdir(parents=True, exist_ok=True)
-            ready, srv_py = wdir / 'owned.ready', wdir / 'owned_srv.py'
+            ready, srv_py = self.proj / 'owned.ready', self.proj / 'owned_srv.py'
             srv_py.write_text(
                 'import http.server, pathlib\nclass H(http.server.BaseHTTPRequestHandler):\n'
                 ' def do_GET(self): b=b"owned-listener\\n"; self.send_response(200); self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b)\n'
                 ' def log_message(self,*a): pass\n'
-                f's=http.server.HTTPServer(("127.0.0.1",{self.port}),H); pathlib.Path({str(ready)!r}).write_text("ok"); s.serve_forever()\n'
+                f's=http.server.HTTPServer(("127.0.0.1",{self.port}),H); pathlib.Path("owned.ready").write_text("ok"); s.serve_forever()\n'
             )
             pol = _CheckpointPoller(self.app, self.sid, approve=True)
             pol.start()
             try:
-                c_start = self.send_calls(self.app, self.sid, [{'name': 'command', 'args': {'command': f'external -- python3 {srv_py} &', 'capability_request': {'local_listen': {'ports': [self.port]}}}}], surface=self.surface)
+                c_start = self.send_calls(self.app, self.sid, [{'name': 'command', 'args': {'command': 'external -- python3 ./owned_srv.py &', 'capability_request': {'local_listen': {'ports': [self.port]}}}}], surface=self.surface)
                 self.prelude_records.append({'kind': 'q17_start', 'call_id': c_start[0][0], 'outcome': c_start[0][1].get('outcome')})
             finally:
                 pol.close()
-            self.app.wait_for(lambda: ready.is_file(), 'owned listener ready', self.sid, timeout=30)
+            self.app.wait_for(lambda: ready.is_file(), 'owned listener ready', timeout=30)
             owned_ok = False
             for _ in range(10):
                 c_cur = self.send_calls(self.app, self.sid, [{'name': 'command', 'args': {'command': f'curl -fsS http://127.0.0.1:{self.port}/owned'}}], surface=self.surface)
@@ -234,6 +232,8 @@ class LiveWitnessContext:
                 time.sleep(0.5)
             c_stop = self.send_calls(self.app, self.sid, [{'name': 'command', 'args': {'command': 'kill %1; wait %1'}}], surface=self.surface)
             self.prelude_records.append({'kind': 'q17_stop', 'call_id': c_stop[0][0], 'outcome': c_stop[0][1].get('outcome')})
+            for tmpf in (ready, srv_py):
+                with contextlib.suppress(OSError): tmpf.unlink()
             self._rebind_srv = _RebindServer(self.port)
             for attempt in range(30):
                 try:

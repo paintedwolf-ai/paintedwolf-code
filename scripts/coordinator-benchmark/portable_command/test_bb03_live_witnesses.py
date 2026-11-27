@@ -28,8 +28,8 @@ class BB03LiveWitnessOracleTests(unittest.TestCase):
             db.execute("ALTER TABLE invocation_program_executions ADD COLUMN arguments_digest TEXT DEFAULT ''")
             db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','rejected',1)")
             db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','conflict',2,'COMMAND_REVISION_CONFLICT')")
-            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,arguments_digest) VALUES ('e1','p1',1,'sed','sed','filesystem','refused','none',?)", ('d' * 64,))
-            db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (json.dumps({'outcome': 'rejected', 'codes': ['COMMAND_REVISION_CONFLICT'], 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'conflict', 'status': 2, 'refusal': {'code': 'COMMAND_REVISION_CONFLICT'}})}),))
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,arguments_digest) VALUES ('e1','p1',1,'sed','sed','filesystem','refused','unknown',?)", ('d' * 64,))
+            db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (json.dumps({'outcome': 'rejected', 'codes': ['COMMAND_REVISION_CONFLICT'], 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'conflict', 'status': 2, 'stderr': case['expected']['stderr'], 'refusal': {'code': 'COMMAND_REVISION_CONFLICT'}})}),))
             db.commit(); db.close()
             turns = [{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}]
             wm = {'checkpoint_id': 'cp-1', 'doc_before_rev': 1, 'human_revision': 2, 'after_revision': 2}
@@ -45,11 +45,11 @@ class BB03LiveWitnessOracleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             case, proj, base, dbp, lp = self._base(pathlib.Path(tmp), 'publication-barrier')
             db = sqlite3.connect(dbp)
-            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','failed',1)")
-            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','incomplete',2,'')")
-            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,accepted_revision,published_revision) VALUES ('e1','p1',1,'printf','printf','processes','completed','none','',''), ('e2','p1',2,'write','','filesystem','failed','attempted','rev2','')")
+            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','rejected',1)")
+            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','rejected',2,'COMMAND_PUBLICATION_PENDING')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,accepted_revision,published_revision) VALUES ('e1','p1',1,'printf','printf','processes','completed','none','',''), ('e2','p1',2,'write','','filesystem','refused','attempted','rev2','')")
             db.execute("INSERT INTO invocation_program_revision_pins VALUES ('p1','e2',0,'destination','accepted_document','dir/input.txt')")
-            db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (json.dumps({'outcome': 'failed', 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'incomplete', 'status': 2, 'stdout': '', 'stderr': ''})}),))
+            db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (json.dumps({'outcome': 'rejected', 'codes': ['COMMAND_PUBLICATION_PENDING'], 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'rejected', 'status': 2, 'stdout': '', 'stderr': case['expected']['stderr'], 'refusal': {'code': 'COMMAND_PUBLICATION_PENDING'}})}),))
             db.commit(); db.close()
             turns = [{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}]
             wm = {'input_doc_before_rev': 1, 'input_doc_after_rev': 2, 'input_doc_dirty': True, 'input_held_agent_version_id': 'hv-1', 'unrelated_doc_before_rev': 2, 'unrelated_doc_after_rev': 2, 'unrelated_doc_dirty': True}
@@ -66,12 +66,12 @@ class BB03LiveWitnessOracleTests(unittest.TestCase):
             case, proj, base, dbp, lp = self._base(root / 'q15', 'partial-write-unknown-http')
             (proj / 'first.txt').write_text('first\n')
             db = sqlite3.connect(dbp)
-            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','interrupted',1)")
-            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','interrupted',2,'')")
-            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,accepted_revision,published_revision) VALUES ('e1','p1',1,'printf','printf','processes','completed','none','',''), ('e2','p1',2,'write','','filesystem','completed','completed','rev1','rev2'), ('e3','p1',3,'http_request','curl','network','interrupted','unknown','','')")
+            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','completed',1)")
+            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',52,'')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,accepted_revision,published_revision) VALUES ('e1','p1',1,'printf','printf','processes','completed','none','',''), ('e2','p1',2,'write','','filesystem','completed','completed','rev1','rev2'), ('e3','p1',3,'http_request','curl','network','failed','unknown','','')")
             db.execute("INSERT INTO invocation_program_revision_pins VALUES ('p1','e2',0,'destination','absent','first.txt')")
             db.execute("INSERT INTO invocation_program_publications VALUES ('p1','sess1234','committed',1)")
-            db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (json.dumps({'outcome': 'interrupted', 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'interrupted', 'status': 2, 'completed_effects': 1, 'uncertain_effects': 1, 'replay_available': False, 'stdout': '', 'stderr': ''})}),))
+            db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (json.dumps({'outcome': 'completed', 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'completed', 'status': 52, 'completed_effects': 1, 'uncertain_effects': 1, 'replay_available': False, 'stdout': '', 'stderr': 'curl: (52) Empty reply from server\n'})}),))
             db.commit(); db.close()
             turns = [{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}]
             wm = {'http_requests': [{'seq': 1, 'method': 'POST', 'path': '/commit', 'body': 'payload'}]}
