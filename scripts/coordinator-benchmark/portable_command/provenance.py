@@ -39,18 +39,30 @@ def resolve_engine_manifest(engine_manifest=None):
     return pathlib.Path(env_manifest).resolve() if env_manifest else None
 
 
-def materialize_helpers(helpers, helpers_dir):
+CASE_HELPERS = {
+    'temp-native-process-handoff': {'fixture-reader': {'kind': 'read-file-arg'}},
+    'owned-background-state': {'fixture-job': {'kind': 'print-env-fixture'}},
+}
+
+
+def materialize_helpers(helpers, helpers_dir, case_id=None):
     """Materialize fixture helper executables into a per-case bin directory."""
-    if not helpers:
+    merged = {**(CASE_HELPERS.get(case_id) or {}), **(helpers or {})}
+    if not merged:
         return None
     dest = pathlib.Path(helpers_dir).resolve()
     dest.mkdir(parents=True, exist_ok=True)
-    for name, spec in helpers.items():
+    for name, spec in merged.items():
         if not name or '/' in name or '\\' in name or name in {'.', '..'}:
             raise ValueError('invalid helper executable name: ' + str(name))
         script = dest / name
-        if spec.get('kind') == 'argv-json':
+        kind = spec.get('kind')
+        if kind == 'argv-json':
             script.write_text("#!/bin/sh\nexec python3 -c 'import json,sys; print(json.dumps(sys.argv[1:], separators=(\",\", \":\")))' \"$@\"\n")
+        elif kind == 'read-file-arg':
+            script.write_text("#!/bin/sh\nexec python3 -c 'import pathlib,sys; sys.stdout.buffer.write(pathlib.Path(sys.argv[1]).read_bytes())' \"$1\"\n")
+        elif kind == 'print-env-fixture':
+            script.write_text("#!/bin/sh\nprintf '%s\\n' \"${FIXTURE:-}\"\n")
         else:
             out = shlex.quote(str(spec.get('stdout') or ''))
             err = shlex.quote(str(spec.get('stderr') or ''))

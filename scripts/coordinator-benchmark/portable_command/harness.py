@@ -213,7 +213,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
     revision_aliases = {alias: baseline_hashes.get(path) for path, alias in case['setup'].get('revisions', {}).items()}
     identity = source_identity(ROOT, profile=case['profile'], engine_bin=engine_bin, engine_manifest=engine_manifest)
     save(out_dir / 'attempt.json', {'status': 'running', 'case_id': case['id'], 'identity': identity, 'revision_aliases': revision_aliases})
-    helpers_dir = materialize_helpers(case['setup'].get('helpers'), out_dir / 'helpers')
+    helpers_dir = materialize_helpers(case['setup'].get('helpers'), out_dir / 'helpers', case_id=case['id'])
     config_root = out_dir / 'config-root'
     host_binding = materialize_denied_progress_scope(case, config_root) if app_factory is smoke.Application else None
     application = make_app_factory(engine_bin, app_factory, helpers_dir=helpers_dir, config_root=config_root if host_binding else None)(app_dir)

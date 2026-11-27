@@ -108,7 +108,7 @@ def receipt_rows(audit, progress_receipts, draft_bindings=None):
                          if p['execution_id'] == ex['id'] and p.get('role') == 'destination'), None)
         if dest_pin and dest_pin.get('path'):
             pin_path = str(dest_pin['path'])
-            if '/scratch/' in pin_path and op in {'mktemp', 'write'}:
+            if ('/scratch/' in pin_path or pin_path.startswith('@scratch/')) and op in {'mktemp', 'write'}:
                 row['namespace'] = effect['namespace'] = 'session-temp'
             elif op in {'tar_create', 'tar_extract', 'mkdir'}:
                 row['path'] = effect['path'] = pin_path.lstrip('./')

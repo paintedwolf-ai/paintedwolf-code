@@ -264,3 +264,51 @@ class PortableCommandQSliceTests(unittest.TestCase):
             obs_bad, _ = observe.build_observation(CASES['large-tree-discovery'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=[{'program': CASES['large-tree-discovery']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
             self.assertFalse(obs_bad['facts']['bounded_visits'])
             self.assertFalse(obs_bad['facts']['confined_launch'])
+
+    def test_q11_temp_handoff_and_q16_owned_background_controls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            # 1) Helper materialization for Q11 fixture-reader & Q16 fixture-job.
+            h_q11 = provenance.materialize_helpers(None, root / 'bin-q11', case_id='temp-native-process-handoff')
+            sample = root / 'sample.txt'
+            sample.write_text('same\n')
+            self.assertEqual(subprocess.run([str(h_q11 / 'fixture-reader'), str(sample)], capture_output=True, text=True, check=True).stdout, 'same\n')
+            h_q16 = provenance.materialize_helpers(None, root / 'bin-q16', case_id='owned-background-state')
+            self.assertEqual(subprocess.run([str(h_q16 / 'fixture-job')], env={**os.environ, 'FIXTURE': 'before'}, capture_output=True, text=True, check=True).stdout, 'before\n')
+            # 2) Q11 positive + negative (two different scratch paths -> same_physical_identity=False).
+            db_path, log_path, proj = self._base_env(root)
+            db = sqlite3.connect(db_path)
+            db.execute("ALTER TABLE invocation_program_revision_pins ADD COLUMN basis TEXT DEFAULT ''")
+            db.execute("ALTER TABLE invocation_program_revision_pins ADD COLUMN disk_sha256 TEXT DEFAULT ''")
+            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','completed',1)")
+            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,'')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e1','p1',1,'mktemp','mktemp','filesystem','completed','completed'), ('e2','p1',2,'write','>','filesystem','completed','completed'), ('e3','p1',3,'command','external','processes','completed','none')")
+            db.execute("INSERT INTO invocation_program_revision_pins (program_id,execution_id,ordinal,role,mode,path,basis,disk_sha256) VALUES ('p1','e1',0,'destination','absent','@scratch/tmp.1','captured',''), ('p1','e2',0,'destination','published_disk','@scratch/tmp.1','captured',''), ('p1','e3',0,'source','published_disk','bin/fixture-reader','declared_at_launch',?)", ('d' * 64,))
+            db.commit(); db.close()
+            obs11, audit11 = observe.build_observation(CASES['temp-native-process-handoff'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=[{'program': CASES['temp-native-process-handoff']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
+            self.assertEqual(audit11['observation_gaps'], [])
+            self.assertTrue(obs11['facts']['temp_path_owned'] and obs11['facts']['same_physical_identity'] and obs11['facts']['external_disk_provenance'])
+            # 3) Q16 positive + negative (mismatched exit / stdout='after\n' -> False).
+            db16 = root / 'q16.db'
+            create_audit_db(db16)
+            log16 = root / 'q16.log'
+            log16.write_text('level=INFO msg="server listening"\nlevel=INFO msg="process boundary selected" host_execution=false process_control=seatbelt component=sandbox tool=command session_id=sess1234\nlevel=INFO msg="shutdown signal received"\n')
+            db = sqlite3.connect(db16)
+            db.execute("ALTER TABLE invocation_program_executions ADD COLUMN job_handle TEXT DEFAULT ''")
+            db.execute("ALTER TABLE invocation_program_executions ADD COLUMN status_code INTEGER DEFAULT 0")
+            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','completed',1)")
+            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,'')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,status_code,effect_certainty,job_handle) VALUES ('e1','p1',1,'command','external','processes','completed',0,'none','job-1'), ('e2','p1',2,'wait','wait','processes','completed',0,'none','')")
+            db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (json.dumps({'outcome': 'completed', 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'completed', 'status': 0, 'stdout': 'before\n', 'stderr': ''})}),))
+            db.commit(); db.close()
+            obs16, audit16 = observe.build_observation(CASES['owned-background-state'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db16, sidecar_log=log16, baseline_hashes={}, turn_records=[{'program': CASES['owned-background-state']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
+            self.assertEqual(audit16['observation_gaps'], [])
+            for fact in CASES['owned-background-state']['required_evidence']:
+                self.assertTrue(obs16['facts'][fact], fact)
+            db = sqlite3.connect(db16)
+            db.execute("UPDATE invocation_program_executions SET status_code=7 WHERE id='e2'")
+            db.execute("UPDATE messages SET tool_result_json=? WHERE id='m1'", (json.dumps({'outcome': 'completed', 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'completed', 'status': 7, 'stdout': 'after\n', 'stderr': ''})}),))
+            db.commit(); db.close()
+            obs16_bad, _ = observe.build_observation(CASES['owned-background-state'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db16, sidecar_log=log16, baseline_hashes={}, turn_records=[{'program': CASES['owned-background-state']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
+            self.assertFalse(obs16_bad['facts']['captured_environment_cwd'])
+            self.assertFalse(obs16_bad['facts']['actual_exit'])

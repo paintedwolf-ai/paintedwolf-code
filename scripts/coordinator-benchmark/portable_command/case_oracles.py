@@ -5,6 +5,7 @@ import tarfile
 import zipfile
 from portable_command.contracts import bytes_value, fixture_path
 from portable_command.delivery_oracles import extract_deliveries, inspect_edit_and_bounds
+from portable_command.lifecycle_oracles import inspect_temp_handoff_and_jobs
 from portable_command.live import MODEL_FIELDS, SOURCE_FIELDS, freeze_plan, load_live_manifest, summarize_slots
 from portable_command.profile_session import inspect_readonly_authority
 
@@ -220,10 +221,7 @@ def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, rece
         if any(tok in recovery['owner_code'].lower() for tok in ('zip', 'traversal', 'escape', 'archive', 'path')):
             facts['zip_slip_refused'] = True
     facts.update(verify_tar_bz2(project_dir, receipts, effects, audit['invocation_program_publications'], final_hashes))
-    temp_pins = [str(p.get('path') or '') for p in pins if p.get('role') == 'destination' and f'/scratch/{session_id}/' in str(p.get('path') or '')]
-    if temp_pins:
-        facts['temp_path_owned'] = True
-        facts['same_physical_identity'] = len(set(temp_pins)) == 1
+    facts.update(inspect_temp_handoff_and_jobs(case, session_id=session_id, audit=audit, receipts=receipts, sidecar=sidecar, last_payload=last_payload))
     ro_facts, recovery = inspect_readonly_authority(
         case, session_surface=session_surface, project_dir=project_dir, audit=audit, recovery=recovery,
         last_payload=last_payload, last_raw=last_raw, baseline_hashes=baseline_hashes,
