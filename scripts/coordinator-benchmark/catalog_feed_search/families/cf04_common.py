@@ -460,37 +460,50 @@ def seed_worker_branch_in_db(
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(data)
 
-    conn = sqlite3.connect(str(db_path), timeout=10.0)
-    try:
-        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        scope_json = json.dumps({"mode": "write", "paths": ["."]})
-        conn.execute(
-            """
-            INSERT INTO worker_jobs (
-                id, project_id, workspace_root_id, workspace_path, workspace_key,
-                agent_type, status, prompt, brief, scope_json, created_at,
-                workspace_relpath, merge_status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                worker_id,
-                project_id,
-                primary_root_id,
-                str(primary_root_path.resolve()),
-                "",
-                "implementer",
-                status,
-                "cf04-k06 worker branch verification",
-                "cf04-k06 worker branch verification",
-                scope_json,
-                now,
-                relpath,
-                merge_status,
-            ),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    scope_json = json.dumps({"mode": "write", "paths": ["."]})
+    waiter = threading.Event()
+    last_exc: Exception | None = None
+    for attempt in range(8):
+        conn = sqlite3.connect(str(db_path), timeout=30.0)
+        try:
+            conn.execute("PRAGMA busy_timeout = 30000")
+            conn.execute(
+                """
+                INSERT INTO worker_jobs (
+                    id, project_id, workspace_root_id, workspace_path, workspace_key,
+                    agent_type, status, prompt, brief, scope_json, created_at,
+                    workspace_relpath, merge_status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    worker_id,
+                    project_id,
+                    primary_root_id,
+                    str(primary_root_path.resolve()),
+                    "",
+                    "implementer",
+                    status,
+                    "cf04-k06 worker branch verification",
+                    "cf04-k06 worker branch verification",
+                    scope_json,
+                    now,
+                    relpath,
+                    merge_status,
+                ),
+            )
+            conn.commit()
+            last_exc = None
+            break
+        except sqlite3.OperationalError as exc:
+            last_exc = exc
+            if "locked" not in str(exc).lower() and "busy" not in str(exc).lower():
+                raise
+            waiter.wait(0.25 * (attempt + 1))
+        finally:
+            conn.close()
+    if last_exc is not None:
+        raise last_exc
     return branch_root
 
 

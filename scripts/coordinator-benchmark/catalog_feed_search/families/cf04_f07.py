@@ -316,11 +316,18 @@ with tempfile.TemporaryDirectory(prefix="cf04-f07-mnt-") as tmp_s:
         browse_during = client.browse_dir(pid, rid, ".")
         ws_during = client.get_source_workspace(pid)
         outage_reported = (read_during.status >= 400) and (browse_during.status >= 400)
+        ws_during_summary = count_workspace_live_watchers(ws_during.json_body) if isinstance(ws_during.json_body, dict) else {}
         if not outage_reported:
             defects.append({
                 "code": "linux_unmount_outage_not_reported",
                 "read_during": read_during.status,
                 "browse_during": browse_during.status,
+            })
+        if ws_during_summary.get("by_root", {}).get(rid) == "live":
+            defects.append({
+                "code": "unmount_watch_state_remained_live",
+                "detail": "watch.state remained 'live' after real volume unmount instead of reporting outage",
+                "workspace_during": ws_during_summary,
             })
 
         # Real remount of the owned tmpfs volume and restore repo!
@@ -458,12 +465,25 @@ def _run_darwin_real_disk_image_outage_edge(
                 read_during = client.get_source_file(pid, rid, "vol.txt")
                 browse_during = client.browse_dir(pid, rid, ".")
                 ws_during = client.get_source_workspace(pid)
+                ws_during_summary = (
+                    count_workspace_live_watchers(ws_during.json_body)
+                    if isinstance(ws_during.json_body, dict)
+                    else {}
+                )
                 if not (read_during.status >= 400 and browse_during.status >= 400):
                     defects.append(
                         {
                             "code": "darwin_unmount_outage_not_reported",
                             "read_during": read_during.status,
                             "browse_during": browse_during.status,
+                        }
+                    )
+                if isinstance(ws_during_summary.get("by_root"), dict) and ws_during_summary["by_root"].get(rid) == "live":
+                    defects.append(
+                        {
+                            "code": "unmount_watch_state_remained_live",
+                            "detail": "watch.state remained 'live' after real APFS volume unmount instead of reporting outage",
+                            "workspace_during": ws_during_summary,
                         }
                     )
 
