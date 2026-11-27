@@ -92,6 +92,8 @@ def write_third_party_notices(
         "- libxml2 2.12.9 & libxslt 1.1.42 (MIT) — built into WASI guest for lxml.etree XPath/XML support",
         "- Pillow 11.1.0 built-in PIL._imaging C extension (MIT-CMU)",
         "- lxml 5.3.0 built-in lxml.etree & lxml._elementpath Cython/C extensions (BSD-3-Clause)",
+        "- NumPy 1.26.4 built-in WASI C/C++ extensions with lapack_lite backend (BSD-3-Clause)",
+        "- pandas 2.2.3 built-in WASI Cython/C/C++ extensions (BSD-3-Clause)",
         "",
         "Bundled Python Distributions:",
     ]
@@ -269,4 +271,48 @@ def apply_wasi_package_patches(
                     "reason": "Replace absent WASI HTTPS classes with fail-closed refusing stubs and explicitly refuse all remote URL image fetches without falling back to plain HTTP",
                 }
             )
+
+    # Patch 4: pandas 2.2.3 imports optional stdlib ctypes (Windows WinError / interchange)
+    # and mmap (memory_map=True) which CPython omits on wasm32-wasi. Guard cleanly.
+    ctypes_guard = (
+        "\ntry:\n"
+        "    import ctypes\n"
+        "except ImportError:\n"
+        "    ctypes = None  # type: ignore[assignment]\n"
+    )
+    for rel in ("pandas/errors/__init__.py", "pandas/core/interchange/from_dataframe.py"):
+        target = packages_root / rel
+        if target.is_file():
+            text = target.read_text(encoding="utf-8")
+            if "\nimport ctypes\n" in text:
+                target.write_text(text.replace("\nimport ctypes\n", ctypes_guard, 1), encoding="utf-8")
+                _refresh_record_entry(packages_root, "pandas-*.dist-info", rel, target, record_hash)
+                patches.append(
+                    {
+                        "target": f"packages/{rel}",
+                        "reason": "Guard optional ctypes import on wasm32-wasi where CPython omits _ctypes/libffi",
+                    }
+                )
+    mmap_guard = (
+        "\ntry:\n"
+        "    import mmap\n"
+        "except ImportError:\n"
+        "    class _PWNoMmap:\n"
+        "        class mmap:\n"
+        "            pass\n"
+        "    mmap = _PWNoMmap  # type: ignore[assignment]\n"
+    )
+    for rel in ("pandas/io/common.py", "pandas/io/excel/_openpyxl.py"):
+        target = packages_root / rel
+        if target.is_file():
+            text = target.read_text(encoding="utf-8")
+            if "\nimport mmap\n" in text:
+                target.write_text(text.replace("\nimport mmap\n", mmap_guard, 1), encoding="utf-8")
+                _refresh_record_entry(packages_root, "pandas-*.dist-info", rel, target, record_hash)
+                patches.append(
+                    {
+                        "target": f"packages/{rel}",
+                        "reason": "Guard optional mmap import on wasm32-wasi where CPython omits mmap",
+                    }
+                )
     return patches

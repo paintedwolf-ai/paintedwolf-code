@@ -4,14 +4,16 @@
     "name": "cpython",
     "version": "3.12.0",
     "target": "wasm32-wasi",
-    "release_tag": "pw-cpython-wasi-engine-v0.2.0",
+    "release_tag": "pw-cpython-wasi-engine-v0.4.0",
     "wasi_sdk": "20.0",
-    "filename": "python-3.12.0-wasi-py10.tar.gz",
-    "source_url": "https://github.com/paintedwolf-ai/paintedwolf-python-engine/releases/download/v0.2.0/python-3.12.0-wasi-py10.tar.gz",
-    "source_sha256": "5d6ba6b729f0dbb08959e086116974d2acc290c7d5c586d2b8e98abe6b118331",
+    "filename": "python-3.12.0-wasi-py13.tar.gz",
+    "source_url": "https://github.com/paintedwolf-ai/paintedwolf-python-engine/releases/download/v0.4.0/python-3.12.0-wasi-py13.tar.gz",
+    "source_sha256": "e3479e20d03e3e642cd63f2c43adb37570cd1f7ff82ad11b4c79fd22dfa5f048",
     "builtin_extensions": {
       "pillow": "11.1.0",
       "lxml": "5.3.0",
+      "numpy": "1.26.4",
+      "pandas": "2.2.3",
       "zlib": "1.3.1",
       "bzip2": "1.0.8",
       "sqlite3": "3.45.3",
@@ -892,6 +894,72 @@
       "filename": "defusedxml-0.7.1-py2.py3-none-any.whl",
       "source_url": "https://files.pythonhosted.org/packages/07/6c/aa3f2f849e01cb6a001cd8554a88d4c77c5c1a31c95bdf1cf9301e6d9ef4/defusedxml-0.7.1-py2.py3-none-any.whl",
       "source_sha256": "a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61"
+    },
+    {
+      "name": "pytz",
+      "normalized_name": "pytz",
+      "version": "2024.2",
+      "public": false,
+      "imports": [
+        "pytz"
+      ],
+      "backend": "pure-python",
+      "features": [],
+      "console_scripts": [],
+      "has_package_data": true,
+      "license": "MIT",
+      "source_kind": "wheel",
+      "filename": "pytz-2024.2-py2.py3-none-any.whl",
+      "source_url": "https://files.pythonhosted.org/packages/11/c3/005fcca25ce078d2cc29fd559379817424e94885510568bc1bc53d7d5846/pytz-2024.2-py2.py3-none-any.whl",
+      "source_sha256": "31c7c1817eb7fae7ca4b8c7ee50c72f93aa2dd863de768e1ef4245d426aa0725"
+    },
+    {
+      "name": "numpy",
+      "normalized_name": "numpy",
+      "version": "1.26.4",
+      "public": false,
+      "imports": [
+        "numpy"
+      ],
+      "backend": "builtin-wasi-extension",
+      "features": [
+        "arrays",
+        "broadcasting",
+        "matmul",
+        "lapack_lite",
+        "fft",
+        "random"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "sdist_pure_python",
+      "filename": "numpy-1.26.4.tar.gz",
+      "source_url": "https://files.pythonhosted.org/packages/source/n/numpy/numpy-1.26.4.tar.gz",
+      "source_sha256": "2a02aba9ed12e4ac4eb3ea9421c420301a0c6460d9830d74a9df87efa4912010"
+    },
+    {
+      "name": "pandas",
+      "normalized_name": "pandas",
+      "version": "2.2.3",
+      "public": false,
+      "imports": [
+        "pandas"
+      ],
+      "backend": "builtin-wasi-extension",
+      "features": [
+        "dataframe",
+        "read_csv",
+        "merge",
+        "groupby"
+      ],
+      "console_scripts": [],
+      "has_package_data": false,
+      "license": "BSD-3-Clause",
+      "source_kind": "sdist_pure_python",
+      "filename": "pandas-2.2.3.tar.gz",
+      "source_url": "https://files.pythonhosted.org/packages/source/p/pandas/pandas-2.2.3.tar.gz",
+      "source_sha256": "4f18ba62b61d7e192368b84517265a99b4d7ee8912f8708660fb4a366cc82667"
     }
   ],
   "bundled_fonts": [
