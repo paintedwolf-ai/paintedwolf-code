@@ -2,6 +2,7 @@ package portablepython
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -213,6 +214,8 @@ func TestNativeQual_SixFrozenWorkloads(t *testing.T) {
 }
 
 type zeroEntropy struct{}
+
+func (z zeroEntropy) Reader() io.Reader { return z }
 
 func (zeroEntropy) Read(p []byte) (int, error) {
 	clear(p)
