@@ -45,10 +45,7 @@ class UnrelatedRebindServer:
     """Unrelated host process binding the exact port previously owned by the session."""
 
     def __init__(self, port):
-        self._port = port
-        self._lock = threading.Lock()
-        self.hits = []
-        self._server, self._thread = None, None
+        self._port, self._lock, self.hits, self._server, self._thread = port, threading.Lock(), [], None, None
 
     def start(self):
         owner = self
@@ -123,11 +120,8 @@ class CheckpointPoller:
 
 
 def _run_cmd(app, sid, surface, cmd, *, cap_req=None):
-    args = {'command': cmd}
-    if cap_req:
-        args['capability_request'] = cap_req
-    results = send_tool_calls(app, sid, [{'name': 'command', 'args': args}], surface=surface)
-    call_id, raw_res = results[-1]
+    args = {'command': cmd} if not cap_req else {'command': cmd, 'capability_request': cap_req}
+    call_id, raw_res = send_tool_calls(app, sid, [{'name': 'command', 'args': args}], surface=surface)[-1]
     raw_parsed, payload = parse_tool_result({'tool_result_json': json.dumps(raw_res)})
     code, details = structured_rejection(raw_parsed, payload)
     return {
@@ -167,15 +161,12 @@ def run_q17_and_cancellation(repo_root, out_path, engine_manifest=None, engine_b
 
         # Phase 1: Session launches its own loopback HTTP listener on port P and curls it without loopback_connect.
         ready_file = project_dir / 'owned.ready'
-        owned_srv_py = (
-            'import http.server, pathlib; '
-            'class H(http.server.BaseHTTPRequestHandler):\n'
-            ' def do_GET(self):\n'
-            '  b=b"owned-listener\\n"; self.send_response(200); self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b)\n'
+        (project_dir / 'owned_srv.py').write_text(
+            'import http.server, pathlib\nclass H(http.server.BaseHTTPRequestHandler):\n'
+            ' def do_GET(self): b=b"owned-listener\\n"; self.send_response(200); self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b)\n'
             ' def log_message(self,*a): pass\n'
-            f's=http.server.HTTPServer(("127.0.0.1",{port}),H); pathlib.Path("owned.ready").write_text("ok"); s.serve_forever()'
+            f's=http.server.HTTPServer(("127.0.0.1",{port}),H); pathlib.Path("owned.ready").write_text("ok"); s.serve_forever()\n'
         )
-        (project_dir / 'owned_srv.py').write_text(owned_srv_py)
         poller = CheckpointPoller(app, sid, approve=True)
         poller.start()
         q17_start = _run_cmd(app, sid, surface, 'external -- python3 ./owned_srv.py &', cap_req={'local_listen': {'ports': [port]}})
@@ -183,7 +174,6 @@ def run_q17_and_cancellation(repo_root, out_path, engine_manifest=None, engine_b
         poller = None
         app.wait_for(lambda: ready_file.is_file(), 'owned listener ready', sid, timeout=30)
 
-        # Allow bgprocess listener sweeper to observe the live owned listener, then curl without loopback_connect.
         q17_owned_curl = None
         for _ in range(10):
             q17_owned_curl = _run_cmd(app, sid, surface, f'curl -fsS http://127.0.0.1:{port}/owned')
@@ -191,7 +181,7 @@ def run_q17_and_cancellation(repo_root, out_path, engine_manifest=None, engine_b
                 break
             time.sleep(0.5)
 
-        # Phase 2: Stop session's owned listener and rebind the exact same port with an unrelated host server.
+        # Phase 2: Stop owned listener and rebind the exact same port with an unrelated host process.
         q17_stop_owned = _run_cmd(app, sid, surface, 'kill %1; wait %1')
         rebind_srv = UnrelatedRebindServer(port)
         for attempt in range(30):
@@ -203,7 +193,7 @@ def run_q17_and_cancellation(repo_root, out_path, engine_manifest=None, engine_b
                     raise
                 time.sleep(0.2)
 
-        # Phase 3: Curl the exact same URL; rebind must revoke access with zero requests reaching unrelated server.
+        # Phase 3: Curl exact same URL; rebind must revoke access with zero hits to unrelated server.
         poller = CheckpointPoller(app, sid, approve=False)
         poller.start()
         q17_rebound_curl = _run_cmd(app, sid, surface, f'curl -fsS http://127.0.0.1:{port}/owned')
@@ -257,8 +247,8 @@ def run_q17_and_cancellation(repo_root, out_path, engine_manifest=None, engine_b
     rebound_hits = rebind_srv.hit_count() if rebind_srv is not None else -1
     checks = {
         'q17_observed_owned_listener_succeeded': (
-            q17_start['status'] == 0
-            and q17_owned_curl is not None and q17_owned_curl['status'] == 0 and q17_owned_curl['stdout'] == 'owned-listener\n'
+            q17_start['status'] == 0 and q17_owned_curl is not None
+            and q17_owned_curl['status'] == 0 and q17_owned_curl['stdout'] == 'owned-listener\n'
         ),
         'q17_revoked_on_rebind_zero_hits': (
             (q17_rebound_curl['outcome'] == 'rejected' or q17_rebound_curl['status'] != 0 or bool(q17_rebound_curl['rejection_code']))
@@ -277,8 +267,7 @@ def run_q17_and_cancellation(repo_root, out_path, engine_manifest=None, engine_b
     report = {
         'case_id': 'Q17-listener-rebind-and-Q15-cancellation', 'model_calls': 0,
         'passed': all(checks.values()), 'checks': checks, 'identity': identity,
-        'provenance_verified': checks['provenance_verified'],
-        'st01_st03_stop_fence_separate': True,
+        'provenance_verified': checks['provenance_verified'], 'st01_st03_stop_fence_separate': True,
         'q17': {
             'port': port, 'start': q17_start, 'owned_curl': q17_owned_curl,
             'stop_owned': q17_stop_owned, 'rebound_curl': q17_rebound_curl, 'unrelated_hits': rebound_hits,
