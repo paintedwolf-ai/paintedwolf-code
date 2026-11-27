@@ -679,24 +679,57 @@ def _strip_leading_delivery_tags(text: str) -> str:
     return "".join(lines[idx:])
 
 
-def _extract_delivered_read_bytes(delivered_text: str) -> bytes:
-    """Derive independent delivered source bytes strictly from `tool_result.content` (Decision 016).
+_CMD_METADATA_HDR = "Data from tool (command_metadata):"
+_CMD_STDOUT_HDR = "Data from tool (command_stdout):"
+_NEXT_SEGMENT_RE = re.compile(r"^Data from tool \([^)]+\):", re.MULTILINE)
 
-    NEVER reads or substitutes bytes from the fixture file on disk.
-    Preserves blank lines and exact clipped ends (including absence of a trailing newline).
+
+def _parse_command_wire_projection(model_content: str) -> tuple[str, str] | None:
+    """Parse D1's structured `Message.content` projection into (metadata_segment, stdout_payload).
+
+    Matches `lycaon/internal/llm/transcript/command_result.go` as verified in
+    `coordination/receipts/coordinator-gb02-command-wire-projection.md`:
+    - Host-issued delivery tags are extracted ONLY from `command_metadata`.
+    - `command_stdout` is payload text only (tag-lookalikes inside stdout are never metadata).
     """
-    stripped = _strip_leading_delivery_tags(delivered_text)
-    source_text = stripped
-    try:
-        envelope = json.loads(stripped)
-        if isinstance(envelope, Mapping) and isinstance(envelope.get("stdout"), str):
-            source_text = envelope["stdout"]
-    except (TypeError, ValueError):
-        pass
+    if _CMD_METADATA_HDR not in model_content and _CMD_STDOUT_HDR not in model_content:
+        return None
 
+    metadata_seg = ""
+    meta_idx = model_content.find(_CMD_METADATA_HDR)
+    if meta_idx != -1:
+        after_meta = model_content[meta_idx + len(_CMD_METADATA_HDR) :]
+        nxt = _NEXT_SEGMENT_RE.search(after_meta)
+        metadata_seg = after_meta[: nxt.start()] if nxt else after_meta
+
+    stdout_payload = ""
+    out_idx = model_content.find(_CMD_STDOUT_HDR)
+    if out_idx != -1:
+        after_out = model_content[out_idx + len(_CMD_STDOUT_HDR) :]
+        nxt = _NEXT_SEGMENT_RE.search(after_out)
+        out_seg = after_out[: nxt.start()] if nxt else after_out
+        # Extract fenced payload after `Command stdout:\n```\n` up to closing `\n``` `
+        fence_start = out_seg.find("```\n")
+        if fence_start != -1:
+            inner = out_seg[fence_start + 4 :]
+            fence_end = inner.rfind("\n```")
+            if fence_end != -1:
+                stdout_payload = inner[:fence_end]
+                # D1's command_stdout fence adds one blank framing newline before closing ```
+                if stdout_payload.endswith("\n\n"):
+                    stdout_payload = stdout_payload[:-1]
+            else:
+                stdout_payload = inner
+        else:
+            stdout_payload = out_seg
+
+    return (metadata_seg, stdout_payload)
+
+
+def _strip_cat_n_prefixes(source_text: str) -> bytes:
+    """Strip numbered-line prefixes while preserving blank lines and exact clipped ends."""
     if not source_text:
         return b""
-
     lines = source_text.splitlines(keepends=True)
     out_parts: list[str] = []
     for ln in lines:
@@ -712,6 +745,27 @@ def _extract_delivered_read_bytes(delivered_text: str) -> bytes:
         nm = _NUMBERED_LINE_RE.match(core)
         out_parts.append((nm.group("rest") if nm else core) + eol)
     return "".join(out_parts).encode("utf-8")
+
+
+def _extract_delivered_read_bytes(delivered_text: str) -> bytes:
+    """Derive independent delivered source bytes strictly from model-facing delivery (Decision 016).
+
+    NEVER reads or substitutes bytes from the fixture file on disk.
+    Preserves blank lines and exact clipped ends (including absence of a trailing newline).
+    """
+    proj = _parse_command_wire_projection(delivered_text)
+    if proj is not None:
+        return _strip_cat_n_prefixes(proj[1])
+
+    stripped = _strip_leading_delivery_tags(delivered_text)
+    source_text = stripped
+    try:
+        envelope = json.loads(stripped)
+        if isinstance(envelope, Mapping) and isinstance(envelope.get("stdout"), str):
+            source_text = envelope["stdout"]
+    except (TypeError, ValueError):
+        pass
+    return _strip_cat_n_prefixes(source_text)
 
 
 def _safe_fixture_file(ws_path: pathlib.Path | None, rel_path: str) -> pathlib.Path | None:
@@ -977,15 +1031,17 @@ def extract_tool_messages_from_pending(
         seen_call_ids.add(call_id)
         meta = call_meta.get(call_id, {})
 
-        # Retain actual delivered body verbatim from D1's nested `tool_result.content`
-        # (verified in coordinator-gb02-linux-manual-preflight.md), falling back to
-        # `tool_result.output` or top-level `msg.content` only when absent.
-        content = tr_map.get("content") if tr_map else None
-        if not content and tr_map:
-            content = tr_map.get("output")
-        if not content:
-            content = msg.get("content") or ""
-        delivered_text = str(content or "")
+        # Decision 016 para 7 & coordinator-gb02-command-wire-projection.md:
+        # Top-level `Message.content` is the real model-facing projection (matching
+        # `openai_compat_wire.go`, which uses Message.Content first and falls back to
+        # nested `tool_result.content` only when top-level content is empty).
+        # Retain both projections separately so host metadata tags come strictly from
+        # `command_metadata` (never stdout payload) and receipt details come from `tool_result`.
+        model_content = str(msg.get("content") or "")
+        nested_receipt = ""
+        if tr_map:
+            nested_receipt = str(tr_map.get("content") or tr_map.get("output") or "")
+        delivered_text = model_content if model_content else nested_receipt
 
         raw_handles = msg.get("evidence_handles")
         if not raw_handles and tr_map:
@@ -995,7 +1051,15 @@ def extract_tool_messages_from_pending(
             if isinstance(raw_handles, Sequence) and not isinstance(raw_handles, (str, bytes))
             else ()
         )
-        delivery_tags = _parse_delivery_tags(delivered_text, evidence_handles)
+
+        proj = _parse_command_wire_projection(model_content) if model_content else None
+        if proj is not None:
+            meta_segment, stdout_payload = proj
+            # Trust ONLY `command_metadata` for host-issued tags; stdout is payload text!
+            delivery_tags = _parse_delivery_tags(meta_segment, evidence_handles)
+        else:
+            stdout_payload = ""
+            delivery_tags = _parse_delivery_tags(delivered_text, evidence_handles)
 
         new_msgs.append(
             {
@@ -1005,6 +1069,8 @@ def extract_tool_messages_from_pending(
                 "arguments": dict(meta.get("args") or {}),
                 "delivered_body": delivered_text,
                 "delivered_body_sha256": hashlib.sha256(delivered_text.encode("utf-8")).hexdigest(),
+                "delivered_stdout": stdout_payload,
+                "nested_receipt_content": nested_receipt,
                 "evidence_handles": list(evidence_handles),
                 "delivery_tags": list(delivery_tags),
                 "request_id": str(pending.get("id") or ""),
@@ -1099,26 +1165,28 @@ def run_scripted_session(
                 if kind == "command":
                     rec_shape = "command"
                     ranges, line_numbered, printed_other = ((), False, False)
-                    rec_bytes = _format_independent_command_body(delivered_text)
+                    receipt_src = item.get("nested_receipt_content") or delivered_text
+                    rec_bytes = _format_independent_command_body(receipt_src)
                     rec_source_rev = source_revision
                 else:
                     rec_shape = "file_region" if handle_path else ""
                     fixture_file = _safe_fixture_file(ws_path, handle_path)
-                    # Decision 016: Derive delivered bytes strictly from `tool_result.content`,
+                    # Decision 016: Derive delivered bytes strictly from model-facing projection,
                     # NEVER substituting bytes from the fixture file on disk!
                     rec_bytes = _extract_delivered_read_bytes(delivered_text)
-                    delivered_for_range = rec_bytes.decode("utf-8", errors="replace")
-                    # Preserve numbered lines for numbering check if present in stdout/body
-                    stripped_env = _strip_leading_delivery_tags(delivered_text)
-                    try:
-                        env_obj = json.loads(stripped_env)
-                        range_probe_text = (
-                            env_obj["stdout"]
-                            if isinstance(env_obj, Mapping) and isinstance(env_obj.get("stdout"), str)
-                            else stripped_env
-                        )
-                    except (TypeError, ValueError):
-                        range_probe_text = stripped_env
+                    if item.get("delivered_stdout"):
+                        range_probe_text = str(item["delivered_stdout"])
+                    else:
+                        stripped_env = _strip_leading_delivery_tags(delivered_text)
+                        try:
+                            env_obj = json.loads(stripped_env)
+                            range_probe_text = (
+                                env_obj["stdout"]
+                                if isinstance(env_obj, Mapping) and isinstance(env_obj.get("stdout"), str)
+                                else stripped_env
+                            )
+                        except (TypeError, ValueError):
+                            range_probe_text = stripped_env
 
                     ranges, line_numbered, printed_other = _derive_actual_range_and_numbering(
                         range_probe_text,
