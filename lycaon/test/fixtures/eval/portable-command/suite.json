@@ -308,7 +308,11 @@
           "b.txt": "baseline:b.txt",
           "diff.txt": "baseline:diff.txt"
         },
-        "host_facts": {}
+        "host_facts": {},
+        "file_mtimes": {
+          "a.txt": 1767323045,
+          "b.txt": 1767323045
+        }
       },
       "turns": [
         {
@@ -325,7 +329,7 @@
         "files": {
           "a.txt": "a\n",
           "b.txt": "b\n",
-          "diff.txt": "--- ./a.txt\n+++ ./b.txt\n@@ -1 +1 @@\n-a\n+b\n"
+          "diff.txt": "--- ./a.txt\t2026-01-02 03:04:05.000000000 +0000\n+++ ./b.txt\t2026-01-02 03:04:05.000000000 +0000\n@@ -1 +1 @@\n-a\n+b\n"
         },
         "absent": [],
         "receipts": [
@@ -397,7 +401,7 @@
         "stderr": "",
         "status": 1,
         "host_stop": null,
-        "complete": false,
+        "complete": true,
         "files": {
           "result.txt": "old\n"
         },
@@ -407,12 +411,33 @@
         "receipts": [
           {
             "operation": "external_exec",
-            "outcome": "failed",
+            "outcome": "completed",
             "status": 1,
             "publication_eligible": false
+          },
+          {
+            "operation": "write",
+            "outcome": "failed",
+            "status": 1,
+            "publication_eligible": false,
+            "path": "result.txt",
+            "accepted": false,
+            "published": false
           }
         ],
-        "effects": [],
+        "effects": [
+          {
+            "operation": "external_exec",
+            "outcome": "completed"
+          },
+          {
+            "operation": "write",
+            "outcome": "failed",
+            "path": "result.txt",
+            "accepted": false,
+            "published": false
+          }
+        ],
         "obligations": [],
         "deliveries": [],
         "closeout": "complete"
@@ -459,7 +484,7 @@
         "stderr": "",
         "status": 1,
         "host_stop": null,
-        "complete": false,
+        "complete": true,
         "files": {
           "result.txt": "old\n"
         },
@@ -467,15 +492,39 @@
         "receipts": [
           {
             "operation": "external_exec",
-            "outcome": "failed",
-            "status": 1
+            "outcome": "completed",
+            "status": 1,
+            "publication_eligible": false
           },
           {
             "operation": "read",
-            "outcome": "completed"
+            "outcome": "completed",
+            "status": 0,
+            "publication_eligible": true
+          },
+          {
+            "operation": "write",
+            "outcome": "failed",
+            "status": 1,
+            "publication_eligible": false,
+            "path": "result.txt",
+            "accepted": false,
+            "published": false
           }
         ],
-        "effects": [],
+        "effects": [
+          {
+            "operation": "external_exec",
+            "outcome": "completed"
+          },
+          {
+            "operation": "write",
+            "outcome": "failed",
+            "path": "result.txt",
+            "accepted": false,
+            "published": false
+          }
+        ],
         "obligations": [],
         "deliveries": [],
         "closeout": "complete"
@@ -507,20 +556,31 @@
       "turns": [
         {
           "program": "cat ./input.txt && rm ./input.txt",
-          "expected_outcome": "rejected"
+          "expected_outcome": "rejected",
+          "expected_rejection": "COMMAND_OPERATION_NOT_ALLOWED"
         }
       ],
       "expected": {
-        "stdout": "",
-        "stderr": "",
-        "status": 2,
+        "stdout": "keep\n",
+        "stderr": "rm: request: The active profile explicitly excludes this operation or its public command form [COMMAND_OPERATION_NOT_ALLOWED]\n",
+        "status": 1,
         "host_stop": "rejected",
         "complete": false,
         "files": {
           "input.txt": "keep\n"
         },
         "absent": [],
-        "receipts": [],
+        "receipts": [
+          {
+            "operation": "read",
+            "outcome": "completed"
+          },
+          {
+            "operation": "delete",
+            "outcome": "rejected",
+            "status": 1
+          }
+        ],
         "effects": [],
         "obligations": [],
         "deliveries": [],
@@ -556,13 +616,14 @@
       "turns": [
         {
           "program": "cmd=$(cat ./selector); \"$cmd\" ./input.txt",
-          "expected_outcome": "rejected"
+          "expected_outcome": "rejected",
+          "expected_rejection": "COMMAND_OPERATION_NOT_ALLOWED"
         }
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
-        "status": 2,
+        "stderr": "rm: request: The active profile explicitly excludes this operation or its public command form [COMMAND_OPERATION_NOT_ALLOWED]\n",
+        "status": 1,
         "host_stop": "rejected",
         "complete": false,
         "files": {
@@ -592,7 +653,7 @@
           "remedy": "readonly_or_closeout",
           "effect_certainty_required": true,
           "source_span_required": true,
-          "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+          "owner_code": "COMMAND_OPERATION_NOT_ALLOWED"
         },
         "closeout": "blocked"
       },
@@ -624,13 +685,14 @@
       "turns": [
         {
           "program": "sed 'w ./forbidden' ./input.txt",
-          "expected_outcome": "rejected"
+          "expected_outcome": "rejected",
+          "expected_rejection": "COMMAND_EFFECT_NOT_ALLOWED"
         }
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
-        "status": 2,
+        "stderr": "sed: request: Its bound effect set is not permitted by the active command surface [COMMAND_EFFECT_NOT_ALLOWED]\n",
+        "status": 1,
         "host_stop": "rejected",
         "complete": false,
         "files": {
@@ -639,7 +701,13 @@
         "absent": [
           "forbidden"
         ],
-        "receipts": [],
+        "receipts": [
+          {
+            "operation": "sed",
+            "outcome": "rejected",
+            "status": 1
+          }
+        ],
         "effects": [],
         "obligations": [],
         "deliveries": [],
@@ -668,18 +736,25 @@
       "turns": [
         {
           "program": "awk 'BEGIN { system(\"fixture-tool\") }'",
-          "expected_outcome": "rejected"
+          "expected_outcome": "rejected",
+          "expected_rejection": "COMMAND_NATIVE_FORM_UNSUPPORTED"
         }
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
+        "stderr": "awk: BEGIN { system(\"fixture-tool\") }: The native command adapter cannot execute this form [COMMAND_NATIVE_FORM_UNSUPPORTED]\n",
         "status": 2,
         "host_stop": "rejected",
         "complete": false,
         "files": {},
         "absent": [],
-        "receipts": [],
+        "receipts": [
+          {
+            "operation": "awk",
+            "outcome": "rejected",
+            "status": 2
+          }
+        ],
         "effects": [],
         "obligations": [],
         "deliveries": [],
@@ -700,7 +775,7 @@
       "profile": "implement",
       "setup": {
         "files": {
-          "bad.sh": "echo ok; eval data"
+          "bad.sh": "echo inner\ntrap x INT\n"
         },
         "drafts": {},
         "progress": "valid",
@@ -711,18 +786,19 @@
       },
       "turns": [
         {
-          "program": "printf 'parent\\n'; source -- ./bad.sh",
-          "expected_outcome": "rejected"
+          "program": "printf 'parent\\n'; source -- ./bad.sh; printf 'after\\n'",
+          "expected_outcome": "rejected",
+          "expected_rejection": "COMMAND_SYNTAX_UNSUPPORTED"
         }
       ],
       "expected": {
         "stdout": "parent\n",
-        "stderr": "",
+        "stderr": "source: line 2: trap '...' EXIT [COMMAND_SYNTAX_UNSUPPORTED]\n",
         "status": 2,
         "host_stop": "rejected",
         "complete": false,
         "files": {
-          "bad.sh": "echo ok; eval data"
+          "bad.sh": "echo inner\ntrap x INT\n"
         },
         "absent": [],
         "receipts": [
@@ -833,16 +909,16 @@
       "profile": "implement",
       "setup": {
         "files": {
-          "input.txt": "alpha\n"
+          "AGENTS.md": "alpha\n"
         },
         "drafts": {},
         "progress": "valid",
         "revisions": {
-          "input.txt": "baseline:input.txt"
+          "AGENTS.md": "baseline:AGENTS.md"
         },
         "host_facts": {
           "during_review": {
-            "input.txt": {
+            "AGENTS.md": {
               "revision": "human-r2",
               "bytes": "human\n"
             }
@@ -851,32 +927,33 @@
       },
       "turns": [
         {
-          "program": "sed -i 's/alpha/beta/' ./input.txt",
-          "expected_outcome": "conflict"
+          "program": "sed -i 's/alpha/beta/' ./AGENTS.md",
+          "expected_outcome": "conflict",
+          "expected_rejection": "COMMAND_REVISION_CONFLICT"
         }
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
+        "stderr": "sed: ./AGENTS.md: The captured revision could not be used at AGENTS.md. Publication at this path was refused [COMMAND_REVISION_CONFLICT]\n",
         "status": 2,
         "host_stop": "conflict",
         "complete": false,
         "files": {
-          "input.txt": "human\n"
+          "AGENTS.md": "alpha\n"
         },
         "absent": [],
         "receipts": [
           {
             "operation": "sed",
-            "outcome": "completed"
-          },
-          {
-            "operation": "write",
-            "outcome": "rejected",
-            "path": "input.txt"
+            "outcome": "rejected"
           }
         ],
-        "effects": [],
+        "effects": [
+          {
+            "operation": "sed",
+            "outcome": "rejected"
+          }
+        ],
         "obligations": [],
         "deliveries": [],
         "recovery": {
@@ -887,8 +964,8 @@
           "automatic_execution": false,
           "remedy": "fresh_read_and_preparation",
           "effect_certainty_required": true,
-          "source_span_required": true,
-          "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+          "source_span_required": false,
+          "owner_code": "COMMAND_REVISION_CONFLICT"
         },
         "closeout": "blocked"
       },
@@ -909,7 +986,7 @@
       "profile": "implement",
       "setup": {
         "files": {
-          "input.txt": "old\n",
+          "dir/input.txt": "old\n",
           "unrelated.txt": "disk\n"
         },
         "drafts": {
@@ -920,7 +997,7 @@
         },
         "progress": "valid",
         "revisions": {
-          "input.txt": "baseline:input.txt",
+          "dir/input.txt": "baseline:dir/input.txt",
           "unrelated.txt": "baseline:unrelated.txt"
         },
         "host_facts": {
@@ -929,21 +1006,24 @@
       },
       "turns": [
         {
-          "program": "printf 'next\\n' > ./input.txt && fixture-verifier",
-          "expected_outcome": "incomplete"
+          "program": "printf 'next\\n' > ./dir/input.txt && printf 'RAN\\n' > ./marker.txt",
+          "expected_outcome": "rejected",
+          "expected_rejection": "COMMAND_PUBLICATION_PENDING"
         }
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
+        "stderr": ">: ./dir/input.txt: The publication did not complete; the accepted edit remains retained [COMMAND_PUBLICATION_PENDING]\n",
         "status": 2,
-        "host_stop": "incomplete",
+        "host_stop": "rejected",
         "complete": false,
         "files": {
-          "input.txt": "old\n",
+          "dir/input.txt": "old\n",
           "unrelated.txt": "disk\n"
         },
-        "absent": [],
+        "absent": [
+          "marker.txt"
+        ],
         "receipts": [
           {
             "operation": "printf",
@@ -951,8 +1031,8 @@
           },
           {
             "operation": "write",
-            "outcome": "failed",
-            "path": "input.txt",
+            "outcome": "refused",
+            "path": "dir/input.txt",
             "accepted": true,
             "published": false
           }
@@ -960,8 +1040,8 @@
         "effects": [
           {
             "operation": "write",
-            "outcome": "failed",
-            "path": "input.txt",
+            "outcome": "refused",
+            "path": "dir/input.txt",
             "accepted": true,
             "published": false
           }
@@ -995,16 +1075,16 @@
       },
       "turns": [
         {
-          "program": "printf 'first\\n' > ./first.txt; curl -d payload \"$FIXTURE_HTTP\"; touch ./never",
-          "expected_outcome": "interrupted"
+          "program": "printf 'first\\n' > ./first.txt && curl -fsS -d payload \"$FIXTURE_HTTP\" && touch ./never",
+          "expected_outcome": "completed"
         }
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
-        "status": 2,
-        "host_stop": "interrupted",
-        "complete": false,
+        "stderr": "curl: (52) Empty reply from server\n",
+        "status": 52,
+        "host_stop": null,
+        "complete": true,
         "files": {
           "first.txt": "first\n"
         },
@@ -1025,7 +1105,7 @@
           },
           {
             "operation": "http_request",
-            "outcome": "interrupted",
+            "outcome": "failed",
             "effect_certainty": "unknown"
           }
         ],
@@ -1039,7 +1119,7 @@
           },
           {
             "operation": "http_request",
-            "outcome": "interrupted",
+            "outcome": "failed",
             "effect_certainty": "unknown",
             "recipient": "fixture-http"
           }
@@ -1054,10 +1134,9 @@
           "automatic_execution": false,
           "remedy": "specific_remaining_status_action",
           "effect_certainty_required": true,
-          "source_span_required": false,
-          "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+          "source_span_required": false
         },
-        "closeout": "blocked"
+        "closeout": "complete"
       },
       "allowed_partial": [
         "first.txt"
@@ -1133,7 +1212,7 @@
       },
       "turns": [
         {
-          "program": "printf 'a\\nb\\n' | head -n 1",
+          "program": "printf 'a\\n%131072s\\n' b | head -n 1",
           "expected_outcome": "completed"
         }
       ],
@@ -1148,12 +1227,15 @@
         "receipts": [
           {
             "operation": "printf",
-            "outcome": "completed",
+            "outcome": "failed",
+            "status": 1,
+            "publication_eligible": false,
             "closure": "expected-consumer"
           },
           {
             "operation": "read",
-            "outcome": "completed"
+            "outcome": "completed",
+            "status": 0
           }
         ],
         "effects": [],
@@ -1190,12 +1272,6 @@
           "expected_outcome": "completed"
         },
         {
-          "structured_tool": "edit",
-          "arguments": {
-            "path": "input.txt",
-            "old_string": "beta",
-            "new_string": "gamma"
-          },
           "program": "edit --path ./input.txt --old-string beta --new-string gamma",
           "expected_outcome": "completed"
         }
@@ -1264,7 +1340,12 @@
         "files": {
           "input.txt": "alpha\nbeta\n"
         },
-        "drafts": {},
+        "drafts": {
+          "input.txt": {
+            "revision": "draft-r1",
+            "bytes": "alpha\nbeta\n"
+          }
+        },
         "progress": "valid",
         "revisions": {
           "input.txt": "baseline:input.txt"
@@ -1273,27 +1354,107 @@
       },
       "turns": [
         {
+          "program": "head -n 1 ./input.txt; printf '%131072s\n' b",
+          "expected_outcome": "completed"
+        },
+        {
+          "program": "code-rewrite --pattern beta --rewrite gamma --path input.txt --lang python",
+          "structured_tool": "code_rewrite",
+          "arguments": {
+            "path": "input.txt",
+            "lang": "python",
+            "pattern": "beta",
+            "rewrite": "gamma"
+          },
+          "expected_outcome": "rejected",
+          "expected_rejection": "EDITOR_DOCUMENT_READ_REQUIRED"
+        },
+        {
+          "program": "sed -n '2p' ./input.txt",
+          "expected_outcome": "completed"
+        },
+        {
+          "program": "code-rewrite --pattern beta --rewrite gamma --path input.txt --lang python",
+          "structured_tool": "code_rewrite",
+          "arguments": {
+            "path": "input.txt",
+            "lang": "python",
+            "pattern": "beta",
+            "rewrite": "gamma"
+          },
+          "expected_outcome": "rejected",
+          "expected_rejection": "EDITOR_DOCUMENT_READ_REQUIRED"
+        },
+        {
           "program": "cat ./input.txt",
+          "expected_outcome": "completed"
+        },
+        {
+          "program": "code-rewrite --pattern beta --rewrite gamma --path input.txt --lang python",
+          "structured_tool": "code_rewrite",
+          "arguments": {
+            "path": "input.txt",
+            "lang": "python",
+            "pattern": "beta",
+            "rewrite": "gamma"
+          },
           "expected_outcome": "completed"
         }
       ],
       "expected": {
-        "stdout": "alpha\n",
+        "stdout": "",
         "stderr": "",
         "status": 0,
         "host_stop": null,
         "complete": true,
         "files": {
-          "input.txt": "alpha\nbeta\n"
+          "input.txt": "alpha\ngamma\n"
         },
         "absent": [],
         "receipts": [
           {
             "operation": "read",
+            "outcome": "completed",
+            "input_revision": "draft-r1"
+          },
+          {
+            "operation": "printf",
             "outcome": "completed"
+          },
+          {
+            "operation": "code_rewrite",
+            "outcome": "rejected"
+          },
+          {
+            "operation": "sed",
+            "outcome": "completed"
+          },
+          {
+            "operation": "code_rewrite",
+            "outcome": "rejected"
+          },
+          {
+            "operation": "read",
+            "outcome": "completed",
+            "input_revision": "draft-r1"
+          },
+          {
+            "operation": "code_rewrite",
+            "outcome": "completed",
+            "path": "input.txt",
+            "accepted": true,
+            "published": true
           }
         ],
-        "effects": [],
+        "effects": [
+          {
+            "operation": "code_rewrite",
+            "outcome": "completed",
+            "path": "input.txt",
+            "accepted": true,
+            "published": true
+          }
+        ],
         "obligations": [],
         "deliveries": [
           {
@@ -1302,6 +1463,26 @@
             "lines": [
               1,
               1
+            ],
+            "representation": "literal",
+            "delivered": true
+          },
+          {
+            "path": "input.txt",
+            "revision": "baseline:input.txt",
+            "lines": [
+              2,
+              2
+            ],
+            "representation": "literal",
+            "delivered": true
+          },
+          {
+            "path": "input.txt",
+            "revision": "baseline:input.txt",
+            "lines": [
+              1,
+              2
             ],
             "representation": "literal",
             "delivered": true
@@ -1376,6 +1557,10 @@
             "namespace": "session-temp",
             "accepted": true,
             "published": true
+          },
+          {
+            "operation": "external_exec",
+            "outcome": "completed"
           }
         ],
         "obligations": [],
@@ -1457,7 +1642,7 @@
         }
       ],
       "expected": {
-        "stdout": "before\n",
+        "stdout": "",
         "stderr": "",
         "status": 0,
         "host_stop": null,
@@ -1466,23 +1651,22 @@
         "absent": [],
         "receipts": [
           {
-            "operation": "export",
-            "outcome": "completed"
-          },
-          {
             "operation": "external_exec",
-            "outcome": "completed"
-          },
-          {
-            "operation": "export",
-            "outcome": "completed"
+            "outcome": "completed",
+            "status": 0
           },
           {
             "operation": "wait",
+            "outcome": "completed",
+            "status": 0
+          }
+        ],
+        "effects": [
+          {
+            "operation": "external_exec",
             "outcome": "completed"
           }
         ],
-        "effects": [],
         "obligations": [],
         "deliveries": [],
         "closeout": "complete"
@@ -1512,14 +1696,15 @@
       },
       "turns": [
         {
-          "program": "curl \"$FIXTURE_HTTP\"",
-          "expected_outcome": "rejected"
+          "program": "curl -fsS \"$FIXTURE_HTTP\"",
+          "expected_outcome": "rejected",
+          "expected_rejection": "SANDBOX_LOOPBACK_CONNECT_DENIED"
         }
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
-        "status": 2,
+        "stderr": "curl: request: The person declined this connection to the local service [SANDBOX_LOOPBACK_CONNECT_DENIED]\n",
+        "status": 1,
         "host_stop": "rejected",
         "complete": false,
         "files": {},
@@ -1530,7 +1715,12 @@
             "outcome": "rejected"
           }
         ],
-        "effects": [],
+        "effects": [
+          {
+            "operation": "http_request",
+            "outcome": "rejected"
+          }
+        ],
         "obligations": [],
         "deliveries": [],
         "closeout": "blocked"
@@ -1581,7 +1771,12 @@
       },
       "turns": [
         {
-          "program": "git add -- ./authored.txt; git commit -m 'Fixture change'",
+          "program": "git -c core.fsmonitor=fixture-unmediated-helper status",
+          "expected_rejection": "COMMAND_OPTION_UNSUPPORTED",
+          "expected_outcome": "rejected"
+        },
+        {
+          "program": "git add -- ./authored.txt; git commit -m 'Fixture change' >/dev/null",
           "expected_outcome": "completed"
         }
       ],
@@ -1597,6 +1792,10 @@
         },
         "absent": [],
         "receipts": [
+          {
+            "operation": "git",
+            "outcome": "refused"
+          },
           {
             "operation": "git_add",
             "outcome": "completed"
@@ -1748,12 +1947,13 @@
       "turns": [
         {
           "program": "unzip ./hostile.zip -d ./out",
-          "expected_outcome": "rejected"
+          "expected_outcome": "rejected",
+          "expected_rejection": "EXTRACT_ZIP_SLIP"
         }
       ],
       "expected": {
-        "stdout": "",
-        "stderr": "",
+        "stdout": "Archive:  ./hostile.zip\n",
+        "stderr": "unzip: EXTRACT_ZIP_SLIP [EXTRACT_ZIP_SLIP]\n",
         "status": 2,
         "host_stop": "rejected",
         "complete": false,
@@ -1768,7 +1968,8 @@
         "receipts": [
           {
             "operation": "unzip",
-            "outcome": "rejected"
+            "outcome": "rejected",
+            "status": 2
           }
         ],
         "effects": [],
@@ -1823,7 +2024,12 @@
             "outcome": "completed"
           }
         ],
-        "effects": [],
+        "effects": [
+          {
+            "operation": "external_exec",
+            "outcome": "completed"
+          }
+        ],
         "obligations": [],
         "deliveries": [],
         "closeout": "complete"
@@ -2492,21 +2698,59 @@
       "turns": [
         {
           "program": "touch ./never",
+          "expected_rejection": "PROGRESS_MISSING",
           "expected_outcome": "rejected"
+        },
+        {
+          "structured_tool": "update_progress",
+          "arguments": {
+            "content": "- [ ] Create ./never"
+          },
+          "program": "update_progress",
+          "expected_outcome": "completed"
+        },
+        {
+          "program": "touch ./never",
+          "requires_fresh_invocation": true,
+          "expected_outcome": "completed"
         }
       ],
       "expected": {
         "stdout": "",
         "stderr": "",
-        "status": 2,
-        "host_stop": "rejected",
-        "complete": false,
-        "files": {},
-        "absent": [
-          "never"
+        "status": 0,
+        "host_stop": null,
+        "complete": true,
+        "files": {
+          "never": ""
+        },
+        "absent": [],
+        "receipts": [
+          {
+            "operation": "touch",
+            "outcome": "refused",
+            "status": 2
+          },
+          {
+            "operation": "update_progress",
+            "outcome": "completed"
+          },
+          {
+            "operation": "touch",
+            "outcome": "completed",
+            "status": 0
+          }
         ],
-        "receipts": [],
-        "effects": [],
+        "effects": [
+          {
+            "operation": "update_progress",
+            "outcome": "completed"
+          },
+          {
+            "operation": "touch",
+            "outcome": "completed"
+          }
+        ],
         "obligations": [],
         "deliveries": [],
         "recovery": {
@@ -2520,7 +2764,7 @@
           "source_span_required": false,
           "owner_code": "PROGRESS_MISSING"
         },
-        "closeout": "blocked"
+        "closeout": "complete"
       },
       "allowed_partial": [],
       "required_evidence": [
@@ -2612,7 +2856,7 @@
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
+        "stderr": "touch: WRITE_SCOPE_DENIED [WRITE_SCOPE_DENIED]\n",
         "status": 2,
         "host_stop": "rejected",
         "complete": false,
@@ -2627,7 +2871,7 @@
           },
           {
             "operation": "touch",
-            "outcome": "rejected"
+            "outcome": "refused"
           }
         ],
         "effects": [
@@ -2654,6 +2898,7 @@
       "allowed_partial": [],
       "required_evidence": [
         "progress_committed_separately",
+        "denied_path_bound",
         "no_gated_effect",
         "fresh_resubmission_only"
       ]
@@ -3137,12 +3382,7 @@
         "complete": true,
         "files": {},
         "absent": [],
-        "receipts": [
-          {
-            "operation": "true",
-            "outcome": "completed"
-          }
-        ],
+        "receipts": [],
         "effects": [],
         "obligations": [],
         "deliveries": [],
@@ -3247,20 +3487,27 @@
       "turns": [
         {
           "program": "sed -i 's/a/b/' ./input.txt",
-          "expected_outcome": "rejected"
+          "expected_outcome": "rejected",
+          "expected_rejection": "COMMAND_EFFECT_NOT_ALLOWED"
         }
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
-        "status": 2,
+        "stderr": "sed: request: Its bound effect set is not permitted by the active command surface [COMMAND_EFFECT_NOT_ALLOWED]\n",
+        "status": 1,
         "host_stop": "rejected",
         "complete": false,
         "files": {
           "input.txt": "a\n"
         },
         "absent": [],
-        "receipts": [],
+        "receipts": [
+          {
+            "operation": "sed",
+            "outcome": "rejected",
+            "status": 1
+          }
+        ],
         "effects": [],
         "obligations": [],
         "deliveries": [],
@@ -3273,7 +3520,7 @@
           "remedy": "honest_blocked_closeout",
           "effect_certainty_required": true,
           "source_span_required": false,
-          "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+          "owner_code": "COMMAND_EFFECT_NOT_ALLOWED"
         },
         "closeout": "blocked"
       },
