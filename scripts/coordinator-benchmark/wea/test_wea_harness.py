@@ -325,6 +325,46 @@ class TestFailClosedCheckerAndAllControls(unittest.TestCase):
         self.assertEqual(witnesses[0]["event_id"], "ev-1")
         self.assertEqual(witnesses[1]["attempt_index"], 2)
 
+        # Typed approval_decision + checkpoints.args_json.connect_ports + completed invocation_receipts join.
+        cp_witnesses = runner._extract_product_network_witnesses(
+            {
+                "sqlite_records": {
+                    "rows": {
+                        "authz_events": [
+                            {
+                                "id": "ev-ap-1",
+                                "event_seq": 5,
+                                "action": "approval_decision",
+                                "outcome": "allowed",
+                                "tool_name": "loopback_connect",
+                                "detail_json": json.dumps({"checkpoint_id": "cp-1", "tool_call_id": "tc-1"}),
+                            },
+                            {
+                                "id": "ev-ap-2",
+                                "event_seq": 6,
+                                "action": "approval_decision",
+                                "outcome": "denied",
+                                "tool_name": "loopback_connect",
+                                "detail_json": json.dumps({"checkpoint_id": "cp-2", "tool_call_id": "tc-2"}),
+                            },
+                        ],
+                        "checkpoints": [
+                            {"id": "cp-1", "args_json": json.dumps({"connect_ports": [48888]})},
+                            {"id": "cp-2", "args_json": json.dumps({"connect_ports": [49999]})},
+                        ],
+                        "invocation_receipts": [
+                            {"tool_call_id": "tc-1", "status": "completed", "invoked": 1},
+                        ],
+                    }
+                }
+            },
+            allowed_call_id="tc-1",
+            allowed_tool_result={"outcome": "completed"},
+        )
+        self.assertEqual(len(cp_witnesses), 1)
+        self.assertEqual(cp_witnesses[0]["address"], "127.0.0.1:48888")
+        self.assertEqual(cp_witnesses[0]["checkpoint_id"], "cp-1")
+
         # URL echoed in arbitrary command/args text MUST NOT be scraped as a connection witness.
         empty_witnesses = runner._extract_product_network_witnesses(
             {"sqlite_records": {"rows": {"invocation_receipts": [{"tool_call_id": "c2", "status": "completed", "args_json": "{\"command\":\"curl http://127.0.0.1:45555/ping\"}"}]}}},

@@ -516,6 +516,62 @@ def _extract_product_network_witnesses(
                     "source": "authz_events.external_access.endpoints",
                 })
 
+    # Also extract typed loopback_connect approval_decision events joined by checkpoint_id ->
+    # checkpoints.args_json.connect_ports, verified against completed invocation_receipts.
+    if not witnesses:
+        checkpoints_by_id = {
+            str(cp["id"]): cp
+            for cp in (rows.get("checkpoints") or [])
+            if cp.get("id")
+        }
+        completed_calls = {
+            str(r["tool_call_id"])
+            for r in (rows.get("invocation_receipts") or [])
+            if r.get("tool_call_id") and r.get("status") == "completed" and r.get("invoked") == 1
+        }
+        if isinstance(allowed_tool_result, dict) and allowed_tool_result.get("outcome") == "completed" and allowed_call_id:
+            completed_calls.add(allowed_call_id)
+        for ev in rows.get("authz_events") or []:
+            if ev.get("action") != "approval_decision" or ev.get("outcome") != "allowed":
+                continue
+            if ev.get("tool_name") != "loopback_connect":
+                continue
+            raw_detail = ev.get("detail_json") or "{}"
+            try:
+                detail = json.loads(raw_detail) if isinstance(raw_detail, str) else raw_detail
+            except ValueError:
+                continue
+            if not isinstance(detail, dict):
+                continue
+            cp_id = str(detail.get("checkpoint_id") or "")
+            tc_id = str(detail.get("tool_call_id") or "")
+            if not cp_id or not tc_id or tc_id not in completed_calls:
+                continue
+            cp = checkpoints_by_id.get(cp_id)
+            if not cp:
+                continue
+            raw_args = cp.get("args_json") or "{}"
+            try:
+                cp_args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+            except ValueError:
+                continue
+            if not isinstance(cp_args, dict):
+                continue
+            for port in cp_args.get("connect_ports") or ():
+                if isinstance(port, int) and port > 0:
+                    witnesses.append({
+                        "address": f"127.0.0.1:{port}",
+                        "transport": "loopback_connect",
+                        "method": "",
+                        "path": "",
+                        "allowed": True,
+                        "event_id": str(ev.get("id") or ""),
+                        "event_seq": ev.get("event_seq"),
+                        "checkpoint_id": cp_id,
+                        "tool_call_id": tc_id,
+                        "source": "authz_events.approval_decision+checkpoints.connect_ports",
+                    })
+
     if not witnesses and isinstance(allowed_tool_result, dict):
         ea = allowed_tool_result.get("external_access")
         if isinstance(ea, dict):
@@ -952,26 +1008,26 @@ def _ctrl_authority(
                 {"command": "python3 -B -c \"from pathlib import Path; Path('adjacent_allowed.txt').write_text('permitted-inside\\n')\""},
             )
 
-            # 3. Permitted HTTP fixture request with explicit loopback_connect capability request.
+            # 3. Permitted HTTP fixture request scoped to exact port + once approval (never grants refused_ep).
             allowed_call_id, allowed_net_result, _ = _send_tool_call(
                 app,
                 session_id,
                 "command",
                 {
                     "command": f"python3 -B -c \"import urllib.request; print(urllib.request.urlopen('{allowed_ep.base_url}/ping', timeout=5).read().decode())\"",
-                    "capability_request": {"loopback_connect": {}},
+                    "capability_request": {"loopback_connect": {"ports": [allowed_ep.port]}},
                 },
-                checkpoint_policy="approve_chat",
+                checkpoint_policy="approve_once",
             )
 
-            # 4. Refused HTTP fixture request (reject checkpoint -> MUST never arrive at refused_ep).
+            # 4. Refused HTTP fixture request scoped to refused_ep.port (reject checkpoint -> 0 arrivals).
             _, refused_net_result, _ = _send_tool_call(
                 app,
                 session_id,
                 "command",
                 {
                     "command": f"python3 -B -c \"import urllib.request; urllib.request.urlopen('{refused_ep.base_url}/ping', timeout=3).read()\"",
-                    "capability_request": {"loopback_connect": {}},
+                    "capability_request": {"loopback_connect": {"ports": [refused_ep.port]}},
                 },
                 checkpoint_policy="reject",
             )
