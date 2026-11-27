@@ -227,8 +227,14 @@ func (e *turnContextAssembler) prepareCoordinatorBoard(
 			return frame, "", err
 		}
 		machine := frame.Machine
+		postureRules := frame.PostureRules
+		projectRootCount := frame.ProjectRootCount
+		overlayRootPaths := frame.OverlayRootPaths
 		frame = refreshed
 		inject.StampMachine(&frame, machine)
+		frame.PostureRules = postureRules
+		frame.ProjectRootCount = projectRootCount
+		frame.OverlayRootPaths = overlayRootPaths
 		if frame.RunContext.RunID == run.RunID && frame.RunContext.CurrentPhase == run.CurrentPhase {
 			break
 		}
