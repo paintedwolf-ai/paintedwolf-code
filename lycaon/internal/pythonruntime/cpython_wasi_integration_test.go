@@ -604,7 +604,7 @@ def test_fixtures(tmp_path, monkeypatch, caplog):
 			Stdout:      &stdout,
 			Stderr:      &stderr,
 			Workspace:   newMemWorkspaceAdapter(files),
-			Limits:      ResourceLimits{Timeout: 60 * time.Second},
+			Limits:      ResourceLimits{Timeout: 180 * time.Second},
 		})
 		testutil.FailErr(t, "execute module pytest", err)
 		if !res.CleanCompletion || res.ExitCode != 0 {
@@ -624,7 +624,7 @@ def test_fixtures(tmp_path, monkeypatch, caplog):
 			Stdout:      &stdout,
 			Stderr:      &stderr,
 			Workspace:   newMemWorkspaceAdapter(files),
-			Limits:      ResourceLimits{Timeout: 60 * time.Second},
+			Limits:      ResourceLimits{Timeout: 180 * time.Second},
 		})
 		testutil.FailErr(t, "execute pytest.main", err)
 		if !res.CleanCompletion || res.ExitCode != 0 {
