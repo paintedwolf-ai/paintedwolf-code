@@ -141,6 +141,31 @@ class TestCF09Presentation(unittest.TestCase):
         )
         self.assertEqual(verify_presentation_observation(good).verdict, "PASS")
 
+    def test_verify_returns_missing_observation_when_uncorrelated_or_unready(self) -> None:
+        uncorrelated = PresentationObservation(
+            surface="search_stage",
+            state="failed",
+            platform="linux",
+            native_window=True,
+            api_response={"issues": [{"executor": "code", "reason": "catalog_failed", "count": 1}]},
+            coverage_note_visible=False,
+            request_correlated=False,
+            workspace_ready=True,
+        )
+        self.assertEqual(verify_presentation_observation(uncorrelated).verdict, "MISSING_OBSERVATION")
+
+        unready = PresentationObservation(
+            surface="search_stage",
+            state="failed",
+            platform="linux",
+            native_window=True,
+            api_response={"issues": [{"executor": "code", "reason": "catalog_failed", "count": 1}]},
+            coverage_note_visible=False,
+            request_correlated=True,
+            workspace_ready=False,
+        )
+        self.assertEqual(verify_presentation_observation(unready).verdict, "MISSING_OBSERVATION")
+
     def test_write_presentation_evidence_writes_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "CF09"

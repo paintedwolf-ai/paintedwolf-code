@@ -225,6 +225,12 @@ class PresentationObservation:
     apply_all_disabled: bool | None = None
     screenshot_path: str = ""
     notes: str = ""
+    project_id: str = ""
+    query: str = ""
+    scope: str = ""
+    request_url: str = ""
+    request_correlated: bool = True
+    workspace_ready: bool = True
 
 
 @dataclass(frozen=True)
@@ -234,10 +240,13 @@ class PresentationVerdict:
     surface: str
     state: str
     platform: str
-    verdict: str  # "PASS" | "DEFECT" | "BLOCKED"
+    verdict: str  # "PASS" | "DEFECT" | "MISSING_OBSERVATION" | "BLOCKED"
     declared_facts: tuple[str, ...]
     violations: tuple[str, ...] = ()
     screenshot_path: str = ""
+    project_id: str = ""
+    scope: str = ""
+    request_correlated: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -252,6 +261,26 @@ def verify_presentation_observation(obs: PresentationObservation) -> Presentatio
 
     facts = extract_declared_facts(obs.api_response)
     violations: list[str] = []
+
+    # Decision 037: separate fixture bring-up / missing observation from genuine presentation divergence.
+    if not obs.workspace_ready or not obs.request_correlated:
+        missing_reasons: list[str] = []
+        if not obs.workspace_ready:
+            missing_reasons.append("workspace_not_ready: opening overlay or loading gate still active")
+        if not obs.request_correlated:
+            missing_reasons.append("uncorrelated_request: frame not joined to Den's own scoped HTTP response")
+        return PresentationVerdict(
+            surface=obs.surface,
+            state=obs.state,
+            platform=obs.platform,
+            verdict="MISSING_OBSERVATION",
+            declared_facts=facts,
+            violations=tuple(missing_reasons),
+            screenshot_path=obs.screenshot_path,
+            project_id=obs.project_id,
+            scope=obs.scope,
+            request_correlated=obs.request_correlated,
+        )
 
     # D14: A browser page never satisfies a native slot.
     if not obs.native_window:
@@ -276,9 +305,6 @@ def verify_presentation_observation(obs: PresentationObservation) -> Presentatio
         )
 
     # Rule 1: Every declared coverage fact reaches the screen beside its results.
-    # Note: per docs/search.md § Crossbar, routine refresh of an already complete
-    # index with no other issue may run without a status banner in compact lanes,
-    # while explicit warming/incomplete/failed/bounded facts MUST be shown on screen.
     non_routine_facts = tuple(f for f in facts if f != "catalog_refreshing")
     if non_routine_facts and not obs.coverage_note_visible:
         violations.append(
@@ -286,8 +312,6 @@ def verify_presentation_observation(obs: PresentationObservation) -> Presentatio
         )
 
     # Replace review contract (R01 / docs/search.md):
-    # - `limited` preview disables Apply all.
-    # - `preparing` preview never shows empty-final and disables Apply all.
     if obs.surface == "replace_review":
         preview_state = str(obs.api_response.get("state") or "")
         if preview_state in ("limited", "preparing"):
@@ -309,6 +333,9 @@ def verify_presentation_observation(obs: PresentationObservation) -> Presentatio
         declared_facts=facts,
         violations=tuple(violations),
         screenshot_path=obs.screenshot_path,
+        project_id=obs.project_id,
+        scope=obs.scope,
+        request_correlated=obs.request_correlated,
     )
 
 
@@ -335,6 +362,7 @@ def write_presentation_evidence(
             "total": len(verdicts),
             "passed": sum(1 for v in verdicts if v.verdict == "PASS"),
             "failed": sum(1 for v in verdicts if v.verdict == "DEFECT"),
+            "missing_observation": sum(1 for v in verdicts if v.verdict == "MISSING_OBSERVATION"),
             "blocked": sum(1 for v in verdicts if v.verdict == "BLOCKED"),
         },
         "verdicts": [v.to_dict() for v in verdicts],

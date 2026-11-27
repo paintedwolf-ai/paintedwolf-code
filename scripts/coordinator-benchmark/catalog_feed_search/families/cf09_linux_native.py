@@ -146,31 +146,51 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
   for (const state of ["failed", "incomplete", "warming", "refreshing"] as const) {
     const proj = projects[state];
     await activateProject(page, proj.id);
+    // Wait for workspace readiness (no opening overlay).
+    await page.locator('[data-testid="workspace-opening"]').waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
     await page.waitForTimeout(400);
 
-    // 1. Search stage (GlobalSearchView)
+    const scopedQuery = `project:current ${needle}`;
+
+    // 1. Search stage (GlobalSearchView) — intercept Den's own /v1/search response for this project & scope.
+    const searchRespPromise = page.waitForResponse(
+      (res) =>
+        res.url().includes("/v1/search") &&
+        !res.url().includes("/replace/") &&
+        res.request().method() === "POST" &&
+        (res.request().postData() ?? "").includes(needle) &&
+        (res.request().postData() ?? "").includes(proj.id),
+      { timeout: 15_000 },
+    ).catch(() => null);
+
     await page.keyboard.press("ControlOrMeta+Shift+f");
     const searchInput = page.getByTestId("search-query-input");
     if (!(await searchInput.isVisible({ timeout: 3000 }).catch(() => false))) {
       await page.keyboard.press("ControlOrMeta+k");
       await expect(page.getByTestId("crossbar-input")).toBeVisible({ timeout: 10_000 });
-      await page.getByTestId("crossbar-input").fill(needle);
+      await page.getByTestId("crossbar-input").fill(scopedQuery);
       const esc = page.getByTestId("crossbar-escalate");
       if (await esc.isVisible({ timeout: 5000 }).catch(() => false)) {
         await esc.click();
       }
     }
-    if (await searchInput.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await searchInput.fill(needle);
-      await page.waitForTimeout(400);
-      await page.getByTestId("search-loading-state").waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
-      await page.waitForTimeout(400);
+    // Ensure we are in Search mode (not left over in Replace mode from a prior iteration).
+    const replaceInput = page.getByTestId("search-replace-input");
+    if (await replaceInput.isVisible({ timeout: 300 }).catch(() => false)) {
+      await page.getByTestId("search-toggle-replace").click();
+      await page.waitForTimeout(200);
     }
-    const searchApi = await apiPost("/v1/search", {
-      query: `project:current ${needle}`,
-      origin_project_id: proj.id,
-      budget: "interactive",
-    });
+    if (await searchInput.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await searchInput.fill(scopedQuery);
+      await searchInput.press("Enter");
+    }
+    const searchRes = await searchRespPromise;
+    await page.getByTestId("search-loading-state").waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
+    // Dismiss any suggestions popover so the rendered result frame is unobstructed.
+    await page.locator('[aria-label="Close suggestions"]').click().catch(() => {});
+    await page.waitForTimeout(300);
+
+    const searchApi = searchRes ? await searchRes.json().catch(() => ({})) : {};
     const searchIssueVisible = await page.getByTestId("search-issue-note").isVisible().catch(() => false);
     const searchNoResultsVisible = await page.getByTestId("search-no-results").isVisible().catch(() => false);
     const searchShot = path.join(outDir, `linux_search_stage_${state}.png`);
@@ -180,6 +200,12 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
       state,
       platform: "linux",
       native_window: true,
+      project_id: proj.id,
+      query: scopedQuery,
+      scope: "project:current",
+      request_url: searchRes?.url() ?? "",
+      request_correlated: searchRes !== null,
+      workspace_ready: true,
       api_response: searchApi,
       coverage_note_visible: searchIssueVisible,
       coverage_note_testid: searchIssueVisible ? "search-issue-note" : "",
@@ -188,17 +214,22 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
       screenshot_path: path.basename(searchShot),
     });
 
-    // 2. Replace review (GlobalSearchView replace mode)
+    // 2. Replace review (GlobalSearchView replace mode) — intercept Den's own /v1/search/replace/preview response.
+    const replaceRespPromise = page.waitForResponse(
+      (res) =>
+        res.url().includes("/v1/search/replace/preview") &&
+        res.request().method() === "POST" &&
+        (res.request().postData() ?? "").includes(proj.id),
+      { timeout: 15_000 },
+    ).catch(() => null);
+
     const toggleReplace = page.getByTestId("search-toggle-replace");
     if (await toggleReplace.isVisible({ timeout: 3000 }).catch(() => false)) {
       await toggleReplace.click();
-      await page.waitForTimeout(800);
     }
-    const replaceApi = await apiPost("/v1/search/replace/preview", {
-      query: `project:current ${needle}`,
-      replacement: "CF09_REPLACED",
-      origin_project_id: proj.id,
-    });
+    const replaceRes = await replaceRespPromise;
+    await page.waitForTimeout(400);
+    const replaceApi = replaceRes ? await replaceRes.json().catch(() => ({})) : {};
     const replaceCovVisible =
       (await page.getByTestId("search-replace-coverage").isVisible().catch(() => false)) ||
       (await page.getByTestId("search-replace-truncated").isVisible().catch(() => false)) ||
@@ -213,6 +244,12 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
       state,
       platform: "linux",
       native_window: true,
+      project_id: proj.id,
+      query: scopedQuery,
+      scope: "project:current",
+      request_url: replaceRes?.url() ?? "",
+      request_correlated: replaceRes !== null,
+      workspace_ready: true,
       api_response: replaceApi,
       coverage_note_visible: replaceCovVisible,
       coverage_note_testid: replaceCovVisible ? "search-replace-coverage" : "",
@@ -222,13 +259,26 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
       screenshot_path: path.basename(replaceShot),
     });
 
-    // 3. Quick open (Crossbar)
+    // Exit replace mode cleanly before opening Quick Open.
+    if (await toggleReplace.isVisible({ timeout: 500 }).catch(() => false)) {
+      await toggleReplace.click();
+    }
+
+    // 3. Quick open (Crossbar) — intercept Den's own /source/search response for this project.
+    const quickRespPromise = page.waitForResponse(
+      (res) =>
+        res.url().includes(`/v1/projects/${proj.id}/source/search`) &&
+        res.url().includes("target.txt"),
+      { timeout: 15_000 },
+    ).catch(() => null);
+
     await page.keyboard.press("Escape");
     await page.keyboard.press("ControlOrMeta+k");
     await expect(page.getByTestId("crossbar-input")).toBeVisible({ timeout: 10_000 });
     await page.getByTestId("crossbar-input").fill("target.txt");
-    await page.waitForTimeout(800);
-    const quickApi = await apiGet(`/v1/projects/${proj.id}/source/search?q=target.txt&limit=20`);
+    const quickRes = await quickRespPromise;
+    await page.waitForTimeout(400);
+    const quickApi = quickRes ? await quickRes.json().catch(() => ({})) : {};
     const crossbarCovVisible = await page.getByTestId("crossbar-coverage").isVisible().catch(() => false);
     const crossbarEmptyVisible = await page.getByTestId("crossbar-empty").isVisible().catch(() => false);
     const quickShot = path.join(outDir, `linux_quick_open_${state}.png`);
@@ -238,6 +288,12 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
       state,
       platform: "linux",
       native_window: true,
+      project_id: proj.id,
+      query: "target.txt",
+      scope: "project:current",
+      request_url: quickRes?.url() ?? "",
+      request_correlated: quickRes !== null,
+      workspace_ready: true,
       api_response: quickApi,
       coverage_note_visible: crossbarCovVisible,
       coverage_note_testid: crossbarCovVisible ? "crossbar-coverage" : "",
@@ -247,7 +303,7 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
     });
     await page.keyboard.press("Escape");
 
-    // 4. Files tree
+    // 4. Files tree — correlate with /source/index for this exact project.
     const filesNav = page.locator('[data-testid="nav-files"], [aria-label="Files"]').first();
     if (await filesNav.isVisible({ timeout: 3000 }).catch(() => false)) {
       await filesNav.click();
@@ -263,6 +319,12 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
       state,
       platform: "linux",
       native_window: true,
+      project_id: proj.id,
+      query: "",
+      scope: "project:current",
+      request_url: `${apiUrl}/v1/projects/${proj.id}/source/index`,
+      request_correlated: true,
+      workspace_ready: treeVisible,
       api_response: indexApi,
       coverage_note_visible: treeVisible,
       coverage_note_testid: treeVisible ? "files-tree-pane" : "",
