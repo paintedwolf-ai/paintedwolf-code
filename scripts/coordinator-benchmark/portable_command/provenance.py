@@ -4,6 +4,7 @@ import json
 import os
 import pathlib
 import platform
+import shlex
 import subprocess
 import uuid
 import smoke
@@ -36,18 +37,44 @@ def resolve_engine_manifest(engine_manifest=None):
     return pathlib.Path(env_manifest).resolve() if env_manifest else None
 
 
-def make_app_factory(engine_bin=None, base_factory=smoke.Application):
-    """Wrap smoke.Application so an explicit engine binary or PW_ENGINE_BIN is honored."""
+def materialize_helpers(helpers, helpers_dir):
+    """Materialize fixture helper executables into a per-case bin directory."""
+    if not helpers:
+        return None
+    dest = pathlib.Path(helpers_dir).resolve()
+    dest.mkdir(parents=True, exist_ok=True)
+    for name, spec in helpers.items():
+        if not name or '/' in name or '\\' in name or name in {'.', '..'}:
+            raise ValueError('invalid helper executable name: ' + str(name))
+        out = shlex.quote(str(spec.get('stdout') or ''))
+        err = shlex.quote(str(spec.get('stderr') or ''))
+        code = int(spec.get('status', 0))
+        script = dest / name
+        script.write_text(f"#!/bin/sh\nprintf '%s' {out}\nprintf '%s' {err} >&2\nexit {code}\n")
+        script.chmod(0o755)
+    return dest
+
+
+def make_app_factory(engine_bin=None, base_factory=smoke.Application, helpers_dir=None):
+    """Wrap smoke.Application so an explicit engine binary, PW_ENGINE_BIN, or helper PATH is honored."""
     if base_factory is not smoke.Application:
         return base_factory
     binary, _ = resolve_engine_binary(ROOT, engine_bin)
     def factory(directory):
         orig = smoke.engine_path
+        orig_path = os.environ.get('PATH')
         smoke.engine_path = lambda _root: binary
+        if helpers_dir is not None:
+            os.environ['PATH'] = str(helpers_dir) + (os.pathsep + orig_path if orig_path else '')
         try:
             return base_factory(directory)
         finally:
             smoke.engine_path = orig
+            if helpers_dir is not None:
+                if orig_path is None:
+                    os.environ.pop('PATH', None)
+                else:
+                    os.environ['PATH'] = orig_path
     return factory
 
 

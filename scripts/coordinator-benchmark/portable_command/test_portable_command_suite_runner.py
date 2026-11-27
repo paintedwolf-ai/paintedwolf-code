@@ -309,7 +309,8 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
             db_path = root / 'store.db'
             create_audit_db(db_path)
             db = sqlite3.connect(db_path)
-            db.execute("CREATE TABLE session_progress (session_id TEXT PRIMARY KEY, document_version INTEGER)")
+            db.execute("CREATE TABLE session_progress (session_id TEXT PRIMARY KEY, document_version INTEGER, content TEXT)")
+            db.execute("INSERT INTO session_progress VALUES ('sess1234', 1, '')")
             db.execute("INSERT INTO invocation_receipts VALUES ('rcpt-syn','sess1234','call-1','command','processes','rejected',0)")
             raw_res = {
                 'outcome': 'rejected', 'codes': ['COMMAND_SYNTAX_INVALID'], 'content': 'Rejected: syntax',
@@ -337,7 +338,7 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
             self.assertTrue(obs['facts']['zero_progress_effects'] and obs['facts']['zero_program_effects'] and obs['facts']['syntax_span'])
             # Independent session_progress mutation witness breaks zero_progress_effects.
             db = sqlite3.connect(db_path)
-            db.execute("INSERT INTO session_progress VALUES ('sess1234', 1)")
+            db.execute("UPDATE session_progress SET content='- [ ] Mutated' WHERE session_id='sess1234'")
             db.commit()
             db.close()
             obs2, _ = observe.build_observation(

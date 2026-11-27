@@ -16,6 +16,7 @@ from portable_command.artifacts import project_hashes
 from portable_command.contracts import DIRECTORY, ROOT, load_suite, materialize
 from portable_command.grading import grade_case
 from portable_command.observe import build_observation, file_sha256, source_identity
+from portable_command.provenance import materialize_helpers
 from portable_command.reporting import inject_drafts, make_app_factory
 from progress import save
 
@@ -213,7 +214,8 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
     identity = source_identity(ROOT, profile=case['profile'], engine_bin=engine_bin, engine_manifest=engine_manifest)
     save(out_dir / 'attempt.json', {'status': 'running', 'case_id': case['id'], 'identity': identity, 'revision_aliases': revision_aliases})
 
-    application = make_app_factory(engine_bin, app_factory)(app_dir)
+    helpers_dir = materialize_helpers(case['setup'].get('helpers'), out_dir / 'helpers')
+    application = make_app_factory(engine_bin, app_factory, helpers_dir=helpers_dir)(app_dir)
     sidecar_path = app_dir / 'sidecar.log'
     sse, prelude_records, turn_records, draft_bindings = None, [], [], {}
     drafts_ok, session_id, pre_prompt_lines, post_tool_lines = True, None, None, None
@@ -272,7 +274,8 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
         observation, audit_bundle = build_observation(
             case, session_id=session_id, identity=identity, project_dir=project_dir, db_path=app_dir / 'store.db',
             sidecar_log=sidecar_path, turn_records=turn_records, prelude_records=prelude_records,
-            sidecar_window=window, extra_gaps=extra_gaps, baseline_hashes=baseline_hashes, session_surface=session_surface,
+            sidecar_window=window, extra_gaps=extra_gaps, baseline_hashes=baseline_hashes,
+            session_surface=session_surface, draft_bindings=draft_bindings,
         )
         grade = grade_case(case, observation, project_dir, identity)
     except Exception as exc:
