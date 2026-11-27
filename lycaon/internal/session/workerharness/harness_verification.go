@@ -72,22 +72,33 @@ func (m *Service) Verify(ctx context.Context, child *api.Session, job *api.Worke
 		}
 		defer func() {
 			status := api.InvocationStatusCompleted
-			if retErr != nil {
-				if ctx.Err() != nil {
-					status = api.InvocationStatusInterrupted
-				} else {
-					status = api.InvocationStatusError
-				}
-			}
+			evidenceKind := "source_run"
+			var evidenceRef string
+			var failure *api.InvocationFailure
 			var rev, rootDigest, verdict string
 			if tctx.Effects.Out != nil && tctx.Effects.Out.SourceRun != nil {
 				rev = tctx.Effects.Out.SourceRun.SourceRevision
 				rootDigest = tctx.Effects.Out.SourceRun.SourceRootDigest
 				verdict = tctx.Effects.Out.SourceRun.Verdict
+				evidenceRef = tctx.Effects.Out.SourceRun.CheckID
+			}
+			if retErr != nil {
+				if ctx.Err() != nil {
+					status = api.InvocationStatusInterrupted
+					evidenceKind = "interrupted"
+					failure = &api.InvocationFailure{Code: "TOOL_OWNER_INTERRUPTED", Class: "interrupted"}
+				} else {
+					status = api.InvocationStatusError
+					evidenceKind = "error"
+					failure = &api.InvocationFailure{Code: "HARNESS_VERIFY_FAILED", Class: "execution_error"}
+				}
 			}
 			if _, settleErr := m.invocations.Settle(context.WithoutCancel(ctx), receipt.ID, invocation.Settlement{
 				Status:           status,
 				Invoked:          true,
+				EvidenceKind:     evidenceKind,
+				EvidenceRef:      evidenceRef,
+				Failure:          failure,
 				SourceRevision:   rev,
 				SourceRootDigest: rootDigest,
 				SourceVerdict:    verdict,
