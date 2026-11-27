@@ -1,29 +1,29 @@
 package cmddiag
 
 import (
-	"context"
 	"slices"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 )
 
-// Rule IDs for Workers, Edits, and Authority (WEA) ordinary-development
+// Independent RuleIDs for Workers, Edits, and Authority (WEA) ordinary-development
 // contradiction diagnostics (TB11).
 const (
 	RuleWEALandedPathMismatch        RuleID = "wea_landed_path_mismatch"
-	RuleWEAEditBasisOrAuthorMismatch RuleID = "wea_edit_basis_or_author_mismatch"
+	RuleWEAEditStaleReadBasis        RuleID = "wea_edit_stale_read_basis"
+	RuleWEAEditWrongAuthor           RuleID = "wea_edit_wrong_author"
 	RuleWEAUnauthorizedEffect        RuleID = "wea_unauthorized_effect"
 	RuleWEAUnrecordedOrRefusedEgress RuleID = "wea_unrecorded_or_refused_egress"
 	RuleWEASecretCanaryLeak          RuleID = "wea_secret_canary_leak"
 )
 
 // WEAObservation is an immutable snapshot of typed durable facts across the
-// Workers, Edits, and Authority tracks, joined strictly by typed identities
-// (never prose).
+// Workers, Edits, and Authority tracks, joined strictly by stable identities
+// and event ordering (never prose).
 type WEAObservation struct {
 	SessionID       string `json:"session_id,omitempty"`
+	ProjectID       string `json:"project_id,omitempty"`
+	DeviceID        string `json:"device_id,omitempty"`
 	WorkerID        string `json:"worker_id,omitempty"`
 	JobID           string `json:"job_id,omitempty"`
 	ResultHandle    string `json:"result_handle,omitempty"`
@@ -139,26 +139,35 @@ type WEAFileVersionFact struct {
 type WEAApprovalPlanFact struct {
 	ApprovalPlanID string `json:"approval_plan_id"`
 	SessionID      string `json:"session_id,omitempty"`
+	ProjectID      string `json:"project_id,omitempty"`
 	InvocationID   string `json:"invocation_id,omitempty"`
 	ActionKind     string `json:"action_kind,omitempty"`
 	TargetRef      string `json:"target_ref,omitempty"`
 	ActionDigest   string `json:"action_digest,omitempty"`
+	DecisionSeq    int64  `json:"decision_seq,omitempty"`
 	Approved       bool   `json:"approved"`
 	Refused        bool   `json:"refused,omitempty"`
+	Settled        bool   `json:"settled,omitempty"`
 	SourceRef      string `json:"source_ref,omitempty"`
 }
 
-// WEAGrantFact records an installed reusable authority grant.
+// WEAGrantFact records an installed reusable or exact-action authority grant.
+// Scope must be one of "exact_action", "chat", "project", or "device".
 type WEAGrantFact struct {
 	GrantID      string `json:"grant_id"`
 	SessionID    string `json:"session_id,omitempty"`
-	Scope        string `json:"scope,omitempty"` // "exact", "chat", "project", "device"
+	ProjectID    string `json:"project_id,omitempty"`
+	DeviceID     string `json:"device_id,omitempty"`
+	InvocationID string `json:"invocation_id,omitempty"`
+	Scope        string `json:"scope,omitempty"`
 	ActionKind   string `json:"action_kind,omitempty"`
 	TargetRef    string `json:"target_ref,omitempty"`
 	ActionDigest string `json:"action_digest,omitempty"`
+	GrantedSeq   int64  `json:"granted_seq,omitempty"`
 	Active       bool   `json:"active"`
 	Revoked      bool   `json:"revoked,omitempty"`
 	Expired      bool   `json:"expired,omitempty"`
+	Settled      bool   `json:"settled,omitempty"`
 	SourceRef    string `json:"source_ref,omitempty"`
 }
 
@@ -166,6 +175,8 @@ type WEAGrantFact struct {
 type WEAAuthorityEffectFact struct {
 	EffectID          string `json:"effect_id"`
 	SessionID         string `json:"session_id,omitempty"`
+	ProjectID         string `json:"project_id,omitempty"`
+	DeviceID          string `json:"device_id,omitempty"`
 	WorkerID          string `json:"worker_id,omitempty"`
 	InvocationID      string `json:"invocation_id,omitempty"`
 	ActionKind        string `json:"action_kind,omitempty"`
@@ -173,36 +184,47 @@ type WEAAuthorityEffectFact struct {
 	ActionDigest      string `json:"action_digest,omitempty"`
 	ApprovalPlanID    string `json:"approval_plan_id,omitempty"`
 	GrantID           string `json:"grant_id,omitempty"`
+	EventSeq          int64  `json:"event_seq,omitempty"`
 	RequiresAuthority bool   `json:"requires_authority"`
 	Executed          bool   `json:"executed"`
 	Refused           bool   `json:"refused,omitempty"`
 	RefusalCode       string `json:"refusal_code,omitempty"`
+	Settled           bool   `json:"settled,omitempty"`
 	RetentionPruned   bool   `json:"retention_pruned,omitempty"`
 	SourceRef         string `json:"source_ref,omitempty"`
 }
 
 // WEAEgressDecisionFact records a product-side egress gate decision.
+// GrantScope governs reuse: empty or "exact_action" binds strictly to
+// (SessionID, InvocationID, DestinationRef) with cardinality MaxUses (default 1);
+// "chat", "project", and "device" bind to their respective owning identities.
 type WEAEgressDecisionFact struct {
-	DecisionID      string `json:"decision_id,omitempty"`
-	SessionID       string `json:"session_id,omitempty"`
-	WorkerID        string `json:"worker_id,omitempty"`
-	InvocationID    string `json:"invocation_id,omitempty"`
-	DestinationRef  string `json:"destination_ref"`
-	Admitted        bool   `json:"admitted"`
-	Refused         bool   `json:"refused,omitempty"`
-	RefusalCode     string `json:"refusal_code,omitempty"`
-	DecisionOrdinal int64  `json:"decision_ordinal,omitempty"`
-	SourceRef       string `json:"source_ref,omitempty"`
+	DecisionID     string `json:"decision_id,omitempty"`
+	SessionID      string `json:"session_id,omitempty"`
+	ProjectID      string `json:"project_id,omitempty"`
+	DeviceID       string `json:"device_id,omitempty"`
+	WorkerID       string `json:"worker_id,omitempty"`
+	InvocationID   string `json:"invocation_id,omitempty"`
+	DestinationRef string `json:"destination_ref"`
+	GrantScope     string `json:"grant_scope,omitempty"`
+	MaxUses        int    `json:"max_uses,omitempty"`
+	Admitted       bool   `json:"admitted"`
+	Refused        bool   `json:"refused,omitempty"`
+	RefusalCode    string `json:"refusal_code,omitempty"`
+	DecisionSeq    int64  `json:"decision_seq,omitempty"`
+	SourceRef      string `json:"source_ref,omitempty"`
 }
 
 // WEAEgressConnectionFact records a host/fixture-observed egress connection.
 type WEAEgressConnectionFact struct {
 	ConnectionID    string `json:"connection_id,omitempty"`
 	SessionID       string `json:"session_id,omitempty"`
+	ProjectID       string `json:"project_id,omitempty"`
+	DeviceID        string `json:"device_id,omitempty"`
 	WorkerID        string `json:"worker_id,omitempty"`
 	InvocationID    string `json:"invocation_id,omitempty"`
 	DestinationRef  string `json:"destination_ref"`
-	ObservedOrdinal int64  `json:"observed_ordinal,omitempty"`
+	ObservedSeq     int64  `json:"observed_seq,omitempty"`
 	Settled         bool   `json:"settled"`
 	RetentionPruned bool   `json:"retention_pruned,omitempty"`
 	SourceRef       string `json:"source_ref,omitempty"`
@@ -236,297 +258,27 @@ type WEARecordedArtifactFact struct {
 	SourceRef             string `json:"source_ref,omitempty"`
 }
 
-// WEATask is a deferred bounded fetch task for WEA observations.
-type WEATask struct {
-	SessionID string
-	ScopeKey  string
-	Fetch     func(ctx context.Context) (WEAObservation, error)
+// WrapWEAObservation wraps a WEAObservation in a standard cmddiag Observation
+// so it flows through the existing Observer lifecycle, queue, deduplication,
+// sanitization, and retention pipeline.
+func WrapWEAObservation(wea WEAObservation) Observation {
+	copyWEA := wea
+	return Observation{
+		SessionID:  wea.SessionID,
+		ProgramID:  weaScopeKey(wea),
+		ToolCallID: wea.InvocationID,
+		WEA:        &copyWEA,
+	}
 }
 
-// WEAConfig configures an opt-in bounded asynchronous WEA diagnostic observer.
-type WEAConfig struct {
-	Enabled       bool
-	QueueCapacity int
-	TaskTimeout   time.Duration
-	CloseGrace    time.Duration
-	MaxFindings   int
-	Sink          func(Finding)
-	Now           func() time.Time
-}
-
-// WEAReport is a bounded, deduplicated local summary of emitted WEA findings.
-type WEAReport struct {
-	SchemaVersion int       `json:"schema_version"`
-	Findings      []Finding `json:"findings,omitempty"`
-	Stats         Stats     `json:"stats"`
-}
-
-type weaWorkItem struct {
-	obs  *WEAObservation
-	task *WEATask
-}
-
-// WEAObserver evaluates WEA observations asynchronously on a bounded queue.
-// When disabled, it starts no goroutines, allocates no queue or dedup tables,
-// and Submit/SubmitTask are O(1) no-ops.
-type WEAObserver struct {
-	enabled     bool
-	capacity    int
-	taskTimeout time.Duration
-	closeGrace  time.Duration
-	maxFindings int
-	sink        func(Finding)
-	now         func() time.Time
-
-	workerCtx    context.Context
-	workerCancel context.CancelFunc
-
-	mu               sync.RWMutex
-	closed           bool
-	queue            chan weaWorkItem
-	wg               sync.WaitGroup
-	closeOnce        sync.Once
-	seen             map[dedupKey]int
-	findingsMu       sync.Mutex
-	findings         []Finding
-	enqueued         atomic.Int64
-	dropped          atomic.Int64
-	emitted          atomic.Int64
-	deduplicated     atomic.Int64
-	reportedDropMark atomic.Int64
-}
-
-// NewWEAObserver creates a bounded opt-in WEA observer. When cfg.Enabled is
-// false, no background goroutine, queue, or map is allocated.
-func NewWEAObserver(cfg WEAConfig) *WEAObserver {
-	if !cfg.Enabled {
-		return &WEAObserver{enabled: false}
-	}
-	capacity := cfg.QueueCapacity
-	if capacity <= 0 {
-		capacity = DefaultQueueCapacity
-	}
-	timeout := cfg.TaskTimeout
-	if timeout <= 0 {
-		timeout = DefaultTaskTimeout
-	}
-	grace := cfg.CloseGrace
-	if grace <= 0 {
-		grace = DefaultCloseGrace
-	}
-	maxFindings := cfg.MaxFindings
-	if maxFindings <= 0 {
-		maxFindings = DefaultMaxDedupEntries
-	}
-	nowFn := cfg.Now
-	if nowFn == nil {
-		nowFn = func() time.Time { return time.Now().UTC() }
-	}
-	workerCtx, workerCancel := context.WithCancel(context.Background())
-	obs := &WEAObserver{
-		enabled:      true,
-		capacity:     capacity,
-		taskTimeout:  timeout,
-		closeGrace:   grace,
-		maxFindings:  maxFindings,
-		sink:         cfg.Sink,
-		now:          nowFn,
-		workerCtx:    workerCtx,
-		workerCancel: workerCancel,
-		queue:        make(chan weaWorkItem, capacity),
-		seen:         make(map[dedupKey]int),
-	}
-	obs.wg.Add(1)
-	go obs.run()
-	return obs
-}
-
-// Enabled reports whether this WEA observer is active.
-func (o *WEAObserver) Enabled() bool {
-	return o != nil && o.enabled
-}
-
-// Submit enqueues an immutable WEA observation without blocking.
-// When disabled, this is an O(1), zero-allocation no-op.
-func (o *WEAObserver) Submit(obs WEAObservation) bool {
-	if o == nil || !o.enabled {
+// ObserveWEA submits a WEAObservation to the active cmddiag Observer when
+// opt-in diagnostics are enabled. When disabled, it is a zero-allocation no-op.
+func ObserveWEA(wea WEAObservation) bool {
+	target := activeObserver()
+	if target == nil || !target.enabled {
 		return false
 	}
-	copyObs := obs
-	return o.enqueue(weaWorkItem{obs: &copyObs})
-}
-
-// SubmitTask enqueues a deferred fetch task without blocking.
-// When disabled or saturated, task.Fetch is never called.
-func (o *WEAObserver) SubmitTask(task WEATask) bool {
-	if o == nil || !o.enabled || task.Fetch == nil {
-		return false
-	}
-	copyTask := task
-	return o.enqueue(weaWorkItem{task: &copyTask})
-}
-
-func (o *WEAObserver) enqueue(item weaWorkItem) bool {
-	if o == nil || !o.enabled {
-		return false
-	}
-	o.mu.RLock()
-	defer o.mu.RUnlock()
-	if o.closed {
-		return false
-	}
-	select {
-	case o.queue <- item:
-		o.enqueued.Add(1)
-		return true
-	default:
-		o.dropped.Add(1)
-		return false
-	}
-}
-
-// Stats returns the current enqueued, dropped, emitted, and deduplicated counts.
-func (o *WEAObserver) Stats() Stats {
-	if o == nil {
-		return Stats{}
-	}
-	return Stats{
-		Enqueued:     o.enqueued.Load(),
-		Dropped:      o.dropped.Load(),
-		Emitted:      o.emitted.Load(),
-		Deduplicated: o.deduplicated.Load(),
-	}
-}
-
-// Report returns a bounded, deduplicated snapshot of emitted findings and stats.
-func (o *WEAObserver) Report() WEAReport {
-	if o == nil || !o.enabled {
-		return WEAReport{SchemaVersion: SchemaVersion}
-	}
-	o.findingsMu.Lock()
-	copied := make([]Finding, len(o.findings))
-	copy(copied, o.findings)
-	o.findingsMu.Unlock()
-	return WEAReport{
-		SchemaVersion: SchemaVersion,
-		Findings:      copied,
-		Stats:         o.Stats(),
-	}
-}
-
-// Close drains queued observations and stops the background worker.
-func (o *WEAObserver) Close() {
-	if o == nil || !o.enabled {
-		return
-	}
-	o.closeOnce.Do(func() {
-		o.mu.Lock()
-		o.closed = true
-		close(o.queue)
-		o.mu.Unlock()
-		done := make(chan struct{})
-		go func() {
-			o.wg.Wait()
-			close(done)
-		}()
-		timer := time.NewTimer(o.closeGrace)
-		select {
-		case <-done:
-			timer.Stop()
-		case <-timer.C:
-			if o.workerCancel != nil {
-				o.workerCancel()
-			}
-			<-done
-		}
-		if o.workerCancel != nil {
-			o.workerCancel()
-		}
-		o.emitOverflowIfNeeded()
-	})
-}
-
-func (o *WEAObserver) run() {
-	defer o.wg.Done()
-	for item := range o.queue {
-		o.emitOverflowIfNeeded()
-		var obs WEAObservation
-		if item.task != nil {
-			taskCtx, cancel := context.WithTimeout(o.workerCtx, o.taskTimeout)
-			fetched, err := item.task.Fetch(taskCtx)
-			cancel()
-			if err != nil {
-				o.emitDedup(sanitizeFinding(Finding{
-					SchemaVersion: SchemaVersion,
-					Timestamp:     o.now().UTC(),
-					RuleID:        RuleObservationLoss,
-					Disposition:   DispositionIncomplete,
-					SessionID:     item.task.SessionID,
-					ProgramID:     item.task.ScopeKey,
-					Expected:      map[string]any{"wea_fact_read_succeeded": true},
-					Observed:      map[string]any{"wea_fact_read_succeeded": false},
-					Reason:        "wea_fact_read_failed",
-				}))
-				continue
-			}
-			obs = fetched
-		} else if item.obs != nil {
-			obs = *item.obs
-		}
-		for _, finding := range EvaluateWEA(obs, o.now()) {
-			o.emitDedup(finding)
-		}
-	}
-}
-
-func (o *WEAObserver) emitDedup(f Finding) {
-	if f.RuleID != RuleCaptureOverflow && f.ProgramID != "" {
-		key := dedupKey{rule: f.RuleID, programID: f.ProgramID}
-		rank := dispositionRank(f.Disposition)
-		if prevRank, exists := o.seen[key]; exists && rank <= prevRank {
-			o.deduplicated.Add(1)
-			return
-		}
-		if len(o.seen) >= DefaultMaxDedupEntries {
-			clear(o.seen)
-		}
-		o.seen[key] = rank
-	}
-	o.emit(f)
-}
-
-func (o *WEAObserver) emitOverflowIfNeeded() {
-	dropped := o.dropped.Load()
-	prev := o.reportedDropMark.Load()
-	if dropped <= prev {
-		return
-	}
-	if !o.reportedDropMark.CompareAndSwap(prev, dropped) {
-		return
-	}
-	f := sanitizeFinding(Finding{
-		SchemaVersion: SchemaVersion,
-		Timestamp:     o.now().UTC(),
-		RuleID:        RuleCaptureOverflow,
-		Disposition:   DispositionOverflow,
-		DroppedCount:  dropped,
-		Expected:      map[string]any{"dropped_observations": 0, "queue_capacity": o.capacity},
-		Observed:      map[string]any{"dropped_observations": dropped},
-		Reason:        "bounded_queue_saturated",
-	})
-	o.emit(f)
-}
-
-func (o *WEAObserver) emit(f Finding) {
-	o.emitted.Add(1)
-	o.findingsMu.Lock()
-	if len(o.findings) < o.maxFindings {
-		o.findings = append(o.findings, f)
-	}
-	o.findingsMu.Unlock()
-	if o.sink != nil {
-		o.sink(f)
-	}
+	return target.Submit(WrapWEAObservation(wea))
 }
 
 // EvaluateWEAIfEnabled runs EvaluateWEA only when enabled is true.
@@ -538,9 +290,11 @@ func EvaluateWEAIfEnabled(enabled bool, obs WEAObservation, now time.Time) []Fin
 	return EvaluateWEA(obs, now)
 }
 
-// EvaluateWEA runs all five Workers, Edits, and Authority contradiction checks
-// against an immutable WEAObservation. At most one sanitized finding is emitted
-// per rule per observation, and all secret canaries and raw paths are redacted.
+// EvaluateWEA runs all six independently identifiable WEA diagnostic checks
+// (worker landing, edit read-basis, edit author, authority approval/grant,
+// egress connection, and secret canary leak) against an immutable WEAObservation.
+// At most one sanitized finding is emitted per rule per observation, and all
+// secret canaries and raw paths/destinations are redacted.
 func EvaluateWEA(obs WEAObservation, now time.Time) []Finding {
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -549,7 +303,10 @@ func EvaluateWEA(obs WEAObservation, now time.Time) []Finding {
 	if f, ok := checkWEALandedPathMismatch(obs, now); ok {
 		out = append(out, finalizeWEAFinding(f, obs.SecretCanaries))
 	}
-	if f, ok := checkWEAEditBasisOrAuthorMismatch(obs, now); ok {
+	if f, ok := checkWEAEditStaleReadBasis(obs, now); ok {
+		out = append(out, finalizeWEAFinding(f, obs.SecretCanaries))
+	}
+	if f, ok := checkWEAEditWrongAuthor(obs, now); ok {
 		out = append(out, finalizeWEAFinding(f, obs.SecretCanaries))
 	}
 	if f, ok := checkWEAUnauthorizedEffect(obs, now); ok {
@@ -666,7 +423,14 @@ func normalizePathKey(p string) string {
 	return trimmed
 }
 
-// 1. Landed path absent from committed worker result (or claimed landed path missing on disk).
+func firstNonEmpty(a, b string) string {
+	if strings.TrimSpace(a) != "" {
+		return strings.TrimSpace(a)
+	}
+	return strings.TrimSpace(b)
+}
+
+// 1. Worker landing: landed path absent from committed worker result (or claimed landed path missing on disk).
 func checkWEALandedPathMismatch(obs WEAObservation, now time.Time) (Finding, bool) {
 	if len(obs.LandedPaths) == 0 || obs.RetentionGapped {
 		return Finding{}, false
@@ -754,25 +518,14 @@ func checkWEALandedPathMismatch(obs WEAObservation, now time.Time) (Finding, boo
 	return f, true
 }
 
-// 2. Edit accepted against a stale read basis (or wrong recorded author).
-func checkWEAEditBasisOrAuthorMismatch(obs WEAObservation, now time.Time) (Finding, bool) {
+// 2. Edit read-basis: accepted write with stale or missing qualifying read basis.
+func checkWEAEditStaleReadBasis(obs WEAObservation, now time.Time) (Finding, bool) {
 	if len(obs.EditEffects) == 0 || obs.RetentionGapped {
 		return Finding{}, false
 	}
 
-	versionByID := make(map[string]WEAFileVersionFact, len(obs.FileVersions))
-	versionByEffect := make(map[string]WEAFileVersionFact, len(obs.FileVersions))
-	for _, ver := range obs.FileVersions {
-		if ver.VersionID != "" {
-			versionByID[ver.VersionID] = ver
-		}
-		if ver.EffectID != "" {
-			versionByEffect[ver.EffectID] = ver
-		}
-	}
-
 	hasQualifyingRead := func(sessionID, path, rev string) bool {
-		if rev == "" {
+		if rev == "" || sessionID == "" {
 			return false
 		}
 		normPath := normalizePathKey(path)
@@ -780,7 +533,8 @@ func checkWEAEditBasisOrAuthorMismatch(obs WEAObservation, now time.Time) (Findi
 			if rb.RetentionPruned {
 				return true
 			}
-			if rb.SessionID != "" && sessionID != "" && rb.SessionID != sessionID {
+			rbSession := firstNonEmpty(rb.SessionID, obs.SessionID)
+			if rbSession == "" || rbSession != sessionID {
 				continue
 			}
 			if normalizePathKey(rb.Path) != normPath {
@@ -798,18 +552,11 @@ func checkWEAEditBasisOrAuthorMismatch(obs WEAObservation, now time.Time) (Findi
 		if ed.RetentionPruned || !ed.Accepted || ed.Refused {
 			continue
 		}
-		sessionID := ed.SessionID
-		if sessionID == "" {
-			sessionID = obs.SessionID
-		}
+		sessionID := firstNonEmpty(ed.SessionID, obs.SessionID)
 		pathDigest := DigestReference(normalizePathKey(ed.Path))
 
-		// Check read basis validity.
 		if ed.RebasedCleanly {
-			basisRev := ed.RebasedFromRevision
-			if basisRev == "" {
-				basisRev = ed.ReadBasisRevision
-			}
+			basisRev := firstNonEmpty(ed.RebasedFromRevision, ed.ReadBasisRevision)
 			if len(obs.ReadBases) > 0 && !hasQualifyingRead(sessionID, ed.Path, basisRev) {
 				reasons = append(reasons, "rebased_edit_missing_qualifying_read_basis")
 				effectIDs = append(effectIDs, ed.EffectID)
@@ -817,44 +564,23 @@ func checkWEAEditBasisOrAuthorMismatch(obs WEAObservation, now time.Time) (Findi
 				workerIDs = append(workerIDs, ed.WorkerID)
 				sourceRefs = append(sourceRefs, DigestReference(ed.SourceRef), pathDigest)
 			}
-		} else {
-			stale := ed.CurrentRevision != "" && ed.ReadBasisRevision != "" && ed.ReadBasisRevision != ed.CurrentRevision
-			missingBasis := ed.ReadBasisRevision == "" || (len(obs.ReadBases) > 0 && !hasQualifyingRead(sessionID, ed.Path, ed.ReadBasisRevision))
-			if stale {
-				reasons = append(reasons, "accepted_edit_stale_read_basis")
-				effectIDs = append(effectIDs, ed.EffectID)
-				versionIDs = append(versionIDs, ed.VersionID)
-				workerIDs = append(workerIDs, ed.WorkerID)
-				sourceRefs = append(sourceRefs, DigestReference(ed.SourceRef), pathDigest)
-			} else if missingBasis {
-				reasons = append(reasons, "accepted_edit_missing_qualifying_read_basis")
-				effectIDs = append(effectIDs, ed.EffectID)
-				versionIDs = append(versionIDs, ed.VersionID)
-				workerIDs = append(workerIDs, ed.WorkerID)
-				sourceRefs = append(sourceRefs, DigestReference(ed.SourceRef), pathDigest)
-			}
+			continue
 		}
 
-		// Check recorded version author against effect author.
-		ver, hasVer := versionByID[ed.VersionID]
-		if !hasVer && ed.EffectID != "" {
-			ver, hasVer = versionByEffect[ed.EffectID]
-		}
-		if hasVer {
-			authorMismatch := ed.AuthorID != "" && ver.AuthorID != "" && ed.AuthorID != ver.AuthorID
-			kindMismatch := ed.AuthorKind != "" && ver.AuthorKind != "" && ed.AuthorKind != ver.AuthorKind
-			if authorMismatch || kindMismatch {
-				if authorMismatch {
-					reasons = append(reasons, "version_author_disagrees_with_effect")
-				}
-				if kindMismatch {
-					reasons = append(reasons, "version_author_kind_disagrees_with_effect")
-				}
-				effectIDs = append(effectIDs, ed.EffectID)
-				versionIDs = append(versionIDs, ver.VersionID)
-				workerIDs = append(workerIDs, ed.WorkerID, ver.WorkerID)
-				sourceRefs = append(sourceRefs, DigestReference(ed.SourceRef), DigestReference(ver.SourceRef), pathDigest)
-			}
+		stale := ed.CurrentRevision != "" && ed.ReadBasisRevision != "" && ed.ReadBasisRevision != ed.CurrentRevision
+		missingBasis := ed.ReadBasisRevision == "" || (len(obs.ReadBases) > 0 && !hasQualifyingRead(sessionID, ed.Path, ed.ReadBasisRevision))
+		if stale {
+			reasons = append(reasons, "accepted_edit_stale_read_basis")
+			effectIDs = append(effectIDs, ed.EffectID)
+			versionIDs = append(versionIDs, ed.VersionID)
+			workerIDs = append(workerIDs, ed.WorkerID)
+			sourceRefs = append(sourceRefs, DigestReference(ed.SourceRef), pathDigest)
+		} else if missingBasis {
+			reasons = append(reasons, "accepted_edit_missing_qualifying_read_basis")
+			effectIDs = append(effectIDs, ed.EffectID)
+			versionIDs = append(versionIDs, ed.VersionID)
+			workerIDs = append(workerIDs, ed.WorkerID)
+			sourceRefs = append(sourceRefs, DigestReference(ed.SourceRef), pathDigest)
 		}
 	}
 
@@ -863,14 +589,13 @@ func checkWEAEditBasisOrAuthorMismatch(obs WEAObservation, now time.Time) (Findi
 	}
 	slices.Sort(reasons)
 	reasons = slices.Compact(reasons)
-	f := baseWEAFinding(obs, now, RuleWEAEditBasisOrAuthorMismatch, DispositionContradiction)
+	f := baseWEAFinding(obs, now, RuleWEAEditStaleReadBasis, DispositionContradiction)
 	f.ExecutionIDs = effectIDs
 	f.OperationIDs = versionIDs
 	f.SourceIDs = sourceRefs
 	f.Reason = reasons[0]
 	f.Expected = map[string]any{
 		"qualifying_read_basis_required": true,
-		"version_author_matches_effect":  true,
 	}
 	f.Observed = map[string]any{
 		"mismatches":  reasons,
@@ -881,7 +606,78 @@ func checkWEAEditBasisOrAuthorMismatch(obs WEAObservation, now time.Time) (Findi
 	return f, true
 }
 
-// 3. Effect executed without a matching recorded approval/grant (or grant applied across chats).
+// 3. Edit author: durable file version whose recorded author disagrees with its effect.
+func checkWEAEditWrongAuthor(obs WEAObservation, now time.Time) (Finding, bool) {
+	if len(obs.EditEffects) == 0 || len(obs.FileVersions) == 0 || obs.RetentionGapped {
+		return Finding{}, false
+	}
+
+	versionByID := make(map[string]WEAFileVersionFact, len(obs.FileVersions))
+	versionByEffect := make(map[string]WEAFileVersionFact, len(obs.FileVersions))
+	for _, ver := range obs.FileVersions {
+		if ver.VersionID != "" {
+			versionByID[ver.VersionID] = ver
+		}
+		if ver.EffectID != "" {
+			versionByEffect[ver.EffectID] = ver
+		}
+	}
+
+	var reasons, effectIDs, versionIDs, workerIDs, sourceRefs []string
+	for _, ed := range obs.EditEffects {
+		if ed.RetentionPruned || !ed.Accepted || ed.Refused {
+			continue
+		}
+		ver, hasVer := versionByID[ed.VersionID]
+		if !hasVer && ed.EffectID != "" {
+			ver, hasVer = versionByEffect[ed.EffectID]
+		}
+		if !hasVer {
+			continue
+		}
+		authorMismatch := ed.AuthorID != "" && ver.AuthorID != "" && ed.AuthorID != ver.AuthorID
+		kindMismatch := ed.AuthorKind != "" && ver.AuthorKind != "" && ed.AuthorKind != ver.AuthorKind
+		if !authorMismatch && !kindMismatch {
+			continue
+		}
+		if authorMismatch {
+			reasons = append(reasons, "version_author_disagrees_with_effect")
+		}
+		if kindMismatch {
+			reasons = append(reasons, "version_author_kind_disagrees_with_effect")
+		}
+		pathDigest := DigestReference(normalizePathKey(firstNonEmpty(ed.Path, ver.Path)))
+		effectIDs = append(effectIDs, ed.EffectID)
+		versionIDs = append(versionIDs, ver.VersionID)
+		workerIDs = append(workerIDs, ed.WorkerID, ver.WorkerID)
+		sourceRefs = append(sourceRefs, DigestReference(ed.SourceRef), DigestReference(ver.SourceRef), pathDigest)
+	}
+
+	if len(reasons) == 0 {
+		return Finding{}, false
+	}
+	slices.Sort(reasons)
+	reasons = slices.Compact(reasons)
+	f := baseWEAFinding(obs, now, RuleWEAEditWrongAuthor, DispositionContradiction)
+	f.ExecutionIDs = effectIDs
+	f.OperationIDs = versionIDs
+	f.SourceIDs = sourceRefs
+	f.Reason = reasons[0]
+	f.Expected = map[string]any{
+		"version_author_matches_effect": true,
+	}
+	f.Observed = map[string]any{
+		"mismatches":  reasons,
+		"effect_ids":  effectIDs,
+		"version_ids": versionIDs,
+		"worker_ids":  workerIDs,
+	}
+	return f, true
+}
+
+// 4. Approval/grant authority: effect executed without a matching recorded
+// approval plan or scoped grant. Never treats missing IDs or digests as wildcards;
+// reports missing required facts as DispositionIncomplete.
 func checkWEAUnauthorizedEffect(obs WEAObservation, now time.Time) (Finding, bool) {
 	if len(obs.AuthorityEffects) == 0 || obs.RetentionGapped {
 		return Finding{}, false
@@ -900,173 +696,439 @@ func checkWEAUnauthorizedEffect(obs WEAObservation, now time.Time) (Finding, boo
 	}
 
 	var reasons, effectIDs, planIDs, grantIDs, invocationIDs, sourceRefs []string
+	var incompleteReasons, incompleteEffects, incompleteSources []string
+
 	for _, eff := range obs.AuthorityEffects {
 		if eff.RetentionPruned || !eff.RequiresAuthority || !eff.Executed || eff.Refused {
 			continue
 		}
-		effSession := eff.SessionID
-		if effSession == "" {
-			effSession = obs.SessionID
+		if !obs.Settled && !eff.Settled {
+			continue
+		}
+		effSession := firstNonEmpty(eff.SessionID, obs.SessionID)
+		effProject := firstNonEmpty(eff.ProjectID, obs.ProjectID)
+		effDevice := firstNonEmpty(eff.DeviceID, obs.DeviceID)
+		effInvocation := firstNonEmpty(eff.InvocationID, obs.InvocationID)
+		effDigest := strings.TrimSpace(eff.ActionDigest)
+		effSrc := DigestReference(eff.SourceRef)
+		effTarget := DigestReference(eff.TargetRef)
+
+		if effSession == "" || effDigest == "" {
+			incompleteReasons = append(incompleteReasons, "effect_missing_required_session_or_digest")
+			incompleteEffects = append(incompleteEffects, eff.EffectID)
+			incompleteSources = append(incompleteSources, effSrc, effTarget)
+			continue
 		}
 
 		authorized := false
-		var effReasons []string
+		deferred := false
+		var effContradictions []string
+		var effIncompletes []string
 
 		if eff.ApprovalPlanID != "" {
 			plan, ok := plansByID[eff.ApprovalPlanID]
 			if !ok {
-				effReasons = append(effReasons, "approval_plan_not_recorded")
-			} else if !plan.Approved || plan.Refused {
-				effReasons = append(effReasons, "effect_executed_with_unapproved_plan")
-			} else if plan.SessionID != "" && effSession != "" && plan.SessionID != effSession {
-				effReasons = append(effReasons, "approval_plan_applied_across_sessions")
-			} else if plan.ActionDigest != "" && eff.ActionDigest != "" && plan.ActionDigest != eff.ActionDigest {
-				effReasons = append(effReasons, "approval_plan_digest_mismatch")
+				effContradictions = append(effContradictions, "approval_plan_not_recorded")
+			} else if !obs.Settled && !plan.Settled {
+				deferred = true
 			} else {
-				authorized = true
+				planSession := strings.TrimSpace(plan.SessionID)
+				planDigest := strings.TrimSpace(plan.ActionDigest)
+				if planSession == "" || planDigest == "" {
+					effIncompletes = append(effIncompletes, "approval_plan_missing_required_session_or_digest")
+				} else if !plan.Approved || plan.Refused {
+					effContradictions = append(effContradictions, "effect_executed_with_unapproved_plan")
+				} else if planSession != effSession {
+					effContradictions = append(effContradictions, "approval_plan_applied_across_sessions")
+				} else if plan.InvocationID != "" && effInvocation != "" && plan.InvocationID != effInvocation {
+					effContradictions = append(effContradictions, "approval_plan_invocation_mismatch")
+				} else if planDigest != effDigest {
+					effContradictions = append(effContradictions, "approval_plan_digest_mismatch")
+				} else if plan.DecisionSeq > 0 && eff.EventSeq > 0 && plan.DecisionSeq > eff.EventSeq {
+					effContradictions = append(effContradictions, "approval_plan_recorded_after_effect")
+				} else {
+					authorized = true
+				}
 			}
 		}
 
-		if !authorized && eff.GrantID != "" {
+		if !authorized && !deferred && eff.GrantID != "" {
 			grant, ok := grantsByID[eff.GrantID]
 			if !ok {
-				effReasons = append(effReasons, "grant_not_recorded")
-			} else if grant.Scope == "chat" && grant.SessionID != "" && effSession != "" && grant.SessionID != effSession {
-				effReasons = append(effReasons, "chat_grant_applied_across_sessions")
-			} else if !grant.Active || grant.Revoked || grant.Expired {
-				effReasons = append(effReasons, "inactive_or_revoked_grant_used")
-			} else if grant.ActionDigest != "" && eff.ActionDigest != "" && grant.ActionDigest != eff.ActionDigest {
-				effReasons = append(effReasons, "grant_action_digest_mismatch")
+				effContradictions = append(effContradictions, "grant_not_recorded")
+			} else if !obs.Settled && !grant.Settled {
+				deferred = true
 			} else {
-				authorized = true
+				grantScope := strings.TrimSpace(grant.Scope)
+				grantDigest := strings.TrimSpace(grant.ActionDigest)
+				if grantScope == "" || grantDigest == "" {
+					effIncompletes = append(effIncompletes, "grant_missing_required_scope_or_digest")
+				} else if !grant.Active || grant.Revoked || grant.Expired {
+					effContradictions = append(effContradictions, "inactive_or_revoked_grant_used")
+				} else if grantDigest != effDigest {
+					effContradictions = append(effContradictions, "grant_action_digest_mismatch")
+				} else if grant.GrantedSeq > 0 && eff.EventSeq > 0 && grant.GrantedSeq > eff.EventSeq {
+					effContradictions = append(effContradictions, "grant_recorded_after_effect")
+				} else {
+					switch grantScope {
+					case "exact_action", "exact":
+						grantSession := strings.TrimSpace(grant.SessionID)
+						grantInv := strings.TrimSpace(grant.InvocationID)
+						if grantSession == "" || grantInv == "" || effInvocation == "" {
+							effIncompletes = append(effIncompletes, "exact_action_grant_missing_required_identity")
+						} else if grantSession != effSession || grantInv != effInvocation {
+							effContradictions = append(effContradictions, "exact_action_grant_scope_mismatch")
+						} else {
+							authorized = true
+						}
+					case "chat":
+						grantSession := strings.TrimSpace(grant.SessionID)
+						if grantSession == "" {
+							effIncompletes = append(effIncompletes, "chat_grant_missing_session_id")
+						} else if grantSession != effSession {
+							effContradictions = append(effContradictions, "chat_grant_applied_across_sessions")
+						} else {
+							authorized = true
+						}
+					case "project":
+						grantProject := strings.TrimSpace(grant.ProjectID)
+						if grantProject == "" || effProject == "" {
+							effIncompletes = append(effIncompletes, "project_grant_missing_project_id")
+						} else if grantProject != effProject {
+							effContradictions = append(effContradictions, "project_grant_applied_across_projects")
+						} else {
+							authorized = true
+						}
+					case "device":
+						grantDevice := strings.TrimSpace(grant.DeviceID)
+						if grantDevice == "" || effDevice == "" {
+							effIncompletes = append(effIncompletes, "device_grant_missing_device_id")
+						} else if grantDevice != effDevice {
+							effContradictions = append(effContradictions, "device_grant_applied_across_devices")
+						} else {
+							authorized = true
+						}
+					default:
+						effIncompletes = append(effIncompletes, "unknown_grant_scope")
+					}
+				}
 			}
 		}
 
-		if !authorized {
-			if len(effReasons) == 0 {
-				effReasons = append(effReasons, "effect_executed_without_matching_approval_or_grant")
-			}
-			reasons = append(reasons, effReasons...)
+		if authorized || deferred {
+			continue
+		}
+		if len(effContradictions) > 0 {
+			reasons = append(reasons, effContradictions...)
 			effectIDs = append(effectIDs, eff.EffectID)
 			planIDs = append(planIDs, eff.ApprovalPlanID)
 			grantIDs = append(grantIDs, eff.GrantID)
-			invocationIDs = append(invocationIDs, eff.InvocationID)
-			sourceRefs = append(sourceRefs, DigestReference(eff.SourceRef), DigestReference(eff.TargetRef))
+			invocationIDs = append(invocationIDs, effInvocation)
+			sourceRefs = append(sourceRefs, effSrc, effTarget)
+			continue
 		}
+		if len(effIncompletes) > 0 {
+			incompleteReasons = append(incompleteReasons, effIncompletes...)
+			incompleteEffects = append(incompleteEffects, eff.EffectID)
+			incompleteSources = append(incompleteSources, effSrc, effTarget)
+			continue
+		}
+		reasons = append(reasons, "effect_executed_without_matching_approval_or_grant")
+		effectIDs = append(effectIDs, eff.EffectID)
+		planIDs = append(planIDs, eff.ApprovalPlanID)
+		grantIDs = append(grantIDs, eff.GrantID)
+		invocationIDs = append(invocationIDs, effInvocation)
+		sourceRefs = append(sourceRefs, effSrc, effTarget)
 	}
 
-	if len(reasons) == 0 {
-		return Finding{}, false
+	if len(reasons) > 0 {
+		slices.Sort(reasons)
+		reasons = slices.Compact(reasons)
+		f := baseWEAFinding(obs, now, RuleWEAUnauthorizedEffect, DispositionContradiction)
+		f.ExecutionIDs = effectIDs
+		f.OperationIDs = append(append([]string{}, planIDs...), grantIDs...)
+		f.SourceIDs = sourceRefs
+		f.Reason = reasons[0]
+		f.Expected = map[string]any{
+			"matching_recorded_approval_or_grant": true,
+			"grant_scope_identity_validated":      true,
+		}
+		f.Observed = map[string]any{
+			"mismatches":        reasons,
+			"effect_ids":        effectIDs,
+			"approval_plan_ids": planIDs,
+			"grant_ids":         grantIDs,
+			"invocation_ids":    invocationIDs,
+		}
+		return f, true
 	}
-	slices.Sort(reasons)
-	reasons = slices.Compact(reasons)
-	f := baseWEAFinding(obs, now, RuleWEAUnauthorizedEffect, DispositionContradiction)
-	f.ExecutionIDs = effectIDs
-	f.OperationIDs = append(append([]string{}, planIDs...), grantIDs...)
-	f.SourceIDs = sourceRefs
-	f.Reason = reasons[0]
-	f.Expected = map[string]any{
-		"matching_recorded_approval_or_grant": true,
-		"chat_grant_scoped_to_session":        true,
+	if len(incompleteReasons) > 0 {
+		slices.Sort(incompleteReasons)
+		incompleteReasons = slices.Compact(incompleteReasons)
+		f := baseWEAFinding(obs, now, RuleWEAUnauthorizedEffect, DispositionIncomplete)
+		f.ExecutionIDs = incompleteEffects
+		f.SourceIDs = incompleteSources
+		f.Reason = incompleteReasons[0]
+		f.Expected = map[string]any{
+			"required_authority_identities_present": true,
+		}
+		f.Observed = map[string]any{
+			"missing_facts": incompleteReasons,
+			"effect_ids":    incompleteEffects,
+		}
+		return f, true
 	}
-	f.Observed = map[string]any{
-		"mismatches":        reasons,
-		"effect_ids":        effectIDs,
-		"approval_plan_ids": planIDs,
-		"grant_ids":         grantIDs,
-		"invocation_ids":    invocationIDs,
-	}
-	return f, true
+	return Finding{}, false
 }
 
-// 4. Observed network egress connection unrecorded by product (or arriving after refusal).
+// 5. Egress connection: observed network egress connection unrecorded by product,
+// arriving before admission, reusing an exhausted exact-action decision, or
+// arriving under a refused action (without a valid superseding later admission).
+// Never treats missing invocation/session/sequence fields as wildcards.
 func checkWEAUnrecordedOrRefusedEgress(obs WEAObservation, now time.Time) (Finding, bool) {
 	if len(obs.ObservedConnections) == 0 || obs.RetentionGapped {
 		return Finding{}, false
 	}
 
+	// Order connections deterministically by ObservedSeq so exact-action
+	// cardinality tracking is reproducible.
+	conns := make([]WEAEgressConnectionFact, len(obs.ObservedConnections))
+	copy(conns, obs.ObservedConnections)
+	slices.SortStableFunc(conns, func(a, b WEAEgressConnectionFact) int {
+		if a.ObservedSeq < b.ObservedSeq {
+			return -1
+		}
+		if a.ObservedSeq > b.ObservedSeq {
+			return 1
+		}
+		return strings.Compare(a.ConnectionID, b.ConnectionID)
+	})
+
+	exactUses := make(map[string]int, len(obs.EgressDecisions))
+
 	var reasons, connIDs, invocationIDs, decisionIDs, destDigests, sourceRefs []string
-	for _, conn := range obs.ObservedConnections {
+	var incompleteReasons, incompleteConns, incompleteSources []string
+
+	for _, conn := range conns {
 		if conn.RetentionPruned || (!obs.Settled && !conn.Settled) {
 			continue
 		}
-		connSession := conn.SessionID
-		if connSession == "" {
-			connSession = obs.SessionID
-		}
+		connSession := firstNonEmpty(conn.SessionID, obs.SessionID)
+		connProject := firstNonEmpty(conn.ProjectID, obs.ProjectID)
+		connDevice := firstNonEmpty(conn.DeviceID, obs.DeviceID)
+		connInv := strings.TrimSpace(conn.InvocationID)
 		connDest := strings.TrimSpace(conn.DestinationRef)
 		destDigest := DigestReference(connDest)
+		connSrc := DigestReference(conn.SourceRef)
 
-		admitted := false
-		refused := false
-		var matchedDecisionID string
+		if connSession == "" || connInv == "" || connDest == "" || conn.ObservedSeq <= 0 {
+			incompleteReasons = append(incompleteReasons, "egress_connection_missing_required_identity_or_seq")
+			incompleteConns = append(incompleteConns, conn.ConnectionID)
+			incompleteSources = append(incompleteSources, connSrc, destDigest)
+			continue
+		}
 
-		for _, dec := range obs.EgressDecisions {
-			decSession := dec.SessionID
-			if decSession == "" {
-				decSession = obs.SessionID
-			}
-			if decSession != "" && connSession != "" && decSession != connSession {
-				continue
-			}
-			if dec.InvocationID != "" && conn.InvocationID != "" && dec.InvocationID != conn.InvocationID {
-				continue
-			}
+		var latestRefusalSeq int64
+		var latestRefusalID string
+		var bestAdmitIdx = -1
+		var bestAdmitSeq int64
+		var exhaustedExactID string
+		var postArrivalAdmitID string
+		var sawIncompleteDecision bool
+
+		for i, dec := range obs.EgressDecisions {
 			if strings.TrimSpace(dec.DestinationRef) != connDest {
 				continue
 			}
+			if dec.DecisionSeq <= 0 {
+				sawIncompleteDecision = true
+				continue
+			}
+			decSession := strings.TrimSpace(dec.SessionID)
+			decInv := strings.TrimSpace(dec.InvocationID)
+
 			if dec.Refused {
-				if conn.ObservedOrdinal == 0 || dec.DecisionOrdinal == 0 || conn.ObservedOrdinal >= dec.DecisionOrdinal {
-					refused = true
-					matchedDecisionID = dec.DecisionID
+				// Refusals bind strictly to the owning action (session + invocation + destination).
+				if decSession == "" || decInv == "" {
+					sawIncompleteDecision = true
+					continue
 				}
-			} else if dec.Admitted {
-				admitted = true
-				matchedDecisionID = dec.DecisionID
+				if decSession == connSession && decInv == connInv && dec.DecisionSeq <= conn.ObservedSeq {
+					if dec.DecisionSeq >= latestRefusalSeq {
+						latestRefusalSeq = dec.DecisionSeq
+						latestRefusalID = dec.DecisionID
+					}
+				}
+				continue
+			}
+
+			if !dec.Admitted {
+				continue
+			}
+
+			scope := strings.TrimSpace(dec.GrantScope)
+			if scope == "" {
+				scope = "exact_action"
+			}
+
+			matchesScope := false
+			switch scope {
+			case "exact_action", "exact":
+				if decSession == "" || decInv == "" {
+					sawIncompleteDecision = true
+					continue
+				}
+				matchesScope = decSession == connSession && decInv == connInv
+			case "chat":
+				if decSession == "" {
+					sawIncompleteDecision = true
+					continue
+				}
+				matchesScope = decSession == connSession
+			case "project":
+				if strings.TrimSpace(dec.ProjectID) == "" || connProject == "" {
+					sawIncompleteDecision = true
+					continue
+				}
+				matchesScope = strings.TrimSpace(dec.ProjectID) == connProject
+			case "device":
+				if strings.TrimSpace(dec.DeviceID) == "" || connDevice == "" {
+					sawIncompleteDecision = true
+					continue
+				}
+				matchesScope = strings.TrimSpace(dec.DeviceID) == connDevice
+			default:
+				sawIncompleteDecision = true
+				continue
+			}
+
+			if !matchesScope {
+				continue
+			}
+
+			// Admitting decision must precede the observed arrival.
+			if dec.DecisionSeq > conn.ObservedSeq {
+				if postArrivalAdmitID == "" {
+					postArrivalAdmitID = dec.DecisionID
+				}
+				continue
+			}
+
+			// Enforce cardinality for exact-action decisions.
+			if scope == "exact_action" || scope == "exact" {
+				key := firstNonEmpty(dec.DecisionID, decSession+"|"+decInv+"|"+connDest)
+				maxUses := dec.MaxUses
+				if maxUses <= 0 {
+					maxUses = 1
+				}
+				if exactUses[key] >= maxUses {
+					if exhaustedExactID == "" {
+						exhaustedExactID = dec.DecisionID
+					}
+					continue
+				}
+			}
+
+			if dec.DecisionSeq >= bestAdmitSeq {
+				bestAdmitSeq = dec.DecisionSeq
+				bestAdmitIdx = i
 			}
 		}
 
-		if refused {
+		// A valid later admission superseding an earlier refusal (bestAdmitSeq > latestRefusalSeq)
+		// authorizes the connection cleanly.
+		if bestAdmitIdx >= 0 && bestAdmitSeq > latestRefusalSeq {
+			dec := obs.EgressDecisions[bestAdmitIdx]
+			scope := strings.TrimSpace(dec.GrantScope)
+			if scope == "" || scope == "exact_action" || scope == "exact" {
+				key := firstNonEmpty(dec.DecisionID, strings.TrimSpace(dec.SessionID)+"|"+strings.TrimSpace(dec.InvocationID)+"|"+connDest)
+				exactUses[key]++
+			}
+			continue
+		}
+
+		if latestRefusalSeq > 0 {
 			reasons = append(reasons, "egress_connection_after_refusal")
 			connIDs = append(connIDs, conn.ConnectionID)
-			invocationIDs = append(invocationIDs, conn.InvocationID)
-			decisionIDs = append(decisionIDs, matchedDecisionID)
+			invocationIDs = append(invocationIDs, connInv)
+			decisionIDs = append(decisionIDs, latestRefusalID)
 			destDigests = append(destDigests, destDigest)
-			sourceRefs = append(sourceRefs, DigestReference(conn.SourceRef), destDigest)
-		} else if !admitted {
-			reasons = append(reasons, "egress_connection_unrecorded_by_product")
-			connIDs = append(connIDs, conn.ConnectionID)
-			invocationIDs = append(invocationIDs, conn.InvocationID)
-			destDigests = append(destDigests, destDigest)
-			sourceRefs = append(sourceRefs, DigestReference(conn.SourceRef), destDigest)
+			sourceRefs = append(sourceRefs, connSrc, destDigest)
+			continue
 		}
+		if exhaustedExactID != "" {
+			reasons = append(reasons, "egress_exact_decision_reused")
+			connIDs = append(connIDs, conn.ConnectionID)
+			invocationIDs = append(invocationIDs, connInv)
+			decisionIDs = append(decisionIDs, exhaustedExactID)
+			destDigests = append(destDigests, destDigest)
+			sourceRefs = append(sourceRefs, connSrc, destDigest)
+			continue
+		}
+		if postArrivalAdmitID != "" {
+			reasons = append(reasons, "egress_connection_before_admission")
+			connIDs = append(connIDs, conn.ConnectionID)
+			invocationIDs = append(invocationIDs, connInv)
+			decisionIDs = append(decisionIDs, postArrivalAdmitID)
+			destDigests = append(destDigests, destDigest)
+			sourceRefs = append(sourceRefs, connSrc, destDigest)
+			continue
+		}
+		if sawIncompleteDecision {
+			incompleteReasons = append(incompleteReasons, "egress_decision_missing_required_identity_or_seq")
+			incompleteConns = append(incompleteConns, conn.ConnectionID)
+			incompleteSources = append(incompleteSources, connSrc, destDigest)
+			continue
+		}
+
+		reasons = append(reasons, "egress_connection_unrecorded_by_product")
+		connIDs = append(connIDs, conn.ConnectionID)
+		invocationIDs = append(invocationIDs, connInv)
+		destDigests = append(destDigests, destDigest)
+		sourceRefs = append(sourceRefs, connSrc, destDigest)
 	}
 
-	if len(reasons) == 0 {
-		return Finding{}, false
+	if len(reasons) > 0 {
+		slices.Sort(reasons)
+		reasons = slices.Compact(reasons)
+		f := baseWEAFinding(obs, now, RuleWEAUnrecordedOrRefusedEgress, DispositionContradiction)
+		f.ExecutionIDs = connIDs
+		f.OperationIDs = decisionIDs
+		f.SourceIDs = sourceRefs
+		f.Reason = reasons[0]
+		f.Expected = map[string]any{
+			"observed_egress_preceded_by_admitting_decision": true,
+			"egress_after_refusal_forbidden":                 true,
+		}
+		f.Observed = map[string]any{
+			"mismatches":          reasons,
+			"connection_ids":      connIDs,
+			"decision_ids":        decisionIDs,
+			"invocation_ids":      invocationIDs,
+			"destination_digests": destDigests,
+		}
+		return f, true
 	}
-	slices.Sort(reasons)
-	reasons = slices.Compact(reasons)
-	f := baseWEAFinding(obs, now, RuleWEAUnrecordedOrRefusedEgress, DispositionContradiction)
-	f.ExecutionIDs = connIDs
-	f.OperationIDs = decisionIDs
-	f.SourceIDs = sourceRefs
-	f.Reason = reasons[0]
-	f.Expected = map[string]any{
-		"observed_egress_admitted_by_product": true,
-		"egress_after_refusal_forbidden":      true,
+	if len(incompleteReasons) > 0 {
+		slices.Sort(incompleteReasons)
+		incompleteReasons = slices.Compact(incompleteReasons)
+		f := baseWEAFinding(obs, now, RuleWEAUnrecordedOrRefusedEgress, DispositionIncomplete)
+		f.ExecutionIDs = incompleteConns
+		f.SourceIDs = incompleteSources
+		f.Reason = incompleteReasons[0]
+		f.Expected = map[string]any{
+			"required_egress_identities_and_seq_present": true,
+		}
+		f.Observed = map[string]any{
+			"missing_facts":  incompleteReasons,
+			"connection_ids": incompleteConns,
+		}
+		return f, true
 	}
-	f.Observed = map[string]any{
-		"mismatches":          reasons,
-		"connection_ids":      connIDs,
-		"decision_ids":        decisionIDs,
-		"invocation_ids":      invocationIDs,
-		"destination_digests": destDigests,
-	}
-	return f, true
+	return Finding{}, false
 }
 
-// 5. Managed secret canary / plaintext appearing in agent-visible or persisted record.
+// 6. Managed secret canary / plaintext appearing in agent-visible or persisted record.
 func checkWEASecretCanaryLeak(obs WEAObservation, now time.Time) (Finding, bool) {
 	if len(obs.RecordedArtifacts) == 0 {
 		return Finding{}, false

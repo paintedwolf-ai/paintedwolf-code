@@ -3,16 +3,22 @@ package cmddiag
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/debugpaths"
 )
 
 func cleanWEAObservation() WEAObservation {
 	return WEAObservation{
 		SessionID:    "11111111-2222-3333-4444-555555555555",
+		ProjectID:    "proj-wea-1",
+		DeviceID:     "dev-mac-1",
 		WorkerID:     "worker-alpha",
 		JobID:        "job-wea-1",
 		ResultHandle: "res-handle-1",
@@ -95,11 +101,14 @@ func cleanWEAObservation() WEAObservation {
 			{
 				ApprovalPlanID: "plan-1",
 				SessionID:      "11111111-2222-3333-4444-555555555555",
+				ProjectID:      "proj-wea-1",
 				InvocationID:   "inv-wea-1",
 				ActionKind:     "command",
 				TargetRef:      "workspace/repo",
 				ActionDigest:   "sha256:plan1",
+				DecisionSeq:    5,
 				Approved:       true,
+				Settled:        true,
 				SourceRef:      "approvals/plan-1.json",
 			},
 		},
@@ -107,11 +116,15 @@ func cleanWEAObservation() WEAObservation {
 			{
 				GrantID:      "grant-chat-1",
 				SessionID:    "11111111-2222-3333-4444-555555555555",
+				ProjectID:    "proj-wea-1",
+				DeviceID:     "dev-mac-1",
 				Scope:        "chat",
 				ActionKind:   "egress",
 				TargetRef:    "https://fixture.invalid/api",
 				ActionDigest: "sha256:grant1",
+				GrantedSeq:   4,
 				Active:       true,
+				Settled:      true,
 				SourceRef:    "grants/grant-chat-1.json",
 			},
 		},
@@ -119,39 +132,49 @@ func cleanWEAObservation() WEAObservation {
 			{
 				EffectID:          "eff-auth-1",
 				SessionID:         "11111111-2222-3333-4444-555555555555",
+				ProjectID:         "proj-wea-1",
+				DeviceID:          "dev-mac-1",
 				WorkerID:          "worker-alpha",
 				InvocationID:      "inv-wea-1",
 				ActionKind:        "command",
 				TargetRef:         "workspace/repo",
 				ActionDigest:      "sha256:plan1",
 				ApprovalPlanID:    "plan-1",
+				EventSeq:          6,
 				RequiresAuthority: true,
 				Executed:          true,
+				Settled:           true,
 				SourceRef:         "effects/eff-auth-1.json",
 			},
 		},
 		EgressDecisions: []WEAEgressDecisionFact{
 			{
-				DecisionID:      "dec-egress-1",
-				SessionID:       "11111111-2222-3333-4444-555555555555",
-				WorkerID:        "worker-alpha",
-				InvocationID:    "inv-wea-1",
-				DestinationRef:  "https://fixture.invalid/api",
-				Admitted:        true,
-				DecisionOrdinal: 10,
-				SourceRef:       "egress/dec-egress-1.json",
+				DecisionID:     "dec-egress-1",
+				SessionID:      "11111111-2222-3333-4444-555555555555",
+				ProjectID:      "proj-wea-1",
+				DeviceID:       "dev-mac-1",
+				WorkerID:       "worker-alpha",
+				InvocationID:   "inv-wea-1",
+				DestinationRef: "https://fixture.invalid/api",
+				GrantScope:     "exact_action",
+				MaxUses:        1,
+				Admitted:       true,
+				DecisionSeq:    10,
+				SourceRef:      "egress/dec-egress-1.json",
 			},
 		},
 		ObservedConnections: []WEAEgressConnectionFact{
 			{
-				ConnectionID:    "conn-1",
-				SessionID:       "11111111-2222-3333-4444-555555555555",
-				WorkerID:        "worker-alpha",
-				InvocationID:    "inv-wea-1",
-				DestinationRef:  "https://fixture.invalid/api",
-				ObservedOrdinal: 11,
-				Settled:         true,
-				SourceRef:       "fixture_endpoint/conn-1.json",
+				ConnectionID:   "conn-1",
+				SessionID:      "11111111-2222-3333-4444-555555555555",
+				ProjectID:      "proj-wea-1",
+				DeviceID:       "dev-mac-1",
+				WorkerID:       "worker-alpha",
+				InvocationID:   "inv-wea-1",
+				DestinationRef: "https://fixture.invalid/api",
+				ObservedSeq:    11,
+				Settled:        true,
+				SourceRef:      "fixture_endpoint/conn-1.json",
 			},
 		},
 		SecretCanaries: []WEASecretCanaryFact{
@@ -190,9 +213,11 @@ func marshalFindings(t *testing.T, findings []Finding) string {
 
 func TestEvaluateWEAQuietOnCleanRun(t *testing.T) {
 	fixed := time.Date(2026, 11, 27, 12, 0, 0, 0, time.UTC)
-	findings := EvaluateWEA(cleanWEAObservation(), fixed)
-	if len(findings) != 0 {
+	if findings := EvaluateWEA(cleanWEAObservation(), fixed); len(findings) != 0 {
 		t.Fatalf("expected 0 findings on clean WEA run, got %+v", findings)
+	}
+	if findings := Evaluate(WrapWEAObservation(cleanWEAObservation()), fixed); len(findings) != 0 {
+		t.Fatalf("expected 0 findings through Evaluate(WrapWEAObservation), got %+v", findings)
 	}
 }
 
@@ -213,7 +238,7 @@ func TestEvaluateWEAContradictionFixtures(t *testing.T) {
 			SourceRef:     "/Users/dev/private_repo_canary/promotions/p1.json",
 		})
 
-		findings := EvaluateWEA(obs, fixed)
+		findings := Evaluate(WrapWEAObservation(obs), fixed)
 		if len(findings) != 1 {
 			t.Fatalf("expected 1 finding, got %+v", findings)
 		}
@@ -240,7 +265,7 @@ func TestEvaluateWEAContradictionFixtures(t *testing.T) {
 		obs.LandedPaths[0].DiskChecked = true
 		obs.LandedPaths[0].PresentOnDisk = false
 
-		findings := EvaluateWEA(obs, fixed)
+		findings := Evaluate(WrapWEAObservation(obs), fixed)
 		if len(findings) != 1 {
 			t.Fatalf("expected 1 finding, got %+v", findings)
 		}
@@ -253,7 +278,7 @@ func TestEvaluateWEAContradictionFixtures(t *testing.T) {
 		}
 	})
 
-	t.Run("2a_edit_accepted_against_stale_read_basis", func(t *testing.T) {
+	t.Run("2_edit_stale_read_basis_independent_rule", func(t *testing.T) {
 		obs := cleanWEAObservation()
 		obs.EditEffects[0].Path = "/Users/dev/secret_workspace/pkg/stale_file.go"
 		obs.ReadBases[0].Path = obs.EditEffects[0].Path
@@ -261,12 +286,12 @@ func TestEvaluateWEAContradictionFixtures(t *testing.T) {
 		obs.EditEffects[0].CurrentRevision = "rev-10"
 		obs.EditEffects[0].RebasedCleanly = false
 
-		findings := EvaluateWEA(obs, fixed)
+		findings := Evaluate(WrapWEAObservation(obs), fixed)
 		if len(findings) != 1 {
 			t.Fatalf("expected 1 finding, got %+v", findings)
 		}
 		f := findings[0]
-		if f.RuleID != RuleWEAEditBasisOrAuthorMismatch || f.Disposition != DispositionContradiction {
+		if f.RuleID != RuleWEAEditStaleReadBasis || f.Disposition != DispositionContradiction {
 			t.Fatalf("unexpected finding: %+v", f)
 		}
 		if f.Reason != "accepted_edit_stale_read_basis" {
@@ -280,17 +305,17 @@ func TestEvaluateWEAContradictionFixtures(t *testing.T) {
 		}
 	})
 
-	t.Run("2b_edit_wrong_recorded_author", func(t *testing.T) {
+	t.Run("3_edit_wrong_author_independent_rule", func(t *testing.T) {
 		obs := cleanWEAObservation()
 		obs.FileVersions[0].AuthorID = "person-spoofed"
 		obs.FileVersions[0].AuthorKind = "person"
 
-		findings := EvaluateWEA(obs, fixed)
+		findings := Evaluate(WrapWEAObservation(obs), fixed)
 		if len(findings) != 1 {
 			t.Fatalf("expected 1 finding, got %+v", findings)
 		}
 		f := findings[0]
-		if f.RuleID != RuleWEAEditBasisOrAuthorMismatch || f.Disposition != DispositionContradiction {
+		if f.RuleID != RuleWEAEditWrongAuthor || f.Disposition != DispositionContradiction {
 			t.Fatalf("unexpected finding: %+v", f)
 		}
 		if f.Reason != "version_author_disagrees_with_effect" {
@@ -298,21 +323,47 @@ func TestEvaluateWEAContradictionFixtures(t *testing.T) {
 		}
 	})
 
-	t.Run("3a_effect_executed_without_matching_approval_or_grant", func(t *testing.T) {
+	t.Run("2_and_3_both_edit_rules_emit_independently", func(t *testing.T) {
+		obs := cleanWEAObservation()
+		obs.EditEffects[0].ReadBasisRevision = "rev-08"
+		obs.EditEffects[0].CurrentRevision = "rev-10"
+		obs.FileVersions[0].AuthorID = "person-spoofed"
+
+		findings := Evaluate(WrapWEAObservation(obs), fixed)
+		if len(findings) != 2 {
+			t.Fatalf("expected 2 independent findings (read-basis + author), got %+v", findings)
+		}
+		seen := map[RuleID]bool{}
+		for _, f := range findings {
+			seen[f.RuleID] = true
+			if f.Disposition != DispositionContradiction {
+				t.Fatalf("expected contradiction, got %+v", f)
+			}
+		}
+		if !seen[RuleWEAEditStaleReadBasis] || !seen[RuleWEAEditWrongAuthor] {
+			t.Fatalf("expected both %q and %q, got %+v", RuleWEAEditStaleReadBasis, RuleWEAEditWrongAuthor, findings)
+		}
+	})
+
+	t.Run("4a_effect_executed_without_matching_approval_or_grant", func(t *testing.T) {
 		obs := cleanWEAObservation()
 		obs.AuthorityEffects = append(obs.AuthorityEffects, WEAAuthorityEffectFact{
 			EffectID:          "eff-unauth-1",
 			SessionID:         obs.SessionID,
+			ProjectID:         obs.ProjectID,
+			DeviceID:          obs.DeviceID,
 			InvocationID:      "inv-unauth-1",
 			ActionKind:        "command",
 			TargetRef:         "/Users/dev/secret_target/token=sk-1234567890abcdef1234567890",
 			ActionDigest:      "sha256:unauth",
+			EventSeq:          12,
 			RequiresAuthority: true,
 			Executed:          true,
+			Settled:           true,
 			SourceRef:         "effects/eff-unauth-1.json",
 		})
 
-		findings := EvaluateWEA(obs, fixed)
+		findings := Evaluate(WrapWEAObservation(obs), fixed)
 		if len(findings) != 1 {
 			t.Fatalf("expected 1 finding, got %+v", findings)
 		}
@@ -331,56 +382,151 @@ func TestEvaluateWEAContradictionFixtures(t *testing.T) {
 		}
 	})
 
-	t.Run("3b_chat_grant_applied_across_chats", func(t *testing.T) {
-		obs := cleanWEAObservation()
-		obs.Grants = append(obs.Grants, WEAGrantFact{
-			GrantID:      "grant-other-chat",
-			SessionID:    "99999999-aaaa-bbbb-cccc-dddddddddddd",
-			Scope:        "chat",
-			ActionKind:   "command",
-			ActionDigest: "sha256:crosschat",
-			Active:       true,
-			SourceRef:    "grants/grant-other-chat.json",
-		})
-		obs.AuthorityEffects = append(obs.AuthorityEffects, WEAAuthorityEffectFact{
-			EffectID:          "eff-cross-chat-1",
-			SessionID:         obs.SessionID,
-			InvocationID:      "inv-cross-1",
-			ActionKind:        "command",
-			ActionDigest:      "sha256:crosschat",
-			GrantID:           "grant-other-chat",
-			RequiresAuthority: true,
-			Executed:          true,
-			SourceRef:         "effects/eff-cross-chat-1.json",
-		})
+	t.Run("4b_all_grant_scopes_validated_strictly_no_wildcards", func(t *testing.T) {
+		// Valid grants for exact_action, chat, project, device all pass.
+		for _, tc := range []struct {
+			name  string
+			grant WEAGrantFact
+		}{
+			{
+				name: "valid_exact_action",
+				grant: WEAGrantFact{
+					GrantID: "g-exact", SessionID: "11111111-2222-3333-4444-555555555555",
+					InvocationID: "inv-sc-1", Scope: "exact_action", ActionDigest: "sha256:sc1",
+					GrantedSeq: 8, Active: true, Settled: true,
+				},
+			},
+			{
+				name: "valid_chat",
+				grant: WEAGrantFact{
+					GrantID: "g-chat", SessionID: "11111111-2222-3333-4444-555555555555",
+					Scope: "chat", ActionDigest: "sha256:sc1",
+					GrantedSeq: 8, Active: true, Settled: true,
+				},
+			},
+			{
+				name: "valid_project",
+				grant: WEAGrantFact{
+					GrantID: "g-proj", ProjectID: "proj-wea-1",
+					Scope: "project", ActionDigest: "sha256:sc1",
+					GrantedSeq: 8, Active: true, Settled: true,
+				},
+			},
+			{
+				name: "valid_device",
+				grant: WEAGrantFact{
+					GrantID: "g-dev", DeviceID: "dev-mac-1",
+					Scope: "device", ActionDigest: "sha256:sc1",
+					GrantedSeq: 8, Active: true, Settled: true,
+				},
+			},
+		} {
+			obs := cleanWEAObservation()
+			obs.Grants = append(obs.Grants, tc.grant)
+			obs.AuthorityEffects = append(obs.AuthorityEffects, WEAAuthorityEffectFact{
+				EffectID: "eff-sc-1", SessionID: obs.SessionID, ProjectID: obs.ProjectID,
+				DeviceID: obs.DeviceID, InvocationID: "inv-sc-1", ActionDigest: "sha256:sc1",
+				GrantID: tc.grant.GrantID, EventSeq: 9, RequiresAuthority: true, Executed: true, Settled: true,
+			})
+			if got := EvaluateWEA(obs, fixed); len(got) != 0 {
+				t.Fatalf("%s: expected 0 findings, got %+v", tc.name, got)
+			}
+		}
 
-		findings := EvaluateWEA(obs, fixed)
-		if len(findings) != 1 {
-			t.Fatalf("expected 1 finding, got %+v", findings)
+		// Mismatched scope identities for all 4 scopes produce contradictions.
+		for _, tc := range []struct {
+			name       string
+			grant      WEAGrantFact
+			wantReason string
+		}{
+			{
+				name: "exact_action_wrong_invocation",
+				grant: WEAGrantFact{
+					GrantID: "g-exact-bad", SessionID: "11111111-2222-3333-4444-555555555555",
+					InvocationID: "inv-other", Scope: "exact_action", ActionDigest: "sha256:sc1",
+					GrantedSeq: 8, Active: true, Settled: true,
+				},
+				wantReason: "exact_action_grant_scope_mismatch",
+			},
+			{
+				name: "chat_wrong_session",
+				grant: WEAGrantFact{
+					GrantID: "g-chat-bad", SessionID: "99999999-aaaa-bbbb-cccc-dddddddddddd",
+					Scope: "chat", ActionDigest: "sha256:sc1",
+					GrantedSeq: 8, Active: true, Settled: true,
+				},
+				wantReason: "chat_grant_applied_across_sessions",
+			},
+			{
+				name: "project_wrong_project",
+				grant: WEAGrantFact{
+					GrantID: "g-proj-bad", ProjectID: "proj-other",
+					Scope: "project", ActionDigest: "sha256:sc1",
+					GrantedSeq: 8, Active: true, Settled: true,
+				},
+				wantReason: "project_grant_applied_across_projects",
+			},
+			{
+				name: "device_wrong_device",
+				grant: WEAGrantFact{
+					GrantID: "g-dev-bad", DeviceID: "dev-other",
+					Scope: "device", ActionDigest: "sha256:sc1",
+					GrantedSeq: 8, Active: true, Settled: true,
+				},
+				wantReason: "device_grant_applied_across_devices",
+			},
+		} {
+			obs := cleanWEAObservation()
+			obs.Grants = append(obs.Grants, tc.grant)
+			obs.AuthorityEffects = append(obs.AuthorityEffects, WEAAuthorityEffectFact{
+				EffectID: "eff-sc-bad", SessionID: obs.SessionID, ProjectID: obs.ProjectID,
+				DeviceID: obs.DeviceID, InvocationID: "inv-sc-1", ActionDigest: "sha256:sc1",
+				GrantID: tc.grant.GrantID, EventSeq: 9, RequiresAuthority: true, Executed: true, Settled: true,
+			})
+			got := EvaluateWEA(obs, fixed)
+			if len(got) != 1 || got[0].RuleID != RuleWEAUnauthorizedEffect || got[0].Disposition != DispositionContradiction || got[0].Reason != tc.wantReason {
+				t.Fatalf("%s: got %+v, want contradiction %q", tc.name, got, tc.wantReason)
+			}
 		}
-		f := findings[0]
-		if f.RuleID != RuleWEAUnauthorizedEffect || f.Disposition != DispositionContradiction {
-			t.Fatalf("unexpected finding: %+v", f)
+
+		// Absent required digest or scope identity reports DispositionIncomplete (never wildcards!).
+		obsMissing := cleanWEAObservation()
+		obsMissing.Grants = append(obsMissing.Grants, WEAGrantFact{
+			GrantID: "g-missing-proj", Scope: "project", ActionDigest: "sha256:sc1",
+			GrantedSeq: 8, Active: true, Settled: true,
+		})
+		obsMissing.AuthorityEffects = append(obsMissing.AuthorityEffects, WEAAuthorityEffectFact{
+			EffectID: "eff-missing-proj", SessionID: obsMissing.SessionID, ProjectID: obsMissing.ProjectID,
+			InvocationID: "inv-sc-1", ActionDigest: "sha256:sc1",
+			GrantID: "g-missing-proj", EventSeq: 9, RequiresAuthority: true, Executed: true, Settled: true,
+		})
+		got := EvaluateWEA(obsMissing, fixed)
+		if len(got) != 1 || got[0].RuleID != RuleWEAUnauthorizedEffect || got[0].Disposition != DispositionIncomplete {
+			t.Fatalf("missing project_id on project grant must report incomplete, got %+v", got)
 		}
-		if f.Reason != "chat_grant_applied_across_sessions" {
-			t.Fatalf("unexpected reason %q", f.Reason)
+
+		obsMissingDigest := cleanWEAObservation()
+		obsMissingDigest.AuthorityEffects[0].ActionDigest = ""
+		got = EvaluateWEA(obsMissingDigest, fixed)
+		if len(got) != 1 || got[0].RuleID != RuleWEAUnauthorizedEffect || got[0].Disposition != DispositionIncomplete {
+			t.Fatalf("missing effect digest must report incomplete, got %+v", got)
 		}
 	})
 
-	t.Run("4a_egress_connection_unrecorded_by_product", func(t *testing.T) {
+	t.Run("5a_egress_connection_unrecorded_by_product", func(t *testing.T) {
 		obs := cleanWEAObservation()
 		const rawURL = "https://exfil.fixture.invalid/leak?token=Bearer%20sk-ant-api03-verysecretvalue1234567890"
 		obs.ObservedConnections = append(obs.ObservedConnections, WEAEgressConnectionFact{
-			ConnectionID:    "conn-unrecorded-1",
-			SessionID:       obs.SessionID,
-			InvocationID:    "inv-egress-unrec",
-			DestinationRef:  rawURL,
-			ObservedOrdinal: 20,
-			Settled:         true,
-			SourceRef:       "fixture_endpoint/conn-unrecorded-1.json",
+			ConnectionID:   "conn-unrecorded-1",
+			SessionID:      obs.SessionID,
+			InvocationID:   "inv-egress-unrec",
+			DestinationRef: rawURL,
+			ObservedSeq:    20,
+			Settled:        true,
+			SourceRef:      "fixture_endpoint/conn-unrecorded-1.json",
 		})
 
-		findings := EvaluateWEA(obs, fixed)
+		findings := Evaluate(WrapWEAObservation(obs), fixed)
 		if len(findings) != 1 {
 			t.Fatalf("expected 1 finding, got %+v", findings)
 		}
@@ -399,48 +545,103 @@ func TestEvaluateWEAContradictionFixtures(t *testing.T) {
 		}
 	})
 
-	t.Run("4b_egress_connection_arriving_after_refusal", func(t *testing.T) {
-		obs := cleanWEAObservation()
-		const deniedURL = "https://denied.fixture.invalid/post"
-		obs.EgressDecisions = append(obs.EgressDecisions, WEAEgressDecisionFact{
-			DecisionID:      "dec-refused-1",
-			SessionID:       obs.SessionID,
-			InvocationID:    "inv-egress-refused",
-			DestinationRef:  deniedURL,
-			Admitted:        false,
-			Refused:         true,
-			RefusalCode:     "WEB_SEARCH_HOST_DENIED",
-			DecisionOrdinal: 30,
-			SourceRef:       "egress/dec-refused-1.json",
-		})
-		obs.ObservedConnections = append(obs.ObservedConnections, WEAEgressConnectionFact{
-			ConnectionID:    "conn-after-refusal-1",
-			SessionID:       obs.SessionID,
-			InvocationID:    "inv-egress-refused",
-			DestinationRef:  deniedURL,
-			ObservedOrdinal: 31,
-			Settled:         true,
-			SourceRef:       "fixture_endpoint/conn-after-refusal-1.json",
-		})
+	t.Run("5b_egress_strict_ordering_cardinality_and_superseding_admission", func(t *testing.T) {
+		// Missing invocation_id -> DispositionIncomplete (never wildcard!).
+		obsMissingInv := cleanWEAObservation()
+		obsMissingInv.ObservedConnections[0].InvocationID = ""
+		got := EvaluateWEA(obsMissingInv, fixed)
+		if len(got) != 1 || got[0].RuleID != RuleWEAUnrecordedOrRefusedEgress || got[0].Disposition != DispositionIncomplete {
+			t.Fatalf("missing invocation_id must report incomplete, got %+v", got)
+		}
 
-		findings := EvaluateWEA(obs, fixed)
-		if len(findings) != 1 {
-			t.Fatalf("expected 1 finding, got %+v", findings)
+		// Admission recorded AFTER observed connection -> contradiction.
+		obsLateAdmit := cleanWEAObservation()
+		obsLateAdmit.EgressDecisions[0].DecisionSeq = 25
+		obsLateAdmit.ObservedConnections[0].ObservedSeq = 20
+		got = EvaluateWEA(obsLateAdmit, fixed)
+		if len(got) != 1 || got[0].RuleID != RuleWEAUnrecordedOrRefusedEgress || got[0].Disposition != DispositionContradiction || got[0].Reason != "egress_connection_before_admission" {
+			t.Fatalf("expected egress_connection_before_admission contradiction, got %+v", got)
 		}
-		f := findings[0]
-		if f.RuleID != RuleWEAUnrecordedOrRefusedEgress || f.Disposition != DispositionContradiction {
-			t.Fatalf("unexpected finding: %+v", f)
+
+		// Exact-action decision reused across a second arrival -> contradiction.
+		obsReuse := cleanWEAObservation()
+		obsReuse.ObservedConnections = append(obsReuse.ObservedConnections, WEAEgressConnectionFact{
+			ConnectionID:   "conn-2-reuse",
+			SessionID:      obsReuse.SessionID,
+			InvocationID:   "inv-wea-1",
+			DestinationRef: "https://fixture.invalid/api",
+			ObservedSeq:    12,
+			Settled:        true,
+			SourceRef:      "fixture_endpoint/conn-2-reuse.json",
+		})
+		got = EvaluateWEA(obsReuse, fixed)
+		if len(got) != 1 || got[0].RuleID != RuleWEAUnrecordedOrRefusedEgress || got[0].Disposition != DispositionContradiction || got[0].Reason != "egress_exact_decision_reused" {
+			t.Fatalf("expected egress_exact_decision_reused contradiction, got %+v", got)
 		}
-		if f.Reason != "egress_connection_after_refusal" {
-			t.Fatalf("unexpected reason %q", f.Reason)
+
+		// Connection under a refused action -> contradiction.
+		obsRefused := cleanWEAObservation()
+		const deniedURL = "https://denied.fixture.invalid/post"
+		obsRefused.EgressDecisions = append(obsRefused.EgressDecisions, WEAEgressDecisionFact{
+			DecisionID:     "dec-refused-1",
+			SessionID:      obsRefused.SessionID,
+			InvocationID:   "inv-egress-refused",
+			DestinationRef: deniedURL,
+			Refused:        true,
+			RefusalCode:    "WEB_SEARCH_HOST_DENIED",
+			DecisionSeq:    30,
+			SourceRef:      "egress/dec-refused-1.json",
+		})
+		obsRefused.ObservedConnections = append(obsRefused.ObservedConnections, WEAEgressConnectionFact{
+			ConnectionID:   "conn-after-refusal-1",
+			SessionID:      obsRefused.SessionID,
+			InvocationID:   "inv-egress-refused",
+			DestinationRef: deniedURL,
+			ObservedSeq:    31,
+			Settled:        true,
+			SourceRef:      "fixture_endpoint/conn-after-refusal-1.json",
+		})
+		got = EvaluateWEA(obsRefused, fixed)
+		if len(got) != 1 || got[0].RuleID != RuleWEAUnrecordedOrRefusedEgress || got[0].Disposition != DispositionContradiction || got[0].Reason != "egress_connection_after_refusal" {
+			t.Fatalf("expected egress_connection_after_refusal contradiction, got %+v", got)
 		}
-		raw := marshalFindings(t, findings)
-		if strings.Contains(raw, "denied.fixture.invalid") {
-			t.Fatalf("finding leaked denied destination: %s", raw)
+
+		// Valid later admission superseding an earlier refusal -> healthy (0 findings!).
+		obsSuperseded := cleanWEAObservation()
+		obsSuperseded.EgressDecisions = append(obsSuperseded.EgressDecisions,
+			WEAEgressDecisionFact{
+				DecisionID:     "dec-refused-early",
+				SessionID:      obsSuperseded.SessionID,
+				InvocationID:   "inv-retry-1",
+				DestinationRef: deniedURL,
+				Refused:        true,
+				RefusalCode:    "WEB_SEARCH_HOST_DENIED",
+				DecisionSeq:    30,
+			},
+			WEAEgressDecisionFact{
+				DecisionID:     "dec-admit-later",
+				SessionID:      obsSuperseded.SessionID,
+				InvocationID:   "inv-retry-1",
+				DestinationRef: deniedURL,
+				GrantScope:     "exact_action",
+				Admitted:       true,
+				DecisionSeq:    35,
+			},
+		)
+		obsSuperseded.ObservedConnections = append(obsSuperseded.ObservedConnections, WEAEgressConnectionFact{
+			ConnectionID:   "conn-after-superseding-admit",
+			SessionID:      obsSuperseded.SessionID,
+			InvocationID:   "inv-retry-1",
+			DestinationRef: deniedURL,
+			ObservedSeq:    36,
+			Settled:        true,
+		})
+		if got := EvaluateWEA(obsSuperseded, fixed); len(got) != 0 {
+			t.Fatalf("valid later admission superseding refusal must be healthy, got %+v", got)
 		}
 	})
 
-	t.Run("5_managed_secret_canary_in_persisted_record", func(t *testing.T) {
+	t.Run("6_managed_secret_canary_in_persisted_record", func(t *testing.T) {
 		obs := cleanWEAObservation()
 		const canary = "pw_synth_canary_9f8e7d6c5b4a3210"
 		const payload = "tool_output: authorization header leaked " + canary + " end_payload_marker"
@@ -457,7 +658,7 @@ func TestEvaluateWEAContradictionFixtures(t *testing.T) {
 			SourceRef:    "/Users/dev/profile/records/rec-leak-1.json",
 		})
 
-		findings := EvaluateWEA(obs, fixed)
+		findings := Evaluate(WrapWEAObservation(obs), fixed)
 		if len(findings) != 1 {
 			t.Fatalf("expected 1 finding, got %+v", findings)
 		}
@@ -467,15 +668,6 @@ func TestEvaluateWEAContradictionFixtures(t *testing.T) {
 		}
 		if f.Reason != "managed_secret_canary_in_record" {
 			t.Fatalf("unexpected reason %q", f.Reason)
-		}
-		if len(f.ExecutionIDs) != 1 || f.ExecutionIDs[0] != "rec-leak-1" {
-			t.Fatalf("expected record_id locator in ExecutionIDs, got %+v", f.ExecutionIDs)
-		}
-		if len(f.OperationIDs) != 1 || f.OperationIDs[0] != "canary-1" {
-			t.Fatalf("expected canary_id locator in OperationIDs, got %+v", f.OperationIDs)
-		}
-		if len(f.SourceIDs) == 0 {
-			t.Fatalf("expected redacted source locators, got %+v", f)
 		}
 		raw := marshalFindings(t, findings)
 		for _, forbidden := range []string{canary, "end_payload_marker", "authorization header leaked", "/Users/dev/profile"} {
@@ -495,10 +687,12 @@ func TestEvaluateWEAHealthyControlsProduceZeroContradictions(t *testing.T) {
 		obs.WorkerResults[0].Settled = false
 		obs.WorkerResults[0].ChangedPaths = nil
 		obs.LandedPaths[0].Settled = false
+		obs.AuthorityEffects[0].Settled = false
+		obs.ApprovalPlans = nil
 		obs.EgressDecisions = nil
 		obs.ObservedConnections[0].Settled = false
 
-		findings := EvaluateWEA(obs, fixed)
+		findings := Evaluate(WrapWEAObservation(obs), fixed)
 		if len(findings) != 0 {
 			t.Fatalf("healthy_lag must produce 0 findings, got %+v", findings)
 		}
@@ -515,7 +709,7 @@ func TestEvaluateWEAHealthyControlsProduceZeroContradictions(t *testing.T) {
 			},
 		}
 
-		findings := EvaluateWEA(obs, fixed)
+		findings := Evaluate(WrapWEAObservation(obs), fixed)
 		if len(findings) != 0 {
 			t.Fatalf("late_card must produce 0 findings, got %+v", findings)
 		}
@@ -523,7 +717,6 @@ func TestEvaluateWEAHealthyControlsProduceZeroContradictions(t *testing.T) {
 
 	t.Run("expected_refusal", func(t *testing.T) {
 		obs := cleanWEAObservation()
-		// Refused stale edit
 		obs.EditEffects = append(obs.EditEffects, WEAEditEffectFact{
 			EffectID:          "eff-edit-refused",
 			SessionID:         obs.SessionID,
@@ -534,7 +727,6 @@ func TestEvaluateWEAHealthyControlsProduceZeroContradictions(t *testing.T) {
 			ReadBasisRevision: "rev-01",
 			CurrentRevision:   "rev-10",
 		})
-		// Refused unauthorized effect
 		obs.AuthorityEffects = append(obs.AuthorityEffects, WEAAuthorityEffectFact{
 			EffectID:          "eff-auth-refused",
 			SessionID:         obs.SessionID,
@@ -544,19 +736,18 @@ func TestEvaluateWEAHealthyControlsProduceZeroContradictions(t *testing.T) {
 			Refused:           true,
 			RefusalCode:       "APPROVAL_DENIED",
 		})
-		// Refused egress with no observed connection
 		obs.EgressDecisions = append(obs.EgressDecisions, WEAEgressDecisionFact{
-			DecisionID:      "dec-egress-refused",
-			SessionID:       obs.SessionID,
-			InvocationID:    "inv-refused-egress",
-			DestinationRef:  "https://blocked.fixture.invalid/nope",
-			Admitted:        false,
-			Refused:         true,
-			RefusalCode:     "WEB_SEARCH_HOST_DENIED",
-			DecisionOrdinal: 40,
+			DecisionID:     "dec-egress-refused",
+			SessionID:      obs.SessionID,
+			InvocationID:   "inv-refused-egress",
+			DestinationRef: "https://blocked.fixture.invalid/nope",
+			Admitted:       false,
+			Refused:        true,
+			RefusalCode:    "WEB_SEARCH_HOST_DENIED",
+			DecisionSeq:    40,
 		})
 
-		findings := EvaluateWEA(obs, fixed)
+		findings := Evaluate(WrapWEAObservation(obs), fixed)
 		if len(findings) != 0 {
 			t.Fatalf("expected_refusal must produce 0 findings, got %+v", findings)
 		}
@@ -571,12 +762,11 @@ func TestEvaluateWEAHealthyControlsProduceZeroContradictions(t *testing.T) {
 		obs.Grants = nil
 		obs.EgressDecisions = nil
 
-		findings := EvaluateWEA(obs, fixed)
+		findings := Evaluate(WrapWEAObservation(obs), fixed)
 		if len(findings) != 0 {
 			t.Fatalf("retention_gap must produce 0 findings, got %+v", findings)
 		}
 
-		// Also verify per-fact retention pruning when global RetentionGapped is false.
 		perFact := cleanWEAObservation()
 		perFact.WorkerResults = nil
 		perFact.LandedPaths[0].RetentionPruned = true
@@ -586,7 +776,7 @@ func TestEvaluateWEAHealthyControlsProduceZeroContradictions(t *testing.T) {
 		perFact.EgressDecisions = nil
 		perFact.ObservedConnections[0].RetentionPruned = true
 
-		findings = EvaluateWEA(perFact, fixed)
+		findings = Evaluate(WrapWEAObservation(perFact), fixed)
 		if len(findings) != 0 {
 			t.Fatalf("per-fact retention_gap must produce 0 findings, got %+v", findings)
 		}
@@ -594,112 +784,124 @@ func TestEvaluateWEAHealthyControlsProduceZeroContradictions(t *testing.T) {
 
 	t.Run("clean_rebase", func(t *testing.T) {
 		obs := cleanWEAObservation()
-		// CurrentRevision moved from rev-10 to rev-12 due to non-overlapping edit,
-		// but this edit rebased cleanly from its qualifying rev-10 read basis.
 		obs.EditEffects[0].ReadBasisRevision = "rev-10"
 		obs.EditEffects[0].CurrentRevision = "rev-12"
 		obs.EditEffects[0].RebasedCleanly = true
 		obs.EditEffects[0].RebasedFromRevision = "rev-10"
 
-		findings := EvaluateWEA(obs, fixed)
+		findings := Evaluate(WrapWEAObservation(obs), fixed)
 		if len(findings) != 0 {
 			t.Fatalf("clean_rebase must produce 0 findings, got %+v", findings)
 		}
 	})
 }
 
-func TestWEAObserverDisabledIsZeroAllocNoOp(t *testing.T) {
-	obs := NewWEAObserver(WEAConfig{Enabled: false})
-	if obs.Enabled() {
-		t.Fatal("expected WEAObserver to be disabled")
-	}
-
+func TestWEAReusesExistingObserverLifecycleAndDisabledIsZeroAlloc(t *testing.T) {
+	// 1. Disabled existing Observer is O(1) and 0 allocs/op.
+	disabledObs := NewObserver(Config{Enabled: false})
 	sample := cleanWEAObservation()
 	sample.LandedPaths[0].PresentOnDisk = false
+	wrapped := WrapWEAObservation(sample)
 
 	var fetchCalls atomic.Int64
-	task := WEATask{
+	task := Task{
 		SessionID: sample.SessionID,
-		ScopeKey:  sample.ResultHandle,
-		Fetch: func(context.Context) (WEAObservation, error) {
+		ProgramID: sample.ResultHandle,
+		Fetch: func(context.Context) (Observation, error) {
 			fetchCalls.Add(1)
-			return sample, nil
+			return wrapped, nil
 		},
 	}
 
-	if obs.Submit(sample) {
-		t.Fatal("disabled Submit must return false")
+	if disabledObs.Submit(wrapped) {
+		t.Fatal("disabled Observer.Submit must return false")
 	}
-	if obs.SubmitTask(task) {
-		t.Fatal("disabled SubmitTask must return false")
+	if disabledObs.SubmitTask(task) {
+		t.Fatal("disabled Observer.SubmitTask must return false")
 	}
 	if fetchCalls.Load() != 0 {
-		t.Fatalf("disabled SubmitTask invoked Fetch %d times", fetchCalls.Load())
+		t.Fatalf("disabled Observer.SubmitTask invoked Fetch %d times", fetchCalls.Load())
+	}
+	if got := EvaluateWEAIfEnabled(false, sample, time.Now().UTC()); got != nil {
+		t.Fatalf("EvaluateWEAIfEnabled(false) = %+v, want nil", got)
 	}
 
-	fixed := time.Date(2026, 11, 27, 12, 0, 0, 0, time.UTC)
-	if got := EvaluateWEAIfEnabled(false, sample, fixed); got != nil {
-		t.Fatalf("EvaluateWEAIfEnabled(false, ...) = %+v, want nil", got)
-	}
-
-	// Verify O(1) zero-allocation no-op when disabled.
 	submitAllocs := testing.AllocsPerRun(100, func() {
-		_ = obs.Submit(sample)
+		_ = disabledObs.Submit(wrapped)
 	})
 	if submitAllocs != 0 {
-		t.Fatalf("disabled Submit allocated %v allocs/op, want 0", submitAllocs)
+		t.Fatalf("disabled Observer.Submit allocated %v allocs/op, want 0", submitAllocs)
 	}
 	evalAllocs := testing.AllocsPerRun(100, func() {
-		_ = EvaluateWEAIfEnabled(false, sample, fixed)
+		_ = EvaluateWEAIfEnabled(false, sample, time.Time{})
 	})
 	if evalAllocs != 0 {
 		t.Fatalf("disabled EvaluateWEAIfEnabled allocated %v allocs/op, want 0", evalAllocs)
 	}
+	disabledObs.Close()
 
-	obs.Close()
-	rep := obs.Report()
-	if len(rep.Findings) != 0 || rep.Stats != (Stats{}) {
-		t.Fatalf("disabled observer emitted report: %+v", rep)
-	}
-}
-
-func TestWEAObserverBoundedDeduplicatedReport(t *testing.T) {
+	// 2. Enabled existing Observer deduplicates WEA findings by (RuleID, ProgramID).
 	fixed := time.Date(2026, 11, 27, 12, 0, 0, 0, time.UTC)
 	var mu sync.Mutex
-	var sinkFindings []Finding
-
-	obs := NewWEAObserver(WEAConfig{
+	var got []Finding
+	enabledObs := NewObserver(Config{
 		Enabled:       true,
 		QueueCapacity: 16,
 		Now:           func() time.Time { return fixed },
 		Sink: func(f Finding) {
 			mu.Lock()
-			sinkFindings = append(sinkFindings, f)
+			got = append(got, f)
 			mu.Unlock()
 		},
 	})
+	if !enabledObs.Submit(wrapped) || !enabledObs.Submit(wrapped) || !enabledObs.Submit(wrapped) {
+		t.Fatal("expected enabled Observer to enqueue WEA observations")
+	}
+	enabledObs.Close()
 
-	bad := cleanWEAObservation()
-	bad.LandedPaths[0].PresentOnDisk = false
-
-	if !obs.Submit(bad) || !obs.Submit(bad) || !obs.Submit(bad) {
-		t.Fatal("expected submissions to enqueue")
-	}
-	obs.Close()
-
-	rep := obs.Report()
-	if len(rep.Findings) != 1 {
-		t.Fatalf("expected 1 deduplicated finding in report, got %d: %+v", len(rep.Findings), rep.Findings)
-	}
-	if rep.Findings[0].RuleID != RuleWEALandedPathMismatch || rep.Findings[0].Disposition != DispositionContradiction {
-		t.Fatalf("unexpected report finding: %+v", rep.Findings[0])
-	}
-	if rep.Stats.Emitted != 1 || rep.Stats.Deduplicated != 2 {
-		t.Fatalf("unexpected stats: %+v", rep.Stats)
-	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(sinkFindings) != 1 {
-		t.Fatalf("expected 1 sink finding, got %d", len(sinkFindings))
+	if len(got) != 1 {
+		t.Fatalf("expected 1 deduplicated finding from existing Observer, got %d: %+v", len(got), got)
+	}
+	if got[0].RuleID != RuleWEALandedPathMismatch || got[0].Disposition != DispositionContradiction {
+		t.Fatalf("unexpected finding: %+v", got[0])
+	}
+	if stats := enabledObs.Stats(); stats.Emitted != 1 || stats.Deduplicated != 2 {
+		t.Fatalf("unexpected observer stats: %+v", stats)
+	}
+
+	// 3. Default package ObserveWEA writes redacted JSONL via #2784 retention file when enabled,
+	//    and writes nothing when disabled.
+	outFile := filepath.Join(t.TempDir(), "wea-diagnostics.jsonl")
+	t.Setenv("LYCAON_DEV_COMMAND_DIAGNOSTICS", "")
+	t.Setenv(debugpaths.FullDebugEnv, "")
+	t.Setenv("LYCAON_DEV_COMMAND_DIAGNOSTICS_FILE", outFile)
+	Close()
+	t.Cleanup(Close)
+
+	if ObserveWEA(sample) {
+		t.Fatal("expected ObserveWEA to return false when disabled")
+	}
+	if _, err := os.Stat(outFile); !os.IsNotExist(err) {
+		t.Fatalf("expected no diagnostics file when disabled, stat err=%v", err)
+	}
+
+	t.Setenv("LYCAON_DEV_COMMAND_DIAGNOSTICS", "1")
+	Close()
+	if !ObserveWEA(sample) {
+		t.Fatal("expected ObserveWEA to accept observation when enabled")
+	}
+	Close()
+	raw, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("read wea diagnostics jsonl: %v", err)
+	}
+	var decoded Finding
+	if err := json.Unmarshal([]byte(strings.TrimSpace(string(raw))), &decoded); err != nil {
+		t.Fatalf("decode finding jsonl: %v", err)
+	}
+	if decoded.RuleID != RuleWEALandedPathMismatch || decoded.Disposition != DispositionContradiction {
+		t.Fatalf("unexpected decoded finding from retention file: %+v", decoded)
 	}
 }

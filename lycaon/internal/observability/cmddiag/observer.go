@@ -111,6 +111,9 @@ func NewObserver(cfg Config) *Observer {
 
 // Submit enqueues an immutable observation without blocking.
 func (o *Observer) Submit(obs Observation) bool {
+	if o == nil || !o.enabled {
+		return false
+	}
 	copyObs := obs
 	return o.enqueue(workItem{obs: &copyObs})
 }
@@ -118,7 +121,7 @@ func (o *Observer) Submit(obs Observation) bool {
 // SubmitTask enqueues a deferred fetch task without blocking. When the queue
 // is saturated, task.Fetch is never called.
 func (o *Observer) SubmitTask(task Task) bool {
-	if task.Fetch == nil {
+	if o == nil || !o.enabled || task.Fetch == nil {
 		return false
 	}
 	copyTask := task
