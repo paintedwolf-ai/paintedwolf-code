@@ -166,14 +166,18 @@ def run_watch_boundary_case(
             application,
             session_id,
             rendered_observer=rendered_obs,
-            admission_observer=admission_obs,
+            source_observer=source_obs,
             timeout_s=timeout_s,
             sse_path=sse_path,
         )
 
         # 1. Launch gated background command and register a real watch (collect or wake).
-        _, _, handle = driver.call_command(barrier.shell_command())
-        barrier.wait_reached(timeout_s=min(10.0, timeout_s))
+        cmd_str = barrier.command_string(relative_to=project_dir, background=True)
+        _, _, handle = driver.call_command(
+            cmd_str,
+            progress_update=f"- [ ] Run WW09 {case_id} watch parity check",
+        )
+        barrier.wait_reached(timeout_s=min(10.0, timeout_s), dump_state=driver._dump_state)
         source_obs.record_event("command_launched", handle=handle)
         _, _, watch_receipt = driver.call_watch(
             {
@@ -225,7 +229,7 @@ def run_watch_boundary_case(
         )
     except Exception as exc:
         verdict = "fail"
-        defect_codes.append(f"exception:{type(exc).__name__}")
+        defect_codes.append(f"exception:{type(exc).__name__}:{exc}")
     finally:
         if sse is not None:
             sse.close()
