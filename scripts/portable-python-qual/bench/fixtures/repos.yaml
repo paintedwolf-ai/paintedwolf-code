@@ -1,0 +1,39 @@
+# Public repositories the generated sessions work in, pinned by commit. Every
+# license is permissive. `license_files` pins, by sha256, the license texts a
+# person read at that commit to confirm the SPDX label; `repos verify` checks
+# each pin and each text, and a dataset release ships the texts.
+# Held-out repositories never contribute a training row: they measure a
+# codebase the heads never saw.
+repos:
+  - {name: cobra,   url: https://github.com/spf13/cobra,        commit: adbc8813901bba65827259daa8e22ff94ec1f30e, spdx: Apache-2.0, language: go,         split: train,
+      license_files: {LICENSE.txt: 5e3400b93bbb099e83e52bab885e7441750673c21f97988ca3f1240639b63283}}
+  - {name: gin,     url: https://github.com/gin-gonic/gin,      commit: 1bd0ecf2d3e08da37efa270bb7be20c1eddb0d68, spdx: MIT,        language: go,         split: train,
+      license_files: {LICENSE: b104efb2c7700691650f27034e8541c5ae0ed9af54d884287f19a7467ca2fe7f}}
+  - {name: flask,   url: https://github.com/pallets/flask,      commit: d73fa1cdcbd8b1465c151db8924ba58b1dd14e35, spdx: BSD-3-Clause, language: python,   split: train,
+      license_files: {LICENSE.txt: 489a8e1108509ed98a37bb983e11e0f7e1d31f0bd8f99a79c8448e7ff37d07ea}}
+  - {name: httpx,   url: https://github.com/encode/httpx,       commit: b5addb64f0161ff6bfe94c124ef76f6a1fba5254, spdx: BSD-3-Clause, language: python,   split: train,
+      license_files: {LICENSE.md: 4ec59d544f12b5f539a3a716fd321ac58ccd8030b465221f2c880200cdf28d8d}}
+  - {name: requests, url: https://github.com/psf/requests,      commit: 611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60, spdx: Apache-2.0, language: python,     split: train,
+      license_files: {LICENSE: 09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b}}
+  - {name: express, url: https://github.com/expressjs/express,  commit: 9a34acf03cb818ff3f8bc40e44176e277a25cbb9, spdx: MIT,        language: javascript, split: train,
+      license_files: {LICENSE: 95a5762890e5c1c9808921cef095661fc482c5e1f0bba31446ac85595df6237c}}
+  - {name: axios,   url: https://github.com/axios/axios,        commit: 2426e03ba9020be31ed013873423cea6b7cd2e67, spdx: MIT,        language: javascript, split: train,
+      license_files: {LICENSE: 82761059eaedacb3356803aea8a170d8298609f91b14fc32ee1bfb40d690183c}}
+  - {name: gson,    url: https://github.com/google/gson,        commit: 854c8255b625cf1e13c701a83ea9ccb4caaa576a, spdx: Apache-2.0, language: java,       split: train,
+      license_files: {LICENSE: cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30}}
+  - {name: okhttp,  url: https://github.com/square/okhttp,      commit: 40a3b8749deaacf60a04c890aed052cb14ad36ee, spdx: Apache-2.0, language: kotlin,     split: train,
+      license_files: {LICENSE.txt: cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30}}
+  - {name: axum,    url: https://github.com/tokio-rs/axum,      commit: bc8d4912435204a4a073cea70355ae0328d263fe, spdx: MIT,        language: rust,       split: train,
+      license_files: {LICENSE: 008c87afcd2e626eaf564093250bed06dd7efb5732113264bba3dda8f1c556a1}}
+  - {name: fd,      url: https://github.com/sharkdp/fd,         commit: ce97e473ebaec49697c07daa50a7bc2b32f713d2, spdx: MIT OR Apache-2.0, language: rust, split: train,
+      license_files: {LICENSE-MIT: 322cfc7aa0c774d0eca3b2610f1d414de3ddbd7d8dd4b9dea941a13a6eb07455, LICENSE-APACHE: 73c83c60d817e7df1943cb3f0af81e4939a8352c9a96c2fd00451b1116fa635c}}
+  - {name: thor,    url: https://github.com/rails/thor,         commit: cb11e8e87b3cfe6bc9f6d4b092897f0dfda2476d, spdx: MIT,        language: ruby,       split: train,
+      license_files: {LICENSE.md: 4df3e92a124b84d6767b1a0f1302600ea41d7616cda0b0fc40c1eefe4c9e414b}}
+  - {name: slim,    url: https://github.com/slimphp/Slim,       commit: 3675bf6baac66b07032575b7bef4200b60b7974b, spdx: MIT,        language: php,        split: train,
+      license_files: {LICENSE.md: 24d84675cc9fffd507101fd43fecb5dd7f87679f065d90b2ef597d0a8b7e5994}}
+  - {name: zod,     url: https://github.com/colinhacks/zod,     commit: 2bf7b0630d5378033e90bcee82cb32b0fe04628e, spdx: MIT,        language: typescript, split: holdout,
+      license_files: {LICENSE: 3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8}}
+  - {name: sinatra, url: https://github.com/sinatra/sinatra,    commit: cb22afd7902b566b6eaba6c4ea89739494a65d12, spdx: MIT,        language: ruby,       split: holdout,
+      license_files: {LICENSE: f2f60556a2d5c8d7ef9d54ec1c62152ff40d626b807aba5bdc5126f669ed500f}}
+  - {name: ripgrep, url: https://github.com/BurntSushi/ripgrep, commit: 3fce3b5bb0236da2df6d99672afb8a719642eca7, spdx: Unlicense OR MIT, language: rust, split: holdout,
+      license_files: {LICENSE-MIT: 0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f, COPYING: 01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f, UNLICENSE: 7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c}}
