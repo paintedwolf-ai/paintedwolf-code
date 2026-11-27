@@ -1,0 +1,220 @@
+"""Asset bundling, third-party notices, and auditable WASI package patches
+for scripts/portable-python/build-image.py.
+"""
+
+from __future__ import annotations
+
+import tarfile
+from pathlib import Path
+from typing import Any, Callable
+
+
+def install_bundled_fonts(
+    lock: dict[str, Any],
+    cache_dir: Path,
+    packages_dir: Path,
+    download_verified: Callable[[str, Path, str], Path],
+    sha256_file: Callable[[Path], str],
+) -> list[dict[str, Any]]:
+    """Extract verified redistributable Unicode TrueType fonts and license notices."""
+    bundles = lock.get("bundled_fonts") or []
+    if not bundles:
+        return []
+    fonts_dir = packages_dir / "fonts"
+    fonts_dir.mkdir(parents=True, exist_ok=True)
+    manifest_fonts: list[dict[str, Any]] = []
+    for bundle in bundles:
+        archive = download_verified(
+            bundle["source_url"],
+            cache_dir / "fonts" / bundle["filename"],
+            bundle["source_sha256"],
+        )
+        license_member = bundle["license_member"]
+        license_dest_name = bundle["license_dest"]
+        wanted = {f["archive_member"]: f for f in bundle["files"]}
+        found_files: dict[str, bytes] = {}
+        license_bytes: bytes | None = None
+        mode = "r:bz2" if archive.name.endswith(".bz2") else "r:gz"
+        with tarfile.open(archive, mode) as tf:
+            for member in tf.getmembers():
+                if not member.isfile():
+                    continue
+                if member.name == license_member:
+                    fh = tf.extractfile(member)
+                    assert fh is not None
+                    license_bytes = fh.read()
+                elif member.name in wanted:
+                    fh = tf.extractfile(member)
+                    assert fh is not None
+                    found_files[member.name] = fh.read()
+        if license_bytes is None:
+            raise RuntimeError(f"Font archive {archive.name} missing license {license_member}")
+        lic_out = fonts_dir / license_dest_name
+        lic_out.write_bytes(license_bytes)
+        for member_name, spec in wanted.items():
+            if member_name not in found_files:
+                raise RuntimeError(f"Font archive {archive.name} missing {member_name}")
+            out_path = fonts_dir / spec["dest_name"]
+            out_path.write_bytes(found_files[member_name])
+            manifest_fonts.append(
+                {
+                    "family": spec["family"],
+                    "style": spec["style"],
+                    "image_path": f"packages/fonts/{spec['dest_name']}",
+                    "guest_path": f"/packages/fonts/{spec['dest_name']}",
+                    "sha256": sha256_file(out_path),
+                    "license": bundle["license"],
+                    "license_path": f"packages/fonts/{license_dest_name}",
+                    "source_url": bundle["source_url"],
+                }
+            )
+            print(f"[font] {spec['family']} {spec['style']} -> /packages/fonts/{spec['dest_name']}")
+    return manifest_fonts
+
+
+def write_third_party_notices(
+    image_dir: Path,
+    manifest_dists: list[dict[str, Any]],
+    bundled_fonts: list[dict[str, Any]],
+) -> str:
+    """Write THIRD_PARTY_NOTICES.txt listing all bundled distributions, fonts, and native libs."""
+    lines = [
+        "Painted Wolf Portable Python — Third-Party Notices",
+        "==================================================",
+        "",
+        "Interpreter & Built-in WASI Native Components:",
+        "- CPython 3.12.0 (PSF-2.0)",
+        "- WASI-SDK 20.0 / wasi-libc (Apache-2.0 WITH LLVM-exception / MIT)",
+        "- zlib 1.3.1 (Zlib License) — built into WASI guest for PNG/DEFLATE support",
+        "- bzip2 1.0.8 (bzip2-1.0.6 License) — built into WASI guest for bz2 compression",
+        "- SQLite3 3.45.3 (Public Domain) — built into WASI guest for sqlite3 stdlib",
+        "- libjpeg (IJG) 9f (IJG License) — built into WASI guest for Pillow JPEG codec",
+        "- libxml2 2.12.9 & libxslt 1.1.42 (MIT) — built into WASI guest for lxml.etree XPath/XML support",
+        "- Pillow 11.1.0 built-in PIL._imaging C extension (MIT-CMU)",
+        "- lxml 5.3.0 built-in lxml.etree & lxml._elementpath Cython/C extensions (BSD-3-Clause)",
+        "",
+        "Bundled Python Distributions:",
+    ]
+    for d in sorted(manifest_dists, key=lambda x: x["normalized_name"]):
+        vis = "public" if d["public"] else "dependency"
+        lines.append(f"- {d['name']} {d['version']} ({d['license']}) [{vis}] — {d['source_url']}")
+    if bundled_fonts:
+        lines.append("")
+        lines.append("Bundled Redistributable Fonts:")
+        for f in bundled_fonts:
+            lines.append(
+                f"- {f['family']} {f['style']} ({f['license']}) at {f['guest_path']} "
+                f"(license text: {f['license_path']}) — {f['source_url']}"
+            )
+    lines.append("")
+    out = image_dir / "THIRD_PARTY_NOTICES.txt"
+    out.write_text("\n".join(lines), encoding="utf-8")
+    return "THIRD_PARTY_NOTICES.txt"
+
+
+def _refresh_record_entry(
+    packages_root: Path,
+    dist_info_glob: str,
+    rel_path: str,
+    target_file: Path,
+    record_hash: Callable[[Path], tuple[str, int]],
+) -> None:
+    h, sz = record_hash(target_file)
+    for dist_info in packages_root.glob(dist_info_glob):
+        rec = dist_info / "RECORD"
+        if rec.is_file():
+            lines = rec.read_text(encoding="utf-8").splitlines()
+            updated = [
+                f"{rel_path},{h},{sz}" if line.startswith(f"{rel_path},") else line
+                for line in lines
+            ]
+            rec.write_text("\n".join(updated) + "\n", encoding="utf-8")
+
+
+def apply_wasi_package_patches(
+    packages_root: Path,
+    record_hash: Callable[[Path], tuple[str, int]],
+) -> list[dict[str, str]]:
+    """Apply minimal, auditable WASI compatibility patches and refresh RECORD."""
+    patches: list[dict[str, str]] = []
+
+    # Patch 1: pytest 8.4.1 _pytest/compat.py checks win32/emscripten for os.getuid()
+    # but omits wasi, breaking the tmp_path fixture on wasm32-wasi.
+    compat_py = packages_root / "_pytest" / "compat.py"
+    if compat_py.is_file():
+        old = 'if sys.platform == "win32" or sys.platform == "emscripten":'
+        new = 'if sys.platform in ("win32", "emscripten", "wasi"):'
+        text = compat_py.read_text(encoding="utf-8")
+        if old in text:
+            compat_py.write_text(text.replace(old, new, 1), encoding="utf-8")
+            _refresh_record_entry(packages_root, "pytest-*.dist-info", "_pytest/compat.py", compat_py, record_hash)
+            patches.append(
+                {
+                    "target": "packages/_pytest/compat.py",
+                    "reason": "Treat sys.platform == 'wasi' like emscripten/win32 in get_user_id() so tmp_path fixture works without os.getuid()",
+                }
+            )
+
+    # Patch 2: sympy 1.14.0 sympy/external/gmpy.py imports ctypes.c_long/sizeof
+    # solely to compute LONG_MAX, but wasm32-wasi CPython omits _ctypes/libffi.
+    gmpy_py = packages_root / "sympy" / "external" / "gmpy.py"
+    if gmpy_py.is_file():
+        old_imp = "from ctypes import c_long, sizeof"
+        old_max = "LONG_MAX = (1 << (8*sizeof(c_long) - 1)) - 1"
+        text = gmpy_py.read_text(encoding="utf-8")
+        if old_imp in text and old_max in text:
+            updated_text = text.replace(old_imp, "import struct as _struct", 1).replace(
+                old_max, "LONG_MAX = (1 << (8*_struct.calcsize('l') - 1)) - 1", 1
+            )
+            gmpy_py.write_text(updated_text, encoding="utf-8")
+            _refresh_record_entry(packages_root, "sympy-*.dist-info", "sympy/external/gmpy.py", gmpy_py, record_hash)
+            patches.append(
+                {
+                    "target": "packages/sympy/external/gmpy.py",
+                    "reason": "Compute LONG_MAX via stdlib struct.calcsize('l') instead of ctypes.sizeof(c_long) so SymPy imports cleanly on wasm32-wasi without _ctypes",
+                }
+            )
+
+    # Patch 3: fpdf2 2.9.0 fpdf/image_parsing.py unconditionally imports
+    # urllib.request.HTTPSHandler and http.client.HTTPSConnection, which CPython
+    # omits on wasm32-wasi (no _ssl).
+    img_parsing_py = packages_root / "fpdf" / "image_parsing.py"
+    if img_parsing_py.is_file():
+        old_block = (
+            "from urllib.request import (\n"
+            "    HTTPHandler,\n"
+            "    HTTPRedirectHandler,\n"
+            "    HTTPSHandler,\n"
+            "    ProxyHandler,\n"
+            "    Request,\n"
+            "    build_opener,\n"
+            ")"
+        )
+        new_block = (
+            "from urllib.request import (\n"
+            "    HTTPHandler,\n"
+            "    HTTPRedirectHandler,\n"
+            "    ProxyHandler,\n"
+            "    Request,\n"
+            "    build_opener,\n"
+            ")\n"
+            "try:\n"
+            "    from urllib.request import HTTPSHandler\n"
+            "except ImportError:\n"
+            "    HTTPSHandler = HTTPHandler"
+        )
+        text = img_parsing_py.read_text(encoding="utf-8")
+        if old_block in text:
+            patched_text = text.replace(old_block, new_block, 1).replace(
+                "http.client.HTTPSConnection",
+                'getattr(http.client, "HTTPSConnection", http.client.HTTPConnection)',
+            )
+            img_parsing_py.write_text(patched_text, encoding="utf-8")
+            _refresh_record_entry(packages_root, "fpdf2-*.dist-info", "fpdf/image_parsing.py", img_parsing_py, record_hash)
+            patches.append(
+                {
+                    "target": "packages/fpdf/image_parsing.py",
+                    "reason": "Guard urllib.request.HTTPSHandler and http.client.HTTPSConnection when _ssl is absent on wasm32-wasi so fpdf2 imports cleanly",
+                }
+            )
+    return patches
