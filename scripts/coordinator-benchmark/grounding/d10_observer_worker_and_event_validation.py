@@ -275,16 +275,28 @@ def run_d10_worker_and_event_validation(
             if not child_sid or child_req is None:
                 raise RuntimeError("Worker child session never became pending")
 
-            # Child reads app.go, then incurs a grounding reject on [read#99:99] and repairs to [read#1:3]
+            # Child emits an ungrounded mid-turn note [read#99:99] alongside a command tool call
+            # (charging shared grounding friction on (child_sid, root_sid)), then completes cleanly.
             client.respond(
                 child_req["id"],
+                content="Worker inspecting bogus handle [read#99:99].",
                 tool_calls=[{"id": str(uuid.uuid4()), "name": "command", "args": {"command": "cat -n app.go"}}],
             )
             child_req2 = client.wait_pending(child_sid, timeout=180.0)
-            client.respond(child_req2["id"], content="Worker claimed [read#99:99].")
-            # Wait for repair prompt on child_sid and repair
-            child_rep = client.wait_pending(child_sid, timeout=180.0)
-            client.respond(child_rep["id"], content="[cite: c1 => read#1:3]")
+            client.respond(
+                child_req2["id"],
+                tool_calls=[
+                    {
+                        "id": str(uuid.uuid4()),
+                        "name": "complete_leg",
+                        "args": {
+                            "leg_status": "complete",
+                            "brief": "Surveyed app.go.",
+                            "findings": [{"path": "app.go", "line": 3, "evidence": "read#1", "note": "Verified Main()."}],
+                        },
+                    }
+                ],
+            )
 
             art_sib = sib_fut.result()
             (out_dir / "sibling-session.json").write_text(
