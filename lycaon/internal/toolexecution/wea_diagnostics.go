@@ -1,6 +1,7 @@
 package toolexecution
 
 import (
+	"context"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -8,32 +9,91 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-// observeSettledAuthorityEffectWEA emits ONLY the settled authority-gated
-// execution effect fact using the owning ActionDigest (hitl.GrantKey) and
-// checkpoint/grant references. ApprovalPlans and Grants are emitted
-// independently by internal/hitl and joined inside cmddiag.Observer.
+type authorityWitnessKey struct{}
+
+// authorityExecutionWitness captures the authority requirement and any
+// authorized checkpoint/grant binding during pre-invoke evaluation. It emits
+// NOTHING during approval; observePostExecutionAuthorityEffectWEA emits the
+// settled AuthorityEffect fact ONLY after registry.Run completes with err==nil.
+type authorityExecutionWitness struct {
+	requiresAuthority bool
+	tool              string
+	actionDigest      string
+	approvalPlanID    string
+	grantID           string
+}
+
+func withAuthorityExecutionWitness(ctx context.Context) context.Context {
+	if !cmddiag.Enabled() {
+		return ctx
+	}
+	return context.WithValue(ctx, authorityWitnessKey{}, &authorityExecutionWitness{})
+}
+
+func authorityWitnessFrom(ctx context.Context) *authorityExecutionWitness {
+	if ctx == nil {
+		return nil
+	}
+	w, _ := ctx.Value(authorityWitnessKey{}).(*authorityExecutionWitness)
+	return w
+}
+
+func recordAuthorityRequirement(ctx context.Context, tool, actionDigest, grantID string) {
+	w := authorityWitnessFrom(ctx)
+	if w == nil {
+		return
+	}
+	w.requiresAuthority = true
+	if strings.TrimSpace(tool) != "" {
+		w.tool = strings.TrimSpace(tool)
+	}
+	if strings.TrimSpace(actionDigest) != "" {
+		w.actionDigest = strings.TrimSpace(actionDigest)
+	}
+	if strings.TrimSpace(grantID) != "" {
+		w.grantID = strings.TrimSpace(grantID)
+	}
+}
+
+func recordAuthorizedCheckpoint(ctx context.Context, action hitl.ProposedAction, final *hitl.CheckpointResponse) {
+	w := authorityWitnessFrom(ctx)
+	if w == nil || final == nil {
+		return
+	}
+	w.requiresAuthority = true
+	w.tool = strings.TrimSpace(action.Invocation.Tool)
+	w.actionDigest = strings.TrimSpace(hitl.GrantKey(action))
+	w.approvalPlanID = strings.TrimSpace(final.CheckpointID)
+	if final.Result != nil && len(final.Result.GrantIDs) > 0 {
+		w.grantID = strings.TrimSpace(final.Result.GrantIDs[0])
+	}
+}
+
+// observePostExecutionAuthorityEffectWEA emits the settled authority-gated
+// execution effect fact STRICTLY AFTER registry.Run succeeds (err == nil).
+// An approval whose execution later fails or is canceled never reaches this
+// seam and therefore never produces an executed-effect diagnostic fact.
+// A real committed effect on a path that bypasses awaitActionApproval (leaving
+// approvalPlanID and grantID empty while requiresAuthority is true) IS emitted
+// and caught as unauthorized.
 // Zero overhead when diagnostics are disabled.
-func observeSettledAuthorityEffectWEA(action hitl.ProposedAction, tc tools.ToolContext, final *hitl.CheckpointResponse) bool {
-	if !cmddiag.Enabled() || final == nil {
+func observePostExecutionAuthorityEffectWEA(ctx context.Context, tc tools.ToolContext) bool {
+	if !cmddiag.Enabled() {
+		return false
+	}
+	w := authorityWitnessFrom(ctx)
+	if w == nil || !w.requiresAuthority {
 		return false
 	}
 	sess := strings.TrimSpace(tc.Identity.SessionID)
-	if sess == "" {
-		sess = strings.TrimSpace(action.Scope.SessionID)
-	}
-	inv := strings.TrimSpace(action.Invocation.ActionID)
+	inv := strings.TrimSpace(tc.EffectActionID())
 	if inv == "" {
 		inv = strings.TrimSpace(tc.Identity.ToolCallID)
 	}
-	digest := strings.TrimSpace(hitl.GrantKey(action))
 	seq := cmddiag.NextWEASeq()
 	effectID := inv
 	if effectID == "" {
-		effectID = cmddiag.DigestReference("auth_effect", sess, final.CheckpointID)
-	}
-	grantID := ""
-	if final.Result != nil && len(final.Result.GrantIDs) > 0 {
-		grantID = strings.TrimSpace(final.Result.GrantIDs[0])
+		effectID = cmddiag.DigestReference("auth_effect", sess, w.approvalPlanID, w.actionDigest)
 	}
 	return cmddiag.ObserveWEA(cmddiag.WEAObservation{
 		SessionID:    sess,
@@ -47,11 +107,11 @@ func observeSettledAuthorityEffectWEA(action hitl.ProposedAction, tc tools.ToolC
 				SessionID:         sess,
 				ProjectID:         strings.TrimSpace(tc.Identity.ProjectID),
 				InvocationID:      inv,
-				ActionKind:        strings.TrimSpace(action.Invocation.Tool),
-				TargetRef:         cmddiag.DigestReference("tool_action", action.Invocation.Tool, digest),
-				ActionDigest:      digest,
-				ApprovalPlanID:    strings.TrimSpace(final.CheckpointID),
-				GrantID:           grantID,
+				ActionKind:        w.tool,
+				TargetRef:         cmddiag.DigestReference("tool_action", w.tool, w.actionDigest),
+				ActionDigest:      w.actionDigest,
+				ApprovalPlanID:    w.approvalPlanID,
+				GrantID:           w.grantID,
 				EventSeq:          seq,
 				RequiresAuthority: true,
 				Executed:          true,

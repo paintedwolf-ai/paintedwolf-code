@@ -27,6 +27,7 @@ const networkEgressTool = "network"
 
 // Invoke runs policy checks then delegates to the tool registry.
 func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[string]any, tc tools.ToolContext) (out string, err error) {
+	ctx = withAuthorityExecutionWitness(ctx)
 	ctx, socketScope := socketref.WithScope(ctx)
 	defer socketScope.Close()
 	args = capabilityrequest.CanonicalArguments(args)
@@ -145,6 +146,7 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 		// Subsystem-owner output survives this failure.
 		return out, e.Rejections.renderReject(tr)
 	}
+	observePostExecutionAuthorityEffectWEA(ctx, tc)
 	return out, nil
 }
 

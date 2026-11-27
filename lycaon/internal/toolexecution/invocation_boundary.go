@@ -233,6 +233,9 @@ func (e *Executor) applyPreInvokePolicy(
 	if tool == "process_list" || tool == "process_signal" {
 		return args, nil
 	}
+	if decision.RequiresApproval {
+		recordAuthorityRequirement(ctx, tool, hitl.GrantKey(proposedActionFromPolicy(policyEval)), "")
+	}
 	for decision.RequiresApproval {
 		if e.Approvals.checkpointMgr == nil {
 			return nil, fmt.Errorf("tool approval checkpoints not configured")

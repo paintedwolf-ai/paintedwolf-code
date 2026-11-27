@@ -1,6 +1,7 @@
 package toolexecution
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -10,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-func TestObserveSettledAuthorityEffectWEACrossOwnerJoinAndDisabledZeroAlloc(t *testing.T) {
+func TestPostExecutionAuthorityEffectWEALifecycleAndBypassDetection(t *testing.T) {
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool:     "command",
@@ -36,19 +37,21 @@ func TestObserveSettledAuthorityEffectWEACrossOwnerJoinAndDisabledZeroAlloc(t *t
 
 	// 1. Disabled: 0 allocs/op.
 	restoreOff := cmddiag.SetObserver(cmddiag.NewObserver(cmddiag.Config{Enabled: false}))
-	if observeSettledAuthorityEffectWEA(action, tc, final) {
+	ctxOff := withAuthorityExecutionWitness(context.Background())
+	if observePostExecutionAuthorityEffectWEA(ctxOff, tc) {
 		restoreOff()
 		t.Fatal("expected false when diagnostics disabled")
 	}
 	allocs := testing.AllocsPerRun(100, func() {
-		_ = observeSettledAuthorityEffectWEA(action, tc, final)
+		c := withAuthorityExecutionWitness(context.Background())
+		_ = observePostExecutionAuthorityEffectWEA(c, tc)
 	})
 	restoreOff()
 	if allocs != 0 {
-		t.Fatalf("disabled observeSettledAuthorityEffectWEA allocated %v allocs/op, want 0", allocs)
+		t.Fatalf("disabled post-execution hook allocated %v allocs/op, want 0", allocs)
 	}
 
-	// 2. Enabled: verify cross-owner correlation through cmddiag.Observer.
+	// 2. Enabled: verify post-execution semantics and bypass detection.
 	var mu sync.Mutex
 	var findings []cmddiag.Finding
 	obs := cmddiag.NewObserver(cmddiag.Config{
@@ -64,7 +67,18 @@ func TestObserveSettledAuthorityEffectWEACrossOwnerJoinAndDisabledZeroAlloc(t *t
 	restoreOn := cmddiag.SetObserver(obs)
 	defer restoreOn()
 
-	// 2a. Healthy: independent ApprovalPlan from hitl precedes settled effect -> 0 findings.
+	// 2a. Approval granted in awaitActionApproval, but execution later fails/cancels:
+	//     recordAuthorizedCheckpoint MUST NOT emit an executed-effect diagnostic fact!
+	ctxCanceled := withAuthorityExecutionWitness(context.Background())
+	recordAuthorizedCheckpoint(ctxCanceled, action, &hitl.CheckpointResponse{
+		CheckpointID: "cp-canceled-never-ran",
+		Status:       hitl.DecisionStatusApproved,
+		Result:       &hitl.DecisionResult{Approved: true},
+	})
+	// Execution fails or is canceled -> observePostExecutionAuthorityEffectWEA is NOT called.
+	// Even though cp-canceled-never-ran was never recorded in hitl, zero findings must be emitted!
+
+	// 2b. Healthy: independent ApprovalPlan from hitl precedes post-execution settlement -> 0 findings.
 	planSeq := cmddiag.NextWEASeq()
 	cmddiag.ObserveWEA(cmddiag.WEAObservation{
 		SessionID: tc.Identity.SessionID,
@@ -81,64 +95,32 @@ func TestObserveSettledAuthorityEffectWEACrossOwnerJoinAndDisabledZeroAlloc(t *t
 			},
 		},
 	})
-	if !observeSettledAuthorityEffectWEA(action, tc, final) {
-		t.Fatal("expected authorized settled effect to enqueue")
+	ctxOK := withAuthorityExecutionWitness(context.Background())
+	recordAuthorizedCheckpoint(ctxOK, action, final)
+	if !observePostExecutionAuthorityEffectWEA(ctxOK, tc) {
+		t.Fatal("expected authorized post-execution effect to enqueue")
 	}
 
-	// 2b. Contradiction: settled effect references unrecorded approval plan -> contradiction.
-	unauthAction := action
-	unauthAction.Invocation.ActionID = "act-auth-unrecorded"
-	unauthFinal := &hitl.CheckpointResponse{
-		CheckpointID: "cp-never-recorded",
-		Status:       hitl.DecisionStatusApproved,
-		Result:       &hitl.DecisionResult{Approved: true},
-	}
-	if !observeSettledAuthorityEffectWEA(unauthAction, tc, unauthFinal) {
-		t.Fatal("expected unrecorded-plan settled effect to enqueue")
-	}
-
-	// 2c. Contradiction: settled effect digest disagrees with recorded approval plan -> contradiction.
-	mismatchAction := action
-	mismatchAction.Invocation.ActionID = "act-auth-mismatch"
-	mismatchSeq := cmddiag.NextWEASeq()
-	cmddiag.ObserveWEA(cmddiag.WEAObservation{
-		SessionID: tc.Identity.SessionID,
-		ScopeKey:  "cp-auth-mismatch",
-		Settled:   true,
-		ApprovalPlans: []cmddiag.WEAApprovalPlanFact{
-			{
-				ApprovalPlanID: "cp-auth-mismatch",
-				SessionID:      tc.Identity.SessionID,
-				ActionDigest:   "sha256:tampered-different-digest",
-				DecisionSeq:    mismatchSeq,
-				Approved:       true,
-				Settled:        true,
-			},
-		},
-	})
-	mismatchFinal := &hitl.CheckpointResponse{
-		CheckpointID: "cp-auth-mismatch",
-		Status:       hitl.DecisionStatusApproved,
-		Result:       &hitl.DecisionResult{Approved: true},
-	}
-	if !observeSettledAuthorityEffectWEA(mismatchAction, tc, mismatchFinal) {
-		t.Fatal("expected digest-mismatch settled effect to enqueue")
+	// 2c. Contradiction: real committed effect on a path that bypassed awaitActionApproval
+	//     (requiresAuthority=true, no approvalPlanID/grantID) IS emitted and caught!
+	ctxBypass := withAuthorityExecutionWitness(context.Background())
+	recordAuthorityRequirement(ctxBypass, "command", hitl.GrantKey(action), "")
+	tcBypass := tc
+	tcBypass.Identity.ToolCallID = "call-bypass-1"
+	if !observePostExecutionAuthorityEffectWEA(ctxBypass, tcBypass) {
+		t.Fatal("expected bypassed post-execution effect to enqueue")
 	}
 	obs.Close()
 
 	mu.Lock()
 	defer mu.Unlock()
-	if len(findings) != 2 {
-		t.Fatalf("expected 2 contradictions (unrecorded + digest_mismatch), got %d: %+v", len(findings), findings)
+	if len(findings) != 1 {
+		t.Fatalf("expected exactly 1 finding (bypass only; canceled approval must emit 0), got %d: %+v", len(findings), findings)
 	}
-	reasons := map[string]bool{}
-	for _, f := range findings {
-		if f.RuleID != cmddiag.RuleWEAUnauthorizedEffect || f.Disposition != cmddiag.DispositionContradiction {
-			t.Fatalf("unexpected finding: %+v", f)
-		}
-		reasons[f.Reason] = true
+	if findings[0].RuleID != cmddiag.RuleWEAUnauthorizedEffect || findings[0].Disposition != cmddiag.DispositionContradiction {
+		t.Fatalf("unexpected finding: %+v", findings[0])
 	}
-	if !reasons["approval_plan_not_recorded"] || !reasons["approval_plan_digest_mismatch"] {
-		t.Fatalf("expected both approval_plan_not_recorded and approval_plan_digest_mismatch, got %+v", findings)
+	if findings[0].Reason != "effect_executed_without_matching_approval_or_grant" {
+		t.Fatalf("unexpected reason %q, want effect_executed_without_matching_approval_or_grant", findings[0].Reason)
 	}
 }
