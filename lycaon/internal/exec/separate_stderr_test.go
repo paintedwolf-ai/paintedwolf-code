@@ -3,6 +3,9 @@ package exec
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -61,5 +64,30 @@ func TestScanOutputCapExceedsDefault(t *testing.T) {
 	if DefaultMaxScanOutputBytes <= DefaultMaxOutputBytes {
 		t.Fatalf("scan cap %d must exceed the log cap %d — SARIF reports are documents, not logs",
 			DefaultMaxScanOutputBytes, DefaultMaxOutputBytes)
+	}
+}
+
+func TestPipelineKeepsDiagnosticsOnPartialLaunchCancellation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell pipeline fixture")
+	}
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	res, err := RunPipeline(ctx, []Stage{
+		{Name: "sh", Args: []string{"-c", "echo launch-diagnostic >&2 && touch emitted"}},
+		{Name: "cat"},
+	}, ExecOpts{
+		Launch: HostLaunch("exec test"), Dir: dir, SeparateStderr: true,
+		Started: func(int) {
+			testutil.WaitFor(t, "first stage emitted diagnostics", func() bool {
+				_, err := os.Stat(filepath.Join(dir, "emitted"))
+				return err == nil
+			})
+			cancel()
+		},
+	})
+	if !errors.Is(err, context.Canceled) || res == nil || res.ExitCode != -1 || strings.TrimSpace(string(res.Stderr)) != "launch-diagnostic" {
+		t.Fatalf("partial launch returned result %+v, error %v", res, err)
 	}
 }

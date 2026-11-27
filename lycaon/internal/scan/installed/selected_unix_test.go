@@ -56,6 +56,10 @@ func selectedFixture(t *testing.T) (*bundled.Manifest, string) {
 	testutil.FailErr(t, "fixture artifact directory", os.MkdirAll(directory, 0o700))
 	const executable = `#!/bin/sh
 while [ "$#" -gt 0 ]; do
+  if [ "$1" = --version ]; then
+    printf '%s\n' '1.30.0+paintedwolf.40'
+    exit 0
+  fi
   if [ "$1" = --output ]; then
     shift
     printf '%s' '{"results":[],"errors":[],"paths":{"scanned":[]}}' > "$1"

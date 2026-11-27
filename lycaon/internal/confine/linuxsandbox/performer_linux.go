@@ -53,9 +53,8 @@ type pathCall struct {
 	// Absolute marks, by position, a name whose absolute path makes its
 	// directory irrelevant; no descriptor travels for it.
 	Absolute uint8 `json:"absolute,omitempty"`
-	// Notification is the pending call this one performs. The performer
-	// answers the kernel for it directly when it holds the listener, so the
-	// caller resumes without another hop through the supervisor.
+	// Notification is the pending call this one performs. With the listener,
+	// the performer answers directly except when the supervisor must report a refusal.
 	Notification uint64 `json:"notification,omitempty"`
 	// Caller is the calling process, echoed back so a refusal names it.
 	Caller int `json:"caller,omitempty"`
@@ -247,7 +246,7 @@ func servePathCalls(fd int) error {
 			_ = unix.Close(dir)
 		}
 		result.Caller, result.Notification = call.Caller, call.Notification
-		if call.Notification != 0 && listener >= 0 {
+		if call.Notification != 0 && listener >= 0 && result.Refusal == nil {
 			answerKernel(listener, call, result, opened)
 			if opened >= 0 {
 				_ = unix.Close(opened)
@@ -354,9 +353,8 @@ func newPerformerClient(fd int) *performerClient {
 	return &performerClient{fd: fd}
 }
 
-// lend gives the performer the seccomp listener, after which every call it is
-// forwarded is answered to the kernel by the performer itself; its results
-// arrive at report for refusals.
+// lend lets the performer complete forwarded calls that carry no refusal.
+// The supervisor reports and completes refusals.
 func (c *performerClient) lend(listener int, report func(pathResult)) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -385,7 +383,7 @@ func (c *performerClient) Close() error {
 	return unix.Close(c.fd)
 }
 
-// forward hands the performer a pending call it answers itself.
+// forward hands the performer a pending call.
 func (c *performerClient) forward(call pathCall, dirs []int) error {
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
@@ -454,7 +452,10 @@ func (c *performerClient) readResults(report func(pathResult)) {
 		delete(c.pending, result.Notification)
 		c.mu.Unlock()
 		if result.Refusal != nil {
+			// The caller can exit as soon as the kernel answers, killing the
+			// performer with its namespace. Record the refusal before waking it.
 			report(result)
+			answerKernel(c.listener, pathCall{Notification: result.Notification}, result, -1)
 		}
 	}
 }

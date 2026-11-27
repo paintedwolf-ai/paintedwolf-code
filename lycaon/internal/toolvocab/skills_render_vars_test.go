@@ -36,3 +36,25 @@ func TestSkillRenderVarsSkipsInvalidToolNames(t *testing.T) {
 		t.Fatalf("command mutation still grants write tools: %#v", vars)
 	}
 }
+
+func TestRenderSkillTextInIsolatesValidationMemoFromGlobalCache(t *testing.T) {
+	t.Parallel()
+	local := map[string]skillRenderMemo{}
+	vars := map[string]any{"profile_has_edit": true}
+	varsKey := varsDigestKey(vars)
+	text := "{% if profile_has_edit %}edit-enabled{% endif %}"
+
+	first, err := renderSkillTextIn(local, varsKey, text, vars)
+	testutil.FailErr(t, "renderSkillTextIn miss", err)
+	if first != "edit-enabled" {
+		t.Fatalf("renderSkillTextIn = %q, want %q", first, "edit-enabled")
+	}
+	second, err := renderSkillTextIn(local, varsKey, text, vars)
+	testutil.FailErr(t, "renderSkillTextIn hit", err)
+	if second != first {
+		t.Fatalf("renderSkillTextIn hit = %q, want %q", second, first)
+	}
+	if _, leaked := skillRenderCache.Load(skillRenderCacheKey(varsKey, text)); leaked {
+		t.Fatal("renderSkillTextIn polluted package-global skillRenderCache")
+	}
+}

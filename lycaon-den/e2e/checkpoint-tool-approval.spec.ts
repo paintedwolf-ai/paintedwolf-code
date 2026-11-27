@@ -117,64 +117,69 @@ webE2e.describe("checkpoint tool approval parity", () => {
       const sessionId = await settledChatSessionId(page);
       expect(sessionId).toBeTruthy();
 
-      const socketPath = harnessSocketPath("docker.sock");
-      await listenHarnessSocket(socketPath);
-      const inject = await request.post(
-        `${apiUrl}/harness/checkpoints/tool_approval`,
-        {
-          headers: { ...auth, "Content-Type": "application/json" },
-          data: {
-            session_id: sessionId,
-            command:
-              "docker context use a-very-long-local-development-environment-name",
-            approved_path: socketPath,
-            resolved_path: socketPath,
-            title: "Allow a local development service",
+      let closeSocket: (() => Promise<void>) | undefined;
+      try {
+        const socketPath = harnessSocketPath("docker.sock");
+        closeSocket = await listenHarnessSocket(socketPath);
+        const inject = await request.post(
+          `${apiUrl}/harness/checkpoints/tool_approval`,
+          {
+            headers: { ...auth, "Content-Type": "application/json" },
+            data: {
+              session_id: sessionId,
+              command:
+                "docker context use a-very-long-local-development-environment-name",
+              approved_path: socketPath,
+              resolved_path: socketPath,
+              title: "Allow a local development service",
+            },
           },
-        },
-      );
-      expect(inject.ok(), await inject.text()).toBeTruthy();
-      const card = stage.getByTestId("tool-approval-card");
-      await expect(card).toBeVisible({ timeout: 60_000 });
+        );
+        expect(inject.ok(), await inject.text()).toBeTruthy();
+        const card = stage.getByTestId("tool-approval-card");
+        await expect(card).toBeVisible({ timeout: 60_000 });
 
-      await page
-        .getByTestId("focused-project-nav")
-        .getByRole("button", { name: "Files", exact: true })
-        .click();
-      await page.getByTestId("layout-dock-btn").click();
-      await page.getByTestId("layout-tile-split").click();
-      const divider = page.getByTestId("split-divider");
-      await expect(divider).toBeVisible();
-      await divider.press("End");
+        await page
+          .getByTestId("focused-project-nav")
+          .getByRole("button", { name: "Files", exact: true })
+          .click();
+        await page.getByTestId("layout-dock-btn").click();
+        await page.getByTestId("layout-tile-split").click();
+        const divider = page.getByTestId("split-divider");
+        await expect(divider).toBeVisible();
+        await divider.press("End");
 
-      const chat = page.getByTestId("split-col-chat");
-      await expect
-        .poll(async () => (await chat.boundingBox())?.width ?? 0)
-        .toBeLessThanOrEqual(341);
-      await expect(card.getByRole("button", {name:"Approval details in Files",exact:true})).toBeVisible();
+        const chat = page.getByTestId("split-col-chat");
+        await expect
+          .poll(async () => (await chat.boundingBox())?.width ?? 0)
+          .toBeLessThanOrEqual(341);
+        await expect(card.getByRole("button", {name:"Approval details in Files",exact:true})).toBeVisible();
 
-      const fit = await card.evaluate((element) => {
-        const cardRect = element.getBoundingClientRect();
-        const controls = [
-          ...element.querySelectorAll<HTMLElement>(
-            "[data-zone=actions] button",
-          ),
-        ];
-        return {
-          cardClientWidth: element.clientWidth,
-          cardScrollWidth: element.scrollWidth,
-          controlsFit: controls.every((control) => {
-            const rect = control.getBoundingClientRect();
-            return rect.left >= cardRect.left && rect.right <= cardRect.right;
-          }),
-          controlCount: controls.length,
-        };
-      });
-      expect(fit.cardScrollWidth).toBe(fit.cardClientWidth);
-      expect(fit.controlCount).toBeGreaterThan(0);
-      expect(fit.controlsFit).toBe(true);
-      await card.getByRole("button", {name:"Approval details in Files",exact:true}).click();
-      await expect(page.getByTestId("chat-content-page")).toContainText(socketPath);
+        const fit = await card.evaluate((element) => {
+          const cardRect = element.getBoundingClientRect();
+          const controls = [
+            ...element.querySelectorAll<HTMLElement>(
+              "[data-zone=actions] button",
+            ),
+          ];
+          return {
+            cardClientWidth: element.clientWidth,
+            cardScrollWidth: element.scrollWidth,
+            controlsFit: controls.every((control) => {
+              const rect = control.getBoundingClientRect();
+              return rect.left >= cardRect.left && rect.right <= cardRect.right;
+            }),
+            controlCount: controls.length,
+          };
+        });
+        expect(fit.cardScrollWidth).toBe(fit.cardClientWidth);
+        expect(fit.controlCount).toBeGreaterThan(0);
+        expect(fit.controlsFit).toBe(true);
+        await card.getByRole("button", {name:"Approval details in Files",exact:true}).click();
+        await expect(page.getByTestId("chat-content-page")).toContainText(socketPath);
+      } finally {
+        await closeSocket?.();
+      }
     },
   );
 });

@@ -18,6 +18,10 @@ if [[ -z "${LYCAON_E2E_STATE_DIR:-}" || -z "${LYCAON_E2E_PROJECT_DIR:-}" ]]; the
   echo "error: LYCAON_E2E_STATE_DIR and LYCAON_E2E_PROJECT_DIR must be set" >&2
   exit 1
 fi
+if [[ -z "${LYCAON_E2E_SOCKET_DIR:-}" ]]; then
+  export LYCAON_E2E_SOCKET_DIR="${LYCAON_E2E_STATE_DIR}/s"
+fi
+mkdir -p "${LYCAON_E2E_SOCKET_DIR}"
 
 export LYCAON_REPO_ROOT="${_e2e_root}"
 export LYCAON_E2E_COMPOSE_FILE="${_e2e_root}/lycaon/test/fixtures/e2e/docker-compose.e2e.yml"

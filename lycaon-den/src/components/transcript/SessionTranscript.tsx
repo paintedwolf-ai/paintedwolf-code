@@ -5,9 +5,9 @@ import {
   type TranscriptDisclosureKey,
 } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
 import { createTranscriptGeometry } from "../../chat/transcript/layout/transcript-geometry.ts";
-import type { TranscriptSeam } from "../../chat/transcript/layout/transcript-spacing.ts";
+import { transcriptSpacing, type TranscriptSeam } from "../../chat/transcript/layout/transcript-spacing.ts";
 import { scrollportMotionForViewport } from "../../platform/scrolling/scrollport-motion.ts";
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js";
 import { KeyedIndex } from "../keyed-index.tsx";
 import type { WorkerTranscriptCache } from "../../chat/worker/worker-transcript.ts";
 import type { SlotContent } from "../../ui/slot-content.ts";
@@ -414,12 +414,49 @@ export function SessionTranscript(props: Props) {
 
   // Window swaps preserve extent; resize observations report content growth.
   const virtualExtent = createMemo(() => virtualizer.getTotalSize());
+  let geometryTransitionActive = false;
+  let geometryTransitionFrame: number | undefined;
+  const clearGeometryTransition = () => {
+    geometryTransitionActive = false;
+    if (geometryTransitionFrame !== undefined) {
+      cancelAnimationFrame(geometryTransitionFrame);
+      geometryTransitionFrame = undefined;
+    }
+  };
+  onCleanup(clearGeometryTransition);
+  createEffect(
+    on(
+      () => [geometry.key(), geometry.origin(), transcriptSpacing()] as const,
+      () => {
+        if (layout() !== "chat") return;
+        geometryTransitionActive = true;
+        if (geometryTransitionFrame !== undefined) {
+          cancelAnimationFrame(geometryTransitionFrame);
+        }
+        // Keep the transition active through the frame's ResizeObserver row
+        // measurements (which run after rAF callbacks, before paint).
+        geometryTransitionFrame = requestAnimationFrame(() => {
+          geometryTransitionFrame = requestAnimationFrame(() => {
+            geometryTransitionFrame = undefined;
+            geometryTransitionActive = false;
+          });
+        });
+      },
+      { defer: true },
+    ),
+  );
   createEffect(() => {
     if (layout() !== "chat") return;
     virtualExtent();
     const scroller = scrollHostEl();
     if (!scroller) return;
-    scrollportMotionForViewport(scroller)?.scheduleLayoutReconcile();
+    const motion = scrollportMotionForViewport(scroller);
+    if (!motion) return;
+    if (geometryTransitionActive && motion.tail.pinControlsOffset() && scroller.isConnected) {
+      motion.notifyLayoutMutated();
+      return;
+    }
+    motion.scheduleLayoutReconcile();
   });
 
   createEffect(() => {

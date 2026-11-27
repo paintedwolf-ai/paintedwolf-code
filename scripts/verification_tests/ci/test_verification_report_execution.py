@@ -77,3 +77,68 @@ class VerificationReportTests(unittest.TestCase):
                 "::error title=lint:full failed::see the job summary",
                 "::error title=den:test unverified::cancelled before admission",
             ])
+
+    def test_report_lists_top_ten_packages_closest_to_ceiling_and_notes_unavailable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            batch = root / "verification" / "batch"
+            batch.mkdir(parents=True)
+            ceiling = 3584 * ci.MIB
+            results = {}
+            for index in range(1, 13):
+                ratio = round(0.10 + index * 0.07, 4)
+                peak = int(ceiling * ratio)
+                results[f"example/pkg{index:02d}"] = {
+                    "status": "passed",
+                    "memory": {
+                        "peak_bytes": peak,
+                        "limit_bytes": ceiling,
+                        "ratio": ratio,
+                        "source": "proc_vmhwm" if index == 12 else "wait4_ru_maxrss",
+                        "lower_bound": index == 12,
+                    },
+                }
+            results["example/missing1"] = {
+                "status": "passed",
+                "memory": {"peak_bytes": None, "limit_bytes": ceiling, "ratio": None,
+                           "source": "unavailable", "lower_bound": False},
+            }
+            results["example/missing2"] = {
+                "status": "passed",
+                "memory": {"peak_bytes": None, "limit_bytes": ceiling, "ratio": None,
+                           "source": "unavailable", "lower_bound": False},
+            }
+            receipt = {"status": "passed", "names": ["test:contract"],
+                       "evidence": [{"stage": "test:contract", "results": results}]}
+            (batch / "1-go.json").write_text(json.dumps(receipt))
+            # A duplicate receipt with a lower peak for pkg12 must not overwrite the higher peak.
+            duplicate = {"status": "passed", "names": ["test:contract"],
+                         "evidence": [{"stage": "test:contract", "results": {
+                             "example/pkg12": {
+                                 "status": "passed",
+                                 "memory": {"peak_bytes": 100 * ci.MIB, "limit_bytes": ceiling, "ratio": 0.0279,
+                                            "source": "wait4_ru_maxrss", "lower_bound": False},
+                             }}}]}
+            (batch / "2-go.json").write_text(json.dumps(duplicate))
+            (batch / "1-go.progress.json").write_text("{}")
+            (root / "ci").mkdir(parents=True)
+            (root / "ci" / "run.json").write_text(json.dumps({
+                "lane": "ready", "targets": ["test:contract"],
+                "started_at": 100.0, "finished_at": 160.0, "status": "passed",
+            }))
+            summary = root / "summary.md"
+            source = {"sha": "a" * 40, "tree": "b" * 40}
+            with patch.object(ci, "artifact_root", return_value=root), patch.object(ci, "source", return_value=source), \
+                    patch.dict(ci.os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}):
+                ci.report("success")
+            text = summary.read_text()
+            self.assertIn("#### Peak package memory", text)
+            self.assertIn("`example/pkg12`", text)
+            self.assertIn("`proc_vmhwm` (lower bound)", text)
+            self.assertIn("`example/pkg03`", text)
+            self.assertNotIn("`example/pkg02`", text)
+            self.assertNotIn("`example/pkg01`", text)
+            self.assertNotIn("`example/missing1`", text)
+            self.assertIn("2 packages had unavailable memory observations.", text)
+            self.assertLess(text.index("`example/pkg12`"), text.index("`example/pkg11`"))
+            self.assertLess(text.index("`example/pkg11`"), text.index("`example/pkg03`"))

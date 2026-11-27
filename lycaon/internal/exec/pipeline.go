@@ -523,6 +523,15 @@ func runPipeline(ctx context.Context, stages []Stage, opts ExecOpts, waitDelay t
 	run := newSequenceRun(stages, opts, call, stdinReader, waitDelay)
 	if err := run.start(runCtx); err != nil {
 		if !errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+			// A stage can emit output before launch confirmation finishes.
+			// start has reaped all started stages, so their streams are drained.
+			res := &PipelineResult{ExitCode: -1, Output: capture.Bytes()}
+			if opts.SeparateStderr {
+				res.Stderr = errCapture.Bytes()
+			}
+			if len(res.Output) != 0 || len(res.Stderr) != 0 {
+				return res, err
+			}
 			return nil, err
 		}
 		run.timeout = commandTimeout(runCtx, run.started)

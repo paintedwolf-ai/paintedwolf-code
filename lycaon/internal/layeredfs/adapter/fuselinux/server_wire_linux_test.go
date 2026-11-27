@@ -122,6 +122,10 @@ func (w *wireServer) reply(unique uint64) wireReply {
 		}
 		buf := make([]byte, 256*1024)
 		n, err := unix.Read(w.peer, buf)
+		// The receive timeout makes a signal, such as the runtime's preemption, interrupt the read.
+		for errors.Is(err, unix.EINTR) {
+			n, err = unix.Read(w.peer, buf)
+		}
 		if err != nil || n < fuseHeaderOutSize {
 			w.t.Fatalf("waiting for reply to %d: n=%d err=%v", unique, n, err)
 		}

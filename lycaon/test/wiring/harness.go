@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/cost"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -25,6 +26,7 @@ import (
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	bundleddriver "github.com/lycaon/lycaon/internal/scan/drivers/bundled"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -55,7 +57,19 @@ type Harness struct {
 // BuildForTest assembles a host in a temporary directory.
 func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	t.Helper()
-	return BuildForTestAt(t, t.TempDir(), opts...)
+	dir := t.TempDir()
+	CleanupBundledRuntime(t, filepath.Join(dir, "config"))
+	return BuildForTestAt(t, dir, opts...)
+}
+
+// CleanupBundledRuntime removes sealed engine directories before t.TempDir cleanup.
+// Register it for a test-owned config root before starting the scanner host.
+func CleanupBundledRuntime(t *testing.T, configDir string) {
+	t.Helper()
+	root := enginepaths.OpengrepRuntimeRootUnder(configDir)
+	t.Cleanup(func() {
+		testutil.FailErr(t, "clean bundled scanner runtime", bundleddriver.RemoveOfflineRuntimeTree(root))
+	})
 }
 
 // BuildForTestAt boots on a caller-owned directory, including an existing store.

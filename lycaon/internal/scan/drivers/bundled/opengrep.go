@@ -102,19 +102,90 @@ func (o *OpenGrepScanner) Run(ctx context.Context, req scan.ScanRequest) (*scano
 		return nil, fmt.Errorf("opengrep path excludes: %w", err)
 	}
 
+	return o.runWithPolicy(ctx, projectDir, bin, targets, excludes.Patterns(), gates.Analysis, func(runCtx context.Context) (opengrepRunFiles, func(), []string, error) {
+		runFiles, cleanup, err := newOpengrepRunFiles()
+		if err != nil {
+			return opengrepRunFiles{}, nil, nil, err
+		}
+		var binarySHA256 string
+		if art, artErr := o.manifest.ArtifactForCurrentPlatform(); artErr == nil {
+			binarySHA256 = art.SHA256
+		}
+		runtimeCacheDir, releaseRuntime, err := prepareOpengrepRuntime(runCtx, bin, binarySHA256)
+		if err != nil {
+			cleanup()
+			return opengrepRunFiles{}, nil, nil, fmt.Errorf("opengrep runtime: %w", err)
+		}
+		runFiles.runtimeCacheDir = runtimeCacheDir
+		fullCleanup := func() {
+			releaseRuntime()
+			cleanup()
+		}
+		// Execution reads the same configuration source the contract hashes.
+		rulePaths, err := rules.MaterializeGateRules(gates, "", runFiles.dir())
+		if err != nil {
+			fullCleanup()
+			return opengrepRunFiles{}, nil, nil, err
+		}
+		return runFiles, fullCleanup, rulePaths, nil
+	})
+}
+
+func hardLimitTimeoutError(ctx context.Context, started time.Time) *exec.TimeoutError {
+	deadline, _ := ctx.Deadline()
+	return &exec.TimeoutError{
+		Elapsed:         time.Since(started),
+		Deadline:        deadline,
+		Cause:           context.Cause(ctx),
+		CommandDeadline: true,
+	}
+}
+
+func classifyRunError(ctx context.Context, started time.Time, err error) error {
+	if errors.Is(context.Cause(ctx), scancatalog.ErrHardLimitExceeded) {
+		var timeout *exec.TimeoutError
+		if errors.As(err, &timeout) && timeout.CommandDeadline {
+			return err
+		}
+		timeoutErr := hardLimitTimeoutError(ctx, started)
+		if err != nil && errors.Is(err, scancatalog.ErrHardLimitExceeded) {
+			return fmt.Errorf("%w: %w", err, timeoutErr)
+		}
+		return fmt.Errorf("opengrep scan: %w", timeoutErr)
+	}
+	if err != nil {
+		return err
+	}
+	if ctx.Err() != nil {
+		return fmt.Errorf("opengrep scan interrupted: %w", ctx.Err())
+	}
+	return nil
+}
+
+func (o *OpenGrepScanner) runWithPolicy(
+	ctx context.Context,
+	projectDir, bin string,
+	targets, excludes []string,
+	analysis opengrep.Analysis,
+	prepare func(context.Context) (opengrepRunFiles, func(), []string, error),
+) (result *scanoutput.Result, err error) {
+	started := time.Now()
 	ctx, cancel := o.runtimePolicy.Context(ctx)
 	defer cancel()
-	runFiles, cleanup, err := newOpengrepRunFiles()
+	defer func() {
+		if err = classifyRunError(ctx, started, err); err != nil {
+			result = nil
+		}
+	}()
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("opengrep scan interrupted: %w", err)
+	}
+	runFiles, cleanup, rulePaths, err := prepare(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer cleanup()
-	// Execution reads the same configuration source the contract hashes.
-	rulePaths, err := rules.MaterializeGateRules(gates, "", runFiles.dir())
-	if err != nil {
-		return nil, err
-	}
-	parsed, err := o.scanTargets(ctx, projectDir, bin, rulePaths, targets, excludes.Patterns(), gates.Analysis, runFiles)
+	parsed, err := o.scanTargets(ctx, projectDir, bin, rulePaths, targets, excludes, analysis, runFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +200,7 @@ func (o *OpenGrepScanner) Run(ctx context.Context, req scan.ScanRequest) (*scano
 	if len(origins) > 0 {
 		embeddedFiles := runFiles
 		embeddedFiles.jsonPath = filepath.Join(runFiles.dir(), "embedded.json")
-		extra, err := o.scanTargets(ctx, projectDir, bin, rulePaths, []string{projectionDir}, nil, gates.Analysis, embeddedFiles)
+		extra, err := o.scanTargets(ctx, projectDir, bin, rulePaths, []string{projectionDir}, nil, analysis, embeddedFiles)
 		if err != nil {
 			return nil, err
 		}
@@ -187,6 +258,9 @@ func (o *OpenGrepScanner) scanTargetBatch(ctx context.Context, projectDir, bin s
 	})
 	console = append(output, console...)
 	if ctx.Err() != nil {
+		if errors.Is(context.Cause(ctx), scancatalog.ErrHardLimitExceeded) {
+			return nil, fmt.Errorf("opengrep scan (exit %d): %w%s", exitCode, context.Cause(ctx), o.consoleTail(console))
+		}
 		return nil, fmt.Errorf("opengrep scan interrupted: %w", ctx.Err())
 	}
 	if err != nil && !errors.Is(err, exec.ErrOutputTruncated) {
@@ -228,39 +302,20 @@ func (o *OpenGrepScanner) consoleTail(console []byte) string {
 	}, console)
 }
 
-// CLI state stays inside the jail output root.
+// CLI state stays inside the jail output root while XDG_CACHE_HOME points at
+// the host-prepared read-only engine runtime when present.
 func opengrepSubprocessEnv(files opengrepRunFiles) []string {
-	out := append([]string(nil), os.Environ()...)
-	pins := map[string]string{
-		"XDG_CACHE_HOME":             files.dir(),
+	return overrideEnv(os.Environ(), map[string]string{
+		"XDG_CACHE_HOME":             files.cache(),
 		"TMPDIR":                     files.dir(),
 		"TMP":                        files.dir(),
 		"TEMP":                       files.dir(),
-		"LANG":                       "C.UTF-8",
-		"LC_ALL":                     "C.UTF-8",
-		"LC_CTYPE":                   "C.UTF-8",
-		"PYTHONIOENCODING":           "utf-8",
-		"PYTHONUTF8":                 "1",
+		"HOME":                       files.dir(),
 		"SEMGREP_LOG_FILE":           files.logPath,
 		"SEMGREP_SETTINGS_FILE":      files.settingsPath,
 		"SEMGREP_VERSION_CACHE_PATH": files.versionCachePath,
 		"SEMGREP_SEND_METRICS":       "off",
-	}
-	for k, v := range pins {
-		prefix := k + "="
-		replaced := false
-		for i, kv := range out {
-			if strings.HasPrefix(kv, prefix) {
-				out[i] = prefix + v
-				replaced = true
-				break
-			}
-		}
-		if !replaced {
-			out = append(out, prefix+v)
-		}
-	}
-	return out
+	})
 }
 
 func filterNonCode(ctx context.Context, result *scanoutput.Result, project string, bundle []byte) error {
@@ -305,9 +360,14 @@ func filterNonCode(ctx context.Context, result *scanoutput.Result, project strin
 	return nil
 }
 
-// opengrepLaunch confines OpenGrep to reading the project and writing its run files.
+// opengrepLaunch confines OpenGrep to reading the project and any host-prepared
+// read-only engine runtime, and writing only its ephemeral run workspace.
 func opengrepLaunch(projectDir string, runFiles opengrepRunFiles) (exec.LaunchPlan, error) {
-	confinement, err := scan.BundledScannerConfinement(projectDir, runFiles.workspace)
+	var extraReadRoots []string
+	if runFiles.runtimeCacheDir != "" {
+		extraReadRoots = []string{runFiles.runtimeCacheDir}
+	}
+	confinement, err := scan.BundledScannerConfinement(projectDir, runFiles.workspace, extraReadRoots...)
 	if err != nil {
 		return exec.LaunchPlan{}, err
 	}
