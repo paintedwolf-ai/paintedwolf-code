@@ -12,6 +12,8 @@ from ci_policy import retained_go_failures
 
 ROOT = Path(__file__).resolve().parents[2]
 EXCERPT_LINES = 60
+TOP_MEMORY_PACKAGES = 10
+MIB = 1024 * 1024
 GO_PROGRESS = re.compile(r"^=== (RUN|PAUSE|CONT|NAME)\b|^\s*--- (PASS|SKIP):")
 
 
@@ -48,6 +50,58 @@ def passed_stages(root):
                 if evidence["stage"] not in passed:
                     passed.append(evidence["stage"])
     return passed
+
+
+def package_memory(root):
+    """Peak RSS observations recorded in this job's verification receipts, closest to ceiling first."""
+    measured = {}
+    unavailable = set()
+    for receipt in sorted((root / "verification").glob("*/[0-9]*.json")):
+        if receipt.name.endswith(".progress.json"):
+            continue
+        record = json.loads(receipt.read_text())
+        for evidence in record.get("evidence", []):
+            stage = evidence.get("stage", "")
+            for subject, result in evidence.get("results", {}).items():
+                memory = result.get("memory")
+                if not isinstance(memory, dict):
+                    continue
+                key = (stage, subject)
+                peak = memory.get("peak_bytes")
+                limit = memory.get("limit_bytes")
+                ratio = memory.get("ratio")
+                if type(peak) is int and type(limit) is int and limit > 0 and type(ratio) in (int, float):
+                    entry = {
+                        "stage": stage, "package": subject, "peak_bytes": peak, "limit_bytes": limit,
+                        "ratio": float(ratio), "source": str(memory.get("source") or "unknown"),
+                        "lower_bound": bool(memory.get("lower_bound")),
+                    }
+                    previous = measured.get(key)
+                    if previous is None or (entry["ratio"], entry["peak_bytes"]) > (previous["ratio"], previous["peak_bytes"]):
+                        measured[key] = entry
+                    unavailable.discard(key)
+                elif key not in measured:
+                    unavailable.add(key)
+    ranked = sorted(measured.values(), key=lambda row: (-row["ratio"], -row["peak_bytes"], row["stage"], row["package"]))
+    return ranked, len(unavailable)
+
+
+def memory_summary_lines(measured, unavailable_count, limit=TOP_MEMORY_PACKAGES):
+    if not measured and not unavailable_count:
+        return []
+    lines = ["#### Peak package memory", ""]
+    if measured:
+        lines += ["| Stage | Package | Peak | Ceiling | Share | Source |",
+                  "|---|---|---:|---:|---:|---|"]
+        for row in measured[:limit]:
+            source = f"`{row['source']}` (lower bound)" if row["lower_bound"] else f"`{row['source']}`"
+            lines.append(f"| `{row['stage']}` | `{row['package']}` | {row['peak_bytes'] / MIB:.1f} MiB | "
+                         f"{row['limit_bytes'] / MIB:.1f} MiB | {row['ratio'] * 100:.1f}% | {source} |")
+        lines.append("")
+    if unavailable_count:
+        noun = "package" if unavailable_count == 1 else "packages"
+        lines += [f"{unavailable_count} {noun} had unavailable memory observations.", ""]
+    return lines
 
 
 def excerpt(failure):
@@ -118,6 +172,8 @@ def report(status):
             lines += summary_lines(failure)
             print("\n".join([annotation(failure), *excerpt(failure), ""]), flush=True)
         lines.append("")
+    measured, unavailable_count = package_memory(root)
+    lines += memory_summary_lines(measured, unavailable_count)
     lines += ["Receipts, stage logs, and available reports are retained with this job's artifacts.", ""]
     with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
         output.write("\n".join(lines))

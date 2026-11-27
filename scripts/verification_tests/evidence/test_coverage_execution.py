@@ -25,12 +25,18 @@ class CoverageExecutionTests(unittest.TestCase):
     def test_aggregate_and_package_reports_share_one_test_run(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = Path(directory)
-            fake_go = fixture / "go"
+            # A toolchain root: test isolation selects the go under GOROOT.
+            fake_go = fixture / "bin" / "go"
+            fake_go.parent.mkdir()
             fake_go.write_text("""#!/usr/bin/env python3
 import os
 from pathlib import Path
 import sys
-if sys.argv[1] == 'test':
+root = Path(__file__).resolve().parents[1]
+if sys.argv[1] == 'env':
+    known = {'GOROOT': root, 'GOCACHE': root / 'go-cache', 'GOMODCACHE': root / 'go-mod', 'GOPATH': root / 'go-path'}
+    print('\\n'.join(str(known[name]) for name in sys.argv[2:]))
+elif sys.argv[1] == 'test':
     with Path(os.environ['COVERAGE_CALLS']).open('a') as calls:
         calls.write('test\\n')
     profile = next(arg.split('=', 1)[1] for arg in sys.argv if arg.startswith('-coverprofile='))
@@ -43,7 +49,7 @@ else:
 """)
             fake_go.chmod(0o755)
             calls = fixture / "calls"
-            env = {**os.environ, "PATH": str(fixture) + os.pathsep + os.environ["PATH"],
+            env = {**os.environ, "PATH": str(fake_go.parent) + os.pathsep + os.environ["PATH"],
                    # The script takes real admission; an isolated queue keeps it off the shared one.
                    "PW_TEST_ARTIFACT_ROOT": str(fixture), "PW_TEST_EXECUTION_ROOT": str(fixture / "queue"),
                    "XDG_CACHE_HOME": str(fixture / "user-cache"),

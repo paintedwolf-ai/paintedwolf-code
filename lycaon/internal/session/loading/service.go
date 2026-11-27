@@ -35,7 +35,7 @@ type Turns interface {
 	PutTurnLoadReceipt(ctx context.Context, r store.TurnLoadReceipt) (store.TurnLoadReceipt, error)
 }
 type Workflow interface {
-	ResolvedRequest(ctx context.Context, sessionID string) workflowfacts.ResolvedWorkflowRequest
+	ResolvedRequest(ctx context.Context, sessionID string) (workflowfacts.ResolvedWorkflowRequest, error)
 }
 type Workers interface {
 	Get(string) (*api.WorkerTask, bool)

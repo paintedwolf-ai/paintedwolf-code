@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -51,12 +52,16 @@ func (p RuntimePolicy) Normalized() RuntimePolicy {
 	return p
 }
 
+// ErrHardLimitExceeded is the context cancellation cause attached when a
+// RuntimePolicy hard limit expires before the caller's own context.
+var ErrHardLimitExceeded = errors.New("scanner hard runtime limit exceeded")
+
 // Context inherits owner cancellation and any explicitly selected runtime ceiling.
 func (p RuntimePolicy) Context(parent context.Context) (context.Context, context.CancelFunc) {
 	if p.HardLimitSec == 0 {
 		return context.WithCancel(parent)
 	}
-	return context.WithTimeout(parent, time.Duration(p.HardLimitSec)*time.Second)
+	return context.WithTimeoutCause(parent, time.Duration(p.HardLimitSec)*time.Second, ErrHardLimitExceeded)
 }
 
 // ValidateRuntimePolicy checks an explicit, fully populated runtime policy.

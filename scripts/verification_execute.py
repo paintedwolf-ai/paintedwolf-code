@@ -258,7 +258,9 @@ class StageEvents:
         fresh = set()
         for event in self.lines("events"):
             if isinstance(event.get("package"), str) and type(event.get("exit_code")) is int and event["exit_code"] > 0:
-                self.known[event["package"]] = {key: event[key] for key in ("output", "tests", "resource_limit") if key in event}
+                self.known[event["package"]] = {
+                    key: event[key] for key in ("output", "tests", "resource_limit", "memory") if key in event
+                }
                 fresh.add(event["package"])
         for event in self.lines("raw"):
             if event.get("Action") == "fail" and isinstance(event.get("Package"), str) and not event.get("Test"):
@@ -643,9 +645,12 @@ class Executor:
                     "failed" if action == "fail" else "passed")
                 if package in failures:
                     status = "failed"
-                cache[package] = {"status": status, "exit_code": {"passed": 0, "failed": 1, "unverified": 2}[status],
-                                  "stage_id": stage_id, "log": str(log), "report": str(result_path),
-                                  **failures.get(package, {})}
+                entry = {"status": status, "exit_code": {"passed": 0, "failed": 1, "unverified": 2}[status],
+                         "stage_id": stage_id, "log": str(log), "report": str(result_path),
+                         **failures.get(package, {})}
+                if isinstance(outcomes.get(package, {}).get("memory"), dict):
+                    entry["memory"] = outcomes[package]["memory"]
+                cache[package] = entry
             scans = [outcomes[p]["child_scan_seconds"] for p in packages if "child_scan_seconds" in outcomes.get(p, {})]
             if scans:
                 print(f"test execution: {stage_id}: child process scans took {sum(scans):.1f} s over "

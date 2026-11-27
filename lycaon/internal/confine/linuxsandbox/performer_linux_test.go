@@ -30,16 +30,17 @@ func startTestPerformer(t *testing.T, fs Filesystem) *performerClient {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
+		defer func() { _ = unix.Close(pair[1]) }()
 		// The thread keeps its own umask and is discarded with the goroutine.
 		runtime.LockOSThread()
 		if err := unix.Unshare(unix.CLONE_FS); err != nil {
 			return
 		}
 		_ = servePathCalls(pair[1])
-		_ = unix.Close(pair[1])
 	}()
-	t.Cleanup(func() { _ = unix.Close(pair[0]); <-done })
-	return newPerformerClient(pair[0])
+	client := newPerformerClient(pair[0])
+	t.Cleanup(func() { _ = client.Close(); <-done })
+	return client
 }
 
 func openDirFD(t *testing.T, path string) int {
@@ -505,6 +506,50 @@ func TestPerformerCloseWaitsForRefusalReporting(t *testing.T) {
 	case <-reported:
 	default:
 		t.Fatal("client close returned before refusal reporting completed")
+	}
+}
+
+func TestPerformerReportsRefusalBeforeResumingCaller(t *testing.T) {
+	original := seccompIoctl
+	t.Cleanup(func() { seccompIoctl = original })
+	listener, err := unix.Eventfd(0, unix.EFD_CLOEXEC)
+	testutil.FailErr(t, "listener fixture", err)
+	t.Cleanup(func() { _ = unix.Close(listener) })
+	path := filepath.Join(t.TempDir(), "held")
+	client := startTestPerformer(t, Filesystem{ReadOnly: []string{path}})
+
+	reports := make(chan pathResult, 1)
+	type completion struct {
+		response seccompNotifResp
+		report   pathResult
+	}
+	completed := make(chan completion, 1)
+	seccompIoctl = func(_ int, request uint, arg unsafe.Pointer) (uintptr, unix.Errno) {
+		if request != unix.SECCOMP_IOCTL_NOTIF_SEND {
+			return 0, unix.ENOENT
+		}
+		// At this point the target can immediately exit and take the performer
+		// with it. Capture only evidence that has already reached the supervisor.
+		result := completion{response: *(*seccompNotifResp)(arg)}
+		select {
+		case result.report = <-reports:
+		default:
+		}
+		completed <- result
+		return 0, 0
+	}
+
+	testutil.FailErr(t, "lend listener", client.lend(listener, func(r pathResult) { reports <- r }))
+	testutil.FailErr(t, "forward refused open", client.forward(pathCall{
+		Op: callOpen, Path: path, Absolute: 1, Flags: unix.O_CREAT | unix.O_WRONLY, Notification: 42,
+	}, nil))
+
+	got := testutil.Receive(t, "caller resumes", completed)
+	if got.response.ID != 42 || got.response.Error != -int32(unix.EACCES) {
+		t.Fatalf("kernel response = %+v, want EACCES for notification 42", got.response)
+	}
+	if got.report.Notification != 42 || got.report.Refusal == nil || got.report.Refusal.Target != path || got.report.Refusal.Operation != refusalCreate {
+		t.Fatalf("caller resumed before the open refusal was reported: %+v", got.report)
 	}
 }
 
