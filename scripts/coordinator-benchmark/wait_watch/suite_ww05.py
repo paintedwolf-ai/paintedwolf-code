@@ -8,6 +8,7 @@ import json
 import os
 import pathlib
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -19,8 +20,11 @@ REPO_ROOT = BENCHMARK_DIR.parent.parent
 if str(BENCHMARK_DIR) not in sys.path:
     sys.path.insert(0, str(BENCHMARK_DIR))
 
+import smoke  # noqa: E402
 from capture_storage import checkpoint_closed_store  # noqa: E402
 from portable_command.harness import SSECollector, create_isolated_session  # noqa: E402
+from portable_command.provenance import resolve_engine_binary  # noqa: E402
+from progress import save  # noqa: E402
 
 from wait_watch.barriers import (  # noqa: E402
     BarrierTimeoutError,
@@ -718,6 +722,48 @@ def run_c16_git_ref(
     )
 
 
+def _restart_sidecar_in_place(application: Any, engine_bin: pathlib.Path | str | None) -> int:
+    """Restart a live WaitWatchApplication in-place against its existing app_dir, store.db, config, and token."""
+    app_dir = pathlib.Path(application.directory)
+    old_proc = getattr(application, "process", None)
+    application.close(cleanup=False)
+    if old_proc is not None:
+        checkpoint_closed_store(app_dir / "store.db", old_proc)
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+
+    application.port = port
+    application.url = f"http://127.0.0.1:{port}"
+    application.log = (app_dir / "sidecar.log").open("a", encoding="utf-8")
+
+    binary, _ = resolve_engine_binary(REPO_ROOT, engine_bin)
+    manual = bool(getattr(application, "manual", True))
+    env = smoke.application_environment({
+        "LYCAON_CONFIG_DIR": str(application.config),
+        "LYCAON_CONFIG_ROOT": str(REPO_ROOT / "lycaon"),
+        "LYCAON_ENGINE_ROOT": str(REPO_ROOT / "lycaon-den/src-tauri/engine-root"),
+        "LYCAON_ADDR": f"127.0.0.1:{port}",
+        "LYCAON_API_TOKEN": application.token,
+        "LYCAON_DEV": "1",
+        "LYCAON_HARNESS": "1",
+        "LYCAON_LOG_LEVEL": "debug",
+        "LYCAON_LLM_MOCK": "1" if manual else "0",
+        "LYCAON_LLM_MANUAL": "1" if manual else "0",
+    })
+    application.process = subprocess.Popen(
+        [str(binary), "serve", "--db", str(app_dir / "store.db")],
+        cwd=REPO_ROOT,
+        env=env,
+        stdout=application.log,
+        stderr=subprocess.STDOUT,
+    )
+    save(app_dir / "ownership.json", {"pid": application.process.pid, "port": port})
+    application.ready()
+    return int(application.process.pid)
+
+
 def run_c17_timer_sidecar_restart(
     out_dir: pathlib.Path,
     *,
@@ -743,8 +789,7 @@ def run_c17_timer_sidecar_restart(
     den_obs = DenObserver(status="not_run", os_name=host["os"])
 
     make_app = _make_wait_watch_app_factory(engine_bin, app_factory)
-    app1 = make_app(app_dir)
-    app2 = None
+    application = make_app(app_dir)
     sse1 = None
     sse2 = None
     sse1_path = raw_dir / "events-pre-restart.jsonl"
@@ -763,20 +808,20 @@ def run_c17_timer_sidecar_restart(
 
     try:
         # Phase 1: Arm a 4000ms ambient wake timer watch and finish turn cleanly.
-        app1.ready()
-        pre_pid = getattr(getattr(app1, "process", None), "pid", 0) or 0
-        sse1 = SSECollector(app1.url, app1.token, sse1_path)
+        application.ready()
+        pre_pid = getattr(getattr(application, "process", None), "pid", 0) or 0
+        sse1 = SSECollector(application.url, application.token, sse1_path)
         sse1.start()
         session_id, project_id, _, _ = create_isolated_session(
-            app1, project_dir, {"profile": "implement", "turns": [1, 2, 3]}
+            application, project_dir, {"profile": "implement", "turns": [1, 2, 3]}
         )
         submission_id = str(uuid.uuid4())
-        app1.request(
+        application.request(
             f"/v1/sessions/{session_id}/prompts",
             {"operation_id": submission_id, "text": "Arm WW05 C17 timer watch before sidecar restart."},
         )
         driver1 = WaitWatchDriver(
-            app1,
+            application,
             session_id,
             rendered_observer=rendered_obs,
             source_observer=source_obs,
@@ -796,26 +841,20 @@ def run_c17_timer_sidecar_restart(
         driver1.finish_turn(post_watch_req, "Timer watch armed; ready for sidecar restart.")
         time.sleep(0.3)
 
-        # Phase 2: Stop sidecar cleanly and restart a fresh engine process on the same store.db.
+        # Phase 2: Restart sidecar in-place against the existing app_dir, store.db, config, and token.
         sse1.close()
         sse1 = None
-        app1.close(cleanup=False)
-        proc1 = getattr(app1, "process", None)
-        if proc1 is not None:
-            checkpoint_closed_store(app_dir / "store.db", proc1)
         if (app_dir / "sidecar.log").is_file():
             shutil.copyfile(app_dir / "sidecar.log", raw_dir / "sidecar-pre-restart.log")
-        source_obs.record_event("sidecar_stopped", pre_pid=pre_pid)
+        source_obs.record_event("sidecar_stopping", pre_pid=pre_pid)
 
-        app2 = make_app(app_dir)
-        app2.ready()
-        post_pid = getattr(getattr(app2, "process", None), "pid", 0) or 0
-        sse2 = SSECollector(app2.url, app2.token, sse2_path)
+        post_pid = _restart_sidecar_in_place(application, engine_bin)
+        sse2 = SSECollector(application.url, application.token, sse2_path)
         sse2.start()
         source_obs.record_event("sidecar_restarted", pre_pid=pre_pid, post_pid=post_pid)
 
         driver2 = WaitWatchDriver(
-            app2,
+            application,
             session_id,
             rendered_observer=rendered_obs,
             source_observer=source_obs,
@@ -844,8 +883,8 @@ def run_c17_timer_sidecar_restart(
             evidence_refs={"session_id": "rendered_input:pending.session_id", **prod_refs},
         )
         driver2.finish_turn(wake_req, "Observed C17 timer wake after sidecar restart.")
-        admission_obs.capture_http(app2, session_id=session_id, project_id=project_id, submission_ids=[submission_id])
-        app2.request(f"/v1/sessions/{session_id}/abort", {})
+        admission_obs.capture_http(application, session_id=session_id, project_id=project_id, submission_ids=[submission_id])
+        application.request(f"/v1/sessions/{session_id}/abort", {})
     except BarrierTimeoutError as exc:
         barrier_error = exc.to_dict()
     finally:
@@ -853,12 +892,9 @@ def run_c17_timer_sidecar_restart(
             sse1.close()
         if sse2 is not None:
             sse2.close()
-        if app2 is not None:
-            app2.close(cleanup=False)
-        else:
-            app1.close(cleanup=False)
+        application.close(cleanup=False)
 
-    last_proc = getattr(app2 or app1, "process", None)
+    last_proc = getattr(application, "process", None)
     if last_proc is not None:
         checkpoint_closed_store(app_dir / "store.db", last_proc)
 
