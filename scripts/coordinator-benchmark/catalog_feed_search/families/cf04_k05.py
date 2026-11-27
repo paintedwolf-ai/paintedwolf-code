@@ -108,58 +108,85 @@ def _run_k05_tree_instance(
     root_id = str(proj["roots"][0]["id"])  # type: ignore[index]
 
     revisions_seen: list[int] = []
-    indexed_progression: list[int] = []
+    file_count_progression: list[int] = []
     foreground_browse_during_walk: dict[str, object] | None = None
     other_project_during_walk: dict[str, object] | None = None
-    admissions_probed = 0
     settled = False
     last_index: dict[str, object] = {}
     last_storage: dict[str, object] = {}
 
+    def _read_root_index_state() -> tuple[dict[str, object], dict[str, object], bool, int]:
+        resp = client.get_source_index(project_id)
+        if resp.status != 200 or not isinstance(resp.json_body, dict):
+            return {}, {}, False, -1
+        body = resp.json_body
+        cov_list = body.get("coverage") or []
+        root_cov = next(
+            (c for c in cov_list if isinstance(c, dict) and str(c.get("root_id") or "") == root_id),
+            {},
+        )
+        roots_list = body.get("roots") or []
+        root_entry = next(
+            (r for r in roots_list if isinstance(r, dict) and str(r.get("root_id") or "") == root_id),
+            {},
+        )
+        fc = int(root_entry.get("file_count", body.get("file_count", -1)))
+        complete = bool(root_cov.get("discovery_complete")) and str(root_cov.get("state") or "").lower() == "ready"
+        return body, root_cov, complete, fc
+
     deadline = time.monotonic() + settle_timeout_s
     waiter = threading.Event()
     while time.monotonic() < deadline:
-        idx_resp = client.get_source_index(project_id)
-        if idx_resp.status == 200 and isinstance(idx_resp.json_body, dict):
-            last_index = idx_resp.json_body
-            rev = int(last_index.get("revision") or 0)
+        body, root_cov, complete, fc = _read_root_index_state()
+        if body:
+            last_index = body
+            rev = int(body.get("revision") or 0)
             if not revisions_seen or revisions_seen[-1] != rev:
                 revisions_seen.append(rev)
-            cov_list = last_index.get("coverage") or []
-            root_cov = next(
-                (c for c in cov_list if isinstance(c, dict) and str(c.get("root_id") or "") == root_id),
-                {},
-            )
-            complete = bool(root_cov.get("discovery_complete")) and str(root_cov.get("state") or "").lower() == "ready"
+            if fc >= 0 and (not file_count_progression or file_count_progression[-1] != fc):
+                file_count_progression.append(fc)
+
             if not complete:
-                # Probe foreground browse during active traversal
+                # K05-E01 causal in-walk proof: verify incomplete BOTH before and after foreground browse!
                 if foreground_browse_during_walk is None:
                     b_start = time.monotonic()
                     b_resp = client.browse_dir(project_id, root_id, ".")
                     b_ms = round((time.monotonic() - b_start) * 1000.0, 2)
+                    _, after_cov, after_complete, after_fc = _read_root_index_state()
                     entries = b_resp.json_body.get("entries") if isinstance(b_resp.json_body, dict) else []
                     foreground_browse_during_walk = {
                         "status": b_resp.status,
                         "entry_count": len(entries) if isinstance(entries, list) else 0,
-                        "elapsed_ms": b_ms,
-                        "during_state": root_cov.get("state"),
-                        "during_discovery_complete": root_cov.get("discovery_complete"),
+                        "elapsed_ms_diagnostic": b_ms,
+                        "before_discovery_complete": bool(root_cov.get("discovery_complete")),
+                        "before_file_count": fc,
+                        "after_discovery_complete": after_complete,
+                        "after_file_count": after_fc,
+                        "causally_during_walk": (not complete) and (not after_complete),
                     }
-                    admissions_probed += 1
-                # Probe other project's requests completing during large walk
+                # K05-E02 causal in-walk proof: verify incomplete BOTH before and after other-project requests!
                 if other_project_during_walk is None:
-                    o_start = time.monotonic()
-                    o_browse = client.browse_dir(other_project_id, other_root_id, ".")
-                    o_read = client.get_source_file(other_project_id, other_root_id, "ping.txt")
-                    o_search = client.driver.search_raw("K05OtherProjectPingToken", origin_project_id=other_project_id, case_sensitive=True)
-                    o_ms = round((time.monotonic() - o_start) * 1000.0, 2)
-                    other_project_during_walk = {
-                        "browse_status": o_browse.status,
-                        "read_status": o_read.status,
-                        "search_hit_count": len(o_search.get("hits") or []),
-                        "elapsed_ms": o_ms,
-                    }
-                    admissions_probed += 1
+                    _, pre_cov, pre_complete, pre_fc = _read_root_index_state()
+                    if not pre_complete:
+                        o_start = time.monotonic()
+                        o_browse = client.browse_dir(other_project_id, other_root_id, ".")
+                        o_read = client.get_source_file(other_project_id, other_root_id, "ping.txt")
+                        o_search = client.driver.search_raw(
+                            "K05OtherProjectPingToken", origin_project_id=other_project_id, case_sensitive=True
+                        )
+                        o_ms = round((time.monotonic() - o_start) * 1000.0, 2)
+                        _, post_cov, post_complete, post_fc = _read_root_index_state()
+                        other_project_during_walk = {
+                            "browse_status": o_browse.status,
+                            "read_status": o_read.status,
+                            "search_hit_count": len(o_search.get("hits") or []),
+                            "elapsed_ms_diagnostic": o_ms,
+                            "before_discovery_complete": pre_complete,
+                            "before_file_count": pre_fc,
+                            "after_discovery_complete": post_complete,
+                            "after_file_count": post_fc,
+                            "causally_during_walk": (not pre_complete) and (not post_complete),
+                        }
             else:
                 settled = True
                 break
@@ -167,49 +194,78 @@ def _run_k05_tree_instance(
         st_resp = client.get_source_storage(project_id)
         if st_resp.status == 200 and isinstance(st_resp.json_body, dict):
             last_storage = st_resp.json_body
-            inv = last_storage.get("inventory")
-            if isinstance(inv, dict) and inv.get("indexed_files") is not None:
-                n = int(inv["indexed_files"])
-                if not indexed_progression or indexed_progression[-1] != n:
-                    indexed_progression.append(n)
-        waiter.wait(0.25)
+        waiter.wait(0.15)
 
     elapsed_s = round(time.monotonic() - t0, 3)
 
-    # Fallback probes if walk settled faster than first poll
-    if foreground_browse_during_walk is None:
-        b_resp = client.browse_dir(project_id, root_id, ".")
-        entries = b_resp.json_body.get("entries") if isinstance(b_resp.json_body, dict) else []
-        foreground_browse_during_walk = {
-            "status": b_resp.status,
-            "entry_count": len(entries) if isinstance(entries, list) else 0,
-            "settled_before_probe": True,
-        }
-        admissions_probed += 1
-    if other_project_during_walk is None:
-        o_browse = client.browse_dir(other_project_id, other_root_id, ".")
-        o_read = client.get_source_file(other_project_id, other_root_id, "ping.txt")
-        o_search = client.driver.search_raw("K05OtherProjectPingToken", origin_project_id=other_project_id, case_sensitive=True)
-        other_project_during_walk = {
-            "browse_status": o_browse.status,
-            "read_status": o_read.status,
-            "search_hit_count": len(o_search.get("hits") or []),
-            "settled_before_probe": True,
-        }
-        admissions_probed += 1
+    # Extract exact settled file count & coverage facts from /source/index
+    settled_roots = last_index.get("roots") or []
+    settled_root_entry = next(
+        (r for r in settled_roots if isinstance(r, dict) and str(r.get("root_id") or "") == root_id),
+        {},
+    )
+    settled_cov_list = last_index.get("coverage") or []
+    settled_cov = next(
+        (c for c in settled_cov_list if isinstance(c, dict) and str(c.get("root_id") or "") == root_id),
+        {},
+    )
+    settled_file_count = int(settled_root_entry.get("file_count", last_index.get("file_count", -1)))
+    bounded_dirs = int(settled_cov.get("bounded_directories") or 0)
+    failed_dirs = int(settled_cov.get("failed_directories") or 0)
 
     if not settled:
         defects.append({"code": "scale_walk_did_not_settle", "elapsed_s": elapsed_s, "last_index": last_index})
-    if int(foreground_browse_during_walk.get("status", 0)) != 200 or int(foreground_browse_during_walk.get("entry_count", 0)) < shape.group_directories:
-        defects.append({"code": "foreground_browse_failed", "probe": foreground_browse_during_walk})
-    if (
-        int(other_project_during_walk.get("browse_status", 0)) != 200
-        or int(other_project_during_walk.get("read_status", 0)) != 200
-        or int(other_project_during_walk.get("search_hit_count", 0)) < 1
-    ):
-        defects.append({"code": "other_project_unresponsive", "probe": other_project_during_walk})
+    if settled_file_count != shape.files:
+        defects.append(
+            {
+                "code": "settled_file_count_mismatch",
+                "expected_files": shape.files,
+                "actual_file_count": settled_file_count,
+                "bounded_directories": bounded_dirs,
+                "failed_directories": failed_dirs,
+            }
+        )
+    if bounded_dirs != 0 or failed_dirs != 0:
+        defects.append(
+            {
+                "code": "settled_coverage_has_bounded_or_failed_dirs",
+                "bounded_directories": bounded_dirs,
+                "failed_directories": failed_dirs,
+            }
+        )
 
-    # Verify settled file lookup returns matches from the scale tree
+    # Causal in-walk probe checks (never pass via post-settlement fallback!)
+    fg_causal_verdict = "UNKNOWN"
+    if foreground_browse_during_walk is not None:
+        if (
+            int(foreground_browse_during_walk.get("status", 0)) == 200
+            and int(foreground_browse_during_walk.get("entry_count", 0)) >= shape.group_directories
+            and bool(foreground_browse_during_walk.get("causally_during_walk"))
+        ):
+            fg_causal_verdict = "PASS"
+        elif int(foreground_browse_during_walk.get("status", 0)) != 200 or int(
+            foreground_browse_during_walk.get("entry_count", 0)
+        ) < shape.group_directories:
+            fg_causal_verdict = "DEFECT"
+            defects.append({"code": "foreground_browse_failed", "probe": foreground_browse_during_walk})
+
+    other_causal_verdict = "UNKNOWN"
+    if other_project_during_walk is not None:
+        if (
+            int(other_project_during_walk.get("browse_status", 0)) == 200
+            and int(other_project_during_walk.get("read_status", 0)) == 200
+            and int(other_project_during_walk.get("search_hit_count", 0)) >= 1
+            and bool(other_project_during_walk.get("causally_during_walk"))
+        ):
+            other_causal_verdict = "PASS"
+        elif (
+            int(other_project_during_walk.get("browse_status", 0)) != 200
+            or int(other_project_during_walk.get("read_status", 0)) != 200
+            or int(other_project_during_walk.get("search_hit_count", 0)) < 1
+        ):
+            other_causal_verdict = "DEFECT"
+            defects.append({"code": "other_project_unresponsive", "probe": other_project_during_walk})
+
     sample_lookup = client.driver.file_lookup(project_id, "f000.go", root_id=root_id, limit=25)
     sample_matches = len(sample_lookup.get("matches") or [])
     if sample_matches == 0:
@@ -217,10 +273,25 @@ def _run_k05_tree_instance(
 
     client.delete_project_async(project_id, operation_id=str(uuid.uuid4()))
 
+    # Honest work-counter reporting per Decision 027 (no polling proxies substituted for unexported counters)
+    work_counters = {
+        "directory_reads": "unknown",
+        "per_file_metadata_reads": "unknown",
+        "published_batches": "unknown",
+        "admissions": "unknown",
+        "expected_directories": shape.total_directories,
+        "expected_files": shape.files,
+        "reason": "D1 black-box sidecar /source/index and performance.jsonl do not export internal sourcecatalog WorkCounters (D6 prohibits adding a test seam to shipped binary)",
+    }
+
     return {
         "name": name,
         "selector": selector,
-        "verdict": "PASS" if not defects else "DEFECT",
+        "verdict": "DEFECT" if defects else ("PASS" if fg_causal_verdict == "PASS" and other_causal_verdict == "PASS" else "UNKNOWN"),
+        "settled_count_verdict": "PASS" if (settled and settled_file_count == shape.files and bounded_dirs == 0 and failed_dirs == 0) else "DEFECT",
+        "work_counters_verdict": "UNKNOWN",
+        "foreground_browse_verdict": fg_causal_verdict,
+        "other_project_verdict": other_causal_verdict,
         "tree_shape": {
             "files": shape.files,
             "leaf_directories": shape.leaf_directories,
@@ -229,11 +300,13 @@ def _run_k05_tree_instance(
             "total_bytes": shape.total_bytes,
         },
         "settled": settled,
+        "settled_file_count": settled_file_count,
+        "bounded_directories": bounded_dirs,
+        "failed_directories": failed_dirs,
         "elapsed_s_diagnostic": elapsed_s,
-        "published_revisions": revisions_seen,
-        "published_batch_count": len(revisions_seen),
-        "indexed_files_progression": indexed_progression,
-        "admissions_probed": admissions_probed,
+        "observed_revision_transitions_diagnostic": len(revisions_seen),
+        "file_count_progression_diagnostic": file_count_progression,
+        "work_counters": work_counters,
         "foreground_browse": foreground_browse_during_walk,
         "other_project_probe": other_project_during_walk,
         "sample_lookup_matches": sample_matches,
@@ -313,33 +386,30 @@ def run_k05_suite(
                 )
                 generated_results.append(res)
 
-            # 2 Hand-written edge verdicts synthesized from direct scale probes:
-            # K05-E01: Foreground directory listing publishes while traversal continues
-            # K05-E02: Another project stays responsive while large traversal runs
-            e1_ok = all(int(r["foreground_browse"].get("status", 0)) == 200 for r in generated_results)  # type: ignore[union-attr]
-            e2_ok = all(
-                int(r["other_project_probe"].get("browse_status", 0)) == 200  # type: ignore[union-attr]
-                and int(r["other_project_probe"].get("read_status", 0)) == 200  # type: ignore[union-attr]
-                and int(r["other_project_probe"].get("search_hit_count", 0)) >= 1  # type: ignore[union-attr]
-                for r in generated_results
-            )
+            # 2 Hand-written edge verdicts requiring causal in-walk completion (Decision 027 §3)
+            e1_verdicts = [str(r["foreground_browse_verdict"]) for r in generated_results]
+            e2_verdicts = [str(r["other_project_verdict"]) for r in generated_results]
+            e1_verdict = "DEFECT" if "DEFECT" in e1_verdicts else ("PASS" if all(v == "PASS" for v in e1_verdicts) else "UNKNOWN")
+            e2_verdict = "DEFECT" if "DEFECT" in e2_verdicts else ("PASS" if all(v == "PASS" for v in e2_verdicts) else "UNKNOWN")
             edge_results = [
                 {
                     "name": "K05-E01-foreground-browse-during-walk",
-                    "verdict": "PASS" if e1_ok else "DEFECT",
+                    "verdict": e1_verdict,
                     "probes": [r["foreground_browse"] for r in generated_results],
                 },
                 {
                     "name": "K05-E02-other-project-responsive-during-walk",
-                    "verdict": "PASS" if e2_ok else "DEFECT",
+                    "verdict": e2_verdict,
                     "probes": [r["other_project_probe"] for r in generated_results],
                 },
             ]
 
             gen_passed = sum(1 for r in generated_results if r["verdict"] == "PASS")
-            gen_failed = len(generated_results) - gen_passed
+            gen_unknown = sum(1 for r in generated_results if r["verdict"] == "UNKNOWN")
+            gen_failed = sum(1 for r in generated_results if r["verdict"] == "DEFECT")
             edge_passed = sum(1 for r in edge_results if r["verdict"] == "PASS")
-            edge_failed = len(edge_results) - edge_passed
+            edge_unknown = sum(1 for r in edge_results if r["verdict"] == "UNKNOWN")
+            edge_failed = sum(1 for r in edge_results if r["verdict"] == "DEFECT")
 
             report = {
                 "family": "K05",
@@ -349,11 +419,14 @@ def run_k05_suite(
                 "generated_planned": len(sizes),
                 "generated_executed": len(generated_results),
                 "generated_passed": gen_passed,
+                "generated_unknown": gen_unknown,
                 "generated_failed": gen_failed,
                 "edges_planned": 2,
                 "edges_executed": len(edge_results),
                 "edges_passed": edge_passed,
+                "edges_unknown": edge_unknown,
                 "edges_failed": edge_failed,
+                "work_counters_verdict": "UNKNOWN",
                 "generated_results": generated_results,
                 "edge_results": edge_results,
             }
