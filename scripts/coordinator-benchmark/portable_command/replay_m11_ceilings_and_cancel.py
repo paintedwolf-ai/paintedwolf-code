@@ -87,11 +87,11 @@ def run_m11_ceilings_and_cancel(repo_root, out_path, engine_manifest=None, engin
         app.request(f'/v1/sessions/{sid}/prompts', {'operation_id': str(uuid.uuid4()), 'text': 'Execute M11 resource ceilings and midstream cancellation.'})
         send_tool_calls(app, sid, [{'name': 'update_progress', 'args': {'content': '- [ ] Run M11 resource ceilings and midstream cancellation'}}], surface=surface)
 
-        # 1a. pipeline_stages ceiling: at limit (32 stages) succeeds; over limit (33 stages) refuses.
-        pipe_at_cmd = "printf 'pipe-ok\\n'" + (' | cat' * 31)
-        pipe_over_cmd = "printf 'pipe-over\\n'" + (' | cat' * 32)
-        pipe_at = _run_cmd(app, sid, surface, pipe_at_cmd)
-        pipe_over = _run_cmd(app, sid, surface, pipe_over_cmd)
+        # 1a. Pipeline within limits (16 stages) succeeds; 32 stages hits ast_depth (65 > 64);
+        #     33 stages hits pipeline_stages (33 > 32).
+        pipe_ok = _run_cmd(app, sid, surface, "printf 'pipe-ok\\n'" + (' | cat' * 15))
+        ast_over = _run_cmd(app, sid, surface, "printf 'ast-over\\n'" + (' | cat' * 31))
+        pipe_over = _run_cmd(app, sid, surface, "printf 'pipe-over\\n'" + (' | cat' * 32))
 
         # 1b. expanded_fields ceiling (max 16384): brace expansion of 20000 refuses with COMMAND_LIMIT_EXCEEDED.
         expand_over = _run_cmd(app, sid, surface, 'echo {1..20000}')
@@ -156,9 +156,16 @@ def run_m11_ceilings_and_cancel(repo_root, out_path, engine_manifest=None, engin
     finally:
         app.close(cleanup=False)
 
+    ast_det = ast_over['rejection_details'] if isinstance(ast_over['rejection_details'], dict) else {}
     rec_sha = sha256_file(project_dir / 'm11_rec.txt')
     checks = {
-        'pipeline_stages_at_32_succeeds': (pipe_at['status'] == 0 and pipe_at['stdout'] == 'pipe-ok\n'),
+        'pipeline_within_limits_succeeds': (pipe_ok['status'] == 0 and pipe_ok['stdout'] == 'pipe-ok\n'),
+        'ast_depth_over_64_refused': (
+            ast_over['rejection_code'] == 'COMMAND_LIMIT_EXCEEDED'
+            and ast_det.get('limit_id') == 'ast_depth'
+            and ast_det.get('limit_maximum') == 64
+            and ast_det.get('limit_observed') == 65
+        ),
         'pipeline_stages_over_32_refused': (
             pipe_over['rejection_code'] == 'COMMAND_LIMIT_EXCEEDED' and pipe_over['status'] != 0
         ),
@@ -191,7 +198,7 @@ def run_m11_ceilings_and_cancel(repo_root, out_path, engine_manifest=None, engin
         'identity': identity, 'provenance_verified': checks['provenance_verified'],
         'session': {'id': sid, 'recovery_session_id': rec_sid, 'project_id': project_id, 'root_id': root_id},
         'ceilings': {
-            'pipeline_at_32': pipe_at, 'pipeline_over_32': pipe_over,
+            'pipeline_within_limits': pipe_ok, 'ast_depth_over_64': ast_over, 'pipeline_over_32': pipe_over,
             'expanded_fields_over': expand_over, 'function_depth_over': func_over,
             'after_ceilings': after_ceilings,
         },
