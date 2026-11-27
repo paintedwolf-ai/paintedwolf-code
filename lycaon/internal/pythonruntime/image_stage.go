@@ -32,6 +32,7 @@ func ResolveRetainedDevArtifact(filename string, extraDirs ...string) string {
 		if trimmed := strings.TrimSpace(d); trimmed != "" {
 			searchDirs = append(searchDirs,
 				trimmed,
+				filepath.Join(trimmed, "PY12", "image"),
 				filepath.Join(trimmed, "PY11", "image"),
 				filepath.Join(trimmed, "PY10", "engine"),
 				filepath.Join(trimmed, "PY10", "image"),
@@ -43,6 +44,7 @@ func ResolveRetainedDevArtifact(filename string, extraDirs ...string) string {
 	if envDir := strings.TrimSpace(os.Getenv(EnvArtifactDir)); envDir != "" {
 		searchDirs = append(searchDirs,
 			envDir,
+			filepath.Join(envDir, "PY12", "image"),
 			filepath.Join(envDir, "PY11", "image"),
 			filepath.Join(envDir, "PY10", "engine"),
 			filepath.Join(envDir, "PY10", "image"),
@@ -53,6 +55,7 @@ func ResolveRetainedDevArtifact(filename string, extraDirs ...string) string {
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		base := filepath.Join(home, ".local", "share", "paintedwolf-portable-python", "results")
 		searchDirs = append(searchDirs,
+			filepath.Join(base, "PY12", "image"),
 			filepath.Join(base, "PY11", "image"),
 			filepath.Join(base, "PY10", "engine"),
 			filepath.Join(base, "PY10", "image"),

@@ -99,6 +99,13 @@ func TestDefaultLaunchManifestRoundTripAndRoster(t *testing.T) {
 		"license-expression": "license_expression",
 		"graphql-core":       "graphql",
 		"tinycss2":           "tinycss2",
+		"jc":                 "jc",
+		"dpkt":               "dpkt",
+		"dnspython":          "dns",
+		"asn1crypto":         "asn1crypto",
+		"drain3":             "drain3",
+		"parse":              "parse",
+		"pyelftools":         "elftools",
 	}
 	if len(wantPublic) != LaunchPublicDistributionCount {
 		t.Fatalf("wantPublic len = %d, want %d", len(wantPublic), LaunchPublicDistributionCount)
