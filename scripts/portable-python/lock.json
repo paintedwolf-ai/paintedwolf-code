@@ -4,11 +4,21 @@
     "name": "cpython",
     "version": "3.12.0",
     "target": "wasm32-wasi",
-    "release_tag": "python/3.12.0+20231211-040d5a6",
+    "release_tag": "pw-cpython-wasi-engine-v0.2.0",
     "wasi_sdk": "20.0",
-    "filename": "python-3.12.0-wasi-sdk-20.0.tar.gz",
-    "source_url": "https://github.com/vmware-labs/webassembly-language-runtimes/releases/download/python%2F3.12.0%2B20231211-040d5a6/python-3.12.0-wasi-sdk-20.0.tar.gz",
-    "source_sha256": "6c1cddbb69ae09e87eee2906bdc70539bff5f2969818a6f8457d4e6a6eb67d4d"
+    "filename": "python-3.12.0-wasi-py10.tar.gz",
+    "source_url": "https://github.com/paintedwolf-ai/paintedwolf-python-engine/releases/download/v0.2.0/python-3.12.0-wasi-py10.tar.gz",
+    "source_sha256": "66644449c1b4d0af58dab8066f00feb34361c4e2b6ff53b0a6f8299462bb7b3e",
+    "builtin_extensions": {
+      "pillow": "11.1.0",
+      "lxml": "5.3.0",
+      "zlib": "1.3.1",
+      "bzip2": "1.0.8",
+      "sqlite3": "3.45.3",
+      "libjpeg": "9f",
+      "libxml2": "2.12.9",
+      "libxslt": "1.1.42"
+    }
   },
   "distributions": [
     {
@@ -715,7 +725,7 @@
     {
       "name": "Pillow",
       "normalized_name": "pillow",
-      "version": "11.2.1",
+      "version": "11.1.0",
       "public": true,
       "imports": [
         "PIL"
@@ -732,14 +742,14 @@
       "has_package_data": false,
       "license": "MIT-CMU",
       "source_kind": "sdist_pure_python",
-      "filename": "pillow-11.2.1.tar.gz",
-      "source_url": "https://files.pythonhosted.org/packages/af/cb/bb5c01fcd2a69335b86c22142b2bccfc3464087efb7fd382eee5ffc7fdf7/pillow-11.2.1.tar.gz",
-      "source_sha256": "a64dd61998416367b7ef979b73d3a85853ba9bec4c2925f74e588879a58716b6"
+      "filename": "pillow-11.1.0.tar.gz",
+      "source_url": "https://files.pythonhosted.org/packages/f3/af/c097e544e7bd278333db77933e535098c259609c4eb3b85381109602fb5b/pillow-11.1.0.tar.gz",
+      "source_sha256": "368da70808b36d73b4b390a8ffac11069f8a5c85f29eff1f1b01bcf3ef5b2a20"
     },
     {
       "name": "lxml",
       "normalized_name": "lxml",
-      "version": "5.4.0",
+      "version": "5.3.0",
       "public": true,
       "imports": [
         "lxml",
@@ -756,9 +766,9 @@
       "has_package_data": true,
       "license": "BSD-3-Clause",
       "source_kind": "sdist_pure_python",
-      "filename": "lxml-5.4.0.tar.gz",
-      "source_url": "https://files.pythonhosted.org/packages/76/3d/14e82fc7c8fb1b7761f7e748fd47e2ec8276d137b6acfe5a4bb73853e08f/lxml-5.4.0.tar.gz",
-      "source_sha256": "d12832e1dbea4be280b22fd0ea7c9b87f0d8fc51ba06e92dc62d52f804f78ebd"
+      "filename": "lxml-5.3.0.tar.gz",
+      "source_url": "https://files.pythonhosted.org/packages/e7/6b/20c3a4b24751377aaa6307eb230b66701024012c29dd374999cc92983269/lxml-5.3.0.tar.gz",
+      "source_sha256": "4e109ca30d1edec1ac60cdbe341905dc3b8f55b16855e03a54aaf59e51ec8c6f"
     },
     {
       "name": "python-docx",

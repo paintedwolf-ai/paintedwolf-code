@@ -26,8 +26,8 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-PINNED_CPYTHON_WASM_SHA256 = "5ce0cbeb843e6e5abf2d50c7158002e8333c26a40fbe27a7a52e66ee48cf64a8"
-PINNED_METERED_WASM_SHA256 = "774a08a7863c1dee1b2f21bb80fb9964f0dd5dc27bdf2294bdd8a11934e893c6"
+PINNED_CPYTHON_WASM_SHA256 = "dbd949fbb473d96277cc3fff67fae32b14d713830b339b1687bc9180cbc3c88c"
+PINNED_METERED_WASM_SHA256 = "3e54c6e508679f660356422f4640f971c9ecf1acc7a3e1754547c6be2153c91a"
 PINNED_IMPORT_INVENTORY_SHA256 = "d4dca3e9def0586bdc7c43af04340073fcbd99b28a87f26f33341b30f00d623b"
 CPYTHON_312_MAGIC_HEX = "cb0d0d0a"
 
@@ -527,11 +527,15 @@ def write_third_party_notices(
         "==================================================",
         "",
         "Interpreter & Built-in WASI Native Components:",
-        "- CPython 3.12 (PSF-2.0)",
-        "- WASI SDK / wasi-libc (Apache-2.0 WITH LLVM-exception / MIT)",
-        "- zlib (Zlib License) — built into WASI guest for PNG/DEFLATE support",
-        "- libjpeg / libjpeg-turbo (IJG / BSD-3-Clause / Zlib) — built into WASI guest for Pillow JPEG codec",
-        "- libxml2 & libxslt (MIT) — built into WASI guest for lxml.etree XPath/XML support",
+        "- CPython 3.12.0 (PSF-2.0)",
+        "- WASI-SDK 20.0 / wasi-libc (Apache-2.0 WITH LLVM-exception / MIT)",
+        "- zlib 1.3.1 (Zlib License) — built into WASI guest for PNG/DEFLATE support",
+        "- bzip2 1.0.8 (bzip2-1.0.6 License) — built into WASI guest for bz2 compression",
+        "- SQLite3 3.45.3 (Public Domain) — built into WASI guest for sqlite3 stdlib",
+        "- libjpeg (IJG) 9f (IJG License) — built into WASI guest for Pillow JPEG codec",
+        "- libxml2 2.12.9 & libxslt 1.1.42 (MIT) — built into WASI guest for lxml.etree XPath/XML support",
+        "- Pillow 11.1.0 built-in PIL._imaging C extension (MIT-CMU)",
+        "- lxml 5.3.0 built-in lxml.etree & lxml._elementpath Cython/C extensions (BSD-3-Clause)",
         "",
         "Bundled Python Distributions:",
     ]
@@ -767,6 +771,12 @@ def main() -> None:
         help="Pinned SHA-256 of the InstrumentWasmFuel-metered python.wasm",
     )
     ap.add_argument(
+        "--interpreter-archive",
+        type=Path,
+        default=None,
+        help="Optional local path to verified CPython/WASI guest archive (e.g. python-3.12.0-wasi-py10.tar.gz)",
+    )
+    ap.add_argument(
         "--interpreter-wasm",
         type=Path,
         default=None,
@@ -795,11 +805,19 @@ def main() -> None:
 
     # 1. Fetch & extract CPython WASI interpreter + stdlib
     interp = lock["interpreter"]
-    interp_tar = download_verified(
-        interp["source_url"],
-        args.cache_dir / interp["filename"],
-        interp["source_sha256"],
-    )
+    if args.interpreter_archive is not None:
+        interp_tar = args.interpreter_archive
+        got_tar_sha = sha256_file(interp_tar)
+        if got_tar_sha != interp["source_sha256"]:
+            raise RuntimeError(
+                f"SHA-256 mismatch for {interp_tar}: expected {interp['source_sha256']}, got {got_tar_sha}"
+            )
+    else:
+        interp_tar = download_verified(
+            interp["source_url"],
+            args.cache_dir / interp["filename"],
+            interp["source_sha256"],
+        )
     print(f"[interpreter] verified {interp_tar.name} ({interp['source_sha256'][:16]}...)")
 
     wasm_out = bin_dir / "python.wasm"
@@ -808,13 +826,13 @@ def main() -> None:
             if not member.isfile():
                 continue
             name = member.name.lstrip("./")
-            if name == "bin/python-3.12.0.wasm":
+            if name in ("bin/python.wasm", "bin/python-3.12.0.wasm"):
                 f = tf.extractfile(member)
                 assert f is not None
                 wasm_out.write_bytes(f.read())
                 os.chmod(wasm_out, 0o755)
-            elif name.startswith("usr/local/lib/"):
-                sub = name[len("usr/local/lib/") :]
+            elif name.startswith("usr/local/lib/") or name.startswith("lib/"):
+                sub = name[len("usr/local/lib/") :] if name.startswith("usr/local/lib/") else name[len("lib/") :]
                 if not sub or "/__pycache__/" in sub or sub.endswith(".pyc"):
                     continue
                 out = lib_dir / sub
