@@ -241,8 +241,12 @@ func (o *Owners) captureDestination(ctx context.Context, tc tools.ToolContext, e
 func (o *Owners) publish(ctx context.Context, tc tools.ToolContext, target pinnedTarget, content []byte) (native.WriteResult, error) {
 	// Appending to a captured absence creates the file from the new bytes.
 	appendBytes := target.append && target.pin.Mode != toolcontract.AbsentRevision
-	return o.Operations.Write.Apply(ctx, native.WriteInput{Path: target.abs, Exact: true, Bytes: content, Append: appendBytes, Memory: o.Revisions.Memory,
+	result, err := o.Operations.Write.Apply(ctx, native.WriteInput{Path: target.abs, Exact: true, Bytes: content, Append: appendBytes, Memory: o.Revisions.Memory,
 		Admission: native.WriteExecutionPinned, Destination: target.pin, Mode: target.mode}, tc)
+	if err == nil && o.ManagedTemps != nil {
+		o.ManagedTemps.Record(ctx, tc, o.Revisions, target.abs)
+	}
+	return result, err
 }
 
 // fileStage holds one destination's bytes until the evaluator publishes or
