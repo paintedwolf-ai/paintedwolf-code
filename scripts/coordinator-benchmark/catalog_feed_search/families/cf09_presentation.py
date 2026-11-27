@@ -427,13 +427,13 @@ def verify_presentation_observation(obs: PresentationObservation) -> Presentatio
             f"false_final_empty: empty result shown as final while state={obs.state} facts={list(facts)}"
         )
 
-    # Rule 1: Every declared coverage fact reaches the screen beside its results.
-    non_routine_facts = tuple(f for f in facts if f != "catalog_refreshing")
-    if non_routine_facts and not obs.coverage_note_visible:
+    # Rule 1: Every declared coverage fact (including catalog_refreshing when it is
+    # the active state) reaches the screen beside its results.
+    if facts and not obs.coverage_note_visible:
         violations.append(
-            f"missing_coverage_presentation: declared facts {list(non_routine_facts)} did not reach the screen"
+            f"missing_coverage_presentation: declared facts {list(facts)} did not reach the screen"
         )
-    elif non_routine_facts and (obs.surface == "files_tree" or obs.coverage_notice_categories):
+    elif facts and (obs.surface == "files_tree" or obs.coverage_notice_categories):
         rendered_categories = set(obs.coverage_notice_categories)
         if not rendered_categories and obs.notes:
             rendered_categories = set(
@@ -444,7 +444,7 @@ def verify_presentation_observation(obs: PresentationObservation) -> Presentatio
             )
         unmatched = [
             f
-            for f in non_routine_facts
+            for f in facts
             if f in DECLARED_TO_NOTICE_CATEGORIES
             and not (rendered_categories & DECLARED_TO_NOTICE_CATEGORIES[f])
         ]

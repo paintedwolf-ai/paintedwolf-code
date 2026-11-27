@@ -493,6 +493,7 @@ def run_macos_native(
             sidecar_env.update(
                 {
                     "LYCAON_CONFIG_DIR": str(cfg_dir),
+                    "LYCAON_CONFIG_ROOT": str(den_repo / "lycaon"),
                     "LYCAON_ADDR": f"127.0.0.1:{port}",
                     "LYCAON_API_TOKEN": token,
                     "LYCAON_DEV": "1",
@@ -610,6 +611,14 @@ def run_macos_native(
 
             desktop_shot = out_dir / "native_desktop_macos.png"
             desktop_captured = _capture_screen(desktop_shot)
+
+            # Stop background processes and flush logs BEFORE computing sha256_manifest.json.
+            _stop_proc(tauri_proc)
+            tauri_proc = None
+            _stop_proc(sidecar_proc)
+            sidecar_proc = None
+            tauri_log.close()
+            sidecar_log.close()
 
             raw_obs = json.loads(
                 (out_dir / "raw_observations_macos.json").read_text(encoding="utf-8")

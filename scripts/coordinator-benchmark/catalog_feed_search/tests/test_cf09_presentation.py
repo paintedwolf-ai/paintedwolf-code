@@ -300,6 +300,33 @@ class TestCF09Presentation(unittest.TestCase):
         )
         self.assertEqual(verify_presentation_observation(uncorrelated_tree).verdict, "MISSING_OBSERVATION")
 
+    def test_refreshing_slot_requires_visible_refresh_indication(self) -> None:
+        # Decision 078: catalog_refreshing as the sole fact must NOT auto-pass without visible refresh indication.
+        no_refresh_ui = PresentationObservation(
+            surface="search_stage",
+            state="refreshing",
+            platform="linux",
+            native_window=True,
+            api_response={"issues": [{"executor": "code", "reason": "catalog_refreshing", "count": 1}]},
+            coverage_note_visible=False,
+        )
+        verdict = verify_presentation_observation(no_refresh_ui)
+        self.assertEqual(verdict.verdict, "DEFECT")
+        self.assertTrue(any("missing_coverage_presentation" in v for v in verdict.violations))
+
+        with_refresh_ui = PresentationObservation(
+            surface="files_tree",
+            state="refreshing",
+            platform="linux",
+            native_window=True,
+            api_response={"refreshing": True, "coverage": [{"root_id": "r1", "state": "ready", "refreshing": True}]},
+            coverage_note_visible=True,
+            coverage_note_testid="files-root-summary-coverage",
+            coverage_notice_categories=("catalog_refreshing",),
+            notes="Files are refreshing in the background.",
+        )
+        self.assertEqual(verify_presentation_observation(with_refresh_ui).verdict, "PASS")
+
     def test_write_presentation_evidence_writes_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "CF09"
