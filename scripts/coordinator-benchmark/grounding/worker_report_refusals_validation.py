@@ -101,7 +101,7 @@ def _run_worker_job(
     child_req2 = client.wait_pending(child_sid, timeout=180.0)
 
     if inject_bad_first_report:
-        # Submit unobserved read#999999 -> refused with typed WORKER_EVIDENCE_HANDLE_UNKNOWN
+        # Submit nonexistent path + unobserved read#999999 -> refused on D1 with typed grounding Code
         client.respond(
             child_req2["id"],
             tool_calls=[
@@ -109,9 +109,9 @@ def _run_worker_job(
                     "id": str(uuid.uuid4()),
                     "name": "complete_leg",
                     "args": {
-                        "leg_status": "partial",
-                        "brief": "Surveyed app.go.",
-                        "findings": [{"path": "app.go", "line": 90, "evidence": "read#999999", "note": "Unobserved line."}],
+                        "leg_status": "complete",
+                        "brief": "Surveyed nonexistent.go.",
+                        "findings": [{"path": "nonexistent.go", "line": 90, "evidence": "read#999999", "note": "Unobserved file and handle."}],
                     },
                 }
             ],
