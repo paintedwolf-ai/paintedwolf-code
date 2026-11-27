@@ -60,8 +60,15 @@ func reportUnoffered(r *invariants.Run, label, text string, held map[string]bool
 		if !ok {
 			return nil, false
 		}
-		if tool == "command" && !held[toolcontract.ReachCommandExternalExec] {
-			return tools.PruneCommandReadOnlySchema(meta.ArgsSchema), true
+		if tool == "command" {
+			args := meta.ArgsSchema
+			if !held[toolcontract.ReachCommandExternalExec] {
+				args = tools.PruneCommandReadOnlySchema(args)
+			}
+			if !held["update_progress"] {
+				args = tools.PruneCommandProgressSchema(args)
+			}
+			return args, true
 		}
 		return meta.ArgsSchema, true
 	}

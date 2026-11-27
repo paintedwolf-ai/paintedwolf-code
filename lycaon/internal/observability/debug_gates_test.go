@@ -23,7 +23,8 @@ func TestFullDebugMainSwitchEnablesAllCaptures(t *testing.T) {
 	}
 	if LLMDebugEnabled() || HTTPDebugEnabled() || SSEDebugEnabled() ||
 		ToolDebugEnabled() || WebSearchDebugEnabled() || SummarizeDebugEnabled() ||
-		DenPerfDebugEnabled() || PerformanceEnabled() {
+		DenPerfDebugEnabled() || PerformanceEnabled() ||
+		debugpaths.Enabled(debugpaths.KindCommandDiagnostics) {
 		t.Fatal("expected all captures disabled with no env set")
 	}
 
@@ -32,14 +33,15 @@ func TestFullDebugMainSwitchEnablesAllCaptures(t *testing.T) {
 		t.Fatal("expected main enabled for 1")
 	}
 	captures := map[string]bool{
-		"llm":         LLMDebugEnabled(),
-		"http":        HTTPDebugEnabled(),
-		"sse":         SSEDebugEnabled(),
-		"tool":        ToolDebugEnabled(),
-		"websearch":   WebSearchDebugEnabled(),
-		"summarize":   SummarizeDebugEnabled(),
-		"den-perf":    DenPerfDebugEnabled(),
-		"performance": PerformanceEnabled(),
+		"llm":                 LLMDebugEnabled(),
+		"http":                HTTPDebugEnabled(),
+		"sse":                 SSEDebugEnabled(),
+		"tool":                ToolDebugEnabled(),
+		"websearch":           WebSearchDebugEnabled(),
+		"summarize":           SummarizeDebugEnabled(),
+		"den-perf":            DenPerfDebugEnabled(),
+		"performance":         PerformanceEnabled(),
+		"command-diagnostics": debugpaths.Enabled(debugpaths.KindCommandDiagnostics),
 	}
 	for name, enabled := range captures {
 		if !enabled {

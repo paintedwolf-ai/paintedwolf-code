@@ -308,7 +308,11 @@
           "b.txt": "baseline:b.txt",
           "diff.txt": "baseline:diff.txt"
         },
-        "host_facts": {}
+        "host_facts": {},
+        "file_mtimes": {
+          "a.txt": 1767323045,
+          "b.txt": 1767323045
+        }
       },
       "turns": [
         {
@@ -325,7 +329,7 @@
         "files": {
           "a.txt": "a\n",
           "b.txt": "b\n",
-          "diff.txt": "--- ./a.txt\n+++ ./b.txt\n@@ -1 +1 @@\n-a\n+b\n"
+          "diff.txt": "--- ./a.txt\t2026-01-02 03:04:05.000000000 +0000\n+++ ./b.txt\t2026-01-02 03:04:05.000000000 +0000\n@@ -1 +1 @@\n-a\n+b\n"
         },
         "absent": [],
         "receipts": [
@@ -700,7 +704,7 @@
       "profile": "implement",
       "setup": {
         "files": {
-          "bad.sh": "echo ok; eval data"
+          "bad.sh": "echo inner\ntrap x INT\n"
         },
         "drafts": {},
         "progress": "valid",
@@ -711,18 +715,19 @@
       },
       "turns": [
         {
-          "program": "printf 'parent\\n'; source -- ./bad.sh",
-          "expected_outcome": "rejected"
+          "program": "printf 'parent\\n'; source -- ./bad.sh; printf 'after\\n'",
+          "expected_outcome": "rejected",
+          "expected_rejection": "COMMAND_SYNTAX_UNSUPPORTED"
         }
       ],
       "expected": {
         "stdout": "parent\n",
-        "stderr": "",
+        "stderr": "source: line 2: trap '...' EXIT [COMMAND_SYNTAX_UNSUPPORTED]\n",
         "status": 2,
         "host_stop": "rejected",
         "complete": false,
         "files": {
-          "bad.sh": "echo ok; eval data"
+          "bad.sh": "echo inner\ntrap x INT\n"
         },
         "absent": [],
         "receipts": [

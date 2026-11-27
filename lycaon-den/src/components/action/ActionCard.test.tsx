@@ -334,6 +334,70 @@ describe("ActionCard", () => {
     });
   });
 
+  it("caches settled receipt output by program revision and renders fresh bytes on a later revision or unversioned remount", async () => {
+    const receiptPage = (revision: number, text: string) => ({
+      program: { id: "prog-cache", state: "completed", activity_revision: revision },
+      executions: [
+        {
+          execution_id: `exec-${revision}`,
+          state: "completed",
+          status_code: 0,
+          outputs: [
+            { stream: "stdout", ref: `ref-${revision}`, size_bytes: text.length, complete: true, redacted: false, preview: text, preview_truncated: false, line_count: 1 },
+          ],
+        },
+      ],
+    });
+    const getCommandProgramReceipt = vi.fn()
+      .mockResolvedValueOnce(receiptPage(1, "output-v1\n"))
+      .mockResolvedValueOnce(receiptPage(2, "output-v2\n"))
+      .mockResolvedValueOnce(receiptPage(3, "unversioned-1\n"))
+      .mockResolvedValueOnce(receiptPage(4, "unversioned-2\n"));
+    const client = stubClient({ getCommandProgramReceipt });
+    const settledAction: CardAction = {
+      ...descriptor,
+      status: "done",
+      preview: { kind: "output", receipts: [{ program_id: "prog-cache", activity_id: "act-1" }] },
+    };
+    const partAtRev = (rev: number): ToolPartView => ({
+      ...part(),
+      commandProgram: { id: "prog-cache", state: "completed", activity_revision: rev } as NonNullable<ToolPartView["commandProgram"]>,
+    });
+
+    const first = render(() => <ActionCard part={partAtRev(1)} action={settledAction} layout="chat" sessionId="sess-1" client={client} />);
+    open(first.container);
+    await waitFor(() => expect(first.container.querySelector('[data-testid="action-preview"]')?.textContent).toContain("output-v1"));
+    expect(getCommandProgramReceipt).toHaveBeenCalledTimes(1);
+    first.unmount();
+
+    // Remounting at the same settled revision hits the cache.
+    const sameRev = render(() => <ActionCard part={partAtRev(1)} action={settledAction} layout="chat" sessionId="sess-1" client={client} />);
+    open(sameRev.container);
+    await waitFor(() => expect(sameRev.container.querySelector('[data-testid="action-preview"]')?.textContent).toContain("output-v1"));
+    expect(getCommandProgramReceipt).toHaveBeenCalledTimes(1);
+    sameRev.unmount();
+
+    // Remounting at a later revision bypasses the older entry and renders fresh bytes.
+    const nextRev = render(() => <ActionCard part={partAtRev(2)} action={settledAction} layout="chat" sessionId="sess-1" client={client} />);
+    open(nextRev.container);
+    await waitFor(() => expect(nextRev.container.querySelector('[data-testid="action-preview"]')?.textContent).toContain("output-v2"));
+    expect(getCommandProgramReceipt).toHaveBeenCalledTimes(2);
+    nextRev.unmount();
+
+    // Without an authoritative revision token, remounting always fetches fresh output.
+    const unversioned1 = render(() => <ActionCard part={part()} action={settledAction} layout="chat" sessionId="sess-1" client={client} />);
+    open(unversioned1.container);
+    await waitFor(() => expect(unversioned1.container.querySelector('[data-testid="action-preview"]')?.textContent).toContain("unversioned-1"));
+    expect(getCommandProgramReceipt).toHaveBeenCalledTimes(3);
+    unversioned1.unmount();
+
+    const unversioned2 = render(() => <ActionCard part={part()} action={settledAction} layout="chat" sessionId="sess-1" client={client} />);
+    open(unversioned2.container);
+    await waitFor(() => expect(unversioned2.container.querySelector('[data-testid="action-preview"]')?.textContent).toContain("unversioned-2"));
+    expect(getCommandProgramReceipt).toHaveBeenCalledTimes(4);
+    unversioned2.unmount();
+  });
+
   it("indexes and searches folded tool part members", async () => {
     const folded: ToolPartView = {
       ...part(),
