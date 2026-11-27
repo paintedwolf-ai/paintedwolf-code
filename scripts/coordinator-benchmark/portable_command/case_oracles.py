@@ -182,8 +182,14 @@ def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, rece
     facts = {}
     if recovery and recovery.get('owner_code') == 'PROGRESS_MISSING':
         all_refused = bool(execs) and all(e.get('state') in {'refused', 'rejected'} and e.get('effect_certainty') in {None, '', 'none'} for e in execs)
-        if all_refused and last_payload.get('completed_effects', 0) == 0 and last_payload.get('uncertain_effects', 0) == 0:
-            recovery = {**recovery, 'zero_program_effects': True}
+        zero_ok = bool(all_refused and last_payload.get('completed_effects', 0) == 0 and last_payload.get('uncertain_effects', 0) == 0)
+        ref_details = (last_payload.get('refusal') or {}).get('details') if isinstance(last_payload.get('refusal'), dict) else {}
+        remedy = 'update_progress' if (
+            isinstance(ref_details, dict) and 'progress' in str(ref_details.get('expected_form') or '').lower()
+        ) else recovery.get('remedy', '')
+        recovery = {**recovery, 'cause': 'missing_progress', 'remedy': remedy}
+        if zero_ok:
+            recovery = {**recovery, 'zero_program_effects': True, 'effect_certainty_required': True}
             facts['zero_program_effects'] = baseline_hashes is None or final_hashes == baseline_hashes
         if (last_payload.get('detail_ref') or '').startswith('output:program-source:') and last_payload.get('replay_available') is False:
             facts['validated_resubmission_reference'] = True

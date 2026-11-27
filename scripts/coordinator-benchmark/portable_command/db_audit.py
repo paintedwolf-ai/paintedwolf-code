@@ -109,7 +109,8 @@ def receipt_rows(audit, progress_receipts, draft_bindings=None):
             elif op in {'tar_create', 'tar_extract', 'mkdir'}:
                 row['path'] = effect['path'] = pin_path.lstrip('./')
         if op == 'mkdir' and 'path' not in effect:
-            toks = [t for t in (ex.get('canonical') or '').split() if not t.startswith('-') and t != 'mkdir']
+            toks = [t.rstrip(';') for t in (ex.get('canonical') or '').split() if not t.startswith('-') and t != 'mkdir']
+            toks = [t for t in toks if t]
             if toks:
                 row['path'] = effect['path'] = toks[-1].lstrip('./')
         if op == 'read' and draft_bindings:

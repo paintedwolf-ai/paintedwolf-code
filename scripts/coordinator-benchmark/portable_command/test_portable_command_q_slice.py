@@ -48,7 +48,9 @@ class PortableCommandQSliceTests(unittest.TestCase):
             self.assertEqual(audit['observation_gaps'], [])
             self.assertTrue(obs['facts']['missing_progress_owner_code'])
             self.assertTrue(obs['facts']['zero_program_effects'])
-            self.assertTrue(obs['recovery']['zero_program_effects'])
+            self.assertEqual(obs['recovery']['cause'], 'missing_progress')
+            self.assertEqual(obs['recovery']['remedy'], 'update_progress')
+            self.assertTrue(obs['recovery']['zero_program_effects'] and obs['recovery']['effect_certainty_required'])
             self.assertTrue(obs['facts']['validated_resubmission_reference'])
 
     def test_q21_external_argv_disk_provenance_and_confined_launch_gap(self):
@@ -84,7 +86,7 @@ class PortableCommandQSliceTests(unittest.TestCase):
             db.execute("ALTER TABLE invocation_program_executions ADD COLUMN canonical TEXT DEFAULT ''")
             db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','completed',1)")
             db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,'')")
-            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,canonical) VALUES ('e1','p1',1,'extract_archive','tar','filesystem','completed','completed','tar -cjf ./bundle.tar.bz2 ./input.txt'), ('e2','p1',2,'mkdir','mkdir','filesystem','completed','completed','mkdir -p ./out'), ('e3','p1',3,'extract_archive','tar','filesystem','completed','completed','tar -xjf ./bundle.tar.bz2 -C ./out')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,canonical) VALUES ('e1','p1',1,'extract_archive','tar','filesystem','completed','completed','tar -cjf ./bundle.tar.bz2 ./input.txt'), ('e2','p1',2,'mkdir','mkdir','filesystem','completed','completed','mkdir -p ./out;'), ('e3','p1',3,'extract_archive','tar','filesystem','completed','completed','tar -xjf ./bundle.tar.bz2 -C ./out')")
             db.execute("INSERT INTO invocation_program_revision_pins VALUES ('p1','e1',0,'destination','absent','bundle.tar.bz2')")
             db.execute("INSERT INTO invocation_program_publications VALUES ('p1','sess1234','committed',1)")
             db.commit(); db.close()
