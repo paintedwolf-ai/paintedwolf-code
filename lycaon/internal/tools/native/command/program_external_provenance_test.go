@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -11,7 +12,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 type launchLogCapture struct {
@@ -45,60 +48,94 @@ func (c *launchLogCapture) snapshot() []map[string]string {
 	return out
 }
 
-func TestExternalLaunchEmitsStructuredDiskProvenance(t *testing.T) {
-	capture := &launchLogCapture{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(capture))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+func TestExternalLaunchDiskProvenanceControls(t *testing.T) {
+	t.Run("capture_off_default_emits_nothing", func(t *testing.T) {
+		t.Setenv(configdir.EnvDev, "")
+		t.Setenv(configdir.EnvHarness, "")
+		capture := &launchLogCapture{}
+		prev := slog.Default()
+		slog.SetDefault(slog.New(capture))
+		t.Cleanup(func() { slog.SetDefault(prev) })
 
-	f := newProgramFixture(t)
-	raw, err := f.call(t, t.Context(), `external -- /bin/echo provenance-ok`)
-	testutil.FailErr(t, "run external echo", err)
-	outcome := decodeOutcome(t, raw)
-	if outcome.Status != 0 || outcome.Refusal != nil || outcome.Stdout != "provenance-ok\n" {
-		t.Fatalf("outcome = %+v", outcome)
-	}
-
-	page, err := f.Recorder.ReadProgramPage(t.Context(), f.Session, outcome.ProgramID, "", 20)
-	testutil.FailErr(t, "read program page", err)
-	var execID string
-	for _, exec := range page.Executions {
-		if strings.Contains(exec.Command, "/bin/echo") {
-			execID = exec.ID
+		f := newProgramFixture(t)
+		raw, err := f.call(t, t.Context(), `external -- /bin/echo default-ok`)
+		testutil.FailErr(t, "run external echo with capture off", err)
+		if outcome := decodeOutcome(t, raw); outcome.Status != 0 || outcome.Refusal != nil || outcome.Stdout != "default-ok\n" {
+			t.Fatalf("outcome = %+v", outcome)
 		}
-	}
-	if execID == "" {
-		t.Fatalf("missing /bin/echo execution in %+v", page.Executions)
-	}
+		if got := capture.snapshot(); len(got) != 0 {
+			t.Fatalf("capture-off emitted %d provenance records, want 0: %+v", len(got), got)
+		}
+	})
 
-	recs := capture.snapshot()
-	if len(recs) != 1 {
-		t.Fatalf("got %d launch provenance records, want 1: %+v", len(recs), recs)
-	}
-	rec := recs[0]
-	if rec["execution_id"] != execID {
-		t.Fatalf("execution_id = %q, want %q", rec["execution_id"], execID)
-	}
-	if rec["executable_path"] == "" {
-		t.Fatalf("empty executable_path in %+v", rec)
-	}
-	resolved, err := filepath.EvalSymlinks(rec["executable_path"])
-	testutil.FailErr(t, "resolve executable_path", err)
-	body, err := os.ReadFile(resolved)
-	testutil.FailErr(t, "read executable bytes", err)
-	sum := sha256.Sum256(body)
-	wantDigest := hex.EncodeToString(sum[:])
-	if rec["executable_sha256"] != wantDigest {
-		t.Fatalf("executable_sha256 = %q, want %q", rec["executable_sha256"], wantDigest)
-	}
+	t.Run("capture_on_started_edge_matches_independent_disk_digest", func(t *testing.T) {
+		t.Setenv(configdir.EnvDev, "1")
+		t.Setenv(configdir.EnvHarness, "1")
+		capture := &launchLogCapture{}
+		prev := slog.Default()
+		slog.SetDefault(slog.New(capture))
+		t.Cleanup(func() { slog.SetDefault(prev) })
 
-	// Missing binary exits 127 before launch and emits no launch provenance log.
-	rawMissing, err := f.call(t, t.Context(), `external -- /no/such/binary-bb09-provenance`)
-	testutil.FailErr(t, "run missing external", err)
-	if got := decodeOutcome(t, rawMissing); got.Status != 127 {
-		t.Fatalf("missing binary outcome = %+v, want status 127", got)
-	}
-	if len(capture.snapshot()) != 1 {
-		t.Fatalf("missing binary emitted launch provenance: %+v", capture.snapshot())
-	}
+		f := newProgramFixture(t)
+		raw, err := f.call(t, t.Context(), `external -- /bin/echo provenance-ok`)
+		testutil.FailErr(t, "run external echo", err)
+		outcome := decodeOutcome(t, raw)
+		if outcome.Status != 0 || outcome.Refusal != nil || outcome.Stdout != "provenance-ok\n" {
+			t.Fatalf("outcome = %+v", outcome)
+		}
+
+		page, err := f.Recorder.ReadProgramPage(t.Context(), f.Session, outcome.ProgramID, "", 20)
+		testutil.FailErr(t, "read program page", err)
+		var execID string
+		for _, exec := range page.Executions {
+			if strings.Contains(exec.Command, "/bin/echo") {
+				execID = exec.ID
+			}
+		}
+		if execID == "" {
+			t.Fatalf("missing /bin/echo execution in %+v", page.Executions)
+		}
+
+		recs := capture.snapshot()
+		if len(recs) != 1 {
+			t.Fatalf("got %d launch provenance records, want 1: %+v", len(recs), recs)
+		}
+		rec := recs[0]
+		if rec["execution_id"] != execID || rec["executable_path"] == "" || rec["executable_sha256_status"] != "ok" || rec["executable_provenance_basis"] != "prepared_file" {
+			t.Fatalf("unexpected provenance record: %+v", rec)
+		}
+		resolved, err := filepath.EvalSymlinks(rec["executable_path"])
+		testutil.FailErr(t, "resolve executable_path", err)
+		body, err := os.ReadFile(resolved)
+		testutil.FailErr(t, "read executable bytes", err)
+		sum := sha256.Sum256(body)
+		if want := hex.EncodeToString(sum[:]); rec["executable_sha256"] != want {
+			t.Fatalf("executable_sha256 = %q, want %q", rec["executable_sha256"], want)
+		}
+	})
+
+	t.Run("refused_or_missing_start_emits_no_launch_provenance", func(t *testing.T) {
+		t.Setenv(configdir.EnvDev, "1")
+		t.Setenv(configdir.EnvHarness, "1")
+		capture := &launchLogCapture{}
+		prev := slog.Default()
+		slog.SetDefault(slog.New(capture))
+		t.Cleanup(func() { slog.SetDefault(prev) })
+
+		f := newProgramFixture(t)
+		rawMissing, err := f.call(t, t.Context(), `external -- /no/such/binary-bb09-provenance`)
+		testutil.FailErr(t, "run missing external", err)
+		if got := decodeOutcome(t, rawMissing); got.Status != 127 {
+			t.Fatalf("missing binary outcome = %+v, want status 127", got)
+		}
+
+		fRefused := newProgramFixture(t)
+		fRefused.Context = func(_ string, tc *tools.ToolContext) {
+			tc.Source.RecordViewProcess = func(int) error { return errors.New("injected start refusal") }
+		}
+		_, _ = fRefused.call(t, t.Context(), `external -- /bin/echo refused-start`)
+		if got := capture.snapshot(); len(got) != 0 {
+			t.Fatalf("refused/missing starts emitted provenance: %+v", got)
+		}
+	})
 }

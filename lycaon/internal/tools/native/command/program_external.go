@@ -84,8 +84,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "external", "reason": err.Error(), "expected": "an environment without host-reserved keys"})
 	}
-	execPath, lookupErr := lycexec.LaunchLookup(argv[0], opts)
-	if confine.IsCommandNotFound(lookupErr) {
+	if _, err := lycexec.LaunchLookup(argv[0], opts); confine.IsCommandNotFound(err) {
 		_, _ = fmt.Fprintf(nonNilWriter(streams.Error), "bash: %s: command not found\n", argv[0])
 		return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
 	}
@@ -121,7 +120,6 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, err
 	}
 	defer release()
-	logExternalLaunchProvenance(ctx, request.Invocation.Identity.ExecutionID, execPath)
 	opts.Started = func(pid int) { noteJobProcess(ctx, pid, launchArgv) }
 	async, err := lycexec.StartPipelineAsync(ctx, []lycexec.Stage{{Name: launchArgv[0], Args: launchArgv[1:]}}, opts, nonNilWriter(streams.Output), nonNilWriter(streams.Error))
 	if err != nil {
@@ -134,6 +132,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		}
 		return externalLaunchFailure(err, toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}), err
 	}
+	logExternalLaunchProvenance(ctx, request.Invocation.Identity.ExecutionID, async.ExecutablePath())
 	if bound.directIPApplied {
 		// Every return below follows the reap, including a program handed back
 		// as running whose launch settles later.

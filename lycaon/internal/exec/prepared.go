@@ -20,12 +20,12 @@ type preparedLifecycle struct {
 	cleanup         func()
 	untrack         func()
 	record          func(pid int) error
+	executablePath  string
 }
 
 var preparedLifecycles sync.Map
 
-// launchEnvironment builds the final child environment and the captured cwd
-// a launch with opts selects its program from.
+// launchEnvironment builds the final child environment and captured cwd for opts.
 func launchEnvironment(opts ExecOpts, stageEnv map[string]string, terminal bool) (*exec.Cmd, string, error) {
 	final := &exec.Cmd{}
 	if err := configureStageCmdEnv(final, opts, stageEnv); err != nil {
@@ -166,7 +166,7 @@ func prepareNativeCommand(ctx context.Context, name string, args []string, opts 
 		_ = inputs.Close()
 		return nil, nil, err
 	}
-	state := &preparedLifecycle{record: opts.Launch.startRecorder(opts.Dir)}
+	state := &preparedLifecycle{record: opts.Launch.startRecorder(opts.Dir), executablePath: metadataPath}
 	state.cleanup = func() { cancel(); release(); baseCleanup(); _ = inputs.Close() }
 	preparedLifecycles.Store(cmd, state)
 	cleanup := func() {
