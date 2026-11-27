@@ -40,10 +40,11 @@ type SessionJobs struct {
 	// order is the job table in start order. A job takes one more than the
 	// highest number in the table and leaves it once waited, so numbers are
 	// reused as a shell reuses them.
-	order        []string
-	numbers      map[string]int
-	publicIDs    map[string]int
-	nextNativeID int
+	order         []string
+	numbers       map[string]int
+	publicIDs     map[string]int
+	nextNativeID  int
+	beforeSetStop func(handle string)
 }
 
 type jobWaiter struct{ unblock func() }
@@ -203,15 +204,28 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 			defer close(done)
 			defer release()
 			<-ready
-			ctx, cancel := context.WithCancel(jobCtx)
-			defer cancel()
+			ctx, cancel := context.WithCancelCause(jobCtx)
+			defer cancel(nil)
 			ctx = context.WithValue(ctx, jobProcessKey{}, tracker)
-			stopAfter := context.AfterFunc(stopCtx, cancel)
+			stopAfter := context.AfterFunc(stopCtx, func() { cancel(context.Cause(stopCtx)) })
 			defer stopAfter()
+			if stopCtx.Err() != nil {
+				cancel(context.Cause(stopCtx))
+			}
+			if ctx.Err() != nil {
+				status := j.signalStatus(handle)
+				result := toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.NoEffect}
+				j.record(handle, result, ctx.Err())
+				return bgprocess.ProgramJobResult{ExitCode: result.Status}, ctx.Err()
+			}
 			result, err := run(ctx, handle, commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr})
 			if ctx.Err() != nil && (result.Terminal == "" || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 				status := j.signalStatus(handle)
-				result = toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.EffectUnknown}
+				certainty := result.EffectCertainty
+				if certainty == "" {
+					certainty = toolcontract.EffectUnknown
+				}
+				result = toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: certainty}
 			}
 			j.record(handle, result, err)
 			settled := bgprocess.ProgramJobResult{ExitCode: result.Status}
@@ -224,7 +238,6 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 		close(ready)
 		return commandprogram.StartedJob{}, err
 	}
-	setStop(func() { _, _ = j.Registry.Lifecycle.Stop(j.SessionID, handle, bgprocess.TerminationStoppedByAgent) })
 	if j.numbers == nil {
 		j.numbers = map[string]int{}
 	}
@@ -237,6 +250,7 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	if own, ok := ctx.Value(programJobsKey{}).(*programJobs); ok {
 		own.handles = append(own.handles, handle)
 	}
+	beforeSetStop := j.beforeSetStop
 	j.mu.Unlock()
 	tracker.onRecord = func(process jobProcess) {
 		j.recordProcess(handle, process)
@@ -244,6 +258,12 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	tracker.attachStage = func(stage bgprocess.ProgramStage) func(confine.SandboxRefusals, []confine.EgressHost) {
 		return j.Registry.AttachProgramStage(context.WithoutCancel(jobCtx), j.SessionID, handle, stage)
 	}
+	if beforeSetStop != nil {
+		beforeSetStop(handle)
+	}
+	setStop(func(reason bgprocess.TerminationReason) {
+		_, _ = j.Registry.Lifecycle.Stop(j.SessionID, handle, reason)
+	})
 	close(ready)
 	select {
 	case <-tracker.ready:

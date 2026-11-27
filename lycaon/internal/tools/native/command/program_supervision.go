@@ -203,13 +203,13 @@ func (s *ProgramSupervisor) AdmitChild(ctx context.Context) error {
 // Stop closes admission for the session's programs and then cancels them. The
 // returned IDs acknowledge the request; settlement reports the actual exit.
 func (s *ProgramSupervisor) Stop(sessionID string) []string {
-	return s.end(sessionID, ErrProgramStopped)
+	return s.end(sessionID, ErrProgramStopped, bgprocess.TerminationStoppedByUser)
 }
 
 // Lost handles supervisor loss for a live host: programs are interrupted,
 // receipts reconciled through the owner, and nothing is replayed.
 func (s *ProgramSupervisor) Lost(ctx context.Context, sessionID, detailReference string) (int64, error) {
-	s.end(sessionID, errSupervisorLost)
+	s.end(sessionID, errSupervisorLost, bgprocess.TerminationReasonFromContext(ctx, bgprocess.TerminationAppQuit))
 	if s.Interrupter == nil {
 		return 0, fmt.Errorf("program supervisor has no receipt reconciliation")
 	}
@@ -268,18 +268,21 @@ func (s *ProgramSupervisor) StopProgram(programID string, reason bgprocess.Termi
 		cancel(bgprocess.WithCauseReason(ErrProgramInterrupted, reason))
 	}
 	for _, job := range jobs {
-		job.end(ErrProgramStopped)
+		job.end(ErrProgramStopped, reason)
 	}
 }
 
 // StopAll stops every session's programs, for the host disable control.
 func (s *ProgramSupervisor) StopAll() []string {
-	return s.end("", ErrProgramStopped)
+	return s.end("", ErrProgramStopped, bgprocess.TerminationStoppedByUser)
 }
 
-func (s *ProgramSupervisor) end(sessionID string, cause error) []string {
+func (s *ProgramSupervisor) end(sessionID string, cause error, reason bgprocess.TerminationReason) []string {
 	if s == nil {
 		return nil
+	}
+	if reason == "" {
+		reason = bgprocess.TerminationStoppedByAgent
 	}
 	s.mu.Lock()
 	var ids []string
@@ -297,11 +300,12 @@ func (s *ProgramSupervisor) end(sessionID string, cause error) []string {
 		}
 	}
 	s.mu.Unlock()
+	typedCause := bgprocess.WithCauseReason(cause, reason)
 	for _, cancel := range cancels {
-		cancel(cause)
+		cancel(typedCause)
 	}
 	for _, job := range jobs {
-		job.end(cause)
+		job.end(cause, reason)
 	}
 	return ids
 }
@@ -309,26 +313,44 @@ func (s *ProgramSupervisor) end(sessionID string, cause error) []string {
 // supervisedJob is one held & job: its context and the registry stop that
 // marks the job's handle stopped when supervision ends it.
 type supervisedJob struct {
-	mu     sync.Mutex
-	cancel context.CancelCauseFunc
-	stop   func()
+	mu        sync.Mutex
+	cancel    context.CancelCauseFunc
+	stop      func(bgprocess.TerminationReason)
+	stopped   bool
+	reason    bgprocess.TerminationReason
+	delivered bool
 }
 
-func (j *supervisedJob) end(cause error) {
+func (j *supervisedJob) end(cause error, reason bgprocess.TerminationReason) {
+	if reason == "" {
+		reason = bgprocess.TerminationReasonOf(cause)
+	}
+	if reason == "" {
+		reason = bgprocess.TerminationStoppedByAgent
+	}
+	var stop func(bgprocess.TerminationReason)
 	j.mu.Lock()
-	stop := j.stop
+	if !j.stopped {
+		j.stopped = true
+		j.reason = reason
+	}
+	winningReason := j.reason
+	if j.stop != nil && !j.delivered {
+		j.delivered = true
+		stop = j.stop
+	}
 	j.mu.Unlock()
 	if stop != nil {
-		stop()
+		stop(winningReason)
 	}
-	j.cancel(cause)
+	j.cancel(bgprocess.WithCauseReason(cause, winningReason))
 }
 
 // Hold keeps a program supervised for one & job beyond its foreground. The
 // job context keeps the program's identity, survives the launching call and
 // ends on Stop or loss, which also calls the stop registered with setStop.
 // release ends the hold exactly once.
-func (s *ProgramSupervisor) Hold(ctx context.Context) (jobCtx context.Context, setStop func(func()), release func(), err error) {
+func (s *ProgramSupervisor) Hold(ctx context.Context) (jobCtx context.Context, setStop func(func(bgprocess.TerminationReason)), release func(), err error) {
 	id, _ := ctx.Value(supervisedKey{}).(string)
 	if s == nil || id == "" {
 		return nil, nil, nil, fmt.Errorf("program job is outside supervision")
@@ -350,10 +372,25 @@ func (s *ProgramSupervisor) Hold(ctx context.Context) (jobCtx context.Context, s
 	program.jobs[key] = job
 	s.mu.Unlock()
 	var once sync.Once
-	setStop = func(stop func()) {
+	setStop = func(stop func(bgprocess.TerminationReason)) {
+		if stop == nil {
+			return
+		}
+		var deliver bool
+		var winningReason bgprocess.TerminationReason
 		job.mu.Lock()
-		job.stop = stop
+		if job.stop == nil {
+			job.stop = stop
+		}
+		if job.stopped && !job.delivered && job.stop != nil {
+			job.delivered = true
+			deliver = true
+			winningReason = job.reason
+		}
 		job.mu.Unlock()
+		if deliver {
+			stop(winningReason)
+		}
 	}
 	return jobCtx, setStop, func() {
 		once.Do(func() {
@@ -418,9 +455,10 @@ func (s *ProgramSupervisor) DisposeSession(ctx context.Context, sessionID string
 		jobs.closed.Store(true)
 		jobs.mu.Unlock()
 	}
-	s.Stop(sessionID)
+	reason := bgprocess.TerminationReasonFromContext(ctx, bgprocess.TerminationChatDeleted)
+	s.end(sessionID, ErrProgramStopped, reason)
 	if s.Background != nil {
-		if err := s.Background.Lifecycle.DisposeSession(ctx, sessionID, bgprocess.TerminationReasonFromContext(ctx, bgprocess.TerminationChatDeleted)); err != nil {
+		if err := s.Background.Lifecycle.DisposeSession(ctx, sessionID, reason); err != nil {
 			return err
 		}
 	}
