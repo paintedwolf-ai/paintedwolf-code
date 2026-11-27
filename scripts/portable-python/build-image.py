@@ -646,7 +646,11 @@ def apply_wasi_package_patches(packages_root: Path) -> list[dict[str, str]]:
         )
         text = img_parsing_py.read_text(encoding="utf-8")
         if old_block in text:
-            img_parsing_py.write_text(text.replace(old_block, new_block, 1), encoding="utf-8")
+            patched_text = text.replace(old_block, new_block, 1).replace(
+                "http.client.HTTPSConnection",
+                'getattr(http.client, "HTTPSConnection", http.client.HTTPConnection)',
+            )
+            img_parsing_py.write_text(patched_text, encoding="utf-8")
             for dist_info in packages_root.glob("fpdf2-*.dist-info"):
                 rec = dist_info / "RECORD"
                 if rec.is_file():
