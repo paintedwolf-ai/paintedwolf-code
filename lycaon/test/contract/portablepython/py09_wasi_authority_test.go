@@ -215,7 +215,7 @@ func extractAdmissionSignature(resp *portablepython.ToolResponse) []string {
 		return nil
 	}
 	seen := make(map[string]struct{})
-	for _, rec := range resp.AdmissionEvidence.Records() {
+	for _, rec := range resp.AdmissionEvidence.Admissions() {
 		key := string(rec.Family) + ":" + rec.Operation + ":" + rec.Target.RelPath + ":" + string(rec.Decision)
 		seen[key] = struct{}{}
 	}
@@ -467,12 +467,12 @@ func (e *py09RevisionEditorBridge) PublishDraft(
 	}
 	if baseRev.DocumentRevision != "" && d.Revision != baseRev.DocumentRevision {
 		return pythondocuments.DocumentRevision{}, true, &pythondocuments.RevisionConflictError{
-			Target: pythonruntime.CanonicalTarget{Namespace: pythonruntime.NamespaceWorkspace, RootID: rootID, Branch: branch, RelPath: relPath},
-			Base:   baseRev,
-			Current: pythondocuments.DocumentRevision{
-				RootID: rootID, Branch: branch, DocumentID: d.DocumentID, DocumentRevision: d.Revision, UnsavedDraft: true,
+			Conflict: pythonruntime.RevisionConflict{
+				Target:           pythonruntime.CanonicalTarget{Namespace: pythonruntime.NamespaceWorkspace, RootID: rootID, Branch: branch, RelPath: relPath},
+				ExpectedRevision: baseRev.DocumentRevision,
+				ActualRevision:   d.Revision,
+				Reason:           "editor draft revision changed concurrently",
 			},
-			Reason: "editor draft revision changed concurrently",
 		}
 	}
 	nextRev := d.Revision + "+1"
@@ -586,7 +586,7 @@ print("CAUGHT_PUBLICATION_OK")
 
 		// Verify receipt records the particular dynamic open ("missing/dynamic_probe.txt").
 		foundDynamic := false
-		for _, rec := range resp.AdmissionEvidence.Records() {
+		for _, rec := range resp.AdmissionEvidence.Admissions() {
 			if strings.Contains(rec.Target.RelPath, "missing/dynamic_probe.txt") {
 				foundDynamic = true
 				break
@@ -598,10 +598,29 @@ print("CAUGHT_PUBLICATION_OK")
 		// Verify durable receipt persisted on disk.
 		reopened, err := portablepython.NewFileReceiptStore(receiptDir)
 		contractcheck.FailErr(t, "reopen FileReceiptStore", err)
-		execRec, ok, err := reopened.FindExecution("py09-auth-caught")
-		contractcheck.FailErr(t, "FindExecution", err)
-		if !ok || !execRec.CleanCompletion {
-			t.Fatalf("reopened receipt missing or not clean: ok=%v rec=%+v", ok, execRec)
+		execs, err := reopened.LoadExecutions()
+		contractcheck.FailErr(t, "LoadExecutions", err)
+		foundExec := false
+		for _, er := range execs {
+			if er.ExecutionID == "py09-auth-caught" && er.CleanCompletion {
+				foundExec = true
+				break
+			}
+		}
+		if !foundExec {
+			t.Fatalf("reopened execution receipt py09-auth-caught missing or not clean: %+v", execs)
+		}
+		adms, err := reopened.LoadAdmissions("py09-auth-caught")
+		contractcheck.FailErr(t, "LoadAdmissions", err)
+		foundPersistedDynamic := false
+		for _, a := range adms {
+			if strings.Contains(a.Target, "missing/dynamic_probe.txt") {
+				foundPersistedDynamic = true
+				break
+			}
+		}
+		if !foundPersistedDynamic {
+			t.Fatalf("reopened durable admission receipts missing dynamic open missing/dynamic_probe.txt: %+v", adms)
 		}
 	})
 
