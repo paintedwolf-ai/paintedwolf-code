@@ -54,6 +54,9 @@ type processRuntimeState struct {
 	discarded         bool
 	done              chan struct{}
 	cancel            context.CancelFunc
+	cancelCause       context.CancelCauseFunc
+	onStop            func(TerminationReason)
+	stopClosed        chan struct{}
 	async             *exec.AsyncPipeline
 	// personWaits counts open waits on a person; personWaited sums the closed ones.
 	personWaits         int
