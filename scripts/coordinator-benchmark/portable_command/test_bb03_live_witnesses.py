@@ -106,7 +106,8 @@ class BB03LiveWitnessOracleTests(unittest.TestCase):
             db.commit(); db.close()
             turns = [{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}]
             wm = {
-                'abort_barrier': 'active_child_started', 'aborted_child_started': True, 'aborted_child_invoked': True,
+                'abort_barrier': 'active_child_running_verified', 'aborted_child_running_pre_abort': True,
+                'aborted_child_started': True, 'aborted_child_invoked': True,
                 'aborted_child_certainty': 'none', 'aborted_child_status': 130,
                 'db_program': {'state': 'interrupted', 'status_code': 130, 'stop_code': 'TOOL_OWNER_INTERRUPTED'},
                 'exec_count_at_idle': 3, 'exec_count_after_wait': 3, 'unsettled_children': 0, 'recovery_ok': True,
