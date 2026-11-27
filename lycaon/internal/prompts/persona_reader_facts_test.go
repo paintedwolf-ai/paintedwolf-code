@@ -44,12 +44,14 @@ func TestPersonaRenderDataCarriesReaderFacts(t *testing.T) {
 					continue
 				}
 				t.Run(fmt.Sprintf("effects=%d/roots=%d/%s", posture, rootCount, agent.ID), func(t *testing.T) {
-					reader, err := NewReader(ReaderInput{
-						ProfileID: agent.ToolProfile,
+					reader, err := NewReader(HostFacts{
 						Profiles:  profiles,
 						RootCount: rootCount,
 						HasGit:    rootCount > 0,
 						WebSearch: true,
+					}, TurnProjection{
+						ProfileID: agent.ToolProfile,
+						Declared:  true,
 					})
 					if err != nil {
 						t.Fatalf("reader: %v", err)

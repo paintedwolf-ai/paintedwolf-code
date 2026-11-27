@@ -4,6 +4,7 @@ import (
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 
 	"context"
+
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 
@@ -70,14 +71,8 @@ func (e *Capabilities) preflightLocalListenCapability(
 		return nil, e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, err)
 	}
 	if result.Denied {
-		context := map[string]any{}
-		if result.UserGuidance != "" {
-			context[toolrejection.UserGuidanceKey] = result.UserGuidance
-		}
-		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
-			Code: isolation.CodeLocalListenDenied,
-			Data: context,
-		})
+		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args,
+			approvalRefusalReject(isolation.CodeLocalListenDenied, result.DenialCause, result.ApprovalResolvedBy, result.UserGuidance))
 	}
 	if !result.Authorized {
 		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{

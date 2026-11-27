@@ -26,7 +26,7 @@ Workers run without a successful-cycle round ceiling; semantic attempt limits bo
 
 If a worker cannot emit a corrected grounded report, the host removes unobserved paths and URLs and binds a small sample from the evidence ledger. This settles the leg without treating model-authored citations as observed facts.
 
-Coordinator-planned fanout uses host-issued leg ids, and each leg names its `subject` for the report checklist. `fanout.max_attempts` bounds attempts per planned leg (default one; the security survey allows two). Queue admission rejects duplicate active legs and attempts beyond the allowance. The worker-cycle gate accounts for every planned leg, including ones never started: idleness or a successful final peer cannot clear an earlier partial result. Exhausted attempts settle execution; their remaining scope stays open unless the workflow declares an evidence-backed coverage review that accounts for it. Host workflow controls (plans, coverage, gates, human responses and approval, phase skips, reviewer rosters, review attempts, execution mode, and parameters) cannot be rewritten through `state_update`; model-authored artifact inputs remain writable. Plans are retained by execution phase, and replaying a recorded native `task` call returns its original receipt even after a phase change.
+Coordinator-planned fanout uses host-issued leg ids, and each leg names its `subject` for the report checklist. `fanout.max_attempts` bounds attempts per planned leg (default one; the security survey allows two). Queue admission rejects duplicate active legs and attempts beyond the allowance. The worker-cycle gate accounts for every planned leg, including ones never started: idleness or a successful final peer cannot clear an earlier partial result. Exhausted attempts settle execution; their remaining scope stays open unless the workflow declares an evidence-backed coverage review that accounts for it. Host workflow controls (plans, coverage, gates, human responses and approval, phase skips, reviewer rosters, review attempts, execution mode, and parameters) are host-owned; no agent tool writes them. Plans are retained by execution phase, and replaying a recorded native `task` call returns its original receipt even after a phase change.
 
 A review may declare `reconciles_phase` to name the earlier claim set it addresses. Reports retain every recorded claim, preserve subsequent dispositions, and label omitted reconciliation entries unresolved. Citations establish provenance, not the truth of the model's judgment.
 
@@ -154,8 +154,8 @@ The pause transaction retains a report snapshot: accepted verdicts, worker
 reports, bound scans, coverage facts, and the separately labeled unaccepted
 candidate. Its report says **Review incomplete**, assigns no success rating, and
 remains downloadable after cancellation. It does not pass the phase evidence
-gate. Repair episodes and snapshots are host-managed workflow variables; model
-`state_update` cannot alter them.
+gate. Repair episodes and snapshots are host-managed workflow variables that no
+agent tool writes.
 
 `review_loop.coverage_reviewers` selects a subset of `required_agents` to assess coverage independently. It requires a `coverage_review` verdict member and a `reconciles_phase` carrying candidate coverage. Dispatch records the subject before composing the worker prompt. `complete_leg.coverage_review` is validated against that recorded subject; verdict admission separately checks its applicability. Reviewer output cannot change its own assigned inputs. An unrelated or focused job with the same persona cannot replace a completed independent review.
 

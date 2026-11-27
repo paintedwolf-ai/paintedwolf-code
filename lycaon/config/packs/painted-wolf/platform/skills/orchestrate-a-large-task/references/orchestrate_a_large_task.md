@@ -14,15 +14,16 @@ The dispatch steps below are coordinator-only: a worker applies the matching dec
 6. Give each `task()` one focus and a self-contained `brief`: one goal, only material facts and references, decided constraints, and concrete `done_when`. Workers cannot read this conversation or each other's files.{% else %}
 5. Apply the worker guidance in the note above to your own assignment; verify your outcome against its `done_when` before reporting.
 6. Do not dispatch; report what a dispatch decision needs to the parent.{% endif %}
-7. Set the remaining fields deliberately:
+{% if profile_has_task %}7. Set the remaining fields deliberately:
    - `files` — likely starting points only, not a reading list.
    - `scope.paths` — optional focus hints for any worker; they do not limit access or promotion.
 {% if profile_has_instruct_worker %}   - To continue or reuse an existing worker, call `instruct_worker` by worker name instead of `task`.
 {% endif %}   - `scope.base_overlay_id` — a pending write result handle when a fresh worker must stack on unlanded changes.
    - `after_workers` — sibling producer worker names that must deliver a complete result and land their changes before this worker starts; a producer sent back holds this worker until it delivers again. Do not combine it with `scope.base_overlay_id`.
    - `shared_context` — up to 8192 bytes of interface agreements copied to each collaborating worker; give collaborators the same text.
-8. Add a recommended worker procedure to `brief.constraints` when one listed skill clearly fits: `Recommended procedure: use the <name> skill.` This does not replace a complete brief. Do not prescribe a skill because its name is adjacent to the topic, and do not invent a task argument for skills.
-9. Keep dependent stages sequential; when a consumer must start only after a producer's changes land, name the producer workers in `after_workers`.{% if profile_has_record_finding %} Workers may exchange short grounded findings via `record_finding`, but a message arriving after a design choice is not a prerequisite.{% endif %}
+8. Add a recommended worker procedure to `brief.constraints` when one listed skill clearly fits: `Recommended procedure: use the <name> skill.` This does not replace a complete brief. Do not prescribe a skill because its name is adjacent to the topic, and do not invent a task argument for skills.{% else %}7. Report likely starting paths, focus hints, and any producer this work must follow to the parent.
+8. Name a fitting skill in your report when the parent should recommend one.{% endif %}
+9. Keep dependent stages sequential{% if profile_has_task %}; when a consumer must start only after a producer's changes land, name the producer workers in `after_workers`{% endif %}.{% if profile_has_record_finding %} Workers may exchange short grounded findings via `record_finding`, but a message arriving after a design choice is not a prerequisite.{% endif %}
 10. Wait for every dispatched worker, inspect complete envelopes, integrate write overlays explicitly, send partial work back{% if profile_has_instruct_worker %} with `instruct_worker`{% endif %}, and verify the combined result.
 
 ## Sizing by shape

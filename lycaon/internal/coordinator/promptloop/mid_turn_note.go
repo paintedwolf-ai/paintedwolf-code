@@ -127,7 +127,7 @@ func (l *toolBatch) commitMidTurnNote(ctx context.Context, sessionID string, his
 func (l *toolBatch) settleExhaustedVisibility(ctx context.Context, sess *api.Session, sessionID string, history []api.Message, carrierID, surfaceID string, lastToolTS *time.Time, st *promptLoopTurnState) ([]api.Message, error) {
 	body := ""
 	if !hostProgressPublished(history) {
-		body = l.midTurnHostProgress(ctx, history)
+		body = l.midTurnHostProgress(ctx, history, st)
 	}
 	if body != "" {
 		note := api.Message{
@@ -169,12 +169,17 @@ func hostProgressPublished(history []api.Message) bool {
 }
 
 // midTurnHostProgress renders only structured dispatch and result facts.
-func (l *toolBatch) midTurnHostProgress(ctx context.Context, history []api.Message) string {
+func (l *toolBatch) midTurnHostProgress(ctx context.Context, history []api.Message, st *promptLoopTurnState) string {
 	workers := guidance.IntentWindowWorkerFacts(history)
 	if len(workers) == 0 || l.Closeout.Deps.RenderHostKick == nil {
 		return ""
 	}
-	body, err := l.Closeout.Deps.RenderHostKick(ctx, midTurnHostProgressKick, map[string]any{"workers": workers})
+	reader := turnReader(st)
+	if !reader.Valid() {
+		slog.WarnContext(ctx, "mid-turn host progress has no request reader")
+		return ""
+	}
+	body, err := l.Closeout.Deps.RenderHostKick(ctx, reader, midTurnHostProgressKick, map[string]any{"workers": workers})
 	if err != nil {
 		slog.WarnContext(ctx, "render mid-turn host progress", "error", err)
 		return ""

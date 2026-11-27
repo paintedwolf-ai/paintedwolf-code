@@ -62,5 +62,7 @@ func TestGateUnmetHintRequiresFailedLeavesInContextBlock(t *testing.T) {
 func renderCoordinatorInjectForTest(t *testing.T, ctx api.CoordinatorRunContext, codes []string, hints *guidance.HintConfig) (string, error) {
 	t.Helper()
 	renderer := prompts.NewInjectRenderer(contractcheck.BundledPromptEngineForRoot(t))
-	return inject.RenderActiveWorkflowInject(context.Background(), renderer, "sess-inject-test", inject.CoordinatorTurnFrame{RunContext: ctx}, hints, codes, nil)
+	reader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
+	contractcheck.FailErr(t, "DeclaredReader coordinator", err)
+	return inject.RenderActiveWorkflowInject(context.Background(), renderer, reader, "sess-inject-test", inject.CoordinatorTurnFrame{RunContext: ctx}, hints, codes, nil)
 }

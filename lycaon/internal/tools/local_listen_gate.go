@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/isolation"
 )
 
 // LocalListenAsk is the input for a structured pre-spawn listener approval.
@@ -30,6 +31,9 @@ type LocalListenResult struct {
 	Authorized bool
 	// Denied reports a rejected or expired approval.
 	Denied bool
+	// DenialCause and ApprovalResolvedBy classify a denial; see isolation.PathDenialCause.
+	DenialCause        isolation.PathDenialCause
+	ApprovalResolvedBy string
 	// Ports is the covering narrowing; empty with Authorized means any local port.
 	Ports []uint16
 	// UserGuidance is explicit composer direction attached to a denial.

@@ -140,6 +140,17 @@ func (m *Service) EffectiveApprovalPosture(ctx context.Context, sess *api.Sessio
 	return m.effectiveApprovalPosture(ctx, sess, true)
 }
 
+// ProjectApprovalPosture reads the session's effective approval posture
+// without mutating posture-change baselines.
+func (m *Service) ProjectApprovalPosture(ctx context.Context, sess *api.Session) gate.Posture {
+	return m.effectiveApprovalPosture(ctx, sess, false)
+}
+
+// CommandExternalHidden reports whether the explicit external selector is hidden.
+func (m *Service) CommandExternalHidden() bool {
+	return m != nil && m.commandExternalHidden != nil && m.commandExternalHidden()
+}
+
 func (m *Service) effectiveApprovalPosture(ctx context.Context, sess *api.Session, observe bool) gate.Posture {
 	if m == nil || sess == nil {
 		return gate.PostureStrict

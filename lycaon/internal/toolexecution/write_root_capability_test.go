@@ -19,12 +19,12 @@ func TestWriteRootPreflightUsesCompiledCapability(t *testing.T) {
 			calls := 0
 			executor := func() *Executor {
 				e := NewExecutor(nil, nil, "")
-				e.Boundary.writeRootPreflight = func(_ context.Context, gotTool string, _ map[string]any, _ tools.ToolContext, gotRoot string) (bool, bool, string, error) {
+				e.Boundary.writeRootPreflight = func(_ context.Context, gotTool string, _ map[string]any, _ tools.ToolContext, gotRoot string) (PathPreflightResult, error) {
 					calls++
 					if gotTool != tool || gotRoot != root {
 						t.Fatalf("preflight = %q, %q; want %q, %q", gotTool, gotRoot, tool, root)
 					}
-					return true, false, "", nil
+					return PathPreflightResult{Authorized: true}, nil
 				}
 				return e
 			}()
@@ -46,9 +46,9 @@ func TestWriteRootPreflightUsesCompiledCapability(t *testing.T) {
 func TestTerminalWriteRootCannotAuthorizeInstructionChanges(t *testing.T) {
 	executor := func() *Executor {
 		e := NewExecutor(nil, nil, "")
-		e.Boundary.writeRootPreflight = func(context.Context, string, map[string]any, tools.ToolContext, string) (bool, bool, string, error) {
+		e.Boundary.writeRootPreflight = func(context.Context, string, map[string]any, tools.ToolContext, string) (PathPreflightResult, error) {
 			t.Fatal("instruction changes reached ordinary write-root authorization")
-			return true, false, "", nil
+			return PathPreflightResult{Authorized: true}, nil
 		}
 		return e
 	}()
@@ -78,9 +78,9 @@ func TestRedirectReviewRefreshesAnExistingNarrowGrant(t *testing.T) {
 	target := filepath.Join(parent, "result")
 	e := NewExecutor(nil, nil, "")
 	e.Boundary.SetSessionWriteRootOverlay(func(context.Context, string, string) []string { return []string{target} })
-	e.Boundary.SetWriteRootPreflight(func(context.Context, string, map[string]any, tools.ToolContext, string) (bool, bool, string, error) {
+	e.Boundary.SetWriteRootPreflight(func(context.Context, string, map[string]any, tools.ToolContext, string) (PathPreflightResult, error) {
 		t.Fatal("redirect asked for a broader root")
-		return false, false, "", nil
+		return PathPreflightResult{}, nil
 	})
 	tc, err := e.Boundary.ReviewRedirectRoot(t.Context(), tools.ToolContext{}, ">", target, parent)
 	testutil.FailErr(t, "refresh grant", err)

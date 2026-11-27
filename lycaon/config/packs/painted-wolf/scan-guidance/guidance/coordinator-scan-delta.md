@@ -4,7 +4,7 @@ Introduced by recent edits:
 {% for f in introduced %}
   • {{ f.level }} {{ f.rule_id }} — {{ f.path }}{% if f.line %}:{{ f.line }}{% endif %}{% if f.message %} — {{ f.message }}{% endif %}
 {% endfor %}{% if introduced_omitted_count > 0 %}
-  … {{ introduced_omitted_count }} more; use `scan_query` with `introduced_since` for the full list.
+  … {{ introduced_omitted_count }} more{% if profile_has_scan_query %}; use `scan_query` with `introduced_since` for the full list{% endif %}.
 {% endif %}{% endif %}{% if fixed_count > 0 %}
 Fixed by recent edits:
 {% for f in fixed %}

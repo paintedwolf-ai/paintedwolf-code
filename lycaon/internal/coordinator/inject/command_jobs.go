@@ -11,27 +11,40 @@ import (
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/runeclamp"
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 const maxCommandLedgerLineRunes = 64
+
+// WaitSchemaAllowsProcessDone reports whether a projected wait tool schema
+// accepts until_complete with conditions[].handles and conditions[].kind == "process_done".
+func WaitSchemaAllowsProcessDone(waitSchema map[string]any) bool {
+	return waitSchema != nil &&
+		toolschema.SchemaAcceptsField(waitSchema, "until_complete") &&
+		toolschema.SchemaAcceptsField(waitSchema, "conditions.handles") &&
+		toolschema.SchemaAcceptsEnumValue(waitSchema, "conditions.kind", "process_done")
+}
 
 // RenderCommandJobsBlock renders the host ledger of command jobs and held calls
 // for a turn. Each sentence renders only in the states it is true for.
 func RenderCommandJobsBlock(
 	ctx context.Context,
 	renderer *prompts.InjectRenderer,
+	reader prompts.Reader,
+	projectedWaitSchema map[string]any,
 	sessionID string,
 	jobs []bgprocess.JobSnapshot,
 	held []heldcall.Running,
 	now time.Time,
 	surface string,
 ) string {
-	if renderer == nil || len(jobs)+len(held) == 0 {
+	if renderer == nil || !reader.Valid() || len(jobs)+len(held) == 0 {
 		return ""
 	}
-	block, err := anchor.RenderInform(
+	waitProcessDoneAllowed := slices.Contains(reader.Offered(), "wait") && WaitSchemaAllowsProcessDone(projectedWaitSchema)
+	block, err := anchor.RenderInformWithReader(
 		ctx, anchor.InjectCommandJobs, anchor.MatchContext{Surface: surface, SessionID: sessionID},
-		renderer, commandJobsVars(jobs, held, now),
+		renderer, reader, commandJobsVars(jobs, held, now, waitProcessDoneAllowed),
 	)
 	if err != nil {
 		return ""
@@ -41,7 +54,7 @@ func RenderCommandJobsBlock(
 
 // commandJobsVars are the ledger's facts: one row per job or held call, and
 // which kinds are present, so each sentence is conditioned on its own state.
-func commandJobsVars(jobs []bgprocess.JobSnapshot, held []heldcall.Running, now time.Time) map[string]any {
+func commandJobsVars(jobs []bgprocess.JobSnapshot, held []heldcall.Running, now time.Time, waitProcessDoneAllowed bool) map[string]any {
 	rows := make([]map[string]any, 0, len(jobs)+len(held))
 	running, exited := false, false
 	for _, job := range jobs {
@@ -69,8 +82,11 @@ func commandJobsVars(jobs []bgprocess.JobSnapshot, held []heldcall.Running, now 
 		})
 	}
 	return map[string]any{
-		"jobs": rows, "has_running": running, "has_exited": exited, "has_held": len(held) > 0,
-		"can_wait": running || len(held) > 0,
+		"jobs":                      rows,
+		"has_running":               running,
+		"has_exited":                exited,
+		"has_held":                  len(held) > 0,
+		"wait_process_done_allowed": waitProcessDoneAllowed,
 	}
 }
 

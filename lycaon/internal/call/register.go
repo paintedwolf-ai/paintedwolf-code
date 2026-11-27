@@ -9,8 +9,7 @@ import (
 
 // HandoffToolDeps wires handoff_* tool executors.
 type HandoffToolDeps struct {
-	Calls    CallManager
-	Sessions SessionLookup
+	Calls CallManager
 }
 
 // RegisterHandoffTools registers handoff_* sibling coordination tools.

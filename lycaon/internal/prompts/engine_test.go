@@ -14,8 +14,9 @@ import (
 func TestFileEngineLoadTemplate(t *testing.T) {
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	got, err := engine.Render(context.Background(), "agents/coordinator-core.md", map[string]any{
-		"execution_mode": "orchestrate",
-		"has_file_tools": true,
+		"execution_mode":      "orchestrate",
+		"has_workspace_roots": true,
+		"has_file_tools":      true,
 	})
 	testutil.FailErr(t, "render prompt template", err)
 	if !strings.Contains(got, "Orchestrate work") {

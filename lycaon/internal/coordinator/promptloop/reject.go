@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"maps"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
@@ -40,8 +41,8 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 	if l.Closeout.Deps.BeforeFinishNoToolTurn == nil && outputRejection == nil {
 		return history, nil, false, nil
 	}
-	if st != nil && !tools.CallReach(ctx).Known() {
-		ctx = tools.WithCallReach(ctx, st.requestReach())
+	if st != nil && !toolreach.FromContext(ctx).Known() {
+		ctx = toolreach.WithRequest(ctx, st.requestReach())
 	}
 	workersIdle := true
 	if l.Context.Deps.ImplementSessionState != nil {
@@ -164,20 +165,27 @@ func (l *toolInvocations) retractRejectedAssistantTurn(
 	return history, nil
 }
 
+func withToolOccurrenceContext(ctx context.Context, sess *api.Session, toolCtx tools.ToolContext) (context.Context, toolreach.Request) {
+	reach := tools.TurnReach(toolCtx)
+	ctx = toolreach.WithRequest(ctx, reach)
+	if sess != nil {
+		ctx = curationctx.WithSession(ctx, curationctx.Session{
+			SessionID:       sess.ID,
+			ProjectID:       sess.ProjectID,
+			OwnerPersonID:   sess.OwnerPersonID,
+			Posture:         string(sess.Posture),
+			Mode:            string(sess.Mode),
+			Surface:         toolCtx.Turn.TurnSurfaceID,
+			Agent:           toolCtx.Identity.Agent,
+			ParentSessionID: toolCtx.Identity.ParentSessionID,
+		})
+	}
+	return ctx, reach
+}
+
 // Intrinsic refusals retain occurrence identity and the offered recovery surface.
 func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Session, tc api.ToolCall, toolCtx tools.ToolContext, code string, data map[string]any) *guidance.Refusal {
-	reach := tools.TurnReach(toolCtx)
-	ctx = tools.WithCallReach(ctx, reach)
-	ctx = curationctx.WithSession(ctx, curationctx.Session{
-		SessionID:       sess.ID,
-		ProjectID:       sess.ProjectID,
-		OwnerPersonID:   sess.OwnerPersonID,
-		Posture:         string(sess.Posture),
-		Mode:            string(sess.Mode),
-		Surface:         toolCtx.Turn.TurnSurfaceID,
-		Agent:           toolCtx.Identity.Agent,
-		ParentSessionID: toolCtx.Identity.ParentSessionID,
-	})
+	ctx, reach := withToolOccurrenceContext(ctx, sess, toolCtx)
 	data = maps.Clone(data)
 	if data == nil {
 		data = map[string]any{}
@@ -224,11 +232,57 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 	return l.toolReject(code, tr.Data).WithCause(tr)
 }
 
+// curateToolRejectOccurrence routes a pre-constructed ToolReject through the OAR
+// block plane without overwriting ArgumentValidation, FailureClass, or diagnostics.
+func (l *toolInvocations) curateToolRejectOccurrence(
+	ctx context.Context,
+	sess *api.Session,
+	tc api.ToolCall,
+	toolCtx tools.ToolContext,
+	tr *toolrejection.ToolReject,
+) *guidance.Refusal {
+	if tr == nil {
+		return nil
+	}
+	ctx, _ = withToolOccurrenceContext(ctx, sess, toolCtx)
+	curated := *tr
+	curated.Data = maps.Clone(tr.Data)
+	if curated.Data == nil {
+		curated.Data = map[string]any{}
+	}
+	for k, v := range map[string]any{
+		"tool":         tc.Name,
+		"profile":      toolCtx.Identity.Agent,
+		"turn_surface": toolCtx.Turn.TurnSurfaceID,
+	} {
+		if _, exists := curated.Data[k]; !exists {
+			curated.Data[k] = v
+		}
+	}
+	if strings.TrimSpace(curated.FailureClass) == "" {
+		if curated.Code == toolrejection.ToolOwnerFailedCode {
+			curated.FailureClass = api.FailureClassOwnerError
+		} else {
+			curated.FailureClass = api.FailureClassHostRejection
+		}
+	}
+	err := l.Deps.BlockPlane.RejectObservation(ctx, tc.Name, toolCtx.Identity.Agent, tc.Args, &curated)
+	if err == nil {
+		err = toolrejection.RenderReject(&curated, l.Closeout.Deps.RejectFmt)
+	}
+	if refusal, ok := guidance.RefusalFromError(err); ok {
+		if toolrejection.AsToolReject(refusal) == nil {
+			refusal = refusal.WithCause(&curated)
+		}
+		return refusal
+	}
+	return l.toolReject(curated.Code, curated.Data).WithCause(&curated)
+}
+
 // toolRetiredToPublishedText reports a call to a tool whose job is now text, where
 // that text can actually reach the user. Elsewhere the ordinary refusal is the truth.
 func toolRetiredToPublishedText(sess *api.Session, tool, surfaceID string) bool {
-	_, retired := toolcontract.RetiredToContent(tool)
-	return retired && sess != nil && !sess.IsWorkerChild() && surface.PublishesMidTurnText(surfaceID)
+	return toolcontract.RetiredToPublishedText(tool) && sess != nil && !sess.IsWorkerChild() && surface.PublishesMidTurnText(surfaceID)
 }
 
 // toolReject renders a refusal with a structured code.

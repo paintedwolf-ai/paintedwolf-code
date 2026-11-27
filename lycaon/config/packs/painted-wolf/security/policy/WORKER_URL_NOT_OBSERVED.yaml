@@ -3,7 +3,7 @@ id: WORKER_URL_NOT_OBSERVED
 kind: invariant
 on: worker.report_check
 selector: {}
-requires_facts: [paintedwolf.next_steps, paintedwolf.observed_urls_sample, paintedwolf.offender_count, paintedwolf.offenders_omitted, paintedwolf.offenders_sample, paintedwolf.profile_fetches_urls, paintedwolf.session_role, paintedwolf.unobserved_cited_urls]
+requires_facts: [paintedwolf.next_steps, paintedwolf.observed_urls_sample, paintedwolf.offender_count, paintedwolf.offenders_omitted, paintedwolf.offenders_sample, paintedwolf.session_role, paintedwolf.unobserved_cited_urls]
 when: paintedwolf.session_role == "worker" && size(paintedwolf.unobserved_cited_urls) > 0
 effect: block
 x-paintedwolf-category: recoverable

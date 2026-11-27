@@ -84,23 +84,13 @@ func TestSurfaceCardTracksRoster(t *testing.T) {
 	}
 }
 
-// Unnamed surfaces use their execution-mode family; unknown families render no card.
-func TestSurfaceCardFallsBackToFamily(t *testing.T) {
-	_ = renderSurfaceCard(t, "", "", "orchestrate", []string{"recall", "task"}, nil)
-
-	// The investigate family states what happens to text only where it is published.
-	for _, publishes := range []bool{true, false} {
-		vars := surfaceCardVarsMap(prompts.CoordinatorSurfaceCardVars(prompts.SurfaceCard{PublishesText: publishes}, []string{"recall"}, nil, true), "investigate")
-		out, err := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}).Render(context.Background(), "partials/coordinator-surface-card.md", vars)
-		testutil.FailErr(t, "render investigate family", err)
-		if got := strings.Contains(out, "Text alongside tool calls reaches the user"); got != publishes {
-			t.Fatalf("publishes = %v, card = %q", publishes, out)
+// A surface without a card label renders no banner, whatever its
+// execution-mode family.
+func TestSurfaceCardWithoutLabelRendersNothing(t *testing.T) {
+	for _, family := range []string{"", "investigate", "orchestrate", "wrapup"} {
+		if out := renderSurfaceCard(t, "", "", family, []string{"recall", "task"}, nil); strings.TrimSpace(out) != "" {
+			t.Fatalf("family %q without a label rendered %q", family, out)
 		}
-	}
-
-	none := renderSurfaceCard(t, "", "", "", []string{"recall"}, nil)
-	if strings.TrimSpace(none) != "" {
-		t.Fatalf("no label and no family must render no card, got %q", none)
 	}
 }
 

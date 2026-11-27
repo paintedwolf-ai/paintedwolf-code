@@ -32,6 +32,9 @@ type RequestDebug struct {
 	Purpose string
 	// CommandGuidance records rendered command-guidance templates and facts.
 	CommandGuidance *CommandGuidanceDebug
+	// ReaderFingerprint identifies the prompt Reader this request projects;
+	// empty when its host facts were unavailable.
+	ReaderFingerprint string
 	// HistoryCut records where fitted history starts for prefix-reuse attribution.
 	HistoryCut HistoryCutFacts
 }

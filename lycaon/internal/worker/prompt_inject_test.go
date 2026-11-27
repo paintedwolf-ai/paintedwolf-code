@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -19,6 +20,23 @@ func testInjectRenderer(t *testing.T) *prompts.InjectRenderer {
 	return promptstest.InjectRenderer(t)
 }
 
+func testPreambleReader(t *testing.T) prompts.Reader {
+	t.Helper()
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	r, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "implement",
+		Declared:  true,
+	})
+	testutil.FailErr(t, "NewReader implement", err)
+	return r
+}
+
 func TestRenderWorkerTaskPreambleWriteMode(t *testing.T) {
 	ctx := context.Background()
 	renderer := testInjectRenderer(t)
@@ -26,7 +44,7 @@ func TestRenderWorkerTaskPreambleWriteMode(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(projectDir, "internal"), 0o755); err != nil {
 		testutil.FailErr(t, "create directory", err)
 	}
-	block, err := RenderWorkerTaskPreamble(ctx, renderer, "sess-inject-test", projectDir,
+	block, err := RenderWorkerTaskPreamble(ctx, renderer, testPreambleReader(t), "sess-inject-test", projectDir,
 		[]string{"internal/**", "lycaon/**"},
 		&api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"src/game.js"}},
 	)
@@ -49,7 +67,7 @@ func TestRenderWorkerTaskPreambleAbsentSuggestedPaths(t *testing.T) {
 	ctx := context.Background()
 	renderer := testInjectRenderer(t)
 	projectDir := t.TempDir()
-	block, err := RenderWorkerTaskPreamble(ctx, renderer, "sess-inject-test", projectDir,
+	block, err := RenderWorkerTaskPreamble(ctx, renderer, testPreambleReader(t), "sess-inject-test", projectDir,
 		nil,
 		&api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"Sources/GameEngine/**"}},
 	)
@@ -66,7 +84,7 @@ func TestRenderWorkerTaskPreambleExistingSuggestedPathNoCreateSteer(t *testing.T
 	if err := os.MkdirAll(filepath.Join(projectDir, "Sources", "GameEngine"), 0o755); err != nil {
 		testutil.FailErr(t, "create directory", err)
 	}
-	block, err := RenderWorkerTaskPreamble(ctx, renderer, "sess-inject-test", projectDir,
+	block, err := RenderWorkerTaskPreamble(ctx, renderer, testPreambleReader(t), "sess-inject-test", projectDir,
 		nil,
 		&api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"Sources/GameEngine/**"}},
 	)
@@ -79,7 +97,7 @@ func TestRenderWorkerTaskPreambleExistingSuggestedPathNoCreateSteer(t *testing.T
 func TestRenderWorkerTaskPreambleReadMinimal(t *testing.T) {
 	ctx := context.Background()
 	renderer := testInjectRenderer(t)
-	block, err := RenderWorkerTaskPreamble(ctx, renderer, "sess-inject-test", t.TempDir(), nil, &api.TaskScope{Mode: api.TaskScopeModeRead})
+	block, err := RenderWorkerTaskPreamble(ctx, renderer, testPreambleReader(t), "sess-inject-test", t.TempDir(), nil, &api.TaskScope{Mode: api.TaskScopeModeRead})
 	testutil.FailErr(t, "RenderWorkerTaskPreamble failed", err)
 	if block != "" {
 		t.Fatalf("read mode without paths should be omitted: %q", block)
@@ -100,7 +118,7 @@ func TestBuildWorkerPromptJoinsAssignment(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(projectDir, "internal", "auth"), 0o755); err != nil {
 		testutil.FailErr(t, "create directory", err)
 	}
-	prompt, err := BuildWorkerPrompt(ctx, renderer, "sess-inject-test", projectDir,
+	prompt, err := BuildWorkerPrompt(ctx, renderer, testPreambleReader(t), "sess-inject-test", projectDir,
 		[]string{"internal/**"},
 		&api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"internal/auth/**"}},
 		"Implement login fix",
@@ -125,7 +143,7 @@ func TestRenderWorkerTaskPreambleLinkedCheckoutWriteMode(t *testing.T) {
 	testutil.FailErr(t, "mkdir worktree", os.MkdirAll(wtDir, 0o755))
 	testutil.FailErr(t, "write .git pointer", os.WriteFile(filepath.Join(wtDir, ".git"), []byte("gitdir: /real/repo/.git/worktrees/wt\n"), 0o644))
 
-	block, err := RenderWorkerTaskPreamble(ctx, renderer, "sess-inject-test", projectDir,
+	block, err := RenderWorkerTaskPreamble(ctx, renderer, testPreambleReader(t), "sess-inject-test", projectDir,
 		nil,
 		&api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"worktree/main.go"}},
 	)

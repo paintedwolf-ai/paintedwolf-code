@@ -61,7 +61,7 @@ func Details(rule string, data map[string]any) map[string]any {
 	if out == nil {
 		out = map[string]any{}
 	}
-	out["policy_rule"] = rule
+	out[oar.PolicyRuleDetailKey] = rule
 	return out
 }
 func Subject(sessionID string, data map[string]any) *api.FeedbackSubject {

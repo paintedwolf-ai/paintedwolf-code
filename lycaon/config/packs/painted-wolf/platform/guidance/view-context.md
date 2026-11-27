@@ -6,6 +6,5 @@
 {% endfor %}{% if folder %}- File tree, folder last opened: {{ folder }}
 {% endif %}{% if search_query %}- Search for {{ search_query }}{% if search_hit %}, result {{ search_hit }} selected{% endif %}
 {% endif %}{% for f in findings %}- Security finding {{ f.rule_id }} ({{ f.level }}){% if f.location %} at {{ f.location }}{% endif %}
-{% endfor %}{% if read_offered and editors %}`read` returns an open file as the editor holds it, unsaved edits included.
-{% endif %}{% else %}The person had nothing in view when they sent the next message.
+{% endfor %}{% else %}The person had nothing in view when they sent the next message.
 {% endif %}
