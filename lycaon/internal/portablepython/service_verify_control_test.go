@@ -73,7 +73,13 @@ func buildSyntheticServiceImage(t *testing.T) string {
 	if err := os.MkdirAll(filepath.Join(pkgRoot, "demo"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(pkgRoot, "demo-1.0.0.dist-info"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(pkgRoot, "demo", "__init__.py"), []byte("X = 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgRoot, "demo-1.0.0.dist-info", "RECORD"), []byte("demo/__init__.py,,\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -90,6 +96,7 @@ func buildSyntheticServiceImage(t *testing.T) string {
 	im := pythonruntime.ImageManifest{
 		SchemaVersion: pythonruntime.ImageManifestSchemaVersion,
 		ImageID:       "pp-cpython-3.12.0-wasi-fresh-control",
+		BuiltAt:       "2026-11-27T00:00:00Z",
 		Target:        "wasm32-wasi",
 		Interpreter: pythonruntime.InterpreterSpec{
 			Name:         "cpython",
@@ -101,6 +108,16 @@ func buildSyntheticServiceImage(t *testing.T) string {
 		},
 		PackagesRoot:       "packages",
 		PackagesTreeSHA256: pkgSHA,
+		Distributions: []pythonruntime.DistributionSpec{
+			{
+				Name:           "demo",
+				NormalizedName: "demo",
+				Version:        "1.0.0",
+				Public:         true,
+				Imports:        []string{"demo"},
+				DistInfoPath:   "packages/demo-1.0.0.dist-info",
+			},
+		},
 		WasmImports: []pythonruntime.WasmImportSpec{
 			{
 				Module:      "wasi_snapshot_preview1",
