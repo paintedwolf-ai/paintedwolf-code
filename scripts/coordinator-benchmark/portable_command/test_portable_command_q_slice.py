@@ -9,7 +9,7 @@ import tarfile
 import tempfile
 import unittest
 import zipfile
-from portable_command import artifacts, case_oracles, grading, observe
+from portable_command import artifacts, case_oracles, grading, observe, provenance
 from portable_command.contracts import load_suite, materialize
 from portable_command.test_portable_command_harness import create_audit_db
 
@@ -71,6 +71,9 @@ class PortableCommandQSliceTests(unittest.TestCase):
             self.assertTrue(obs['facts']['exact_argv'])
             self.assertTrue(obs['facts']['disk_provenance'])
             self.assertIn('missing_observation:confined_launch:process_owner', audit['observation_gaps'])
+            hdir = provenance.materialize_helpers(case['setup']['helpers'], pathlib.Path(tmp) / 'bin')
+            out = subprocess.run([str(hdir / 'fixture-argv'), 'a b', 'x;touch never', 'https://example.test/a?b=c'], capture_output=True, text=True, check=True).stdout
+            self.assertEqual(out, case['expected']['stdout'])
 
     def test_q19_archive_cross_decoder_hostile_zip_and_q11_temp_namespace(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -190,8 +193,9 @@ class PortableCommandQSliceTests(unittest.TestCase):
             db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,'')")
             db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e1','p1',1,'read','cat','filesystem','completed','none')")
             db.execute("INSERT INTO invocation_program_outputs VALUES ('o1','p1','e1','stdout','ref:o1',1,0,'1\\talpha\\n2\\tbeta\\n',0,2,'','b'*64)")
-            m1 = json.dumps([{'Source': {'Path': 'input.txt', 'ContentSHA256': base['input.txt'], 'Representation': 'numbered-reversible'}, 'SourceStartByte': 0, 'SourceEndByte': 6, 'OutputStartByte': 2, 'OutputEndByte': 8, 'PrintedLine': 1}])
-            m2 = json.dumps([{'Source': {'Path': 'input.txt', 'ContentSHA256': base['input.txt'], 'Representation': 'numbered-reversible'}, 'SourceStartByte': 6, 'SourceEndByte': 11, 'OutputStartByte': 10, 'OutputEndByte': 15, 'PrintedLine': 2}])
+            src_id = 'disk:' + str((proj / 'input.txt').resolve())
+            m1 = json.dumps([{'Source': {'SourceID': src_id, 'SHA256': base['input.txt'], 'Representation': 'utf8-no-bom'}, 'SourceStartByte': 0, 'SourceEndByte': 6, 'OutputStartByte': 2, 'OutputEndByte': 8, 'PrintedLine': 1}])
+            m2 = json.dumps([{'Source': {'SourceID': src_id, 'SHA256': base['input.txt'], 'Representation': 'utf8-no-bom'}, 'SourceStartByte': 6, 'SourceEndByte': 11, 'OutputStartByte': 10, 'OutputEndByte': 15, 'PrintedLine': 2}])
             db.execute("INSERT INTO invocation_program_deliveries VALUES ('d1','o1','resp1','del1',2,8,'owner:1',?), ('d2','o1','resp1','del1#1',10,15,'owner:1',?)", (m1, m2))
             db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?), ('m2','sess1234',2,'tool','c2',?)", (
                 json.dumps({'outcome': 'completed', 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'completed', 'status': 0, 'stdout': '1\talpha\n2\tbeta\n', 'stderr': ''})}),
@@ -220,14 +224,14 @@ class PortableCommandQSliceTests(unittest.TestCase):
             db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,'')")
             db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e1','p1',1,'read','cat','filesystem','completed','none')")
             db.execute("INSERT INTO invocation_program_outputs VALUES ('o1','p1','e1','stdout','ref:o1',1,0,'alpha\\n',1,2,'',?)", ('b' * 64,))
-            m_line1 = json.dumps([{'Source': {'Path': 'input.txt', 'ContentSHA256': base['input.txt'], 'Representation': 'literal'}, 'SourceStartByte': 0, 'SourceEndByte': 6, 'OutputStartByte': 0, 'OutputEndByte': 6}])
+            m_line1 = json.dumps([{'Source': {'SourceID': src_id, 'SHA256': base['input.txt'], 'Representation': 'utf8-no-bom'}, 'SourceStartByte': 0, 'SourceEndByte': 6, 'OutputStartByte': 0, 'OutputEndByte': 6}])
             db.execute("INSERT INTO invocation_program_deliveries VALUES ('d1','o1','resp1','del1',0,6,'owner:1',?)", (m_line1,))
             db.commit(); db.close()
             obs_q6, _ = observe.build_observation(CASES['unseen-output-no-edit-base'], session_id='sess1234', identity=ident, project_dir=proj, db_path=db_q6, sidecar_log=log_path, baseline_hashes=base, turn_records=[{'program': 'cat ./input.txt', 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
             self.assertEqual(obs_q6['deliveries'], [{'path': 'input.txt', 'revision': 'baseline:input.txt', 'lines': [1, 1], 'representation': 'literal', 'delivered': True}])
             self.assertTrue(obs_q6['facts']['unseen_ranges_not_read_bases'])
             db = sqlite3.connect(db_q6)
-            m_full = json.dumps([{'Source': {'Path': 'input.txt', 'ContentSHA256': base['input.txt'], 'Representation': 'literal'}, 'SourceStartByte': 0, 'SourceEndByte': 11, 'OutputStartByte': 0, 'OutputEndByte': 11}])
+            m_full = json.dumps([{'Source': {'SourceID': src_id, 'SHA256': base['input.txt'], 'Representation': 'utf8-no-bom'}, 'SourceStartByte': 0, 'SourceEndByte': 11, 'OutputStartByte': 0, 'OutputEndByte': 11}])
             db.execute("UPDATE invocation_program_deliveries SET end_byte=11, mappings_json=? WHERE id='d1'", (m_full,))
             db.commit(); db.close()
             obs_q6_bad, _ = observe.build_observation(CASES['unseen-output-no-edit-base'], session_id='sess1234', identity=ident, project_dir=proj, db_path=db_q6, sidecar_log=log_path, baseline_hashes=base, turn_records=[{'program': 'cat ./input.txt', 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])

@@ -50,7 +50,7 @@ def materialize_helpers(helpers, helpers_dir):
             raise ValueError('invalid helper executable name: ' + str(name))
         script = dest / name
         if spec.get('kind') == 'argv-json':
-            script.write_text("#!/bin/sh\nexec python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' \"$@\"\n")
+            script.write_text("#!/bin/sh\nexec python3 -c 'import json,sys; print(json.dumps(sys.argv[1:], separators=(\",\", \":\")))' \"$@\"\n")
         else:
             out = shlex.quote(str(spec.get('stdout') or ''))
             err = shlex.quote(str(spec.get('stderr') or ''))

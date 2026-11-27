@@ -27,7 +27,23 @@ def _line_span_from_bytes(raw_bytes, start_byte, end_byte):
     return [start_line, max(start_line, end_line)]
 
 
-def extract_deliveries(case, audit, baseline_hashes):
+def _resolve_source_path(src, project_dir):
+    direct = str(src.get('Path') or src.get('path') or '').lstrip('./')
+    if direct:
+        return direct
+    sid = str(src.get('SourceID') or src.get('source_id') or '')
+    if not sid:
+        return ''
+    raw = sid[5:] if sid.startswith('disk:') else sid
+    if project_dir and raw.startswith('/'):
+        try:
+            return pathlib.Path(raw).resolve().relative_to(pathlib.Path(project_dir).resolve()).as_posix()
+        except ValueError:
+            pass
+    return raw.lstrip('./')
+
+
+def extract_deliveries(case, audit, baseline_hashes, project_dir=None):
     """Extract source-owner-confirmed deliveries from invocation_program_deliveries."""
     rows = audit.get('invocation_program_deliveries') or []
     if not rows:
@@ -55,7 +71,7 @@ def extract_deliveries(case, audit, baseline_hashes):
                 all_ranges_exact = False
                 continue
             src = m.get('Source') or m.get('source') or {}
-            path = str(src.get('Path') or src.get('path') or '').lstrip('./')
+            path = _resolve_source_path(src, project_dir)
             s_start = m.get('SourceStartByte', m.get('source_start_byte'))
             s_end = m.get('SourceEndByte', m.get('source_end_byte'))
             o_start = m.get('OutputStartByte', m.get('output_start_byte'))
@@ -74,10 +90,10 @@ def extract_deliveries(case, audit, baseline_hashes):
             else:
                 raw_file = bytes_value(setup_files[path]) if path in setup_files else b''
                 span = _line_span_from_bytes(raw_file, s_start, s_end)
-            sha = src.get('ContentSHA256') or src.get('content_sha256') or ''
+            sha = src.get('SHA256') or src.get('ContentSHA256') or src.get('content_sha256') or ''
             rev = revisions.get(path) if (path in revisions and (not baseline_hashes or not sha or sha == baseline_hashes.get(path))) else (sha or '')
             raw_rep = str(src.get('Representation') or src.get('representation') or '')
-            rep = 'numbered-reversible' if (printed and printed > 0) or 'numbered' in raw_rep else (raw_rep or 'literal')
+            rep = 'numbered-reversible' if (printed and printed > 0) or 'numbered' in raw_rep else 'literal'
             key = (path, rev, rep)
             entry = grouped.setdefault(key, {'path': path, 'revision': rev, 'lines': None, 'representation': rep, 'delivered': bool(owner_ref)})
             entry['delivered'] = entry['delivered'] and bool(owner_ref)

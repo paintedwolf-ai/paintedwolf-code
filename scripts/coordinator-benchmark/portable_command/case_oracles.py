@@ -187,7 +187,7 @@ def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, rece
     """Collect Q05, Q06, Q11, Q18, Q19, Q20, Q21, and Q22 facts from SQLite audit rows, sidecar log, and repo state."""
     execs = audit['invocation_program_executions']
     pins = audit['invocation_program_revision_pins']
-    deliveries, delivery_facts = extract_deliveries(case, audit, baseline_hashes)
+    deliveries, delivery_facts = extract_deliveries(case, audit, baseline_hashes, project_dir=project_dir)
     facts = dict(delivery_facts)
     if recovery and recovery.get('owner_code') == 'PROGRESS_MISSING':
         all_refused = bool(execs) and all(e.get('state') in {'refused', 'rejected'} and e.get('effect_certainty') in {None, '', 'none'} for e in execs)
