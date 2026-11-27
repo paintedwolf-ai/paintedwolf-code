@@ -498,6 +498,8 @@ type ToolRequest struct {
 // ToolResponse carries the complete trusted host outcome of ExecuteTool.
 type ToolResponse struct {
 	ExecutionID              string                                   `json:"execution_id"`
+	Backend                  pythonruntime.BackendKind                `json:"backend,omitempty"`
+	EngineTag                string                                   `json:"engine_tag,omitempty"`
 	ExitCode                 int                                      `json:"exit_code"`
 	CleanCompletion          bool                                     `json:"clean_completion"`
 	Stdout                   string                                   `json:"stdout,omitempty"`
@@ -738,6 +740,8 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 
 	resp := &ToolResponse{
 		ExecutionID:       res.ExecutionID,
+		Backend:           res.Backend,
+		EngineTag:         res.EngineTag,
 		ExitCode:          res.ExitCode,
 		CleanCompletion:   res.CleanCompletion,
 		Stdout:            stdoutBuf.String(),
