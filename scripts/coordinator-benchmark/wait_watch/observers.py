@@ -5,8 +5,10 @@ import contextlib
 import hashlib
 import json
 import pathlib
+import re
 import sqlite3
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 CORRELATION_FIELDS = (
@@ -185,8 +187,89 @@ class StorageObserver:
         }
 
 
+_SLOG_KV_RE = re.compile(r'([a-zA-Z0-9_.-]+)=("(?:\\.|[^"\\])*"|\S+)')
+
+
+def parse_rfc3339_ns(val: Any) -> int | None:
+    if isinstance(val, int):
+        return val
+    if not isinstance(val, str) or not val.strip():
+        return None
+    text = val.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(text)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp() * 1_000_000_000)
+    except ValueError:
+        return None
+
+
+def parse_sidecar_phase_records(
+    sidecar_log: pathlib.Path | str,
+    *,
+    session_id: str | None = None,
+    handle: str | None = None,
+) -> list[dict[str, Any]]:
+    """Parse authoritative `await.EmitPhaseRecord` ('wait delivery phase') records from sidecar.log."""
+    path = pathlib.Path(sidecar_log)
+    if not path.is_file():
+        return []
+    records: list[dict[str, Any]] = []
+    for line_no, raw_line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or "wait delivery phase" not in line:
+            continue
+        fields: dict[str, Any] = {}
+        if line.startswith("{"):
+            try:
+                parsed = json.loads(line)
+                if isinstance(parsed, dict) and parsed.get("msg") == "wait delivery phase":
+                    fields = parsed
+            except ValueError:
+                continue
+        else:
+            for k, v in _SLOG_KV_RE.findall(line):
+                if len(v) >= 2 and v[0] == '"' and v[-1] == '"':
+                    try:
+                        fields[k] = json.loads(v)
+                    except ValueError:
+                        fields[k] = v[1:-1]
+                else:
+                    fields[k] = v
+            if fields.get("msg") != "wait delivery phase":
+                continue
+        if not fields.get("phase"):
+            continue
+        rec_sid = str(fields.get("session_id") or "")
+        rec_handle = str(fields.get("handle") or "")
+        if session_id and rec_sid != session_id:
+            continue
+        if handle and rec_handle != handle:
+            continue
+        rec_at = str(fields.get("recorded_at") or fields.get("time") or "")
+        rec_at_ns = parse_rfc3339_ns(rec_at)
+        records.append({
+            "line_no": line_no,
+            "phase": str(fields.get("phase") or ""),
+            "session_id": rec_sid,
+            "handle": rec_handle,
+            "tool_call_id": str(fields.get("tool_call_id") or ""),
+            "lease_id": str(fields.get("lease_id") or ""),
+            "tool": str(fields.get("tool") or ""),
+            "outcome": str(fields.get("outcome") or ""),
+            "status": str(fields.get("status") or ""),
+            "recorded_at": rec_at,
+            "recorded_at_ns": rec_at_ns,
+            "evidence_ref": f"sidecar.log:L{line_no}:phase={fields.get('phase')}",
+        })
+    return records
+
+
 class AdmissionObserver:
-    """Observer 3: execution admission, watch REST endpoints, and /v1/events SSE JSONL frames."""
+    """Observer 3: execution admission, watch REST endpoints, /v1/events SSE frames, and scoped phase records."""
 
     def __init__(self, *, clock_domain: str = "system") -> None:
         self.clock_domain = clock_domain
@@ -194,6 +277,17 @@ class AdmissionObserver:
         self.project_watches: list[dict[str, Any]] = []
         self.session_watches: list[dict[str, Any]] = []
         self.sse_frames: list[dict[str, Any]] = []
+        self.phase_records: list[dict[str, Any]] = []
+
+    def load_phase_records(
+        self,
+        sidecar_log: pathlib.Path | str,
+        *,
+        session_id: str | None = None,
+        handle: str | None = None,
+    ) -> list[dict[str, Any]]:
+        self.phase_records = parse_sidecar_phase_records(sidecar_log, session_id=session_id, handle=handle)
+        return self.phase_records
 
     def capture_http(
         self,
@@ -245,6 +339,8 @@ class AdmissionObserver:
             "session_watches": self.session_watches,
             "sse_frame_count": len(self.sse_frames),
             "sse_frames": self.sse_frames,
+            "phase_record_count": len(self.phase_records),
+            "phase_records": self.phase_records,
         }
         return {
             "observer": "admission",

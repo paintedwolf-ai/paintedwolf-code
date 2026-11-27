@@ -27,6 +27,7 @@ from wait_watch.barriers import (  # noqa: E402
 from wait_watch.driver import (  # noqa: E402
     WaitWatchApplication,
     _make_wait_watch_app_factory,
+    _observe_report_publication,
     replay_bundle,
     run_case,
 )
@@ -102,12 +103,24 @@ class _FakeApp:
             )
 
     def _run_child(self, cmd: str, receipt_id: str) -> None:
-        proc = subprocess.Popen(["/bin/sh", "-c", cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        # Strip trailing background '&' in the fake runner so Popen tracks the actual child process directly.
+        clean_cmd = cmd.rstrip()
+        if clean_cmd.endswith("&"):
+            clean_cmd = clean_cmd[:-1].rstrip()
+        proc = subprocess.Popen(
+            ["/bin/sh", "-c", clean_cmd],
+            cwd=self.directory.parent / "project",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
         self._child = proc
         out, _ = proc.communicate(timeout=15)
         self._stdout = out
         self._exit_code = proc.returncode
-        pub_ns = time.time_ns()
+        from datetime import datetime, timezone
+        pub_dt = datetime.now(timezone.utc)
+        pub_ns = int(pub_dt.timestamp() * 1_000_000_000)
         with sqlite3.connect(self._db_path) as db:
             db.execute(
                 "INSERT INTO invocation_programs(id, parent_receipt_id, session_id, state, status_code, published_at_ns) VALUES (?, ?, ?, 'completed', ?, ?)",
@@ -115,6 +128,15 @@ class _FakeApp:
             )
             db.execute(
                 "UPDATE wait_leases SET status='resolved' WHERE session_id='sess-fake' AND status='armed'"
+            )
+        # Emit authoritative slog debug line matching await.EmitPhaseRecord(phase=process_report_published).
+        rec_ts = pub_dt.isoformat().replace("+00:00", "Z")
+        with (self.directory / "sidecar.log").open("a", encoding="utf-8") as log_fh:
+            log_fh.write(
+                f'time={rec_ts} level=DEBUG msg="wait delivery phase" session_id=sess-fake '
+                f'tool_call_id=call-1 lease_id=lease-1 handle={self._handle} tool=command '
+                f'phase=process_report_published outcome=satisfied status=exited duration_ms=1 '
+                f'recorded_at={rec_ts} failed=false\n'
             )
         if self._parked:
             report = f"handle={self._handle} termination=exited exit_code={proc.returncode}\n{out}"
@@ -165,7 +187,13 @@ class _FakeApp:
                 self._child_thread.start()
                 self._record_tool_result(
                     cid,
-                    {"outcome": "running", "content": json.dumps({"state": "running", "handle": self._handle})},
+                    {
+                        "outcome": "completed",
+                        "content": json.dumps({
+                            "state": "completed",
+                            "background_jobs": [{"handle": self._handle, "output_cursor": 0}],
+                        }),
+                    },
                 )
                 self._pending = {
                     "pending": True,
@@ -271,6 +299,29 @@ class TestBarriersAndReplay(unittest.TestCase):
             rec = git_fix.release(message="bump")
             self.assertNotEqual(first, rec["oid"])
             self.assertEqual(git_fix.source_facts()["commit_count"], 2)
+
+    def test_observe_report_publication_requires_authoritative_phase_record(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            log_path = pathlib.Path(td) / "sidecar.log"
+            # Generic log lines without phase=process_report_published must NOT satisfy report publication.
+            log_path.write_text(
+                'time=2026-11-27T17:00:00Z level=DEBUG msg="wait delivery phase" session_id=s1 handle=command-1 phase=wait_handler_return recorded_at=2026-11-27T17:00:00Z\n',
+                encoding="utf-8",
+            )
+            self.assertIsNone(_observe_report_publication(log_path, session_id="s1", handle="command-1"))
+
+            # Matching session_id + handle + phase=process_report_published with recorded_at succeeds.
+            with log_path.open("a", encoding="utf-8") as fh:
+                fh.write(
+                    'time=2026-11-27T17:00:01Z level=DEBUG msg="wait delivery phase" session_id=s1 handle=command-1 phase=process_report_published recorded_at=2026-11-27T17:00:01.123456Z\n'
+                )
+            pub = _observe_report_publication(log_path, session_id="s1", handle="command-1")
+            self.assertIsNotNone(pub)
+            self.assertEqual(pub["phase"], "process_report_published")
+            self.assertEqual(pub["evidence_ref"], "sidecar.log:L2:phase=process_report_published")
+            self.assertIsInstance(pub["published_at_ns"], int)
+            # Wrong handle must still return None.
+            self.assertIsNone(_observe_report_publication(log_path, session_id="s1", handle="command-2"))
 
     def test_engine_bin_honored_for_wait_watch_application_subclass(self) -> None:
         import smoke

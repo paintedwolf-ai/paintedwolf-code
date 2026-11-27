@@ -611,11 +611,37 @@ def build_control_bundles() -> dict[str, dict[str, Any]]:
         "bundle": release_no_pub,
     }
 
+    # Control: terminal program + resolved lease present, but NO authoritative publication phase record -> verdict='unknown'
+    term_no_pub = copy.deepcopy(base)
+    term_no_pub["expectations"]["report_published_seq"] = None
+    term_no_pub["expectations"]["require_publication_order"] = True
+    term_no_pub["observers"]["source"]["facts"]["report_published_seq"] = None
+    term_no_pub["observers"]["source"]["facts"].pop("report_published_ts_ns", None)
+    term_no_pub["observers"]["source"]["events"] = [
+        {"event_seq": 1, "kind": "barrier_reached"},
+        {"event_seq": 2, "kind": "barrier_released"},
+        {"event_seq": 3, "kind": "process_exited"},
+    ]
+    term_no_pub["observers"]["storage"]["tables"]["invocation_programs"] = [
+        {"id": "prog-1", "session_id": "sess-1", "state": "completed", "status_code": 17}
+    ]
+    term_no_pub["observers"]["storage"]["tables"]["wait_leases"] = [
+        {"id": "lease-1", "session_id": "sess-1", "status": "resolved"}
+    ]
+    term_no_pub["observers"]["admission"]["phase_records"] = []
+    controls["terminal_program_without_publication_phase"] = {
+        "kind": "instrumentation",
+        "expected_verdict": "unknown",
+        "expected_defect": None,
+        "expected_missing": "missing_report_publication_after_release",
+        "bundle": term_no_pub,
+    }
+
     return controls
 
 
 def run_checker_controls() -> dict[str, Any]:
-    """Execute all 13 checker controls and return a structured qualification report."""
+    """Execute all 14 checker controls and return a structured qualification report."""
     controls = build_control_bundles()
     results: dict[str, Any] = {}
     all_passed = True

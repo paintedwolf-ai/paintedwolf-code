@@ -43,6 +43,7 @@ from wait_watch.observers import (  # noqa: E402
     StorageObserver,
     canonical_sha256,
     correlate_observers,
+    parse_sidecar_phase_records,
 )
 
 SUPPORTED_CASES = ("c01-fast-exit", "c01-parked-exit")
@@ -113,6 +114,11 @@ def _host_identity() -> dict[str, str]:
 
 def _extract_handle(tool_result: dict[str, Any]) -> str:
     payload = parse_content_json(tool_result)
+    bg_jobs = payload.get("background_jobs")
+    if isinstance(bg_jobs, list):
+        for job in bg_jobs:
+            if isinstance(job, dict) and isinstance(job.get("handle"), str) and job["handle"].strip():
+                return job["handle"].strip()
     for key in ("handle", "job_handle"):
         val = payload.get(key)
         if isinstance(val, str) and val.strip():
@@ -244,92 +250,36 @@ def _observe_product_identities(storage_snap: dict[str, Any]) -> tuple[dict[str,
     return ids, refs, limitations
 
 
-def _parse_rfc3339_ns(val: Any) -> int | None:
-    if isinstance(val, int):
-        return val
-    if not isinstance(val, str) or not val.strip():
-        return None
-    from datetime import datetime, timezone
-    text = val.strip()
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    try:
-        dt = datetime.fromisoformat(text)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return int(dt.timestamp() * 1_000_000_000)
-    except ValueError:
-        return None
-
-
 def _observe_report_publication(
-    db_path: pathlib.Path,
-    sse_path: pathlib.Path,
+    sidecar_log: pathlib.Path | str,
+    *,
     session_id: str,
+    handle: str,
 ) -> dict[str, Any] | None:
-    """Independently observe owning report publication from storage or SSE (never from barrier release)."""
-    snap = StorageObserver(db_path).snapshot(session_id)
-    tables = snap.get("tables") or {}
-    progs = tables.get("invocation_programs") or []
-    terminal_prog = next(
-        (p for p in reversed(progs) if (p.get("state") in {"completed", "failed", "exited"}) or isinstance(p.get("status_code"), int)),
-        None,
-    )
-    outputs = tables.get("invocation_program_outputs") or []
-    leases = tables.get("wait_leases") or []
-    resolved_lease = next((l for l in reversed(leases) if l.get("status") == "resolved"), None)
+    """Independently observe the authoritative `phase=process_report_published` record from sidecar.log.
 
-    sse_pub_seq: int | None = None
-    sse_pub_type = ""
-    if sse_path.is_file():
-        for idx, line in enumerate(sse_path.read_text(encoding="utf-8", errors="replace").splitlines(), start=1):
-            text = line.strip()
-            if not text:
-                continue
-            try:
-                frame = json.loads(text)
-            except ValueError:
-                continue
-            etype = str(frame.get("type") or frame.get("event") or "")
-            if any(tok in etype.lower() for tok in ("process.finished", "program.finished", "report_published", "wait_lease.resolved", "command.finished")):
-                sse_pub_seq = idx
-                sse_pub_type = etype
-
-    if terminal_prog is None and resolved_lease is None and sse_pub_seq is None:
+    Never accepts a generic terminal program row, resolved lease, or generic finished SSE frame
+    as report publication. Returns None if the authoritative phase record or its orderable timestamp
+    is absent (causing the checker to emit verdict='unknown').
+    """
+    if not session_id or not handle:
         return None
-
-    pub_ts_ns = None
-    evidence_ref = ""
-    if terminal_prog is not None:
-        evidence_ref = f"storage:invocation_programs:{terminal_prog.get('id', '')}"
-        for col in ("published_at_ns", "ended_at", "updated_at", "completed_at", "created_at"):
-            parsed = _parse_rfc3339_ns(terminal_prog.get(col))
-            if parsed is not None:
-                pub_ts_ns = parsed
-                break
-    if resolved_lease is not None:
-        if not evidence_ref:
-            evidence_ref = f"storage:wait_leases:{resolved_lease.get('id', '')}"
-        if pub_ts_ns is None:
-            for col in ("resolved_at", "updated_at"):
-                parsed = _parse_rfc3339_ns(resolved_lease.get(col))
-                if parsed is not None:
-                    pub_ts_ns = parsed
-                    break
-    if sse_pub_seq is not None and not evidence_ref:
-        evidence_ref = f"sse:{sse_pub_type}#{sse_pub_seq}"
-
+    records = parse_sidecar_phase_records(sidecar_log, session_id=session_id, handle=handle)
+    pub_records = [r for r in records if r.get("phase") == "process_report_published"]
+    if not pub_records:
+        return None
+    rec = pub_records[-1]
+    if rec.get("recorded_at_ns") is None:
+        return None
     return {
         "observed": True,
-        "evidence_ref": evidence_ref,
-        "program_id": (terminal_prog or {}).get("id", ""),
-        "program_state": (terminal_prog or {}).get("state", ""),
-        "program_status_code": (terminal_prog or {}).get("status_code"),
-        "output_count": len(outputs),
-        "resolved_lease_id": (resolved_lease or {}).get("id", ""),
-        "sse_event_seq": sse_pub_seq,
-        "sse_event_type": sse_pub_type,
-        "published_at_ns": pub_ts_ns,
+        "phase": rec["phase"],
+        "session_id": rec["session_id"],
+        "handle": rec["handle"],
+        "evidence_ref": rec["evidence_ref"],
+        "line_no": rec["line_no"],
+        "recorded_at": rec["recorded_at"],
+        "published_at_ns": rec["recorded_at_ns"],
     }
 
 
@@ -431,9 +381,12 @@ class WaitWatchDriver:
             })
         return req, results
 
-    def call_command(self, command: str) -> tuple[str, dict[str, Any], str]:
+    def call_command(self, command: str, *, progress_update: str | None = None) -> tuple[str, dict[str, Any], str]:
+        args: dict[str, Any] = {"command": command}
+        if progress_update:
+            args["progress_update"] = {"content": progress_update}
         _, results = self.send_calls(
-            [{"name": "command", "args": {"command": command}}],
+            [{"name": "command", "args": args}],
             phase="command",
         )
         cid, res = results[0]
@@ -553,7 +506,8 @@ def run_case(
     out_path = pathlib.Path(out_dir).resolve()
     app_dir = out_path / "app"
     project_dir = out_path / "project"
-    barrier_dir = out_path / "barrier"
+    # Barrier files MUST live inside the session workspace write root.
+    barrier_dir = project_dir / ".ww02-barrier"
     raw_dir = out_path / "raw"
     project_dir.mkdir(parents=True, exist_ok=True)
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -609,9 +563,21 @@ def run_case(
             sse_path=sse_path,
         )
 
-        # 1. Launch exit-17 barrier command.
-        command_call_id, cmd_res, handle = driver.call_command(barrier.command_string())
-        source_obs.record_event("command_launched", handle=handle, call_id=command_call_id, outcome=(cmd_res or {}).get("outcome"))
+        # 1. Launch exit-17 barrier command in background inside workspace (with progress_update for build posture).
+        cmd_str = barrier.command_string(relative_to=project_dir, background=True)
+        command_call_id, cmd_res, handle = driver.call_command(
+            cmd_str,
+            progress_update=f"- [ ] Run wait/watch control {case_id}",
+        )
+        cmd_outcome = (cmd_res or {}).get("outcome")
+        source_obs.record_event("command_launched", handle=handle, call_id=command_call_id, outcome=cmd_outcome)
+        if cmd_outcome == "rejected":
+            raise BarrierTimeoutError(
+                f"command tool rejected barrier launch: {json.dumps(cmd_res)[:500]}",
+                phase="command.rejected",
+                verdict="incomplete",
+                diagnostics={"command_result": cmd_res, **driver._dump_state()},
+            )
 
         # 2. Verify barrier reached.
         reached_info = barrier.wait_reached(timeout_s=timeout_s, dump_state=driver._dump_state)
@@ -621,16 +587,29 @@ def run_case(
             # Fast-exit: release gate (distinct event from exit/publication).
             rel_info = barrier.release()
             source_obs.record_event("barrier_released", handle=handle, **rel_info)
+            child_exited = barrier.wait_child_exited(timeout_s=min(10.0, timeout_s))
+            if child_exited:
+                source_obs.record_event("process_exited", handle=handle, pid=barrier.child_pid)
 
-            # Independently observe process exit & report publication in storage BEFORE calling wait.
-            persisted = _confirm_process_persisted_before_wait(
-                app_dir / "store.db", session_id, handle, timeout_s, driver._dump_state
+            # Independently wait for authoritative `phase=process_report_published` in sidecar.log BEFORE calling wait.
+            sidecar_log = app_dir / "sidecar.log"
+            pub_guard = TimerGuard(
+                min(10.0, timeout_s),
+                phase="c01.wait_report_published_phase",
+                verdict="incomplete",
+                dump_state=driver._dump_state,
             )
-            source_obs.record_event("process_exited", handle=handle, persisted=persisted)
-            report_pub_fact = _observe_report_publication(app_dir / "store.db", sse_path, session_id)
+            try:
+                report_pub_fact = pub_guard.poll(
+                    lambda: _observe_report_publication(sidecar_log, session_id=session_id, handle=handle),
+                    detail=f"phase=process_report_published for {session_id}/{handle}",
+                )
+            except BarrierTimeoutError:
+                report_pub_fact = None
+
             if report_pub_fact is not None:
-                pub_ev = source_obs.record_event("report_published", handle=handle, **report_pub_fact)
-                report_published_ts_ns = report_pub_fact.get("published_at_ns") or pub_ev["ts_ns"]
+                source_obs.record_event("report_published", **report_pub_fact)
+                report_published_ts_ns = report_pub_fact.get("published_at_ns")
             else:
                 instrumentation_gaps.append("missing_report_publication_after_release")
 
@@ -710,17 +689,12 @@ def run_case(
             resumed_req = driver.await_pending("c01-parked-exit:resumed_pending")
             report_text, observed_exit, observed_handle = _extract_report_from_pending(resumed_req, expected_handle=handle)
 
-            # Independently observe process exit & report publication from storage/SSE.
+            # Independently observe authoritative `phase=process_report_published` from sidecar.log.
             storage_now = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id)
-            report_pub_fact = _observe_report_publication(app_dir / "store.db", sse_path, session_id)
+            sidecar_log = app_dir / "sidecar.log"
+            report_pub_fact = _observe_report_publication(sidecar_log, session_id=session_id, handle=handle)
             if report_pub_fact is not None:
-                source_obs.record_event(
-                    "process_exited",
-                    handle=handle,
-                    program_id=report_pub_fact.get("program_id", ""),
-                    status_code=report_pub_fact.get("program_status_code"),
-                )
-                source_obs.record_event("report_published", handle=handle, **report_pub_fact)
+                source_obs.record_event("report_published", **report_pub_fact)
                 report_published_ts_ns = report_pub_fact.get("published_at_ns")
             else:
                 instrumentation_gaps.append("missing_report_publication_after_release")
@@ -769,6 +743,7 @@ def run_case(
     if proc is not None:
         checkpoint_closed_store(app_dir / "store.db", proc)
     admission_obs.load_sse_jsonl(sse_path)
+    scoped_phases = admission_obs.load_phase_records(app_dir / "sidecar.log", session_id=session_id or None)
 
     storage_snap = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id or None)
     final_prod_ids, final_prod_refs, _ = _observe_product_identities(storage_snap)
@@ -776,6 +751,7 @@ def run_case(
         **barrier.source_facts(),
         "report_publication": report_pub_fact,
         "report_published_ts_ns": report_published_ts_ns,
+        "phase_records": scoped_phases,
         "handle": handle,
         "parked_proof": parked_proof,
         "product_identities": final_prod_ids,

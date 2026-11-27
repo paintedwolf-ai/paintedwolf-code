@@ -128,25 +128,58 @@ class ProcessBarrier:
     def payload_sha256(self) -> str:
         return hashlib.sha256(self.payload.encode("utf-8")).hexdigest()
 
-    def command_string(self) -> str:
-        """Return a portable POSIX shell command implementing the barrier contract."""
-        reached_q = shlex.quote(str(self.reached_path))
-        reached_tmp_q = shlex.quote(str(self.reached_path) + ".tmp")
-        release_q = shlex.quote(str(self.release_path))
-        marker_q = shlex.quote(self.marker)
-        payload_q = shlex.quote(self.payload)
-        max_ticks = max(10, self.max_script_wait_s * 20)
-        # POSIX sh only; writes atomic reached sentinel, polls release gate, emits exact payload, exits with exit_code.
-        return (
-            f"printf '{{\"marker\":%s,\"pid\":%d,\"ts\":%s}}\\n' "
-            f"\"\\\"{self.marker}\\\"\" \"$$\" \"$(date +%s)\" > {reached_tmp_q} "
-            f"&& mv {reached_tmp_q} {reached_q}; "
-            f"i=0; while [ ! -f {release_q} ]; do "
-            f"i=$((i+1)); if [ \"$i\" -ge {max_ticks} ]; then exit 124; fi; "
-            f"sleep 0.05; done; "
-            f"printf '%s' {payload_q}; "
-            f"exit {self.exit_code}"
+    def _ensure_script(self) -> pathlib.Path:
+        script_path = self.root_dir / "run_barrier.py"
+        body = (
+            "import json, os, pathlib, sys, time\n"
+            f"root = pathlib.Path(__file__).resolve().parent\n"
+            f"reached = root / 'reached'\n"
+            f"reached_tmp = root / 'reached.tmp'\n"
+            f"release = root / 'release'\n"
+            f"marker = {self.marker!r}\n"
+            f"payload = {self.payload!r}\n"
+            f"exit_code = {self.exit_code}\n"
+            f"max_wait = {self.max_script_wait_s}\n"
+            "reached_tmp.write_text(json.dumps({'marker': marker, 'pid': os.getpid(), 'ts_ns': time.time_ns()}), encoding='utf-8')\n"
+            "os.replace(reached_tmp, reached)\n"
+            "deadline = time.monotonic() + max_wait\n"
+            "while not release.is_file():\n"
+            "    if time.monotonic() >= deadline:\n"
+            "        sys.exit(124)\n"
+            "    time.sleep(0.05)\n"
+            "sys.stdout.write(payload)\n"
+            "sys.stdout.flush()\n"
+            "sys.exit(exit_code)\n"
         )
+        script_path.write_text(body, encoding="utf-8")
+        return script_path
+
+    def command_string(self, *, relative_to: pathlib.Path | str | None = None, background: bool = False) -> str:
+        """Return a Portable-Command-safe command launching the workspace-contained barrier script."""
+        script_path = self._ensure_script()
+        if relative_to is not None:
+            rel = os.path.relpath(script_path, pathlib.Path(relative_to).resolve())
+            script_arg = shlex.quote(rel)
+        else:
+            script_arg = shlex.quote(str(script_path))
+        cmd = f"python3 -B {script_arg}"
+        return f"{cmd} &" if background else cmd
+
+    def wait_child_exited(self, timeout_s: float = 10.0) -> bool:
+        """Wait until the recorded child_pid is no longer running (best-effort OS check)."""
+        if not self.child_pid:
+            return False
+        pid = self.child_pid
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return True
+            except PermissionError:
+                return False
+            time.sleep(0.05)
+        return False
 
     def is_reached(self) -> bool:
         return self.reached_path.is_file()
