@@ -37,6 +37,8 @@ type ProgramOutcome struct {
 	// Refusal is the host decision that stopped the program; the output and
 	// status of every child that ran before it stay in this outcome.
 	Refusal *ProgramRefusal `json:"refusal,omitempty"`
+	// ProgressUpdate is the independently settled optional progress_update result.
+	ProgressUpdate *ProgramProgressOutcome `json:"progress_update,omitempty"`
 	// SourceWindow is the observation window of a program that launched an
 	// external process.
 	SourceWindow *hostcmd.SourceWindow `json:"source_window,omitempty"`

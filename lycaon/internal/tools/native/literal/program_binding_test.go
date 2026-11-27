@@ -32,3 +32,17 @@ func TestProgramBindingsShareAccountLookupAndKeepSeparateMemory(t *testing.T) {
 		t.Fatalf("shared cache performed %d lookups", lookups)
 	}
 }
+
+func TestOwnersClosedFormsPolicy(t *testing.T) {
+	var owners Owners
+	for _, closed := range []string{"cat", "head", "tail", "nl"} {
+		if !owners.ClosedForms(closed) {
+			t.Errorf("ClosedForms(%q) = false, want true", closed)
+		}
+	}
+	for _, open := range []string{"du", "df", "cmp", "od", "strings"} {
+		if owners.ClosedForms(open) {
+			t.Errorf("ClosedForms(%q) = true, want false", open)
+		}
+	}
+}

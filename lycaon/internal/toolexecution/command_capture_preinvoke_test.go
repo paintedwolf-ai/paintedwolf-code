@@ -56,6 +56,16 @@ func TestCommandCaptureValidationRejectsBeforeApprovalAndOwnerDispatch(t *testin
 			args:     map[string]any{"command": "python3 src/main.py", "background": true, "snapshot_capture": map[string]any{}},
 			wantCode: "TOOL_ARGS_INVALID",
 		},
+		{
+			name:     "terminal_capture incompatible progress_update",
+			args:     map[string]any{"command": "python3 src/main.py", "progress_update": map[string]any{"content": "- [ ] Capture"}, "terminal_capture": map[string]any{}},
+			wantCode: "TOOL_ARGS_INVALID",
+		},
+		{
+			name:     "snapshot_capture incompatible progress_update",
+			args:     map[string]any{"command": "python3 src/main.py", "progress_update": map[string]any{"content": "- [ ] Capture"}, "snapshot_capture": map[string]any{}},
+			wantCode: "TOOL_ARGS_INVALID",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var effects tools.ToolInvocationOut
