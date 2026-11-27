@@ -143,6 +143,42 @@ class PairedCompareIdentityControlsTest(unittest.TestCase):
             self.assertNotEqual(fail.returncode, 0)
             self.assertIn("fresh service mislabeled warm", fail.stderr)
 
+            # Changed service_instance_id with identical timings (service_construction_ms == 0) fails
+            bad_svc = json.loads(fixture.read_text(encoding="utf-8"))
+            bad_svc["workloads"][0]["warm"]["samples"][2]["service_instance_id"] = "svc-replaced-same-timings"
+            bad_svc_path = Path(tmp) / "bad-warm-svc-id.json"
+            bad_svc_path.write_text(json.dumps(bad_svc), encoding="utf-8")
+            fail_svc = subprocess.run(
+                ["python3", str(grader), "--kind", "baseline", "--receipt", str(bad_svc_path), "--expected-samples", "5"],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertNotEqual(fail_svc.returncode, 0)
+            self.assertIn("warm service_instance_id changed", fail_svc.stderr)
+
+            # Missing cold section fails
+            no_cold = json.loads(fixture.read_text(encoding="utf-8"))
+            del no_cold["workloads"][0]["cold"]
+            no_cold_path = Path(tmp) / "missing-cold.json"
+            no_cold_path.write_text(json.dumps(no_cold), encoding="utf-8")
+            fail_cold = subprocess.run(
+                ["python3", str(grader), "--kind", "baseline", "--receipt", str(no_cold_path), "--expected-samples", "5"],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertNotEqual(fail_cold.returncode, 0)
+            self.assertIn("missing required 'cold' section", fail_cold.stderr)
+
+            # Duplicate invocation_id fails
+            dup_inv = json.loads(fixture.read_text(encoding="utf-8"))
+            dup_inv["workloads"][0]["warm"]["samples"][1]["invocation_id"] = dup_inv["workloads"][0]["warm"]["samples"][0]["invocation_id"]
+            dup_inv_path = Path(tmp) / "dup-inv.json"
+            dup_inv_path.write_text(json.dumps(dup_inv), encoding="utf-8")
+            fail_inv = subprocess.run(
+                ["python3", str(grader), "--kind", "baseline", "--receipt", str(dup_inv_path), "--expected-samples", "5"],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertNotEqual(fail_inv.returncode, 0)
+            self.assertIn("duplicate invocation_id", fail_inv.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

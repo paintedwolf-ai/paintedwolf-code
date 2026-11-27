@@ -702,8 +702,82 @@ func writeJSONTemp(t *testing.T, name string, data map[string]any) string {
 
 func buildRealCompareReportFromBaseline(base map[string]any) map[string]any {
 	eng := base["native_engine"].(map[string]any)
-	w0 := base["workloads"].([]any)[0].(map[string]any)
-	warmPriming := w0["warm"].(map[string]any)["priming_sample_excluded"]
+	workloads := base["workloads"].([]any)
+
+	basePriming := map[string]any{}
+	candPriming := map[string]any{}
+	comparisons := make([]any, 0, len(workloads)*2)
+
+	for _, rawW := range workloads {
+		w := rawW.(map[string]any)
+		wn := w["workload"].(string)
+		cold := w["cold"].(map[string]any)
+		warm := w["warm"].(map[string]any)
+
+		coldSamps := cold["samples"].([]any)
+		warmSamps := warm["samples"].([]any)
+		prim := warm["priming_sample_excluded"].(map[string]any)
+
+		bColdSvc, cColdSvc := make([]any, 0, len(coldSamps)), make([]any, 0, len(coldSamps))
+		bColdInv, cColdInv := make([]any, 0, len(coldSamps)), make([]any, 0, len(coldSamps))
+		for _, rs := range coldSamps {
+			s := rs.(map[string]any)
+			bColdSvc = append(bColdSvc, "base-"+s["service_instance_id"].(string))
+			cColdSvc = append(cColdSvc, "cand-"+s["service_instance_id"].(string))
+			bColdInv = append(bColdInv, "base-"+s["invocation_id"].(string))
+			cColdInv = append(cColdInv, "cand-"+s["invocation_id"].(string))
+		}
+		comparisons = append(comparisons, map[string]any{
+			"workload":                       wn,
+			"mode":                           "cold",
+			"sample_count":                   len(coldSamps),
+			"baseline_service_instance_ids":  bColdSvc,
+			"candidate_service_instance_ids": cColdSvc,
+			"baseline_invocation_ids":        bColdInv,
+			"candidate_invocation_ids":       cColdInv,
+			"baseline_median_construct_ms":   cold["median_service_construction_ms"],
+			"candidate_median_construct_ms":  cold["median_service_construction_ms"],
+			"baseline_median_tool_ms":        cold["median_tool_latency_ms"],
+			"candidate_median_tool_ms":       cold["median_tool_latency_ms"],
+		})
+
+		bPrim := map[string]any{}
+		cPrim := map[string]any{}
+		for k, v := range prim {
+			bPrim[k] = v
+			cPrim[k] = v
+		}
+		bPrim["service_instance_id"] = "base-" + prim["service_instance_id"].(string)
+		cPrim["service_instance_id"] = "cand-" + prim["service_instance_id"].(string)
+		bPrim["invocation_id"] = "base-" + prim["invocation_id"].(string)
+		cPrim["invocation_id"] = "cand-" + prim["invocation_id"].(string)
+		basePriming[wn] = bPrim
+		candPriming[wn] = cPrim
+
+		bWarmSvc, cWarmSvc := make([]any, 0, len(warmSamps)), make([]any, 0, len(warmSamps))
+		bWarmInv, cWarmInv := make([]any, 0, len(warmSamps)), make([]any, 0, len(warmSamps))
+		for _, rs := range warmSamps {
+			s := rs.(map[string]any)
+			bWarmSvc = append(bWarmSvc, bPrim["service_instance_id"])
+			cWarmSvc = append(cWarmSvc, cPrim["service_instance_id"])
+			bWarmInv = append(bWarmInv, "base-"+s["invocation_id"].(string))
+			cWarmInv = append(cWarmInv, "cand-"+s["invocation_id"].(string))
+		}
+		comparisons = append(comparisons, map[string]any{
+			"workload":                       wn,
+			"mode":                           "warm",
+			"sample_count":                   len(warmSamps),
+			"baseline_service_instance_ids":  bWarmSvc,
+			"candidate_service_instance_ids": cWarmSvc,
+			"baseline_invocation_ids":        bWarmInv,
+			"candidate_invocation_ids":       cWarmInv,
+			"baseline_median_construct_ms":   0.0,
+			"candidate_median_construct_ms":  0.0,
+			"baseline_median_tool_ms":        warm["median_tool_latency_ms"],
+			"candidate_median_tool_ms":       warm["median_tool_latency_ms"],
+		})
+	}
+
 	return map[string]any{
 		"schema_version":        "paintedwolf.portable-python.paired-compare/v2",
 		"cold_order":            "alternating-ABAB-fresh-service",
@@ -732,20 +806,10 @@ func buildRealCompareReportFromBaseline(base map[string]any) map[string]any {
 			},
 		},
 		"priming_samples_excluded": map[string]any{
-			"baseline":  map[string]any{"pass_noop": warmPriming},
-			"candidate": map[string]any{"pass_noop": warmPriming},
+			"baseline":  basePriming,
+			"candidate": candPriming,
 		},
-		"comparisons": []any{
-			map[string]any{
-				"workload":                      "pass_noop",
-				"mode":                          "warm",
-				"sample_count":                  5,
-				"baseline_median_construct_ms":  0.0,
-				"candidate_median_construct_ms": 0.0,
-				"baseline_median_tool_ms":       164.9,
-				"candidate_median_tool_ms":      166.1,
-			},
-		},
+		"comparisons":      comparisons,
 		"regression_flags": []any{},
 	}
 }
@@ -842,6 +906,56 @@ func TestPY14_PairedBenchmarkReceiptGrader(t *testing.T) {
 		p2 := writeJSONTemp(t, "baseline-incomplete.json", base2)
 		if out, err := runRealPairedReceiptGrader(t, "baseline", p2, 5); err == nil {
 			t.Fatalf("real grader failed to block incomplete warm samples:\n%s", out)
+		}
+	})
+
+	t.Run("rejects_missing_cold_or_warm_sections", func(t *testing.T) {
+		t.Parallel()
+		// Missing cold section on pass_noop
+		baseNoCold := loadSanitizedBaselineReceipt(t)
+		delete(baseNoCold["workloads"].([]any)[0].(map[string]any), "cold")
+		p1 := writeJSONTemp(t, "baseline-missing-cold.json", baseNoCold)
+		out1, err1 := runRealPairedReceiptGrader(t, "baseline", p1, 5)
+		if err1 == nil || !strings.Contains(out1, "missing required 'cold' section") {
+			t.Fatalf("real grader failed to block missing cold section: err=%v\n%s", err1, out1)
+		}
+
+		// Missing warm section on frozen_workbook
+		baseNoWarm := loadSanitizedBaselineReceipt(t)
+		delete(baseNoWarm["workloads"].([]any)[1].(map[string]any), "warm")
+		p2 := writeJSONTemp(t, "baseline-missing-warm.json", baseNoWarm)
+		out2, err2 := runRealPairedReceiptGrader(t, "baseline", p2, 5)
+		if err2 == nil || !strings.Contains(out2, "missing required 'warm' section") {
+			t.Fatalf("real grader failed to block missing warm section: err=%v\n%s", err2, out2)
+		}
+	})
+
+	t.Run("rejects_changed_service_instance_id_with_identical_timings", func(t *testing.T) {
+		t.Parallel()
+		// Keep service_construction_ms == 0 and identical timings, but change
+		// service_instance_id on warm sample 2 -> proves reuse is checked by
+		// actual service identity, not zero construction time!
+		base := loadSanitizedBaselineReceipt(t)
+		w0 := base["workloads"].([]any)[0].(map[string]any)
+		warmSamples := w0["warm"].(map[string]any)["samples"].([]any)
+		warmSamples[1].(map[string]any)["service_instance_id"] = "svc-999-replaced"
+		p := writeJSONTemp(t, "baseline-replaced-warm-svc-same-timings.json", base)
+		out, err := runRealPairedReceiptGrader(t, "baseline", p, 5)
+		if err == nil || !strings.Contains(out, "warm service_instance_id changed") {
+			t.Fatalf("real grader failed to block replaced warm service with identical timings: err=%v\n%s", err, out)
+		}
+	})
+
+	t.Run("rejects_duplicate_invocation_id", func(t *testing.T) {
+		t.Parallel()
+		base := loadSanitizedBaselineReceipt(t)
+		w0 := base["workloads"].([]any)[0].(map[string]any)
+		warmSamples := w0["warm"].(map[string]any)["samples"].([]any)
+		warmSamples[2].(map[string]any)["invocation_id"] = warmSamples[1].(map[string]any)["invocation_id"]
+		p := writeJSONTemp(t, "baseline-dup-invocation.json", base)
+		out, err := runRealPairedReceiptGrader(t, "baseline", p, 5)
+		if err == nil || !strings.Contains(out, "duplicate invocation_id") {
+			t.Fatalf("real grader failed to block duplicate invocation_id: err=%v\n%s", err, out)
 		}
 	})
 }

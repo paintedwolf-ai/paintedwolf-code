@@ -23,8 +23,10 @@ import (
 
 type pairedSample struct {
 	Index                 int     `json:"index"`
-	Mode                  string  `json:"mode"` // "cold" or "warm"
+	Mode                  string  `json:"mode"` // "cold", "warm-priming", or "warm"
 	Backend               string  `json:"backend"`
+	ServiceInstanceID     string  `json:"service_instance_id"`
+	InvocationID          string  `json:"invocation_id"`
 	ServiceConstructionMS float64 `json:"service_construction_ms"`
 	ToolLatencyMS         float64 `json:"tool_latency_ms"`
 	RuntimeDurationMS     float64 `json:"runtime_duration_ms"`
@@ -309,6 +311,9 @@ func TestPY10_PairedBaseline(t *testing.T) {
 		receipt.Label = "baseline"
 	}
 
+	svcSeq := 0
+	svcInstanceIDs := make(map[*portablepython.Service]string)
+
 	newServiceTimed := func(t *testing.T, scope string) (*portablepython.Service, float64) {
 		t.Helper()
 		t0 := time.Now()
@@ -319,6 +324,8 @@ func TestPY10_PairedBaseline(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewService (%s): %v", scope, err)
 		}
+		svcSeq++
+		svcInstanceIDs[svc] = fmt.Sprintf("svc-%d-%p", svcSeq, svc)
 		info := svc.RuntimeInfo()
 		if info.Backend != pythonruntime.BackendNativeAOT {
 			_ = svc.Close(ctx)
@@ -383,10 +390,20 @@ func TestPY10_PairedBaseline(t *testing.T) {
 			}
 		}
 		peakBytes := uint64(resp.Usage.PeakMemoryPages) * wasmPageSizeBytes
+		svcID := svcInstanceIDs[svc]
+		if svcID == "" {
+			svcID = fmt.Sprintf("svc-untracked-%p", svc)
+		}
+		invID := resp.ExecutionID
+		if invID == "" {
+			invID = req.ExecutionID
+		}
 		return pairedSample{
 			Index:                 idx,
 			Mode:                  mode,
 			Backend:               string(resp.Backend),
+			ServiceInstanceID:     svcID,
+			InvocationID:          invID,
 			ServiceConstructionMS: constrMS,
 			ToolLatencyMS:         toolMS,
 			RuntimeDurationMS:     float64(resp.Usage.Duration.Microseconds()) / 1000.0,
