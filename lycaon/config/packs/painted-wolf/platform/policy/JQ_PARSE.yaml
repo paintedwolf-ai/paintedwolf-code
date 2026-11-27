@@ -3,7 +3,7 @@ id: JQ_PARSE
 kind: schema
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.can_command, paintedwolf.detail, paintedwolf.format, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.admitted_raw_read_forms, paintedwolf.command_loader_call, paintedwolf.detail, paintedwolf.format, paintedwolf.operation, paintedwolf.path, paintedwolf.raw_read_forms_loadable_without_schema, paintedwolf.rejection_code]
 when: paintedwolf.operation in ["jq", "jq_edit"] && paintedwolf.rejection_code == "JQ_PARSE"
 effect: block
 x-paintedwolf-category: recoverable
@@ -12,7 +12,7 @@ message: jq could not parse the document
 what: jq could not parse {{ paintedwolf.path }} as {{ paintedwolf.format }} — {{ paintedwolf.detail }}.
 cause: File is not valid for the selected format, or format auto-detection failed.
 why: Queries run on a parsed document tree — malformed configs must be fixed or read raw.
-fix: '{% if paintedwolf.can_command %}Fix the file, set format explicitly (json|yaml|toml), or inspect the raw bytes with `cat` or `sed -n` inside command — then retry.{% else %}Fix the file or set format explicitly (json|yaml|toml) with an offered editor — then retry.{% endif %}'
+fix: '{% if paintedwolf.admitted_raw_read_forms %}Fix the file, set format explicitly (json|yaml|toml), or inspect the raw bytes inside command{% if paintedwolf.command_loader_call %} after loading it with {{ paintedwolf.command_loader_call }}{% endif %} ({{ paintedwolf.admitted_raw_read_forms }}) — then retry.{% else %}{% if paintedwolf.raw_read_forms_loadable_without_schema %}Fix the file, set format explicitly (json|yaml|toml), or call {{ paintedwolf.command_loader_call }} to inspect its projected schema for raw file reads — then retry.{% else %}Fix the file or set format explicitly (json|yaml|toml) with an offered editor — then retry.{% endif %}{% endif %}'
 instead: Branch on Code; fix format or inspect raw bytes
 x-paintedwolf-scenarios:
   - id: default
@@ -24,11 +24,11 @@ x-paintedwolf-scenarios:
       tool: jq
   - id: command-leg
     vars:
-      can_command: true
+      admitted_raw_read_forms: [cat FILE, 'sed -n 1,10p FILE']
       detail: invalid character
       format: json
       path: package.json
       profile: implement
       tool: jq_edit
     expect_contains:
-      - '`cat`'
+      - cat FILE

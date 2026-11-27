@@ -3,13 +3,14 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestBuildPublishesDeclaredOAREventThroughAcquiredStream(t *testing.T) {

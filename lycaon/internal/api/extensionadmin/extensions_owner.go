@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/extensionstate"
 	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -52,6 +53,7 @@ func (s *Mutations) submitExtensionIntent(r *http.Request, scope wire.Extensions
 // writeExtensionMutationError maps typed subsystem-owner results onto the wire.
 func (s *Mutations) writeExtensionMutationError(w http.ResponseWriter, r *http.Request, err error) {
 	var rejected *extensionstate.RejectedError
+	var retired *toolcontract.RetiredToolError
 	switch {
 	case errors.Is(err, extensionstate.ErrExpectedRevisionRequired):
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "expected_revision required")
@@ -70,12 +72,28 @@ func (s *Mutations) writeExtensionMutationError(w http.ResponseWriter, r *http.R
 		s.responses.Fail(w, wire.ApiErrorCodeStockPackImmutable, "stock packs cannot be changed here")
 	case errors.Is(err, extpacks.ErrLinkedSourceMissing):
 		s.responses.Fail(w, wire.ApiErrorCodePathMissing, "the linked pack folder is missing")
+	case errors.As(err, &rejected) && errors.As(err, &retired):
+		s.responses.Logger.InfoContext(r.Context(), "extension candidate names a retired tool", "err", rejected)
+		s.responses.FailDetails(w, wire.ApiErrorCodeExtensionCandidateRejected, retiredToolDetails(retired),
+			"The extension candidate names a retired tool.")
 	case errors.As(err, &rejected):
 		s.responses.Logger.InfoContext(r.Context(), "extension candidate rejected", "err", rejected)
 		s.responses.FailReason(w, wire.ApiErrorCodeExtensionCandidateRejected, "The extension candidate could not be prepared or validated. Check its source and configuration.")
 	default:
 		s.responses.InternalError(w, r, err)
 	}
+}
+
+// retiredToolDetails carries the retired name and its recorded successor as
+// typed facts; the notice copy tells the author what to use instead.
+func retiredToolDetails(retired *toolcontract.RetiredToolError) map[string]any {
+	details := map[string]any{"retired_tool": retired.Tool, "retired_site": retired.Site}
+	if contract := retired.Retirement.ContentContract; contract != "" {
+		details["successor_contract"] = contract
+	} else {
+		details["successor"] = append([]string(nil), retired.Retirement.Successors...)
+	}
+	return details
 }
 
 func isStale(err error) bool {

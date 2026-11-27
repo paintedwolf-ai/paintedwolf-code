@@ -109,7 +109,7 @@ schema:
             description: 1-based line when citing file content.
           evidence:
             type: string
-            description: Exact observation supporting this finding. Source text uses its read or grep handle; scanner-only findings use scan#N without path, line or excerpt.
+            description: Exact observation supporting this finding. Source text uses its read or grep handle; non-source findings omit path, line, and excerpt and pass the observed tool handle.
           excerpt:
             type: string
             description: Verbatim observed source text at path/line. Omit for scanner-only and web findings.

@@ -7,19 +7,19 @@ Maintained sources of truth: `docs/tools.md` (Interactive exec) and `docs/ground
 | Need | Runner | Evidence |
 |---|---|---|
 | Exit status, bounded stdout/stderr, non-interactive tests | `command` / `verify` | Command result; not a terminal-screen claim |
-| One-shot terminal picture, including direct-network CLI output | `command` with `terminal_capture` | `tui#` terminal screen evidence plus optional visual `artifact_id` |
-| Prompt, keyboard interaction, TTY-gated formatting, full-screen UI | `terminal_open` plus handle tools | `terminal_session#` terminal screen evidence from the virtual screen |
+{% if profile_has_terminal_capture %}| One-shot terminal picture, including direct-network CLI output | `command` with `terminal_capture` | `tui#` terminal screen evidence plus optional visual `artifact_id` |
+{% endif %}| Prompt, keyboard interaction, TTY-gated formatting, full-screen UI{% if not profile_has_terminal_capture %}, or one-shot screen when sealed capture is unavailable{% endif %} | `terminal_open` plus handle tools | `terminal_session#` terminal screen evidence from the virtual screen |
 | Picture of a held terminal state | `terminal_snapshot` | `terminal_session#` terminal screen evidence plus optional visual `artifact_id` |
 
-`terminal_capture` runs the exact one-shot process inside a sealed PTY; it is not a pipe or a replay. Piping or redirecting a TUI through ordinary `command` removes the controlling terminal and cannot establish what its screen rendered. Do not use expect-style shell scripts, or patch the program's input inside its own runtime, as a substitute for the PTY tools.
-
+{% if profile_has_terminal_capture %}`terminal_capture` runs the exact one-shot process inside a sealed PTY; it is not a pipe or a replay. {% endif %}Piping or redirecting a TUI through ordinary `command` removes the controlling terminal and cannot establish what its screen rendered. Do not use expect-style shell scripts, or patch the program's input inside its own runtime, as a substitute for the PTY tools.
+{% if profile_has_terminal_capture %}
 ## Capture a sealed screen
 
 1. Put the exact program argv, working directory, capability request, `terminal_capture`, size, and caption on one `command` call.
 2. Use it when no input is needed and one settled screen establishes the claim. It is the required route when the action needs direct network authority, which cannot be held across turns.
 3. Inspect the returned terminal state and screen. Cite its terminal evidence handle and present the visual artifact when useful.
 4. Do not run a weaker second invocation for the screenshot, replay saved output, or print a prior result into another PTY.
-
+{% endif %}
 ## Drive a held screen
 
 1. Open with argv and an explicit working directory. Pin rows and columns when layout or wrapping is under review.

@@ -98,22 +98,24 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 				activeRootID = tc.roots[0].ID
 			}
 			prompts.MergeWorkspaceRootsVars(vars, tc.roots, activeRootID)
-			in := prompts.ReaderInput{
-				Profiles:  profiles,
-				RootCount: len(tc.roots),
-				HasGit:    len(tc.roots) > 0,
-				WebSearch: true,
+			host := prompts.HostFacts{
+				Profiles:              profiles,
+				RootCount:             len(tc.roots),
+				HasGit:                len(tc.roots) > 0,
+				HasAnyGitRoot:         len(tc.roots) > 0,
+				WebSearch:             true,
+				ReviewsConfinedWrites: tc.posture.ReviewsConfinedWrites(),
+				CommandExternalHidden: tc.externalHidden,
+				SessionScratchDir:     "/scratch/sess-1",
+				SharedTempLocations:   shared,
 			}
+			turn := prompts.TurnProjection{ProfileID: tc.scopeID, Declared: true}
 			if tc.isCoordinator {
 				plan, err := prompts.CompileSurfacePlan(tc.scopeID, len(tc.roots))
 				contractcheck.FailErr(t, "compile surface plan", err)
-				in.ProfileID = prompts.CoordinatorProfileID
-				in.SurfaceID = tc.scopeID
-				in.Plan = plan
-			} else {
-				in.ProfileID = tc.scopeID
+				turn = prompts.TurnProjection{ProfileID: prompts.CoordinatorProfileID, SurfaceID: tc.scopeID, Plan: plan, Offered: plan.ImmediateNames()}
 			}
-			reader, err := prompts.NewReader(in)
+			reader, err := prompts.NewReader(host, turn)
 			contractcheck.FailErr(t, "new reader", err)
 			vars["platform_os"] = tc.platformOS
 			vars, err = prompts.Vars(reader, vars)
@@ -143,7 +145,6 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 			for key, want := range map[string]bool{
 				"shared_temp_writable":     len(shared) > 0,
 				"profile_command_mutation": !tc.readOnly,
-				"command_output_files":     true,
 				"command_external_hidden":  tc.externalHidden,
 				"command_external_shown":   !tc.externalHidden,
 				"reviews_confined_writes":  tc.posture == gate.PostureStrict,
@@ -166,14 +167,17 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 		if slices.Contains(offered, "command") || slices.Contains(deferred, "command") {
 			t.Fatalf("no-folder plan must not offer or defer command: immediate=%v deferred=%v", offered, deferred)
 		}
-		templates, facts := prompts.BuildCommandGuidanceSnapshot(prompts.CommandGuidanceSnapshotInput{
-			ProfileID:     prompts.CoordinatorProfileID,
-			SurfaceID:     "implement_investigate",
-			IsCoordinator: true,
-			OfferedTools:  offered,
-			DeferredTools: deferred,
-			RootCount:     0,
-			Posture:       gate.PostureStrict,
+		profiles, err := sandbox.LoadToolProfiles()
+		contractcheck.FailErr(t, "load tool profiles", err)
+		reader, err := prompts.NewReader(prompts.HostFacts{Profiles: profiles, WebSearch: true}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: "implement_investigate",
+			Plan:      noFolderPlan,
+			Offered:   offered,
+		})
+		contractcheck.FailErr(t, "new reader", err)
+		templates, facts := prompts.BuildCommandGuidanceSnapshot(reader, prompts.CommandGuidanceSnapshotInput{
+			Posture: gate.PostureStrict,
 		})
 		if slices.Contains(templates, "partials/command-surface.md") || slices.Contains(templates, "tools/schemas/command.yaml") {
 			t.Fatalf("no-folder snapshot must not render command guidance: %v", templates)
@@ -219,10 +223,7 @@ func TestCommandVisualGuidanceUsesOfferedCaptureRoutes(t *testing.T) {
 			for _, name := range tc.tools {
 				tools[name] = true
 			}
-			reader, err := prompts.NewReader(prompts.ReaderInput{
-				ProfileID: "worker",
-				Plan:      toolsurface.Compile(tc.tools, nil),
-				Visible:   tc.tools,
+			reader, err := prompts.NewReader(prompts.HostFacts{
 				Profiles: []sandbox.ToolProfile{{
 					ID:             "worker",
 					Tools:          tools,
@@ -230,6 +231,10 @@ func TestCommandVisualGuidanceUsesOfferedCaptureRoutes(t *testing.T) {
 				}},
 				RootCount: 1,
 				WebSearch: true,
+			}, prompts.TurnProjection{
+				ProfileID: "worker",
+				Plan:      toolsurface.Compile(tc.tools, nil),
+				Offered:   tc.tools,
 			})
 			contractcheck.FailErr(t, "NewReader", err)
 			vars := reader.Facts()

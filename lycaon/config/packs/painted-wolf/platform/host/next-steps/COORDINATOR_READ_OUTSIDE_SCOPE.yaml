@@ -2,4 +2,4 @@ steps:
   - tool: "task"
     args:
       agent_type: "repo-researcher"
-    say: "Use {{ call }} for repo-wide survey when sync tools are insufficient."
+    say: "Use {% if load %}{{ load }}, then {% endif %}{{ call }} for repo-wide survey when sync tools are insufficient."

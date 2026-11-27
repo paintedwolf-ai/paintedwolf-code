@@ -398,7 +398,14 @@ func renderGateSignalText(ctx context.Context, tmpl string, feedbackCtx map[stri
 	if err != nil {
 		return "", fmt.Errorf("signal template: %w", err)
 	}
-	out, err := pongoplain.Execute(ctx, t, map[string]any{"context": feedbackCtx})
+	data := map[string]any{}
+	if facts, ok := feedbackCtx[readerFactsKey].(map[string]any); ok {
+		for k, v := range facts {
+			data[k] = v
+		}
+	}
+	data["context"] = feedbackCtx
+	out, err := pongoplain.Execute(ctx, t, data)
 	if err != nil {
 		return "", fmt.Errorf("signal template: %w", err)
 	}

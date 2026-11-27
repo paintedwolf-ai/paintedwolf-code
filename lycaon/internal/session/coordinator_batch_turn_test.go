@@ -228,7 +228,7 @@ func (e failingKickPromptEngine) RenderGuidance(context.Context, string, map[str
 	return "", e.err
 }
 
-func (e failingKickPromptEngine) RenderKick(context.Context, string, map[string]any) (string, error) {
+func (e failingKickPromptEngine) RenderKick(context.Context, prompts.Reader, string, map[string]any) (string, error) {
 	return "", e.err
 }
 

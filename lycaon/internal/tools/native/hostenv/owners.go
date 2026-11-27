@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/commandmode"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -164,18 +165,9 @@ func (o *Owners) Prepare(request commandprogram.OperationRequest) (Prepared, err
 	if err != nil {
 		return Prepared{}, nativeutility.ArgvRejection(err, spec)
 	}
-	mode := ""
-	if len(spec.Effects) > 0 {
+	mode, ok := commandmode.SelectMultiMode(spec, bound)
+	if !ok && len(spec.Effects) == 1 {
 		mode = spec.Effects[0].Mode
-	}
-	if command == "env" {
-		mode = "inspect"
-		for _, op := range bound.Operands() {
-			if idx := strings.IndexByte(op.Value, '='); idx <= 0 {
-				mode = "dispatch"
-				break
-			}
-		}
 	}
 	return Prepared{Mode: mode, Argv: bound, Review: bound.Review(spec.Name), owners: o, request: request, spec: spec, run: utilities[command]}, nil
 }

@@ -156,9 +156,9 @@ func TestBundledCopyNamesAToolOnlyAsSubjectMentionOrCheckedStep(t *testing.T) {
 		"retired name":          {Copy: oar.Copy{Fix: "Call `list_dir`."}},
 		"post-invoke operation": {Anchor: oar.AnchorToolPost, When: `paintedwolf.operation == "list_dir"`},
 		"subject call in fix":   {Selector: oar.Selector{"tools": {"recall"}}, Copy: oar.Copy{Fix: "Retry `recall(query=\"x\")`."}},
-		"retired next step":     {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "list_dir", Say: "{{ call }}"}}}},
-		"undeclared argument":   {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Args: map[string]any{"q": "x"}, Say: "{{ call }}"}}}},
-		"incomplete call":       {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Complete: true, Say: "{{ call }}"}}}},
+		"retired next step":     {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "list_dir", Say: "{% if load %}{{ load }}, then {% endif %}{{ call }}"}}}},
+		"undeclared argument":   {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Args: map[string]any{"q": "x"}, Say: "{% if load %}{{ load }}, then {% endif %}{{ call }}"}}}},
+		"incomplete call":       {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Complete: true, Say: "{% if load %}{{ load }}, then {% endif %}{{ call }}"}}}},
 	} {
 		if err := check(rule); err == nil {
 			t.Errorf("%s: accepted", name)
@@ -168,7 +168,7 @@ func TestBundledCopyNamesAToolOnlyAsSubjectMentionOrCheckedStep(t *testing.T) {
 		"subject":   {Selector: oar.Selector{"tools": {"recall"}}, Copy: oar.Copy{What: "`recall` failed."}},
 		"mention":   {NextSteps: &oar.NextSteps{Mentions: []string{"recall"}}, Copy: oar.Copy{Why: "Results from `recall` are retained."}},
 		"fact name": {Copy: oar.Copy{Fix: "See {{ paintedwolf.source_history }}."}},
-		"next step": {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Complete: true, Args: map[string]any{"query": "x"}, Say: "{{ call }}"}}}},
+		"next step": {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Complete: true, Args: map[string]any{"query": "x"}, Say: "{% if load %}{{ load }}, then {% endif %}{{ call }}"}}}},
 	} {
 		if err := check(rule); err != nil {
 			t.Errorf("%s: %v", name, err)

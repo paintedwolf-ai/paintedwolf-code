@@ -101,29 +101,101 @@ func (b *extractBudget) addEntry(relDest string, n int64) {
 	b.out = append(b.out, extractEntryResult{Path: relDest, Bytes: n})
 }
 
-func archiveFormat(path string) (string, error) {
-	lower := strings.ToLower(filepath.ToSlash(path))
-	switch {
-	case strings.HasSuffix(lower, ".tar.gz"), strings.HasSuffix(lower, ".tgz"):
-		return "tar.gz", nil
-	case strings.HasSuffix(lower, ".tar.bz2"), strings.HasSuffix(lower, ".tbz2"):
-		return "tar.bz2", nil
-	case strings.HasSuffix(lower, ".tar.xz"), strings.HasSuffix(lower, ".txz"):
-		return "tar.xz", nil
-	case strings.HasSuffix(lower, ".tar.zst"), strings.HasSuffix(lower, ".tzst"):
-		return "tar.zst", nil
-	case strings.HasSuffix(lower, ".tar"):
-		return "tar", nil
-	case strings.HasSuffix(lower, ".zip"):
-		return "zip", nil
-	default:
-		return "", &toolrejection.ToolReject{
+type archiveFormatEntry struct {
+	format   string
+	suffixes []string
+	extract  func(extractSink, fseffect.Location, *extractBudget, entryGuard) error
+}
+
+var archiveFormatTable = []archiveFormatEntry{
+	{format: "zip", suffixes: []string{".zip"}, extract: extractZipFile},
+	{format: "tar", suffixes: []string{".tar"}, extract: extractTarFormat("tar")},
+	{format: "tar.gz", suffixes: []string{".tar.gz", ".tgz"}, extract: extractTarFormat("tar.gz")},
+	{format: "tar.bz2", suffixes: []string{".tar.bz2", ".tbz2"}, extract: extractTarFormat("tar.bz2")},
+	{format: "tar.xz", suffixes: []string{".tar.xz", ".txz"}, extract: extractTarFormat("tar.xz")},
+	{format: "tar.zst", suffixes: []string{".tar.zst", ".tzst"}, extract: extractTarFormat("tar.zst")},
+}
+
+func extractTarFormat(format string) func(extractSink, fseffect.Location, *extractBudget, entryGuard) error {
+	return func(sink extractSink, archive fseffect.Location, budget *extractBudget, guard entryGuard) error {
+		return extractTarFile(sink, archive, format, budget, guard)
+	}
+}
+
+func allowedArchiveSuffixes() []string {
+	out := make([]string, 0, 10)
+	for _, entry := range archiveFormatTable {
+		out = append(out, entry.suffixes...)
+	}
+	return out
+}
+
+func allowedArchiveFormats() []string {
+	out := make([]string, 0, len(archiveFormatTable))
+	for _, entry := range archiveFormatTable {
+		out = append(out, entry.format)
+	}
+	return out
+}
+
+func offendingArchiveSuffix(cleanPath string) string {
+	base := path.Base(cleanPath)
+	ext := path.Ext(base)
+	if ext == "" || ext == base {
+		return base
+	}
+	stem := strings.TrimSuffix(base, ext)
+	if strings.HasSuffix(strings.ToLower(stem), ".tar") {
+		return stem[len(stem)-len(".tar"):] + ext
+	}
+	return ext
+}
+
+func resolveArchiveFormat(archivePath, explicitFormat string) (archiveFormatEntry, error) {
+	cleanPath := filepath.ToSlash(archivePath)
+	if explicitFormat != "" {
+		for _, entry := range archiveFormatTable {
+			if entry.format == explicitFormat {
+				return entry, nil
+			}
+		}
+		return archiveFormatEntry{}, &toolrejection.ToolReject{
 			Code: "EXTRACT_FORMAT_UNSUPPORTED",
 			Data: map[string]any{
-				"path":    filepath.ToSlash(path),
-				"allowed": []string{".zip", ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz", ".tar.zst", ".tzst"},
+				"path":                   cleanPath,
+				"format":                 explicitFormat,
+				"extract_format_cause":   "invalid_format",
+				"extract_invalid_format": true,
+				"extract_rejected_value": explicitFormat,
+				"extract_allowed":        allowedArchiveFormats(),
 			},
 		}
+	}
+	lower := strings.ToLower(cleanPath)
+	var matched archiveFormatEntry
+	bestLen := 0
+	for _, entry := range archiveFormatTable {
+		for _, suffix := range entry.suffixes {
+			if len(suffix) > bestLen && strings.HasSuffix(lower, suffix) {
+				matched = entry
+				bestLen = len(suffix)
+			}
+		}
+	}
+	if bestLen > 0 {
+		return matched, nil
+	}
+	offending := offendingArchiveSuffix(cleanPath)
+	return archiveFormatEntry{}, &toolrejection.ToolReject{
+		Code: "EXTRACT_FORMAT_UNSUPPORTED",
+		Data: map[string]any{
+			"path":                   cleanPath,
+			"extension":              offending,
+			"extract_format_cause":   "unsupported_suffix",
+			"extract_invalid_format": false,
+			"extract_rejected_value": offending,
+			"extract_allowed":        allowedArchiveSuffixes(),
+		},
 	}
 }
 

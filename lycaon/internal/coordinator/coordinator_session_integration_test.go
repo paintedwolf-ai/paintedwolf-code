@@ -128,10 +128,9 @@ func TestRuntimeAssemblyEngineDirect(t *testing.T) {
 		Injects:          prompts.NewInjectRenderer(pe),
 		Limits:           func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		CoordinatorFrame: &phaseStubCoordinator{phase: "implement", brief: "go"},
-		PromptToolLister: prompttest.CoordinatorTools,
 	}
 	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{
-		AssemblyDeps: func() assembly.AssemblyDeps { return deps },
+		AssemblyDeps: func() assembly.AssemblyDeps { return withListedFixtureReader(deps, prompttest.CoordinatorTools) },
 	})
 	rt.BeginPromptTurn("s1", anchor.InformRender(anchor.GateBlocked))
 	msgs, err := rt.BuildCompletionMessages(context.Background(), &api.Session{

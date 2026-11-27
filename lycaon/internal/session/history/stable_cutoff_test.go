@@ -282,7 +282,7 @@ func TestOversizedBodiesHoldTheirProjectionAC_KV_06(t *testing.T) {
 		testutil.FailErr(t, "append exchange", sqlStore.Transcript.AppendMessages(t.Context(), sess.ID, turnExchange(5000+step, strings.Repeat("o", 1000))...))
 		history, err := svc.Load(t.Context(), sess)
 		testutil.FailErr(t, "load", err)
-		fitted, err := svc.FitRequest(t.Context(), sess, history, requestFor(sess, frame, history), budgets, nil)
+		fitted, err := svc.FitRequest(t.Context(), sess, history, requestForWithRecall(t, sess, frame, history), budgets, nil)
 		testutil.FailErr(t, "fit", err)
 		assertPairedExchanges(t, fitted.Messages)
 		if input := modelcall.EstimateRequestInput(fitted); input > cfg.HardCeilingTokens {

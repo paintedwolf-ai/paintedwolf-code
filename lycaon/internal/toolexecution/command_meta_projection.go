@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 var (
@@ -52,9 +53,9 @@ func ProjectCommandMeta(meta tools.ToolMeta, effects toolcontract.CommandEffects
 	}
 	meta.Description = strings.TrimSpace(strings.Join(chunks, " "))
 	meta.DescriptionParts = parts
-	if !effects.Allows(commandEffectExternalExec) {
-		meta.ArgsSchema = tools.PruneCommandReadOnlySchema(meta.ArgsSchema)
-	}
+	meta.ArgsSchema = toolschema.NarrowToolSchema("command", meta.ArgsSchema, toolschema.ProjectOptions{
+		CommandReadOnly: !effects.Allows(commandEffectExternalExec),
+	})
 	return meta
 }
 

@@ -234,22 +234,22 @@ const (
 var reachMarks = []string{"ReachCommandMutation", "ReachCommandExternalExec", "ReachCommandNetworkEgress"}
 
 var promptReader = []invariants.Invariant{{
-	// In internal/prompts only DeclaredReader loads tool profiles from disk.
-	Name: "prompts-load-tool-profiles-through-declared-reader",
+	// In internal/prompts only declaredToolProfiles loads tool profiles from disk.
+	Name: "prompts-load-tool-profiles-through-declared-profiles",
 	Anchors: []invariants.Anchor{
-		invariants.Func("internal/prompts", "DeclaredReader"),
+		invariants.Func("internal/prompts", "declaredToolProfiles"),
 		invariants.Func("internal/sandbox", "LoadToolProfiles"),
 		invariants.Func("internal/sandbox", "LoadToolProfilesWithCatalog"),
 	},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/prompts") {
 			f.Funcs(func(fn *ast.FuncDecl) {
-				if fn.Name.Name == "DeclaredReader" {
+				if fn.Name.Name == "declaredToolProfiles" {
 					return
 				}
 				f.Calls(fn.Body, func(call *ast.CallExpr, pkg, name string) {
 					if pkg == sandboxPkg && (name == "LoadToolProfiles" || name == "LoadToolProfilesWithCatalog") {
-						r.ReportAt(call.Pos(), "%s calls sandbox.%s; read through DeclaredReader", fn.Name.Name, name)
+						r.ReportAt(call.Pos(), "%s calls sandbox.%s; read through declaredToolProfiles", fn.Name.Name, name)
 					}
 				})
 			})

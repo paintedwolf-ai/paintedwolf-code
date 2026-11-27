@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/lycaon/lycaon/internal/commandmode"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -124,13 +125,10 @@ func (o *Owners) SelectMode(argv commandprogram.Fields) (string, bool) {
 }
 
 func queryMode(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) string {
-	if spec.Name == "yq" {
-		if _, ok := bound.Last("-i"); ok {
-			return "-i"
-		}
-		return "query"
+	if mode, ok := commandmode.SelectMultiMode(spec, bound); ok {
+		return mode
 	}
-	if len(spec.Effects) > 0 {
+	if len(spec.Effects) == 1 {
 		return spec.Effects[0].Mode
 	}
 	return ""

@@ -5,7 +5,7 @@ on: tool.rejected
 selector:
   tools:
     - skills_read
-requires_facts: [paintedwolf.available, paintedwolf.name, paintedwolf.rejection_code, paintedwolf.resource, paintedwolf.unknown_target]
+requires_facts: [paintedwolf.available, paintedwolf.can_skills_read, paintedwolf.name, paintedwolf.rejection_code, paintedwolf.resource, paintedwolf.unknown_target]
 when: paintedwolf.rejection_code == "SKILL_RESOURCE_UNKNOWN"
 effect: block
 x-paintedwolf-category: recoverable
@@ -14,7 +14,7 @@ message: '{% if paintedwolf.available %}Skill {{ paintedwolf.name }} has no reso
 what: Skill {{ paintedwolf.name }} has no readable resource at {{ paintedwolf.resource }}.
 cause: '{% if paintedwolf.available %}The path is not a regular bundled file listed for this skill.{% else %}Skill {{ paintedwolf.name }} has no supporting resource files; its full procedure is in SKILL.md.{% endif %}'
 why: Skill resources are confined to their own directory and selected by exact relative path.
-fix: '{% if paintedwolf.available %}Call skills_read for the skill instructions, then use one of its listed files: {{ paintedwolf.available }}{% else %}Follow the skill instructions from SKILL.md; omit resource when calling skills_read for {{ paintedwolf.name }}.{% endif %}'
+fix: '{% if paintedwolf.available %}{% if paintedwolf.can_skills_read %}Call skills_read for the skill instructions, then use one of its listed files: {{ paintedwolf.available }}{% else %}Use one of the skill''s listed files when skill reading is offered: {{ paintedwolf.available }}{% endif %}{% else %}{% if paintedwolf.can_skills_read %}Follow the skill instructions from SKILL.md; omit resource when calling skills_read for {{ paintedwolf.name }}.{% else %}Follow the skill instructions from SKILL.md without requesting a supporting resource for {{ paintedwolf.name }}.{% endif %}{% endif %}'
 instead: '{% if paintedwolf.available %}Branch on Code SKILL_RESOURCE_UNKNOWN; choose a listed skill resource{% else %}Branch on Code SKILL_RESOURCE_UNKNOWN; do not request a supporting resource for {{ paintedwolf.name }}{% endif %}'
 x-paintedwolf-scenarios:
   - id: default
