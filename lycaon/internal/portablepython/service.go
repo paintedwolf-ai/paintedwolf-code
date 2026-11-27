@@ -16,7 +16,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -28,6 +27,7 @@ import (
 	"github.com/lycaon/lycaon/internal/pythoncatalog"
 	"github.com/lycaon/lycaon/internal/pythondocuments"
 	"github.com/lycaon/lycaon/internal/pythonevidence"
+	"github.com/lycaon/lycaon/internal/pythonnative"
 	"github.com/lycaon/lycaon/internal/pythonruntime"
 	experimentalsys "github.com/tetratelabs/wazero/experimental/sys"
 )
@@ -104,15 +104,11 @@ func standardImageDirCandidates() []string {
 	if cfgRoot, err := configdir.Root(); err == nil && cfgRoot != "" {
 		out = append(out, filepath.Join(cfgRoot, "portable-python", "image"))
 	}
-	// 4. Standard user data directories.
+	// 4. Standard user data directories (declared via pythonnative platform adapter).
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		channel := configdir.ChannelDirName()
-		out = append(out,
-			filepath.Join(home, ".local", "share", "paintedwolf-portable-python", "image"),
-			filepath.Join(home, ".local", "share", channel, "portable-python", "image"),
-		)
-		if runtime.GOOS == "darwin" {
-			out = append(out, filepath.Join(home, "Library", "Application Support", channel, "portable-python", "image"))
+		for _, dir := range pythonnative.UserDataDirs(home, channel) {
+			out = append(out, filepath.Join(dir, "image"))
 		}
 	}
 	return out

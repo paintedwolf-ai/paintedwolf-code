@@ -1,133 +1,4 @@
-//go:build cgo && (darwin || linux)
-
 package pythonruntime
-
-/*
-#cgo linux LDFLAGS: -ldl
-#include <dlfcn.h>
-#include <stdlib.h>
-#include "pw_py_engine.h"
-
-typedef const pw_py_engine_identity_t* (*fn_pw_py_engine_identity)(void);
-typedef pw_py_status_t (*fn_pw_py_engine_init)(void);
-typedef pw_py_status_t (*fn_pw_py_instance_new)(const pw_py_instance_config_t*, pw_py_host_wasi_fn, void*, pw_py_instance_t**);
-typedef pw_py_status_t (*fn_pw_py_instance_run)(pw_py_instance_t*, pw_py_run_result_t*);
-typedef void (*fn_pw_py_instance_cancel)(pw_py_instance_t*);
-typedef pw_py_status_t (*fn_pw_py_instance_memory)(pw_py_instance_t*, uint8_t**, uint64_t*, uint32_t*, uint32_t*);
-typedef void (*fn_pw_py_instance_free)(pw_py_instance_t*);
-
-typedef struct pw_py_lib {
-    void* handle;
-    fn_pw_py_engine_identity engine_identity;
-    fn_pw_py_engine_init engine_init;
-    fn_pw_py_instance_new instance_new;
-    fn_pw_py_instance_run instance_run;
-    fn_pw_py_instance_cancel instance_cancel;
-    fn_pw_py_instance_memory instance_memory;
-    fn_pw_py_instance_free instance_free;
-} pw_py_lib_t;
-
-static pw_py_lib_t* pw_py_lib_open(const char* path, const char** err_out) {
-    void* h = dlopen(path, RTLD_LOCAL | RTLD_NOW);
-    if (!h) {
-        *err_out = dlerror();
-        return NULL;
-    }
-    pw_py_lib_t* out = (pw_py_lib_t*)calloc(1, sizeof(pw_py_lib_t));
-    if (!out) {
-        *err_out = "out of memory allocating pw_py_lib_t";
-        dlclose(h);
-        return NULL;
-    }
-    out->handle = h;
-    out->engine_identity = (fn_pw_py_engine_identity)dlsym(h, "pw_py_engine_identity");
-    out->engine_init     = (fn_pw_py_engine_init)dlsym(h, "pw_py_engine_init");
-    out->instance_new    = (fn_pw_py_instance_new)dlsym(h, "pw_py_instance_new");
-    out->instance_run    = (fn_pw_py_instance_run)dlsym(h, "pw_py_instance_run");
-    out->instance_cancel = (fn_pw_py_instance_cancel)dlsym(h, "pw_py_instance_cancel");
-    out->instance_memory = (fn_pw_py_instance_memory)dlsym(h, "pw_py_instance_memory");
-    out->instance_free   = (fn_pw_py_instance_free)dlsym(h, "pw_py_instance_free");
-    if (!out->engine_identity || !out->engine_init || !out->instance_new ||
-        !out->instance_run || !out->instance_cancel || !out->instance_memory ||
-        !out->instance_free) {
-        *err_out = "missing one or more required pw_py_* exported symbols";
-        dlclose(h);
-        free(out);
-        return NULL;
-    }
-    return out;
-}
-
-static void pw_py_lib_close(pw_py_lib_t* lib) {
-    if (lib) {
-        if (lib->handle) {
-            dlclose(lib->handle);
-            lib->handle = NULL;
-        }
-        free(lib);
-    }
-}
-
-static const pw_py_engine_identity_t* pw_py_call_identity(pw_py_lib_t* lib) {
-    return lib->engine_identity();
-}
-
-static pw_py_status_t pw_py_call_init(pw_py_lib_t* lib) {
-    return lib->engine_init();
-}
-
-extern uint32_t pwGoWasiCallback(
-    uintptr_t handle_val,
-    uint32_t op_id,
-    uint64_t* args,
-    uint32_t argc,
-    uint32_t* out_ret);
-
-static pw_py_wasi_action_t pw_py_c_wasi_trampoline(
-    void* host_ctx,
-    pw_py_wasi_op_t op_id,
-    const char* op_name,
-    const uint64_t* args,
-    uint32_t argc,
-    uint32_t* out_ret) {
-    (void)op_name;
-    return (pw_py_wasi_action_t)pwGoWasiCallback((uintptr_t)host_ctx, (uint32_t)op_id, (uint64_t*)args, argc, out_ret);
-}
-
-static pw_py_status_t pw_py_call_instance_new(
-    pw_py_lib_t* lib,
-    const pw_py_instance_config_t* cfg,
-    uintptr_t handle_val,
-    pw_py_instance_t** out_inst) {
-    return lib->instance_new(cfg, pw_py_c_wasi_trampoline, (void*)handle_val, out_inst);
-}
-
-static pw_py_status_t pw_py_call_instance_run(
-    pw_py_lib_t* lib,
-    pw_py_instance_t* inst,
-    pw_py_run_result_t* out_res) {
-    return lib->instance_run(inst, out_res);
-}
-
-static void pw_py_call_instance_cancel(pw_py_lib_t* lib, pw_py_instance_t* inst) {
-    lib->instance_cancel(inst);
-}
-
-static pw_py_status_t pw_py_call_instance_memory(
-    pw_py_lib_t* lib,
-    pw_py_instance_t* inst,
-    uint8_t** out_data,
-    uint64_t* out_size,
-    uint32_t* out_pages,
-    uint32_t* out_max_pages) {
-    return lib->instance_memory(inst, out_data, out_size, out_pages, out_max_pages);
-}
-
-static void pw_py_call_instance_free(pw_py_lib_t* lib, pw_py_instance_t* inst) {
-    lib->instance_free(inst);
-}
-*/
-import "C"
 
 import (
 	"bytes"
@@ -136,50 +7,13 @@ import (
 	"io"
 	"os"
 	"runtime"
-	"runtime/cgo"
 	"sort"
 	"strings"
 	"sync"
 	"time"
-	"unsafe"
+
+	"github.com/lycaon/lycaon/internal/pythonnative"
 )
-
-type nativeExecHandle struct {
-	lib  *C.pw_py_lib_t
-	inst *C.pw_py_instance_t
-	host *nativeWASIHost
-}
-
-//export pwGoWasiCallback
-func pwGoWasiCallback(handleVal C.uintptr_t, opID C.uint32_t, argsPtr *C.uint64_t, argc C.uint32_t, outRet *C.uint32_t) C.uint32_t {
-	h := cgo.Handle(handleVal)
-	ctxObj, ok := h.Value().(*nativeExecHandle)
-	if !ok || ctxObj == nil || ctxObj.host == nil {
-		if outRet != nil {
-			*outRet = C.uint32_t(wasiErrnoIO)
-		}
-		return C.uint32_t(C.PW_PY_WASI_TRAP)
-	}
-
-	var mem []byte
-	var dataPtr *C.uint8_t
-	var memSize C.uint64_t
-	var pages, maxPages C.uint32_t
-	if ctxObj.inst != nil && C.pw_py_call_instance_memory(ctxObj.lib, ctxObj.inst, &dataPtr, &memSize, &pages, &maxPages) == C.PW_PY_STATUS_OK && dataPtr != nil && memSize > 0 {
-		mem = unsafe.Slice((*byte)(unsafe.Pointer(dataPtr)), int(memSize))
-	}
-
-	var args []uint64
-	if argc > 0 && argsPtr != nil {
-		args = unsafe.Slice((*uint64)(unsafe.Pointer(argsPtr)), int(argc))
-	}
-
-	action, ret := ctxObj.host.dispatch(mem, uint32(opID), args)
-	if outRet != nil {
-		*outRet = C.uint32_t(ret)
-	}
-	return C.uint32_t(action)
-}
 
 type nativeActiveExec struct {
 	cancel context.CancelFunc
@@ -187,7 +21,8 @@ type nativeActiveExec struct {
 
 // NativeEngineRuntime executes isolated Portable Python invocations using
 // PY07's ahead-of-time compiled native CPython/WASI shared library loaded via
-// dlopen after complete fail-closed manifest, SHA-256, ABI, and image verification.
+// the declared pythonnative platform adapter after complete fail-closed
+// manifest, SHA-256, ABI, and image verification.
 type NativeEngineRuntime struct {
 	mu                  sync.Mutex
 	closed              bool
@@ -195,7 +30,7 @@ type NativeEngineRuntime struct {
 	activeWG            sync.WaitGroup
 	activeExecs         map[uint64]*nativeActiveExec
 	nextExecID          uint64
-	lib                 *C.pw_py_lib_t
+	lib                 *pythonnative.Library
 	identity            NativeEngineIdentity
 	manifest            *ImageManifest
 	imageDir            string
@@ -210,9 +45,23 @@ type NativeEngineRuntime struct {
 }
 
 // NewNativeEngineRuntime verifies the staged native engine artifact, opens it
-// via dlopen, performs the fail-closed pw_py_engine_identity() + image pairing
-// handshake, and initializes the engine. It NEVER silently falls back to wazero.
+// via the pythonnative adapter, performs the fail-closed pw_py_engine_identity()
+// + image pairing handshake, and initializes the engine. It fails explicitly
+// when native capability is unavailable and NEVER silently falls back to wazero.
 func NewNativeEngineRuntime(_ context.Context, cfg RuntimeConfig) (Runtime, error) {
+	goos, goarch := pythonnative.HostPlatform()
+	if !pythonnative.NativeAOTSupported() {
+		return nil, &NativeEngineVerificationError{
+			Stage:   "capability",
+			Message: fmt.Sprintf("native portable python AOT engine is unsupported in this build (%s/%s)", goos, goarch),
+			Err: &pythonnative.UnsupportedCapabilityError{
+				GOOS:   goos,
+				GOARCH: goarch,
+				Reason: "native AOT loader requires CGO_ENABLED=1 on darwin/arm64 or linux/amd64",
+			},
+		}
+	}
+
 	bundled := cfg.EngineManifest
 	if bundled == nil {
 		var err error
@@ -246,15 +95,15 @@ func NewNativeEngineRuntime(_ context.Context, cfg RuntimeConfig) (Runtime, erro
 		}
 	}
 
-	art, err := bundled.ArtifactForCurrentPlatform()
+	art, err := bundled.ArtifactForPlatform(goos, goarch)
 	if err != nil {
 		return nil, &NativeEngineVerificationError{
 			Stage:   "platform",
-			Message: fmt.Sprintf("no pinned native python engine artifact for %s/%s", runtime.GOOS, runtime.GOARCH),
+			Message: fmt.Sprintf("no pinned native python engine artifact for %s/%s", goos, goarch),
 			Err:     err,
 		}
 	}
-	libPath, err := VerifyEngineDir(bundled, engineDir, runtime.GOOS, runtime.GOARCH, art)
+	libPath, err := VerifyEngineDir(bundled, engineDir, goos, goarch, art)
 	if err != nil {
 		return nil, &NativeEngineVerificationError{
 			Stage:   "artifact",
@@ -263,30 +112,24 @@ func NewNativeEngineRuntime(_ context.Context, cfg RuntimeConfig) (Runtime, erro
 		}
 	}
 
-	cPath := C.CString(libPath)
-	defer C.free(unsafe.Pointer(cPath))
-	var cErr *C.char
-	lib := C.pw_py_lib_open(cPath, &cErr)
-	if lib == nil {
-		msg := "dlopen failed"
-		if cErr != nil {
-			msg = C.GoString(cErr)
-		}
+	lib, err := pythonnative.Open(libPath)
+	if err != nil {
 		return nil, &NativeEngineVerificationError{
 			Stage:   "dlopen",
-			Message: fmt.Sprintf("failed to load verified native engine %s: %s", libPath, msg),
+			Message: fmt.Sprintf("failed to load verified native engine %s", libPath),
+			Err:     err,
 		}
 	}
 
-	cID := C.pw_py_call_identity(lib)
-	if cID == nil {
-		C.pw_py_lib_close(lib)
+	rawID := lib.Identity()
+	if rawID == nil {
+		lib.Close()
 		return nil, &NativeEngineVerificationError{
 			Stage:   "abi",
 			Message: "pw_py_engine_identity() returned NULL",
 		}
 	}
-	reported := cIdentityToGo(cID)
+	reported := nativeIdentityToGo(rawID)
 
 	verifiedID, err := VerifyNativeEngineHandshake(HandshakeVerificationInput{
 		BundledManifest:  bundled,
@@ -294,26 +137,26 @@ func NewNativeEngineRuntime(_ context.Context, cfg RuntimeConfig) (Runtime, erro
 		ImageDir:         cfg.ImageDir,
 		ImageManifest:    cfg.Manifest,
 		ReportedIdentity: reported,
-		GOOS:             runtime.GOOS,
-		GOARCH:           runtime.GOARCH,
+		GOOS:             goos,
+		GOARCH:           goarch,
 	})
 	if err != nil {
-		C.pw_py_lib_close(lib)
+		lib.Close()
 		return nil, err
 	}
 
 	audit, err := AuditNativeEngineImports(verifiedID, engineDir, cfg.ImageDir, cfg.Manifest, cfg.WasmBytes, cfg.ImportPolicy)
 	if err != nil {
-		C.pw_py_lib_close(lib)
+		lib.Close()
 		return nil, err
 	}
 	if cfg.EnforceImportAudit && !audit.Passed {
-		C.pw_py_lib_close(lib)
+		lib.Close()
 		return nil, fmt.Errorf("native engine wasm import audit failed: %d denied, %d undeclared", len(audit.Denied), len(audit.Undeclared))
 	}
 
-	if st := C.pw_py_call_init(lib); st != C.PW_PY_STATUS_OK {
-		C.pw_py_lib_close(lib)
+	if st := lib.Init(); st != pythonnative.StatusOK {
+		lib.Close()
 		return nil, &NativeEngineVerificationError{
 			Stage:   "init",
 			Message: fmt.Sprintf("pw_py_engine_init() failed with status %d", int(st)),
@@ -334,7 +177,7 @@ func NewNativeEngineRuntime(_ context.Context, cfg RuntimeConfig) (Runtime, erro
 	}
 	if strings.TrimSpace(cfg.ScratchRoot) != "" {
 		if err := os.MkdirAll(cfg.ScratchRoot, 0o700); err != nil {
-			C.pw_py_lib_close(lib)
+			lib.Close()
 			return nil, fmt.Errorf("create scratch root: %w", err)
 		}
 		_, _ = CleanOrphanedScratchDirs(cfg.ScratchRoot)
@@ -357,28 +200,22 @@ func NewNativeEngineRuntime(_ context.Context, cfg RuntimeConfig) (Runtime, erro
 	}, nil
 }
 
-func cIdentityToGo(c *C.pw_py_engine_identity_t) *NativeEngineIdentity {
-	if c == nil {
+func nativeIdentityToGo(id *pythonnative.Identity) *NativeEngineIdentity {
+	if id == nil {
 		return nil
 	}
-	goStr := func(p *C.char) string {
-		if p == nil {
-			return ""
-		}
-		return C.GoString(p)
-	}
 	return &NativeEngineIdentity{
-		ABIVersion:            uint32(c.abi_version),
-		ImportCount:           uint32(c.import_count),
-		EngineTag:             goStr(c.engine_tag),
-		SourceCommit:          goStr(c.source_commit),
-		Platform:              goStr(c.platform),
-		CPythonVersion:        goStr(c.cpython_version),
-		CPythonWasmSHA256:     goStr(c.cpython_wasm_sha256),
-		MeteredWasmSHA256:     goStr(c.metered_wasm_sha256),
-		WABTVersion:           goStr(c.wabt_version),
-		FuelAlgorithmVersion:  goStr(c.fuel_algorithm_version),
-		ImportInventorySHA256: goStr(c.import_inventory_sha256),
+		ABIVersion:            id.ABIVersion,
+		ImportCount:           id.ImportCount,
+		EngineTag:             id.EngineTag,
+		SourceCommit:          id.SourceCommit,
+		Platform:              id.Platform,
+		CPythonVersion:        id.CPythonVersion,
+		CPythonWasmSHA256:     id.CPythonWasmSHA256,
+		MeteredWasmSHA256:     id.MeteredWasmSHA256,
+		WABTVersion:           id.WABTVersion,
+		FuelAlgorithmVersion:  id.FuelAlgorithmVersion,
+		ImportInventorySHA256: id.ImportInventorySHA256,
 	}
 }
 
@@ -421,7 +258,7 @@ func (r *NativeEngineRuntime) Close(_ context.Context) error {
 
 	r.parked.ReleaseAll()
 	if lib != nil {
-		C.pw_py_lib_close(lib)
+		lib.Close()
 	}
 
 	r.mu.Lock()
@@ -576,39 +413,18 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 		return res, nil
 	}
 
-	execHandle := &nativeExecHandle{
-		lib:  lib,
-		host: wasiHost,
-	}
-	cgoHandle := cgo.NewHandle(execHandle)
-	defer cgoHandle.Delete()
-
-	instCfg := C.pw_py_instance_config_t{
-		struct_size:      C.uint32_t(unsafe.Sizeof(C.pw_py_instance_config_t{})),
-		max_memory_pages: C.uint32_t(maxPages),
-		fuel_budget:      C.uint64_t(inv.Limits.MaxGuestWork),
-	}
-	var inst *C.pw_py_instance_t
-	if st := C.pw_py_call_instance_new(lib, &instCfg, C.uintptr_t(cgoHandle), &inst); st != C.PW_PY_STATUS_OK {
+	inst, st := lib.NewInstance(pythonnative.InstanceConfig{
+		MaxMemoryPages: maxPages,
+		FuelBudget:     inv.Limits.MaxGuestWork,
+	}, wasiHost.dispatch)
+	if st != pythonnative.StatusOK {
 		return nil, fmt.Errorf("pw_py_instance_new failed with status %d", int(st))
 	}
-	execHandle.inst = inst
-
-	var freeOnce sync.Once
-	freeInstance := func() {
-		freeOnce.Do(func() {
-			if inst != nil {
-				C.pw_py_call_instance_free(lib, inst)
-				inst = nil
-				execHandle.inst = nil
-			}
-		})
-	}
-	defer freeInstance()
+	defer inst.Free()
 
 	// Asynchronous cancellation watcher: interrupts pure CPU loops via
 	// pw_py_instance_cancel(inst) when execCtx is canceled or times out.
-	// Deferred stop runs BEFORE freeInstance() (and BEFORE activeWG.Done())
+	// Deferred stop runs BEFORE inst.Free() (and BEFORE activeWG.Done())
 	// so cancel is never called on a freed instance or unloaded library.
 	doneCh := make(chan struct{})
 	watcherDone := make(chan struct{})
@@ -619,12 +435,11 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 			<-watcherDone
 		})
 	}
-	cancelTarget := inst
 	go func() {
 		defer close(watcherDone)
 		select {
 		case <-execCtx.Done():
-			C.pw_py_call_instance_cancel(lib, cancelTarget)
+			inst.Cancel()
 			ticker := time.NewTicker(1 * time.Millisecond)
 			defer ticker.Stop()
 			for {
@@ -632,7 +447,7 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 				case <-doneCh:
 					return
 				case <-ticker.C:
-					C.pw_py_call_instance_cancel(lib, cancelTarget)
+					inst.Cancel()
 				}
 			}
 		case <-doneCh:
@@ -640,8 +455,7 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 	}()
 	defer stopWatcher()
 
-	var runRes C.pw_py_run_result_t
-	_ = C.pw_py_call_instance_run(lib, inst, &runRes)
+	runRes := inst.Run()
 	stopWatcher()
 
 	// Capture open write descriptor count BEFORE closing host FDs.
@@ -651,10 +465,10 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 	}
 
 	// Deterministic exactly-once guest teardown after run returns.
-	freeInstance()
+	inst.Free()
 	wasiHost.closeAll()
 
-	meter.SetGuestWork(uint64(runRes.guest_work_used))
+	meter.SetGuestWork(runRes.GuestWorkUsed)
 	res := &ExecutionResult{
 		ExecutionID: inv.ExecutionID,
 		Backend:     BackendNativeAOT,
@@ -663,7 +477,7 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 		Usage: ResourceUsage{
 			GuestWork:       meter.GuestWork(),
 			HostWork:        meter.HostWork(),
-			PeakMemoryPages: uint32(runRes.peak_memory_pages),
+			PeakMemoryPages: runRes.PeakMemoryPages,
 			StdoutBytes:     sealedStdout.WrittenBytes(),
 			StderrBytes:     sealedStderr.WrittenBytes(),
 			StagedBytes:     meter.StagedBytes(),
@@ -716,7 +530,7 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 func (r *NativeEngineRuntime) classifyNativeOutcome(
 	execCtx context.Context,
 	latch *StopLatch,
-	runRes C.pw_py_run_result_t,
+	runRes pythonnative.RunResult,
 	fuelBudget uint64,
 	res *ExecutionResult,
 ) {
@@ -726,14 +540,14 @@ func (r *NativeEngineRuntime) classifyNativeOutcome(
 		res.CleanCompletion = false
 		return
 	}
-	switch runRes.status {
-	case C.PW_PY_STATUS_OK:
+	switch runRes.Status {
+	case pythonnative.StatusOK:
 		res.ExitCode = 0
 		res.CleanCompletion = true
-	case C.PW_PY_STATUS_PROC_EXIT:
-		res.ExitCode = int(runRes.exit_code)
-		res.CleanCompletion = runRes.exit_code == 0
-	case C.PW_PY_STATUS_FUEL_EXHAUSTED:
+	case pythonnative.StatusProcExit:
+		res.ExitCode = int(runRes.ExitCode)
+		res.CleanCompletion = runRes.ExitCode == 0
+	case pythonnative.StatusFuelExhausted:
 		latch.Trigger(TerminalStop{
 			Code:   StopWorkLimitExceeded,
 			Reason: fmt.Sprintf("guest work fuel exhausted (limit %d)", fuelBudget),
@@ -741,7 +555,7 @@ func (r *NativeEngineRuntime) classifyNativeOutcome(
 		res.Stop = latch.Stop()
 		res.ExitCode = 1
 		res.CleanCompletion = false
-	case C.PW_PY_STATUS_CANCELED:
+	case pythonnative.StatusCanceled:
 		reason := "execution canceled"
 		if execCtx.Err() == context.DeadlineExceeded {
 			reason = "execution timed out"
@@ -750,7 +564,7 @@ func (r *NativeEngineRuntime) classifyNativeOutcome(
 		res.Stop = latch.Stop()
 		res.ExitCode = 1
 		res.CleanCompletion = false
-	case C.PW_PY_STATUS_MEMORY_LIMIT:
+	case pythonnative.StatusMemoryLimit:
 		latch.Trigger(TerminalStop{
 			Code:   StopMemoryLimitExceeded,
 			Reason: "guest linear memory limit exceeded",
@@ -758,7 +572,7 @@ func (r *NativeEngineRuntime) classifyNativeOutcome(
 		res.Stop = latch.Stop()
 		res.ExitCode = 1
 		res.CleanCompletion = false
-	case C.PW_PY_STATUS_HOST_STOP:
+	case pythonnative.StatusHostStop:
 		latch.Trigger(TerminalStop{
 			Code:   StopEffectNotAllowed,
 			Reason: "host stopped guest execution",
@@ -769,7 +583,7 @@ func (r *NativeEngineRuntime) classifyNativeOutcome(
 	default:
 		res.ExitCode = 1
 		res.CleanCompletion = false
-		res.Diagnostics = append(res.Diagnostics, fmt.Sprintf("native engine trap status=%d trap_code=%d", int(runRes.status), uint32(runRes.trap_code)))
+		res.Diagnostics = append(res.Diagnostics, fmt.Sprintf("native engine trap status=%d trap_code=%d", int(runRes.Status), runRes.TrapCode))
 	}
 }
 

@@ -138,7 +138,11 @@ func SelectEngineRelease(ctx context.Context, req SelectEngineReleaseRequest) (*
 		}
 		libName := strings.TrimSpace(da.LibraryName)
 		if libName == "" {
-			libName = DefaultLibraryName(goos)
+			var libErr error
+			libName, libErr = LibraryNameForPlatform(goos, goarch)
+			if libErr != nil {
+				return nil, fmt.Errorf("release descriptor artifact %q: %w", k, libErr)
+			}
 		}
 		artURL := strings.TrimSpace(da.URL)
 		if artURL == "" {

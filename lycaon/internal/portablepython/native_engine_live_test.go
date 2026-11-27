@@ -201,7 +201,10 @@ print(f"OK:{sys.version_info.major}.{sys.version_info.minor}:rows={ws2.max_row}"
 
 	// 5. Fail-closed tampered library check (ZERO silent fallback to wazero).
 	tamperedDir := t.TempDir()
-	libName := pythonruntime.DefaultLibraryName(runtime.GOOS)
+	libName, err := pythonruntime.LibraryNameForPlatform(runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		t.Fatal(err)
+	}
 	origLib, err := os.ReadFile(filepath.Join(engineDir, libName))
 	if err != nil {
 		t.Fatal(err)
