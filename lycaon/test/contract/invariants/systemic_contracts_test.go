@@ -422,9 +422,12 @@ func TestSharedAnalysisRepeatedRunsPreserveFindingsAndLoadOnce(t *testing.T) {
 	if firstAST.Fset == nil || firstAST.Fset != secondAST.Fset {
 		t.Fatalf("expected shared token.FileSet across repeated LoadGoASTCorpus calls")
 	}
-	if len(firstFiles) != 1 || len(secondFiles) != 1 || firstFiles[0].Rel != secondFiles[0].Rel || firstFiles[0].AST != secondFiles[0].AST {
-		t.Fatalf("expected reused parsed AST and path across repeated LoadGoASTCorpus calls: first=%d (%s) second=%d (%s) sameAST=%v",
-			len(firstFiles), firstFiles[0].Rel, len(secondFiles), secondFiles[0].Rel, firstFiles[0].AST == secondFiles[0].AST)
+	if len(firstFiles) != 1 || len(secondFiles) != 1 {
+		t.Fatalf("expected 1 file from repeated LoadGoASTCorpus calls: first=%d second=%d", len(firstFiles), len(secondFiles))
+	}
+	if firstFiles[0].Rel != secondFiles[0].Rel || firstFiles[0].AST != secondFiles[0].AST {
+		t.Fatalf("expected reused parsed AST and path across repeated LoadGoASTCorpus calls: first=%s second=%s sameAST=%v",
+			firstFiles[0].Rel, secondFiles[0].Rel, firstFiles[0].AST == secondFiles[0].AST)
 	}
 	findGC := func(g *testcorpus.GoCorpus) []string {
 		var locs []string
