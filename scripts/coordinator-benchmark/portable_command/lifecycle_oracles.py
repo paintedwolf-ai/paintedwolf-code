@@ -11,9 +11,8 @@ def _settle_turn(application, session_id):
     application.request(f'/v1/sessions/{session_id}/abort', {})
     application.wait_for(
         lambda: (application.request('/harness/llm/pending').get('session_id') != session_id
-                 and application.request(f'/v1/sessions/{session_id}')['status'] == 'idle'),
+                 and application.request(f'/v1/sessions/{session_id}').get('status') in {'idle', 'interrupted', 'completed'}),
         'session abort settle',
-        session_id,
     )
 
 
