@@ -324,12 +324,13 @@ def generate_f03_case(base_seed: str, idx: int) -> F03Case:
     tree_spec = generate_tree_spec(base_seed, "F03", idx, _clean_tree_options(entry_count, max_depth=4))
     files = tree_spec.file_paths()
     open_tab = files[0] if files else "src/open_tab.txt"
-    # Always include an edit to the open tab plus generated ops up to op_count
+    other_files = [f for f in files if f != open_tab]
+    # Always include an edit to the open tab plus generated ops up to op_count (without deleting open_tab)
     extra_ops = generate_change_script(
         base_seed,
         "F03",
         idx,
-        files,
+        other_files,
         op_count=max(0, op_count - 1),
         allowed_ops=("create", "edit", "delete"),
     ).ops
