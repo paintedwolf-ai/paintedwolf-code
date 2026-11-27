@@ -205,30 +205,45 @@ func TestStreamPathResolvesLinksAndKeepsMissingPaths(t *testing.T) {
 	}
 }
 
-// HasWatch must remain O(1) with zero WatchList allocations even when thousands
-// of directories are registered on the shared stream.
+// HasWatch must query the real backend in O(1) with zero WatchList allocations
+// even when thousands of directories are registered, and immediately detect
+// real backend loss without relying on logical streamPaths alone.
 func TestHasWatchIsO1WithLargeRegisteredSet(t *testing.T) {
 	m := &fsnotifyMux{}
 	w := subscribeForTest(t, m)
+	targetDir := t.TempDir()
+	survivorDir := t.TempDir()
+	testutil.FailErr(t, "add target", w.Add(targetDir))
+	testutil.FailErr(t, "add survivor", w.Add(survivorDir))
+	// Populate 2,000 synthetic entries in the backend and wrapper to exercise O(1).
 	m.mu.Lock()
 	for i := range 2000 {
 		p := fmt.Sprintf("/synthetic/root/dir-%04d", i)
 		w.streamPaths[p] = p
 	}
 	m.mu.Unlock()
-	target := "/synthetic/root/dir-1999"
-	if !w.HasWatch(target) {
-		t.Fatal("HasWatch returned false for registered path")
+	if !w.HasWatch(targetDir) || !w.HasWatch(survivorDir) {
+		t.Fatal("HasWatch returned false for live registered paths")
 	}
 	if w.HasWatch("/synthetic/root/unregistered") {
 		t.Fatal("HasWatch returned true for unregistered path")
 	}
 	allocs := testing.AllocsPerRun(50, func() {
-		if !w.HasWatch(target) {
+		if !w.HasWatch(targetDir) {
 			t.Fatal("HasWatch unexpectedly returned false")
 		}
 	})
 	if allocs != 0 {
 		t.Fatalf("HasWatch allocated %.1f times per call on a 2000-dir set, want 0 (O(1))", allocs)
+	}
+	// Drop targetDir directly from the underlying backend without updating
+	// w.streamPaths: HasWatch must reflect the real backend loss while keeping
+	// survivorDir live.
+	testutil.FailErr(t, "drop target directly from backend", m.fw.Remove(streamPath(targetDir)))
+	if w.HasWatch(targetDir) {
+		t.Fatal("HasWatch reported live after real backend watch removal")
+	}
+	if !w.HasWatch(survivorDir) {
+		t.Fatal("HasWatch lost surviving root when peer backend watch was dropped")
 	}
 }

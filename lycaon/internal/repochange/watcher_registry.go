@@ -16,14 +16,21 @@ import (
 	"github.com/lycaon/lycaon/internal/workscope"
 )
 
+// replacementFence coordinates an in-flight Ensure replacement against a
+// concurrent CloseRoot without retaining per-path state after completion.
+type replacementFence struct {
+	retired bool
+}
+
 // watcherRegistry tracks per-project-dir worktree watchers.
 type watcherRegistry struct {
 	mu    sync.Mutex
 	byDir map[string]*worktreeWatcher
-	// gen is a monotonic per-root lifecycle generation bumped on CloseRoot so
-	// an in-flight Ensure replacement never resurrects a retired root.
-	gen     map[string]uint64
-	maxDirs int
+	// replacing tracks only currently in-flight Ensure replacements keyed by
+	// canonical root; entries are removed on completion or CloseRoot so closed
+	// paths never accumulate in memory.
+	replacing map[string]*replacementFence
+	maxDirs   int
 	// budget is process-wide: one descriptor pool for every worktree watcher.
 	budget   *watchfd.Budget
 	closed   bool
@@ -34,20 +41,12 @@ type watcherRegistry struct {
 // newWatcherRegistry returns an empty registry.
 func newWatcherRegistry() *watcherRegistry {
 	return &watcherRegistry{
-		byDir:    map[string]*worktreeWatcher{},
-		gen:      map[string]uint64{},
-		maxDirs:  watchfd.MaxDirs,
-		budget:   watchfd.NewProcessBudget(),
-		debounce: newDebouncer(DefaultDebounce),
+		byDir:     map[string]*worktreeWatcher{},
+		replacing: map[string]*replacementFence{},
+		maxDirs:   watchfd.MaxDirs,
+		budget:    watchfd.NewProcessBudget(),
+		debounce:  newDebouncer(DefaultDebounce),
 	}
-}
-
-func (r *watcherRegistry) bumpGenLocked(key string) uint64 {
-	if r.gen == nil {
-		r.gen = map[string]uint64{}
-	}
-	r.gen[key]++
-	return r.gen[key]
 }
 
 // WatchDirectory is a catalog-discovered directory and its immediate width.
@@ -179,22 +178,29 @@ func (r *watcherRegistry) Ensure(ctx context.Context, projectDir string) {
 		return
 	}
 	if existing, ok := r.byDir[key]; ok {
-		expectedGen := r.gen[key]
 		r.mu.Unlock()
 		if !existing.needsRebind() {
 			return
 		}
 		r.mu.Lock()
-		if r.closed || r.gen[key] != expectedGen || r.byDir[key] != existing {
+		if r.closed || r.byDir[key] != existing {
 			r.mu.Unlock()
 			return
 		}
 		delete(r.byDir, key)
+		if r.replacing == nil {
+			r.replacing = map[string]*replacementFence{}
+		}
+		fence := &replacementFence{}
+		r.replacing[key] = fence
 		r.mu.Unlock()
 		existing.close()
 		r.mu.Lock()
-		// A concurrent CloseRoot bumps r.gen[key], invalidating this replacement.
-		if r.closed || r.gen[key] != expectedGen || r.byDir[key] != nil {
+		if r.replacing[key] == fence {
+			delete(r.replacing, key)
+		}
+		// A concurrent CloseRoot retires fence, invalidating this replacement.
+		if r.closed || fence.retired || r.byDir[key] != nil {
 			r.mu.Unlock()
 			return
 		}
@@ -380,6 +386,10 @@ func (r *watcherRegistry) CloseAll() {
 	defer r.mu.Unlock()
 	r.closed = true
 	r.work.Seal()
+	for k, fence := range r.replacing {
+		fence.retired = true
+		delete(r.replacing, k)
+	}
 	for k, w := range r.byDir {
 		w.close()
 		delete(r.byDir, k)
@@ -396,7 +406,10 @@ func (r *watcherRegistry) CloseRoot(root string) {
 		return
 	}
 	r.mu.Lock()
-	r.bumpGenLocked(key)
+	if fence := r.replacing[key]; fence != nil {
+		fence.retired = true
+		delete(r.replacing, key)
+	}
 	w := r.byDir[key]
 	delete(r.byDir, key)
 	r.mu.Unlock()

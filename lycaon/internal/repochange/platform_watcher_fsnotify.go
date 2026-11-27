@@ -25,13 +25,26 @@ const rootErrorBuffer = 4
 // registrations rather than an instance.
 var sharedFsnotify = &fsnotifyMux{}
 
+type backendStream interface {
+	Add(path string) error
+	Remove(path string) error
+	Has(path string) bool
+	WatchList() []string
+	Close() error
+	Events() <-chan fsnotify.Event
+	Errors() <-chan error
+	Lost() <-chan string
+}
+
+var errWatchLost = errors.New("backend watch registration lost")
+
 type fsnotifyMux struct {
 	// ops serializes stream registration and lifetime. It is never held by
-	// dispatch, which fsnotify may wait on while holding its own lock.
+	// dispatch, which the backend may wait on while holding its own lock.
 	ops sync.Mutex
 	// mu guards routing; dispatch takes only mu.
 	mu    sync.Mutex
-	fw    *fsnotify.Watcher
+	fw    backendStream
 	roots map[*fsnotifyPlatformWatcher]struct{}
 	// routes maps each path the stream reports to the roots registered on it
 	// and the spelling each root registered.
@@ -57,7 +70,7 @@ func (m *fsnotifyMux) subscribe() (*fsnotifyPlatformWatcher, error) {
 	m.ops.Lock()
 	defer m.ops.Unlock()
 	if m.fw == nil {
-		fw, err := fsnotify.NewWatcher()
+		fw, err := newBackendStream()
 		if err != nil {
 			return nil, err
 		}
@@ -200,17 +213,22 @@ func (w *fsnotifyPlatformWatcher) WatchList() []string {
 	return out
 }
 
-// HasWatch reports in O(1) whether this root watcher still holds a registration
-// for path without scanning or allocating the shared stream's watch list.
+// HasWatch reports in O(1) with zero allocations whether the underlying
+// backend stream still holds a live watch registration for path.
 func (w *fsnotifyPlatformWatcher) HasWatch(path string) bool {
 	m := w.mux
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	if w.closed {
+	if w.closed || m.fw == nil {
+		m.mu.Unlock()
 		return false
 	}
-	_, ok := w.streamPaths[path]
-	return ok
+	stream, ok := w.streamPaths[path]
+	fw := m.fw
+	m.mu.Unlock()
+	if !ok {
+		return false
+	}
+	return fw.Has(stream)
 }
 
 func (w *fsnotifyPlatformWatcher) EventChannel() <-chan fsnotify.Event { return w.events }
@@ -220,9 +238,9 @@ func (w *fsnotifyPlatformWatcher) ErrorChannel() <-chan error          { return 
 // dispatch routes one stream until it closes. It never blocks on a root: a
 // root that cannot keep up loses events and receives an overflow, which its
 // loop closes with a resync exactly as it would a kernel queue overflow.
-func (m *fsnotifyMux) dispatch(fw *fsnotify.Watcher) {
-	events, errs := fw.Events, fw.Errors
-	for events != nil || errs != nil {
+func (m *fsnotifyMux) dispatch(fw backendStream) {
+	events, errs, lost := fw.Events(), fw.Errors(), fw.Lost()
+	for events != nil || errs != nil || lost != nil {
 		select {
 		case ev, ok := <-events:
 			if !ok {
@@ -236,8 +254,27 @@ func (m *fsnotifyMux) dispatch(fw *fsnotify.Watcher) {
 				continue
 			}
 			m.broadcast(err)
+		case stream, ok := <-lost:
+			if !ok {
+				lost = nil
+				continue
+			}
+			m.handleLost(stream)
 		}
 	}
+}
+
+// handleLost delivers a root-scoped watch-loss error only to watchers routed
+// on the lost stream path, leaving surviving roots uninterrupted.
+func (m *fsnotifyMux) handleLost(stream string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	listeners := m.routes[stream]
+	for w, path := range listeners {
+		delete(w.streamPaths, path)
+		w.sendError(errWatchLost)
+	}
+	delete(m.routes, stream)
 }
 
 // route delivers an event to every root registered on the event's directory or

@@ -315,3 +315,66 @@ func TestInotifyCloseRootRemovesDetachedInodesAndKeepsSurvivor(t *testing.T) {
 	testutil.FailErr(t, "write surviving file", os.WriteFile(filepath.Join(surviving.root, "kept.txt"), []byte("ok"), 0o644))
 	surviving.waitFor("kept.txt", WorktreeChangeUnknown)
 }
+
+func TestInotifyRealBackendLossFaultsRecoversAndPreservesSurvivor(t *testing.T) {
+	surviving := newInotifyRoot(t, 64)
+	targetRoot, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve target root", err)
+
+	var mu sync.Mutex
+	var targetChanges []WorktreeChange
+	unbind := RegisterObserver(func(_ context.Context, event Event) {
+		if event.ProjectDir == targetRoot && event.Kind == WorktreeChanged && event.Source == SourceWatcher {
+			mu.Lock()
+			targetChanges = append(targetChanges, event.Changes...)
+			mu.Unlock()
+		}
+	})
+	t.Cleanup(unbind)
+
+	surviving.registry.Ensure(t.Context(), targetRoot)
+	testutil.WaitFor(t, "both roots complete coverage", func() bool {
+		return surviving.registry.Coverage(surviving.root).Complete && surviving.registry.Coverage(targetRoot).Complete
+	})
+
+	// Drop targetRoot's watch directly from the real kernel inotify backend
+	// while keeping the directory and its inode intact (same-inode loss).
+	sharedFsnotify.ops.Lock()
+	fw := sharedFsnotify.fw
+	sharedFsnotify.ops.Unlock()
+	if fw == nil {
+		t.Fatal("shared inotify backend stream is nil")
+	}
+	testutil.FailErr(t, "remove target from backend stream", fw.Remove(streamPath(targetRoot)))
+
+	// Target transitions to faulted; surviving root stays live and complete.
+	if cov := surviving.registry.Coverage(targetRoot); !cov.Watching || !cov.Faulted || cov.Complete {
+		t.Fatalf("target coverage after real backend loss = %+v, want Faulted=true Complete=false", cov)
+	}
+	if cov := surviving.registry.Coverage(surviving.root); !cov.Watching || cov.Faulted || !cov.Complete {
+		t.Fatalf("surviving root disrupted by peer backend loss: %+v", cov)
+	}
+
+	// Rebind targetRoot via Ensure and verify positive settled delivery on both roots.
+	surviving.registry.Ensure(t.Context(), targetRoot)
+	testutil.WaitFor(t, "target recovers complete coverage", func() bool {
+		cov := surviving.registry.Coverage(targetRoot)
+		return cov.Watching && !cov.Faulted && cov.Complete
+	})
+
+	mu.Lock()
+	targetChanges = nil
+	mu.Unlock()
+	testutil.FailErr(t, "write recovered target file", os.WriteFile(filepath.Join(targetRoot, "recovered.txt"), []byte("live"), 0o644))
+	testutil.WaitFor(t, "recovered target delivers write", func() bool {
+		ResetDebouncerForTest(t.Context())
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.ContainsFunc(targetChanges, func(ch WorktreeChange) bool {
+			return ch.Path == "recovered.txt"
+		})
+	})
+
+	testutil.FailErr(t, "write surviving file", os.WriteFile(filepath.Join(surviving.root, "still-live.txt"), []byte("ok"), 0o644))
+	surviving.waitFor("still-live.txt", WorktreeChangeUnknown)
+}

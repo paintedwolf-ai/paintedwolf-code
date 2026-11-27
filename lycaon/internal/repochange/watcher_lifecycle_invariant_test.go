@@ -332,3 +332,23 @@ func TestEnsureReplacementAbortsWhenCloseRootIntervenes(t *testing.T) {
 		return reg.Coverage(root).Complete
 	})
 }
+
+func TestWatcherRegistryChurnLeavesNoRetainedRetirementState(t *testing.T) {
+	reg := newWatcherRegistry()
+	t.Cleanup(reg.CloseAll)
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve base", err)
+	for i := range 200 {
+		dir := filepath.Join(base, filepath.FromSlash("root"), string(rune('a'+i%26))+filepath.Base(t.TempDir()))
+		testutil.FailErr(t, "mkdir churn dir", os.MkdirAll(dir, 0o755))
+		reg.Ensure(t.Context(), dir)
+		reg.CloseRoot(dir)
+	}
+	reg.mu.Lock()
+	activeDirs := len(reg.byDir)
+	activeFences := len(reg.replacing)
+	reg.mu.Unlock()
+	if activeDirs != 0 || activeFences != 0 {
+		t.Fatalf("retained registry state after churn: byDir=%d replacing=%d, want 0/0", activeDirs, activeFences)
+	}
+}
