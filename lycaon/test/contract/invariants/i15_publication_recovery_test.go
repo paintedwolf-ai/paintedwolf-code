@@ -153,7 +153,32 @@ func (r *ProgramRuntime) publishRetained(ctx context.Context) error { return r.R
 			}),
 			want:           violates,
 			wantViolations: 1,
-			wantSubstring:  "ProgramRuntime.Run",
+			wantSubstring:  "ProgramRuntime.materializeProgramOutputs reaches command execution entrypoint ProgramRuntime.Run via ProgramRuntime.publishRetained",
+		},
+		"seeded transitive process launch through helper": {
+			files: with(cleanPublicationRecoveryTree, map[string]string{
+				"lycaon/internal/tools/native/command/runtime.go": `package command
+
+import (
+	"context"
+	"os/exec"
+)
+
+type ProgramRuntime struct {
+	Evaluate func(context.Context) error
+}
+
+func (r *ProgramRuntime) Run(ctx context.Context) error { return nil }
+
+func (r *ProgramRuntime) publishRetained(ctx context.Context) error {
+	_ = exec.Command("true")
+	return nil
+}
+`,
+			}),
+			want:           violates,
+			wantViolations: 1,
+			wantSubstring:  "ProgramRuntime.materializeProgramOutputs reaches os/exec process launch Command via ProgramRuntime.publishRetained",
 		},
 		"renamed anchor fails closed": {
 			files: with(cleanPublicationRecoveryTree, map[string]string{
