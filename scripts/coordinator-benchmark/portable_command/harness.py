@@ -106,7 +106,8 @@ def create_isolated_session(application, project_dir, case):
     posture = session_posture(case.get('profile'))
     session = application.request('/v1/sessions', {'project_id': attached['id'], 'posture': posture})
     sid = session['id']
-    application.request('/harness/model-limit', {'session_id': sid, 'limit': 20})
+    turn_budget = max(20, 4 + len(case.get('turns') or ()) * 16)
+    application.request('/harness/model-limit', {'session_id': sid, 'limit': turn_budget})
     observed_state = {}
     def ready():
         state = application.request('/v1/sessions/' + sid)
@@ -119,7 +120,8 @@ def create_isolated_session(application, project_dir, case):
     application.wait_for(ready, 'portable-command session ready', sid)
     surface = {
         'requested_profile': case.get('profile', 'implement'), 'requested_posture': posture,
-        'effective_posture': observed_state.get('posture') or session.get('posture') or '', 'offered_tools': [],
+        'effective_posture': observed_state.get('posture') or session.get('posture') or '',
+        'offered_tools': [], 'session_turn_budget': turn_budget,
     }
     return sid, attached['id'], root_id, surface
 
