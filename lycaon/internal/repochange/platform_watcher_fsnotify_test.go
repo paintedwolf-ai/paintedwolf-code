@@ -4,6 +4,7 @@ package repochange
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -201,5 +202,33 @@ func TestStreamPathResolvesLinksAndKeepsMissingPaths(t *testing.T) {
 	missing := filepath.Join(physical, "gone", "..", "missing")
 	if got := streamPath(missing); got != filepath.Join(physical, "missing") {
 		t.Fatalf("streamPath(missing) = %s", got)
+	}
+}
+
+// HasWatch must remain O(1) with zero WatchList allocations even when thousands
+// of directories are registered on the shared stream.
+func TestHasWatchIsO1WithLargeRegisteredSet(t *testing.T) {
+	m := &fsnotifyMux{}
+	w := subscribeForTest(t, m)
+	m.mu.Lock()
+	for i := range 2000 {
+		p := fmt.Sprintf("/synthetic/root/dir-%04d", i)
+		w.streamPaths[p] = p
+	}
+	m.mu.Unlock()
+	target := "/synthetic/root/dir-1999"
+	if !w.HasWatch(target) {
+		t.Fatal("HasWatch returned false for registered path")
+	}
+	if w.HasWatch("/synthetic/root/unregistered") {
+		t.Fatal("HasWatch returned true for unregistered path")
+	}
+	allocs := testing.AllocsPerRun(50, func() {
+		if !w.HasWatch(target) {
+			t.Fatal("HasWatch unexpectedly returned false")
+		}
+	})
+	if allocs != 0 {
+		t.Fatalf("HasWatch allocated %.1f times per call on a 2000-dir set, want 0 (O(1))", allocs)
 	}
 }

@@ -35,6 +35,7 @@ type worktreeWatcher struct {
 	scope           *sourcescope.Scope
 	reported        bool
 	faulted         bool
+	closed          bool
 	starting        bool
 	// overflowed holds between a dropped event window and the resync that
 	// closes it; overflows counts the windows for diagnostics.
@@ -233,15 +234,16 @@ func (w *worktreeWatcher) coverage() WatchCoverage {
 	return w.coverageLocked()
 }
 
-// verifyRootHealth detects silent root outages (such as Linux IN_UNMOUNT
-// dropping inotify watches or an unmounted volume disappearing/changing device)
-// and transitions the watcher into its faulted state with a bare resync.
+// verifyRootHealth detects root outages (missing root directory, mountpoint
+// identity change, or dropped root registration) and transitions the watcher
+// into its faulted state with a bare resync. Closed watchers suppress late
+// health transitions and notifications.
 func (w *worktreeWatcher) verifyRootHealth() bool {
 	if w == nil || w.root == "" {
 		return true
 	}
 	w.mu.Lock()
-	if w.faulted {
+	if w.closed || w.faulted {
 		w.mu.Unlock()
 		return false
 	}
@@ -260,9 +262,12 @@ func (w *worktreeWatcher) verifyRootHealth() bool {
 	}
 	transitioned := false
 	w.mu.Lock()
-	if !w.faulted {
+	if !w.closed && !w.faulted {
 		w.faulted = true
-		if !rootMissing {
+		// Record faultedInfo only when a different directory identity now
+		// occupies the path (e.g. an unmounted mountpoint), not when only the
+		// watch registration disappeared on the still-current live root.
+		if identityChanged {
 			w.faultedInfo = currentInfo
 		} else {
 			w.faultedInfo = nil
@@ -285,6 +290,10 @@ func (w *worktreeWatcher) needsRebind() bool {
 		return false
 	}
 	w.mu.Lock()
+	if w.closed {
+		w.mu.Unlock()
+		return false
+	}
 	alreadyFaulted := w.faulted
 	faultedInfo := w.faultedInfo
 	rootInfo := w.rootInfo
@@ -498,6 +507,9 @@ func classifyWatcherChange(op fsnotify.Op, isDir bool, statErr error) WorktreeCh
 
 func (w *worktreeWatcher) close() {
 	w.once.Do(func() {
+		w.mu.Lock()
+		w.closed = true
+		w.mu.Unlock()
 		w.refs.close()
 		if w.watcher != nil {
 			_ = w.watcher.Close()

@@ -5,7 +5,6 @@ package repochange
 import (
 	"errors"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 
@@ -201,24 +200,17 @@ func (w *fsnotifyPlatformWatcher) WatchList() []string {
 	return out
 }
 
-// HasWatch reports whether the underlying stream still holds a live watch for
-// path. On Linux, fsnotify removes watches silently on IN_UNMOUNT / IN_IGNORED
-// without delivering an event or error, so checking the stream's watch list
-// detects kernel-dropped watches.
+// HasWatch reports in O(1) whether this root watcher still holds a registration
+// for path without scanning or allocating the shared stream's watch list.
 func (w *fsnotifyPlatformWatcher) HasWatch(path string) bool {
 	m := w.mux
-	m.ops.Lock()
-	defer m.ops.Unlock()
-	if w.closed || m.fw == nil {
-		return false
-	}
 	m.mu.Lock()
-	stream, ok := w.streamPaths[path]
-	m.mu.Unlock()
-	if !ok {
+	defer m.mu.Unlock()
+	if w.closed {
 		return false
 	}
-	return slices.Contains(m.fw.WatchList(), stream)
+	_, ok := w.streamPaths[path]
+	return ok
 }
 
 func (w *fsnotifyPlatformWatcher) EventChannel() <-chan fsnotify.Event { return w.events }

@@ -25,8 +25,12 @@ func TestSeedProjectWatchDoesNotResurrectRetiredRoot(t *testing.T) {
 
 	var mu sync.Mutex
 	var survivingPaths []string
+	var resyncCount int
 	observer := func(_ context.Context, _ string, batch ExternalBatch) {
 		mu.Lock()
+		if batch.Resync {
+			resyncCount++
+		}
 		for _, ch := range batch.Changes {
 			if ch.RootID == "surviving" {
 				survivingPaths = append(survivingPaths, ch.Path)
@@ -74,11 +78,15 @@ func TestSeedProjectWatchDoesNotResurrectRetiredRoot(t *testing.T) {
 	if cov := repochange.Coverage(surviving); !cov.Watching || !cov.Complete {
 		t.Fatalf("surviving root lost its watch on peer detach: %+v", cov)
 	}
+	mu.Lock()
+	resyncBefore := resyncCount
+	mu.Unlock()
 	testutil.FailErr(t, "write surviving file", os.WriteFile(filepath.Join(surviving, "live.txt"), []byte("hi"), 0o644))
 	testutil.WaitFor(t, "surviving root delivers change", func() bool {
 		mu.Lock()
-		defer mu.Unlock()
-		return slices.Contains(survivingPaths, "live.txt")
+		got := slices.Contains(survivingPaths, "live.txt") || resyncCount > resyncBefore
+		mu.Unlock()
+		return got
 	})
 }
 

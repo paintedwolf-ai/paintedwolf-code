@@ -227,7 +227,7 @@ func TestWatcherTransitionsToFaultedOnRootOutageAndRecoversOnRebind(t *testing.T
 		})
 		defer unbind()
 
-		// Simulate fsnotify silently removing the watch on IN_UNMOUNT.
+		// Simulate kernel watch loss on a still-current live root.
 		platform.watchOff.Store(true)
 		cov := w.coverage()
 		if !cov.Faulted || cov.Complete {
@@ -236,5 +236,99 @@ func TestWatcherTransitionsToFaultedOnRootOutageAndRecoversOnRebind(t *testing.T
 		if !resynced.Load() {
 			t.Fatal("silent watch loss did not emit a resync event")
 		}
+		// Because the live root identity did not change into an unmounted
+		// mountpoint, needsRebind must immediately allow watch reinstallation.
+		if !w.needsRebind() {
+			t.Fatal("still-current root with dropped watch remained stuck in needsRebind=false")
+		}
+	})
+
+	t.Run("closed watcher suppresses late health notifications", func(t *testing.T) {
+		root := t.TempDir()
+		info, err := os.Stat(root)
+		testutil.FailErr(t, "stat root", err)
+		platform := &errorTestWatcher{events: make(chan fsnotify.Event), errors: make(chan error, 1), resync: make(chan struct{})}
+		w := &worktreeWatcher{root: root, watcher: platform, done: make(chan struct{}), watched: map[string]int{root: 1}, rootInfo: info}
+		var resyncs atomic.Int32
+		unbind := RegisterObserver(func(_ context.Context, event Event) {
+			if event.ProjectDir == root && event.Kind == WorktreeChanged && slices.Contains(event.Paths, ".") {
+				resyncs.Add(1)
+			}
+		})
+		defer unbind()
+
+		w.close()
+		platform.watchOff.Store(true)
+		if w.verifyRootHealth() {
+			t.Fatal("closed watcher reported healthy")
+		}
+		if w.needsRebind() {
+			t.Fatal("closed watcher requested rebind")
+		}
+		if got := resyncs.Load(); got != 0 {
+			t.Fatalf("closed watcher emitted %d late resync notifications, want 0", got)
+		}
+	})
+}
+
+type barrierCloseWatcher struct {
+	errorTestWatcher
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (b *barrierCloseWatcher) Close() error {
+	close(b.entered)
+	<-b.release
+	return nil
+}
+
+func TestEnsureReplacementAbortsWhenCloseRootIntervenes(t *testing.T) {
+	reg := newWatcherRegistry()
+	t.Cleanup(reg.CloseAll)
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve root", err)
+	info, err := os.Stat(root)
+	testutil.FailErr(t, "stat root", err)
+
+	barrier := &barrierCloseWatcher{
+		errorTestWatcher: errorTestWatcher{events: make(chan fsnotify.Event), errors: make(chan error, 1), resync: make(chan struct{})},
+		entered:          make(chan struct{}),
+		release:          make(chan struct{}),
+	}
+	barrier.watchOff.Store(true) // triggers needsRebind() == true on Ensure
+	existing := &worktreeWatcher{
+		root:     root,
+		watcher:  barrier,
+		done:     make(chan struct{}),
+		watched:  map[string]int{root: 1},
+		rootInfo: info,
+	}
+	reg.mu.Lock()
+	reg.byDir[root] = existing
+	reg.mu.Unlock()
+
+	ensureDone := make(chan struct{})
+	go func() {
+		defer close(ensureDone)
+		reg.Ensure(t.Context(), root)
+	}()
+
+	// Wait until Ensure has removed existing and paused inside existing.close().
+	testutil.AwaitClosed(t, "Ensure enters close barrier", barrier.entered)
+
+	// Concurrent CloseRoot retires the root while Ensure is mid-replacement.
+	reg.CloseRoot(root)
+	close(barrier.release)
+	testutil.AwaitClosed(t, "Ensure finishes after CloseRoot", ensureDone)
+
+	if cov := reg.Coverage(root); cov.Watching {
+		t.Fatalf("stale Ensure resurrected retired root after CloseRoot: %+v", cov)
+	}
+
+	// Subsequent valid reattachment succeeds cleanly.
+	reg.Ensure(t.Context(), root)
+	testutil.WaitFor(t, "reattached root completes coverage", func() bool {
+		return reg.Coverage(root).Complete
 	})
 }
