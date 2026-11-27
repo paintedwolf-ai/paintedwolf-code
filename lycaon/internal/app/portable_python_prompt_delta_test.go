@@ -9,10 +9,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -117,6 +119,7 @@ func TestPortablePythonMatchedModelRequestDelta(t *testing.T) {
 				}),
 			}
 			cfg.TestLLMClient = capClient
+			cfg.TestDecider = nonAbstainingDecider{}
 
 			appInst, err := Build(t.Context(), cfg)
 			testutil.FailErr(t, "app.Build "+variant, err)
@@ -272,3 +275,42 @@ func rewriteCoordinatorSurfacesPython(t *testing.T, raw []byte, mode string) str
 	testutil.FailErr(t, "marshal rewritten coordinator-surfaces.yaml", err)
 	return string(out)
 }
+
+// nonAbstainingDecider answers turn-load questions deterministically without
+// abstaining and without pre-loading optional loadable tools onto the floor.
+type nonAbstainingDecider struct{}
+
+func (nonAbstainingDecider) Decide(_ context.Context, _ decide.Head, _ any, questions map[string]decide.Question) (decide.Result, error) {
+	ans := make(decide.Answers, len(questions))
+	for k, q := range questions {
+		probs := make(map[string]float64, len(q.Options))
+		choice := ""
+		for opt := range q.Options {
+			if choice == "" {
+				choice = opt
+			}
+			probs[opt] = 0.0
+		}
+		if q.Kind == decide.KindChoice && choice != "" {
+			probs[choice] = 1.0
+		}
+		ans[k] = decide.Answer{
+			Kind:          q.Kind,
+			Choice:        choice,
+			Probabilities: probs,
+			Confidence:    1.0,
+		}
+	}
+	return decide.Result{
+		Answers: ans,
+		Engine:  decide.Engine{Name: "test", Model: "deterministic", Device: "cpu"},
+	}, nil
+}
+
+func (nonAbstainingDecider) Rank(_ context.Context, _ decide.Head, _ string, candidates []string) ([]float64, decide.Engine, error) {
+	return make([]float64, len(candidates)), decide.Engine{Name: "test"}, nil
+}
+func (nonAbstainingDecider) HoldPriority(context.Context) func() { return func() {} }
+func (nonAbstainingDecider) Available() bool                     { return true }
+func (nonAbstainingDecider) Loaded(decide.Head) bool             { return true }
+func (nonAbstainingDecider) Speed() time.Duration                { return time.Millisecond }
