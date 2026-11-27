@@ -199,6 +199,11 @@ def main():
             **awk_res, "profile": "worker_readonly", "posture": s_q09["posture"],
             "zero_external_launches": awk_zero_ext, "passed": awk_ok,
         }
+        app.request(f"/v1/sessions/{s_q09['session_id']}/abort", {})
+        app.wait_for(
+            lambda: app.request("/harness/llm/pending").get("session_id") != s_q09["session_id"],
+            "q09 session abort settle",
+        )
 
         # Session 2: plan_review_readonly (Q08/Q20 oar-unavailable-remedy)
         q20_dir = work_dir / "fixture-q20"
