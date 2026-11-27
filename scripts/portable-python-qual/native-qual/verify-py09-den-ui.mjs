@@ -77,22 +77,22 @@ try {
     break;
   }
 
-  // Click the reopened project/session in the sidebar if not already active.
-  const bodyInitial = await page.locator("body").innerText();
-  if (!bodyInitial.includes("PY09 witness completed") && !bodyInitial.includes("py09_witness.py")) {
-    const projBtn = page.locator("button, a, [role='button'], [role='treeitem']").filter({
-      hasText: /py09-den-reopen/i,
+  // Open the reopened project "py09-den-reopen" from Recents / sidebar.
+  const projText = page.getByText("py09-den-reopen", { exact: true }).first();
+  if (await projText.count()) {
+    await projText.click({ timeout: 10_000 }).catch(() => {});
+    await page.waitForTimeout(3000);
+  }
+
+  // If the session isn't already open in Den, click it in the project session list.
+  const bodyAfterProj = await page.locator("body").innerText();
+  if (!bodyAfterProj.includes("PY09 witness completed") && !bodyAfterProj.includes("py09_witness.py")) {
+    const sessItem = page.locator("button, a, [role='button'], [role='treeitem'], li").filter({
+      hasText: /Run py09_witness|PY09 witness|py09_witness|New chat|Session/i,
     }).first();
-    if (await projBtn.count()) {
-      await projBtn.click({ timeout: 10_000 }).catch(() => {});
-      await page.waitForTimeout(1500);
-    }
-    const sessBtn = page.locator("button, a, [role='button'], [role='treeitem']").filter({
-      hasText: /Run py09_witness|PY09 witness|py09_witness/i,
-    }).first();
-    if (await sessBtn.count()) {
-      await sessBtn.click({ timeout: 10_000 }).catch(() => {});
-      await page.waitForTimeout(2500);
+    if (await sessItem.count()) {
+      await sessItem.click({ timeout: 10_000 }).catch(() => {});
+      await page.waitForTimeout(3000);
     }
   }
 
