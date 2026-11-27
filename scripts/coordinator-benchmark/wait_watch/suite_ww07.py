@@ -36,6 +36,7 @@ if str(REPO_ROOT / "scripts") not in sys.path:
 
 from application_environment import application_environment  # noqa: E402
 from bootstrap_policy import open_request  # noqa: E402
+from capture_storage import checkpoint_closed_store  # noqa: E402
 from portable_command.harness import (  # noqa: E402
     SSECollector,
     create_isolated_session,
@@ -138,14 +139,15 @@ class RestartableSidecar:
         )
         save(self.directory / "ownership.json", {"pid": self.process.pid, "port": self.port, "restarts": self.restart_count})
 
-    def stop(self) -> None:
-        if self.process is not None and self.process.poll() is None:
-            self.process.terminate()
+    def stop(self) -> subprocess.Popen[Any] | None:
+        proc = self.process
+        if proc is not None and proc.poll() is None:
+            proc.terminate()
             try:
-                self.process.wait(timeout=20)
+                proc.wait(timeout=20)
             except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait(timeout=10)
+                proc.kill()
+                proc.wait(timeout=10)
         self.process = None
         if self.log is not None:
             try:
@@ -153,9 +155,13 @@ class RestartableSidecar:
             except Exception:
                 pass
             self.log = None
+        return proc
 
     def restart(self, *, timeout_s: float = 25.0) -> None:
-        self.stop()
+        proc = self.stop()
+        db_path = self.directory / "store.db"
+        if proc is not None and db_path.is_file():
+            checkpoint_closed_store(db_path, proc)
         self.restart_count += 1
         self.start()
         self.ready(timeout_s=timeout_s)
@@ -366,7 +372,7 @@ def run_c23_draft_sidecar_restart(
         source_obs.record_event("draft_a_dismissed", handle=handle_a, outcome=dismiss_resp.get("outcome"))
 
         # 3. Real sidecar restart (D4).
-        sse.stop()
+        sse.close()
         sse = None
         app.restart(timeout_s=timeout_s)
         source_obs.record_event("sidecar_restarted", restart_count=app.restart_count)
@@ -434,7 +440,7 @@ def run_c23_draft_sidecar_restart(
         )
     finally:
         if sse is not None:
-            sse.stop()
+            sse.close()
         app.close()
 
 
@@ -591,7 +597,7 @@ def run_c25_sidecar_dispatch_restart(
         source_obs.record_event("run_dispatched", watch_id=watch_id, run_id=run_id, run_session_id=run_session_id)
 
         # 3. Restart sidecar while run is in-flight / just dispatched (D4).
-        sse.stop()
+        sse.close()
         sse = None
         app.restart(timeout_s=timeout_s)
         source_obs.record_event("sidecar_restarted", restart_count=app.restart_count)
@@ -641,7 +647,7 @@ def run_c25_sidecar_dispatch_restart(
         )
     finally:
         if sse is not None:
-            sse.stop()
+            sse.close()
         app.close()
 
 
