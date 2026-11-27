@@ -36,7 +36,7 @@ func TestSymbolFederationDoesNotCycleBeyondRetainedProjectCapacity(t *testing.T)
 	for attempt := range 2 {
 		pending, terminal := 0, 0
 		for _, target := range symbolProjects(leg.Roots) {
-			result := e.searchProject(t.Context(), leg, filter, target)
+			result := e.searchProject(t.Context(), leg, filter, target, unboundedSymbolAllocation)
 			testutil.FailErr(t, "search project slice", result.err)
 			for _, gap := range result.coverage.Gaps {
 				switch gap.Reason {
@@ -65,14 +65,14 @@ func TestSymbolUnretainedForegroundCompletionAndCancellation(t *testing.T) {
 	filter, err := search.CompileSymbolFilter(leg)
 	testutil.FailErr(t, "compile overflow query", err)
 	target := symbolProject{id: p.ID, rootIDs: []string{p.Roots[0].ID}}
-	result := e.searchProject(t.Context(), leg, filter, target)
+	result := e.searchProject(t.Context(), leg, filter, target, unboundedSymbolAllocation)
 	testutil.FailErr(t, "complete unretained foreground search", result.err)
 	if len(result.hits) != 1 || len(result.coverage.Gaps) != 0 || len(e.progress.entries) != 0 {
 		t.Fatalf("complete unretained search acquired a false coverage gap or retained state: %+v", result)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	result = e.searchProject(ctx, leg, filter, target)
+	result = e.searchProject(ctx, leg, filter, target, unboundedSymbolAllocation)
 	if !errors.Is(result.err, context.Canceled) || len(e.progress.entries) != 0 {
 		t.Fatalf("unretained cancellation=%+v", result)
 	}
@@ -89,7 +89,7 @@ func TestSymbolActiveCacheCapacityDoesNotAdvertiseLostProgress(t *testing.T) {
 	leg.Name = "Target"
 	filter, err := search.CompileSymbolFilter(leg)
 	testutil.FailErr(t, "compile capacity query", err)
-	result := e.searchProject(t.Context(), leg, filter, symbolProject{id: p.ID, rootIDs: []string{p.Roots[0].ID}, retainProgress: true})
+	result := e.searchProject(t.Context(), leg, filter, symbolProject{id: p.ID, rootIDs: []string{p.Roots[0].ID}, retainProgress: true}, unboundedSymbolAllocation)
 	testutil.FailErr(t, "search without retained capacity", result.err)
 	if len(result.hits) != 48 || len(result.coverage.Gaps) != 1 || result.coverage.Gaps[0].Reason != projectsource.DeclarationSymbolBudget || result.coverage.Gaps[0].Limit != symbolProgressLimit {
 		t.Fatalf("unretained slice advertised resumable progress: %+v", result)

@@ -212,9 +212,10 @@ func TestRouterOnlyCallsIndexWarmingIncompleteCoverage(t *testing.T) {
 // settled, so it reports truncation until discovery finishes.
 func TestExportReportsTruncatedWhileSourceRootWarms(t *testing.T) {
 	root := sourcecatalog.Root{ID: "export-warming-root", Path: t.TempDir()}
+	codeExec := &CodeExecutor{catalog: sourcecatalog.Process(), legDeadline: expiredCodeLegDeadline}
 	svc := &Service{router: NewRouter(
 		fakeExecutor{source: ExecutorStore},
-		&CodeExecutor{catalog: sourcecatalog.Process()},
+		codeExec,
 		fakeExecutor{source: ExecutorSymbol},
 	)}
 	compileCtx := CompileContext{
@@ -235,6 +236,7 @@ func TestExportReportsTruncatedWhileSourceRootWarms(t *testing.T) {
 	}
 
 	testutil.FailErr(t, "settle source inventory", catalogtest.AwaitIndex(t.Context(), sourcecatalog.Process(), "p1", root))
+	codeExec.legDeadline = unboundedCodeLegDeadline
 	settled, err := svc.Export(t.Context(), "small-export-token", compileCtx)
 	testutil.FailErr(t, "export after settle", err)
 	if settled.Truncated {

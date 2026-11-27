@@ -109,9 +109,6 @@ func symbolHitNames(result search.ExecutorReport) []string {
 
 func TestSymbolRootAndDependencyScopesRefineToReference(t *testing.T) {
 	e, p, leg := symbolProgressFixture(t, 2)
-	// The result cap is under test, not elapsed time: no leg here may end on
-	// its wall clock, so the budgets differ only in their caps.
-	e.wallBudget = time.Hour
 	root := p.Roots[0]
 	testutil.FailErr(t, "create dependency fixture", os.MkdirAll(filepath.Join(root.Path, "node_modules/lib"), 0700))
 	replaceSymbolInput(t, root.Path, "node_modules/lib/dependency.go", "package lib\nfunc TargetDependency() {}\n")
@@ -167,5 +164,26 @@ func TestSymbolRootAndDependencyScopesRefineToReference(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestSymbolExecutorReportsTimeBudgetWhenLegBudgetExpires(t *testing.T) {
+	e, _, leg := symbolProgressFixture(t, 2)
+	e.legBudget = func(ctx context.Context, budget search.SearchBudget) (context.Context, context.CancelFunc, search.SymbolAllocation) {
+		legCtx, cancel := context.WithDeadline(ctx, time.Unix(0, 0))
+		return legCtx, cancel, budget.SymbolAllocation()
+	}
+	leg.Budget = search.BudgetInteractive
+	report, err := e.Run(t.Context(), search.PlanLeg{Symbol: leg})
+	testutil.FailErr(t, "expired symbol leg", err)
+	hasTimeBudget := false
+	for _, issue := range report.Issues {
+		if issue.Executor == search.ExecutorSymbol && issue.Reason == search.IssueTimeBudget {
+			hasTimeBudget = true
+			break
+		}
+	}
+	if !hasTimeBudget {
+		t.Fatalf("issues = %+v, want %q", report.Issues, search.IssueTimeBudget)
 	}
 }
