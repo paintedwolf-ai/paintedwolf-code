@@ -10,7 +10,7 @@ Choose the route for the protocol and declare it on the call that uses it.
 ## What each mode carries
 
 | You need | Carried by | What you do |
-|----------|-----------|-------------|
+|---|---|---|
 {% if profile_command_network_egress %}| One HTTP(S) exchange — API, webhook, login, download or upload | Native `curl` in `command` | Pass URL, method, headers and body via curl flags (`-o` saves output, `--cacert`/`--capath` scoped trust, `--cert`/`--key`/`--pass` mTLS, `-T` upload, `-v` diagnostics). Loopback needs `capability_request.loopback_connect`; `--resolve host:port:127.0.0.1` or `--connect-to` keeps the host name.{% if can_command_external_selector %} Never `external -- curl`.{% endif %} |
 {% endif %}{% if profile_has_fetch_url %}| **Reading a web page or documentation** | `fetch_url` | Pass the URL for extracted markdown, cached `offset`/`limit` ranges, or screened images{% if profile_command_network_egress %}; use `curl` for raw bytes{% endif %} |
 {% endif %}| HTTP(S) from a process — package manager, build, test suite | Mediated HTTP proxy (`HTTP_PROXY` / `HTTPS_PROXY`) | Nothing — proxy-aware HTTP clients already work |
