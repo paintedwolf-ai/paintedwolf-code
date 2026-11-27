@@ -73,7 +73,9 @@ def run_g03_sidecar(
 
         pid, rids = sidecar.driver.attach_project([repo_dir])
         wait_catalog_settled(sidecar.driver, pid, rids[0], max_wait_s=15.0)
-        batch_size = 20
+        # Keep G03 refusal batches small (4 calls/session) so consecutive-rejection
+        # turn guards never halt the session mid-batch.
+        batch_size = 4
         for batch_start in range(0, instances, batch_size):
             batch_end = min(instances, batch_start + batch_size)
             session = AgentToolSession(sidecar, pid)
