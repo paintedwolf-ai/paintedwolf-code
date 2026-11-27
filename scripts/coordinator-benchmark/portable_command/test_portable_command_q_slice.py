@@ -43,7 +43,7 @@ class PortableCommandQSliceTests(unittest.TestCase):
                 'program_id': 'p1', 'detail_ref': 'output:program-source:p1', 'state': 'rejected', 'status': 2, 'executed_children': 0,
                 'stderr': 'touch: PROGRESS_MISSING [PROGRESS_MISSING]\n', 'stop_code': 'PROGRESS_MISSING',
                 'completed_effects': 0, 'uncertain_effects': 0, 'replay_available': False,
-                'refusal': {'code': 'PROGRESS_MISSING', 'feedback': 'Cause: Edits and delegated work start only after the deliverables are recorded in the progress checklist. Next: Record the checklist, then retry the same rejected call.\nCode: PROGRESS_MISSING', 'details': {}},
+                'refusal': {'code': 'PROGRESS_MISSING', 'feedback': 'Cause: Edits and delegated work start only after the deliverables are recorded in the progress checklist. Next: Record the checklist, then retry the same rejected call.\nCode: PROGRESS_MISSING', 'details': {'source_start_byte': 0, 'source_end_byte': 13}},
             }
             payload3 = {'program_id': 'p2', 'state': 'completed', 'status': 0, 'stdout': '', 'stderr': ''}
             db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?), ('m2','sess1234',2,'tool','c2',?), ('m3','sess1234',3,'tool','c3',?)", (

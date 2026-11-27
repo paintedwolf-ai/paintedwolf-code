@@ -216,7 +216,7 @@ def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, rece
             and any(e.get('program_id') != rej_pid and e.get('state') == 'completed' and e.get('effect_certainty') == 'completed' for e in execs)
         )
         resubmit_ok = bool(zero_ok and (rej_payload or {}).get('replay_available') is False and source_matched and source_record_ok and (fresh_write_ok or len(turn_records or ()) == 1))
-        recovery = {**recovery, 'cause': 'missing_progress', 'remedy': remedy, 'whole_program_resubmit_allowed': resubmit_ok}
+        recovery = {**recovery, 'cause': 'missing_progress', 'remedy': remedy, 'whole_program_resubmit_allowed': resubmit_ok, 'source_span_required': False}
         if zero_ok:
             recovery = {**recovery, 'zero_program_effects': True, 'effect_certainty_required': True}
             facts['zero_program_effects'] = True if fresh_write_ok else (baseline_hashes is None or final_hashes == baseline_hashes)
