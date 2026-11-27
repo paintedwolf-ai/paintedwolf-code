@@ -205,12 +205,11 @@ func applySourceRename(plan *sourceMutationPlan) error {
 	if err := requireSourceIdentity(plan.FromAbs, plan.EntryIdentity); err != nil {
 		return err
 	}
+	beforeReceipt, _ := sourcefeed.CaptureMetadataReceipt(plan.FromAbs)
 	if err := fseffect.RenameGuarded(plan.RootPath, filepath.FromSlash(plan.FromPath), filepath.FromSlash(plan.ToPath), plan.EntryIdentity); err != nil {
 		return err
 	}
-	if err := requireSourceIdentity(plan.ToAbs, plan.EntryIdentity); err == nil {
-		plan.RenameReceipt, _ = sourcefeed.CaptureMetadataReceipt(plan.ToAbs)
-	}
+	plan.RenameReceipt, _ = sourcefeed.CaptureVerifiedRenameReceipt(plan.ToAbs, beforeReceipt)
 	return nil
 }
 

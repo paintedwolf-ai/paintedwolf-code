@@ -34,6 +34,29 @@ func CaptureMetadataReceipt(absPath string) (*MetadataReceipt, bool) {
 	return &MetadataReceipt{state: state}, true
 }
 
+// CaptureVerifiedRenameReceipt performs a single Lstat on toAbs and binds the
+// resulting post-rename receipt to pre-rename owner proof `before`. If the entry
+// was replaced (different inode) or mutated (mode, size, or mtime diverged from
+// before) between rename and capture, it returns (nil, false) to fail open.
+func CaptureVerifiedRenameReceipt(toAbs string, before *MetadataReceipt) (*MetadataReceipt, bool) {
+	if before == nil || before.state.absent || before.state.info == nil {
+		return nil, false
+	}
+	after, ok := CaptureMetadataReceipt(toAbs)
+	if !ok || after == nil || after.state.info == nil {
+		return nil, false
+	}
+	if !os.SameFile(before.state.info, after.state.info) {
+		return nil, false
+	}
+	if after.state.mode != before.state.mode ||
+		after.state.size != before.state.size ||
+		after.state.modTimeNano != before.state.modTimeNano {
+		return nil, false
+	}
+	return after, true
+}
+
 type hostWriteTarget struct {
 	path, digest string
 	preCaptured  *hostWriteState

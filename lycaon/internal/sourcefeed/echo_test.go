@@ -174,3 +174,74 @@ func TestHostRenameReceiptBarrierDoesNotAdoptConcurrentOutsideChange(t *testing.
 		}
 	}
 }
+
+// Decision 056 pre-capture window controls:
+// 1. Simple matching rename binds post-rename receipt to pre-rename owner metadata and suppresses echo.
+// 2. Replacement between rename and capture fails open (nil receipt -> external change observed).
+// 3. Same-inode outside write between rename and capture fails open (nil receipt -> external change observed).
+func TestHostRenamePreCaptureWindowControls(t *testing.T) {
+	t.Run("simple_matching_rename", func(t *testing.T) {
+		dir := t.TempDir()
+		src := filepath.Join(dir, "seed.txt")
+		dst := filepath.Join(dir, "renamed.txt")
+		testutil.FailErr(t, "seed", os.WriteFile(src, []byte("seed content\n"), 0o644))
+		before, ok := CaptureMetadataReceipt(src)
+		if !ok || before == nil {
+			t.Fatal("pre-rename CaptureMetadataReceipt failed")
+		}
+		testutil.FailErr(t, "rename", os.Rename(src, dst))
+		after, ok := CaptureVerifiedRenameReceipt(dst, before)
+		if !ok || after == nil {
+			t.Fatal("CaptureVerifiedRenameReceipt rejected matching rename")
+		}
+		prepared, err := prepareChanges([]Change{{
+			ProjectID: "proj-prec", WorkspaceID: "ws-prec", WorkspaceKind: "project",
+			RootID: "r1", Path: "renamed.txt", FromPath: "seed.txt",
+			AbsPath: dst, FromAbsPath: src, MetadataReceipt: after,
+			Op: "rename", Origin: "user",
+		}}, false)
+		testutil.FailErr(t, "prepareChanges", err)
+		noteHostWritePaths(prepared.writePaths)
+		if !isRecentHostWrite(dst) || !isRecentHostWrite(src) {
+			t.Fatal("matching rename did not suppress both destination and source echoes")
+		}
+	})
+
+	t.Run("replacement_before_capture_fails_open", func(t *testing.T) {
+		dir := t.TempDir()
+		src := filepath.Join(dir, "seed.txt")
+		dst := filepath.Join(dir, "renamed.txt")
+		testutil.FailErr(t, "seed", os.WriteFile(src, []byte("seed content\n"), 0o644))
+		before, ok := CaptureMetadataReceipt(src)
+		if !ok || before == nil {
+			t.Fatal("pre-rename CaptureMetadataReceipt failed")
+		}
+		testutil.FailErr(t, "rename", os.Rename(src, dst))
+		// External replacement happens BEFORE post-rename receipt capture.
+		tmp := filepath.Join(dir, ".tmp.replace")
+		testutil.FailErr(t, "write replacement", os.WriteFile(tmp, []byte("seed content\n"), 0o644))
+		testutil.FailErr(t, "replace dst", os.Rename(tmp, dst))
+		after, ok := CaptureVerifiedRenameReceipt(dst, before)
+		if ok || after != nil {
+			t.Fatal("CaptureVerifiedRenameReceipt adopted a replaced inode before capture")
+		}
+	})
+
+	t.Run("same_inode_outside_write_before_capture_fails_open", func(t *testing.T) {
+		dir := t.TempDir()
+		src := filepath.Join(dir, "seed.txt")
+		dst := filepath.Join(dir, "renamed.txt")
+		testutil.FailErr(t, "seed", os.WriteFile(src, []byte("seed content\n"), 0o644))
+		before, ok := CaptureMetadataReceipt(src)
+		if !ok || before == nil {
+			t.Fatal("pre-rename CaptureMetadataReceipt failed")
+		}
+		testutil.FailErr(t, "rename", os.Rename(src, dst))
+		// Same-inode external write happens BEFORE post-rename receipt capture.
+		testutil.FailErr(t, "same-inode outside write", os.WriteFile(dst, []byte("outside mutated before capture\n"), 0o644))
+		after, ok := CaptureVerifiedRenameReceipt(dst, before)
+		if ok || after != nil {
+			t.Fatal("CaptureVerifiedRenameReceipt adopted a same-inode outside write before capture")
+		}
+	})
+}
