@@ -55,12 +55,16 @@ func openCommandWindow(ctx context.Context, tctx tools.ToolContext, toolName, co
 	return commandWindow{open: open}
 }
 
-// outsideRootSpecs are the write roots beyond the project the window compares.
+// outsideRootSpecs are the write roots beyond the project the window
+// compares, and the granted shared temp locations it reports as unobserved.
 func outsideRootSpecs(tctx tools.ToolContext) []sourceledger.OutsideRootSpec {
-	roots := tctx.OutsideWriteRoots()
-	out := make([]sourceledger.OutsideRootSpec, 0, len(roots))
+	roots, unobserved := tctx.OutsideWriteRoots()
+	out := make([]sourceledger.OutsideRootSpec, 0, len(roots)+len(unobserved))
 	for _, root := range roots {
 		out = append(out, sourceledger.OutsideRootSpec{Path: root.Path, Omit: root.Omit})
+	}
+	for _, path := range unobserved {
+		out = append(out, sourceledger.OutsideRootSpec{Path: path, Gap: api.SourceWindowGapSharedTemp})
 	}
 	return out
 }
@@ -73,7 +77,11 @@ func unobservedFolders(tctx tools.ToolContext, outside []sourceledger.OutsideRoo
 		out = append(out, api.CommandFolderCoverage{Folder: root.Path, Coverage: api.SourceWindowCoverageNotObserved, Reason: api.SourceWindowGapBaselineIncomplete})
 	}
 	for _, root := range outside {
-		out = append(out, api.CommandFolderCoverage{Folder: root.Path, Coverage: api.SourceWindowCoverageNotObserved, Reason: api.SourceWindowGapBaselineIncomplete})
+		reason := root.Gap
+		if reason == "" {
+			reason = api.SourceWindowGapBaselineIncomplete
+		}
+		out = append(out, api.CommandFolderCoverage{Folder: root.Path, Coverage: api.SourceWindowCoverageNotObserved, Reason: reason})
 	}
 	return out
 }

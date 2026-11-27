@@ -6,8 +6,13 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/api/requestscope"
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -70,17 +75,60 @@ func (s *Trees) chatLocations(ctx context.Context, scope pagedview.Scope, p *pro
 		return chatLocationProjection{}, err
 	}
 	var out chatLocationProjection
+	scratchCount := 0
 	for _, location := range locations {
-		if !location.Hidden && !pathInsideAttached(p, projectroot.OutsideAbs(location.Anchor)) {
-			dto := chatLocationDTO(p, location)
-			if s.LocationAccess != nil && dto.Available {
-				dto.Access = s.LocationAccess(chatID, p.ID, dto.Path, location.Kind == sourceledger.ChatLocationFile)
-			}
-			out.details = append(out.details, dto)
-			out.roots = append(out.roots, chatLocationRoot(dto, location.AnchorIdentity))
+		if location.Hidden || pathInsideAttached(p, projectroot.OutsideAbs(location.Anchor)) {
+			continue
 		}
+		dto := chatLocationDTO(p, location)
+		scratch := labelScratch(ctx, s.Views.SessionQueries, chatID, &dto)
+		if !scratch && s.LocationAccess != nil && dto.Available {
+			dto.Access = s.LocationAccess(chatID, p.ID, dto.Path, location.Kind == sourceledger.ChatLocationFile)
+		}
+		root := chatLocationRoot(dto, location.AnchorIdentity)
+		if scratch {
+			root.Hide = enginepaths.ProgramTempDirName
+			out.details = slices.Insert(out.details, scratchCount, dto)
+			out.roots = slices.Insert(out.roots, scratchCount, root)
+			scratchCount++
+			continue
+		}
+		out.details = append(out.details, dto)
+		out.roots = append(out.roots, root)
 	}
 	return out, nil
+}
+
+// labelScratch names a chat's own scratch location "@scratch" and a worker's
+// by the worker's title, and reports the session's own write access there.
+func labelScratch(ctx context.Context, sessions requestscope.Sessions, chatID string, dto *wire.SourceChatLocation) bool {
+	scratch, owner, ok := confine.SessionScratchOwner(dto.Path)
+	if !ok || !confine.PathEqual(scratch, dto.Path) {
+		return false
+	}
+	dto.Label = "@scratch"
+	if owner != chatID {
+		worker := "worker"
+		if session, err := sessions.Get(ctx, owner); err == nil && session.ParentSessionID == chatID && strings.TrimSpace(session.Title) != "" {
+			worker = strings.TrimSpace(session.Title)
+		}
+		dto.Label = "@scratch (" + worker + ")"
+	}
+	dto.Access = &wire.SourceLocationAccess{Path: dto.Path, Mode: "write", Tree: true, Scope: "chat"}
+	return true
+}
+
+// ownsScratch reports whether abs lies in the scratch of chat or one of its workers.
+func ownsScratch(ctx context.Context, sessions requestscope.Sessions, chatID, abs string) bool {
+	_, owner, ok := confine.SessionScratchOwner(abs)
+	if !ok {
+		return false
+	}
+	if owner == chatID {
+		return true
+	}
+	session, err := sessions.Get(ctx, owner)
+	return err == nil && session.ParentSessionID == chatID
 }
 
 func (n sourceReadNavigation) outsideLocations() []wire.SourceChatLocation {

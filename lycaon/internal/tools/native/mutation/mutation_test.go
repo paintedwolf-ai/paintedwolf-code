@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -305,7 +306,7 @@ func TestMktempUsesTheSessionTMPDIR(t *testing.T) {
 	for _, words := range [][]string{{"mktemp"}, {"mktemp", "-d"}, {"mktemp", "-t", "build"}, {"mktemp", "job.XXXX"}} {
 		r := h.run("", words...)
 		path := strings.TrimSuffix(r.stdout, "\n")
-		if r.err != nil || r.result.Status != 0 || filepath.Dir(path) != scratch {
+		if r.err != nil || r.result.Status != 0 || filepath.Dir(path) != enginepaths.ProgramTempUnder(scratch) {
 			t.Fatalf("%v: %q %+v %v", words, r.stdout, r.result, r.err)
 		}
 		info, err := os.Stat(path)

@@ -48,15 +48,21 @@ func (l ChatLocation) Relative(rel string) string {
 	return strings.TrimPrefix(rel, l.Anchor+"/")
 }
 
-// Protected files and files at the filesystem root are their own anchors.
+// A session's scratch is one location. Protected files, files at the
+// filesystem root and files directly in shared temp are their own anchors.
 func locationAnchor(rel string) (string, ChatLocationKind) {
 	abs := projectroot.OutsideAbs(rel)
+	if scratch, _, ok := confine.SessionScratchOwner(abs); ok {
+		if anchor, ok := projectroot.OutsideRel(scratch); ok {
+			return anchor, ChatLocationFolder
+		}
+	}
 	if confine.ClassifyBlockedWrite(abs).Kind != confine.WriteSubjectOrdinary {
 		return rel, ChatLocationFile
 	}
 	grant := confine.FloorRecovery{Grant: confine.GrantRepositoryTree}.GrantPath(abs)
 	anchor, ok := projectroot.OutsideRel(grant)
-	if !ok || anchor == rel {
+	if !ok || anchor == rel || slices.ContainsFunc(confine.SharedTempLocations(), func(temp string) bool { return confine.PathEqual(grant, temp) }) {
 		return rel, ChatLocationFile
 	}
 	if _, err := os.Lstat(filepath.Join(grant, ".git")); err == nil {

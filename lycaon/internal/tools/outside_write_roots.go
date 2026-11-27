@@ -15,10 +15,13 @@ type OutsideWriteRoot struct {
 	Omit []string
 }
 
-// OutsideWriteRoots keeps non-overlapping recordable folders in the confinement profile.
-func (tc ToolContext) OutsideWriteRoots() []OutsideWriteRoot {
+// OutsideWriteRoots keeps non-overlapping recordable folders in the
+// confinement profile, session scratch included. A grant of a whole shared
+// temp location is never compared, since other programs write there too; it
+// is returned in unobserved instead.
+func (tc ToolContext) OutsideWriteRoots() (roots []OutsideWriteRoot, unobserved []string) {
 	if tc.Source.OutsideRoot.ID == "" {
-		return nil
+		return nil, nil
 	}
 	attached := make([]string, 0, len(tc.Source.Roots))
 	for _, root := range tc.Source.Roots {
@@ -26,22 +29,37 @@ func (tc ToolContext) OutsideWriteRoots() []OutsideWriteRoot {
 	}
 	profile, err := confine.WriteRootsForBoundary(tc.Identity.ProjectID, attached, tc.Files.GrantedWriteRoots, tc.Host.SessionScratchDir)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
+	if tc.Host.SessionScratchDir != "" {
+		profile = append(profile, tc.Host.SessionScratchDir)
+	}
+	temps := confine.SharedTempLocations()
 	var candidates []string
 	for _, root := range profile {
 		if _, _, ok := tc.outsideLocation(root); !ok {
 			continue
 		}
-		if canonical := fspath.CanonicalPath(root); canonical != "" {
-			candidates = append(candidates, filepath.Clean(canonical))
+		canonical := fspath.CanonicalPath(root)
+		if canonical == "" {
+			continue
+		}
+		canonical = filepath.Clean(canonical)
+		if slices.ContainsFunc(temps, func(temp string) bool { return confine.PathEqual(canonical, temp) }) {
+			if !slices.Contains(unobserved, canonical) {
+				unobserved = append(unobserved, canonical)
+			}
+			continue
+		}
+		if !slices.Contains(candidates, canonical) {
+			candidates = append(candidates, canonical)
 		}
 	}
 	sort.Strings(candidates)
-	unrecorded := tc.unrecordedRoots()
-	var out []OutsideWriteRoot
+	sort.Strings(unobserved)
+	unrecorded := append(tc.unrecordedRoots(), temps...)
 	for _, path := range candidates {
-		if slices.ContainsFunc(out, func(kept OutsideWriteRoot) bool { return confine.PathAtOrUnder(path, kept.Path) }) {
+		if slices.ContainsFunc(roots, func(kept OutsideWriteRoot) bool { return confine.PathAtOrUnder(path, kept.Path) }) {
 			continue
 		}
 		root := OutsideWriteRoot{Path: path}
@@ -51,7 +69,7 @@ func (tc ToolContext) OutsideWriteRoots() []OutsideWriteRoot {
 				root.Omit = append(root.Omit, canonical)
 			}
 		}
-		out = append(out, root)
+		roots = append(roots, root)
 	}
-	return out
+	return roots, unobserved
 }

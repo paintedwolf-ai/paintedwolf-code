@@ -28714,6 +28714,7 @@ components:
         - io_error
         - settlement_failed
         - time_budget
+        - shared_temp
     SourceWindowBoundaryReason:
       type: string
       enum:

@@ -168,7 +168,7 @@ func readObservationNodes(root *os.Root, directory *observationDirectory, dir st
 }
 
 func validateObservationDirectory(root Root, dir string) error {
-	if root.Only != "" && normalizeDir(dir) != "." {
+	if root.Only != "" && normalizeDir(dir) != "." || root.hidden(dir) {
 		return os.ErrPermission
 	}
 	if filepath.IsAbs(dir) || sandbox.HasParentTraversal(dir) {

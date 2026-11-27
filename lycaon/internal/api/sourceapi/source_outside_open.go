@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/project"
@@ -59,6 +60,10 @@ func (s *Workspace) HandleOpenOutsideFile(w http.ResponseWriter, r *http.Request
 		s.responses.InvalidField(w, "path", "is inside a project folder")
 		return
 	}
+	if confine.CurrentControlPlane().Contains(abs) && !ownsScratch(r.Context(), s.SessionQueries, sess.ID, abs) {
+		s.responses.InvalidField(w, "path", "is part of Painted Wolf Code's own state")
+		return
+	}
 	rel, ok := projectroot.OutsideRel(abs)
 	if !ok || p.Outside.ID == "" {
 		s.responses.InvalidField(w, "path", "has no outside-project address on this platform")
@@ -74,6 +79,10 @@ func (s *Workspace) HandleOpenOutsideFile(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Workspace) trackOpenedOutsideFile(w http.ResponseWriter, r *http.Request, p *project.Project, chatID, rel string, file *os.File, location *sourceledger.ChatLocation) {
+	if scratch, _, ok := confine.SessionScratchOwner(file.Name()); ok && confine.PathAtOrUnder(fspath.CanonicalPath(file.Name()), enginepaths.ProgramTempUnder(scratch)) {
+		s.responses.InvalidField(w, "path", "is program temporary storage, which has no history")
+		return
+	}
 	observed, err := observeOutsideFile(file)
 	if err != nil {
 		s.writeSourceReadError(w, r, err)
@@ -107,7 +116,9 @@ func (s *Workspace) trackOpenedOutsideFile(w http.ResponseWriter, r *http.Reques
 		location = &covering
 	}
 	notifyChatLocationChange(r, p)
-	httpio.WriteJSON(w, http.StatusOK, wire.OpenedOutsideFile{RootID: p.Outside.ID, Path: rel, FileID: tracked.FileID, Location: chatLocationDTO(p, *location)})
+	dto := chatLocationDTO(p, *location)
+	labelScratch(r.Context(), s.SessionQueries, chatID, &dto)
+	httpio.WriteJSON(w, http.StatusOK, wire.OpenedOutsideFile{RootID: p.Outside.ID, Path: rel, FileID: tracked.FileID, Location: dto})
 }
 
 // Large files contribute a hash without retained bytes.
@@ -166,7 +177,9 @@ func (s *Workspace) HandleUpdateSourceChatLocation(w http.ResponseWriter, r *htt
 		location.Hidden = *req.Hidden
 		notifyChatLocationChange(r, p)
 	}
-	httpio.WriteJSON(w, http.StatusOK, chatLocationDTO(p, location))
+	dto := chatLocationDTO(p, location)
+	labelScratch(r.Context(), s.SessionQueries, location.SessionID, &dto)
+	httpio.WriteJSON(w, http.StatusOK, dto)
 }
 
 func (s *Workspace) HandleOpenChatLocationFile(w http.ResponseWriter, r *http.Request) {

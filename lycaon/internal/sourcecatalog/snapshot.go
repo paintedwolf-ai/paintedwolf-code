@@ -39,6 +39,9 @@ type Root struct {
 	OnDemand bool
 	// Only, when set, is the one entry name the root lists.
 	Only string
+	// Hide, when set, is an entry of the root's own directory it never lists
+	// or opens.
+	Hide string
 	// DirectoryIdentity binds an on-demand root to the observed directory.
 	DirectoryIdentity string
 }
@@ -379,7 +382,7 @@ func cleanRoots(roots []Root) ([]Root, error) {
 			continue
 		}
 		seen[key] = struct{}{}
-		cleaned = append(cleaned, Root{ID: id, Path: rootPath, Within: cleanAbs(root.Within), OnDemand: root.OnDemand, Only: root.Only, DirectoryIdentity: root.DirectoryIdentity})
+		cleaned = append(cleaned, Root{ID: id, Path: rootPath, Within: cleanAbs(root.Within), OnDemand: root.OnDemand, Only: root.Only, Hide: root.Hide, DirectoryIdentity: root.DirectoryIdentity})
 	}
 	return cleaned, nil
 }
@@ -390,10 +393,16 @@ func rootKey(projectID string, root Root) string {
 
 // discoveryIdentity distinguishes roots whose listings differ over one path.
 func (r Root) discoveryIdentity() string {
-	if !r.OnDemand && r.Only == "" {
+	if !r.OnDemand && r.Only == "" && r.Hide == "" {
 		return ""
 	}
-	return fmt.Sprintf("on-demand=%t only=%q identity=%q", r.OnDemand, r.Only, r.DirectoryIdentity)
+	return fmt.Sprintf("on-demand=%t only=%q hide=%q identity=%q", r.OnDemand, r.Only, r.Hide, r.DirectoryIdentity)
+}
+
+// hidden reports whether rel is, or lies inside, the entry the root hides.
+func (r Root) hidden(rel string) bool {
+	rel = normalizeDir(rel)
+	return r.Hide != "" && (rel == r.Hide || strings.HasPrefix(rel, r.Hide+"/"))
 }
 
 func combineSnapshots(roots []Root, parts []Snapshot) Snapshot {

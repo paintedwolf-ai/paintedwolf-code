@@ -43,8 +43,8 @@ func (f *Folders) Ensure(sessionID string) (Directories, error) {
 		return Directories{}, err
 	}
 	dirs := Directories{Scratch: enginepaths.SessionScratchUnder(fspath.CanonicalPath(f.stateRoot), id), Output: enginepaths.SessionOutputUnder(fspath.CanonicalPath(f.stateRoot), id)}
-	for _, root := range []string{enginepaths.ScratchDirName, enginepaths.SessionOutputDirName} {
-		if _, err := fseffect.MkdirAll(fseffect.Location{Root: f.stateRoot, Rel: filepath.Join(root, id)}, 0700); err != nil {
+	for _, rel := range []string{filepath.Join(enginepaths.ScratchDirName, id, enginepaths.ProgramTempDirName), filepath.Join(enginepaths.SessionOutputDirName, id)} {
+		if _, err := fseffect.MkdirAll(fseffect.Location{Root: f.stateRoot, Rel: rel}, 0700); err != nil {
 			return Directories{}, fmt.Errorf("prepare session folder %q: %w", id, err)
 		}
 	}

@@ -27,6 +27,9 @@ type OutsideRootSpec struct {
 	Path string
 	// Omit holds subtrees covered elsewhere or excluded from source history.
 	Omit []string
+	// Gap, when set, records the folder as not observed for that reason
+	// without reading it.
+	Gap api.SourceWindowGapReason
 }
 
 type outsideSnapshotPort interface {
@@ -109,15 +112,22 @@ func (o *outsideObservation) join(specs []OutsideRootSpec) []*outsideFolder {
 		}
 		folder := &outsideFolder{spec: spec, rel: rel}
 		o.folders = append(o.folders, folder)
+		if spec.Gap != "" {
+			verdict := notObserved(o.rootID, rel, spec.Path, spec.Gap)
+			folder.verdict = &verdict
+			continue
+		}
 		added = append(added, folder)
 	}
 	return added
 }
 
-// covers reports whether path lies in a folder already observed. Caller holds mu.
+// covers reports whether path lies in a folder already joined. A folder
+// joined as a gap covers only itself, so a narrower grant inside it is still
+// observed. Caller holds mu.
 func (o *outsideObservation) covers(path string) bool {
 	for _, folder := range o.folders {
-		if confine.PathAtOrUnder(path, folder.spec.Path) {
+		if folder.spec.Gap != "" && confine.PathEqual(path, folder.spec.Path) || folder.spec.Gap == "" && confine.PathAtOrUnder(path, folder.spec.Path) {
 			return true
 		}
 	}
