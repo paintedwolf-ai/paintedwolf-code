@@ -52,7 +52,7 @@ class MaskedUpstreamFailureControlTests(unittest.TestCase):
             sidecar = root / 'sidecar.log'
             sidecar.write_text('')
             ident = {'provenance_verified': True, 'engine_provenance': {'provenance_verified': True}}
-            obs = build_observation(
+            obs, _ = build_observation(
                 case,
                 session_id='s1',
                 identity=ident,
