@@ -2,17 +2,14 @@ import { expect, type Locator } from "@playwright/test";
 import type { ArtifactListResponse, Message } from "../src/api/types.ts";
 import {
   activateProject,
-  apiCreateProjectWithRoot,
   apiJson,
   apiPostPrompt,
+  bootstrapChatSession,
   CONTEXT_NAV_WITH,
-  e2eTempDir,
-  e2eUniqueLabel,
   expectShellReady,
   liveChatStage,
-  openNewChatSession,
   openSessionRow,
-  seedAppState,
+  settledChatSessionId,
   waitForSessionReady,
   waitHarnessConnected,
   webE2e,
@@ -32,15 +29,11 @@ async function expandDisclosure(container: Locator) {
 webE2e("browser-obligation: build receipt leaves browser obligation open until capture_page retains UI artifact provenance", async ({ page, request }, testInfo) => {
   webE2e.setTimeout(180_000);
 
-  const dir = e2eTempDir("browser-obligation");
-  const project = await apiCreateProjectWithRoot(request, e2eUniqueLabel("BrowserObligation"), dir);
-
-  await seedAppState(page, { contextNav: CONTEXT_NAV_WITH("artifacts") });
-  await page.goto("/");
-  await waitHarnessConnected(page);
-  await expectShellReady(page);
-  await activateProject(page, project.id);
-  const sessionId = await openNewChatSession(page);
+  const project = await bootstrapChatSession(page, request, {
+    contextNav: CONTEXT_NAV_WITH("artifacts"),
+  });
+  const sessionId = await settledChatSessionId(page);
+  const siteDir = `browser-obligation-${crypto.randomUUID().slice(0, 8)}`;
 
   await apiJson(request, "POST", "/harness/llm/auto", { enabled: false });
 
@@ -59,18 +52,18 @@ webE2e("browser-obligation: build receipt leaves browser obligation open until c
       "<p id=\"s\" data-testid=\"status\">ready</p>",
       "</body></html>",
     ].join("");
-    const buildCmd = `printf '%s\\n' ${shellWord(buildHtml)} > index.html && test -s index.html`;
+    const buildCmd = `mkdir -p ${siteDir} && printf '%s\\n' ${shellWord(buildHtml)} > ${siteDir}/index.html && test -s ${siteDir}/index.html`;
     const buildCallId = await driver.invoke("command", { command: buildCmd });
     await driver.completed(buildCallId);
 
-    // Verify build receipt completed while zero browser capture artifacts exist yet.
+    // Verify build receipt completed while zero browser capture artifacts exist for this session yet.
     const midTranscript = await apiJson<{ messages: Message[] }>(request, "GET", `/v1/sessions/${sessionId}/messages`);
     const buildResult = midTranscript.messages.find((m) => m.tool_result?.tool_call_id === buildCallId)?.tool_result;
     expect(buildResult?.outcome).toBe("completed");
     expect(buildResult?.command_program?.state).toBe("completed");
 
     const beforeArtifacts = await apiJson<ArtifactListResponse>(request, "GET", `/v1/projects/${project.id}/artifacts`);
-    const capturesBefore = beforeArtifacts.artifacts.filter((a) => a.source === "capture");
+    const capturesBefore = beforeArtifacts.artifacts.filter((a) => a.source === "capture" && a.session_id === sessionId);
     expect(capturesBefore).toHaveLength(0);
 
     // Load structured browser operation capture_page to satisfy the open browser obligation.
@@ -79,7 +72,7 @@ webE2e("browser-obligation: build receipt leaves browser obligation open until c
     // Phase 2: drive actual UI activity via capture_page and retain visual artifact provenance.
     const caption = "Browser obligation UI check";
     const captureCallId = await driver.invoke("capture_page", {
-      project_dir: ".",
+      project_dir: siteDir,
       caption,
       actions: [
         { type: "click", testid: "ping" },
