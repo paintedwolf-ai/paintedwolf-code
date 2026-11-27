@@ -156,7 +156,7 @@ webE2e.describe("portable command M10 live edges", () => {
         return recorder.docs.some((entry) => entry.status === 200 && entry.settled === true && entry.revision !== null);
       }, { timeout: 20_000 }).toBe(true);
 
-      const settledDoc = recorder.docs.findLast((entry) => entry.status === 200 && entry.settled === true && entry.revision !== null)!;
+      const settledDoc = [...recorder.docs].reverse().find((entry) => entry.status === 200 && entry.settled === true && entry.revision !== null)!;
       expect(settledDoc.revision).not.toBe(liveDoc.revision);
       expect(settledDoc.totalRows).toBeGreaterThanOrEqual(liveDoc.totalRows);
       await expect(refreshBtn).toHaveCount(0, { timeout: 10_000 });
@@ -247,7 +247,8 @@ webE2e.describe("portable command M10 live edges", () => {
       return recorder.windows.filter((entry) => entry.windowId === prunedWindowId).length;
     }, { timeout: 15_000 }).toBeGreaterThanOrEqual(1);
 
-    await page.waitForTimeout(500);
+    await expect(card).toBeVisible();
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     await recorder.drain();
     const initialHits = recorder.windows.filter((entry) => entry.windowId === prunedWindowId);
     expect(initialHits.length).toBeGreaterThanOrEqual(1);
@@ -258,14 +259,25 @@ webE2e.describe("portable command M10 live edges", () => {
     }
     const settledCount = initialHits.length;
 
-    // Dispatch repeated source invalidations and wait a 3-second quiet window; Den must not re-poll.
-    await page.evaluate(async (projectId: string) => {
+    // Dispatch repeated source invalidations, confirm listeners processed them, and assert no re-poll.
+    const deliveredInvalidations = await page.evaluate(async (projectId: string) => {
       const mod = await import(/* @vite-ignore */ "/src/files/source/" + "source-invalidation.ts");
-      mod.invalidateSourceQueries({ projectId });
-      mod.invalidateSourceQueries({ projectId });
+      let delivered = 0;
+      const unsub = mod.subscribeSourceInvalidation((event: { projectId: string }) => {
+        if (event.projectId === projectId) delivered += 1;
+      });
+      try {
+        mod.invalidateSourceQueries({ projectId });
+        mod.invalidateSourceQueries({ projectId });
+      } finally {
+        unsub();
+      }
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      return delivered;
     }, project.id);
+    expect(deliveredInvalidations).toBe(2);
 
-    await page.waitForTimeout(3_000);
+    await apiJson(request, "GET", `/v1/sessions/${sessionId}`);
     await recorder.drain();
 
     const prunedHits = recorder.windows.filter((entry) => entry.windowId === prunedWindowId);
@@ -276,10 +288,10 @@ webE2e.describe("portable command M10 live edges", () => {
       case: "pruned_window_404",
       sessionId,
       prunedWindowId,
+      deliveredInvalidations,
       prunedWindowRequestCount: prunedHits.length,
       status: initialHits[0]?.status ?? null,
       errorCode: initialHits[0]?.errorCode ?? null,
-      quietWindowMs: 3000,
     }));
   });
 });

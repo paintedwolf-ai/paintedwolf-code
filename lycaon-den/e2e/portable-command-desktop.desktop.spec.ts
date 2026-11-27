@@ -215,7 +215,8 @@ test.describe.serial("portable command desktop smoke", () => {
         return recorder.documents.some((entry) => entry.status === 200 && entry.settled === true && entry.rowsLength > 0);
       }, { timeout: 20_000 }).toBe(true);
 
-      await page.waitForTimeout(1_000);
+      await expect(page.getByTestId("chat-content-page")).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId("chat-process-pretty-refresh")).toHaveCount(0);
       await recorder.drain();
 
       recorder.setPhase("reload");
@@ -236,7 +237,9 @@ test.describe.serial("portable command desktop smoke", () => {
       await reloadedCard.locator(":scope > .den-transcript-disclosure-header").click();
       await expect(reloadedCard).toHaveAttribute("data-expanded", "false");
       await expandDisclosure(reloadedCard);
-      await page.waitForTimeout(1_000);
+      await expect(reloadedCard).toContainText("executions", { timeout: 15_000 });
+      await expect(reloadedCard.getByTestId("action-link-receipt")).toBeVisible({ timeout: 15_000 });
+      await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
       await recorder.drain();
 
       const receiptRevisions = recorder.receipts

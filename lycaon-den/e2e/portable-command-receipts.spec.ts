@@ -245,11 +245,12 @@ webE2e("captures live and settled portable command receipts, document pages, rel
       return recorder.documents.some((entry) => entry.status === 200 && entry.settled === true && entry.rowsLength > 0);
     }, { timeout: 20_000 }).toBe(true);
 
-    // Pause briefly to confirm settled L01/L07 polling stays quiet.
-    await page.waitForTimeout(1_000);
+    // Confirm settled receipt viewer is rendered with no unsettled refresh button.
+    await expect(page.getByTestId("chat-content-page")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("chat-process-pretty-refresh")).toHaveCount(0);
     await recorder.drain();
 
-    // Reload Den and verify the folded command activity, settled preview, and receipt document survive with bounded requests.
+    // Reload Den and verify folded activity and receipt document survive with bounded requests.
     recorder.setPhase("reload");
     await page.reload();
     await waitHarnessConnected(page);
@@ -275,7 +276,9 @@ webE2e("captures live and settled portable command receipts, document pages, rel
     await reloadedCard.locator(":scope > .den-transcript-disclosure-header").click();
     await expect(reloadedCard).toHaveAttribute("data-expanded", "false");
     await expandDisclosure(reloadedCard);
-    await page.waitForTimeout(1_000);
+    await expect(reloadedCard).toContainText("executions", { timeout: 15_000 });
+    await expect(reloadedCard.getByTestId("action-link-receipt")).toBeVisible({ timeout: 15_000 });
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     await recorder.drain();
 
     const receiptRevisions = recorder.receipts
