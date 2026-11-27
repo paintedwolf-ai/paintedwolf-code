@@ -143,59 +143,74 @@ def _call_with_checkpoint_inspect(
     *,
     action: str | None = None,  # "approve" | "reject" | None (expect no checkpoint)
     rung: str = "once",
+    timeout_s: float = 20.0,
 ) -> dict[str, Any]:
-    """Send a single tool call, optionally inspect+resolve its checkpoint, and return result + checkpoint info."""
+    """Send a single tool call, racing pending checkpoint vs tool_result with a bounded timeout.
+
+    Never waits blindly for a checkpoint that will never arrive: if the tool settles
+    without opening a checkpoint, returns immediately with `checkpoint.asked == False`
+    and the settled `tool_result_json`.
+    """
     req = _wait_pending(app, session_id)
     call_id = str(uuid.uuid4())
     app.request(
         "/harness/llm/respond",
         {"id": req["id"], "tool_calls": [{"id": call_id, "name": name, "args": args}]},
     )
-    cp_info: dict[str, Any] = {"asked": False, "checkpoint_id": "", "plan_id": "", "option_id": "", "rung": ""}
-    if action in {"approve", "reject"}:
-        cp = _read_pending_checkpoint_for_call(app, session_id, call_id)
-        cp_id = str(cp["id"])
-        plan = (cp.get("tool_approval") or {}).get("plan") or {}
-        cp_info["asked"] = True
-        cp_info["checkpoint_id"] = cp_id
-        cp_info["plan_id"] = str(plan.get("id") or "")
-        if action == "reject":
-            app.request(
-                f"/v1/sessions/{session_id}/checkpoints/{cp_id}",
-                {"kind": "tool_approval", "action": "reject", "guidance": "Denied by TB07 sidecar runner."},
-            )
-        else:
-            opt = _select_option(cp, rung=rung)
-            cp_info["option_id"] = str(opt["id"])
-            cp_info["rung"] = str(opt.get("rung") or "")
-            app.request(
-                f"/v1/sessions/{session_id}/checkpoints/{cp_id}",
-                {"kind": "tool_approval", "action": "approve", "option_id": opt["id"]},
-            )
-        result = _wait_tool_result(app, session_id, call_id)
-    else:
-        # Expect no checkpoint; check if one unexpectedly opened while waiting.
-        db_path = app.directory / "store.db"
+    db_path = app.directory / "store.db"
+    cp_info: dict[str, Any] = {
+        "asked": False,
+        "checkpoint_id": "",
+        "plan_id": "",
+        "option_id": "",
+        "rung": "",
+        "timed_out": False,
+    }
+    resolved_cp = False
 
-        def poll_no_ask() -> dict[str, Any] | None:
-            cps = app.request(f"/v1/sessions/{session_id}/checkpoints?status=pending").get("checkpoints") or []
+    def read_tool_result() -> dict[str, Any] | None:
+        with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+            row = conn.execute(
+                "SELECT tool_result_json FROM messages WHERE session_id=? AND tool_result_call_id=?",
+                (session_id, call_id),
+            ).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def poll_step() -> dict[str, Any] | None:
+        nonlocal resolved_cp
+        if not resolved_cp:
+            cps = (app.request(f"/v1/sessions/{session_id}/checkpoints?status=pending") or {}).get("checkpoints") or []
             for cp in cps:
-                if (cp.get("tool_approval") or {}).get("tool_call_id") == call_id:
-                    cp_info["asked"] = True
-                    cp_info["checkpoint_id"] = str(cp["id"])
-                    cp_info["plan_id"] = str(((cp.get("tool_approval") or {}).get("plan") or {}).get("id") or "")
+                if (cp.get("tool_approval") or {}).get("tool_call_id") != call_id:
+                    continue
+                cp_id = str(cp["id"])
+                plan = (cp.get("tool_approval") or {}).get("plan") or {}
+                cp_info["asked"] = True
+                cp_info["checkpoint_id"] = cp_id
+                cp_info["plan_id"] = str(plan.get("id") or "")
+                if action == "approve":
+                    opt = _select_option(cp, rung=rung)
+                    cp_info["option_id"] = str(opt["id"])
+                    cp_info["rung"] = str(opt.get("rung") or "")
                     app.request(
-                        f"/v1/sessions/{session_id}/checkpoints/{cp['id']}",
-                        {"kind": "tool_approval", "action": "reject", "guidance": "Unexpected ask in no-ask probe."},
+                        f"/v1/sessions/{session_id}/checkpoints/{cp_id}",
+                        {"kind": "tool_approval", "action": "approve", "option_id": opt["id"]},
                     )
-            with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
-                row = conn.execute(
-                    "SELECT tool_result_json FROM messages WHERE session_id=? AND tool_result_call_id=?",
-                    (session_id, call_id),
-                ).fetchone()
-            return json.loads(row[0]) if row else None
+                else:
+                    guidance = "Denied by TB07 sidecar runner." if action == "reject" else "Unexpected ask in no-ask probe."
+                    app.request(
+                        f"/v1/sessions/{session_id}/checkpoints/{cp_id}",
+                        {"kind": "tool_approval", "action": "reject", "guidance": guidance},
+                    )
+                resolved_cp = True
+                break
+        return read_tool_result()
 
-        result = app.wait_for(poll_no_ask, "tb07 tool result (no-ask)", session_id)
+    try:
+        result = app.wait_for(poll_step, "tb07 checkpoint or tool result", session_id, timeout=timeout_s)
+    except RuntimeError as exc:
+        cp_info["timed_out"] = True
+        result = {"outcome": "timeout", "error": str(exc)}
     return {"call_id": call_id, "result": result, "checkpoint": cp_info}
 
 
@@ -282,11 +297,14 @@ def _run_warmed_slots(
                 pre = hash_file(target)
                 call = _call_with_checkpoint_inspect(
                     app, a01_sid, "command",
-                    {"command": f"printf 'after-01\\n' > {target}"},
+                    {
+                        "command": f"printf 'after-01\\n' > {target}",
+                        "capability_request": {"write_roots": [str(outside_dir)]},
+                    },
                     action="approve", rung="once",
                 )
                 post = hash_file(target)
-                db_rec = _read_checkpoint_and_decision_ro(db_path, call["checkpoint"]["checkpoint_id"])
+                db_rec = _read_checkpoint_and_decision_ro(db_path, call["checkpoint"]["checkpoint_id"]) if call["checkpoint"]["checkpoint_id"] else {"checkpoint_id": "", "status": None, "plan_id": "", "decision": {}}
                 want_sha = sha256_bytes(b"after-01\n")
                 ok = (
                     call["checkpoint"]["asked"]
@@ -393,11 +411,14 @@ def _run_warmed_slots(
                 pre = hash_file(target)
                 call = _call_with_checkpoint_inspect(
                     app, a01_sid, "command",
-                    {"command": f"printf 'mutated-05\\n' > {target}"},
+                    {
+                        "command": f"printf 'mutated-05\\n' > {target}",
+                        "capability_request": {"write_roots": [str(outside_dir)]},
+                    },
                     action="reject",
                 )
                 post = hash_file(target)
-                db_rec = _read_checkpoint_and_decision_ro(db_path, call["checkpoint"]["checkpoint_id"])
+                db_rec = _read_checkpoint_and_decision_ro(db_path, call["checkpoint"]["checkpoint_id"]) if call["checkpoint"]["checkpoint_id"] else {"checkpoint_id": "", "status": None, "plan_id": "", "decision": {}}
                 ok = (
                     call["checkpoint"]["asked"]
                     and pre["sha256"] == post["sha256"]

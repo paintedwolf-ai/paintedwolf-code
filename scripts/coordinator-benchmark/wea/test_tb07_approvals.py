@@ -16,6 +16,7 @@ from wea.tb07_sidecar_runner import (
     EXPECTED_SIDECAR_COUNTS_BY_FAMILY,
     TB07_SIDECAR_SLOT_SPECS,
     _build_receipt,
+    _call_with_checkpoint_inspect,
 )
 
 
@@ -311,6 +312,54 @@ class TestTB07InProcManifestAndSidecarRunner(unittest.TestCase):
         )
         self.assertEqual(rec_fail["verdict"], "fail")
         self.assertIn("unverified_source_witness", rec_fail["failure_reasons"])
+
+    def test_call_with_checkpoint_inspect_returns_immediately_when_tool_settles_without_checkpoint(self) -> None:
+        import sqlite3
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app_dir = pathlib.Path(tmp)
+            db_path = app_dir / "store.db"
+            conn = sqlite3.connect(db_path)
+            conn.execute("CREATE TABLE messages (session_id TEXT, tool_result_call_id TEXT, tool_result_json TEXT)")
+            conn.commit()
+            conn.close()
+
+            class FakeApp:
+                directory = app_dir
+
+                def request(self, path: str, body: Any = None, **_kw: Any) -> Any:
+                    if path.startswith("/harness/llm/pending"):
+                        return {"pending": True, "id": "turn-1", "session_id": "sess-1"}
+                    if path == "/harness/llm/respond":
+                        cid = body["tool_calls"][0]["id"]
+                        c = sqlite3.connect(db_path)
+                        c.execute(
+                            "INSERT INTO messages VALUES (?, ?, ?)",
+                            ("sess-1", cid, json.dumps({"outcome": "rejected", "rejection": {"code": "WRITE_SCOPE_DENIED"}})),
+                        )
+                        c.commit()
+                        c.close()
+                        return {"ok": True}
+                    if "/checkpoints" in path:
+                        return {"checkpoints": []}
+                    return {}
+
+                def wait_for(self, fn: Any, _phase: str, _sid: Any = None, timeout: float = 20.0) -> Any:
+                    self.last_timeout = timeout
+                    val = fn()
+                    if val is None:
+                        raise RuntimeError("no progress")
+                    return val
+
+            fake = FakeApp()
+            out = _call_with_checkpoint_inspect(
+                fake, "sess-1", "command", {"command": "printf x > /outside"}, action="approve", rung="once", timeout_s=20.0
+            )
+            self.assertFalse(out["checkpoint"]["asked"])
+            self.assertFalse(out["checkpoint"]["timed_out"])
+            self.assertEqual(out["result"]["outcome"], "rejected")
+            self.assertEqual(fake.last_timeout, 20.0)
 
 
 if __name__ == "__main__":
