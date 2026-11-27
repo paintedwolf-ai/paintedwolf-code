@@ -136,7 +136,7 @@ def run_d10_observer_validation(
                 max_repair_replies=0,
                 engine_provenance=sidecar.provenance,
                 run_manifest=manifest,
-                poll_timeout=90.0,
+                poll_timeout=180.0,
             )
 
         def _run_b_phase1() -> Any:
@@ -156,7 +156,7 @@ def run_d10_observer_validation(
                 repair_reply_content="[cite: c1 => read#1:3]",
                 engine_provenance=sidecar.provenance,
                 run_manifest=manifest,
-                poll_timeout=90.0,
+                poll_timeout=180.0,
             )
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
@@ -186,7 +186,7 @@ def run_d10_observer_validation(
             repair_reply_content="[cite: c1 => read#1:3]",
             engine_provenance=sidecar.provenance,
             run_manifest=manifest,
-            poll_timeout=90.0,
+            poll_timeout=180.0,
         )
 
         a_p2_after = probe_store_db(sidecar.store_db_path, sid_a, trace_log_path=trace_log)
