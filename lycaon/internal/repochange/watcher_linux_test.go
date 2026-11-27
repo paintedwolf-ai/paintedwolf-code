@@ -8,7 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -232,4 +235,83 @@ func TestInotifyRootsShareOneInstance(t *testing.T) {
 			t.Fatalf("root coverage = %+v", coverage)
 		}
 	}
+}
+
+func inotifyWatchedInodes(t *testing.T) map[uint64]bool {
+	t.Helper()
+	entries, err := os.ReadDir("/proc/self/fd")
+	testutil.FailErr(t, "list descriptors", err)
+	inodes := map[uint64]bool{}
+	for _, entry := range entries {
+		target, err := os.Readlink(filepath.Join("/proc/self/fd", entry.Name()))
+		if err != nil || target != "anon_inode:inotify" {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join("/proc/self/fdinfo", entry.Name()))
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(raw), "\n") {
+			if !strings.HasPrefix(line, "inotify ") {
+				continue
+			}
+			for _, field := range strings.Fields(line) {
+				if hexIno, ok := strings.CutPrefix(field, "ino:"); ok {
+					if ino, parseErr := strconv.ParseUint(hexIno, 16, 64); parseErr == nil {
+						inodes[ino] = true
+					}
+				}
+			}
+		}
+	}
+	return inodes
+}
+
+func dirInode(t *testing.T, path string) uint64 {
+	t.Helper()
+	info, err := os.Stat(path)
+	testutil.FailErr(t, "stat "+path, err)
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		t.Fatalf("unexpected Stat_t for %s", path)
+	}
+	return stat.Ino
+}
+
+func TestInotifyCloseRootRemovesDetachedInodesAndKeepsSurvivor(t *testing.T) {
+	surviving := newInotifyRoot(t, 64)
+	detachedRoot, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve detached root", err)
+	detachedSub := filepath.Join(detachedRoot, "child")
+	testutil.FailErr(t, "mkdir detached child", os.MkdirAll(detachedSub, 0o755))
+
+	surviving.registry.Ensure(t.Context(), detachedRoot)
+	surviving.registry.SeedExisting(t.Context(), detachedRoot, []WatchDirectory{
+		{Path: detachedRoot, EntryCount: 1},
+		{Path: detachedSub, EntryCount: 0},
+	})
+	testutil.WaitFor(t, "detached root seeded", func() bool {
+		return surviving.registry.Coverage(detachedRoot).Complete && surviving.registry.DirWatched(detachedRoot, "child")
+	})
+
+	survivingIno := dirInode(t, surviving.root)
+	detachedIno := dirInode(t, detachedRoot)
+	detachedSubIno := dirInode(t, detachedSub)
+
+	before := inotifyWatchedInodes(t)
+	if !before[survivingIno] || !before[detachedIno] || !before[detachedSubIno] {
+		t.Fatalf("missing expected inodes before close: surviving=%v detached=%v sub=%v",
+			before[survivingIno], before[detachedIno], before[detachedSubIno])
+	}
+
+	surviving.registry.CloseRoot(detachedRoot)
+	after := inotifyWatchedInodes(t)
+	if after[detachedIno] || after[detachedSubIno] {
+		t.Fatalf("detached inodes leaked in /proc/self/fdinfo: detached=%v sub=%v", after[detachedIno], after[detachedSubIno])
+	}
+	if !after[survivingIno] {
+		t.Fatal("surviving root inode was dropped on detached root close")
+	}
+	testutil.FailErr(t, "write surviving file", os.WriteFile(filepath.Join(surviving.root, "kept.txt"), []byte("ok"), 0o644))
+	surviving.waitFor("kept.txt", WorktreeChangeUnknown)
 }

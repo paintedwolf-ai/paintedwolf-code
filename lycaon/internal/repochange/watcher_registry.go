@@ -52,6 +52,12 @@ func SeedWatch(ctx context.Context, root string, directories []WatchDirectory) {
 	processWatchers().Seed(ctx, root, directories)
 }
 
+// SeedExistingWatch registers catalog directories only when root already holds
+// an active watcher, so delayed seeding never resurrects a closed root watch.
+func SeedExistingWatch(ctx context.Context, root string, directories []WatchDirectory) {
+	processWatchers().SeedExisting(ctx, root, directories)
+}
+
 // CoverageRevalidationInterval bounds how stale an unwatched subtree may be.
 // A consumer whose root coverage is incomplete trusts events for this long
 // after its last walk, then walks again. Every disk-backed consumer of a root
@@ -160,9 +166,28 @@ func (r *watcherRegistry) Ensure(ctx context.Context, projectDir string) {
 		r.mu.Unlock()
 		return
 	}
-	if _, ok := r.byDir[key]; ok {
+	if existing, ok := r.byDir[key]; ok {
 		r.mu.Unlock()
-		return
+		if !existing.needsRebind() {
+			return
+		}
+		r.mu.Lock()
+		if r.closed || r.byDir[key] != existing {
+			r.mu.Unlock()
+			return
+		}
+		delete(r.byDir, key)
+		r.mu.Unlock()
+		existing.close()
+		r.mu.Lock()
+		if r.closed {
+			r.mu.Unlock()
+			return
+		}
+		if _, ok := r.byDir[key]; ok {
+			r.mu.Unlock()
+			return
+		}
 	}
 	w, err := newWorktreeWatcher(ctx, key, r.maxDirs, r.budget)
 	if err != nil {
@@ -221,6 +246,29 @@ func (r *watcherRegistry) Seed(ctx context.Context, root string, directories []W
 	if w == nil {
 		return
 	}
+	r.seedWatcher(ctx, key, w, directories)
+}
+
+// SeedExisting extends an already-active root watcher without creating one if
+// the root has been closed or retired.
+func (r *watcherRegistry) SeedExisting(ctx context.Context, root string, directories []WatchDirectory) {
+	if r == nil {
+		return
+	}
+	key, err := filepath.Abs(strings.TrimSpace(root))
+	if err != nil || key == "" {
+		return
+	}
+	r.mu.Lock()
+	w := r.byDir[key]
+	r.mu.Unlock()
+	if w == nil {
+		return
+	}
+	r.seedWatcher(ctx, key, w, directories)
+}
+
+func (r *watcherRegistry) seedWatcher(ctx context.Context, key string, w *worktreeWatcher, directories []WatchDirectory) {
 	policyUnwatched := 0
 	filtered := make([]WatchDirectory, 0, len(directories))
 	for _, directory := range directories {

@@ -44,8 +44,14 @@ type worktreeWatcher struct {
 	// lack of per-user watch capacity, until a later registration succeeds.
 	watchLimit    bool
 	limitReported bool
-	refs          refObserver
-	debounce      *debouncer
+	// rootInfo is the directory identity captured when the root bound; a stat
+	// failure or identity change (e.g. unmounted volume) marks the watcher faulted.
+	rootInfo os.FileInfo
+	// faultedInfo records the directory identity observed when an outage
+	// faulted an existing mountpoint path, so rebind waits for a new mount.
+	faultedInfo os.FileInfo
+	refs        refObserver
+	debounce    *debouncer
 }
 
 func newWorktreeWatcher(ctx context.Context, root string, maxDirs int, budget *watchfd.Budget) (*worktreeWatcher, error) {
@@ -61,6 +67,7 @@ func newWorktreeWatcher(ctx context.Context, root string, maxDirs int, budget *w
 	if err != nil {
 		physicalRoot = root
 	}
+	rootInfo, _ := os.Stat(root)
 	w := &worktreeWatcher{
 		scope:     sourcescope.New(root, sourcescope.Options{Plane: cfg.Catalog}),
 		root:      root,
@@ -70,6 +77,7 @@ func newWorktreeWatcher(ctx context.Context, root string, maxDirs int, budget *w
 		recursive: watchfd.Recursive,
 		done:      make(chan struct{}),
 		watched:   map[string]int{},
+		rootInfo:  rootInfo,
 		refs:      refObserver{root: root, physicalRoot: physicalRoot},
 	}
 	if w.addMeasuredDir(root) != addRegistered {
@@ -219,9 +227,95 @@ func (w *worktreeWatcher) noteUnwatchedDir() {
 }
 
 func (w *worktreeWatcher) coverage() WatchCoverage {
+	w.verifyRootHealth()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.coverageLocked()
+}
+
+// verifyRootHealth detects silent root outages (such as Linux IN_UNMOUNT
+// dropping inotify watches or an unmounted volume disappearing/changing device)
+// and transitions the watcher into its faulted state with a bare resync.
+func (w *worktreeWatcher) verifyRootHealth() bool {
+	if w == nil || w.root == "" {
+		return true
+	}
+	w.mu.Lock()
+	if w.faulted {
+		w.mu.Unlock()
+		return false
+	}
+	_, watched := w.watched[w.root]
+	rootInfo := w.rootInfo
+	w.mu.Unlock()
+	if !watched && rootInfo == nil {
+		return true
+	}
+	watchLost := watched && w.watcher != nil && !w.watcher.HasWatch(w.root)
+	currentInfo, statErr := os.Stat(w.root)
+	rootMissing := statErr != nil || !currentInfo.IsDir()
+	identityChanged := !rootMissing && rootInfo != nil && !os.SameFile(rootInfo, currentInfo)
+	if !watchLost && !rootMissing && !identityChanged {
+		return true
+	}
+	transitioned := false
+	w.mu.Lock()
+	if !w.faulted {
+		w.faulted = true
+		if !rootMissing {
+			w.faultedInfo = currentInfo
+		} else {
+			w.faultedInfo = nil
+		}
+		transitioned = true
+	}
+	w.mu.Unlock()
+	if transitioned {
+		slog.Warn("worktree watcher root unavailable or unmounted",
+			"root", w.root, "watch_lost", watchLost, "root_missing", rootMissing, "identity_changed", identityChanged)
+		w.notifyResync()
+	}
+	return false
+}
+
+// needsRebind reports whether an existing root watcher has lost coverage and
+// the root directory is now available to bind a fresh stream.
+func (w *worktreeWatcher) needsRebind() bool {
+	if w == nil || w.root == "" {
+		return false
+	}
+	w.mu.Lock()
+	alreadyFaulted := w.faulted
+	faultedInfo := w.faultedInfo
+	rootInfo := w.rootInfo
+	_, watched := w.watched[w.root]
+	w.mu.Unlock()
+
+	currentInfo, statErr := os.Stat(w.root)
+	if statErr != nil || !currentInfo.IsDir() {
+		w.verifyRootHealth()
+		return false
+	}
+	if alreadyFaulted {
+		if faultedInfo != nil && os.SameFile(faultedInfo, currentInfo) {
+			return false
+		}
+		return true
+	}
+	watchLost := watched && w.watcher != nil && !w.watcher.HasWatch(w.root)
+	identityChanged := rootInfo != nil && !os.SameFile(rootInfo, currentInfo)
+	return watchLost || identityChanged
+}
+
+func (w *worktreeWatcher) notifyResync() {
+	if w.debounce != nil {
+		w.debounce.NotifyWorktreeChanges(context.Background(), w.root, []WorktreeChange{{Path: ".", Kind: WorktreeChangeResync}}, SourceWatcher)
+		return
+	}
+	Notify(context.Background(), Event{
+		ProjectDir: w.root, Kind: WorktreeChanged,
+		Changes: []WorktreeChange{{Path: ".", Kind: WorktreeChangeResync}}, Source: SourceWatcher,
+	})
 }
 
 // watchesDir reports whether writes in one absolute directory reach the epoch.

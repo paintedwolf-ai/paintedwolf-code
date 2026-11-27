@@ -9,7 +9,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/projectcontrol"
-	"github.com/lycaon/lycaon/internal/sourcefeed"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -80,7 +79,12 @@ func (s *Roots) HandleDetachProjectRoot(w http.ResponseWriter, r *http.Request) 
 	}
 	s.forgetRemovedEditorDocuments(dependents)
 	s.sourceViews.InvalidateProjectSourceViews(id)
-	_ = sourcefeed.StopProjectWatch(r.Context(), id)
+	_ = s.sourceWatch.RebindProjectWatch(r.Context(), change.After)
+	if files := s.Sessions.ToolContext.CredentialFiles; files != nil {
+		if err := files.EnsureProject(r.Context(), id); err != nil {
+			slog.WarnContext(r.Context(), "credential-file index update on root detach", "project_id", id, "err", err)
+		}
+	}
 	afterRoots := project.RootRefsFrom(change.After)
 	s.Sessions.ProjectControl.ReassignSessionsAfterRootDetach(r.Context(), id, rootID, afterRoots)
 	s.Sessions.ProjectControl.InvalidateSessionWorkspacePaths(r.Context(), id)

@@ -9,6 +9,7 @@ type platformWatcher interface {
 	Remove(string) error
 	Close() error
 	WatchList() []string
+	HasWatch(string) bool
 	EventChannel() <-chan fsnotify.Event
 	ResyncChannel() <-chan struct{}
 	ErrorChannel() <-chan error
