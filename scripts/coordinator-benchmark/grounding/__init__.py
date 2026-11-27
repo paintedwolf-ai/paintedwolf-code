@@ -44,6 +44,7 @@ from .reference_resolver import (
 from .selectors import (
     ALL_FAMILIES,
     DECISION_005_V04_ASSERTIONS,
+    DECISION_008_S06_ASSERTIONS,
     FIXED_FAMILIES,
     GB01_FINDINGS,
     GENERATED_FAMILIES,

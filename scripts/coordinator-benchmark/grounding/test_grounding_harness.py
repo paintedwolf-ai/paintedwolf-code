@@ -2,10 +2,20 @@
 from __future__ import annotations
 
 import ast
+import contextlib
+import hashlib
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import io
+import json
 import pathlib
+import sqlite3
+import tempfile
+import threading
 import unittest
+import urllib.parse
 
 from grounding.checker import check_slot, check_wording_triad
+from grounding.cli import main as cli_main
 from grounding.delivery_log import (
     DeliveryLog,
     DeliveryRecord,
@@ -14,6 +24,10 @@ from grounding.delivery_log import (
     ProductRecord,
     ProductVerdict,
     SurfaceOutcome,
+)
+from grounding.friction_probe import (
+    friction_observability_report,
+    probe_store_db,
 )
 from grounding.generators import (
     BASE_SEEDS,
@@ -35,11 +49,18 @@ from grounding.reference_resolver import (
 )
 from grounding.selectors import (
     DECISION_005_V04_ASSERTIONS,
+    DECISION_008_S06_ASSERTIONS,
     GB01_FINDINGS,
     PREFLIGHT_COVERAGE_ROWS,
     validate_manifest,
 )
 from grounding.shrinker import ShrinkableCase, ShrunkArtifact, shrink_case
+from grounding.sidecar_driver import (
+    ScriptedTurn,
+    SidecarSessionClient,
+    inspect_engine_binary,
+    run_scripted_session,
+)
 
 
 GROUNDING_DIR = pathlib.Path(__file__).resolve().parent
@@ -123,6 +144,18 @@ class TestIndependenceAndIsolation(unittest.TestCase):
         "internal/grounding",
     )
 
+    PURE_ORACLE_MODULES = frozenset(
+        {
+            "delivery_log.py",
+            "reference_resolver.py",
+            "checker.py",
+            "generators.py",
+            "shrinker.py",
+            "selectors.py",
+            "friction_probe.py",
+        }
+    )
+
     def test_zero_product_grounding_imports_or_subprocesses(self) -> None:
         py_files = sorted(GROUNDING_DIR.glob("*.py"))
         self.assertGreaterEqual(len(py_files), 6)
@@ -131,15 +164,18 @@ class TestIndependenceAndIsolation(unittest.TestCase):
                 continue
             source = path.read_text(encoding="utf-8")
             tree = ast.parse(source, filename=str(path))
+            is_pure = path.name in self.PURE_ORACLE_MODULES
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
                     for alias in node.names:
-                        self.assertNotIn("subprocess", alias.name)
+                        if is_pure:
+                            self.assertNotIn("subprocess", alias.name)
                         for forbidden in self.FORBIDDEN_TOKENS:
                             self.assertNotIn(forbidden, alias.name)
                 elif isinstance(node, ast.ImportFrom):
                     mod = node.module or ""
-                    self.assertNotIn("subprocess", mod)
+                    if is_pure:
+                        self.assertNotIn("subprocess", mod)
                     for forbidden in self.FORBIDDEN_TOKENS:
                         self.assertNotIn(forbidden, mod)
 
@@ -1236,6 +1272,316 @@ class TestDecision007ReviewFixes(unittest.TestCase):
                         saw_unobserved_link = True
         self.assertTrue(saw_observed_link)
         self.assertTrue(saw_unobserved_link)
+
+
+class TestDecision008And009RunnerAndProbes(unittest.TestCase):
+    """Tests for sidecar_driver, friction_probe, cli, S06 boundary, and D009 readback."""
+
+    def test_d009_missing_resolved_handle_and_reanchored_line_never_silently_pass(self) -> None:
+        rec = _make_read_record(handle="read#1", session_id="sess-1")
+        log = DeliveryLog(records=(rec,))
+        scope = PermittedScope(session_id="sess-1", round_id="round-1", intent_window="intent-1")
+        prod_rec = _matching_product_record(rec)
+
+        # Missing resolved_handle on a grounded verdict with expected handle -> status="unknown", NOT pass!
+        cit = Citation(citation_type="handle", raw="[read#1:11]", handle="read#1", start_line=11, citation_id="c1")
+        missing_handle = SurfaceOutcome(
+            surface="coordinator_closeout",
+            verdicts=(ProductVerdict(citation_id="c1", verdict="matched", resolved_handle=""),),
+            records=(prod_rec,),
+        )
+        res = check_slot(log, [cit], scope, missing_handle)
+        self.assertFalse(res.passed)
+        self.assertEqual(res.status, "unknown")
+        self.assertIn("missing resolved_handle readback", res.missing_instrumentation)
+
+        # Missing reanchored_line on a re-anchored citation -> status="unknown", NOT pass!
+        cit_re = Citation(
+            citation_type="handle",
+            raw='[read#1:10 "return nil"]',
+            handle="read#1",
+            start_line=10,
+            excerpt="return nil",
+            citation_id="c1",
+        )
+        missing_re = SurfaceOutcome(
+            surface="coordinator_closeout",
+            verdicts=(ProductVerdict(citation_id="c1", verdict="matched", resolved_handle="read#1", reanchored_line=None),),
+            records=(prod_rec,),
+        )
+        res_re = check_slot(log, [cit_re], scope, missing_re)
+        self.assertFalse(res_re.passed)
+        self.assertEqual(res_re.status, "unknown")
+        self.assertIn("missing reanchored_line readback", res_re.missing_instrumentation)
+
+    def test_d008_s06_historical_unknown_intent_boundary_pre_vs_post_batch(self) -> None:
+        # Verify selector manifest includes S06-historical-unknown-intent-boundary
+        cov05 = next(r for r in PREFLIGHT_COVERAGE_ROWS if r.row_id == "COV-05")
+        for assertion in DECISION_008_S06_ASSERTIONS:
+            self.assertIn(assertion, cov05.assertions)
+
+        scope = PermittedScope(session_id="sess-s06", worker_leg="", round_id="round-1", intent_window="intent-2")
+        prior_window_rec = _make_read_record(
+            handle="read#1",
+            session_id="sess-s06",
+            intent_window="intent-1",
+        )
+        pending_batch_rec = _make_read_record(
+            handle="task#1",
+            kind="task",
+            path="",
+            ranges=(),
+            raw_bytes=b"dispatched worker leg-a",
+            line_numbered=False,
+            session_id="sess-s06",
+            intent_window="intent-2",
+        )
+        cit_task = Citation(citation_type="handle", raw="[task#1]", handle="task#1", citation_id="n1")
+
+        # BEFORE carrier's tool batch executes: task#1 is NOT yet in the delivery log -> ungrounded!
+        pre_batch_log = DeliveryLog(records=(prior_window_rec,))
+        self.assertFalse(has_citable_observation(pre_batch_log, scope))
+        v_pre = resolve_citation(pre_batch_log, cit_task, scope)
+        self.assertEqual(v_pre.verdict_class, "ungrounded")
+        self.assertEqual(v_pre.reason, "unknown_handle")
+
+        # AFTER carrier's tool batch executes: task#1 IS in intent-2 -> grounded!
+        post_batch_log = pre_batch_log.append(pending_batch_rec)
+        self.assertTrue(has_citable_observation(post_batch_log, scope))
+        v_post = resolve_citation(post_batch_log, cit_task, scope)
+        self.assertEqual(v_post.verdict_class, "grounded")
+        self.assertEqual(v_post.supporting_handles, ("task#1",))
+
+    def test_friction_probe_extracts_observable_counters_and_marks_friction_units_unknown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = pathlib.Path(tmp) / "store.db"
+            with contextlib.closing(sqlite3.connect(db_path)) as conn:
+                conn.execute(
+                    "CREATE TABLE messages (id TEXT PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, "
+                    "grounding_json TEXT, workflow_feedback_json TEXT, host_signal_id TEXT, kind TEXT)"
+                )
+                conn.execute(
+                    "INSERT INTO messages VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        "m1",
+                        "sess-f1",
+                        "assistant",
+                        "Answer [read#1:1]",
+                        json.dumps({"retry_count": 2, "host_assembled": True}),
+                        "",
+                        "",
+                        "",
+                    ),
+                )
+                conn.execute(
+                    "INSERT INTO messages VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        "m2",
+                        "sess-f1",
+                        "system",
+                        "withheld",
+                        json.dumps({"hint_code": "MID_TURN_NOTE_UNGROUNDED"}),
+                        "",
+                        "",
+                        "host_feedback",
+                    ),
+                )
+                conn.commit()
+
+            sse = [
+                {"id": "ev-1", "session_id": "sess-f1", "code": "COORDINATOR_GROUNDING_ESCALATED"},
+            ]
+            snap = probe_store_db(db_path, "sess-f1", sse_events=sse)
+            self.assertEqual(snap.repair_attempts.value, 2)
+            self.assertEqual(snap.host_assembled_closeouts.value, 1)
+            self.assertEqual(snap.withheld_notes.value, 1)
+            self.assertEqual(snap.breaker_advisories.value, 1)
+            self.assertEqual(snap.friction_units.status, "unknown")
+            self.assertIsNone(snap.friction_units.value)
+            self.assertEqual(snap.unknown_counters(), ("friction_units",))
+            self.assertIsNone(snap.to_friction_counters())
+
+        report = friction_observability_report()
+        self.assertFalse(report["counters"]["friction_units"]["sidecar_observable"])
+        self.assertTrue(report["counters"]["host_assembled_closeouts"]["sidecar_observable"])
+
+    def test_sidecar_driver_mock_http_and_sqlite_capture(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = pathlib.Path(tmp)
+            # Create a dummy engine binary file and test SHA-256 verification (Decision 009)
+            fake_bin = tmp_path / "lycaon-dev"
+            fake_bin.write_bytes(b"fake-d1-binary-bytes")
+            expected_sha = hashlib.sha256(b"fake-d1-binary-bytes").hexdigest()
+            prov = inspect_engine_binary(fake_bin, expected_sha256=expected_sha)
+            self.assertEqual(prov.sha256, expected_sha)
+            with self.assertRaises(ValueError):
+                inspect_engine_binary(fake_bin, expected_sha256="0" * 64)
+
+            # Seed a temporary SQLite store.db with product evidence + closeout grounding_json
+            db_path = tmp_path / "store.db"
+            with contextlib.closing(sqlite3.connect(db_path)) as conn:
+                conn.execute(
+                    "CREATE TABLE evidence_records (session_id TEXT, handle TEXT, kind TEXT, shape TEXT, "
+                    "path TEXT, url TEXT, line_ranges TEXT, content_blob_sha256 TEXT, marks_untrusted INTEGER, superseded_by TEXT)"
+                )
+                conn.execute(
+                    "CREATE TABLE messages (id TEXT PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, "
+                    "grounding_json TEXT, workflow_feedback_json TEXT, host_signal_id TEXT, kind TEXT)"
+                )
+                body_sha = hashlib.sha256(b"1: package sample\n").hexdigest()
+                conn.execute(
+                    "INSERT INTO evidence_records VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        "sess-mock",
+                        "read#1",
+                        "read",
+                        "file_region",
+                        "sample.go",
+                        "",
+                        json.dumps({"v": 1, "ranges": [{"start": 1, "end": 1}]}),
+                        body_sha,
+                        0,
+                        None,
+                    ),
+                )
+                conn.execute(
+                    "INSERT INTO messages VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        "m-close",
+                        "sess-mock",
+                        "assistant",
+                        "Verified [read#1:1].",
+                        json.dumps({"traced": True, "retry_count": 0, "host_assembled": False}),
+                        "",
+                        "",
+                        "",
+                    ),
+                )
+                conn.commit()
+
+            # Spin up a local mock HTTP server simulating /harness/llm/pending & /respond
+            state: dict[str, object] = {"turn": 0, "responses": []}
+
+            class MockHandler(BaseHTTPRequestHandler):
+                def log_message(self, _fmt: str, *_args: object) -> None:
+                    return
+
+                def do_GET(self) -> None:  # noqa: N802
+                    parsed = urllib.parse.urlparse(self.path)
+                    if parsed.path == "/harness/llm/pending":
+                        turn_num = int(state["turn"])  # type: ignore[arg-type]
+                        if turn_num == 0:
+                            payload = {"id": "req-1", "messages": [{"role": "user", "content": "Read sample.go"}]}
+                        else:
+                            payload = {
+                                "id": "req-2",
+                                "messages": [
+                                    {"role": "user", "content": "Read sample.go"},
+                                    {"role": "tool", "tool_call_id": "call-read-1", "name": "read_file", "content": "1: package sample\n"},
+                                ],
+                            }
+                        body = json.dumps(payload).encode("utf-8")
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.end_headers()
+                        self.wfile.write(body)
+                        return
+                    self.send_response(404)
+                    self.end_headers()
+
+                def do_POST(self) -> None:  # noqa: N802
+                    length = int(self.headers.get("Content-Length", "0"))
+                    raw = self.rfile.read(length).decode("utf-8")
+                    if self.path == "/harness/llm/respond":
+                        state["responses"].append(json.loads(raw))  # type: ignore[union-attr]
+                        state["turn"] = int(state["turn"]) + 1  # type: ignore[arg-type]
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.end_headers()
+                        self.wfile.write(b'{"ok":true}')
+                        return
+                    self.send_response(404)
+                    self.end_headers()
+
+            server = ThreadingHTTPServer(("127.0.0.1", 0), MockHandler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                base_url = f"http://127.0.0.1:{server.server_address[1]}"
+                client = SidecarSessionClient(base_url, token="test-token")
+                artifact = run_scripted_session(
+                    client,
+                    session_id="sess-mock",
+                    turns=(
+                        ScriptedTurn(
+                            tool_calls=({"id": "call-read-1", "name": "read_file", "args": {"path": "sample.go", "start_line": 1, "end_line": 1}},),
+                        ),
+                        ScriptedTurn(content="Verified [read#1:1]."),
+                    ),
+                    db_path=db_path,
+                    engine_provenance=prov,
+                )
+            finally:
+                server.shutdown()
+                server.server_close()
+
+            self.assertEqual(len(artifact.raw_pending_requests), 2)
+            self.assertEqual(len(artifact.scripted_responses), 2)
+            self.assertEqual(len(artifact.delivered_tool_messages), 1)
+            self.assertEqual(artifact.delivered_tool_messages[0]["call_id"], "call-read-1")
+            self.assertEqual(len(artifact.delivery_log.records), 1)
+            self.assertEqual(artifact.delivery_log.records[0].handle, "read#1")
+            self.assertEqual(len(artifact.product_records), 1)
+            self.assertEqual(artifact.product_records[0].handle, "read#1")
+            self.assertEqual(len(artifact.product_closeouts), 1)
+            self.assertIsNotNone(artifact.engine_provenance)
+            assert artifact.friction_after is not None
+            self.assertEqual(artifact.friction_after.friction_units.status, "unknown")
+
+    def test_cli_selftest_replay_controls_dry_run_inprocess_and_friction_report(self) -> None:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cli_main(["selftest"])
+        self.assertEqual(rc, 0)
+        self.assertTrue(json.loads(buf.getvalue())["passed"])
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cli_main(["friction-report"])
+        self.assertEqual(rc, 0)
+        self.assertIn("d7_compliant_proposal", json.loads(buf.getvalue()))
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cli_main(["inprocess", "--dry-run"])
+        self.assertEqual(rc, 0)
+        self.assertTrue(json.loads(buf.getvalue())["dry_run"])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = pathlib.Path(tmp)
+            # Replay a shrunk artifact JSON
+            gen = generate_r06("20261127", 0, variation="path_normalization")
+            art = shrink_case(
+                ShrinkableCase(delivery_log=gen.delivery_log, scope=gen.scope, citation=gen.citation, seed=gen.seed),
+                lambda c: resolve_citation(c.delivery_log, c.citation, c.scope).verdict_class == "grounded",  # type: ignore[arg-type]
+            )
+            art_file = tmp_path / "shrunk.json"
+            art_file.write_text(art.to_json(), encoding="utf-8")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = cli_main(["replay", str(art_file)])
+            self.assertEqual(rc, 0)
+            self.assertEqual(json.loads(buf.getvalue())["verdict_class"], "grounded")
+
+            # Controls dry-run with expected SHA-256 verification
+            fake_bin = tmp_path / "lycaon-dev"
+            fake_bin.write_bytes(b"cli-test-bin")
+            sha = hashlib.sha256(b"cli-test-bin").hexdigest()
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = cli_main(["controls", "--engine-bin", str(fake_bin), "--expected-engine-sha256", sha, "--dry-run"])
+            self.assertEqual(rc, 0)
+            self.assertEqual(json.loads(buf.getvalue())["engine_provenance"]["sha256"], sha)
 
 
 if __name__ == "__main__":

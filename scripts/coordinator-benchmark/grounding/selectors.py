@@ -157,8 +157,9 @@ PREFLIGHT_COVERAGE_ROWS: tuple[PreflightCoverageRow, ...] = (
             "source_change_supplies_no_line_or_excerpt",
             "source_change_unavailable_to_recall",
             "derived_user_note_creates_no_second_model_visible_copy",
+            "S06-historical-unknown-intent-boundary",
         ),
-        summary="source_change# brief-only semantics and derived user note exclusion from model projection.",
+        summary="source_change# brief-only semantics, derived user note exclusion, and Decision 008 S06 pre/post-batch intent-window boundary.",
     ),
     PreflightCoverageRow(
         row_id="COV-06",
@@ -228,6 +229,11 @@ DECISION_005_V04_ASSERTIONS: tuple[str, ...] = (
     "V04-displayed-continuous-numbers",
     "V04-rejected-inferred-coordinate",
     "V04-uniquely-matching-excerpt",
+)
+
+# Decision 008 synthetic S06 boundary assertion (preserves original `unknown` in GB01 history)
+DECISION_008_S06_ASSERTIONS: tuple[str, ...] = (
+    "S06-historical-unknown-intent-boundary",
 )
 
 

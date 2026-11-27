@@ -84,104 +84,149 @@ def _compare_citation_verdict(
     prod_verdict: ProductVerdict,
     *,
     assert_exact_verdicts: bool = False,
-) -> Defect | None:
-    """Compare one product verdict against the independent reference verdict (D4, GB02-R1)."""
+) -> tuple[Defect | None, str]:
+    """Compare one product verdict against the independent reference verdict (D4, GB02-R1, D009).
+
+    Returns `(defect_or_none, missing_readback_note)`.
+    Decision 009: When a grounded verdict has an expected support handle or
+    re-anchored line and the product adapter omits that readback, never silently
+    accept it — surface an explicit missing-readback note (`unknown`).
+    """
+    missing_readbacks: list[str] = []
+
     # Priority 1: False accept (including misbound support or re-anchoring)
     if prod_verdict.is_grounded:
         if ref_verdict.verdict_class == "ungrounded":
-            return Defect(
-                kind="false_accept",
-                citation_id=prod_verdict.citation_id,
-                handle=prod_verdict.resolved_handle,
-                detail=(
-                    f"Product grounded citation ({prod_verdict.verdict}) where reference "
-                    f"resolver says ungrounded ({ref_verdict.reason})"
+            return (
+                Defect(
+                    kind="false_accept",
+                    citation_id=prod_verdict.citation_id,
+                    handle=prod_verdict.resolved_handle,
+                    detail=(
+                        f"Product grounded citation ({prod_verdict.verdict}) where reference "
+                        f"resolver says ungrounded ({ref_verdict.reason})"
+                    ),
                 ),
+                "",
             )
         if ref_verdict.verdict_class == "ambiguous" and not citation.names_handle:
-            return Defect(
-                kind="false_accept",
-                citation_id=prod_verdict.citation_id,
-                handle=prod_verdict.resolved_handle,
-                detail=(
-                    f"Product grounded non-handle citation ({prod_verdict.verdict}) where "
-                    f"reference resolver found multiple deliveries ({ref_verdict.supporting_handles})"
+            return (
+                Defect(
+                    kind="false_accept",
+                    citation_id=prod_verdict.citation_id,
+                    handle=prod_verdict.resolved_handle,
+                    detail=(
+                        f"Product grounded non-handle citation ({prod_verdict.verdict}) where "
+                        f"reference resolver found multiple deliveries ({ref_verdict.supporting_handles})"
+                    ),
                 ),
+                "",
             )
-        # GB02-R1: Verify returned support handle against reference observations
-        if prod_verdict.resolved_handle and ref_verdict.supporting_handles:
-            allowed = set(ref_verdict.supporting_handles)
-            if prod_verdict.resolved_handle not in allowed:
-                return Defect(
-                    kind="false_accept",
-                    citation_id=prod_verdict.citation_id,
-                    handle=prod_verdict.resolved_handle,
-                    detail=(
-                        f"Misbound resolved_handle {prod_verdict.resolved_handle!r}; "
-                        f"expected one of {sorted(allowed)}"
-                    ),
+        # GB02-R1 & Decision 009: Verify returned support handle against reference observations;
+        # never silently accept a missing support handle when an expected handle exists.
+        if ref_verdict.supporting_handles:
+            if not prod_verdict.resolved_handle:
+                missing_readbacks.append(
+                    f"occurrence {prod_verdict.citation_id!r} missing resolved_handle readback "
+                    f"(expected one of {sorted(ref_verdict.supporting_handles)})"
                 )
-        # GB02-R1: Verify re-anchored line against reference observation
-        if ref_verdict.reanchored_line is not None and prod_verdict.reanchored_line is not None:
-            if prod_verdict.reanchored_line != ref_verdict.reanchored_line:
-                return Defect(
-                    kind="false_accept",
-                    citation_id=prod_verdict.citation_id,
-                    handle=prod_verdict.resolved_handle,
-                    detail=(
-                        f"Misbound reanchored_line {prod_verdict.reanchored_line}; "
-                        f"expected {ref_verdict.reanchored_line}"
+            else:
+                allowed = set(ref_verdict.supporting_handles)
+                if prod_verdict.resolved_handle not in allowed:
+                    return (
+                        Defect(
+                            kind="false_accept",
+                            citation_id=prod_verdict.citation_id,
+                            handle=prod_verdict.resolved_handle,
+                            detail=(
+                                f"Misbound resolved_handle {prod_verdict.resolved_handle!r}; "
+                                f"expected one of {sorted(allowed)}"
+                            ),
+                        ),
+                        "",
+                    )
+        # GB02-R1 & Decision 009: Verify re-anchored line against reference observation;
+        # never silently accept a missing re-anchored coordinate readback.
+        if ref_verdict.reanchored_line is not None:
+            if prod_verdict.reanchored_line is None:
+                missing_readbacks.append(
+                    f"occurrence {prod_verdict.citation_id!r} missing reanchored_line readback "
+                    f"(expected line {ref_verdict.reanchored_line})"
+                )
+            elif prod_verdict.reanchored_line != ref_verdict.reanchored_line:
+                return (
+                    Defect(
+                        kind="false_accept",
+                        citation_id=prod_verdict.citation_id,
+                        handle=prod_verdict.resolved_handle,
+                        detail=(
+                            f"Misbound reanchored_line {prod_verdict.reanchored_line}; "
+                            f"expected {ref_verdict.reanchored_line}"
+                        ),
                     ),
+                    "",
                 )
         # R02/R03 exact typed verdict assertion (D4)
         if assert_exact_verdicts and prod_verdict.verdict != ref_verdict.expected_exact_verdict:
-            return Defect(
-                kind="surface_policy_defect",
-                citation_id=prod_verdict.citation_id,
-                handle=prod_verdict.resolved_handle,
-                detail=(
-                    f"Exact typed verdict mismatch: product={prod_verdict.verdict!r}, "
-                    f"expected={ref_verdict.expected_exact_verdict!r}"
+            return (
+                Defect(
+                    kind="surface_policy_defect",
+                    citation_id=prod_verdict.citation_id,
+                    handle=prod_verdict.resolved_handle,
+                    detail=(
+                        f"Exact typed verdict mismatch: product={prod_verdict.verdict!r}, "
+                        f"expected={ref_verdict.expected_exact_verdict!r}"
+                    ),
                 ),
+                "; ".join(missing_readbacks),
             )
-        return None
+        return (None, "; ".join(missing_readbacks))
 
     # Priority 2: False reject
     if ref_verdict.verdict_class == "grounded":
-        return Defect(
-            kind="false_reject",
-            citation_id=prod_verdict.citation_id,
-            handle=prod_verdict.resolved_handle,
-            detail=(
-                f"Product refused citation ({prod_verdict.verdict}) where reference "
-                f"resolver found supporting delivery {ref_verdict.supporting_handles} ({ref_verdict.reason})"
+        return (
+            Defect(
+                kind="false_reject",
+                citation_id=prod_verdict.citation_id,
+                handle=prod_verdict.resolved_handle,
+                detail=(
+                    f"Product refused citation ({prod_verdict.verdict}) where reference "
+                    f"resolver found supporting delivery {ref_verdict.supporting_handles} ({ref_verdict.reason})"
+                ),
             ),
+            "",
         )
 
     # Healthy ambiguous: reference says ambiguous (without handle) and product says ambiguous
     if ref_verdict.verdict_class == "ambiguous" and not citation.names_handle:
         if prod_verdict.verdict == "ambiguous":
-            return None
-        return Defect(
-            kind="false_reject",
-            citation_id=prod_verdict.citation_id,
-            detail=(
-                f"Expected ambiguous verdict for multi-delivery citation, got {prod_verdict.verdict}"
+            return (None, "")
+        return (
+            Defect(
+                kind="false_reject",
+                citation_id=prod_verdict.citation_id,
+                detail=(
+                    f"Expected ambiguous verdict for multi-delivery citation, got {prod_verdict.verdict}"
+                ),
             ),
+            "",
         )
 
     # R02/R03 exact typed verdict assertion on ungrounded class
     if assert_exact_verdicts and prod_verdict.verdict != ref_verdict.expected_exact_verdict:
-        return Defect(
-            kind="surface_policy_defect",
-            citation_id=prod_verdict.citation_id,
-            detail=(
-                f"Exact typed verdict mismatch: product={prod_verdict.verdict!r}, "
-                f"expected={ref_verdict.expected_exact_verdict!r}"
+        return (
+            Defect(
+                kind="surface_policy_defect",
+                citation_id=prod_verdict.citation_id,
+                detail=(
+                    f"Exact typed verdict mismatch: product={prod_verdict.verdict!r}, "
+                    f"expected={ref_verdict.expected_exact_verdict!r}"
+                ),
             ),
+            "",
         )
 
-    return None
+    return (None, "")
 
 
 def compare_records(
@@ -425,6 +470,10 @@ def check_slot(
             continue
         prod_by_id[prod_v.citation_id] = prod_v
 
+    missing_notes: list[str] = []
+    if missing_instr:
+        missing_notes.append(missing_instr)
+
     for cid, (cit, ref_v) in cit_by_id.items():
         prod_v = prod_by_id.get(cid)
         if prod_v is None:
@@ -436,11 +485,15 @@ def check_slot(
                 )
             )
             continue
-        defect = _compare_citation_verdict(
+        defect, readback_missing = _compare_citation_verdict(
             cit, ref_v, prod_v, assert_exact_verdicts=assert_exact_verdicts
         )
         if defect is not None:
             defects.append(defect)
+        if readback_missing:
+            missing_notes.append(readback_missing)
+
+    missing_instr = "; ".join(missing_notes)
 
     for cid in prod_by_id:
         if cid not in cit_by_id:
