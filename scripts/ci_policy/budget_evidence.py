@@ -12,32 +12,38 @@ MAX_ARCHIVE_BYTES = 32 * 1024 * 1024
 MAX_REPORT_BYTES = 8 * 1024 * 1024
 
 
-def _read_zip_memory_observations(raw, tree, policy):
-    observations = {}
+def _read_compact_memory(raw, sha, tree):
+    measured = {}
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-        for member in archive.infolist():
-            if not member.filename.endswith('.json') or member.filename.endswith('.progress.json'):
-                continue
+        members = [m for m in archive.infolist() if m.filename == 'ci/memory.json' or m.filename.endswith('/ci/memory.json')]
+        for member in members:
             if member.file_size <= 0 or member.file_size > MAX_REPORT_BYTES:
                 continue
             try:
-                record = json.loads(archive.read(member))
+                payload = json.loads(archive.read(member))
             except (ValueError, UnicodeDecodeError):
                 continue
-            if not isinstance(record, dict) or record.get('status') != 'passed' or record.get('source_tree') != tree:
+            if (not isinstance(payload, dict) or payload.get('schema_version') != 1
+                    or payload.get('source_sha') != sha or payload.get('source_tree') != tree):
                 continue
-            if not isinstance(record.get('evidence'), list):
-                continue
-            memory_budgets.collect_receipt_observations(record, member.filename, observations, policy)
-    return observations
+            for obs in payload.get('observations', []):
+                if (not isinstance(obs, dict) or obs.get('lane') not in {'ordinary', 'race'}
+                        or not isinstance(obs.get('package'), str)
+                        or type(obs.get('peak_bytes')) is not int or obs['peak_bytes'] <= 0
+                        or type(obs.get('limit_bytes')) is not int or obs['limit_bytes'] <= 0):
+                    continue
+                obs_key = (obs['lane'], obs['package'])
+                prev = measured.get(obs_key)
+                if prev is None or obs['peak_bytes'] > prev['peak_bytes']:
+                    measured[obs_key] = obs
+    return measured
 
 
 def _merge_hosted_memory_artifacts(run, tree, all_artifacts, artifacts, repo_root=None, reviews_dir=None):
     suffix = f"-{run['run_attempt']}"
     prefix = 'receipt-verification-nightly-'
     build_name = f"{prefix}build{suffix}"
-    collected = {}
-    policy = memory_budgets.load_policy()
+    measured = {}
     for artifact in all_artifacts:
         name = artifact.get('name', '')
         if not name.startswith(prefix) or not name.endswith(suffix) or name == build_name or artifact.get('expired'):
@@ -47,13 +53,13 @@ def _merge_hosted_memory_artifacts(run, tree, all_artifacts, artifacts, repo_roo
         raw = subprocess.check_output(['gh', 'api', f"{repository()}/actions/artifacts/{artifact['id']}/zip"])
         if len(raw) > MAX_ARCHIVE_BYTES:
             continue
-        for obs_key, item in _read_zip_memory_observations(raw, tree, policy).items():
-            prev = collected.get(obs_key)
-            if prev is None or (item[1].get('peak_bytes') or -1) > (prev[1].get('peak_bytes') or -1):
-                collected[obs_key] = item
-    measured = {k: obs for k, (_, obs) in collected.items() if type(obs.get('peak_bytes')) is int and obs['peak_bytes'] > 0}
+        for obs_key, obs in _read_compact_memory(raw, run['head_sha'], tree).items():
+            prev = measured.get(obs_key)
+            if prev is None or obs['peak_bytes'] > prev['peak_bytes']:
+                measured[obs_key] = obs
+    observed = {(f"package_memory_{lane}", memory_budgets.artifact_id(pkg)) for lane, pkg in measured}
     if not measured:
-        return
+        return observed
     root = repo_root or memory_budgets.ROOT
     reviews = reviews_dir if reviews_dir is not None else memory_budgets.REVIEWS_DIR
     for row in memory_budgets.tracking_artifacts_from_measured(root, measured, reviews_dir=reviews):
@@ -61,6 +67,7 @@ def _merge_hosted_memory_artifacts(run, tree, all_artifacts, artifacts, repo_roo
         existing = artifacts.get(identity)
         if existing is None or row['measured'] > existing['measured']:
             artifacts[identity] = row
+    return observed
 
 
 def read_snapshot(run, tree):
@@ -82,5 +89,6 @@ def read_snapshot(run, tree):
             raise ValueError('expected one bounded maintainability report')
         report = json.loads(archive.read(members[0]))
     snapshot, artifacts = validate(report, run['head_sha'], tree)
-    _merge_hosted_memory_artifacts(run, tree, all_artifacts, artifacts)
+    observed = _merge_hosted_memory_artifacts(run, tree, all_artifacts, artifacts)
+    snapshot['memory_observed'] = sorted(observed)
     return snapshot, artifacts

@@ -50,7 +50,7 @@ def _lane_for(stage, names, package, limit_bytes, policy):
     return "race" if ordinary is not None and limit_bytes > ordinary else "ordinary"
 
 
-def _artifact_id(package):
+def artifact_id(package):
     if package.startswith(MODULE_PREFIX):
         return "lycaon/" + package[len(MODULE_PREFIX):]
     return package
@@ -208,7 +208,7 @@ def tracking_artifacts_from_measured(repo_root, measured, reviews_dir=REVIEWS_DI
     for obs_key, obs in sorted(measured.items()):
         if not at_or_above_warning(obs["peak_bytes"], obs["limit_bytes"]):
             continue
-        artifact = _artifact_id(obs["package"])
+        artifact = artifact_id(obs["package"])
         if not budget_snapshot.relative(artifact):
             continue
         row = {

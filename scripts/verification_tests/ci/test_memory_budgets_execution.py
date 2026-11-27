@@ -11,6 +11,7 @@ import zipfile
 import budgets
 from ci_policy import budget_evidence as evidence, budget_snapshot as snapshot
 from ci_policy import maintainability_issues as tracker, memory_budgets as mb
+from ci_policy import verification_report as vreport
 
 
 def _write_receipt(artifact_dir, batch, name, tree_sha, stage, results, status="passed", finished_at=100.0,
@@ -226,7 +227,7 @@ class MemoryBudgetTests(unittest.TestCase):
             self.assertIn(("ordinary", "example/p1"), measured)
             self.assertIn(("race", "example/p2"), measured)
 
-    def test_hosted_memory_receipt_creates_post_merge_cleanup_obligation_and_suppresses_retained(self):
+    def test_hosted_memory_receipt_creates_post_merge_cleanup_obligation_and_keeps_open_issue_on_missing_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             repo = root / "repo"
@@ -244,71 +245,80 @@ class MemoryBudgetTests(unittest.TestCase):
                 int(ordinary_limit * 0.90), {"lycaon/test/contract/retained/contract_test.go": digest},
             )))
 
-            # Build job uploads sealed maintainability.json (no memory rows yet); sibling behavior shard uploads MU01 receipts.
+            # Exercise the real producer (verification_report.report) to emit compact ci/memory.json.
+            shard_artifacts = root / "shard-artifacts"
+            _write_receipt(shard_artifacts, "b1", "1.json", tree, "test:contract", {
+                "github.com/lycaon/lycaon/test/contract/promptrender": _obs(int(ordinary_limit * 0.81), ordinary_limit),
+                "github.com/lycaon/lycaon/test/contract/retained": _obs(int(ordinary_limit * 0.85), ordinary_limit),
+            }, source_manifest_tree=tree)
+            summary = root / "summary.md"
+            with patch.object(vreport, "artifact_root", return_value=shard_artifacts), \
+                    patch.object(vreport, "source", return_value={"sha": sha, "tree": tree}), \
+                    patch.dict("os.environ", {"GITHUB_STEP_SUMMARY": str(summary)}):
+                vreport.report("success")
+            compact_memory = json.loads((shard_artifacts / "ci" / "memory.json").read_text())
+            self.assertEqual(compact_memory["source_sha"], sha)
+            self.assertEqual(compact_memory["source_tree"], tree)
+
+            # Build the exact compact receipt-* archives selected by .github/actions/verification-evidence/action.yml
+            # (only ci/ and budgets/reports/ — no raw verification/ directory).
             maint = {"suite": "maintainability", "tracking": {"schema_version": 1, "complete": True, "artifacts": []}}
             snapshot.seal(maint, sha, tree, base)
             build_zip = _zip_bytes({"budgets/reports/maintainability.json": maint})
-            shard_zip = _zip_bytes({
-                "verification/b1/1.json": {
-                    "status": "passed", "source_tree": tree, "finished_at": 100.0, "names": ["test:contract"],
-                    "evidence": [{"stage": "test:contract", "results": {
-                        "github.com/lycaon/lycaon/test/contract/promptrender": _obs(int(ordinary_limit * 0.81), ordinary_limit),
-                        "github.com/lycaon/lycaon/test/contract/retained": _obs(int(ordinary_limit * 0.85), ordinary_limit),
-                    }}],
-                },
-                "verification/b2/1.json": {
-                    "status": "passed", "source_tree": "f" * 40, "finished_at": 200.0, "names": ["test:contract"],
-                    "evidence": [{"stage": "test:contract", "results": {
-                        "github.com/lycaon/lycaon/test/contract/wrongtree": _obs(int(ordinary_limit * 0.95), ordinary_limit),
-                    }}],
-                },
-            })
-            shard_dup_zip = _zip_bytes({
-                "verification/b3/1.json": {
-                    "status": "passed", "source_tree": tree, "finished_at": 105.0, "names": ["test:contract"],
-                    "evidence": [{"stage": "test:contract", "results": {
-                        "github.com/lycaon/lycaon/test/contract/promptrender": _obs(int(ordinary_limit * 0.805), ordinary_limit),
-                    }}],
-                },
-            })
-            artifact_list = [
-                {"id": 1, "name": "receipt-verification-nightly-build-1", "expired": False, "size_in_bytes": len(build_zip)},
-                {"id": 2, "name": "receipt-verification-nightly-behavior-1", "expired": False, "size_in_bytes": len(shard_zip)},
-                {"id": 3, "name": "receipt-verification-nightly-behavior-dup-1", "expired": False, "size_in_bytes": len(shard_dup_zip)},
-            ]
-            zips = {
-                "repos/org/repo/actions/artifacts/1/zip": build_zip,
-                "repos/org/repo/actions/artifacts/2/zip": shard_zip,
-                "repos/org/repo/actions/artifacts/3/zip": shard_dup_zip,
-            }
+            shard_zip = _zip_bytes({"ci/memory.json": compact_memory})
+            shard_dup_zip = _zip_bytes({"ci/memory.json": {
+                **compact_memory,
+                "observations": [{
+                    "lane": "ordinary", "stage": "test:contract",
+                    "package": "github.com/lycaon/lycaon/test/contract/promptrender",
+                    "peak_bytes": int(ordinary_limit * 0.805), "limit_bytes": ordinary_limit,
+                    "source": "proc_vmhwm", "lower_bound": True,
+                }],
+            }})
+            wrong_tree_zip = _zip_bytes({"ci/memory.json": {
+                **compact_memory, "source_tree": "f" * 40,
+                "observations": [{
+                    "lane": "ordinary", "stage": "test:contract",
+                    "package": "github.com/lycaon/lycaon/test/contract/wrongtree",
+                    "peak_bytes": int(ordinary_limit * 0.95), "limit_bytes": ordinary_limit,
+                    "source": "proc_vmhwm", "lower_bound": True,
+                }],
+            }})
             run = {"id": 42, "run_attempt": 1, "head_sha": sha, "head_branch": "main",
                    "path": ".github/workflows/nightly.yml", "event": "schedule",
                    "status": "completed", "conclusion": "success", "repository": {"full_name": "org/repo"}}
-            fake_holds = type("FakeHolds", (), {
-                "__init__": lambda self, source: setattr(self, "records", {}) or setattr(
-                    self, "changes", type("C", (), {"main": sha})()),
-                "__call__": lambda self, row: False,
-                "report": lambda self: [],
-            })
 
-            def fake_pages(path, key=None):
-                if path.endswith("/artifacts"):
-                    return artifact_list
-                return []
+            def run_reconcile(artifact_list, zips, open_issues):
+                with patch.dict("os.environ", {"GITHUB_REPOSITORY": "org/repo"}), \
+                        patch.object(evidence, "pages", return_value=artifact_list), \
+                        patch.object(evidence.subprocess, "check_output", side_effect=lambda cmd: zips[cmd[-1]]), \
+                        patch.object(mb, "ROOT", repo), \
+                        patch.object(mb, "REVIEWS_DIR", reviews), \
+                        patch.object(tracker, "merged_pulls", return_value=[{"number": 2806}]), \
+                        patch.object(tracker, "api", return_value={"tree": {"sha": tree}}), \
+                        patch.object(tracker, "checkpoint", return_value=None), \
+                        patch.object(tracker, "intake", side_effect=lambda _r, arts, _p: set(arts)), \
+                        patch.object(tracker, "pages", return_value=open_issues), \
+                        patch.object(tracker, "MainChanges", return_value=type("MC", (), {
+                            "main": sha, "changed": lambda self, row: False})()):
+                    return tracker.reconcile(run, dry_run=True)
 
-            with patch.dict("os.environ", {"GITHUB_REPOSITORY": "org/repo"}), \
-                    patch.object(evidence, "pages", side_effect=fake_pages), \
-                    patch.object(evidence.subprocess, "check_output", side_effect=lambda cmd: zips[cmd[-1]]), \
-                    patch.object(mb, "ROOT", repo), \
-                    patch.object(mb, "REVIEWS_DIR", reviews), \
-                    patch.object(tracker, "merged_pulls", return_value=[{"number": 2806}]), \
-                    patch.object(tracker, "api", return_value={"tree": {"sha": tree}}), \
-                    patch.object(tracker, "checkpoint", return_value=None), \
-                    patch.object(tracker, "intake", side_effect=lambda _r, arts, _p: set(arts)), \
-                    patch.object(tracker, "pages", return_value=[]), \
-                    patch.object(tracker, "Holds", fake_holds):
-                report = tracker.reconcile(run, dry_run=True)
-
+            # 1. Qualifying compact ci/memory.json creates cleanup issue for unretained 81% and suppresses retained 85%.
+            report = run_reconcile(
+                [
+                    {"id": 1, "name": "receipt-verification-nightly-build-1", "expired": False, "size_in_bytes": len(build_zip)},
+                    {"id": 2, "name": "receipt-verification-nightly-behavior-1", "expired": False, "size_in_bytes": len(shard_zip)},
+                    {"id": 3, "name": "receipt-verification-nightly-behavior-dup-1", "expired": False, "size_in_bytes": len(shard_dup_zip)},
+                    {"id": 4, "name": "receipt-verification-nightly-wrong-1", "expired": False, "size_in_bytes": len(wrong_tree_zip)},
+                ],
+                {
+                    "repos/org/repo/actions/artifacts/1/zip": build_zip,
+                    "repos/org/repo/actions/artifacts/2/zip": shard_zip,
+                    "repos/org/repo/actions/artifacts/3/zip": shard_dup_zip,
+                    "repos/org/repo/actions/artifacts/4/zip": wrong_tree_zip,
+                },
+                [],
+            )
             self.assertEqual(report["above_threshold"], {"package_memory_ordinary": 2})
             self.assertEqual(len(report["operations"]), 1)
             op = report["operations"][0]
@@ -317,6 +327,65 @@ class MemoryBudgetTests(unittest.TestCase):
             self.assertNotIn("wrongtree", op["body"]["body"])
             self.assertNotIn("lycaon/test/contract/retained", op["body"]["body"])
             self.assertEqual(report["workstreams"]["test-memory-headroom"][0]["state"], "retained")
+
+            # 2. With that memory issue already open, a missing lane artifact or unavailable observation MUST NOT close it.
+            open_issue = {
+                "number": 9001, "state": "open", "state_reason": None,
+                "user": {"login": "github-actions[bot]"},
+                "title": op["body"]["title"], "body": op["body"]["body"],
+            }
+            missing_lane_report = run_reconcile(
+                [{"id": 1, "name": "receipt-verification-nightly-build-1", "expired": False, "size_in_bytes": len(build_zip)}],
+                {"repos/org/repo/actions/artifacts/1/zip": build_zip},
+                [open_issue],
+            )
+            self.assertEqual(missing_lane_report["operations"], [])
+            self.assertTrue(any(h.get("reason") == "memory_observation_unavailable" for h in missing_lane_report["held"]))
+
+            unavailable_zip = _zip_bytes({"ci/memory.json": {
+                "schema_version": 1, "source_sha": sha, "source_tree": tree, "status": "success",
+                "lanes": ["ordinary"], "observations": [],
+                "unavailable": {"ordinary": ["github.com/lycaon/lycaon/test/contract/promptrender"]},
+            }})
+            unavail_report = run_reconcile(
+                [
+                    {"id": 1, "name": "receipt-verification-nightly-build-1", "expired": False, "size_in_bytes": len(build_zip)},
+                    {"id": 5, "name": "receipt-verification-nightly-behavior-1", "expired": False, "size_in_bytes": len(unavailable_zip)},
+                ],
+                {
+                    "repos/org/repo/actions/artifacts/1/zip": build_zip,
+                    "repos/org/repo/actions/artifacts/5/zip": unavailable_zip,
+                },
+                [open_issue],
+            )
+            self.assertEqual(unavail_report["operations"], [])
+            self.assertTrue(any(h.get("reason") == "memory_observation_unavailable" for h in unavail_report["held"]))
+
+            # 3. Once a qualifying observation measures promptrender below 80%, the open issue resolves cleanly.
+            recovered_zip = _zip_bytes({"ci/memory.json": {
+                "schema_version": 1, "source_sha": sha, "source_tree": tree, "status": "success",
+                "lanes": ["ordinary"],
+                "observations": [{
+                    "lane": "ordinary", "stage": "test:contract",
+                    "package": "github.com/lycaon/lycaon/test/contract/promptrender",
+                    "peak_bytes": int(ordinary_limit * 0.50), "limit_bytes": ordinary_limit,
+                    "source": "proc_vmhwm", "lower_bound": True,
+                }],
+                "unavailable": {},
+            }})
+            recovered_report = run_reconcile(
+                [
+                    {"id": 1, "name": "receipt-verification-nightly-build-1", "expired": False, "size_in_bytes": len(build_zip)},
+                    {"id": 6, "name": "receipt-verification-nightly-behavior-1", "expired": False, "size_in_bytes": len(recovered_zip)},
+                ],
+                {
+                    "repos/org/repo/actions/artifacts/1/zip": build_zip,
+                    "repos/org/repo/actions/artifacts/6/zip": recovered_zip,
+                },
+                [open_issue],
+            )
+            self.assertEqual(len(recovered_report["operations"]), 1)
+            self.assertEqual(recovered_report["operations"][0]["action"], "resolve")
 
     def test_empty_receipts_returns_no_findings_and_budgets_main_never_blocks_on_memory_warning(self):
         with tempfile.TemporaryDirectory() as directory:

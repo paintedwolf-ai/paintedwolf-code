@@ -28,22 +28,34 @@ def eligible(run, repo):
             and SHA.fullmatch(run['head_sha']) is not None)
 
 
-class Holds:
-    """Artifacts whose measurement inputs changed between the report source and main."""
+MEMORY_CATEGORIES = frozenset({'package_memory_ordinary', 'package_memory_race'})
 
-    def __init__(self, source):
+
+class Holds:
+    """Artifacts whose measurement inputs changed between the report source and main,
+    or memory artifacts lacking a qualifying observation in this run."""
+
+    def __init__(self, source, memory_observed=None):
         self.source, self.records = source, {}
+        self.memory_observed = {tuple(item) for item in (memory_observed or ())}
         self.refresh()
 
     def refresh(self):
         self.changes = MainChanges(ROOT, self.source)
 
     def __call__(self, row):
-        if (row['category'], row['id']) in self.records:
+        pair = (row['category'], row['id'])
+        if pair in self.records:
+            return True
+        if row['category'] in MEMORY_CATEGORIES and pair not in self.memory_observed:
+            self.records[pair] = {
+                'category': row['category'], 'id': row['id'], 'report_source': self.source,
+                'main': self.changes.main, 'reason': 'memory_observation_unavailable',
+            }
             return True
         if not self.changes.changed(row):
             return False
-        self.records[(row['category'], row['id'])] = {
+        self.records[pair] = {
             'category': row['category'], 'id': row['id'], 'report_source': self.source, 'main': self.changes.main}
         return True
 
@@ -73,7 +85,7 @@ def reconcile(run, dry_run=False, backfill=False, save_plan=None):
                 'measured': row['measured'], 'state': review['state']})
     prior = None if backfill else checkpoint()
     intake_keys = set(artifacts) if backfill else intake(run, artifacts, prior)
-    holds = Holds(run['head_sha'])
+    holds = Holds(run['head_sha'], snapshot.get('memory_observed'))
     operations, suppressed = plan(list(pages(f'{repository()}/issues?state=all')), artifacts, observation,
                                   backfill, intake_keys, holds)
     planned = set(holds.records)
