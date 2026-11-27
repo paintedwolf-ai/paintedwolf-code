@@ -49,6 +49,7 @@ def query_db_audit(db_path, session_id, prelude_call_ids=()):
         snap_ids = [r['snapshot_id'] for r in inventory if r.get('snapshot_id')]
         s_ph = ','.join('?' for _ in snap_ids) or "''"
         snapshots = _rows(db, f'SELECT id,file_count,capture_quality FROM source_snapshots WHERE id IN ({s_ph})', snap_ids) if snap_ids and _table_exists(db, 'source_snapshots') else []
+        snap_roots = _rows(db, f'SELECT snapshot_id,root_path FROM source_snapshot_roots WHERE snapshot_id IN ({s_ph}) ORDER BY ordinal', snap_ids) if snap_ids and _table_exists(db, 'source_snapshot_roots') else []
     return {
         'prelude_receipts': prelude_receipts, 'invocation_receipts': receipts, 'invocation_programs': programs,
         'invocation_program_executions': executions, 'invocation_program_revision_pins': pins,
@@ -56,7 +57,7 @@ def query_db_audit(db_path, session_id, prelude_call_ids=()):
         'invocation_program_progress': program_progress, 'invocation_program_sources': program_sources,
         'session_progress': session_progress, 'invocation_program_deliveries': deliveries,
         'invocation_program_revision_pin_segments': pin_segments,
-        'source_inventory_state': inventory, 'source_snapshots': snapshots,
+        'source_inventory_state': inventory, 'source_snapshots': snapshots, 'source_snapshot_roots': snap_roots,
         'source_command_windows': windows, 'tool_result_messages': messages,
     }
 

@@ -24,9 +24,11 @@ class BB10I18WorkLimitsTests(unittest.TestCase):
         db.execute("CREATE TABLE sessions (id TEXT PRIMARY KEY, project_id TEXT)")
         db.execute("CREATE TABLE source_inventory_state (project_id TEXT, requested_generation INTEGER, completed_generation INTEGER, phase TEXT, file_count INTEGER, snapshot_id TEXT)")
         db.execute("CREATE TABLE source_snapshots (id TEXT PRIMARY KEY, file_count INTEGER, capture_quality TEXT)")
+        db.execute("CREATE TABLE source_snapshot_roots (snapshot_id TEXT, root_path TEXT, ordinal INTEGER)")
         db.execute("INSERT INTO sessions VALUES ('sess1234','proj1')")
         db.execute("INSERT INTO source_inventory_state VALUES ('proj1',1,1,'ready',10000,'snap1')")
         db.execute("INSERT INTO source_snapshots VALUES ('snap1',10000,'exact')")
+        db.execute("INSERT INTO source_snapshot_roots VALUES ('snap1',?,0)", (str(proj.resolve()),))
         db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','completed',1)")
         db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,'')")
         db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,complete,effect_certainty) VALUES (?,'p1',1,'find','find','filesystem','completed',1,'none')", (exec_id,))
@@ -65,19 +67,30 @@ class BB10I18WorkLimitsTests(unittest.TestCase):
             self.assertNotIn('bounded_visits', obs_f['facts'])
             self.assertTrue(any('bounded_visits' in g for g in audit_f['observation_gaps']))
 
-    def test_pin_segments_boundary_below_at_and_over_limit(self):
-        limit = delivery_oracles._traversal_visits_limit()
+    def test_pin_count_alone_cannot_establish_bounded_visits_and_catalog_requires_exact_snapshot_root(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
-            for label, pin_count, expected in (('below', limit - 1, True), ('at_limit', limit, True), ('over', limit + 1, False)):
-                with self.subTest(segment_boundary=label):
-                    case, proj, dbp, lp, turns = self._seed_discovery(root / label, entries_log=None)
-                    db = sqlite3.connect(dbp)
-                    db.execute("CREATE TABLE invocation_program_revision_pin_segments (program_id TEXT, execution_id TEXT, first_ordinal INTEGER, pin_count INTEGER, body_sha256 TEXT)")
-                    db.execute("INSERT INTO invocation_program_revision_pin_segments VALUES ('p1','fe1',0,?,?)", (pin_count, 'c' * 64))
-                    db.commit(); db.close()
-                    obs, _ = observe.build_observation(case, session_id='sess1234', identity=IDENT, project_dir=proj, db_path=dbp, sidecar_log=lp, baseline_hashes={}, turn_records=turns, prelude_records=[])
-                    self.assertEqual(obs['facts']['bounded_visits'], expected)
+            # Pin segment count WITHOUT execution-attributed traversal counter MUST leave bounded_visits unobserved!
+            case, proj, dbp, lp, turns = self._seed_discovery(root / 'pins-only', entries_log=None)
+            db = sqlite3.connect(dbp)
+            db.execute("CREATE TABLE invocation_program_revision_pin_segments (program_id TEXT, execution_id TEXT, first_ordinal INTEGER, pin_count INTEGER, body_sha256 TEXT)")
+            db.execute("INSERT INTO invocation_program_revision_pin_segments VALUES ('p1','fe1',0,10000,?)", ('c' * 64,))
+            db.commit(); db.close()
+            obs, audit = observe.build_observation(case, session_id='sess1234', identity=IDENT, project_dir=proj, db_path=dbp, sidecar_log=lp, baseline_hashes={}, turn_records=turns, prelude_records=[])
+            self.assertNotIn('bounded_visits', obs['facts'])
+            self.assertTrue(any('bounded_visits' in g for g in audit['observation_gaps']))
+            self.assertTrue(obs['facts']['catalog_generation_matches_live'])
+            # Live-catalog fact MUST fail if snapshot_id is empty, capture_quality != 'exact', or root mismatches.
+            for label, sql in (
+                ('wrong_root', "UPDATE source_snapshot_roots SET root_path='/wrong/root' WHERE snapshot_id='snap1'"),
+                ('non_exact_quality', "UPDATE source_snapshots SET capture_quality='observed' WHERE id='snap1'"),
+                ('empty_snapshot_id', "UPDATE source_inventory_state SET snapshot_id='' WHERE project_id='proj1'"),
+            ):
+                with self.subTest(catalog_defect=label):
+                    c2, p2, db2, lp2, t2 = self._seed_discovery(root / label, entries_log=10001)
+                    db = sqlite3.connect(db2); db.execute(sql); db.commit(); db.close()
+                    obs_c, _ = observe.build_observation(c2, session_id='sess1234', identity=IDENT, project_dir=p2, db_path=db2, sidecar_log=lp2, baseline_hashes={}, turn_records=t2, prelude_records=[])
+                    self.assertFalse(obs_c['facts']['catalog_generation_matches_live'])
 
     def test_resource_profiles_enforce_exact_below_at_over_boundaries(self):
         profile = SUITE['resource_profiles'][0]

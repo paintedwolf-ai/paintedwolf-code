@@ -275,7 +275,7 @@ def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, rece
         final_hashes=final_hashes, no_external_launch=no_external_launch,
     )
     facts.update(ro_facts)
-    facts.update(inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar, baseline_hashes, final_hashes, invocations=invocations, sidecar_log=sidecar_log))
+    facts.update(inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar, baseline_hashes, final_hashes, invocations=invocations, sidecar_log=sidecar_log, project_dir=project_dir))
     facts.update(inspect_git_facts(case, project_dir, git_setup, effects, audit=audit, invocations=invocations))
     facts.update(verify_paired_manifest_contract(case, identity))
     if db_path is not None:

@@ -150,7 +150,20 @@ def _anchored_by_matching_pins(execs, pins, write_exec_id, rel_path):
     return any(_pins_match(rp, ep) for rp in read_pins for ep in edit_pins)
 
 
-def inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar, baseline_hashes, final_hashes, invocations=None, sidecar_log=None):
+def _root_matches(root_path, project_dir):
+    if not root_path:
+        return False
+    if root_path == '.':
+        return True
+    if not project_dir:
+        return False
+    try:
+        return pathlib.Path(root_path).resolve() == pathlib.Path(project_dir).resolve()
+    except OSError:
+        return str(root_path) == str(project_dir)
+
+
+def inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar, baseline_hashes, final_hashes, invocations=None, sidecar_log=None, project_dir=None):
     """Verify edit anchoring (Q05), Q06 unseen-span refusal, catalog generation & bounded visits (Q01/Q20), and confined launch (Q21)."""
     facts = {}
     execs = audit['invocation_program_executions']
@@ -193,8 +206,10 @@ def inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar,
         expected_files = len((case.get('setup') or {}).get('files') or {}) + sum(int(g.get('count') or 0) for g in (case.get('setup') or {}).get('generators') or ())
         snaps = {s['id']: s for s in (audit.get('source_snapshots') or ()) if s.get('id')}
         row = inv_rows[-1]
-        snap = snaps.get(row.get('snapshot_id') or '')
-        snap_ok = (not row.get('snapshot_id')) or (snap is not None and snap.get('file_count') == expected_files)
+        sid = row.get('snapshot_id') or ''
+        snap = snaps.get(sid)
+        roots = [r.get('root_path') for r in (audit.get('source_snapshot_roots') or ()) if r.get('snapshot_id') == sid]
+        snap_ok = bool(sid and snap is not None and snap.get('capture_quality') == 'exact' and snap.get('file_count') == expected_files and any(_root_matches(r, project_dir) for r in roots))
         facts['catalog_generation_matches_live'] = bool(
             expected_files > 0 and row.get('phase') == 'ready'
             and isinstance(row.get('completed_generation'), int) and row['completed_generation'] >= 0
@@ -204,23 +219,19 @@ def inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar,
     find_execs = [e for e in execs if e.get('native_command') == 'find' and e.get('state') == 'completed' and e.get('complete') == 1]
     if find_execs:
         limit = _traversal_visits_limit()
-        total_pins = 0
-        for fe in find_execs:
-            total_pins += sum(1 for p in pins if p.get('execution_id') == fe['id'])
-            total_pins += sum(int(s.get('pin_count') or 0) for s in segments if s.get('execution_id') == fe['id'] and len(s.get('body_sha256') or '') == 64)
-        log_visits = 0
-        if total_pins == 0 and sidecar_log and pathlib.Path(sidecar_log).is_file():
-            fids = {fe['id'] for fe in find_execs}
+        fids = {fe['id'] for fe in find_execs}
+        matched_fids, log_visits = set(), 0
+        if sidecar_log and pathlib.Path(sidecar_log).is_file():
             for line in pathlib.Path(sidecar_log).read_text(errors='replace').splitlines():
                 if 'command discovery completed' not in line:
                     continue
                 em = re.search(r'\bexecution_id=([^\s"]+)', line)
                 vm = re.search(r'\bentries=(\d+)', line)
                 if em and vm and em.group(1) in fids:
+                    matched_fids.add(em.group(1))
                     log_visits += int(vm.group(1))
-        observed_visits = total_pins or log_visits
-        if observed_visits > 0 and limit > 0:
-            facts['bounded_visits'] = observed_visits <= limit
+        if matched_fids == fids and log_visits > 0 and limit > 0:
+            facts['bounded_visits'] = log_visits <= limit
     # 3) Q21 confined_launch: sidecar.log process boundary selected with component=sandbox & host_execution=false.
     if any(r.get('operation') == 'external_exec' and r.get('outcome') == 'completed' for r in receipts):
         if isinstance(sidecar, dict) and sidecar.get('available') and sidecar.get('complete') and sidecar.get('lines'):
