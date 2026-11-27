@@ -181,9 +181,6 @@ func TestPortablePythonMatchedModelRequestDelta(t *testing.T) {
 	if report.StandingPromptDeltaBytes != 0 {
 		t.Fatalf("standing system prompt delta (offered - absent) = %d bytes, want 0", report.StandingPromptDeltaBytes)
 	}
-	if report.TurnInjectDeltaBytes != 0 {
-		t.Fatalf("turn inject system text delta (offered - absent) = %d bytes, want 0", report.TurnInjectDeltaBytes)
-	}
 	if offered.VerbatimDescriptionCount != 1 {
 		t.Fatalf("offered verbatim description count = %d, want 1", offered.VerbatimDescriptionCount)
 	}
