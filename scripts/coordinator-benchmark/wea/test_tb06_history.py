@@ -317,6 +317,18 @@ class TestTB06InprocManifestAndSidecarRunner(unittest.TestCase):
                 self.assertEqual(rec["lane"], "sidecar")
                 self.assertEqual(rec["verdict"], "pass")
 
+    def test_sidecar_runner_uses_exact_api_json_schemas(self) -> None:
+        src = (pathlib.Path(__file__).resolve().parent / "tb06_sidecar_runner.py").read_text(encoding="utf-8")
+        # /harness/llm/respond MUST use "content" (not "text").
+        self.assertIn('"/harness/llm/respond", {"id": req["id"], "content": text}', src)
+        self.assertNotIn('"/harness/llm/respond", {"id": req["id"], "text":', src)
+        # PUT /v1/projects/{id}/source MUST send encoding="utf-8" and base_sha256 (PutProjectSourceRequest).
+        self.assertIn('"encoding": "utf-8"', src)
+        self.assertIn('"base_sha256":', src)
+        # POST /v1/projects/{id}/source/seen MUST include ordinal, and DELETE MUST pass through_ordinal.
+        self.assertIn('{"file_id": fid, "effect_id": eff_id, "ordinal": ordinal}', src)
+        self.assertIn("?through_ordinal={ordinal}", src)
+
 
 if __name__ == "__main__":
     unittest.main()

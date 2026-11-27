@@ -192,7 +192,7 @@ def _create_fixture_repo(slot_dir: pathlib.Path, files: dict[str, bytes]) -> pat
 
 def _finish_turn_text(app: Any, session_id: str, text: str = "Done.") -> None:
     req = _wait_pending(app, session_id)
-    app.request("/harness/llm/respond", {"id": req["id"], "text": text})
+    app.request("/harness/llm/respond", {"id": req["id"], "content": text})
     app.wait_for(
         lambda: app.request(f"/v1/sessions/{session_id}").get("status") == "idle",
         "tb06 session idle",
@@ -223,10 +223,21 @@ def _run_agent_edit_turn(
     )
     _finish_turn_text(app, session_id)
     if not msg_id:
-        msgs = app.request(f"/v1/sessions/{session_id}/messages").get("messages") or []
+        st_m, msgs_resp = _http_call(app, f"/v1/sessions/{session_id}/messages", method="GET")
+        msgs = (msgs_resp.get("messages") or []) if st_m == 200 and isinstance(msgs_resp, dict) else []
         user_msgs = [m for m in msgs if m.get("role") == "user"]
         if user_msgs:
             msg_id = str(user_msgs[-1].get("id") or "")
+    if not msg_id:
+        db_path = app.directory / "store.db"
+        if db_path.is_file():
+            with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+                row = conn.execute(
+                    "SELECT id FROM messages WHERE session_id = ? AND role = 'user' ORDER BY ord DESC LIMIT 1",
+                    (session_id,),
+                ).fetchone()
+                if row:
+                    msg_id = str(row[0])
     return read_res, write_res, msg_id
 
 
@@ -308,7 +319,8 @@ def _drive_e04_slot(app: Any, slot: SidecarSlotSpec, slot_dir: pathlib.Path) -> 
                 "root_id": active_root_id,
                 "path": "target.txt",
                 "content": new_text,
-                "base": {"state": "content", "sha256": pre_sha},
+                "encoding": "utf-8",
+                "base_sha256": pre_sha,
             },
             method="PUT",
         )
@@ -614,7 +626,8 @@ def _drive_e06_slot(
                     "root_id": root_id,
                     "path": "work.txt",
                     "content": "line1\nlater-human\n",
-                    "base": {"state": "content", "sha256": str(hash_file(proj / "work.txt").get("sha256") or "")},
+                    "encoding": "utf-8",
+                    "base_sha256": str(hash_file(proj / "work.txt").get("sha256") or ""),
                 },
                 method="PUT",
             )
@@ -739,21 +752,31 @@ def _drive_e07_slot(app: Any, slot: SidecarSlotSpec, slot_dir: pathlib.Path) -> 
         f0 = walk_files[0]
         fid = f0.get("file_id", "")
         eff_id = f0.get("presentation_effect_id", "")
+        ordinal = int(f0.get("presentation_ordinal") or f0.get("ordinal") or 0)
+        if ordinal <= 0 and eff_id and db_path.is_file():
+            with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+                row = conn.execute("SELECT ordinal FROM source_effects WHERE id = ?", (eff_id,)).fetchone()
+                if row:
+                    ordinal = int(row[0])
         st_seen, seen_resp = _http_call(
             app,
             f"/v1/projects/{project_id}/source/seen",
-            {"file_id": fid, "effect_id": eff_id},
+            {"file_id": fid, "effect_id": eff_id, "ordinal": ordinal},
             method="POST",
         )
-        typed_result.update({"complete_status": st_seen, "complete_resp": seen_resp})
+        typed_result.update({"complete_status": st_seen, "complete_resp": seen_resp, "ordinal": ordinal})
+        if st_seen not in {200, 204}:
+            failures.append("e07_complete_presentation_failed")
         ind_after = observe_files_marks_counts(db_path, project_id)
         if var == "withdraw_presentation_restores_mark":
             st_wd, wd_resp = _http_call(
                 app,
-                f"/v1/projects/{project_id}/source/seen/{urllib.parse.quote(fid)}",
+                f"/v1/projects/{project_id}/source/seen/{urllib.parse.quote(fid)}?through_ordinal={ordinal}",
                 method="DELETE",
             )
             typed_result.update({"withdraw_status": st_wd, "withdraw_resp": wd_resp})
+            if st_wd not in {200, 204}:
+                failures.append("e07_withdraw_presentation_failed")
         ind = ind_after
     elif var == "deterministic_reresolve_worker_isolated":
         st_walk2, walk_resp2 = _http_call(
@@ -800,7 +823,8 @@ def _drive_e09_slot(app: Any, slot: SidecarSlotSpec, slot_dir: pathlib.Path) -> 
                 "root_id": wt_root_id or root_id,
                 "path": "shared.txt",
                 "content": "worktree-edited\n",
-                "base": {"state": "content", "sha256": wt_pre_sha},
+                "encoding": "utf-8",
+                "base_sha256": wt_pre_sha,
             },
             method="PUT",
         )
