@@ -9,7 +9,7 @@ import smoke_workers
 
 def _settle_turn(application, session_id):
     req = application.wait_for(lambda: smoke_workers.pending(application, session_id), 'settle manual turn', session_id)
-    application.request('/harness/llm/respond', {'id': req['id'], 'text': 'Done.'})
+    application.request('/harness/llm/respond', {'id': req['id'], 'content': 'Done.'})
     application.wait_for(lambda: application.request(f'/v1/sessions/{session_id}')['status'] == 'idle', 'session idle', session_id)
 
 

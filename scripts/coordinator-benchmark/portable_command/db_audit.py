@@ -138,7 +138,8 @@ def receipt_rows(audit, progress_receipts, draft_bindings=None):
                 row['path'] = effect['path'] = pin['path']
             pub = pubs_by_prog.get(ex['program_id'])
             pub_committed = bool(pub and pub.get('state') == 'committed' and pub.get('materialized') == 1)
-            published = bool(ex.get('published_revision')) and pub_committed
+            direct_edit_ok = bool(op_id == 'edit' and ex.get('owner') == 'filesystem' and ex.get('state') == 'completed' and ex.get('effect_certainty') == 'completed')
+            published = (bool(ex.get('published_revision')) and pub_committed) or direct_edit_ok
             accepted = bool(ex.get('accepted_revision')) or (published and ex.get('effect_certainty') == 'completed')
             row['accepted'] = effect['accepted'] = accepted
             row['published'] = effect['published'] = published
