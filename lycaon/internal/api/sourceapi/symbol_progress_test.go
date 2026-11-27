@@ -75,17 +75,18 @@ func TestSymbolExecutorExcludedExactNameDoesNotStopAbbreviations(t *testing.T) {
 	}
 }
 
+var unboundedSymbolAllocation = search.SymbolAllocation{
+	Discovery:    time.Hour,
+	Abbreviation: time.Hour,
+	Outline:      time.Hour,
+}
+
 // unboundedSymbolLegBudget removes real wall-clock deadlines from symbol
 // executor tests so assertions depend on catalog and filter semantics rather
 // than host speed.
 func unboundedSymbolLegBudget(ctx context.Context, _ search.SearchBudget) (context.Context, context.CancelFunc, search.SymbolAllocation) {
 	legCtx, cancel := context.WithCancel(ctx)
-	const noWall = time.Hour
-	return legCtx, cancel, search.SymbolAllocation{
-		Discovery:    noWall,
-		Abbreviation: noWall,
-		Outline:      noWall,
-	}
+	return legCtx, cancel, unboundedSymbolAllocation
 }
 
 func symbolProgressFixture(t *testing.T, count int) (*SymbolExecutor, *project.Project, *search.SymbolPlanLeg) {
