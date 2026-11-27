@@ -315,8 +315,8 @@ class MemoryBudgetTests(unittest.TestCase):
             self.assertEqual(op["action"], "create")
             self.assertIn("lycaon/test/contract/promptrender", op["body"]["body"])
             self.assertNotIn("wrongtree", op["body"]["body"])
-            # Retained package with valid review record is suppressed from creating an unreviewed cleanup issue.
-            self.assertEqual(report["suppressed"]["retained_review"], 1)
+            self.assertNotIn("lycaon/test/contract/retained", op["body"]["body"])
+            self.assertEqual(report["workstreams"]["test-memory-headroom"][0]["state"], "retained")
 
     def test_empty_receipts_returns_no_findings_and_budgets_main_never_blocks_on_memory_warning(self):
         with tempfile.TemporaryDirectory() as directory:
