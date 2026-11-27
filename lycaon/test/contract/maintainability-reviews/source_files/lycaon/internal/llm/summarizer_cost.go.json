@@ -4,12 +4,13 @@
   "kind": "runtime_service",
   "workstream": "local-runtime-capacity",
   "disposition": "retain",
-  "reason": "Retain the utility call transaction within the inspected 327-line ceiling: admission, call budget, lifecycle edges, and usage receipt settlement. Shared admission now carries cancellation for dispensable title and compaction work through both blocking and streaming calls. Keep these operations together while the focused cancellation, ownership and cost contracts hold. Debug-on/off registry tests also preserve the same runtime lane through diagnostic capture.",
+  "reason": "Retain the utility call transaction within the inspected 327-line ceiling: admission, call budget, lifecycle edges, and usage receipt settlement. Shared admission now carries cancellation for dispensable title and compaction work through both blocking and streaming calls. Keep these operations together while the focused cancellation, ownership and cost contracts hold. Debug-on/off registry tests also preserve the same runtime lane through diagnostic capture. The admitted-turn source contract runs in the systemic invariant suite, and the lifecycle forwarding test exercises the service directly.",
   "reviewed_commit": "0a1550f9bf9e0f31d1b5e0ae30b706c909710c8f",
   "ceiling": 327,
   "boundaries": {
     "lycaon/internal/llm/summarizer_cost_test.go": "75fb68a114666e881c591e482cae3f8d1abf8989f414d29d6af1c0f4ff012b5e",
-    "lycaon/internal/llm/utility_lane_occupancy_contract_test.go": "888c7d11f809b2db1b07b97a60b4c0e6801463d780cc3b7e6fd3bd800b2507a4",
-    "lycaon/internal/llm/runtime_capacity_test.go": "ead28f7ed05e1d4b82d6d82d3c6cbcc50bee1e1a35b5f4a329d020234d9b6794"
+    "lycaon/internal/llm/runtime_capacity_test.go": "ead28f7ed05e1d4b82d6d82d3c6cbcc50bee1e1a35b5f4a329d020234d9b6794",
+    "lycaon/internal/llm/summarizer_lifecycle_test.go": "d7d0dab8ef6d14aaa99c1631843ca4c9fbb46c72530d78fb35cb31b8925df8bd",
+    "lycaon/test/contract/invariants/forbiddencalls/utility_lane.go": "7734864d4bfac95f7b42f0fa00dd493e63e0478dd96c59a8a6d4364f0c290e01"
   }
 }
