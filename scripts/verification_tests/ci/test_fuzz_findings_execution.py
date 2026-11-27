@@ -338,6 +338,45 @@ class FindingsGateAndClearTests(GitFixtureMixin, unittest.TestCase):
         with self.assertRaises(findings.FindingsError):
             findings.check_findings(self.repo, offline=True, plan=PLAN, stream=io.StringIO())
 
+    def test_branch_validation_fails_closed_on_missing_or_malformed_sidecars_and_symlinks(self):
+        rel = findings.finding_rel_path("./plain", "FuzzPlain", "broken1")
+        # Commit an input without a sidecar on fuzz-findings.
+        peer = Path(tempfile.mkdtemp(dir=self.root, prefix="broken-"))
+        _git(self.root, "clone", "--branch", findings.DEFAULT_BRANCH, str(self.remote), str(peer))
+        _git(peer, "config", "user.name", "Peer")
+        _git(peer, "config", "user.email", "peer@example.com")
+        dest = peer / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"raw")
+        _git(peer, "add", "--", rel)
+        _git(peer, "commit", "-m", "missing sidecar")
+        _git(peer, "push", "origin", f"HEAD:refs/heads/{findings.DEFAULT_BRANCH}")
+        with self.assertRaises(findings.FindingsError):
+            findings.check_findings(self.repo, plan=PLAN, stream=io.StringIO())
+
+        # Add a malformed sidecar.
+        (peer / findings.sidecar_rel_path(rel)).write_text("{bad", encoding="utf-8")
+        _git(peer, "add", "--", findings.sidecar_rel_path(rel))
+        _git(peer, "commit", "-m", "malformed sidecar")
+        _git(peer, "push", "origin", f"HEAD:refs/heads/{findings.DEFAULT_BRANCH}")
+        with self.assertRaises(findings.FindingsError):
+            findings.check_findings(self.repo, plan=PLAN, stream=io.StringIO())
+
+        # Remove the input leaving an orphan sidecar.
+        _git(peer, "rm", "--", rel)
+        _git(peer, "commit", "-m", "orphan sidecar")
+        _git(peer, "push", "origin", f"HEAD:refs/heads/{findings.DEFAULT_BRANCH}")
+        with self.assertRaises(findings.FindingsError):
+            findings.check_findings(self.repo, plan=PLAN, stream=io.StringIO())
+
+        # Add a symlink on the branch.
+        (peer / "link").symlink_to("README.md")
+        _git(peer, "add", "--", "link")
+        _git(peer, "commit", "-m", "symlink")
+        _git(peer, "push", "origin", f"HEAD:refs/heads/{findings.DEFAULT_BRANCH}")
+        with self.assertRaises(findings.FindingsError):
+            findings.check_findings(self.repo, plan=PLAN, stream=io.StringIO())
+
     def test_clearing_removes_only_byte_identical_main_findings_and_handles_non_ff(self):
         rel_match = findings.finding_rel_path("./plain", "FuzzPlain", "match1")
         rel_diff = findings.finding_rel_path("./plain", "FuzzPlain", "diff1")
@@ -402,12 +441,12 @@ class FindingsWorkflowAndPlanLaws(unittest.TestCase):
     def test_only_filing_and_clearing_jobs_hold_contents_write(self):
         nightly = workflow("nightly")
         self.assertEqual(nightly.permissions.get("contents"), "read")
-        write_jobs = [name for name, job in nightly.jobs.items() if job.permissions.get("contents") == "write"]
+        write_jobs = [name for name, job in nightly.jobs.items() if (job.permissions or {}).get("contents") == "write"]
         self.assertEqual(write_jobs, ["file-fuzz-findings"])
 
         clear = workflow("clear-fuzz-findings")
         self.assertEqual(clear.permissions.get("contents"), "read")
-        clear_write = [name for name, job in clear.jobs.items() if job.permissions.get("contents") == "write"]
+        clear_write = [name for name, job in clear.jobs.items() if (job.permissions or {}).get("contents") == "write"]
         self.assertEqual(clear_write, ["clear-fuzz-findings"])
 
 
