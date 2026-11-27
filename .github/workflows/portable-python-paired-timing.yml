@@ -53,13 +53,15 @@ jobs:
       MIN_IDLE: ${{ inputs.min-idle || '90' }}
       PRECHECK_SECONDS: ${{ inputs.precheck-seconds || '30' }}
     steps:
-      - name: Assert effective architecture and capture runner metadata
+      - name: Assert effective architecture, quiet Spotlight on ephemeral VM, and capture runner metadata
         shell: bash
         run: |
           set -euo pipefail
           ACTUAL_ARCH="$(uname -m)"
           echo "Expected arch: ${EXPECTED_ARCH}, actual arch: ${ACTUAL_ARCH}"
           test "${ACTUAL_ARCH}" = "${EXPECTED_ARCH}"
+          # Disable Spotlight indexing on this ephemeral CI VM before checkout/build so mds_stores does not saturate the 3 vCPUs.
+          sudo mdutil -a -i off || true
           OUT_DIR="${RUNNER_TEMP}/paired-out"
           mkdir -p "${OUT_DIR}"
           {
