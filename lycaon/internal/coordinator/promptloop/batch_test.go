@@ -2,9 +2,10 @@ package promptloop
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/documentcore"
 	"slices"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/documentcore"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/spawn"

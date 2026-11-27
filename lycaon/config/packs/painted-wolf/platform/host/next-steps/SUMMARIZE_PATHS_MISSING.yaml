@@ -1,4 +1,4 @@
 steps:
   - program: ["ls", "-d", "PATH"]
-    say: "Verify each path with {{ call }}, then retry with corrected paths."
+    say: "Verify each path with {% if load %}{{ load }}, then {% endif %}{{ call }}, then retry with corrected paths."
     otherwise: "Retry with paths you have already observed."

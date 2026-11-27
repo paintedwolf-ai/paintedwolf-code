@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -57,7 +58,7 @@ func withheldNudgeDeps(st *store.Repositories, client modelcall.LLMClient) promp
 	deps := promptloop.StoreDeps(st)
 	deps.Model.LLM = client
 	deps.Context.Policy = &recordingToolPolicy{}
-	deps.Nudges.SecretWithheldNudge = func(_ context.Context, _ *api.Session, guidance string) promptloop.HostNudge {
+	deps.Nudges.SecretWithheldNudge = func(_ context.Context, _ *api.Session, _ prompts.Reader, guidance string) promptloop.HostNudge {
 		return promptloop.HostNudge{Content: "host: request not sent, user declined. guidance=" + guidance}
 	}
 	return deps

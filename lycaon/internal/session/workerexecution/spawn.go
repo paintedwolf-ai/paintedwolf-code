@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -115,13 +116,14 @@ func (m *Service) WorkerSummaryFinalizeOpts(ctx context.Context, sess *api.Sessi
 		maxChars = compaction.DefaultCompactionConfig().MaxWorkerSummaryChars
 	}
 	return workercloseout.WorkerSummaryFinalizeOpts{
-		MaxChars:         maxChars,
-		WorkflowHints:    m.workflowHints,
-		RenderWorkerKick: m.RenderKick,
-		WorkspaceCheck:   m.WorkspaceCheck,
-		Ledger:           m.evidenceStore,
-		Pipeline:         m.pipeline,
-		DecisionPending:  m.DecisionPending,
+		MaxChars:          maxChars,
+		WorkflowHints:     m.workflowHints,
+		RenderWorkerKick:  m.RenderKick,
+		NextRequestReader: m.NextRequestReader,
+		WorkspaceCheck:    m.WorkspaceCheck,
+		Ledger:            m.evidenceStore,
+		Pipeline:          m.pipeline,
+		DecisionPending:   m.DecisionPending,
 	}
 }
 
@@ -135,10 +137,10 @@ func (m *Service) DecisionPending(ctx context.Context, childSessionID string) bo
 	return err == nil && ok
 }
 
-func (m *Service) RenderKick(ctx context.Context, kickID string, data map[string]any) (string, error) {
+func (m *Service) RenderKick(ctx context.Context, reader prompts.Reader, kickID string, data map[string]any) (string, error) {
 	if m == nil || m.prompts == nil {
 		return "", nil
 	}
 	// kickID is the Binding.render stem queued by Emit / EmitMatch.
-	return m.prompts.RenderKick(ctx, strings.TrimSpace(kickID), data)
+	return m.prompts.RenderKick(ctx, reader, strings.TrimSpace(kickID), data)
 }

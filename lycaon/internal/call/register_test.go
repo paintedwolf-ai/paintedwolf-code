@@ -26,7 +26,7 @@ func TestHandoffToolsPreserveSessionAgentAndReservationEffects(t *testing.T) {
 	lookup := call.StoreSessionLookup{Get: func(context.Context, string) (string, error) { return "/tmp/a", nil }}
 	manager := call.NewSQLManager(database, lookup)
 	registry := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register handoff tools", call.RegisterHandoffTools(registry, call.HandoffToolDeps{Calls: manager, Sessions: lookup}))
+	testutil.FailErr(t, "register handoff tools", call.RegisterHandoffTools(registry, call.HandoffToolDeps{Calls: manager}))
 	presence := &reservationPresence{}
 	invocation := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "child", ParentSessionID: "sess-b", HandoffSessionID: "sess-a", Agent: "child-agent", HandoffAgentID: "parent-agent"},
@@ -38,7 +38,6 @@ func TestHandoffToolsPreserveSessionAgentAndReservationEffects(t *testing.T) {
 		_, err := registry.Run(t.Context(), name, args, invocation)
 		testutil.FailErr(t, "run "+name, err)
 	}
-	run("handoff_init", map[string]any{})
 	run("handoff_reserve", map[string]any{"paths": []string{" src/main.go "}})
 	rows, err := manager.ListActiveReservations(t.Context(), "sess-a")
 	testutil.FailErr(t, "read handoff reservation", err)
@@ -64,12 +63,11 @@ func TestHandoffToolsPreserveSessionAgentAndReservationEffects(t *testing.T) {
 	if !presence.allReleased {
 		t.Fatal("release all omitted presence notification")
 	}
-	health, err := manager.Health(t.Context(), "sess-b")
-	testutil.FailErr(t, "read released session health", err)
-	if health.ReservationCount != 0 {
-		t.Fatalf("release all left reservations: %+v", health)
+	rows, err = manager.ListActiveReservations(t.Context(), "sess-b")
+	testutil.FailErr(t, "read released session reservations", err)
+	if len(rows) != 0 {
+		t.Fatalf("release all left reservations: %+v", rows)
 	}
-	run("handoff_health", map[string]any{"session_id": "sess-b"})
 	for _, paths := range []any{[]string{" "}, []any{" ", 3}, "other.go"} {
 		if _, err := registry.Run(t.Context(), "handoff_reserve", map[string]any{"paths": paths}, invocation); err == nil {
 			t.Fatalf("invalid paths accepted: %+v", paths)

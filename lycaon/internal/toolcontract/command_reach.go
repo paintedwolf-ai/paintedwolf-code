@@ -1,16 +1,19 @@
 package toolcontract
 
 import (
+	"maps"
 	"regexp"
+	"slices"
 	"sync"
 )
 
-// Reach marks represent command effect axes in a reader's held set.
+// Reach marks represent command effect axes and profile operation exclusions in a reader's held set.
 const (
 	ReachCommandMutation             = "command_mutation"
 	ReachCommandExternalExec         = "command_external_exec"
 	ReachCommandExternalExecSelector = "command_external_exec_selector"
 	ReachCommandNetworkEgress        = "command_network_egress"
+	ReachCommandDeniedPrefix         = "command_denied:"
 )
 
 // ReachMarks returns the synthetic reach marks for a reader's command effects.
@@ -32,14 +35,31 @@ func ReachMarks(holdsCommand bool, effects CommandEffects) map[string]bool {
 	return out
 }
 
-// IsReachMark reports whether name is a synthetic command-effect reach mark.
-func IsReachMark(name string) bool {
-	switch name {
-	case ReachCommandMutation, ReachCommandExternalExec, ReachCommandExternalExecSelector, ReachCommandNetworkEgress:
-		return true
-	default:
-		return false
+// DeniedCommandMarks returns synthetic exclusion marks for native command forms
+// that held and effects would otherwise admit when isDenied excludes their policy identity.
+func DeniedCommandMarks(held map[string]bool, effects CommandEffects, isDenied func(string) bool) map[string]bool {
+	out := make(map[string]bool)
+	if !held["command"] || isDenied == nil {
+		return out
 	}
+	lang := loadCommandReachTables()
+	if lang == nil {
+		return out
+	}
+	for name, spec := range lang.specs {
+		if tool := lang.formTool[name]; tool != "" && !held[tool] {
+			continue
+		}
+		if !specAllowsEffects(spec, effects) {
+			continue
+		}
+		for _, candidate := range lang.identities[name] {
+			if isDenied(candidate) {
+				out[ReachCommandDeniedPrefix+candidate] = true
+			}
+		}
+	}
+	return out
 }
 
 // namedForm matches backticked hyphenated command forms, which plain identifier
@@ -47,14 +67,13 @@ func IsReachMark(name string) bool {
 var namedForm = regexp.MustCompile("`([a-z][a-z0-9_]*-[a-z0-9_-]*)(?:`|[ \t]*\\(|[ \t]+--)")
 
 type commandReachTables struct {
-	commands map[string]bool
-	mutating map[string]bool
-	formTool map[string]string
-	forms    map[string]bool
-	retired  map[string][]string
-	// aliasForm maps a declared command alias to its canonical command name.
-	aliasForm map[string]string
-	// commandAliases maps a canonical command name to its declared aliases.
+	commands       map[string]bool
+	specs          map[string]CommandSpecification
+	identities     map[string][]string
+	formTool       map[string]string
+	forms          map[string]bool
+	retired        map[string][]string
+	aliasForm      map[string]string
 	commandAliases map[string][]string
 }
 
@@ -63,13 +82,14 @@ var loadCommandReachTables = sync.OnceValue(func() *commandReachTables {
 	if err != nil {
 		return nil
 	}
-	mutation, err := NewCommandEffects(CommandMutation)
+	identities, err := policyIdentitiesByCommand()
 	if err != nil {
 		return nil
 	}
 	out := &commandReachTables{
 		commands:       map[string]bool{},
-		mutating:       map[string]bool{},
+		specs:          map[string]CommandSpecification{},
+		identities:     map[string][]string{},
 		formTool:       map[string]string{},
 		forms:          map[string]bool{},
 		retired:        map[string][]string{},
@@ -78,23 +98,17 @@ var loadCommandReachTables = sync.OnceValue(func() *commandReachTables {
 	}
 	for _, spec := range language.Commands {
 		out.commands[spec.Name] = true
+		out.specs[spec.Name] = spec
+		if ids, ok := identities[spec.Name]; ok {
+			out.identities[spec.Name] = ids
+		} else {
+			out.identities[spec.Name] = []string{spec.Name}
+		}
 		if len(spec.Aliases) > 0 {
 			out.commandAliases[spec.Name] = spec.Aliases
 			for _, alias := range spec.Aliases {
 				out.aliasForm[alias] = spec.Name
 			}
-		}
-		mutates := false
-		for _, effect := range spec.Effects {
-			// A wrapper whose child effects are unbound cannot promise
-			// read-only; treat it as mutating so copy stays guarded.
-			required, err := effect.CommandEffects(nil)
-			if err != nil || required.Allows(mutation) {
-				mutates = true
-			}
-		}
-		if mutates {
-			out.mutating[spec.Name] = true
 		}
 	}
 	for _, disposition := range language.Tools {
@@ -114,8 +128,6 @@ var loadCommandReachTables = sync.OnceValue(func() *commandReachTables {
 	return out
 })
 
-// admitForm admits a command form and its declared aliases as hyphenated
-// command forms the scanner can see; the parser admits both spellings.
 func (t *commandReachTables) admitForm(form string) {
 	t.forms[form] = true
 	for _, alias := range t.commandAliases[form] {
@@ -123,14 +135,43 @@ func (t *commandReachTables) admitForm(form string) {
 	}
 }
 
+func heldCommandEffects(held map[string]bool) CommandEffects {
+	if !held["command"] {
+		return 0
+	}
+	effects := commandEffectBit(CommandReadOnly)
+	if held[ReachCommandMutation] {
+		effects |= commandEffectBit(CommandMutation)
+	}
+	if held[ReachCommandExternalExec] {
+		effects |= commandEffectBit(CommandExternalExec)
+	}
+	if held[ReachCommandNetworkEgress] {
+		effects |= commandEffectBit(CommandNetworkEgress)
+	}
+	return effects
+}
+
+func specAllowsEffects(spec CommandSpecification, allowed CommandEffects) bool {
+	if allowed == 0 {
+		return false
+	}
+	for _, requirement := range spec.Effects {
+		required, err := requirement.CommandEffects(&allowed)
+		if err == nil && allowed.Allows(required) {
+			return true
+		}
+	}
+	return false
+}
+
 // CommandLanguageReachable reports whether a reader with held can run name as a
-// command program: under command, through a form the language admits, honoring
-// each form's mutation requirement and dual-state tool gate. A retired
-// operation is reached through the forms that replaced it, and a declared
-// command alias reaches through its canonical form.
+// command program: under command, through an admitted form whose effect modes,
+// dual-state form tool gate, external selector visibility, and profile operation
+// exclusions are all satisfied.
 func CommandLanguageReachable(name string, held map[string]bool) bool {
 	lang := loadCommandReachTables()
-	if lang == nil {
+	if lang == nil || !held["command"] {
 		return false
 	}
 	forms, ok := lang.retired[name]
@@ -146,19 +187,48 @@ func CommandLanguageReachable(name string, held map[string]bool) bool {
 			return false
 		}
 	}
-	if !held["command"] {
-		return false
-	}
+	allowed := heldCommandEffects(held)
 	for _, form := range forms {
 		if tool := lang.formTool[form]; tool != "" && !held[tool] {
 			continue
 		}
-		if lang.mutating[form] && !held[ReachCommandMutation] {
+		if form == "external" && !held[ReachCommandExternalExecSelector] {
 			continue
 		}
-		return true
+		if lang.formDenied(form, held) {
+			continue
+		}
+		if spec, found := lang.specs[form]; found && specAllowsEffects(spec, allowed) {
+			return true
+		}
 	}
 	return false
+}
+
+func (t *commandReachTables) formDenied(form string, held map[string]bool) bool {
+	for _, candidate := range t.identities[form] {
+		if held[ReachCommandDeniedPrefix+candidate] {
+			return true
+		}
+	}
+	return false
+}
+
+// DeclaredCommandPrograms returns the command language's declared program
+// names, sorted.
+func DeclaredCommandPrograms() []string {
+	lang := loadCommandReachTables()
+	if lang == nil {
+		return nil
+	}
+	return slices.Sorted(maps.Keys(lang.commands))
+}
+
+// IsDeclaredCommandProgram reports whether name is a declared program of the
+// command language.
+func IsDeclaredCommandProgram(name string) bool {
+	lang := loadCommandReachTables()
+	return lang != nil && lang.commands[name]
 }
 
 // CommandFormToolOf returns the dual-state tool that gates a command form, or

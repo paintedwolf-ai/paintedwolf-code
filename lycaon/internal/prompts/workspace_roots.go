@@ -46,9 +46,6 @@ func MergeWorkspaceRootsVars(vars map[string]any, roots []projectroot.RootRef, a
 	if vars == nil {
 		return
 	}
-	if _, ok := vars["reviews_confined_writes"].(bool); !ok {
-		vars["reviews_confined_writes"] = true
-	}
 	rows, omitted := WorkspaceRootRows(roots, activeRootID)
 	vars["workspace_roots"] = rows
 	vars["workspace_roots_omitted_count"] = omitted
@@ -120,11 +117,4 @@ func rootsKickRows(roots []projectroot.RootRef, activeID string) []map[string]an
 // writes to standard cache folders require review.
 func PostureChangedKickNeeded(before, after gate.Posture) bool {
 	return before.ReviewsConfinedWrites() != after.ReviewsConfinedWrites()
-}
-
-// PostureChangedKickData builds the posture-change notice context.
-func PostureChangedKickData(after gate.Posture) map[string]any {
-	return map[string]any{
-		"reviews_confined_writes": after.ReviewsConfinedWrites(),
-	}
 }

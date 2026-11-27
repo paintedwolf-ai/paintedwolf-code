@@ -3,8 +3,9 @@ package promptloop
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/llm/policytest"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/llm/policytest"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/events"

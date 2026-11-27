@@ -133,7 +133,6 @@ func (t *SkillsReadTool) renderPackBody(ctx context.Context, tctx tools.ToolCont
 	for name, value := range t.policyVars(ctx, tctx) {
 		vars[name] = value
 	}
-	vars["session_scratch_dir"] = tctx.Host.SessionScratchDir
 	vars["configuration"] = t.packConfiguration(ctx, tctx, sk.PackID)
 	out, err := pongoplain.Execute(ctx, tpl, vars)
 	if err != nil {

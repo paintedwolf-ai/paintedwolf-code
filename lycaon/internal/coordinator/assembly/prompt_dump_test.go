@@ -31,13 +31,15 @@ func TestRenderPromptDumpInvestigateFixture(t *testing.T) {
 	testutil.FailErr(t, "LoadToolProfiles", err)
 	plans, err := surface.CompileToolPlans(1)
 	testutil.FailErr(t, "CompileToolPlans", err)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: "implement_investigate",
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Plan:      plans["implement_investigate"],
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_investigate",
+		Plan:      plans["implement_investigate"],
+		Offered:   (plans["implement_investigate"]).ImmediateNames(),
 	})
 	testutil.FailErr(t, "new reader", err)
 	summaryGuidance, err := engine.Render(context.Background(), "units/native-summarize-tool.md", reader.Facts())

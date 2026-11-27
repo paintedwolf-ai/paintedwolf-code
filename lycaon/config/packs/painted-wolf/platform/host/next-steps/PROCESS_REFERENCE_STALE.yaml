@@ -1,4 +1,4 @@
 steps:
   - program: ["ps"]
     complete: true
-    say: "Run {{ call }} again and review the new exact target."
+    say: "Run {% if load %}{{ load }}, then {% endif %}{{ call }} again and review the new exact target."

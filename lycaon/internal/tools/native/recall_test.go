@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
@@ -88,6 +89,7 @@ func TestRecallHistoryAndCoordinateReject(t *testing.T) {
 
 func TestRecallRecoveryActionExplainsRecordRequestsAndPreservesExistingAction(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	recallCtx := toolreach.WithRequest(t.Context(), promptstest.StockToolReach(t, "recall"))
 	for _, tc := range []struct {
 		name   string
 		result recall.Result
@@ -102,7 +104,7 @@ func TestRecallRecoveryActionExplainsRecordRequestsAndPreservesExistingAction(t 
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			before := tc.result.NextAction
-			addRecallRecoveryAction(t.Context(), &tc.result)
+			addRecallRecoveryAction(recallCtx, &tc.result)
 			if tc.want == "" {
 				if tc.result.NextAction != "" {
 					t.Fatal("complete observation acquired needless recovery guidance")
@@ -113,6 +115,12 @@ func TestRecallRecoveryActionExplainsRecordRequestsAndPreservesExistingAction(t 
 				t.Fatalf("lost reachable or existing action: %s", tc.result.NextAction)
 			}
 		})
+	}
+
+	unprojected := recall.Result{NextRequest: &recall.HistoryContinuation{History: recall.HistoryRequest{MessageID: "m", Offset: 5}}}
+	addRecallRecoveryAction(t.Context(), &unprojected)
+	if !strings.Contains(unprojected.NextAction, "Additional recorded content remains") || strings.Contains(unprojected.NextAction, "calling `recall`") {
+		t.Fatalf("unprojected context must retain occurrence details and omit recall call: %q", unprojected.NextAction)
 	}
 }
 

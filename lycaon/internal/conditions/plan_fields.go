@@ -31,9 +31,10 @@ func (f PlanField) ValueIDs() []string {
 	return out
 }
 
-// Prompt renders the field the way the agent must write it.
+// Prompt renders the field the way the agent must write it. The key is a host
+// value, so it is not backticked as a protocol form.
 func (f PlanField) Prompt() string {
-	return "`" + f.Key + ":` in frontmatter (" + strings.Join(f.ValueIDs(), " | ") + ")"
+	return f.Key + ": in frontmatter (" + strings.Join(f.ValueIDs(), " | ") + ")"
 }
 
 // Lookup resolves a written value by normalized equality: trimmed and lowercased,
