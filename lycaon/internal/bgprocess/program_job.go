@@ -114,6 +114,7 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 		cancel(nil)
 		r.jobs.mu.Lock()
 		proc.running, proc.hasExit, proc.exitCode = false, true, exitCode
+		proc.onStop = nil
 		proc.programStopCode = settled.ProgramStop.Code
 		proc.resources.programStop = settled.ProgramStop
 		proc.resources.releaseNotices = settled.ReleaseNotices

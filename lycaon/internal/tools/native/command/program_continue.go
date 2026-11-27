@@ -20,13 +20,15 @@ type RunningProgramResult struct {
 
 func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluation, ending *programEnding, startedAt time.Time) (string, error) {
 	run := e.run
+	supervisor := r.Supervisor
+	programID := run.root.Identity.ProgramID
 	attached := make(chan error, 1)
 	handle, err := r.Supervisor.Background.StartProgram(ctx, bgprocess.ProgramJobSpec{
 		SessionID: run.tc.Identity.SessionID, RootSessionID: run.tc.ChatSessionID(),
 		ProjectID: run.tc.Identity.ProjectID, Cwd: e.paths.Cwd().DisplayPath,
 		CommandLine: run.source, OriginTool: run.tool, ToolCallID: run.tc.Identity.ToolCallID, StartedAt: startedAt,
 		OnStop: func(reason bgprocess.TerminationReason) {
-			r.Supervisor.StopProgram(run.root.Identity.ProgramID, reason)
+			supervisor.StopProgram(programID, reason)
 		},
 		Run: func(_ context.Context, stdout, stderr io.Writer) (bgprocess.ProgramJobResult, error) {
 			attachErr := errors.Join(e.stdout.follow(stdout), e.stderr.follow(stderr))
