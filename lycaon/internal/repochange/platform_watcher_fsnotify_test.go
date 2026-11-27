@@ -247,3 +247,36 @@ func TestHasWatchIsO1WithLargeRegisteredSet(t *testing.T) {
 		t.Fatal("HasWatch lost surviving root when peer backend watch was dropped")
 	}
 }
+
+func TestDelayedWatchLossDoesNotHarmFreshRebind(t *testing.T) {
+	m := &fsnotifyMux{}
+	w := subscribeForTest(t, m)
+	dir := t.TempDir()
+	testutil.FailErr(t, "initial add", w.Add(dir))
+	stream := streamPath(dir)
+
+	m.mu.Lock()
+	oldReg := m.routeReg[stream]
+	m.mu.Unlock()
+	if oldReg == 0 {
+		t.Fatal("initial registration ID was 0")
+	}
+
+	// Simulate backend drop + fresh rebind yielding a new registration ID.
+	testutil.FailErr(t, "drop backend watch", m.fw.Remove(stream))
+	testutil.FailErr(t, "rebind add", w.Add(dir))
+	m.mu.Lock()
+	newReg := m.routeReg[stream]
+	m.mu.Unlock()
+	if newReg == oldReg {
+		t.Fatalf("rebind reused old registration ID %d", oldReg)
+	}
+
+	// Delayed loss for oldReg must be ignored and leave the fresh rebind live.
+	m.handleLost(watchLoss{path: stream, regID: oldReg})
+	if !w.HasWatch(dir) {
+		t.Fatal("delayed old watchLoss tore down fresh rebind")
+	}
+	testutil.FailErr(t, "write after delayed loss", os.WriteFile(filepath.Join(dir, "live.txt"), []byte("ok"), 0o644))
+	awaitEventNamed(t, w, filepath.Join(dir, "live.txt"))
+}

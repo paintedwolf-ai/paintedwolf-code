@@ -11,11 +11,12 @@ import (
 
 type fsnotifyBackendStream struct {
 	fw   *fsnotify.Watcher
-	lost chan string
+	lost chan watchLoss
 
-	mu     sync.Mutex
-	live   map[string]struct{}
-	closed bool
+	mu        sync.Mutex
+	nextRegID uint64
+	live      map[string]uint64
+	closed    bool
 }
 
 func newBackendStream() (backendStream, error) {
@@ -25,22 +26,27 @@ func newBackendStream() (backendStream, error) {
 	}
 	return &fsnotifyBackendStream{
 		fw:   fw,
-		lost: make(chan string),
-		live: map[string]struct{}{},
+		lost: make(chan watchLoss),
+		live: map[string]uint64{},
 	}, nil
 }
 
-func (s *fsnotifyBackendStream) Add(path string) error {
+func (s *fsnotifyBackendStream) Add(path string) (uint64, error) {
 	path = filepath.Clean(path)
 	if err := s.fw.Add(path); err != nil {
-		return err
+		return 0, err
 	}
 	s.mu.Lock()
-	if !s.closed {
-		s.live[path] = struct{}{}
+	defer s.mu.Unlock()
+	if s.closed {
+		return 0, fsnotify.ErrClosed
 	}
-	s.mu.Unlock()
-	return nil
+	if existing, ok := s.live[path]; ok {
+		return existing, nil
+	}
+	s.nextRegID++
+	s.live[path] = s.nextRegID
+	return s.nextRegID, nil
 }
 
 func (s *fsnotifyBackendStream) Remove(path string) error {
@@ -77,4 +83,4 @@ func (s *fsnotifyBackendStream) Close() error {
 
 func (s *fsnotifyBackendStream) Events() <-chan fsnotify.Event { return s.fw.Events }
 func (s *fsnotifyBackendStream) Errors() <-chan error          { return s.fw.Errors }
-func (s *fsnotifyBackendStream) Lost() <-chan string           { return s.lost }
+func (s *fsnotifyBackendStream) Lost() <-chan watchLoss        { return s.lost }

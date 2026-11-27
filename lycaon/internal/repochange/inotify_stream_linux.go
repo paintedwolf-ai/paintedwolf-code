@@ -23,18 +23,26 @@ const inotifyWatchMask = unix.IN_CREATE |
 	unix.IN_MOVE_SELF |
 	unix.IN_ATTRIB
 
-type inotifyStream struct {
-	fd     int
-	file   *os.File
-	events chan fsnotify.Event
-	errors chan error
-	lost   chan string
-	done   chan struct{}
+type inotifyWatch struct {
+	path  string
+	wd    uint32
+	regID uint64
+}
 
-	mu     sync.Mutex
-	byPath map[string]uint32
-	byWd   map[uint32]string
-	closed bool
+type inotifyStream struct {
+	fd      int
+	file    *os.File
+	events  chan fsnotify.Event
+	errors  chan error
+	lost    chan watchLoss
+	closing chan struct{}
+	done    chan struct{}
+
+	mu        sync.Mutex
+	nextRegID uint64
+	byPath    map[string]*inotifyWatch
+	byWd      map[uint32]*inotifyWatch
+	closed    bool
 }
 
 func newBackendStream() (backendStream, error) {
@@ -43,37 +51,43 @@ func newBackendStream() (backendStream, error) {
 		return nil, err
 	}
 	s := &inotifyStream{
-		fd:     fd,
-		file:   os.NewFile(uintptr(fd), "inotify"),
-		events: make(chan fsnotify.Event),
-		errors: make(chan error),
-		lost:   make(chan string, 64),
-		done:   make(chan struct{}),
-		byPath: map[string]uint32{},
-		byWd:   map[uint32]string{},
+		fd:      fd,
+		file:    os.NewFile(uintptr(fd), "inotify"),
+		events:  make(chan fsnotify.Event),
+		errors:  make(chan error),
+		lost:    make(chan watchLoss, 64),
+		closing: make(chan struct{}),
+		done:    make(chan struct{}),
+		byPath:  map[string]*inotifyWatch{},
+		byWd:    map[uint32]*inotifyWatch{},
 	}
 	go s.readEvents()
 	return s, nil
 }
 
-func (s *inotifyStream) Add(path string) error {
+func (s *inotifyStream) Add(path string) (uint64, error) {
 	path = filepath.Clean(path)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return fsnotify.ErrClosed
+		return 0, fsnotify.ErrClosed
 	}
 	wd, err := unix.InotifyAddWatch(s.fd, path, inotifyWatchMask)
 	if wd == -1 {
-		return err
+		return 0, err
 	}
 	uwd := uint32(wd)
-	if prev, ok := s.byWd[uwd]; ok && prev != path {
-		delete(s.byPath, prev)
+	if existing, ok := s.byPath[path]; ok && existing.wd == uwd {
+		return existing.regID, nil
 	}
-	s.byPath[path] = uwd
-	s.byWd[uwd] = path
-	return nil
+	if prev, ok := s.byWd[uwd]; ok && prev.path != path {
+		delete(s.byPath, prev.path)
+	}
+	s.nextRegID++
+	entry := &inotifyWatch{path: path, wd: uwd, regID: s.nextRegID}
+	s.byPath[path] = entry
+	s.byWd[uwd] = entry
+	return entry.regID, nil
 }
 
 func (s *inotifyStream) Remove(path string) error {
@@ -83,13 +97,15 @@ func (s *inotifyStream) Remove(path string) error {
 	if s.closed {
 		return nil
 	}
-	wd, ok := s.byPath[path]
+	entry, ok := s.byPath[path]
 	if !ok {
 		return fsnotify.ErrNonExistentWatch
 	}
+	// Remove from tables before InotifyRmWatch so the subsequent kernel
+	// IN_IGNORED for this explicit removal is recognized as expected.
 	delete(s.byPath, path)
-	delete(s.byWd, wd)
-	_, err := unix.InotifyRmWatch(s.fd, wd)
+	delete(s.byWd, entry.wd)
+	_, err := unix.InotifyRmWatch(s.fd, entry.wd)
 	if errors.Is(err, unix.EINVAL) {
 		return nil
 	}
@@ -130,6 +146,7 @@ func (s *inotifyStream) Close() error {
 	s.closed = true
 	s.byPath = nil
 	s.byWd = nil
+	close(s.closing)
 	s.mu.Unlock()
 	err := s.file.Close()
 	<-s.done
@@ -138,7 +155,7 @@ func (s *inotifyStream) Close() error {
 
 func (s *inotifyStream) Events() <-chan fsnotify.Event { return s.events }
 func (s *inotifyStream) Errors() <-chan error          { return s.errors }
-func (s *inotifyStream) Lost() <-chan string           { return s.lost }
+func (s *inotifyStream) Lost() <-chan watchLoss        { return s.lost }
 
 func (s *inotifyStream) readEvents() {
 	defer func() {
@@ -176,14 +193,13 @@ func (s *inotifyStream) readEvents() {
 					return
 				}
 			}
-			ev, lostPath, ok := s.handleEvent(inEv, &buf, offset)
+			ev, loss, ok := s.handleEvent(inEv, &buf, offset)
 			if !ok {
 				return
 			}
-			if lostPath != "" {
-				select {
-				case s.lost <- lostPath:
-				default:
+			if loss.path != "" {
+				if !s.sendLost(loss) {
+					return
 				}
 			}
 			if ev.Op != 0 {
@@ -196,49 +212,48 @@ func (s *inotifyStream) readEvents() {
 	}
 }
 
-func (s *inotifyStream) handleEvent(inEv *unix.InotifyEvent, buf *[unix.SizeofInotifyEvent * 4096]byte, offset uint32) (fsnotify.Event, string, bool) {
+func (s *inotifyStream) handleEvent(inEv *unix.InotifyEvent, buf *[unix.SizeofInotifyEvent * 4096]byte, offset uint32) (fsnotify.Event, watchLoss, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return fsnotify.Event{}, "", false
+		return fsnotify.Event{}, watchLoss{}, false
 	}
 	wd := uint32(inEv.Wd)
-	watchPath, ok := s.byWd[wd]
+	entry, ok := s.byWd[wd]
 	if !ok {
-		return fsnotify.Event{}, "", true
+		return fsnotify.Event{}, watchLoss{}, true
 	}
+	// Unexpected kernel watch removal (IN_UNMOUNT or unexpected IN_IGNORED
+	// while still present in s.byWd; explicit Remove deletes before RmWatch).
 	if inEv.Mask&(unix.IN_UNMOUNT|unix.IN_IGNORED) != 0 {
 		delete(s.byWd, wd)
-		if s.byPath[watchPath] == wd {
-			delete(s.byPath, watchPath)
+		if s.byPath[entry.path] == entry {
+			delete(s.byPath, entry.path)
 		}
-		if inEv.Mask&unix.IN_UNMOUNT != 0 {
-			return fsnotify.Event{}, watchPath, true
-		}
-		return fsnotify.Event{}, "", true
+		return fsnotify.Event{}, watchLoss{path: entry.path, regID: entry.regID}, true
 	}
 
-	name := watchPath
+	name := entry.path
 	if inEv.Len > 0 {
 		name += "/" + decodeInotifyName(buf, offset, inEv.Len)
 	}
 	if inEv.Mask&unix.IN_DELETE_SELF != 0 {
 		delete(s.byWd, wd)
-		if s.byPath[watchPath] == wd {
-			delete(s.byPath, watchPath)
+		if s.byPath[entry.path] == entry {
+			delete(s.byPath, entry.path)
 		}
-		if _, parentWatched := s.byPath[filepath.Dir(watchPath)]; parentWatched {
-			return fsnotify.Event{}, "", true
+		if _, parentWatched := s.byPath[filepath.Dir(entry.path)]; parentWatched {
+			return fsnotify.Event{}, watchLoss{}, true
 		}
 	}
 	if inEv.Mask&unix.IN_MOVE_SELF != 0 {
 		delete(s.byWd, wd)
-		if s.byPath[watchPath] == wd {
-			delete(s.byPath, watchPath)
+		if s.byPath[entry.path] == entry {
+			delete(s.byPath, entry.path)
 		}
 		_, _ = unix.InotifyRmWatch(s.fd, wd)
 	}
-	return fsnotify.Event{Name: name, Op: translateInotifyMask(inEv.Mask)}, "", true
+	return fsnotify.Event{Name: name, Op: translateInotifyMask(inEv.Mask)}, watchLoss{}, true
 }
 
 func decodeInotifyName(buf *[unix.SizeofInotifyEvent * 4096]byte, offset, nameLen uint32) string {
@@ -278,17 +293,30 @@ func (s *inotifyStream) isClosed() bool {
 }
 
 func (s *inotifyStream) sendEvent(ev fsnotify.Event) bool {
-	if s.isClosed() {
+	select {
+	case s.events <- ev:
+		return true
+	case <-s.closing:
 		return false
 	}
-	s.events <- ev
-	return true
 }
 
 func (s *inotifyStream) sendError(err error) bool {
-	if s.isClosed() {
+	select {
+	case s.errors <- err:
+		return true
+	case <-s.closing:
 		return false
 	}
-	s.errors <- err
-	return true
+}
+
+func (s *inotifyStream) sendLost(loss watchLoss) bool {
+	select {
+	case s.lost <- loss:
+		return true
+	case <-s.closing:
+		return false
+	default:
+		return true
+	}
 }
