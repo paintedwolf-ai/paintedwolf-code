@@ -202,3 +202,14 @@ class PortableCommandGrades(unittest.TestCase):
         self.assertFalse(grade_resources(profile, measured, binding)['passed'])
         measured['hardware_sha256'] = 'different'
         self.assertEqual(grade_resources(profile, measured, binding)['qualification'], 'unqualified')
+
+    def test_diff_status_publication_rejects_wrong_mtime_header(self):
+        case = CASES['diff-status-publication']
+        project_files(self.root, case)
+        self.assertTrue(grade_artifacts(self.root, case))
+        for bad_diff in (
+            '--- ./a.txt\t2026-01-02 03:04:06.000000000 +0000\n+++ ./b.txt\t2026-01-02 03:04:05.000000000 +0000\n@@ -1 +1 @@\n-a\n+b\n',
+            '--- ./a.txt\n+++ ./b.txt\n@@ -1 +1 @@\n-a\n+b\n',
+        ):
+            (self.root / 'diff.txt').write_text(bad_diff)
+            self.assertFalse(grade_artifacts(self.root, case))

@@ -19,7 +19,10 @@ def grade_artifacts(project, case):
             files[f"{generator['directory']}/{index:05}.txt"] = generator['body']
     names = set(files) | set(expected.get('artifact_formats', {})) | set(expected.get('behavior_files', []))
     try:
-        if set(project_hashes(project)) != names:
+        actual = set(project_hashes(project))
+        if case['setup'].get('git'):
+            actual = {p for p in actual if p != '.git' and not p.startswith('.git/')}
+        if actual != names:
             return False
     except ValueError:
         return False

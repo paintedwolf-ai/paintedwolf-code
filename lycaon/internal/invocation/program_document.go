@@ -191,11 +191,7 @@ func loadReceiptPart(ctx context.Context, tx *sql.Tx, sessionID string, scope Re
 		if part.selection, err = selectActivityExecutions(activities, scope.ActivityID); err != nil {
 			return part, err
 		}
-		for i := range activities {
-			if activities[i].ID == scope.ActivityID {
-				part.activity = &activities[i]
-			}
-		}
+		part.activity = findActivity(activities, scope.ActivityID)
 	}
 	if part.selection.ids == "" {
 		// Ordinals are assigned densely from 1 and never reused.
