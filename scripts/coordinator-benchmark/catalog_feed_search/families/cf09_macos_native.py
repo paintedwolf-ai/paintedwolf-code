@@ -237,7 +237,7 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
     }
     const searchRes = await searchRespPromise;
     await page.getByTestId("search-loading-state").waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
-    await page.locator('[aria-label="Close suggestions"]').click().catch(() => {});
+    await page.locator('[aria-label="Close suggestions"]').click({ timeout: 1000 }).catch(() => {});
     await page.waitForTimeout(300);
 
     const searchApi = searchRes ? await searchRes.json().catch(() => ({})) : {};
