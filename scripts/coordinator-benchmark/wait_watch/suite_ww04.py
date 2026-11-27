@@ -556,6 +556,14 @@ def run_slot_c10_restart(
             checks["expiring_watch_registered"] = True
         next_req = driver1.await_pending("c10:pre_restart_finish")
         driver1.finish_turn(next_req, f"Registered {watch_handle} before restart.")
+        # Wait for the pre-restart submission to settle cleanly before terminating the sidecar
+        # so SQLite does not mark sub1 as 'interrupted' across restart.
+        app.wait_for(
+            lambda: app.submission_settled(session_id, sub1),
+            "c10:pre_restart_settled",
+            session_id,
+            timeout=timeout_s,
+        )
         source_obs.record_event("sidecar_stopping_for_restart", handle=watch_handle)
 
         # Phase 2: cold restart the sidecar in place on the same app_dir/store.db, inspect & cancel watch.
