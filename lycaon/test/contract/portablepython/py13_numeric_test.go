@@ -309,15 +309,21 @@ print(json.dumps({"pandas_version": pd.__version__, "import_ms": round(imp_ms, 2
 			t.Fatalf("unexpected host joined.csv:\n%s", string(joinedBytes))
 		}
 		// Verify ordinary file audit receipts were recorded
-		receiptFiles, err := filepath.Glob(filepath.Join(receiptDir, "*.json"))
-		contractcheck.FailErr(t, "glob receipts", err)
-		if len(receiptFiles) == 0 {
+		var receiptCount int
+		err = filepath.WalkDir(receiptDir, func(path string, d fs.DirEntry, walkErr error) error {
+			if walkErr == nil && !d.IsDir() {
+				receiptCount++
+			}
+			return walkErr
+		})
+		contractcheck.FailErr(t, "walk receipts", err)
+		if receiptCount == 0 {
 			t.Fatalf("expected file audit receipts in %s, got 0", receiptDir)
 		}
 		summary.PandasImportMS = out.ImportMS
 		summary.PandasPeakMemPages = resp.Usage.PeakMemoryPages
 		t.Logf("pandas 2.2.3 import=%.2fms wall=%dms peak_pages=%d work=%d receipts=%d",
-			out.ImportMS, resp.Usage.Duration.Milliseconds(), resp.Usage.PeakMemoryPages, resp.Usage.GuestWork, len(receiptFiles))
+			out.ImportMS, resp.Usage.Duration.Milliseconds(), resp.Usage.PeakMemoryPages, resp.Usage.GuestWork, receiptCount)
 	})
 
 	t.Run("03_kernel_cancel_fuel_and_fresh_recovery", func(t *testing.T) {
@@ -353,8 +359,8 @@ while True:
 		if respCancel.CleanCompletion {
 			t.Fatalf("expected non-clean stop on kernel cancel, got CleanCompletion=true")
 		}
-		if respCancel.Stop == nil || respCancel.Stop.Reason != "canceled" {
-			t.Fatalf("expected stop reason=canceled, got %+v", respCancel.Stop)
+		if respCancel.Stop == nil || respCancel.Stop.Code != "PYTHON_CANCELLED" {
+			t.Fatalf("expected stop code=PYTHON_CANCELLED, got %+v", respCancel.Stop)
 		}
 		summary.KernelCancelMS = float64(elapsedCancel.Milliseconds())
 
@@ -377,8 +383,8 @@ while True:
 		if respFuel.CleanCompletion {
 			t.Fatalf("expected fuel exhaustion stop, got CleanCompletion=true")
 		}
-		if respFuel.Stop == nil || respFuel.Stop.Reason != "fuel_exhausted" {
-			t.Fatalf("expected stop reason=fuel_exhausted, got %+v", respFuel.Stop)
+		if respFuel.Stop == nil || respFuel.Stop.Code != "PYTHON_WORK_LIMIT_EXCEEDED" {
+			t.Fatalf("expected stop code=PYTHON_WORK_LIMIT_EXCEEDED, got %+v", respFuel.Stop)
 		}
 		summary.KernelFuelExhausted = true
 
