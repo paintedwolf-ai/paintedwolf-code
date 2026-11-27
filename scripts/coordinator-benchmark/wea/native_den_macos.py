@@ -47,34 +47,39 @@ def _osascript(script: str, *, timeout: float = 15.0) -> tuple[int, str, str]:
 
 
 def _resolve_owned_window_id(owned_pid: int, *, timeout: float = 15.0) -> int | None:
-    """Resolve the CGWindowID belonging strictly to owned_pid via AppleScript/System Events."""
-    script = (
-        f'tell application "System Events" to tell (first process whose unix id is {owned_pid}) '
-        'to get value of attribute "AXWindowNumber" of front window'
-    )
-    rc, out, _ = _osascript(script, timeout=timeout)
-    if rc == 0 and out.isdigit() and int(out) > 0:
-        return int(out)
-    # Fallback via AppleScript window id query (still strictly scoped to owned_pid).
-    script_alt = (
+    """Resolve the CGWindowID belonging strictly to owned_pid via CoreGraphics optionAll (with AX fallback)."""
+    # Prefer CoreGraphics CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID)
+    # filtered to owned_pid, layer 0, and non-trivial window bounds (>= 100x100).
+    script_cg = (
         'ObjC.import("CoreGraphics");'
-        'var list = ObjC.deepUnwrap($.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly, $.kCGNullWindowID));'
-        f'var hit = list.find(function(w){{ return w.kCGWindowOwnerPID === {owned_pid} && w.kCGWindowLayer === 0; }});'
+        'var list = ObjC.deepUnwrap($.CGWindowListCopyWindowInfo($.kCGWindowListOptionAll, $.kCGNullWindowID));'
+        f'var hit = (list || []).find(function(w){{'
+        f'  var b = w.kCGWindowBounds || {{}};'
+        f'  return w.kCGWindowOwnerPID === {owned_pid} && w.kCGWindowLayer === 0 && (b.Width || 0) >= 100 && (b.Height || 0) >= 100;'
+        f'}});'
         'hit ? String(hit.kCGWindowNumber) : "";'
     )
     try:
         proc = subprocess.run(
-            ["osascript", "-l", "JavaScript", "-e", script_alt],
+            ["osascript", "-l", "JavaScript", "-e", script_cg],
             capture_output=True,
             text=True,
             check=False,
             timeout=timeout,
         )
+        out_cg = proc.stdout.strip()
+        if proc.returncode == 0 and out_cg.isdigit() and int(out_cg) > 0:
+            return int(out_cg)
     except subprocess.TimeoutExpired:
-        return None
-    out2 = proc.stdout.strip()
-    if proc.returncode == 0 and out2.isdigit() and int(out2) > 0:
-        return int(out2)
+        pass
+
+    script_ax = (
+        f'tell application "System Events" to tell (first process whose unix id is {owned_pid}) '
+        'to get value of attribute "AXWindowNumber" of front window'
+    )
+    rc, out, _ = _osascript(script_ax, timeout=timeout)
+    if rc == 0 and out.isdigit() and int(out) > 0:
+        return int(out)
     return None
 
 
@@ -114,11 +119,11 @@ def _send_owned_keystrokes(owned_pid: int, key_codes: list[int]) -> list[dict[st
 
 
 def capture_owned_window_screenshot(window_id: int, dest_path: pathlib.Path, *, timeout: float = 15.0) -> dict[str, Any]:
-    """Capture ONLY the owned CGWindowID (`screencapture -x -l <window_id>`)."""
+    """Capture ONLY the owned CGWindowID (`screencapture -l <window_id> -o -x`)."""
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         proc = subprocess.run(
-            ["screencapture", "-x", "-l", str(int(window_id)), str(dest_path)],
+            ["screencapture", "-l", str(int(window_id)), "-o", "-x", str(dest_path)],
             capture_output=True,
             text=True,
             check=False,
@@ -436,6 +441,9 @@ def run_macos_tauri_native(
                 "provenance": prov,
                 "passed": False,
             })
+
+        # Allow WebView initial paint after the owned 1280x800 CGWindow appears.
+        time.sleep(2.0)
 
         focus_before = _read_focused_element(proc.pid)
         try:

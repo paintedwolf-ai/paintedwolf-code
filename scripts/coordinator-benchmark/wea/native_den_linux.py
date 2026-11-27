@@ -573,6 +573,7 @@ def run_linux_tauri_native(
     env = dict(os.environ)
     env["GTK_MODULES"] = "gail:atk-bridge"
     env["NO_AT_BRIDGE"] = "0"
+    env["WEBKIT_DISABLE_DMABUF_RENDERER"] = "1"
     env["WEBKIT_DISABLE_COMPOSITING_MODE"] = "1"
     env["LYCAON_CONFIG_DIR"] = str(profile / "config")
     env["XDG_CONFIG_HOME"] = str(profile / "xdg-config")
@@ -596,7 +597,7 @@ def run_linux_tauri_native(
         xid = _find_x11_window_for_pid(proc.pid, timeout_s=startup_timeout_s, proc=proc)
         if xid <= 0:
             raise RuntimeError(f"no_x11_window_found_for_tauri_pid_{proc.pid}")
-        time.sleep(2.0)
+        time.sleep(3.0)
 
         atspi_before = _probe_atspi(proc.pid)
         key_ev = _send_x11_key(xid, "Tab")
