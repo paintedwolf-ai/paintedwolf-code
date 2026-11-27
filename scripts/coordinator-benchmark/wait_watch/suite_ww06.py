@@ -661,14 +661,11 @@ def _run_c21_budget_sidecar_restart(engine_bin: pathlib.Path, slot_dir: pathlib.
     """C21-budget-sidecar-restart (D4 representative sidecar restart): slot cap/reuse & durable hourly wake budget survive cold restart."""
     app_dir = slot_dir / "app"
     project_dir = slot_dir / "project"
-    barrier_dir = project_dir / ".ww06-c21-wake-barrier"
     raw_dir = slot_dir / "raw"
     project_dir.mkdir(parents=True, exist_ok=True)
     raw_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "README.md").write_text("# WW06 C21 budget & slot reuse restart fixture\n", encoding="utf-8")
 
-    marker = f"ww06-c21-{uuid.uuid4().hex[:8]}"
-    barrier = ProcessBarrier(barrier_dir, exit_code=0, marker=marker, payload=f"{marker}:wake\n")
     source_obs = SourceObserver(clock_domain="system")
     admission_obs = AdmissionObserver(clock_domain="system")
     rendered_obs = RenderedInputObserver(clock_domain="system")
@@ -693,36 +690,26 @@ def _run_c21_budget_sidecar_restart(engine_bin: pathlib.Path, slot_dir: pathlib.
 
         driver = WaitWatchDriver(app, session_id, rendered_observer=rendered_obs, source_observer=source_obs, timeout_s=timeout_s, sse_path=sse_path)
 
-        # 1. Launch a deterministic ProcessBarrier command, arm a delivery=wake watch on it,
-        #    settle turn 1 to idle, and ONLY THEN release the barrier so the ambient wake is
-        #    guaranteed to fire while idle on both fast and slow hosts (zero wall-clock timer race).
-        cmd_str = barrier.command_string(relative_to=project_dir, background=True)
-        _, _, wake_cmd_handle = driver.call_command(cmd_str, progress_update="- [ ] WW06 C21 wake budget setup")
-        barrier.wait_reached(timeout_s=timeout_s, dump_state=driver._dump_state)
-        source_obs.record_event("c21_wake_barrier_reached", handle=wake_cmd_handle, pid=barrier.child_pid)
-
+        # 1. Arm an 8s wake timer watch (plenty of headroom on both macOS and Pop!_OS for turn 1 to settle
+        #    to idle before the timer fires, without an active background command blocking turn completion).
         _, _, fast_wake = driver.call_watch(
             {
-                "conditions": [{"kind": "process_done", "handles": [wake_cmd_handle]}],
+                "conditions": [{"kind": "timer", "delay_ms": 8000}],
                 "delivery": "wake",
             }
         )
         fast_handle = str(fast_wake.get("handle") or "")
         turn1_end = driver.await_pending("c21:finish_turn1")
-        driver.finish_turn(turn1_end, f"Armed wake watch {fast_handle} for {wake_cmd_handle}.")
+        driver.finish_turn(turn1_end, f"Armed 8s wake timer {fast_handle}.")
         _wait_session_idle(
             app,
             session_id,
-            phase="c21.wait_idle_before_wake_release",
+            phase="c21.wait_idle_after_turn1",
             timeout_s=timeout_s,
             dump_state=driver._dump_state,
         )
 
-        # Release barrier now that session is idle -> ambient wake turn admits deterministically.
-        rel_info = barrier.release()
-        source_obs.record_event("c21_wake_barrier_released", handle=wake_cmd_handle, **rel_info)
-        barrier.wait_child_exited(timeout_s=min(10.0, timeout_s))
-
+        # Wait for the ambient wake turn triggered by the 8s timer while idle.
         wake_req = driver.await_pending("c21:ambient_wake_turn")
         rendered_obs.record_pending(wake_req, presentation_kind="new_model_presentation", session_id=session_id, handle=fast_handle)
 
@@ -834,11 +821,6 @@ def _run_c21_budget_sidecar_restart(engine_bin: pathlib.Path, slot_dir: pathlib.
     except Exception as exc:
         errors.append(f"exception:{type(exc).__name__}:{exc}")
     finally:
-        if barrier.is_reached() and not barrier.release_path.is_file():
-            try:
-                barrier.release()
-            except Exception:
-                pass
         if sse is not None:
             sse.close()
         app.close(cleanup=False)
@@ -846,7 +828,7 @@ def _run_c21_budget_sidecar_restart(engine_bin: pathlib.Path, slot_dir: pathlib.
     if app.process is not None:
         checkpoint_closed_store(app_dir / "store.db", app.process)
     storage_snap = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id or None)
-    source_obs.set_facts({**barrier.source_facts(), "restart": restart_info, "checks": checks})
+    source_obs.set_facts({"restart": restart_info, "checks": checks})
     observers = correlate_observers(
         source=source_obs.snapshot(),
         storage=storage_snap,
