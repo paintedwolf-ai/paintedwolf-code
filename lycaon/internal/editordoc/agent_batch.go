@@ -92,6 +92,7 @@ func (a *AgentService) ApplyAgentEdits(ctx context.Context, inputs []AgentEdit) 
 	for i, item := range batch {
 		results[i] = s.publishAgentAcceptance(ctx, item)
 	}
+	observeAcceptedAgentEditsWEA(batch, results)
 	return results, nil
 }
 

@@ -905,3 +905,128 @@ func TestWEAReusesExistingObserverLifecycleAndDisabledIsZeroAlloc(t *testing.T) 
 		t.Fatalf("unexpected decoded finding from retention file: %+v", decoded)
 	}
 }
+
+func TestWEAEnabledDisabledRuntimeParityAndBoundedBurst(t *testing.T) {
+	fixed := time.Date(2026, 11, 27, 12, 0, 0, 0, time.UTC)
+
+	// Simulate a product workflow that returns identical verdicts regardless of
+	// whether opt-in WEA diagnostics are disabled or enabled.
+	runProductWorkflow := func() (acceptedEdits int, allowedEgress int, refusedEgress int) {
+		clean := cleanWEAObservation()
+		// Healthy run + legitimate revalidation + superseding admission after refusal.
+		clean.EditEffects[0].RebasedCleanly = true
+		clean.EditEffects[0].CurrentRevision = "rev-15"
+		clean.EgressDecisions = append(clean.EgressDecisions,
+			WEAEgressDecisionFact{
+				DecisionID: "dec-refuse-1", SessionID: clean.SessionID, InvocationID: "inv-reval",
+				DestinationRef: "https://reval.fixture.invalid/v1", Refused: true, RefusalCode: "HOST_DENIED", DecisionSeq: 40,
+			},
+			WEAEgressDecisionFact{
+				DecisionID: "dec-admit-2", SessionID: clean.SessionID, InvocationID: "inv-reval",
+				DestinationRef: "https://reval.fixture.invalid/v1", GrantScope: "exact_action", Admitted: true, DecisionSeq: 45,
+			},
+		)
+		clean.ObservedConnections = append(clean.ObservedConnections, WEAEgressConnectionFact{
+			ConnectionID: "conn-reval", SessionID: clean.SessionID, InvocationID: "inv-reval",
+			DestinationRef: "https://reval.fixture.invalid/v1", ObservedSeq: 46, Settled: true,
+		})
+		_ = ObserveWEA(clean)
+		return 1, 2, 1
+	}
+
+	// 1. Disabled run: zero findings, zero side effects.
+	restoreOff := SetObserver(NewObserver(Config{Enabled: false}))
+	aOff, eOff, rOff := runProductWorkflow()
+	restoreOff()
+
+	// 2. Enabled run: identical product outcomes, zero warnings on healthy run.
+	var mu sync.Mutex
+	var got []Finding
+	obsOn := NewObserver(Config{
+		Enabled:       true,
+		QueueCapacity: 16,
+		Now:           func() time.Time { return fixed },
+		Sink: func(f Finding) {
+			mu.Lock()
+			got = append(got, f)
+			mu.Unlock()
+		},
+	})
+	restoreOn := SetObserver(obsOn)
+	aOn, eOn, rOn := runProductWorkflow()
+	restoreOn()
+	obsOn.Close()
+
+	if aOff != aOn || eOff != eOn || rOff != rOn {
+		t.Fatalf("enabled/disabled product parity mismatch: off=(%d,%d,%d) on=(%d,%d,%d)", aOff, eOff, rOff, aOn, eOn, rOn)
+	}
+	mu.Lock()
+	if len(got) != 0 {
+		t.Fatalf("expected 0 warnings on healthy revalidation/supersession run, got %+v", got)
+	}
+	mu.Unlock()
+
+	// 3. Bounded queue under burst: never blocks, explicitly records drops.
+	gate := make(chan struct{})
+	firstEntered := make(chan struct{})
+	var closeGateOnce sync.Once
+	closeGate := func() { closeGateOnce.Do(func() { close(gate) }) }
+	var burstFindings []Finding
+	burstObs := NewObserver(Config{
+		Enabled:       true,
+		QueueCapacity: 2,
+		Now:           func() time.Time { return fixed },
+		Sink: func(f Finding) {
+			if f.RuleID == RuleWEALandedPathMismatch {
+				select {
+				case <-firstEntered:
+				default:
+					close(firstEntered)
+				}
+				<-gate
+			}
+			mu.Lock()
+			burstFindings = append(burstFindings, f)
+			mu.Unlock()
+		},
+	})
+	t.Cleanup(func() {
+		closeGate()
+		burstObs.Close()
+	})
+
+	bad := cleanWEAObservation()
+	bad.LandedPaths[0].PresentOnDisk = false
+	if !burstObs.Submit(WrapWEAObservation(bad)) {
+		t.Fatal("first burst item should enqueue")
+	}
+	<-firstEntered
+
+	dropped := 0
+	for i := 0; i < 32; i++ {
+		if !burstObs.Submit(WrapWEAObservation(bad)) {
+			dropped++
+		}
+	}
+	if dropped == 0 {
+		t.Fatal("expected bounded queue to drop excess WEA burst items without blocking")
+	}
+	closeGate()
+	burstObs.Close()
+
+	if burstObs.Stats().Dropped != int64(dropped) {
+		t.Fatalf("stats.Dropped = %d, want %d", burstObs.Stats().Dropped, dropped)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	sawOverflow := false
+	for _, f := range burstFindings {
+		if f.RuleID == RuleCaptureOverflow && f.Disposition == DispositionOverflow && f.DroppedCount == int64(dropped) {
+			sawOverflow = true
+		}
+	}
+	if !sawOverflow {
+		t.Fatalf("expected explicit capture_overflow finding under WEA burst, got %+v", burstFindings)
+	}
+}
+

@@ -110,8 +110,10 @@ func awaitEndpoint(ctx context.Context, host, endpoint, method, path string) err
 		reviewCtx = context.WithValue(reviewCtx, consentContextKey{}, consent)
 	}
 	if confine.DecideAttributedHTTPRequest(reviewCtx, state.Command, endpoint, method, path) {
+		observeEgressDecisionWEA(state.Command, endpoint, true)
 		return nil
 	}
+	observeEgressDecisionWEA(state.Command, endpoint, false)
 	return refused(ctx, reviewCtx, state, host)
 }
 
@@ -124,8 +126,10 @@ func AwaitTransport(ctx context.Context, ep egressproxy.Endpoint) error {
 	}
 	reviewCtx := hitl.WaitContext(ctx)
 	if confine.DecideAttributedEndpoint(reviewCtx, state.Command, ep) {
+		observeEgressDecisionWEA(state.Command, ep.Host, true)
 		return nil
 	}
+	observeEgressDecisionWEA(state.Command, ep.Host, false)
 	return refused(ctx, reviewCtx, state, ep.Host)
 }
 

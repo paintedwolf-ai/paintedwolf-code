@@ -231,6 +231,7 @@ func (s *MergeService) commitCompletedPromotion(ctx context.Context, in promoteF
 		in.out.Error = refreshErr.Error()
 	}
 	in.out.Status = api.WorkerMergeStatusMerged
+	observeCommittedPromotionWEA(in)
 	return nil
 }
 

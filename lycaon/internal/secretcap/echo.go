@@ -21,7 +21,9 @@ func (r *Resolution) ReferenceEchoes(text string) string {
 		return text
 	}
 	text = base64Run.ReplaceAllStringFunc(text, r.decodedEcho)
-	return r.ReferenceValues(text)
+	out := r.ReferenceValues(text)
+	r.observeScreenedEchoWEA(out)
+	return out
 }
 
 // decodedEcho also tries the run past a glued prefix of up to three

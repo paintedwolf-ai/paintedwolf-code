@@ -231,6 +231,7 @@ func (m *ApprovalAuthority) resolveApprovalOptionAdmitted(ctx context.Context, s
 	row.Resolution = &resolution
 	m.checkpoints.announceResolved(ctx, *row, viaOutbox)
 	m.notifyToolApprovalTerminal(*row, DecisionStatusApproved)
+	observeApprovalResolutionWEA(sessionID, checkpointID, option, result)
 	return storedToCheckpointResponse(row), nil
 }
 
