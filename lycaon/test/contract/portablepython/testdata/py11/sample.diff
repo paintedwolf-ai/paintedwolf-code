@@ -7,7 +7,7 @@
 +RETRIES = 3
  HOST = "localhost"
  PORT = 8080
-@@ -10,3 +11,3 @@
+@@ -10,2 +11,2 @@
  def endpoint():
 -    return f"http://{HOST}:{PORT}"
 +    return f"https://{HOST}:{PORT}"

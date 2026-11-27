@@ -290,7 +290,7 @@ print("GROUP1_OK")
 		if h0.SourceStart != 1 || h0.SourceLength != 4 || h0.TargetStart != 1 || h0.TargetLength != 5 || h0.Added != 2 || h0.Removed != 1 || h0.HasNoNewline {
 			t.Fatalf("unexpected hunk[0]: %+v", h0)
 		}
-		if h1.SourceStart != 10 || h1.SourceLength != 3 || h1.TargetStart != 11 || h1.TargetLength != 3 || h1.Added != 1 || h1.Removed != 1 || !h1.HasNoNewline {
+		if h1.SourceStart != 10 || h1.SourceLength != 2 || h1.TargetStart != 11 || h1.TargetLength != 2 || h1.Added != 1 || h1.Removed != 1 || !h1.HasNoNewline {
 			t.Fatalf("unexpected hunk[1]: %+v", h1)
 		}
 	})
@@ -1149,7 +1149,7 @@ license_out = {
     "canonical": str(parsed_expr),
     "keys": [s.key for s in licensing.license_symbols(parsed_expr, unique=True, decompose=True)],
     "valid_errors": list(valid_check.errors),
-    "unknown_symbols": list(unknown_check.unknown_symbols),
+    "unknown_symbols": list(unknown_check.invalid_symbols),
     "unknown_errors": list(unknown_check.errors),
     "syntax_error": syntax_err_msg,
 }
