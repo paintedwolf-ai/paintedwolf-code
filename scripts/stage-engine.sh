@@ -85,7 +85,7 @@ mkdir -p "${ENGINE_ROOT}/schemas"
 cp -R "${ROOT}/schemas/." "${ENGINE_ROOT}/schemas/"
 
 bash "${ROOT}/scripts/stage-bundled-opengrep.sh" "${ENGINE_ROOT}" "${TARGET}" "${OPENGREP_ARTIFACT}"
-bash "${ROOT}/scripts/stage-bundled-portable-python.sh" --root "${ENGINE_ROOT}" --target "${TARGET}"
+bash "${ROOT}/scripts/portable-python/stage-bundled.sh" --root "${ENGINE_ROOT}" --target "${TARGET}"
 if [[ "${MODE}" == "full" ]]; then
   bash "${ROOT}/scripts/gitengine-fetch.sh"
   if [[ "${HOST_KIND}" == "linux" ]]; then
