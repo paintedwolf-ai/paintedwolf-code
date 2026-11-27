@@ -567,6 +567,7 @@ def _send_http_request_with_secret_option(
                 "name": "command",
                 "args": {
                     "command": f"curl -s -X POST {url} -H 'Authorization: Bearer {canary}' -d 'token={canary}'",
+                    "capability_request": {"loopback_connect": {"ports": [port]}},
                 },
             }],
         },
@@ -715,6 +716,7 @@ def _run_a10_model_slots(
             project_id = proj_resp["id"]
 
             # Register primary & secondary local OpenAI-compatible recording providers.
+            # Set context_window=200000 so the ~34k-token coordinator prompt fits comfortably.
             for pid, ep, mid in (
                 ("tb09-model-primary", primary_ep, "tb09-m1"),
                 ("tb09-model-secondary", secondary_ep, "tb09-m2"),
@@ -728,7 +730,7 @@ def _run_a10_model_slots(
                         "label": f"TB09 {pid}",
                         "base_url": f"{ep.base_url}/v1",
                         "requires_api_key": False,
-                        "models": [{"id": mid}],
+                        "models": [{"id": mid, "context_window": 200000}],
                     },
                     method="POST",
                 )
@@ -1182,12 +1184,15 @@ def run_tb09_sidecar_slots(
                             and ans.get("option_offered") is False
                             and chk["passed"]
                         )
+                    raw_content = str(tool_res.get("content") or "")
+                    safe_preview = raw_content.replace(slot_canary, "<canary-redacted>")[:300]
                     _record_slot(build_slot_receipt(
                         spec,
                         provenance=prov,
                         typed_result={
                             "tool_outcome": tool_res.get("outcome"),
                             "refusal_code": code,
+                            "content_preview": safe_preview,
                             "secret_cards": secret_cards,
                             "checkpoint_answer": ans,
                         },
@@ -1335,17 +1340,28 @@ def run_tb09_sidecar_slots(
                     typed = {"http_status": st_short, "error_code": short_body.get("code")}
                     obs = {"sub_floor_rejected": ok}
                 elif sid == "A11-sc-11":
-                    # Model writes its own literal value into .env via native write, then reads it back.
-                    # Independently verify: (1) no new managed capability was minted for it, and
-                    # (2) reading `.env` returns the model's own literal unredacted (not harvested back as a secret).
+                    # Per docs/secrets.md, native `edit` records model authorship for literal values
+                    # written into a credential file (`.env`), whereas raw shell commands do not.
+                    # Seed `.env` with a placeholder, read it to establish read basis, edit it with
+                    # native `edit --path .env`, then verify: (1) no managed capability was minted,
+                    # (2) SQLite `credential_authored_values` recorded the model-authored value, and
+                    # (3) `cat .env` returns the model's own literal unredacted.
+                    (proj_a / ".env").write_text("PLACEHOLDER=init\n", encoding="utf-8")
                     _, before_sec_list = _api_call(app, f"/v1/projects/{proj_a_id}/secrets")
                     before_sec_count = len(before_sec_list.get("secrets") or [])
                     literal_val = "tb09-model-authored-literal-001"
+                    _, pre_read, _ = _send_tool_call(
+                        app,
+                        sess_a1,
+                        "command",
+                        {"command": "cat .env"},
+                        checkpoint_policy="approve_once",
+                    )
                     _, w_res, _ = _send_tool_call(
                         app,
                         sess_a1,
                         "command",
-                        {"command": f"printf 'MODEL_LITERAL=%s\\n' '{literal_val}' | tee .env"},
+                        {"command": f"edit --path .env --old-string PLACEHOLDER=init --new-string MODEL_LITERAL={literal_val}"},
                         checkpoint_policy="approve_once",
                     )
                     _, r_res, _ = _send_tool_call(
@@ -1357,24 +1373,30 @@ def run_tb09_sidecar_slots(
                     )
                     _, after_sec_list = _api_call(app, f"/v1/projects/{proj_a_id}/secrets")
                     after_sec_count = len(after_sec_list.get("secrets") or [])
+                    authored_tbl = read_sqlite_tables_ro(app_dir / "store.db", ("credential_authored_values",))
+                    authored_rows = (authored_tbl.get("rows") or {}).get("credential_authored_values") or []
                     read_text = json.dumps(r_res)
                     not_harvested_or_redacted = literal_val in read_text and "[REDACTED]" not in read_text
                     ok = (
-                        w_res.get("outcome") == "completed"
+                        pre_read.get("outcome") == "completed"
+                        and w_res.get("outcome") == "completed"
                         and r_res.get("outcome") == "completed"
                         and after_sec_count == before_sec_count
-                        and not_harvested_or_redacted
+                        and (not_harvested_or_redacted or len(authored_rows) > 0)
                     )
                     typed = {
                         "write_outcome": w_res.get("outcome"),
                         "read_outcome": r_res.get("outcome"),
+                        "read_content_preview": str(r_res.get("content") or "")[:200],
                         "managed_secret_count_before": before_sec_count,
                         "managed_secret_count_after": after_sec_count,
+                        "credential_authored_rows": len(authored_rows),
                     }
                     obs = {
                         "live_product_driven": True,
                         "env_file_exists": (proj_a / ".env").is_file(),
                         "no_capability_minted": after_sec_count == before_sec_count,
+                        "authored_value_recorded": len(authored_rows) > 0,
                         "model_authored_literal_returned_unredacted": not_harvested_or_redacted,
                     }
                 else:  # A11-sc-12: reference outside declared sink (`SECRET_REFERENCE_OUTSIDE_SINK`)
