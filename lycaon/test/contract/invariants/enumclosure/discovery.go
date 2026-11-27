@@ -1,93 +1,31 @@
-package llm
+package enumclosure
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"path/filepath"
 	"strings"
-	"testing"
 
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
-	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/test/contract/invariants"
 )
 
-// Discovery strategies without a compatible /models endpoint stay documented.
-func TestDiscoveryStrategyConstsInKeepSet(t *testing.T) {
-	t.Parallel()
-	path := filepath.Join(configlayout.FindModuleRoot(), "internal", "llm", "providerprofile", "profile.go")
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, path, nil, 0)
-	testutil.FailErr(t, "parse providerprofile/profile.go", err)
+const providerProfileDir = "internal/llm/providerprofile"
 
-	consts := discoveryStrategyConsts(f)
-	if len(consts) == 0 {
-		t.Fatal("no DiscoveryStrategy consts found in providerprofile/profile.go")
-	}
-	if len(consts) != len(discoveryKeepSet) {
-		t.Errorf("declared strategies = %d, documented strategies = %d", len(consts), len(discoveryKeepSet))
-	}
-	for name, value := range consts {
-		gap, ok := discoveryKeepSet[providerprofile.DiscoveryStrategy(value)]
-		if !ok {
-			t.Errorf("%s (%q) missing from discoveryKeepSet — document the feature gap before minting", name, value)
-			continue
+var discoveryRule = invariants.Invariant{
+	Name:    "provider-discovery-strategies-have-rationale",
+	Anchors: []invariants.Anchor{invariants.Decl(providerProfileDir, "DiscoveryStrategy")},
+	Check: func(r *invariants.Run) {
+		declared := stringEnumValues(r, providerProfileDir, "DiscoveryStrategy")
+		var documented []string
+		for strategy, rationale := range discoveryKeepSet {
+			documented = append(documented, string(strategy))
+			if strings.TrimSpace(rationale) == "" {
+				r.Report("discovery strategy %q has no rationale", strategy)
+			}
 		}
-		if strings.TrimSpace(gap) == "" {
-			t.Errorf("%s (%q) has empty keep-set gap text", name, value)
-		}
-	}
+		r.Diff("declared discovery strategies vs documented strategies", sortedKeys(declared), documented)
+	},
 }
 
-func discoveryStrategyConsts(f *ast.File) map[string]string {
-	out := make(map[string]string)
-	for _, decl := range f.Decls {
-		gen, ok := decl.(*ast.GenDecl)
-		if !ok || gen.Tok != token.CONST {
-			continue
-		}
-		var iotaType string
-		for _, spec := range gen.Specs {
-			vs, ok := spec.(*ast.ValueSpec)
-			if !ok {
-				continue
-			}
-			typeName := ""
-			if vs.Type != nil {
-				if ident, ok := vs.Type.(*ast.Ident); ok {
-					typeName = ident.Name
-					iotaType = typeName
-				}
-			} else if iotaType != "" {
-				typeName = iotaType
-			}
-			if typeName != "DiscoveryStrategy" {
-				if vs.Type != nil {
-					iotaType = ""
-				}
-				continue
-			}
-			for i, name := range vs.Names {
-				if name.Name == "_" || !strings.HasPrefix(name.Name, "Discovery") {
-					continue
-				}
-				if len(vs.Values) <= i {
-					continue
-				}
-				lit, ok := vs.Values[i].(*ast.BasicLit)
-				if !ok || lit.Kind != token.STRING {
-					continue
-				}
-				out[name.Name] = strings.Trim(lit.Value, `"`)
-			}
-		}
-	}
-	return out
-}
-
-// discoveryKeepSet records listing capabilities required by each strategy.
-// The contract guard checks strategy coverage against this table.
+// discoveryKeepSet records the listing capabilities each strategy needs.
 var discoveryKeepSet = map[providerprofile.DiscoveryStrategy]string{
 	providerprofile.DiscoveryConfigured: "Composable DiscoveryProfile over OpenAI-shaped /models " +
 		"(Together type=chat + token pricing, OpenRouter output modalities, " +
