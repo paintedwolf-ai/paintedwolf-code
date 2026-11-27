@@ -346,13 +346,13 @@ class AgentToolSession:
             )
         except Exception:
             pass
-        self._wait_session_idle(timeout_s=30.0)
+        self._wait_session_idle(timeout_s=60.0)
         self._transport.request(
             f"/v1/sessions/{self.session_id}/prompts",
             {"operation_id": str(uuid.uuid4()), "text": "CF07 agent discovery probe"},
             method="POST",
         )
-        self._pending = self._wait_pending(timeout_s=30.0)
+        self._pending = self._wait_pending(timeout_s=90.0)
 
     def _wait_session_idle(self, timeout_s: float = 30.0) -> None:
         deadline = time.monotonic() + timeout_s
@@ -406,7 +406,7 @@ class AgentToolSession:
                     return json.dumps(content, ensure_ascii=False)
         return ""
 
-    def invoke_tool(self, tool_name: str, args: dict[str, object], *, timeout_s: float = 45.0) -> CapturedToolCall:
+    def invoke_tool(self, tool_name: str, args: dict[str, object], *, timeout_s: float = 90.0) -> CapturedToolCall:
         req = self._pending
         tools_avail = req.get("tools") or []
         if isinstance(tools_avail, list) and tool_name not in tools_avail and "request_tools" in tools_avail:
