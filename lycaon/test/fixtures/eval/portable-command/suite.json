@@ -2644,7 +2644,7 @@
       },
       "turns": [
         {
-          "program": "while true; do :; sleep 0.5; done; printf 'after\\n' > ./after",
+          "program": "while true; do :; sleep 1.5; done; printf 'after\\n' > ./after",
           "expected_outcome": "interrupted",
           "expected_rejection": "TOOL_OWNER_INTERRUPTED"
         }
