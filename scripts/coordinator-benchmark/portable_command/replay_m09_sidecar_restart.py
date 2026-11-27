@@ -187,6 +187,7 @@ def run_m09_replay(repo_root, out_path, engine_manifest=None, engine_bin=None):
         s3_invocations = app.request(f'/v1/sessions/{sid}/invocations')
         s3_receipt = app.request(f'/v1/sessions/{sid}/program-receipts/{s3_pid}?limit=50', missing=True) if s3_pid else None
         s3_db_row = _program_row(app_dir / 'store.db', s3_pid) if s3_pid else None
+        _finish_prompt(app, sid)
 
         rec_sid = _open_session(app, project_id)
         _start_prompt(app, rec_sid, 'M09 State 3 post-restart recovery command.')
