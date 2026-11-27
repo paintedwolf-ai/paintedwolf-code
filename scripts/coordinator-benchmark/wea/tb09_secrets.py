@@ -197,7 +197,7 @@ def run_tb09_sidecar_suite(
                 "operation_id": str(uuid.uuid4()),
                 "name": "TB09 Alpha Canary",
                 "purpose": "verify custody and project scoping",
-                "value": canary_v1,
+                "secret_value": canary_v1,
             },
         )
         created_b = app.request(
@@ -206,7 +206,7 @@ def run_tb09_sidecar_suite(
                 "operation_id": str(uuid.uuid4()),
                 "name": "TB09 Beta Canary",
                 "purpose": "verify cross-project isolation",
-                "value": canary_b,
+                "secret_value": canary_b,
             },
         )
         ref_a = str(created_a.get("reference") or "")
@@ -229,7 +229,7 @@ def run_tb09_sidecar_suite(
         # Replace value on secret_a (same reference, version bumps to 2).
         replaced_a = app.request(
             f"/v1/projects/{proj_a_id}/secrets/{secret_a_id}/value",
-            {"value": canary_v2},
+            {"secret_value": canary_v2},
             method="PUT",
         )
         # Revoke secret_a permanently.
@@ -240,7 +240,7 @@ def run_tb09_sidecar_suite(
         )
         # Explicit vault lock call.
         with contextlib.suppress(Exception):
-            app.request("/v1/vault/lock", {"reason": "tb09_pre_restart"})
+            app.request("/v1/vault/lock", {"reason": "away"})
 
         observations["a13_lifecycle_and_restart"]["pre_restart"] = {
             "replaced_same_reference": replaced_a.get("reference") == ref_a,
