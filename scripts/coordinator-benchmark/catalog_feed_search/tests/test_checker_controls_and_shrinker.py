@@ -9,25 +9,31 @@ import unittest
 
 from catalog_feed_search.change_runner import ChangeOp, ChangeScript, WriteLog, WriteLogEntry
 from catalog_feed_search.checker import (
+    CatalogItem,
+    ProductCatalogAnswer,
+    ProductSearchAnswer,
+    ScopedSearchHit,
+    check_catalog,
+    check_search,
+)
+from catalog_feed_search.checker_feed import (
+    FeedEvent,
+    ProductFeedAnswer,
+    check_change_feed,
+    check_feed_batch_effects,
+)
+from catalog_feed_search.checker_replace import (
+    ProductReplaceAnswer,
+    ReplaceFileObservation,
+    check_replace,
+)
+from catalog_feed_search.checker_types import (
     ALL_D4_GAPS,
     CORE_D4_GAPS,
     EXTENDED_D4_GAPS,
-    CatalogItem,
     DeclaredGap,
-    FeedEvent,
     GapSummaryTracker,
-    ProductCatalogAnswer,
-    ProductFeedAnswer,
-    ProductReplaceAnswer,
-    ProductSearchAnswer,
-    ReplaceFileObservation,
-    ScopedSearchHit,
     Verdict,
-    check_catalog,
-    check_change_feed,
-    check_feed_batch_effects,
-    check_replace,
-    check_search,
 )
 from catalog_feed_search.controls import run_all_controls, run_broken_reference_proof
 from catalog_feed_search.generators import TreeEntrySpec, TreeSpec
@@ -40,10 +46,10 @@ from catalog_feed_search.shrinker import FailingInstance, ddmin, shrink_instance
 class ControlsAndProofTests(unittest.TestCase):
     def test_all_runbook_and_rework_checker_controls_pass(self) -> None:
         report = run_all_controls()
-        self.assertEqual(len(report.outcomes), 16)
+        self.assertEqual(len(report.outcomes), 20)
         negatives = [o for o in report.outcomes if o.kind == "negative"]
         positives = [o for o in report.outcomes if o.kind == "positive"]
-        self.assertEqual(len(negatives), 12)
+        self.assertEqual(len(negatives), 16)
         self.assertEqual(len(positives), 4)
         for outcome in report.outcomes:
             self.assertTrue(
@@ -52,7 +58,7 @@ class ControlsAndProofTests(unittest.TestCase):
             )
         self.assertTrue(report.all_passed)
         payload = report.to_dict()
-        self.assertEqual(payload["passed"], 16)
+        self.assertEqual(payload["passed"], 20)
 
     def test_deliberately_broken_reference_proof_catches_shrinks_and_replays(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -306,6 +312,81 @@ class D4AndDecision006CheckerTests(unittest.TestCase):
             ProductFeedAnswer(events=(FeedEvent("a.txt", "b1", op="create", effect_id=None),))
         )
         self.assertEqual(missing_effect.verdict, Verdict.DEFECT)
+
+    def test_decision_012_resync_reconcile_scope_first_leg_and_unapplied_replace(self) -> None:
+        log = WriteLog("manual", (WriteLogEntry(1, "manual", 10, "edit", "a.txt", None, "h0", "h1"),))
+        ref_cat = (CatalogItem("a.txt", "file", "root-0"),)
+
+        # 1a. Resync claimed when all logged paths arrived, missing reconciled walk -> UNKNOWN.
+        res_resync_missing_walk = check_change_feed(
+            log,
+            ProductFeedAnswer(
+                events=(FeedEvent("a.txt", "b1", op="edit"),),
+                declared_gaps=(DeclaredGap("resync"),),
+            ),
+        )
+        self.assertEqual(res_resync_missing_walk.verdict, Verdict.UNKNOWN)
+
+        # 1b. Resync claimed when another gap covers omission, but reconciled walk contradicts ref -> DEFECT.
+        res_resync_other_gap = check_change_feed(
+            log,
+            ProductFeedAnswer(
+                events=(),
+                declared_gaps=(DeclaredGap("executor_error", root_id="root-0"), DeclaredGap("resync")),
+                reconciled_walk=(),
+                reference_post_walk=ref_cat,
+            ),
+        )
+        self.assertEqual(res_resync_other_gap.verdict, Verdict.DEFECT)
+
+        # 2. Mixed omissions: root-0 has in-scope verifiable=False, root-1 has NO explanation -> DEFECT.
+        two_roots = (CatalogItem("a.txt", "file", "root-0"), CatalogItem("b.txt", "file", "root-1"))
+        res_mixed = check_catalog(
+            two_roots,
+            ProductCatalogAnswer(
+                items=(),
+                declared_gaps=(DeclaredGap("catalog_failed", root_id="root-0", verifiable=False),),
+            ),
+        )
+        self.assertEqual(res_mixed.verdict, Verdict.DEFECT)
+
+        # 3. Wrong-leg gap on catalog -> DEFECT.
+        res_wrong_leg = check_catalog(
+            ref_cat,
+            ProductCatalogAnswer(
+                items=(),
+                declared_gaps=(DeclaredGap("catalog_incomplete", root_id="root-0", leg="store"),),
+            ),
+        )
+        self.assertEqual(res_wrong_leg.verdict, Verdict.DEFECT)
+
+        # 4. Non-drifted unapplied file: byte-identical to independent ref.before_sha256 + limited_preview -> PASS_DECLARED_GAP;
+        #    mutated bytes + limited_preview -> DEFECT (even if product lies in expected_before_sha256).
+        ref_rep = {"a.txt": ReplaceFileResult("a.txt", "orig_sha", "new_sha", b"new", 1, True)}
+        res_unchanged = check_replace(
+            ref_rep,
+            ProductReplaceAnswer(
+                files=(ReplaceFileObservation("a.txt", applied=False, observed_sha256="orig_sha"),),
+                declared_gaps=(DeclaredGap("limited_preview", root_id="root-0"),),
+            ),
+        )
+        self.assertEqual(res_unchanged.verdict, Verdict.PASS_DECLARED_GAP)
+
+        res_changed = check_replace(
+            ref_rep,
+            ProductReplaceAnswer(
+                files=(
+                    ReplaceFileObservation(
+                        "a.txt",
+                        applied=False,
+                        observed_sha256="corrupted_sha",
+                        expected_before_sha256="corrupted_sha",
+                    ),
+                ),
+                declared_gaps=(DeclaredGap("limited_preview", root_id="root-0"),),
+            ),
+        )
+        self.assertEqual(res_changed.verdict, Verdict.DEFECT)
 
 
 class ShrinkerUnitTests(unittest.TestCase):

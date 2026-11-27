@@ -9,21 +9,15 @@ from pathlib import Path
 from .change_runner import WriteLog, WriteLogEntry
 from .checker import (
     CatalogItem,
-    CheckResult,
-    DeclaredGap,
-    FeedEvent,
     ProductCatalogAnswer,
-    ProductFeedAnswer,
-    ProductReplaceAnswer,
     ProductSearchAnswer,
-    ReplaceFileObservation,
     ScopedSearchHit,
-    Verdict,
     check_catalog,
-    check_change_feed,
-    check_replace,
     check_search,
 )
+from .checker_feed import FeedEvent, ProductFeedAnswer, check_change_feed
+from .checker_replace import ProductReplaceAnswer, ReplaceFileObservation, check_replace
+from .checker_types import CheckResult, DeclaredGap, Verdict
 from .generators import TreeGenOptions, generate_tree_spec, materialize_tree
 from .queries import CodeQuerySpec
 from .references import ReplaceFileResult, SearchHit, reference_search
@@ -405,6 +399,82 @@ def run_all_controls() -> ControlSuiteReport:
                 declared_gaps=(
                     DeclaredGap(reason="executor_error", root_id="root-other", paths=("unrelated.txt",)),
                 ),
+            ),
+        ),
+    )
+
+    # --- DECISION 012 REGRESSION CONTROLS (4 follow-up counterexamples -> DEFECT) ---
+
+    # R6. Resync declared when all paths arrived, but reconciled catalog is empty -> DEFECT.
+    record(
+        "resync_contradictory_when_all_paths_arrived",
+        "negative",
+        Verdict.DEFECT,
+        check_change_feed(
+            ref_log,
+            ProductFeedAnswer(
+                events=(
+                    FeedEvent(path="src/a.txt", batch_id="b1", op="edit"),
+                    FeedEvent(path="src/b.txt", batch_id="b1", op="edit"),
+                ),
+                declared_gaps=(DeclaredGap(reason="resync"),),
+                reconciled_walk=(),
+                reference_post_walk=ref_cat,
+            ),
+        ),
+    )
+
+    # R7. Missing catalog item in root-0 + unverifiable catalog_failed on unrelated root -> DEFECT.
+    record(
+        "unverifiable_gap_unrelated_root",
+        "negative",
+        Verdict.DEFECT,
+        check_catalog(
+            ref_cat,
+            ProductCatalogAnswer(
+                items=ref_cat[:-1],
+                declared_gaps=(
+                    DeclaredGap(reason="catalog_failed", root_id="unrelated", verifiable=False),
+                ),
+            ),
+        ),
+    )
+
+    # R8. Missing catalog item + gap tagged with leg="store" (route has no leg) -> DEFECT.
+    record(
+        "wrong_leg_gap_outside_search",
+        "negative",
+        Verdict.DEFECT,
+        check_catalog(
+            ref_cat,
+            ProductCatalogAnswer(
+                items=ref_cat[:-1],
+                declared_gaps=(
+                    DeclaredGap(reason="catalog_incomplete", root_id="root-0", leg="store"),
+                ),
+            ),
+        ),
+    )
+
+    # R9. Non-drifted unapplied replace with changed post-op bytes + limited_preview -> DEFECT.
+    record(
+        "unapplied_replace_bytes_changed",
+        "negative",
+        Verdict.DEFECT,
+        check_replace(
+            ref_rep,
+            ProductReplaceAnswer(
+                files=(
+                    ReplaceFileObservation(
+                        path="src/a.txt",
+                        applied=False,
+                        refused_drift=False,
+                        observed_sha256=_sha(b"mutated_unexpectedly\n"),
+                        expected_before_sha256=_sha(b"mutated_unexpectedly\n"),
+                        drifted_before_apply=False,
+                    ),
+                ),
+                declared_gaps=(DeclaredGap(reason="limited_preview", root_id="root-0"),),
             ),
         ),
     )
