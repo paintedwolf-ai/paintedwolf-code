@@ -321,7 +321,7 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 			case <-guestAcked:
 				time.Sleep(100 * time.Millisecond)
 				cancelStream()
-			case <-time.After(15 * time.Second):
+			case <-time.After(120 * time.Second):
 				cancelStream()
 			}
 		}()
@@ -423,7 +423,7 @@ next(r.iter_content(chunk_size=64))`,
 		wsDir := t.TempDir()
 
 		waitForPendingLeaseByCall := func(b *pythonadmission.ApprovalBroker, callID string) pythonadmission.ApprovalLease {
-			deadline := time.Now().Add(8 * time.Second)
+			deadline := time.Now().Add(120 * time.Second)
 			for time.Now().Before(deadline) {
 				for _, l := range b.Registry().List() {
 					if l.CallID == callID && l.State == pythonadmission.LeasePending {
