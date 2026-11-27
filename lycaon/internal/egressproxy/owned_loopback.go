@@ -60,3 +60,10 @@ func (c *ownedLoopbackConn) Write(data []byte) (int, error) {
 	}
 	return c.Conn.Write(data)
 }
+
+func (c *ownedLoopbackConn) CloseWrite() error {
+	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return nil
+}

@@ -113,3 +113,34 @@ func TestAgentCommandLaunchRecordsItsProcessInTheWorkersView(t *testing.T) {
 		t.Fatalf("recorded=%v err=%v", recorded, err)
 	}
 }
+
+func TestBindAgentLaunchSettlesOutcomeFacts(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
+	out := &tools.ToolInvocationOut{}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess-bind", ProjectID: "proj-bind"},
+		Effects:  tools.InvocationEffects{Out: out},
+	}
+	_, release, err := BindAgentLaunch(t.Context(), tctx, "git", "git ls-remote origin", nil)
+	if err != nil || release == nil {
+		t.Fatalf("BindAgentLaunch err=%v releaseNil=%t", err, release == nil)
+	}
+	release(t.Context(), tools.AgentLaunchOutcome{
+		Failed: true,
+		Refusals: []confine.SandboxRefusal{{
+			Operation: "network-outbound",
+			Target:    "/tmp/agent.sock",
+			Count:     1,
+			Recovery:  confine.RecoverSocketPath,
+			Grant:     "/tmp/agent.sock",
+		}},
+		GitTransport: &confine.GitTransportObservation{
+			ExecutionID:  "exec-bind-test",
+			Command:      "git ls-remote origin",
+			ExitCode:     128,
+			Cause:        confine.GitTransportCauseEndpointDenied,
+			Stage:        "policy",
+			PolicyReason: "egress_rule_deny",
+		},
+	})
+}

@@ -12909,6 +12909,30 @@ export interface components {
             expected_revision: string;
             observed_revision: string;
         };
+        CommandExecutionTransportAttempt: {
+            ordinal: number;
+            destination?: string;
+            host?: string;
+            port?: number;
+            stage: string;
+            /** @enum {string} */
+            outcome: "established" | "setup_failed" | "lease_ended" | "endpoint_denied" | "dial_failed" | "invalid_request";
+            reply_code: number;
+            policy_reason?: string;
+            error_class?: string;
+        };
+        /** @description Host-evidenced transport mediation summary and verified per-attempt outcomes for a network Git execution. */
+        CommandExecutionTransport: {
+            /** @enum {string} */
+            cause: "established" | "setup_failed" | "lease_ended" | "endpoint_denied" | "dial_failed" | "invalid_request" | "unknown";
+            stage?: string;
+            destination?: string;
+            host?: string;
+            port?: number;
+            policy_reason?: string;
+            error_class?: string;
+            attempts?: components["schemas"]["CommandExecutionTransportAttempt"][];
+        };
         /** @description Host dynamic execution. It has no assistant message or model tool-call identity. */
         CommandExecutionReceipt: {
             /** Format: uuid */
@@ -12962,6 +12986,7 @@ export interface components {
             /** @description Latest retained stdout and stderr of this child, each with a bounded screened preview. Absent streams retained nothing. */
             outputs?: components["schemas"]["CommandExecutionOutput"][];
             revision_conflict?: components["schemas"]["CommandRevisionConflict"];
+            transport?: components["schemas"]["CommandExecutionTransport"];
         };
         CommandProgramNode: {
             /** @description Host syntax node identity within its program. */
@@ -33057,6 +33082,8 @@ export type ChatContentSearchPage = components["schemas"]["ChatContentSearchPage
 export type CommandProgramProgressReceipt = components["schemas"]["CommandProgramProgressReceipt"];
 export type CommandExecutionOutput = components["schemas"]["CommandExecutionOutput"];
 export type CommandRevisionConflict = components["schemas"]["CommandRevisionConflict"];
+export type CommandExecutionTransportAttempt = components["schemas"]["CommandExecutionTransportAttempt"];
+export type CommandExecutionTransport = components["schemas"]["CommandExecutionTransport"];
 export type CommandExecutionReceipt = components["schemas"]["CommandExecutionReceipt"];
 export type CommandProgramNode = components["schemas"]["CommandProgramNode"];
 export type CommandProgramReceiptPage = components["schemas"]["CommandProgramReceiptPage"];

@@ -161,10 +161,19 @@ func (e *StartConflict) Error() string {
 
 func (e *StartConflict) Unwrap() error { return e.Kind }
 
+// ProgramReceipt summarizes the settled durable receipt handles of a continued program job.
+type ProgramReceipt struct {
+	ProgramID       string
+	StdoutRef       string
+	StderrRef       string
+	EffectCertainty string
+}
+
 // Completion is the terminal, host-authoritative result for one command job.
 type Completion struct {
 	ExitObservation *ExitObservation
 	ProgramStop     ProgramStop
+	ProgramReceipt  *ProgramReceipt
 	// ReleaseNotices returns admission after the completion consumer finishes.
 	ReleaseNotices   func()
 	IsCheck          bool

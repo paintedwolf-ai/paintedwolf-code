@@ -81,6 +81,25 @@ func ParseSocksEndpoint(atyp byte, addr []byte, port uint16) (Endpoint, error) {
 	}, nil
 }
 
+// ParseTCPEndpoint normalizes a host and non-zero port for an opaque TCP stream.
+func ParseTCPEndpoint(host string, port uint16) (Endpoint, error) {
+	if port == 0 {
+		return Endpoint{}, fmt.Errorf("zero port")
+	}
+	if len(host) == 0 || len(host) > maxSocksDomainLen {
+		return Endpoint{}, fmt.Errorf("invalid host length")
+	}
+	normalized, err := normalizeHost(host)
+	if err != nil {
+		return Endpoint{}, err
+	}
+	return Endpoint{
+		Transport: TransportSocksTCP,
+		Host:      normalized,
+		Port:      port,
+	}, nil
+}
+
 // String returns a stable debug form without secrets.
 func (e Endpoint) String() string {
 	if e.Port == 0 {

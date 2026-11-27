@@ -40,6 +40,25 @@ func TestParseSocksEndpoint(t *testing.T) {
 	}
 }
 
+func TestParseTCPEndpoint(t *testing.T) {
+	ep, err := egressproxy.ParseTCPEndpoint("GitHub.COM.", 22)
+	if err != nil || ep.Host != "github.com" || ep.Port != 22 || ep.Transport != egressproxy.TransportSocksTCP {
+		t.Fatalf("domain: ep=%+v err=%v", ep, err)
+	}
+	ep, err = egressproxy.ParseTCPEndpoint("2001:db8::1", 2222)
+	if err != nil || ep.Host != "2001:db8::1" || ep.Port != 2222 {
+		t.Fatalf("ipv6: ep=%+v err=%v", ep, err)
+	}
+	for _, badHost := range []string{"", strings.Repeat("a", 256), "fe80::1%lo0", "bad..host"} {
+		if _, err := egressproxy.ParseTCPEndpoint(badHost, 22); err == nil {
+			t.Fatalf("ParseTCPEndpoint(%q) succeeded", badHost)
+		}
+	}
+	if _, err := egressproxy.ParseTCPEndpoint("github.com", 0); err == nil {
+		t.Fatal("zero port succeeded")
+	}
+}
+
 // An IPv4-mapped IPv6 literal is the IPv4 host it maps, so rules and
 // decisions written for that address apply to it.
 func TestIPv4MappedLiteralIsTheIPv4Host(t *testing.T) {

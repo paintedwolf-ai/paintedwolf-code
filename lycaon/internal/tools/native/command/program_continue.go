@@ -40,7 +40,7 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 			<-ending.done
 			r.recordParkedRun(context.WithoutCancel(ctx), run)
 			r.recordDetachedEffects(context.WithoutCancel(ctx), run)
-			return ending.jobResult(), errors.Join(ending.err, attachErr)
+			return ending.jobResult(run), errors.Join(ending.err, attachErr)
 		},
 	})
 	if err != nil {
@@ -82,7 +82,7 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 	return string(result), err
 }
 
-func (e *programEnding) jobResult() bgprocess.ProgramJobResult {
+func (e *programEnding) jobResult(run *programRun) bgprocess.ProgramJobResult {
 	outcome := e.settlement.outcome
 	status := outcome.Status
 	if e.err != nil && status == 0 {
@@ -90,6 +90,31 @@ func (e *programEnding) jobResult() bgprocess.ProgramJobResult {
 	}
 	settled := bgprocess.ProgramJobResult{
 		ExitCode: status, FinishedAt: e.finishedAt, PersonWait: &e.personWait,
+	}
+	if outcome.ProgramID != "" {
+		certainty := ""
+		if len(outcome.NonzeroExecutions) > 0 {
+			certainty = outcome.NonzeroExecutions[0].EffectCertainty
+		} else if outcome.UncertainEffects > 0 {
+			certainty = "unknown"
+		} else if outcome.CompletedEffects > 0 {
+			certainty = "completed"
+		}
+		settled.ProgramReceipt = &bgprocess.ProgramReceipt{
+			ProgramID:       outcome.ProgramID,
+			StdoutRef:       outcome.StdoutRef,
+			StderrRef:       outcome.StderrRef,
+			EffectCertainty: certainty,
+		}
+	}
+	if run != nil && run.tc.Effects.Out != nil {
+		run.tc.Effects.Out.WithLock(func(out *tools.ToolInvocationOut) {
+			if out.Facts.Confine.Applied {
+				obs := out.Facts.Confine
+				obs.Running = false
+				settled.Observation = &obs
+			}
+		})
 	}
 	if e.settlement.releaseFeedback != nil {
 		settled.ReleaseNotices = e.releaseNotices

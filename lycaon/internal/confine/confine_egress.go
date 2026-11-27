@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/githelper"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 )
 
@@ -513,9 +514,13 @@ func dialErrorLabel(err error) string {
 }
 
 func (b *egressBrokerT) decideEndpoint(ctx context.Context, token string, ep egressproxy.Endpoint) bool {
-	allow := b.decideVerdictEndpoint(ctx, token, ep)
-	b.observeEndpoint(token, ep, allow)
-	return allow
+	return b.decideEndpointDecision(ctx, token, ep).Allowed
+}
+
+func (b *egressBrokerT) decideEndpointDecision(ctx context.Context, token string, ep egressproxy.Endpoint) egressproxy.EndpointDecision {
+	decision := b.decideVerdictEndpoint(ctx, token, ep)
+	b.observeEndpoint(token, ep, decision.Allowed)
+	return decision
 }
 
 // DecideAttributedHTTPRequest gates an attributed request with pack metadata.
@@ -543,7 +548,8 @@ func DecideAttributedEndpoint(ctx context.Context, cmd EgressCommand, ep egressp
 }
 
 func (b *egressBrokerT) decideAttributedEndpoint(ctx context.Context, cmd EgressCommand, ep egressproxy.Endpoint) bool {
-	allow, decided, rule, det := b.ruleOrPosture(ctx, cmd, ep, "attributed_host")
+	allow, decided, reason, rule, det := b.ruleOrPosture(ctx, cmd, ep, "attributed_host")
+	_ = reason
 	if decided {
 		return allow
 	}
@@ -551,21 +557,30 @@ func (b *egressBrokerT) decideAttributedEndpoint(ctx context.Context, cmd Egress
 	return b.askOrCache(ctx, cmd, true, cmd.EffectActionID(), ep, det)
 }
 
-func (b *egressBrokerT) decideVerdictEndpoint(ctx context.Context, token string, ep egressproxy.Endpoint) bool {
+func (b *egressBrokerT) decideVerdictEndpoint(ctx context.Context, token string, ep egressproxy.Endpoint) egressproxy.EndpointDecision {
 	b.mu.Lock()
 	cmd, attributed := b.tokens[token]
 	b.mu.Unlock()
-	allow, decided, rule, det := b.ruleOrPosture(ctx, cmd, ep, "confined_proxy")
+	allow, decided, reason, rule, det := b.ruleOrPosture(ctx, cmd, ep, "confined_proxy")
 	if decided {
-		return allow
+		return egressproxy.EndpointDecision{Allowed: allow, Reason: reason}
 	}
 	cmd.UserRule = rule
 	if attributed {
 		if allow, taken := b.actionVerdict(cmd, ep, det); taken {
-			return allow
+			if allow {
+				return egressproxy.EndpointDecision{Allowed: true}
+			}
+			return egressproxy.EndpointDecision{Allowed: false, Reason: "approval_denied"}
 		}
 	}
-	return b.askOrCache(ctx, cmd, attributed, token, ep, det)
+	if b.askOrCache(ctx, cmd, attributed, token, ep, det) {
+		return egressproxy.EndpointDecision{Allowed: true}
+	}
+	if !attributed {
+		return egressproxy.EndpointDecision{Allowed: false, Reason: "unattributed_posture_deny"}
+	}
+	return egressproxy.EndpointDecision{Allowed: false, Reason: "approval_denied"}
 }
 
 // actionVerdict is a decision the host already took for this endpoint on the
@@ -582,13 +597,13 @@ func (b *egressBrokerT) actionVerdict(cmd EgressCommand, ep egressproxy.Endpoint
 // rules, package-execution scope, disabled approvals and escalating
 // detections. Every other dial is the approval gate's, which weighs grants,
 // configuration, first contact, exposure and ingestion under the posture.
-func (b *egressBrokerT) ruleOrPosture(ctx context.Context, cmd EgressCommand, ep egressproxy.Endpoint, origin string) (allow, decided bool, rule *EgressUserRule, detection *EgressDetectionCitation) {
+func (b *egressBrokerT) ruleOrPosture(ctx context.Context, cmd EgressCommand, ep egressproxy.Endpoint, origin string) (allow, decided bool, reason string, rule *EgressUserRule, detection *EgressDetectionCitation) {
 	// Authored denials take precedence over reusable approvals.
 	if eval := currentRuleEval(); eval != nil {
 		matched := eval(ctx, cmd, ep.Host)
 		switch matched.Effect {
 		case EgressRuleDeny:
-			return false, true, nil, nil
+			return false, true, "egress_rule_deny", nil, nil
 		case EgressRuleAsk:
 			rule = &EgressUserRule{
 				Category: "host", Pattern: matched.Pattern, Subject: ep.Host,
@@ -598,11 +613,14 @@ func (b *egressBrokerT) ruleOrPosture(ctx context.Context, cmd EgressCommand, ep
 	}
 	// Package execution denies undeclared destinations.
 	if cmd.ReducedPackageExecution {
-		return cmd.DeclaresHost(ep.Host), true, nil, nil
+		if cmd.DeclaresHost(ep.Host) {
+			return true, true, "", nil, nil
+		}
+		return false, true, "package_destination_undeclared", nil, nil
 	}
 	// Disabled approvals bypass the remaining ask-only checks.
 	if approvalsDisabled(cmd) {
-		return true, true, nil, nil
+		return true, true, "", nil, nil
 	}
 	// Escalating detection matches become gate inputs.
 	if src, posture := currentEgressDetection(cmd); src != nil {
@@ -613,15 +631,15 @@ func (b *egressBrokerT) ruleOrPosture(ctx context.Context, cmd EgressCommand, ep
 		}
 		if m, ok := src.Match(observation); ok && src.Escalates(m, posture) {
 			cit := m
-			return false, false, rule, &cit
+			return false, false, "", rule, &cit
 		}
 	}
 	// Below Strict the gate leaves a retrieval capability's dial to its own
 	// contract, so without a rule asking it is decided here as there.
 	if rule == nil && RetrievalDial(cmd, ep.Host) && EffectivePosture(cmd) != PostureAsk {
-		return true, true, nil, nil
+		return true, true, "", nil, nil
 	}
-	return false, false, rule, nil
+	return false, false, "", rule, nil
 }
 
 // askOrCache coalesces and caches a verdict within one action.
@@ -885,9 +903,25 @@ func EnvironmentBoundary(c Confinement) (Confinement, error) {
 	return c, nil
 }
 
-// GitSSHEnv returns mediated SSH environment variables.
+// GitSSHEnv returns mediated SSH environment variables using the shared SOCKS listener.
 func GitSSHEnv(c Confinement, selfPath, knownHosts string) []string {
-	if c.Network != NetworkProxyOnly || c.SocksProxyAddr == "" {
+	if c.SocksProxyAddr == "" {
+		return nil
+	}
+	return gitSSHEnv(c, selfPath, knownHosts, "LYCAON_SOCKS_PROXY="+c.SocksProxyAddr)
+}
+
+// ManagedGitSSHEnv returns mediated SSH environment variables bound to a per-launch service socket.
+func ManagedGitSSHEnv(c Confinement, selfPath, knownHosts, socketPath string) []string {
+	socketPath = strings.TrimSpace(socketPath)
+	if socketPath == "" {
+		return nil
+	}
+	return gitSSHEnv(c, selfPath, knownHosts, githelper.SSHSocketEnv+"="+socketPath)
+}
+
+func gitSSHEnv(c Confinement, selfPath, knownHosts, transportEntry string) []string {
+	if c.Network != NetworkProxyOnly || transportEntry == "" {
 		return nil
 	}
 	selfPath = strings.TrimSpace(selfPath)
@@ -911,7 +945,7 @@ func GitSSHEnv(c Confinement, selfPath, knownHosts string) []string {
 	}, " ")
 	return []string{
 		"GIT_SSH_COMMAND=" + sshCmd,
-		"LYCAON_SOCKS_PROXY=" + c.SocksProxyAddr,
+		transportEntry,
 		"LYCAON_SSH_KNOWN_HOSTS=" + knownHosts,
 	}
 }

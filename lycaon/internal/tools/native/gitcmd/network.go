@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -37,9 +38,16 @@ func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, repo gitr
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
-	failed := true
-	defer func() { launch.done(failed) }()
+	failed, exitCode := true, 128
+	defer func() { launch.done(exitCode, failed) }()
+	if launch.setupErr != nil {
+		writeLine(stderr, fmt.Sprintf("fatal: %s: managed SSH transport setup failed", p.command.spec.Name))
+		return toolcontract.ProducerResult{Status: 128, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
+	}
 	diagnostics, code, err := p.owners.Git.NetworkCommand(ctx, repo.Root, p.command.args, out)
+	if err == nil {
+		exitCode = code
+	}
 	failed = err != nil || code != 0 || out.err != nil
 	read := networkRead{wroteStdout: out.written > 0, wroteStderr: len(diagnostics) > 0}
 	if p.command.spec.Name == "git fetch" {
@@ -82,14 +90,21 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, repo gitrepo
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
-	failed := true
-	defer func() { launch.done(failed) }()
+	failed, exitCode := true, 128
+	defer func() { launch.done(exitCode, failed) }()
+	if launch.setupErr != nil {
+		writeLine(stderr, fmt.Sprintf("fatal: %s: managed SSH transport setup failed", p.command.spec.Name))
+		return toolcontract.ProducerResult{Status: 128, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
+	}
 	fetchArgs := []string{"fetch"}
 	if has(p.Argv, "-q") {
 		fetchArgs = append(fetchArgs, "-q")
 	}
 	fetchArgs = append(fetchArgs, p.Argv.Operands().Values()...)
 	diagnostics, code, err := p.owners.Git.NetworkCommand(ctx, repo.Root, fetchArgs, out)
+	if err == nil {
+		exitCode = code
+	}
 	failed = err != nil || code != 0 || out.err != nil
 	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, wroteStderr: len(diagnostics) > 0, trees: []string{repo.CommonDir}})
 	if out.err != nil {
@@ -124,6 +139,7 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, repo gitrepo
 	mut := p.mutations()
 	res, opErr := mut.Operate(ctx, tc, req)
 	result, err := settleOperate(ctx, p, res, out, stderr, has(p.Argv, "-q"), opErr)
+	exitCode = result.Status
 	failed = err != nil || result.Status != 0
 	// The merge or rebase places fetched content in the files it changed, and
 	// its summary names them.
@@ -165,8 +181,12 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
-	failed := true
-	defer func() { launch.done(failed) }()
+	failed, exitCode := true, 128
+	defer func() { launch.done(exitCode, failed) }()
+	if launch.setupErr != nil {
+		writeLine(stderr, fmt.Sprintf("fatal: %s: managed SSH transport setup failed", p.command.spec.Name))
+		return toolcontract.ProducerResult{Status: 128, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
+	}
 	var flags []string
 	if has(p.Argv, "-q") {
 		flags = append(flags, "-q")
@@ -185,6 +205,9 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 	}
 	resolvedURL := resolveLocalCloneSource(dir, rawURL)
 	diagnostics, code, err := git.CloneCommand(ctx, resolvedURL, boundDest.Resolved.Abs, flags, out)
+	if err == nil {
+		exitCode = code
+	}
 	failed = err != nil || code != 0 || out.err != nil
 	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, wroteStderr: len(diagnostics) > 0, trees: []string{boundDest.Resolved.Abs}})
 	if out.err != nil {
@@ -245,10 +268,12 @@ func authorizeRepoNetwork(ctx context.Context, p Prepared, tc tools.ToolContext,
 }
 
 // networkLaunch is one network command's bound launch: done settles it with
-// whether Git failed.
+// Git's exit status and whether the command failed.
 type networkLaunch struct {
-	done        func(failed bool)
+	done        func(exitCode int, failed bool)
+	setupErr    error
 	credentials *gitexec.AgentCredentials
+	ssh         *gitexec.AgentSSH
 }
 
 // refusal is the typed refusal a failed command settles with when Git asked
@@ -282,14 +307,44 @@ func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, ad
 		_ = credentials.Close()
 		return ctx, networkLaunch{}, err
 	}
+	services := []confine.HostService{service}
+	hasSSHRemote := slices.ContainsFunc(admitted.urls, isSSHRemote)
+	primaryDest, primaryHost, primaryPort := primarySSHDestination(admitted.urls)
+	var sshService *gitexec.AgentSSH
+	var sshSetupErr error
+	if hasSSHRemote {
+		startSSH := p.owners.StartSSH
+		if startSSH == nil {
+			startSSH = gitexec.StartAgentSSH
+		}
+		sshService, sshSetupErr = startSSH(ctx, nil)
+		if sshSetupErr == nil && sshService != nil {
+			services = append(services, sshService.HostService())
+		}
+	}
 	launchTC := tc
 	launchTC.Files.SessionReadPaths = append(slices.Clone(tc.Files.SessionReadPaths), admitted.reads...)
 	launchTC.Files.GrantedWriteRoots = append(slices.Clone(tc.Files.GrantedWriteRoots), admitted.writes...)
-	plan, release, err := p.bindLaunch(ctx, launchTC, []confine.HostService{service})
+	plan, release, err := p.bindLaunch(ctx, launchTC, services)
 	if err != nil {
+		if sshService != nil {
+			_ = sshService.Close()
+		}
 		releaseService()
 		_ = credentials.Close()
 		return ctx, networkLaunch{}, err
+	}
+	mediatedSSH := plan.Confinement != nil && plan.Confinement.Network == confine.NetworkProxyOnly && plan.ActionLease != nil
+	if !mediatedSSH {
+		sshSetupErr = nil
+	}
+	if sshService != nil {
+		if mediatedSSH {
+			sshService.BindExecution(p.execution, plan.ActionLease)
+		} else {
+			_ = sshService.Close()
+			sshService = nil
+		}
 	}
 	agent, hasAgent := grantedSSHAgent(ctx, tc)
 	if hasAgent {
@@ -299,16 +354,62 @@ func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, ad
 		plan = plan.WithExtraEnv("SSH_AUTH_SOCK=" + reference)
 	}
 	credentials.Admit(admitted.urls...)
-	done := func(failed bool) {
+	done := func(exitCode int, failed bool) {
 		outcome := tools.AgentLaunchOutcome{Failed: failed}
-		if failed {
+		preAuthFailed := false
+		if hasSSHRemote && mediatedSSH {
+			var obs confine.GitTransportObservation
+			if sshSetupErr != nil {
+				obs = confine.SummarizeGitTransport(
+					p.execution, p.commandLine(), exitCode, failed,
+					"host_setup", "service_start_failed", primaryDest, primaryHost, primaryPort, nil,
+				)
+			} else if sshService != nil {
+				obs = sshService.Observation(p.execution, p.commandLine(), exitCode, failed, primaryDest, primaryHost, primaryPort)
+			}
+			if obs.Cause != "" {
+				outcome.GitTransport = &obs
+				preAuthFailed = obs.Cause.PreAuthFailure()
+			}
+		}
+		if failed && !preAuthFailed {
 			outcome.Refusals = withheldAgent(ctx, admitted.urls, hasAgent)
 		}
 		release(context.WithoutCancel(ctx), outcome)
+		if sshService != nil {
+			_ = sshService.Close()
+		}
 		releaseService()
 		_ = credentials.Close()
 	}
-	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Workspace: tc.Host.ActionWorkspace, Credentials: credentials}), networkLaunch{done: done, credentials: credentials}, nil
+	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{
+		Plan: plan, Workspace: tc.Host.ActionWorkspace, Credentials: credentials, SSH: sshService,
+	}), networkLaunch{done: done, setupErr: sshSetupErr, credentials: credentials, ssh: sshService}, nil
+}
+
+func primarySSHDestination(urls []string) (dest, host string, port uint16) {
+	for _, raw := range urls {
+		if !isSSHRemote(raw) {
+			continue
+		}
+		h := strings.ToLower(strings.TrimSpace(remoteNetworkHost(raw)))
+		if h == "" {
+			continue
+		}
+		p := uint16(22)
+		if strings.Contains(raw, "://") {
+			if parsed, err := url.Parse(raw); err == nil && parsed.Port() != "" {
+				if parsedPort, err := strconv.ParseUint(parsed.Port(), 10, 16); err == nil && parsedPort > 0 {
+					p = uint16(parsedPort)
+				}
+			}
+		}
+		if ep, err := egressproxy.ParseTCPEndpoint(h, p); err == nil {
+			return ep.DialAddr(), ep.Host, ep.Port
+		}
+		return net.JoinHostPort(h, strconv.Itoa(int(p))), h, p
+	}
+	return "", "", 0
 }
 
 // withheldAgent reads a failed SSH network command without the user's SSH
@@ -323,7 +424,10 @@ func withheldAgent(ctx context.Context, urls []string, hasAgent bool) []confine.
 
 func isSSHRemote(raw string) bool {
 	lower := strings.ToLower(strings.TrimSpace(raw))
-	return strings.HasPrefix(lower, "ssh://") || !strings.Contains(lower, "://") && remoteNetworkHost(raw) != ""
+	return strings.HasPrefix(lower, "ssh://") ||
+		strings.HasPrefix(lower, "git+ssh://") ||
+		strings.HasPrefix(lower, "ssh+git://") ||
+		!strings.Contains(lower, "://") && remoteNetworkHost(raw) != ""
 }
 
 // remoteHelperURL is Git's <transport>::<address> form, which runs the

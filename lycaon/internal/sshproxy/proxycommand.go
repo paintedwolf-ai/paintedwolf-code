@@ -1,4 +1,4 @@
-// Package sshproxy implements OpenSSH ProxyCommand mediation through the egress SOCKS front door.
+// Package sshproxy mediates OpenSSH ProxyCommand streams through the host egress broker.
 package sshproxy
 
 import (
@@ -14,14 +14,16 @@ import (
 	"golang.org/x/net/proxy"
 )
 
-// RunProxyCommand connects to host:port through the broker's SOCKS front door
-// and relays stdio. Env: LYCAON_SOCKS_PROXY (host:port). The broker attributes
-// the connection through this process's descent from the confined command.
+// RunProxyCommand connects to host:port through the managed Git SSH service socket
+// when LYCAON_GIT_SSH_SOCKET is set, or through the shared SOCKS listener otherwise.
 func RunProxyCommand(ctx context.Context, host, port string) error {
 	return runProxyCommand(ctx, host, port, os.Stdin, os.Stdout)
 }
 
 func runProxyCommand(ctx context.Context, host, port string, in io.Reader, out io.Writer) error {
+	if socketPath := strings.TrimSpace(os.Getenv(SocketEnv)); socketPath != "" {
+		return runManagedProxyCommand(ctx, socketPath, host, port, in, out)
+	}
 	host = strings.TrimSpace(host)
 	port = strings.TrimSpace(port)
 	if host == "" || port == "" {
@@ -50,32 +52,51 @@ func runProxyCommand(ctx context.Context, host, port string, in io.Reader, out i
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
-	defer func() { _ = conn.Close() }()
-	if deadline, ok := ctx.Deadline(); ok {
-		_ = conn.SetDeadline(deadline)
-	} else {
-		_ = conn.SetDeadline(time.Now().Add(5 * time.Minute))
+	return relayClientStdio(ctx, conn, in, out)
+}
+
+func runManagedProxyCommand(ctx context.Context, socketPath, host, port string, in io.Reader, out io.Writer) error {
+	conn, _, err := Connect(ctx, socketPath, host, port)
+	if err != nil {
+		return err
 	}
+	return relayClientStdio(ctx, conn, in, out)
+}
+
+func relayClientStdio(ctx context.Context, conn net.Conn, in io.Reader, out io.Writer) error {
+	defer func() { _ = conn.Close() }()
+	touch := func() {
+		if deadline, ok := ctx.Deadline(); ok {
+			_ = conn.SetDeadline(deadline)
+			return
+		}
+		_ = conn.SetDeadline(time.Now().Add(relayIdleTimeout))
+	}
+	touch()
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
+
 	errCh := make(chan error, 2)
 	go func() {
-		_, err := io.Copy(conn, in)
+		_, err := io.Copy(touchWriter{w: conn, touch: touch}, in)
 		if cw, ok := conn.(interface{ CloseWrite() error }); ok {
 			_ = cw.CloseWrite()
 		}
 		errCh <- err
 	}()
-	go func() { _, err := io.Copy(out, conn); errCh <- err }()
+	go func() {
+		_, err := io.Copy(out, touchReader{r: conn, touch: touch})
+		errCh <- err
+	}()
 	var first error
-	for i := 0; i < 2; i++ {
-		select {
-		case <-ctx.Done():
-			_ = conn.Close()
-			return ctx.Err()
-		case err := <-errCh:
-			if first == nil && err != nil {
-				first = err
-			}
+	for range 2 {
+		err := <-errCh
+		if first == nil && err != nil {
+			first = err
 		}
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
 	}
 	return first
 }

@@ -1140,6 +1140,30 @@
       "emit": "guard:git_signing",
       "summary": "This action asked for a signed commit or tag; signing is not supported yet."
     },
+    "GIT_SSH_TRANSPORT_DENIED": {
+      "branch_instruction": "Do not speculate about SSH keys or signing agents when the host refused the transport endpoint.",
+      "category": "recoverable",
+      "emit": "guard:command_git_remote",
+      "summary": "The host refused the mediated SSH connection{% if paintedwolf.git_transport_command %} for `{{ paintedwolf.git_transport_command }}`{% endif %}{% if paintedwolf.git_transport_destination %} to `{{ paintedwolf.git_transport_destination }}`{% endif %} (exit {{ paintedwolf.git_transport_exit_code }})."
+    },
+    "GIT_SSH_TRANSPORT_DIAL_FAILED": {
+      "branch_instruction": "Do not request additional sandbox capabilities for an upstream network dial failure.",
+      "category": "recoverable",
+      "emit": "guard:command_git_remote",
+      "summary": "The upstream SSH TCP dial failed{% if paintedwolf.git_transport_command %} for `{{ paintedwolf.git_transport_command }}`{% endif %}{% if paintedwolf.git_transport_destination %} to `{{ paintedwolf.git_transport_destination }}`{% endif %}{% if paintedwolf.git_transport_error_class %} (`{{ paintedwolf.git_transport_error_class }}`){% endif %} (exit {{ paintedwolf.git_transport_exit_code }})."
+    },
+    "GIT_SSH_TRANSPORT_LEASE_ENDED": {
+      "branch_instruction": "Do not speculate about SSH keys or signing agents when the action lease ended.",
+      "category": "recoverable",
+      "emit": "guard:command_git_remote",
+      "summary": "The mediated SSH connection{% if paintedwolf.git_transport_command %} for `{{ paintedwolf.git_transport_command }}`{% endif %}{% if paintedwolf.git_transport_destination %} to `{{ paintedwolf.git_transport_destination }}`{% endif %} stopped because its action lease ended (exit {{ paintedwolf.git_transport_exit_code }})."
+    },
+    "GIT_SSH_TRANSPORT_SETUP_FAILED": {
+      "branch_instruction": "Do not request SSH agent sockets or host keys for a failed host transport setup.",
+      "category": "recoverable",
+      "emit": "guard:command_git_remote",
+      "summary": "Painted Wolf Code could not mediate the SSH connection{% if paintedwolf.git_transport_command %} for `{{ paintedwolf.git_transport_command }}`{% endif %}{% if paintedwolf.git_transport_destination %} to `{{ paintedwolf.git_transport_destination }}`{% endif %} (exit {{ paintedwolf.git_transport_exit_code }})."
+    },
     "GREP_DEADLINE_EXCEEDED": {
       "branch_instruction": "Branch on Code; partition the search scope and retry",
       "category": "recoverable",

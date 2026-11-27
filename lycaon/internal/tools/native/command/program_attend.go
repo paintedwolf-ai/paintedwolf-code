@@ -207,6 +207,15 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 		r.recordParkedRun(settleCtx, run)
 		r.recordDetachedEffects(settleCtx, run)
 		content, err := ending.content()
+		if err == nil && r.PostTool != nil && run.tc.Effects.Out != nil {
+			if sess, sessErr := r.Sessions.Get(settleCtx, run.tc.Identity.SessionID); sessErr == nil && sess != nil {
+				var facts guidance.ToolResultFacts
+				run.tc.Effects.Out.WithLock(func(out *tools.ToolInvocationOut) {
+					facts = out.Facts
+				})
+				content, _ = r.PostTool(settleCtx, sess, run.tool, run.envelope, content, 0, facts)
+			}
+		}
 		parked.Settle(settleCtx, content, err)
 	}()
 	if out := e.callTC.Effects.Out; out != nil {
@@ -281,12 +290,12 @@ func (r *ProgramRuntime) recordDetachedEffects(ctx context.Context, run *program
 
 // ReceiptResult is a program's result as its durable receipts record it, for
 // a program whose live result the host no longer holds, such as one a restart
-// interrupted. Its children's outcomes stay in the receipt page.
+// interrupted.
 func (r *ProgramRuntime) ReceiptResult(ctx context.Context, sessionID, programID string) (string, error) {
 	if r == nil || r.Recorder == nil {
 		return "", fmt.Errorf("command program runtime is not configured")
 	}
-	projection, err := r.Recorder.ProjectProgram(ctx, sessionID, programID, 1)
+	projection, err := r.Recorder.ProjectProgram(ctx, sessionID, programID, 4)
 	if err != nil {
 		return "", err
 	}
@@ -300,9 +309,17 @@ func (r *ProgramRuntime) ReceiptResult(ctx context.Context, sessionID, programID
 		}
 	}
 	outcome := ProgramOutcome{
-		ProgramID: programID, State: projection.Program.State, Status: 130, StopCode: projection.Program.StopCode,
+		ProgramID: programID, DetailRef: projection.DetailReference, State: projection.Program.State, Status: 130, StopCode: projection.Program.StopCode,
 		ExecutedChildren: projection.ExecutedChildren, CompletedEffects: projection.CompletedEffects,
 		UncertainEffects: projection.UncertainEffects, NativeGaps: projection.NativeGaps,
+		OmittedNonzeroExecutions: projection.OmittedNonzero,
+	}
+	for _, child := range projection.Nonzero {
+		observed, err := projectNonzeroExecution(programID, child)
+		if err != nil {
+			return "", err
+		}
+		outcome.NonzeroExecutions = append(outcome.NonzeroExecutions, observed)
 	}
 	outcome.Outputs = projection.Program.Outputs
 	for _, window := range outcome.Outputs {

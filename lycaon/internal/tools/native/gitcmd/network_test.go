@@ -384,6 +384,7 @@ func TestNetworkCommandsOverSSHRemotesAndEgressGate(t *testing.T) {
 		"SSH_ASKPASS_REQUIRE=force",
 		"LYCAON_SSH_KNOWN_HOSTS=/tmp/known_hosts",
 		"LYCAON_SOCKS_PROXY=127.0.0.1:1080",
+		"LYCAON_GIT_SSH_SOCKET=/tmp/ssh.sock",
 	} {
 		h.execWithEnv([]string{envEntry}, "git", "fetch", "origin").refused(t, "env "+envEntry, "COMMAND_OPERAND_INVALID")
 	}

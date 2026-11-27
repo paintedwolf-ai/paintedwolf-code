@@ -27,6 +27,8 @@ type RefusalContext struct {
 	TerminationReason string
 	// Refusals is what the kernel reported refusing the invocation.
 	Refusals SandboxRefusals
+	// GitTransports carries host-evidenced transport outcomes for network Git executions.
+	GitTransports []GitTransportObservation
 }
 
 // StampedRefusal combines denial guidance and observations.
@@ -47,6 +49,12 @@ func StampRefusal(tool, sessionID string, b Boundary, context RefusalContext) St
 	out.Observation.Running = context.Running
 	out.Observation.TerminationReason = context.TerminationReason
 	out.Observation.Refusals = context.Refusals
+	if len(context.GitTransports) > 0 {
+		out.Observation.GitTransports = make([]GitTransportObservation, len(context.GitTransports))
+		for i, tr := range context.GitTransports {
+			out.Observation.GitTransports[i] = tr.Clone()
+		}
+	}
 	if len(context.Refusals.Refusals) > 0 {
 		logSandboxRefusals(tool, sessionID, context.Refusals)
 	}
@@ -58,7 +66,7 @@ func StampRefusal(tool, sessionID string, b Boundary, context RefusalContext) St
 		return out
 	}
 	for _, host := range context.MediatedNetwork {
-		if host.Allowed || strings.TrimSpace(host.Host) == "" {
+		if host.Allowed || host.Inherited || strings.TrimSpace(host.Host) == "" {
 			continue
 		}
 		out.Attribution = AttributionSubject
@@ -97,7 +105,7 @@ func deniedUndeclaredDestination(network []EgressHost, allowedHosts []string) st
 		allowed[host] = struct{}{}
 	}
 	for _, host := range network {
-		if host.Allowed || strings.TrimSpace(host.Host) == "" {
+		if host.Allowed || host.Inherited || strings.TrimSpace(host.Host) == "" {
 			continue
 		}
 		hostname := strings.ToLower(strings.TrimSpace(host.Host))

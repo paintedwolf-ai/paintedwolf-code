@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -309,6 +310,52 @@ func TestCloseStopsAuthenticatedConnectionAwaitingRequest(t *testing.T) {
 	}
 }
 
+func TestDialAttributedTCPDispositionsAndSocksDialFailureReply(t *testing.T) {
+	ep := egressproxy.Endpoint{Host: "dial-target.test", Port: 22, Transport: egressproxy.TransportSocksTCP}
+	peer := egressproxy.Peer{Leased: true, Lineage: "tok"}
+	var nilBroker *egressproxy.Broker
+	if res, err := nilBroker.DialAttributedTCP(t.Context(), peer, ep); res.Conn != nil || res.Disposition != egressproxy.TCPDialFailed || err == nil {
+		t.Fatalf("nil broker DialAttributedTCP = (%+v, %v), want nil Conn, TCPDialFailed, err", res, err)
+	}
+
+	var dialErr error
+	p := brokerWith(func(context.Context, string, egressproxy.Endpoint) bool { return true }, leasedPeer("tok"))
+	addrs, err := p.Start(egressproxy.Options{
+		DialEndpoint: func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
+			return nil, dialErr
+		},
+	})
+	testutil.FailErr(t, "Start", err)
+	defer func() { _ = p.Close() }()
+
+	dialErr = egressproxy.ErrLoopbackNotAuthorized
+	if res, err := p.DialAttributedTCP(t.Context(), peer, ep); res.Conn != nil || res.Disposition != egressproxy.TCPDialEndpointDenied || !errors.Is(err, egressproxy.ErrLoopbackNotAuthorized) {
+		t.Fatalf("loopback unauthorized DialAttributedTCP = (%+v, %v)", res, err)
+	}
+
+	dialErr = errors.New("upstream unreachable")
+	if res, err := p.DialAttributedTCP(t.Context(), peer, ep); res.Conn != nil || res.Disposition != egressproxy.TCPDialFailed || err == nil {
+		t.Fatalf("failed upstream DialAttributedTCP = (%+v, %v)", res, err)
+	}
+
+	socksConn, err := net.Dial("tcp", addrs.SOCKS)
+	testutil.FailErr(t, "dial socks", err)
+	defer func() { _ = socksConn.Close() }()
+	testutil.FailErr(t, "socks handshake", socksClientHandshake(socksConn))
+
+	req := []byte{0x05, 0x01, 0x00, 0x03, byte(len(ep.Host))}
+	req = append(req, ep.Host...)
+	req = append(req, 0x00, 22)
+	_, err = socksConn.Write(req)
+	testutil.FailErr(t, "write socks connect", err)
+	hdr := make([]byte, 10)
+	_, err = io.ReadFull(socksConn, hdr)
+	testutil.FailErr(t, "read socks reply", err)
+	if hdr[1] != 0x04 {
+		t.Fatalf("socks dial failure reply = 0x%02x, want 0x04 (host unreachable)", hdr[1])
+	}
+}
+
 func socksClientHandshake(conn net.Conn) error {
 	if _, err := conn.Write([]byte{0x05, 0x01, 0x00}); err != nil {
 		return err
@@ -356,5 +403,56 @@ func socksClientConnectDomain(conn net.Conn, host string, port uint16) error {
 		return err
 	default:
 		return io.EOF
+	}
+}
+
+func TestClassifyDialErrorAndDetailedEndpointReason(t *testing.T) {
+	cases := []struct {
+		err  error
+		want string
+	}{
+		{err: nil, want: ""},
+		{err: context.Canceled, want: "canceled"},
+		{err: context.DeadlineExceeded, want: "timeout"},
+		{err: syscall.ETIMEDOUT, want: "timeout"},
+		{err: &net.DNSError{Err: "no such host", Name: "missing.test"}, want: "dns_failed"},
+		{err: &net.DNSError{Err: "i/o timeout", Name: "slow.test", IsTimeout: true}, want: "timeout"},
+		{err: syscall.ECONNREFUSED, want: "connection_refused"},
+		{err: syscall.ENETUNREACH, want: "network_unreachable"},
+		{err: syscall.EHOSTUNREACH, want: "network_unreachable"},
+		{err: syscall.ECONNRESET, want: "connection_reset"},
+		{err: io.EOF, want: "dial_error"},
+	}
+	for _, tc := range cases {
+		if got := egressproxy.ClassifyDialError(tc.err); got != tc.want {
+			t.Fatalf("ClassifyDialError(%v) = %q, want %q", tc.err, got, tc.want)
+		}
+	}
+
+	var nilBroker *egressproxy.Broker
+	ep, err := egressproxy.ParseTCPEndpoint("git.example", 22)
+	testutil.FailErr(t, "ParseTCPEndpoint", err)
+	res, err := nilBroker.DialAttributedTCP(t.Context(), egressproxy.Peer{Leased: true, Lineage: "tok"}, ep)
+	if err == nil || res.Disposition != egressproxy.TCPDialFailed || res.Stage != "broker_setup" || res.ErrorClass != "broker_unavailable" {
+		t.Fatalf("nil broker dial = %+v err=%v", res, err)
+	}
+
+	b := egressproxy.New(nil)
+	b.SetEndpointReasonDecider(func(_ context.Context, _ string, got egressproxy.Endpoint) egressproxy.EndpointDecision {
+		if got.Host == "denied.example" {
+			return egressproxy.EndpointDecision{Allowed: false, Reason: "egress_rule_deny"}
+		}
+		return egressproxy.EndpointDecision{Allowed: true}
+	})
+	deniedEP, err := egressproxy.ParseTCPEndpoint("denied.example", 22)
+	testutil.FailErr(t, "ParseTCPEndpoint denied", err)
+	res, err = b.DialAttributedTCP(t.Context(), egressproxy.Peer{Leased: true, Lineage: "tok"}, deniedEP)
+	if err == nil || res.Disposition != egressproxy.TCPDialEndpointDenied || res.Stage != "policy" || res.PolicyReason != "egress_rule_deny" {
+		t.Fatalf("denied endpoint dial = %+v err=%v", res, err)
+	}
+
+	res, err = b.DialAttributedTCP(t.Context(), egressproxy.Peer{Leased: false, Lineage: "tok"}, ep)
+	if err == nil || res.Disposition != egressproxy.TCPDialLeaseEnded || res.Stage != "lease" {
+		t.Fatalf("unleased peer dial = %+v err=%v", res, err)
 	}
 }

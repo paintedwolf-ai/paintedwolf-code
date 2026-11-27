@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/gitrepo"
+	"github.com/lycaon/lycaon/internal/sshproxy"
 )
 
 // Profile selects hermetic vs network-capable invocation.
@@ -136,11 +137,26 @@ func (e execution) run(ctx context.Context, projectDir string, args []string, op
 		env = append(env, plan.Environment()...)
 	}
 	var started func(pid int)
-	if agent, ok := AgentLaunchFrom(ctx); ok && opts.Profile == ProfileNetwork && agent.Credentials != nil {
-		env = append(env, gitcredential.SocketEnv+"="+agent.Credentials.Socket())
+	if agent, ok := AgentLaunchFrom(ctx); ok && opts.Profile == ProfileNetwork && (agent.Credentials != nil || agent.SSH != nil) {
+		if agent.Credentials != nil {
+			env = append(env, gitcredential.SocketEnv+"="+agent.Credentials.Socket())
+		}
+		if agent.SSH != nil && agent.SSH.HasDialer() {
+			launch = launch.WithManagedGitSSHSocket(agent.SSH.Socket())
+			if launch.Confinement == nil {
+				env = append(env, sshproxy.SocketEnv+"="+agent.SSH.Socket())
+			}
+		}
 		// One network Git per command: a second launch cannot rebind the
-		// service, so its helper requests fail closed.
-		started = func(pid int) { _ = agent.Credentials.service.Bind(pid) }
+		// services, so its helper requests fail closed.
+		started = func(pid int) {
+			if agent.Credentials != nil {
+				_ = agent.Credentials.service.Bind(pid)
+			}
+			if agent.SSH != nil {
+				_ = agent.SSH.Bind(pid)
+			}
+		}
 	} else if network.helper == hostHelperVault {
 		service, err := e.credentialService(ctx, bin)
 		if err != nil {

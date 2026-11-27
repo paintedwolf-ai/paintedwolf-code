@@ -6,12 +6,14 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/hostos"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
+	"github.com/lycaon/lycaon/internal/sshproxy"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
 	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -45,7 +47,8 @@ type programOwnerTools struct {
 	privateGit *privategit.Manager
 	registry   *tools.DefaultRegistry
 	// spills wraps each program's textutil spill storage when set.
-	spills func(textutil.SpillStorage) textutil.SpillStorage
+	spills   func(textutil.SpillStorage) textutil.SpillStorage
+	startSSH func(context.Context, sshproxy.DialFunc) (*gitexec.AgentSSH, error)
 }
 
 func directProgramOutputAdmission(current *tools.ToolContext) tools.CommandOutputAdmission {
@@ -255,6 +258,7 @@ func (t programOwnerTools) gitOperation() (func(*mutation.Owners) command.Native
 	owners.Boundary = t.boundary
 	owners.PrivateGit = t.privateGit
 	owners.Launch = command.BindAgentLaunch
+	owners.StartSSH = t.startSSH
 	owners.SecretAsk, owners.SecretMatcher = t.http.SecretAsk, t.http.SecretMatcher
 	registered := func(tool string) bool {
 		if tool == "" || t.registry == nil {

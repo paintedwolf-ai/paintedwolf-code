@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/scan/scanworker"
+	"github.com/lycaon/lycaon/internal/sshproxy"
 )
 
 // Main dispatches re-executed helper verbs before starting the test suite.
@@ -19,6 +20,12 @@ func Main(m *testing.M) int {
 	case len(os.Args) == 3 && os.Args[1] == "git-credential-vault":
 		if err := gitcredential.Forward(os.Args[2], os.Getenv(gitcredential.SocketEnv), os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "credential helper:", err)
+			return 1
+		}
+		return 0
+	case len(os.Args) == 4 && os.Args[1] == "ssh-proxy-command":
+		if err := sshproxy.RunProxyCommand(context.Background(), os.Args[2], os.Args[3]); err != nil {
+			fmt.Fprintln(os.Stderr, "ssh-proxy-command:", err)
 			return 1
 		}
 		return 0

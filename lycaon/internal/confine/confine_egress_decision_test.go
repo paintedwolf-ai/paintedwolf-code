@@ -192,12 +192,12 @@ func TestReducedPackageExecutionAllowsOnlyReviewedRegistryHosts(t *testing.T) {
 		ReducedPackageExecution: true,
 	}
 	registry := egressproxy.Endpoint{Host: "registry.npmjs.org", Port: 443, Transport: egressproxy.TransportHTTPConnect}
-	if allow, decided, _, _ := egressBroker.ruleOrPosture(t.Context(), cmd, registry, "test"); !allow || !decided {
+	if allow, decided, _, _, _ := egressBroker.ruleOrPosture(t.Context(), cmd, registry, "test"); !allow || !decided {
 		t.Fatalf("reviewed registry decision = allow %v decided %v", allow, decided)
 	}
 	unknown := egressproxy.Endpoint{Host: "collect.example", Port: 443, Transport: egressproxy.TransportHTTPConnect}
-	if allow, decided, _, _ := egressBroker.ruleOrPosture(t.Context(), cmd, unknown, "test"); allow || !decided {
-		t.Fatalf("unreviewed host decision = allow %v decided %v", allow, decided)
+	if allow, decided, reason, _, _ := egressBroker.ruleOrPosture(t.Context(), cmd, unknown, "test"); allow || !decided || reason != "package_destination_undeclared" {
+		t.Fatalf("unreviewed host decision = allow %v decided %v reason %q", allow, decided, reason)
 	}
 }
 
@@ -237,11 +237,11 @@ func TestEgressDenyRuleHoldsWhenApprovalsAreDisabled(t *testing.T) {
 	b := newTestBroker()
 
 	denied := egressproxy.Endpoint{Host: "denied.example", Port: 443, Transport: egressproxy.TransportHTTPConnect}
-	if allow, decided, _, _ := b.ruleOrPosture(t.Context(), cmd, denied, "test"); allow || !decided {
-		t.Fatalf("deny rule under disabled approvals = allow %v decided %v, want a decided deny", allow, decided)
+	if allow, decided, reason, _, _ := b.ruleOrPosture(t.Context(), cmd, denied, "test"); allow || !decided || reason != "egress_rule_deny" {
+		t.Fatalf("deny rule under disabled approvals = allow %v decided %v reason %q, want a decided deny", allow, decided, reason)
 	}
 	other := egressproxy.Endpoint{Host: "other.example", Port: 443, Transport: egressproxy.TransportHTTPConnect}
-	if allow, decided, _, _ := b.ruleOrPosture(t.Context(), cmd, other, "test"); !allow || !decided {
+	if allow, decided, _, _, _ := b.ruleOrPosture(t.Context(), cmd, other, "test"); !allow || !decided {
 		t.Fatalf("unruled host under disabled approvals = allow %v decided %v, want a decided allow", allow, decided)
 	}
 }

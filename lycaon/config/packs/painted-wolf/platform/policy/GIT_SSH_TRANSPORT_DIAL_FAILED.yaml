@@ -1,0 +1,40 @@
+spec_version: "1.0"
+id: GIT_SSH_TRANSPORT_DIAL_FAILED
+kind: policy
+on: tool.post_invoke
+selector:
+  tools:
+    - command
+    - verify
+    - command_output
+requires_facts: [paintedwolf.confine_applied, paintedwolf.git_transport_cause, paintedwolf.git_transport_command, paintedwolf.git_transport_destination, paintedwolf.git_transport_error_class, paintedwolf.git_transport_exit_code]
+when: >-
+  paintedwolf.confine_applied && paintedwolf.git_transport_cause == "dial_failed"
+effect: warn
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_git_remote
+message: upstream SSH dial failed after host mediation authorized the endpoint
+what: The upstream SSH TCP dial failed{% if paintedwolf.git_transport_command %} for `{{ paintedwolf.git_transport_command }}`{% endif %}{% if paintedwolf.git_transport_destination %} to `{{ paintedwolf.git_transport_destination }}`{% endif %}{% if paintedwolf.git_transport_error_class %} (`{{ paintedwolf.git_transport_error_class }}`){% endif %} (exit {{ paintedwolf.git_transport_exit_code }}).
+cause: Host egress mediation permitted the connection, and the upstream network dial failed with `{{ paintedwolf.git_transport_error_class }}`.
+why: No sandbox capability or socket grant was missing; the remote endpoint was unreachable or refused the TCP connection.
+fix: Verify the remote address, port and service reachability before retrying remaining work, and preserve any completed effects.
+instead: Do not request additional sandbox capabilities for an upstream network dial failure.
+x-paintedwolf-scenarios:
+  - id: connection_refused
+    vars:
+      tool: command
+      confine_applied: true
+      git_transport_cause: dial_failed
+      git_transport_command: git ls-remote ssh://git@127.0.0.1:2222/repo.git
+      git_transport_destination: 127.0.0.1:2222
+      git_transport_error_class: connection_refused
+      git_transport_exit_code: 128
+  - id: dns_failed
+    vars:
+      tool: command_output
+      confine_applied: true
+      git_transport_cause: dial_failed
+      git_transport_command: git fetch origin
+      git_transport_destination: missing.example:22
+      git_transport_error_class: dns_failed
+      git_transport_exit_code: 128

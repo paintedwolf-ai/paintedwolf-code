@@ -6,16 +6,19 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/fileops"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/sshproxy"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
 	"github.com/lycaon/lycaon/internal/webresearch"
 )
@@ -68,6 +71,10 @@ type Config struct {
 	// TestOrchestrator, when set, builds the workflow orchestrator from the
 	// production dependencies so tests can substitute leg dispatch.
 	TestOrchestrator func(orchestration.OrchestratorDeps) orchestration.Orchestrator
+	// TestProgramClock overrides the clock used for program foreground waits.
+	TestProgramClock commandprogram.Clock
+	// TestGitStartSSH overrides the managed Git SSH transport service factory.
+	TestGitStartSSH func(context.Context, sshproxy.DialFunc) (*gitexec.AgentSSH, error)
 }
 
 func (c Config) ResolveListenAddr() (string, error) {

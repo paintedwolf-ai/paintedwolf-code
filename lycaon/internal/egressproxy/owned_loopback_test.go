@@ -88,3 +88,43 @@ func TestDerivedLoopbackRequiresLiveExactObservationBeforeDial(t *testing.T) {
 		t.Fatalf("closed listener retained derived authority: %v", err)
 	}
 }
+
+func TestOwnedLoopbackConnForwardsCloseWriteWhenSupported(t *testing.T) {
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	testutil.FailErr(t, "open tcp listener", err)
+	t.Cleanup(func() { _ = listener.Close() })
+	addr := listener.Addr().(*net.TCPAddr).AddrPort()
+	endpoint := Endpoint{Host: addr.Addr().String(), Port: addr.Port()}
+
+	accepted := make(chan error, 1)
+	go func() {
+		srv, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			accepted <- acceptErr
+			return
+		}
+		defer func() { _ = srv.Close() }()
+		_, readErr := io.ReadAll(srv)
+		accepted <- readErr
+	}()
+
+	conn, err := defaultDialEndpoint(t.Context(), endpoint, nil, false, func(context.Context, netip.AddrPort) (string, bool) {
+		return "res-1", true
+	}, nil)
+	testutil.FailErr(t, "dial owned loopback", err)
+	defer func() { _ = conn.Close() }()
+
+	cw, ok := conn.(interface{ CloseWrite() error })
+	if !ok {
+		t.Fatal("ownedLoopbackConn must expose CloseWrite")
+	}
+	testutil.FailErr(t, "CloseWrite tcp", cw.CloseWrite())
+	if readErr := <-accepted; readErr != nil {
+		t.Fatalf("server read after CloseWrite: %v", readErr)
+	}
+
+	left, right := net.Pipe()
+	defer func() { _ = left.Close(); _ = right.Close() }()
+	wrapped := &ownedLoopbackConn{Conn: left}
+	testutil.FailErr(t, "CloseWrite non-half-close conn", wrapped.CloseWrite())
+}

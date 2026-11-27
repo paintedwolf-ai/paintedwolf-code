@@ -414,6 +414,7 @@ func (b *serveBuilder) wireMCP() error {
 				Progress: b.sessions.Manager.Coordinator.Guards, Sessions: b.storage.Sessions.Sessions,
 				Provenance: b.storage.Sessions.Evidence, SourceObserver: b.storage.Sessions.Evidence,
 				SourceRuns: b.sessions.Manager.Verification, ExternalHidden: programSettings.ExternalHidden(),
+				Clock: b.startup.cfg.TestProgramClock, GitStartSSH: b.startup.cfg.TestGitStartSSH,
 			}); err != nil {
 				return err
 			}

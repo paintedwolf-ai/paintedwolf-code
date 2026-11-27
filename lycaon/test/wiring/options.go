@@ -4,15 +4,18 @@ import (
 	"context"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/fileops"
 	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/sshproxy"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
@@ -37,6 +40,8 @@ type options struct {
 	globalApprovalPosture   gate.Posture
 	configRoot              *string
 	modelFeedFixture        bool
+	programClock            commandprogram.Clock
+	gitStartSSH             func(context.Context, sshproxy.DialFunc) (*gitexec.AgentSSH, error)
 }
 
 // A scripted model calls surface tools outright, so the default decider
@@ -173,4 +178,14 @@ func withConfigRoot(dir string) Option {
 // WithWebResearchExchange supplies the harness's bounded research exchange.
 func WithWebResearchExchange(exchange webresearch.Exchange) Option {
 	return func(o *options) { o.webResearchExchange = exchange }
+}
+
+// WithProgramClock supplies a deterministic clock for command program foreground waits.
+func WithProgramClock(clock commandprogram.Clock) Option {
+	return func(o *options) { o.programClock = clock }
+}
+
+// WithGitStartSSH overrides the managed Git SSH transport service factory.
+func WithGitStartSSH(fn func(context.Context, sshproxy.DialFunc) (*gitexec.AgentSSH, error)) Option {
+	return func(o *options) { o.gitStartSSH = fn }
 }

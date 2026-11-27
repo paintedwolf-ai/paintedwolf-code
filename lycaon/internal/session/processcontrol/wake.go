@@ -219,6 +219,20 @@ func CommandCompletionDigest(completion bgprocess.Completion) string {
 			digest += "\n" + truncateUTF8Head(stop.Feedback, maxTailBytes)
 		}
 	}
+	if receipt := completion.ProgramReceipt; receipt != nil {
+		if receipt.ProgramID != "" {
+			digest += "\nprogram_id=" + receipt.ProgramID
+		}
+		if receipt.StdoutRef != "" {
+			digest += "\nstdout_ref=" + receipt.StdoutRef
+		}
+		if receipt.StderrRef != "" {
+			digest += "\nstderr_ref=" + receipt.StderrRef
+		}
+		if receipt.EffectCertainty != "" {
+			digest += "\neffect_certainty=" + receipt.EffectCertainty
+		}
+	}
 	if completion.Failure != nil {
 		digest += "\nexec_failure=" + string(completion.Failure.Kind) + ": " + truncateUTF8Head(completion.Failure.Detail, maxCommandBytes)
 	}
@@ -229,6 +243,7 @@ func CommandCompletionDigest(completion bgprocess.Completion) string {
 		digest += "\ncodes=" + strings.Join(completion.GuidanceCodes, ",")
 	}
 	digest += sandboxRefusalLines(completion.Observation)
+	digest += gitTransportLines(completion.Observation)
 	if tail != "" {
 		digest += "\ntail:\n" + tail
 	}
@@ -267,6 +282,32 @@ func sandboxRefusalLines(obs confine.Observation) string {
 	}
 	if refusals.Witness != "" && refusals.Witness != confine.WitnessKernel {
 		b.WriteString("\nsandbox_refusal_witness=" + string(refusals.Witness))
+	}
+	return b.String()
+}
+
+func gitTransportLines(obs confine.Observation) string {
+	if len(obs.GitTransports) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, tr := range obs.GitTransports {
+		if tr.Cause == "" {
+			continue
+		}
+		fmt.Fprintf(&b, "\ngit_transport=%s", tr.Cause)
+		if tr.Stage != "" {
+			b.WriteString(" stage=" + tr.Stage)
+		}
+		if tr.Destination != "" {
+			b.WriteString(" destination=" + tr.Destination)
+		}
+		if tr.PolicyReason != "" {
+			b.WriteString(" policy_reason=" + tr.PolicyReason)
+		}
+		if tr.ErrorClass != "" {
+			b.WriteString(" error_class=" + tr.ErrorClass)
+		}
 	}
 	return b.String()
 }

@@ -2,6 +2,7 @@ package gitcmd
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
+	"github.com/lycaon/lycaon/internal/sshproxy"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -38,10 +40,17 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	// Agent Git runs this binary as its credential helper.
+	// Agent Git runs this binary as its credential or SSH proxy helper.
 	if len(os.Args) == 3 && os.Args[1] == "git-credential-vault" {
 		if err := gitcredential.Forward(os.Args[2], os.Getenv(gitcredential.SocketEnv), os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "credential helper:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+	if len(os.Args) == 4 && os.Args[1] == "ssh-proxy-command" {
+		if err := sshproxy.RunProxyCommand(context.Background(), os.Args[2], os.Args[3]); err != nil {
+			fmt.Fprintln(os.Stderr, "ssh-proxy-command:", err)
 			os.Exit(1)
 		}
 		os.Exit(0)

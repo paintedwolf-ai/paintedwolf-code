@@ -484,6 +484,33 @@ host_facts:
  - name: paintedwolf.git_no_repository_on_write_leg
    type: bool
    observation: True when a native Git read in this command's program, on a worker branch, found no repository.
+ - name: paintedwolf.git_transport_cause
+   type: string
+   observation: Verified host transport mediation outcome for a failed network Git execution, or empty when none failed.
+ - name: paintedwolf.git_transport_stage
+   type: string
+   observation: Transport mediation stage recorded on the failing network Git execution.
+ - name: paintedwolf.git_transport_destination
+   type: string
+   observation: Normalized host and port recorded on the failing network Git execution.
+ - name: paintedwolf.git_transport_port
+   type: string
+   observation: Decimal port recorded on the failing network Git execution when known.
+ - name: paintedwolf.git_transport_loopback_retryable
+   type: bool
+   observation: True when the failing network Git destination was refused solely for a missing loopback port grant.
+ - name: paintedwolf.git_transport_policy_reason
+   type: string
+   observation: Policy or setup decision reason recorded on the failing network Git execution.
+ - name: paintedwolf.git_transport_error_class
+   type: string
+   observation: Upstream dial error classification recorded on the failing network Git execution.
+ - name: paintedwolf.git_transport_command
+   type: string
+   observation: Exact Git command line of the failing network Git execution.
+ - name: paintedwolf.git_transport_exit_code
+   type: int
+   observation: Exit code of the failing network Git execution.
  - name: paintedwolf.syntax_check_overridden
    type: bool
  - name: paintedwolf.source_analysis_unavailable
