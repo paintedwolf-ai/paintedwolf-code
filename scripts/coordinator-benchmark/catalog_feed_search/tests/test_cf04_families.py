@@ -20,7 +20,7 @@ from catalog_feed_search.families.cf04_k05 import (
     scalefixture_path,
     write_scalefixture_tree,
 )
-from catalog_feed_search.families.cf04_k06 import generate_k06_spec
+from catalog_feed_search.families.cf04_k06 import classify_retired_worker_response, generate_k06_spec
 from catalog_feed_search.seeds import BASE_SEED_PRIMARY
 
 
@@ -97,6 +97,96 @@ class TestCF04GeneratorsAndHelpers(unittest.TestCase):
             self.assertEqual(len(lines), 2)
             self.assertIn(f"{sha256_bytes(b'alpha')}  a.txt", lines)
             self.assertIn(f"{sha256_bytes(b'beta')}  sub/b.txt", lines)
+
+    def test_classify_retired_worker_response_positive_and_negative_controls(self) -> None:
+        trunk_bytes = b"trunk content\n"
+        trunk_sha = sha256_bytes(trunk_bytes)
+
+        # Positive control 1: conforming raw D1 project-root fallback
+        kind, rec = classify_retired_worker_response(
+            retired_worker_id="w-1",
+            expected_root_id="r-1",
+            expected_trunk_sha256=trunk_sha,
+            status=200,
+            json_body={
+                "workspace_kind": "project",
+                "root_id": "r-1",
+                "sha256": trunk_sha,
+                "content": trunk_bytes.decode("utf-8"),
+            },
+            body_text="{}",
+        )
+        self.assertEqual(kind, "observation")
+        self.assertEqual(rec["code"], "retired_worker_raw_api_project_fallback")
+
+        # Positive control 2: explicit documented unavailable response
+        kind, rec = classify_retired_worker_response(
+            retired_worker_id="w-1",
+            expected_root_id="r-1",
+            expected_trunk_sha256=trunk_sha,
+            status=410,
+            json_body={"code": "worker_workspace_unavailable", "message": "retired"},
+            body_text="{}",
+        )
+        self.assertEqual(kind, "observation")
+        self.assertEqual(rec["code"], "retired_worker_explicit_unavailable")
+
+        # Negative control 1: HTTP 200 with mismatched content digest
+        kind, rec = classify_retired_worker_response(
+            retired_worker_id="w-1",
+            expected_root_id="r-1",
+            expected_trunk_sha256=trunk_sha,
+            status=200,
+            json_body={
+                "workspace_kind": "project",
+                "root_id": "r-1",
+                "sha256": trunk_sha,
+                "content": "corrupted body\n",
+            },
+            body_text="{}",
+        )
+        self.assertEqual(kind, "defect")
+        self.assertEqual(rec["code"], "retired_worker_invalid_200_response")
+
+        # Negative control 2: HTTP 200 falsely claiming workspace_kind="worker"
+        kind, rec = classify_retired_worker_response(
+            retired_worker_id="w-1",
+            expected_root_id="r-1",
+            expected_trunk_sha256=trunk_sha,
+            status=200,
+            json_body={
+                "workspace_kind": "worker",
+                "root_id": "r-1",
+                "sha256": trunk_sha,
+                "content": trunk_bytes.decode("utf-8"),
+            },
+            body_text="{}",
+        )
+        self.assertEqual(kind, "defect")
+        self.assertEqual(rec["code"], "retired_worker_invalid_200_response")
+
+        # Negative control 3: malformed non-JSON body or unexpected HTTP 500
+        kind, rec = classify_retired_worker_response(
+            retired_worker_id="w-1",
+            expected_root_id="r-1",
+            expected_trunk_sha256=trunk_sha,
+            status=200,
+            json_body=None,
+            body_text="not-json",
+        )
+        self.assertEqual(kind, "defect")
+        self.assertEqual(rec["code"], "retired_worker_malformed_response")
+
+        kind, rec = classify_retired_worker_response(
+            retired_worker_id="w-1",
+            expected_root_id="r-1",
+            expected_trunk_sha256=trunk_sha,
+            status=500,
+            json_body={"code": "internal_error"},
+            body_text='{"code":"internal_error"}',
+        )
+        self.assertEqual(kind, "defect")
+        self.assertEqual(rec["code"], "retired_worker_unexpected_http_error")
 
 
 if __name__ == "__main__":

@@ -61,6 +61,97 @@ def generate_k06_spec(base_seed: str, instance_index: int) -> K06InstanceSpec:
     )
 
 
+def classify_retired_worker_response(
+    *,
+    retired_worker_id: str,
+    expected_root_id: str,
+    expected_trunk_sha256: str,
+    status: int,
+    json_body: dict[str, object] | list[object] | None,
+    body_text: str,
+) -> tuple[str, dict[str, object]]:
+    """Positively classify GET /v1/projects/{id}/source?worker_id=<retired> (Decision 052).
+
+    Returns ("observation", record) ONLY for documented conforming responses:
+      1. Raw D1 OpenAPI project-root fallback: HTTP 200 JSON dict with workspace_kind=='project',
+         matching root_id, and matching trunk sha256 + content digest.
+      2. Explicit documented terminal unavailable response: HTTP 404/409/410/503 JSON dict with a
+         non-empty typed error code.
+    Returns ("defect", record) for malformed bodies, mismatched root_id/digest/bytes, false
+    workspace_kind=='worker' claims, or unexpected HTTP errors (e.g. 500).
+    """
+    if not isinstance(json_body, dict):
+        return (
+            "defect",
+            {
+                "code": "retired_worker_malformed_response",
+                "retired_worker_id": retired_worker_id,
+                "status": status,
+                "body_snippet": body_text[:300],
+            },
+        )
+
+    if status == 200:
+        r_kind = str(json_body.get("workspace_kind") or "")
+        r_root = str(json_body.get("root_id") or "")
+        r_sha = str(json_body.get("sha256") or "")
+        content_val = json_body.get("content")
+        content_sha = sha256_bytes(content_val.encode("utf-8")) if isinstance(content_val, str) else ""
+        if (
+            r_kind == "project"
+            and (not r_root or r_root == expected_root_id)
+            and r_sha == expected_trunk_sha256
+            and content_sha == expected_trunk_sha256
+        ):
+            return (
+                "observation",
+                {
+                    "code": "retired_worker_raw_api_project_fallback",
+                    "detail": "Raw GET /v1/projects/{id}/source?worker_id=<retired> returned HTTP 200 with workspace_kind='project' and verified trunk digest per D1 OpenAPI fallback (Decision 036/051/052)",
+                    "retired_worker_id": retired_worker_id,
+                    "workspace_kind": r_kind,
+                    "root_id": r_root or expected_root_id,
+                    "returned_sha256": r_sha,
+                    "trunk_sha256": expected_trunk_sha256,
+                },
+            )
+        return (
+            "defect",
+            {
+                "code": "retired_worker_invalid_200_response",
+                "retired_worker_id": retired_worker_id,
+                "status": status,
+                "workspace_kind": r_kind,
+                "expected_root_id": expected_root_id,
+                "actual_root_id": r_root,
+                "expected_trunk_sha256": expected_trunk_sha256,
+                "returned_sha256": r_sha,
+                "content_sha256": content_sha,
+            },
+        )
+
+    if status in (404, 409, 410, 503) and str(json_body.get("code") or "").strip():
+        return (
+            "observation",
+            {
+                "code": "retired_worker_explicit_unavailable",
+                "retired_worker_id": retired_worker_id,
+                "status": status,
+                "error_code": str(json_body.get("code") or ""),
+            },
+        )
+
+    return (
+        "defect",
+        {
+            "code": "retired_worker_unexpected_http_error",
+            "retired_worker_id": retired_worker_id,
+            "status": status,
+            "body_snippet": body_text[:300],
+        },
+    )
+
+
 def _init_git_repo_and_clone(base_dir: Path, checkout_a: Path, checkout_b: Path, token: str) -> None:
     """Create a real bare git repo and clone two independent checkouts of it."""
     bare = base_dir / "origin.git"
@@ -393,25 +484,27 @@ def _verify_k06_scenario(
         r_resp = client.get_source_file(project_id, primary_rid, "target.txt", worker_id=retired_id)
         r_kind = str(r_resp.json_body.get("workspace_kind") or "") if isinstance(r_resp.json_body, dict) else ""
         r_sha = str(r_resp.json_body.get("sha256") or "") if isinstance(r_resp.json_body, dict) else ""
+        want_trunk_sha = sha256_bytes(primary_bytes)
         retired_result = {
             "retired_worker_id": retired_id,
             "status": r_resp.status,
             "workspace_kind": r_kind,
             "returned_sha256": r_sha,
-            "trunk_sha256": sha256_bytes(primary_bytes),
+            "trunk_sha256": want_trunk_sha,
             "body_snippet": r_resp.body_text[:300],
         }
-        if r_resp.status == 200 and r_kind == "project":
-            observations.append(
-                {
-                    "code": "retired_worker_raw_api_project_fallback",
-                    "detail": "Raw GET /v1/projects/{id}/source?worker_id=<retired> returned HTTP 200 with workspace_kind='project' per D1 OpenAPI fallback (Decision 036/051: observation only; Den client rejects project bytes for worker buffers)",
-                    "retired_worker_id": retired_id,
-                    "workspace_kind": r_kind,
-                    "returned_sha256": r_sha,
-                    "trunk_sha256": sha256_bytes(primary_bytes),
-                }
-            )
+        kind, record = classify_retired_worker_response(
+            retired_worker_id=retired_id,
+            expected_root_id=primary_rid,
+            expected_trunk_sha256=want_trunk_sha,
+            status=r_resp.status,
+            json_body=r_resp.json_body,
+            body_text=r_resp.body_text,
+        )
+        if kind == "observation":
+            observations.append(record)
+        else:
+            defects.append(record)
 
     # Clean up project asynchronously to keep sidecar tidy
     client.delete_project_async(project_id, operation_id=str(uuid.uuid4()))
