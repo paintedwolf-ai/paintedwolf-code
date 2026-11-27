@@ -4,7 +4,6 @@ import json
 import pathlib
 import sqlite3
 import uuid
-import smoke_workers
 
 
 def _settle_turn(application, session_id):
@@ -54,7 +53,26 @@ def _read_handle_output(application, session_id, handle, send_calls):
     }
 
 
-def probe_background_job_handles(application, session_id, db_path, *, project_dir, create_base_session, send_calls):
+def prepare_cross_session_job_handle(application, db_path, *, project_dir, create_base_session, send_calls):
+    """Create and verify a background job handle in an isolated peer session before the main turn."""
+    sid2, _, _, _ = create_base_session(application, project_dir, {'profile': 'implement', 'turns': []})
+    other_handle, other_usable = '', False
+    try:
+        application.request(f'/v1/sessions/{sid2}/prompts', {'operation_id': str(uuid.uuid4()), 'text': 'Cross-session Q16 handle witness.'})
+        send_calls(application, sid2, [{'name': 'update_progress', 'args': {'content': '- [ ] Cross-session witness'}}])
+        send_calls(application, sid2, [{'name': 'command', 'args': {'command': 'export FIXTURE=other; fixture-job & job=$!; wait "$job"'}}])
+        h2 = _read_handles(db_path, sid2)
+        if h2:
+            other_handle = h2[-1]
+            _, own_info = _read_handle_output(application, sid2, other_handle, send_calls)
+            other_usable = bool(own_info['outcome'] == 'completed' and own_info['returned_handle'] == other_handle and own_info['stdout'].startswith('other\n'))
+    finally:
+        with contextlib.suppress(Exception):
+            _settle_turn(application, sid2)
+    return {'other_handle': other_handle, 'other_usable': other_usable}
+
+
+def probe_background_job_handles(application, session_id, db_path, *, other_job=None, send_calls):
     """Verify background job handle output, unknown-handle refusal, and cross-session handle isolation."""
     handles = _read_handles(db_path, session_id)
     if not handles:
@@ -66,31 +84,13 @@ def probe_background_job_handles(application, session_id, db_path, *, project_di
         handle_outputs[handle] = info
     bad_cid, bad_info = _read_handle_output(application, session_id, 'nonexistent-job-handle', send_calls)
     call_ids.append(bad_cid)
-    _settle_turn(application, session_id)
-    cross_refused, other_usable, other_handle = False, False, ''
-    sid2, _, _, _ = create_base_session(application, project_dir, {'profile': 'implement', 'turns': []})
-    try:
-        application.request(f'/v1/sessions/{sid2}/prompts', {'operation_id': str(uuid.uuid4()), 'text': 'Cross-session Q16 handle witness.'})
-        send_calls(application, sid2, [{'name': 'update_progress', 'args': {'content': '- [ ] Cross-session witness'}}])
-        send_calls(application, sid2, [{'name': 'command', 'args': {'command': 'export FIXTURE=other; fixture-job & job=$!; wait "$job"'}}])
-        _settle_turn(application, sid2)
-        h2 = _read_handles(db_path, sid2)
-        if h2:
-            other_handle = h2[-1]
-            application.request(f'/v1/sessions/{session_id}/prompts', {'operation_id': str(uuid.uuid4()), 'text': 'Cross-session Q16 refusal witness.'})
-            application.wait_for(lambda: smoke_workers.pending(application, session_id) is not None, 'prompt ready')
-            c_cid, c_info = _read_handle_output(application, session_id, other_handle, send_calls)
-            call_ids.append(c_cid)
-            cross_refused = c_info['outcome'] == 'rejected'
-            _settle_turn(application, session_id)
-            application.request(f'/v1/sessions/{sid2}/prompts', {'operation_id': str(uuid.uuid4()), 'text': 'Cross-session Q16 own-session witness.'})
-            application.wait_for(lambda: smoke_workers.pending(application, sid2) is not None, 'prompt ready')
-            _, own_info = _read_handle_output(application, sid2, other_handle, send_calls)
-            other_usable = bool(own_info['outcome'] == 'completed' and own_info['returned_handle'] == other_handle and own_info['stdout'].startswith('other\n'))
-            _settle_turn(application, sid2)
-    finally:
-        with contextlib.suppress(Exception):
-            application.request(f'/v1/sessions/{sid2}/abort', {})
+    other_handle = str((other_job or {}).get('other_handle') or '')
+    other_usable = bool((other_job or {}).get('other_usable'))
+    cross_refused = False
+    if other_handle:
+        c_cid, c_info = _read_handle_output(application, session_id, other_handle, send_calls)
+        call_ids.append(c_cid)
+        cross_refused = c_info['outcome'] == 'rejected'
     return {
         'handles': handles, 'call_ids': call_ids, 'handle_outputs': handle_outputs,
         'wrong_handle_rejected': bad_info['outcome'] == 'rejected',

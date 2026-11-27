@@ -17,7 +17,7 @@ from portable_command.case_oracles import materialize_git_setup, materialize_hos
 from portable_command.contracts import DIRECTORY, ROOT, load_suite, materialize
 from portable_command.grading import grade_case
 from portable_command.handle_await import await_running_handle
-from portable_command.lifecycle_oracles import probe_background_job_handles
+from portable_command.lifecycle_oracles import prepare_cross_session_job_handle, probe_background_job_handles
 from portable_command.observe import build_observation, file_sha256, source_identity
 from portable_command.profile_session import DECLARED_READONLY_PROFILES, create_declared_profile_session
 from portable_command.provenance import materialize_denied_progress_scope, materialize_helpers
@@ -229,8 +229,8 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
             if case.get('profile') in DECLARED_READONLY_PROFILES and app_factory is smoke.Application
             else create_isolated_session(application, project_dir, case)
         )
-        if case['setup'].get('drafts'):
-            drafts_ok, draft_bindings = inject_drafts(application, project_id, root_id, case['setup']['drafts'])
+        drafts_ok, draft_bindings = inject_drafts(application, project_id, root_id, case['setup']['drafts']) if case['setup'].get('drafts') else (True, {})
+        other_job = prepare_cross_session_job_handle(application, app_dir / 'store.db', project_dir=project_dir, create_base_session=create_isolated_session, send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface)) if case['id'] == 'owned-background-state' and app_factory is smoke.Application else None
         pre_prompt_lines = log_line_count(sidecar_path)
         if not session_surface.get('declared_profile_bound'):
             application.request(f'/v1/sessions/{session_id}/prompts', {'operation_id': str(uuid.uuid4()), 'text': f"Execute portable-command fixture {case['id']}."})
@@ -248,7 +248,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
             results = send_tool_calls(application, session_id, batch, surface=session_surface)
             call_ids = [cid for cid, _ in results]
             await_meta = await_running_handle(application, session_id, results[-1][1], send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface))
-            job_probe = probe_background_job_handles(application, session_id, app_dir / 'store.db', project_dir=project_dir, create_base_session=create_isolated_session, send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface)) if case['id'] == 'owned-background-state' and app_factory is smoke.Application else None
+            job_probe = probe_background_job_handles(application, session_id, app_dir / 'store.db', other_job=other_job, send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface)) if case['id'] == 'owned-background-state' and app_factory is smoke.Application else None
             await_ids = ((await_meta['wait_call_ids'] + await_meta['output_call_ids']) if await_meta else []) + (job_probe['call_ids'] if job_probe else [])
             turn_records.append({
                 'program': turn['program'], 'command_call_id': call_ids[-1], 'call_ids': call_ids, 'await_call_ids': await_ids,
