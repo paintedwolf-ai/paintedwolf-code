@@ -40,11 +40,156 @@ import contextlib
 from dataclasses import dataclass
 import json
 import pathlib
+import platform
+import re
 import sqlite3
 from typing import Any, Iterable, Mapping
 
 from .checker import VALID_MID_TURN_NOTE_CODES
 from .delivery_log import FrictionCounters
+
+_UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+
+@dataclass(frozen=True)
+class FrictionHit:
+    """One exact-binary `recordFrictionLocked` charge attributed to (session_id, root_id)."""
+
+    index: int
+    session_id: str = ""
+    root_id: str = ""
+
+
+def build_exact_binary_debugger_prefix(
+    work_dir: str | pathlib.Path,
+    *,
+    platform_system: str | None = None,
+) -> list[str]:
+    """Generate Decision 012 GDB (Linux) or LLDB (macOS) breakpoint wrapper for `recordFrictionLocked`."""
+    root = pathlib.Path(work_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    os_name = platform_system or platform.system()
+    if os_name == "Darwin":
+        setup = root / "trace.lldb"
+        callback = root / "trace_callback.py"
+        callback.write_text(
+            'import re\n'
+            'import lldb\n\n'
+            'def hit(frame, bp_loc, internal_dict):\n'
+            '    print("PW_GND_FRICTION_HIT", flush=True)\n'
+            '    process = frame.GetThread().GetProcess()\n'
+            '    for key, addr_register, len_register in (("sessionID", "x1", "x2"), ("rootID", "x3", "x4")):\n'
+            '        address = frame.FindRegister(addr_register).GetValueAsUnsigned()\n'
+            '        size = frame.FindRegister(len_register).GetValueAsUnsigned()\n'
+            '        if size != 36 or not address:\n'
+            '            continue\n'
+            '        error = lldb.SBError()\n'
+            '        raw = process.ReadMemory(address, size, error)\n'
+            '        if error.Success() and re.fullmatch(rb"[0-9a-f-]{36}", raw):\n'
+            '            print("PW_GND_ARG " + key + " " + raw.decode("ascii"), flush=True)\n'
+            '    return False\n',
+            encoding="utf-8",
+        )
+        setup.write_text(
+            "settings set target.disable-aslr false\n"
+            "breakpoint set --func-regex recordFrictionLocked\n"
+            f"command script import {callback}\n"
+            "breakpoint command add -F trace_callback.hit 1\n"
+            "breakpoint modify --auto-continue true 1\n"
+            "process launch --stop-at-entry\n"
+            'script print("PW_GND_OWNED_PID="+str(lldb.debugger.GetSelectedTarget().GetProcess().GetProcessID()),flush=True)\n'
+            "continue\n",
+            encoding="utf-8",
+        )
+        return ["/usr/bin/lldb", "--batch", "-s", str(setup), "--"]
+
+    setup = root / "trace.gdb"
+    setup.write_text(
+        "set pagination off\n"
+        "set confirm off\n"
+        "set disable-randomization off\n"
+        "starti\n"
+        'python print("PW_GND_OWNED_PID="+str(gdb.selected_inferior().pid),flush=True)\n'
+        "rbreak recordFrictionLocked\n"
+        "commands 1\n"
+        "silent\n"
+        'printf "PW_GND_FRICTION_HIT\\n"\n'
+        "info args\n"
+        "continue\n"
+        "end\n"
+        "continue\n",
+        encoding="utf-8",
+    )
+    return ["/usr/bin/gdb", "-nh", "-nx", "-batch", "-iex", "set auto-load off", "-x", str(setup), "--args"]
+
+
+def parse_friction_trace_log(log_text: str) -> tuple[int | None, tuple[FrictionHit, ...]]:
+    """Parse `PW_GND_OWNED_PID` and attributed `PW_GND_FRICTION_HIT` entries from GDB/LLDB output."""
+    owned_pid: int | None = None
+    pid_match = re.search(r"^PW_GND_OWNED_PID=(\d+)$", log_text, re.MULTILINE)
+    if pid_match:
+        owned_pid = int(pid_match.group(1))
+
+    hits: list[FrictionHit] = []
+    cur_idx = -1
+    cur_session = ""
+    cur_root = ""
+
+    def _flush() -> None:
+        nonlocal cur_idx, cur_session, cur_root
+        if cur_idx >= 0:
+            hits.append(FrictionHit(index=cur_idx, session_id=cur_session, root_id=cur_root))
+            cur_idx = -1
+            cur_session = ""
+            cur_root = ""
+
+    for raw_line in log_text.splitlines():
+        line = raw_line.strip()
+        if line == "PW_GND_FRICTION_HIT":
+            _flush()
+            cur_idx = len(hits)
+            continue
+        if cur_idx < 0:
+            continue
+        if line.startswith("PW_GND_ARG sessionID "):
+            m = _UUID_RE.search(line)
+            if m:
+                cur_session = m.group(0)
+        elif line.startswith("PW_GND_ARG rootID "):
+            m = _UUID_RE.search(line)
+            if m:
+                cur_root = m.group(0)
+        elif line.startswith("sessionID ="):
+            m = _UUID_RE.search(line)
+            if m:
+                cur_session = m.group(0)
+        elif line.startswith("rootID ="):
+            m = _UUID_RE.search(line)
+            if m:
+                cur_root = m.group(0)
+    _flush()
+    return owned_pid, tuple(hits)
+
+
+def count_attributed_friction_hits(
+    hits: Iterable[FrictionHit],
+    *,
+    session_id: str = "",
+    root_id: str = "",
+) -> int:
+    """Count exact-binary friction hits attributed to `session_id` and/or `root_id`."""
+    total = 0
+    for h in hits:
+        if session_id and h.session_id and h.session_id != session_id:
+            continue
+        if root_id and h.root_id and h.root_id != root_id:
+            continue
+        if session_id and not h.session_id and root_id and not h.root_id:
+            continue
+        if session_id and not h.session_id and not root_id:
+            continue
+        total += 1
+    return total
 
 
 BREAKER_ADVISORY_CODES: frozenset[str] = frozenset(
@@ -166,11 +311,14 @@ def probe_store_db(
     session_id: str,
     *,
     sse_events: Iterable[Mapping[str, Any]] = (),
+    trace_log_path: str | pathlib.Path | None = None,
+    root_id: str = "",
 ) -> FrictionSnapshot:
-    """Extract all D1-observable D10 counters from `store.db` and SSE events.
+    """Extract all D1-observable D10 counters from `store.db`, SSE events, and optional Decision 012 trace.
 
-    Marks `friction_units` explicitly `unknown` because D1 stores shared cycle
-    and prompt friction strictly in memory (`closeout_lifecycle.go`).
+    De-duplicates typed events across `event_outbox` and SSE by canonical `(event_id, code)`.
+    When `trace_log_path` is provided, extracts exact `friction_units` attributed to `(session_id, root_id)`
+    from Decision 012's `recordFrictionLocked` GDB/LLDB trace; otherwise marks `friction_units` `unknown`.
     """
     db_file = pathlib.Path(db_path)
     if not db_file.is_file():
@@ -247,20 +395,40 @@ def probe_store_db(
                         continue
                     for code in _extract_codes_from_json(payload):
                         if code in VALID_MID_TURN_NOTE_CODES:
-                            withheld_keys.add(f"outbox:{row['eid']}:{code}")
+                            withheld_keys.add(f"event:{row['eid']}:{code}")
                         if code in BREAKER_ADVISORY_CODES:
-                            breaker_keys.add(f"outbox:{row['eid']}:{code}")
+                            breaker_keys.add(f"event:{row['eid']}:{code}")
 
     for idx, ev in enumerate(sse_events):
         ev_session = str(ev.get("session_id") or "")
         if ev_session and ev_session != session_id:
             continue
-        ev_id = str(ev.get("id") or f"sse-{idx}")
+        ev_id = str(ev.get("id") or ev.get("event_id") or f"sse-{idx}")
         for code in _extract_codes_from_json(json.dumps(ev)):
             if code in VALID_MID_TURN_NOTE_CODES:
-                withheld_keys.add(f"sse:{ev_id}:{code}")
+                withheld_keys.add(f"event:{ev_id}:{code}")
             if code in BREAKER_ADVISORY_CODES:
-                breaker_keys.add(f"sse:{ev_id}:{code}")
+                breaker_keys.add(f"event:{ev_id}:{code}")
+
+    if trace_log_path is not None and pathlib.Path(trace_log_path).is_file():
+        trace_text = pathlib.Path(trace_log_path).read_text(encoding="utf-8", errors="replace")
+        _, hits = parse_friction_trace_log(trace_text)
+        attributed_units = count_attributed_friction_hits(hits, session_id=session_id, root_id=root_id)
+        friction_obs = CounterObservation(
+            name="friction_units",
+            value=attributed_units,
+            status="observed",
+            source="debugger:recordFrictionLocked(sessionID,rootID)",
+            note=f"Exact-binary Decision 012 trace ({len(hits)} total process hits; {attributed_units} attributed).",
+        )
+    else:
+        friction_obs = CounterObservation(
+            name="friction_units",
+            value=None,
+            status="unknown",
+            source="in_memory_only:closeout_lifecycle.go",
+            note="Shared prompt/cycle groundingRejects live in scopedstore.LRU in memory on D1.",
+        )
 
     return FrictionSnapshot(
         repair_attempts=CounterObservation(
@@ -270,13 +438,7 @@ def probe_store_db(
             source="store.db:messages.grounding_json.retry_count",
             note="Committed closeout retry_count; in-flight documentAttempt split is in-memory only.",
         ),
-        friction_units=CounterObservation(
-            name="friction_units",
-            value=None,
-            status="unknown",
-            source="in_memory_only:closeout_lifecycle.go",
-            note="Shared prompt/cycle groundingRejects live in scopedstore.LRU in memory on D1.",
-        ),
+        friction_units=friction_obs,
         host_assembled_closeouts=CounterObservation(
             name="host_assembled_closeouts",
             value=host_assembled,

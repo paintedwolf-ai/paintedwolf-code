@@ -50,7 +50,12 @@ from .delivery_log import (
     ProductVerdict,
     SurfaceOutcome,
 )
-from .friction_probe import FrictionSnapshot, probe_store_db
+from .friction_probe import (
+    FrictionSnapshot,
+    build_exact_binary_debugger_prefix,
+    parse_friction_trace_log,
+    probe_store_db,
+)
 from .reference_resolver import Citation, PermittedScope, resolve_citation
 
 
@@ -429,6 +434,7 @@ class IsolatedSidecarProcess:
         token: str | None = None,
         extra_env: Mapping[str, str] | None = None,
         harness_root: str | pathlib.Path = HARNESS_ROOT,
+        trace_friction: bool = False,
     ) -> None:
         self.engine_bin = pathlib.Path(engine_bin).resolve()
         self.product_root = pathlib.Path(product_root).resolve()
@@ -436,6 +442,7 @@ class IsolatedSidecarProcess:
         self.config_dir = pathlib.Path(config_dir).resolve()
         self.workspace_dir = pathlib.Path(workspace_dir).resolve()
         self.token = token or secrets.token_hex(24)
+        self.trace_friction = bool(trace_friction)
         self.extra_env = dict(extra_env or {})
         self.port: int = 0
         self.pid: int | None = None
@@ -543,10 +550,14 @@ class IsolatedSidecarProcess:
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
         self.port = probe_free_port()
         log_path = self.config_dir / "sidecar.log"
+        self.log_path = log_path
         env = self.build_process_env(self.port)
+        cmd = self.build_command()
+        if self.trace_friction:
+            cmd = [*build_exact_binary_debugger_prefix(self.config_dir), *cmd]
         with log_path.open("wb") as log_fh:
             self.process = subprocess.Popen(
-                self.build_command(),
+                cmd,
                 cwd=str(self.product_root),
                 env=env,
                 stdout=log_fh,
@@ -591,6 +602,15 @@ class IsolatedSidecarProcess:
         raise TimeoutError(f"Sidecar failed to become ready on {self.base_url}/health within {ready_timeout}s")
 
     def stop(self) -> None:
+        if self.trace_friction and getattr(self, "log_path", None) and self.log_path.is_file():
+            try:
+                owned_pid, _ = parse_friction_trace_log(self.log_path.read_text(encoding="utf-8", errors="replace"))
+                if owned_pid:
+                    chk = subprocess.run(["ps", "-p", str(owned_pid), "-o", "comm="], capture_output=True, text=True, check=False)
+                    if chk.returncode == 0 and pathlib.Path(chk.stdout.strip()).name == "lycaon-dev":
+                        os.kill(owned_pid, 15)
+            except OSError:
+                pass
         if self.process is None:
             return
         if self.process.poll() is None:
