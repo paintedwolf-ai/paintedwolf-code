@@ -7,6 +7,7 @@ import pathlib
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 import uuid
 
@@ -77,9 +78,13 @@ def main():
         if data is not None:
             headers["Content-Type"] = "application/json"
         req = urllib.request.Request(app.url + path, data=data, method=method, headers=headers)
-        with open_request(req) as resp:
-            raw = resp.read().decode("utf-8", errors="replace").strip()
-            return json.loads(raw) if raw else None
+        try:
+            with open_request(req) as resp:
+                raw = resp.read().decode("utf-8", errors="replace").strip()
+                return json.loads(raw) if raw else None
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"HTTP {exc.code} {method} {path}: {body}") from exc
 
     def open_doc(pid, root_id, rel_path, client_id="replay-client"):
         return http_json("POST", f"/v1/projects/{pid}/editor-documents", {
@@ -176,11 +181,14 @@ def main():
         human_doc = None
         if pending_cp:
             human_doc = replace_doc(pid1, doc1["id"], doc1["revision"], "human\n")
-            http_json("POST", f"/v1/sessions/{sid1}/checkpoints/{pending_cp['id']}", {
-                "kind": pending_cp.get("kind") or "tool_approval",
-                "action": "approve",
-                "option_id": pick_approve_option(pending_cp),
-            })
+            cp_id = pending_cp.get("checkpoint_id") or pending_cp.get("id")
+            cp_kind = pending_cp.get("kind") or "tool_approval"
+            body = (
+                {"kind": "content_apply", "decision": "approve"}
+                if cp_kind == "content_apply"
+                else {"kind": cp_kind, "action": "approve", "option_id": pick_approve_option(pending_cp)}
+            )
+            http_json("POST", f"/v1/sessions/{sid1}/checkpoints/{cp_id}", body)
 
         t.join(timeout=25.0)
         res1 = call_res.get("result") or {}
