@@ -82,6 +82,20 @@ func TestContractSuitesAvoidForcedGC(t *testing.T) {
 			want:    violates,
 			wantPos: "test/contract/sample/sample_test.go:10:",
 		},
+		"if-initializer shadows runtime import only inside if and genuine call after is caught": {
+			overrides: map[string]string{
+				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport \"runtime\"\n\ntype localGC struct{}\n\nfunc (localGC) GC() {}\n\nfunc helper() {\n\tif runtime := (localGC{}); true {\n\t\truntime.GC()\n\t}\n\truntime.GC()\n}\n",
+			},
+			want:    violates,
+			wantPos: "test/contract/sample/sample_test.go:13:",
+		},
+		"if-initializer shadows dot-imported GC only inside if and genuine call after is caught": {
+			overrides: map[string]string{
+				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport . \"runtime\"\n\nfunc helper() {\n\tif GC := func() {}; true {\n\t\tGC()\n\t}\n\tGC()\n}\n",
+			},
+			want:    violates,
+			wantPos: "test/contract/sample/sample_test.go:9:",
+		},
 		"shadowed runtime and debug identifiers": {
 			overrides: map[string]string{
 				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport (\n\t\"runtime\"\n\t\"runtime/debug\"\n)\n\ntype localGC struct{}\n\nfunc (localGC) GC()           {}\nfunc (localGC) FreeOSMemory() {}\n\nfunc realUse() string {\n\t_, _ = runtime.GOOS, debug.SetMemoryLimit\n\treturn runtime.GOOS\n}\n\nfunc shadowed(runtime localGC) {\n\tdebug := localGC{}\n\truntime.GC()\n\tdebug.FreeOSMemory()\n}\n",

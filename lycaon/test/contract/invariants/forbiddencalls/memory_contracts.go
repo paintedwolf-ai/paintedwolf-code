@@ -1,8 +1,10 @@
 package forbiddencalls
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
+	"go/types"
 
 	"github.com/lycaon/lycaon/test/contract/invariants"
 )
@@ -20,8 +22,17 @@ var memoryContracts = []invariants.Invariant{{
 		invariants.Package("pkg/testcorpus"),
 	},
 	Check: func(r *invariants.Run) {
+		byPkg := map[string][]*invariants.GoFile{}
+		candidates := map[string][]*invariants.GoFile{}
 		for _, f := range r.GoFiles(invariants.AnyGo, contractMemoryDirs...) {
-			checkForcedGC(r, f)
+			key := f.Dir + "\x00" + f.AST.Name.Name
+			byPkg[key] = append(byPkg[key], f)
+			if f.Imports("runtime") || f.Imports("runtime/debug") {
+				candidates[key] = append(candidates[key], f)
+			}
+		}
+		for key, files := range candidates {
+			checkForcedGCPkg(r, byPkg[key], files)
 		}
 	},
 }, {
@@ -45,153 +56,59 @@ var memoryContracts = []invariants.Invariant{{
 	},
 }}
 
-type lexicalScopes []map[string]bool
+// runtimeGCImporter provides minimal go/types package metadata for runtime and
+// runtime/debug so go/types resolves exact Go lexical scopes (including if/for/
+// switch initializers, aliases, and dot imports) without requiring compiled
+// export data on disk.
+type runtimeGCImporter struct{}
 
-func (s *lexicalScopes) push() { *s = append(*s, map[string]bool{}) }
-func (s *lexicalScopes) pop()  { *s = (*s)[:len(*s)-1] }
-
-func (s lexicalScopes) bind(name string) {
-	if len(s) > 0 && name != "" && name != "_" {
-		s[len(s)-1][name] = true
+func (runtimeGCImporter) Import(path string) (*types.Package, error) {
+	switch path {
+	case "runtime":
+		pkg := types.NewPackage("runtime", "runtime")
+		pkg.Scope().Insert(types.NewFunc(token.NoPos, pkg, "GC", types.NewSignatureType(nil, nil, nil, nil, nil, false)))
+		pkg.MarkComplete()
+		return pkg, nil
+	case "runtime/debug":
+		pkg := types.NewPackage("runtime/debug", "debug")
+		pkg.Scope().Insert(types.NewFunc(token.NoPos, pkg, "FreeOSMemory", types.NewSignatureType(nil, nil, nil, nil, nil, false)))
+		pkg.MarkComplete()
+		return pkg, nil
+	default:
+		return nil, fmt.Errorf("skipped non-runtime import %q", path)
 	}
 }
 
-func (s lexicalScopes) bindFields(fl *ast.FieldList) {
-	if fl == nil {
-		return
+func checkForcedGCPkg(r *invariants.Run, pkgFiles, candidates []*invariants.GoFile) {
+	asts := make([]*ast.File, len(pkgFiles))
+	for i, f := range pkgFiles {
+		asts[i] = f.AST
 	}
-	for _, field := range fl.List {
-		for _, name := range field.Names {
-			s.bind(name.Name)
-		}
+	info := &types.Info{Uses: map[*ast.Ident]types.Object{}}
+	conf := types.Config{
+		Importer:                 runtimeGCImporter{},
+		Error:                    func(error) {},
+		DisableUnusedImportCheck: true,
 	}
-}
-
-func (s lexicalScopes) has(name string) bool {
-	for i := len(s) - 1; i >= 0; i-- {
-		if s[i][name] {
-			return true
-		}
-	}
-	return false
-}
-
-func checkForcedGC(r *invariants.Run, f *invariants.GoFile) {
-	dotRuntime := f.DotImports("runtime")
-	dotDebug := f.DotImports("runtime/debug")
-
-	var scopes lexicalScopes
-	var walk func(ast.Node)
-	walk = func(n ast.Node) {
-		if n == nil {
-			return
-		}
-		switch node := n.(type) {
-		case *ast.FuncDecl:
-			scopes.push()
-			scopes.bindFields(node.Recv)
-			if node.Type != nil {
-				scopes.bindFields(node.Type.Params)
-				scopes.bindFields(node.Type.Results)
-			}
-			walk(node.Body)
-			scopes.pop()
-			return
-		case *ast.FuncLit:
-			scopes.push()
-			if node.Type != nil {
-				scopes.bindFields(node.Type.Params)
-				scopes.bindFields(node.Type.Results)
-			}
-			walk(node.Body)
-			scopes.pop()
-			return
-		case *ast.BlockStmt:
-			scopes.push()
-			for _, stmt := range node.List {
-				walk(stmt)
-			}
-			scopes.pop()
-			return
-		case *ast.ValueSpec:
-			for _, v := range node.Values {
-				walk(v)
-			}
-			for _, name := range node.Names {
-				scopes.bind(name.Name)
-			}
-			return
-		case *ast.AssignStmt:
-			for _, rhs := range node.Rhs {
-				walk(rhs)
-			}
-			if node.Tok == token.DEFINE {
-				for _, lhs := range node.Lhs {
-					if id, ok := lhs.(*ast.Ident); ok {
-						scopes.bind(id.Name)
-					}
-				}
-			} else {
-				for _, lhs := range node.Lhs {
-					walk(lhs)
-				}
-			}
-			return
-		case *ast.RangeStmt:
-			scopes.push()
-			walk(node.X)
-			if node.Tok == token.DEFINE {
-				for _, expr := range []ast.Expr{node.Key, node.Value} {
-					if id, ok := expr.(*ast.Ident); ok {
-						scopes.bind(id.Name)
-					}
-				}
-			}
-			walk(node.Body)
-			scopes.pop()
-			return
-		case *ast.SelectorExpr:
-			if id, ok := node.X.(*ast.Ident); ok && !scopes.has(id.Name) {
-				if pkg, name, ok := f.Qualified(node); ok {
-					switch {
-					case pkg == "runtime" && name == "GC":
-						r.ReportAt(node.Pos(), "explicit runtime.GC outside collector-behavior tests")
-					case pkg == "runtime/debug" && name == "FreeOSMemory":
-						r.ReportAt(node.Pos(), "explicit runtime/debug.FreeOSMemory outside collector-behavior tests")
-					}
-				}
-			}
-		case *ast.CallExpr:
-			if dotRuntime || dotDebug {
-				if id, ok := ast.Unparen(node.Fun).(*ast.Ident); ok && !scopes.has(id.Name) {
-					switch {
-					case dotRuntime && id.Name == "GC":
-						r.ReportAt(node.Pos(), "explicit runtime.GC via dot import outside collector-behavior tests")
-					case dotDebug && id.Name == "FreeOSMemory":
-						r.ReportAt(node.Pos(), "explicit runtime/debug.FreeOSMemory via dot import outside collector-behavior tests")
-					}
-				}
-			}
-		}
-		ast.Inspect(n, func(child ast.Node) bool {
-			if child == n || child == nil {
+	_, _ = conf.Check(pkgFiles[0].AST.Name.Name, r.Go().Fset, asts, info)
+	for _, f := range candidates {
+		ast.Inspect(f.AST, func(n ast.Node) bool {
+			id, ok := n.(*ast.Ident)
+			if !ok {
 				return true
 			}
-			walk(child)
-			return false
+			fn, ok := info.Uses[id].(*types.Func)
+			if !ok || fn.Pkg() == nil {
+				return true
+			}
+			switch {
+			case fn.Pkg().Path() == "runtime" && fn.Name() == "GC":
+				r.ReportAt(id.Pos(), "explicit runtime.GC outside collector-behavior tests")
+			case fn.Pkg().Path() == "runtime/debug" && fn.Name() == "FreeOSMemory":
+				r.ReportAt(id.Pos(), "explicit runtime/debug.FreeOSMemory outside collector-behavior tests")
+			}
+			return true
 		})
-	}
-	for _, decl := range f.AST.Decls {
-		switch d := decl.(type) {
-		case *ast.FuncDecl:
-			if d.Body != nil {
-				walk(d)
-			}
-		case *ast.GenDecl:
-			if d.Tok == token.VAR {
-				walk(d)
-			}
-		}
 	}
 }
 
