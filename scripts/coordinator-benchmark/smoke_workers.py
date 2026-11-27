@@ -142,10 +142,33 @@ def dispatch_call(script):
             'scope': {'mode': script['mode'], 'paths': script['paths']}}}
 
 
-def job_id(result):
+def worker_name(result):
+    content = str(result.get('content') or '')
+    idx = content.find('{')
+    if idx >= 0:
+        try:
+            payload = json.loads(content[idx:])
+            if isinstance(payload, dict) and payload.get('worker'):
+                return str(payload['worker'])
+        except json.JSONDecodeError:
+            pass
+    return ''
+
+
+def job_id(result, application=None, seen=None):
     job = (result.get('dispatch') or {}).get('job_id')
+    if not job and application is not None:
+        with contextlib.closing(sqlite3.connect(application.directory / 'store.db')) as db:
+            rows = [r[0] for r in db.execute('SELECT id FROM worker_jobs ORDER BY rowid ASC').fetchall()]
+        used = seen if seen is not None else set()
+        for jid in rows:
+            if jid not in used:
+                job = jid
+                break
     if not job:
         raise RuntimeError('task did not return a job id: ' + json.dumps(result)[:300])
+    if seen is not None:
+        seen.add(job)
     return job
 
 
@@ -187,9 +210,11 @@ def intended_dispatches(application, session, project, dispatches, existing=None
         invoke(application, session, 'update_progress', {'content': '## Progress\n' + ''.join(f"- [{states[d['label']]}] {d['label']}\n" for d in dispatches)})
     checklist()
     observed = []
+    seen_jobs = set()
     for wave in waves(dispatches, (operation or {}).get('dispatch', {}).get('dependencies', {})):
         results = respond(application, session, [dispatch_call(d) for d in wave])
-        jobs = {d['label']: job_id(r) for d, r in zip(wave, results)}
+        jobs = {d['label']: job_id(r, application, seen_jobs) for d, r in zip(wave, results)}
+        workers = {d['label']: worker_name(r) for d, r in zip(wave, results)}
         invoke(application, session, 'wait', {'timeout_ms': 30000, 'conditions': [{'kind': 'next_worker_done'}]})
         for script in wave:
             stage = script['stages'][0]
@@ -205,7 +230,8 @@ def intended_dispatches(application, session, project, dispatches, existing=None
             if stage['kind'] == 'needs_decision':
                 settled(application, session, job, {'held'})
                 option = operation['decisions'][script['label']]['option']
-                invoke(application, session, 'answer_decision', {'job_id': job, 'option': option})
+                wname = workers.get(script['label']) or job
+                invoke(application, session, 'answer_decision', {'worker': wname, 'answer': option})
                 invoke(application, session, 'wait', {'timeout_ms': 30000, 'conditions': [{'kind': 'next_worker_done'}]})
                 row = settled(application, session, job, {'complete'})
                 expected = stage['outcomes'][option]['files']

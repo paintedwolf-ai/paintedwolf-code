@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -42,6 +43,7 @@ type SourceProof func(context.Context, *api.WorkerTask, []api.Message, string, w
 type Service struct {
 	transcriptStore Transcript
 	evidenceStore   Evidence
+	invocations     invocation.Recorder
 	Profiles        Profiles
 	Context         Context
 	Workspaces      Workspaces
@@ -53,4 +55,11 @@ type Service struct {
 
 func New(transcriptStore Transcript, evidenceStore Evidence, profiles Profiles, context Context, workspaces Workspaces, workspace Workspace, tools Tools, verification Verification, proof SourceProof) *Service {
 	return &Service{transcriptStore: transcriptStore, evidenceStore: evidenceStore, Profiles: profiles, Context: context, Workspaces: workspaces, Workspace: workspace, tools: tools, Verification: verification, proof: proof}
+}
+
+// SetInvocations wires durable invocation receipts for harness tool executions.
+func (m *Service) SetInvocations(recorder invocation.Recorder) {
+	if m != nil {
+		m.invocations = recorder
+	}
 }

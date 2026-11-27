@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -125,5 +126,47 @@ func TestVerifyRequiresRetainedCurrentTerminalReceipt(t *testing.T) {
 				t.Fatalf("verify refusal=%v, want %q", err, tc.want)
 			}
 		})
+	}
+}
+
+type fakeInvocationRecorder struct {
+	invocation.Recorder
+	started []invocation.Start
+	settled map[string]invocation.Settlement
+}
+
+func (r *fakeInvocationRecorder) Begin(_ context.Context, start invocation.Start) (*api.InvocationReceipt, error) {
+	r.started = append(r.started, start)
+	return &api.InvocationReceipt{ID: "child-inv-1", ToolCallID: start.ToolCallID, Tool: start.ToolName, Status: api.InvocationStatusRunning}, nil
+}
+
+func (r *fakeInvocationRecorder) Settle(_ context.Context, id string, s invocation.Settlement) (*api.InvocationReceipt, error) {
+	if r.settled == nil {
+		r.settled = map[string]invocation.Settlement{}
+	}
+	r.settled[id] = s
+	return &api.InvocationReceipt{ID: id, Status: s.Status}, nil
+}
+
+func TestVerifyOpensAndSettlesChildInvocationReceipt(t *testing.T) {
+	t.Setenv(configdir.EnvDev, "1")
+	t.Setenv(configdir.EnvHarness, "1")
+	f := &preparationFixture{t: t, retain: true, run: tools.SourceRunCapture{CheckID: "check", IsCheck: true, SourceRootDigest: "root", Verdict: api.SourceVerdictPassed}}
+	rec := &fakeInvocationRecorder{}
+	svc := f.service()
+	svc.SetInvocations(rec)
+	_, err := svc.Verify(t.Context(), &api.Session{ID: "child", ProjectID: "proj-1"}, &api.WorkerTask{ID: "job", WorkspaceRoot: "/isolated/worker"}, "check")
+	if err != nil {
+		t.Fatalf("Verify with invocation recorder failed: %v", err)
+	}
+	if len(rec.started) != 1 || rec.started[0].SessionID != "child" || rec.started[0].ToolName != "verify" {
+		t.Fatalf("unexpected Begin calls: %+v", rec.started)
+	}
+	if f.call.Invocation.ID != "child-inv-1" || f.call.Invocation.SessionID != "child" {
+		t.Fatalf("tool context did not receive child invocation receipt: %+v", f.call.Invocation)
+	}
+	st, ok := rec.settled["child-inv-1"]
+	if !ok || st.Status != api.InvocationStatusCompleted || !st.Invoked || st.SourceVerdict != api.SourceVerdictPassed {
+		t.Fatalf("unexpected settlement: ok=%v %+v", ok, st)
 	}
 }
