@@ -288,3 +288,45 @@ class PortableCommandHarnessTests(unittest.TestCase):
                 db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=[], prelude_records=[],
             )
             self.assertIn('rcpt-uncorr', audit_out['unexpected_receipt_ids'])
+
+    def test_slice2c_source_later_syntax_external_argv_and_tar_mappings(self):
+        # Canonical owner mappings for external_exec, tar_create, tar_extract, and source refused->rejected.
+        audit = {
+            'invocation_program_executions': [
+                {'id': 'e1', 'program_id': 'p1', 'operation_id': 'command', 'native_command': 'external', 'owner': 'processes', 'state': 'completed', 'effect_certainty': 'none'},
+                {'id': 'e2', 'program_id': 'p1', 'operation_id': 'extract_archive', 'native_command': 'tar', 'owner': 'filesystem', 'canonical': 'tar -cjf ./b.tar.bz2 ./a', 'state': 'completed', 'effect_certainty': 'none'},
+                {'id': 'e3', 'program_id': 'p1', 'operation_id': 'extract_archive', 'native_command': 'tar', 'owner': 'filesystem', 'canonical': 'tar -xjf ./b.tar.bz2 -C ./out', 'state': 'completed', 'effect_certainty': 'none'},
+                {'id': 'e4', 'program_id': 'p1', 'operation_id': 'source', 'native_command': 'source', 'owner': 'processes', 'state': 'refused', 'effect_certainty': 'none'},
+            ],
+            'invocation_program_publications': [], 'invocation_program_revision_pins': [],
+        }
+        rows, _, _ = observe._receipt_rows(audit, [])
+        self.assertEqual([(r['operation'], r['outcome']) for r in rows], [
+            ('external_exec', 'completed'), ('tar_create', 'completed'), ('tar_extract', 'completed'), ('source', 'rejected'),
+        ])
+        # source-later-syntax positive + negative controls for no_source_statement_started (child or suffix).
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            db_path, log_path, proj = root / 'store.db', root / 'sidecar.log', root / 'proj'
+            create_audit_db(db_path)
+            db = sqlite3.connect(db_path)
+            db.execute("ALTER TABLE invocation_program_executions ADD COLUMN parent_execution_id TEXT DEFAULT ''")
+            db.execute("CREATE TABLE invocation_program_sources (program_id TEXT, source_unit_id TEXT, source_id TEXT, revision TEXT, sha256 TEXT)")
+            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','rejected',1)")
+            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','rejected',2,'COMMAND_SYNTAX_INVALID')")
+            db.execute("INSERT INTO invocation_program_sources VALUES ('p1','bad.sh','bad.sh','rev-1',?)", ('a' * 64,))
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,parent_execution_id) VALUES ('e1','p1',1,'printf','printf','processes','completed','none','')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,parent_execution_id) VALUES ('e2','p1',2,'source','source','processes','refused','none','')")
+            db.commit()
+            db.close()
+            log_path.write_text('level=INFO msg="server listening"\nlevel=INFO msg="shutdown signal received"\n')
+            proj.mkdir()
+            obs_ok, _ = observe.build_observation(CASES['source-later-syntax'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, turn_records=[{'program': CASES['source-later-syntax']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
+            self.assertTrue(obs_ok['facts']['captured_source_identity'] and obs_ok['facts']['no_source_statement_started'])
+            # Injecting a suffix execution after ordinal 2 must fail no_source_statement_started.
+            db = sqlite3.connect(db_path)
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,parent_execution_id) VALUES ('e3','p1',3,'printf','printf','processes','completed','none','')")
+            db.commit()
+            db.close()
+            obs_bad, _ = observe.build_observation(CASES['source-later-syntax'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, turn_records=[{'program': CASES['source-later-syntax']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
+            self.assertFalse(obs_bad['facts']['no_source_statement_started'])

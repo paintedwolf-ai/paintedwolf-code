@@ -704,7 +704,7 @@
       "profile": "implement",
       "setup": {
         "files": {
-          "bad.sh": "echo ok; eval data"
+          "bad.sh": "echo inner\ntrap x INT\n"
         },
         "drafts": {},
         "progress": "valid",
@@ -715,7 +715,7 @@
       },
       "turns": [
         {
-          "program": "printf 'parent\\n'; source -- ./bad.sh",
+          "program": "printf 'parent\\n'; source -- ./bad.sh; printf 'after\\n'",
           "expected_outcome": "rejected"
         }
       ],
@@ -726,7 +726,7 @@
         "host_stop": "rejected",
         "complete": false,
         "files": {
-          "bad.sh": "echo ok; eval data"
+          "bad.sh": "echo inner\ntrap x INT\n"
         },
         "absent": [],
         "receipts": [
