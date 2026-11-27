@@ -150,33 +150,43 @@ func (tree handlerErrorTree) load(typed *invariants.Program, moduleDir string) *
 		}
 		return false
 	}
-	// Packages outside httpLayer whose functions are directly called from
+	// Packages outside httpLayer whose functions are transitively called from
 	// httpLayer and return map[string]any can supply ErrorResponse.Details keys.
 	detailsHelperPkgs := map[string]bool{}
+	var detailsQueue []string
 	for _, path := range typed.Order {
-		if !strings.HasPrefix(path, tree.httpLayer) {
-			continue
+		if strings.HasPrefix(path, tree.httpLayer) {
+			detailsQueue = append(detailsQueue, path)
 		}
+	}
+	for len(detailsQueue) > 0 {
+		path := detailsQueue[0]
+		detailsQueue = detailsQueue[1:]
 		pkg := typed.Packages[path]
 		if pkg == nil || pkg.Info == nil {
 			continue
 		}
-		for _, obj := range pkg.Info.Uses {
-			fn, ok := obj.(*types.Func)
-			if !ok || fn.Pkg() == nil || !tree.inScope(fn.Pkg().Path()) {
-				continue
+		visitCallee := func(fn *types.Func) {
+			if fn == nil || fn.Pkg() == nil {
+				return
+			}
+			target := fn.Pkg().Path()
+			if !tree.inScope(target) || strings.HasPrefix(target, tree.httpLayer) || detailsHelperPkgs[target] {
+				return
 			}
 			if returnsStringAnyMap(fn.Type()) {
-				detailsHelperPkgs[fn.Pkg().Path()] = true
+				detailsHelperPkgs[target] = true
+				detailsQueue = append(detailsQueue, target)
+			}
+		}
+		for _, obj := range pkg.Info.Uses {
+			if fn, ok := obj.(*types.Func); ok {
+				visitCallee(fn)
 			}
 		}
 		for _, sel := range pkg.Info.Selections {
-			fn, ok := sel.Obj().(*types.Func)
-			if !ok || fn.Pkg() == nil || !tree.inScope(fn.Pkg().Path()) {
-				continue
-			}
-			if returnsStringAnyMap(fn.Type()) {
-				detailsHelperPkgs[fn.Pkg().Path()] = true
+			if fn, ok := sel.Obj().(*types.Func); ok {
+				visitCallee(fn)
 			}
 		}
 	}

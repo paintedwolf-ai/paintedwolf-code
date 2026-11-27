@@ -28,11 +28,11 @@ func LoadGoASTCorpusMode(root string, mode parser.Mode) (*testcorpus.GoCorpus, e
 	if mode == standardGoCorpusMode {
 		if abs, absErr := filepath.Abs(root); absErr == nil {
 			if modRoot := enclosingLycaonModuleRoot(abs); modRoot != "" {
-				base, loadErr := contractGoLoader.Load(modRoot, opts, mode)
-				if loadErr != nil {
-					return nil, loadErr
+				if base, loadErr := contractGoLoader.Load(modRoot, opts, mode); loadErr == nil {
+					corpus, err = base.Sub(abs)
+				} else if abs == modRoot {
+					err = loadErr
 				}
-				corpus, err = base.Sub(abs)
 			}
 		}
 	}

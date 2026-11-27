@@ -3,7 +3,6 @@ package invariants_test
 import (
 	"context"
 	"os"
-	"runtime"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -76,7 +75,6 @@ func TestInvariants(t *testing.T) {
 		}
 	}
 	corpus.ReleaseTypes()
-	runtime.GC()
 	for _, family := range families {
 		if !typedFamilies[family.Name] {
 			runFamily(family)

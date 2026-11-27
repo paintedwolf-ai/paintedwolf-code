@@ -3,7 +3,6 @@ package specsync
 import (
 	"fmt"
 	"net/http"
-	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -52,8 +51,6 @@ func handlerScan(r *invariants.Run, tree handlerErrorTree) ([]*handlerErrors, de
 		for _, h := range handlers {
 			h.roots = nil
 		}
-		prog = nil
-		runtime.GC()
 		return scan{handlers: handlers, details: details, problems: problems}, nil
 	})
 	for _, problem := range s.problems {

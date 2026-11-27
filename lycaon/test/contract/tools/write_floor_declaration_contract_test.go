@@ -146,9 +146,6 @@ func loadWriteFloorProgram(t *testing.T) *writeFloorProgram {
 	dir := filepath.Join(contractcheck.RepoRoot(t), "lycaon")
 	patterns := writeFloorPackagePatterns(t, dir)
 	prog := buildWriteFloorSSA(t, dir, patterns)
-	// Release ASTs and types.Info from packages.Load before allocating the
-	// CHA and VTA call graphs.
-	runtime.GC()
 	funcs := ssautil.AllFunctions(prog)
 	graph := buildWriteFloorCallGraph(prog, funcs)
 

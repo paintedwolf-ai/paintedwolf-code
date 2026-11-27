@@ -50,7 +50,7 @@ func ProseDrift(text string) []string {
 			continue
 		}
 		at := fmt.Sprintf("line %d", i+1)
-		if isEmptyListItem(trimmed) {
+		if isEmptyListItem(line) {
 			out = append(out, fmt.Sprintf("%s: an empty list item %q", at, trimmed))
 		}
 		if strings.Contains(line, "``") {
@@ -72,7 +72,9 @@ func ProseDrift(text string) []string {
 	return append(out, prompts.RenderedProseStructureDrift(text)...)
 }
 
-func isEmptyListItem(trimmed string) bool {
+// isEmptyListItem matches the ASCII-whitespace pattern `^\s*(\d+\.|[-*])\s*$`.
+func isEmptyListItem(line string) bool {
+	trimmed := strings.Trim(line, " \t\n\f\r")
 	if trimmed == "-" || trimmed == "*" {
 		return true
 	}

@@ -277,3 +277,101 @@ func TestHandlerErrorScanResolvesEachPattern(t *testing.T) {
 			return keys, ok
 		}))
 }
+
+// TestHandlerErrorScanFollowsTwoHopDetailsHelpers proves that a handler whose
+// ErrorResponse.Details map flows through two downstream helper packages outside
+// internal/api still produces the same detail-key diagnostics after SSA scoping.
+func TestHandlerErrorScanFollowsTwoHopDetailsHelpers(t *testing.T) {
+	t.Parallel()
+	fixture := map[string]string{
+		"lycaon/go.mod": "module github.com/lycaon/lycaon\n\ngo 1.26\n",
+		"lycaon/pkg/api/types.go": `package api
+
+type ApiErrorCode string
+
+const WidgetConflict ApiErrorCode = "widget_conflict"
+
+type ErrorResponse struct {
+	Code    ApiErrorCode
+	Details map[string]any
+}
+`,
+		"lycaon/internal/helper2/leaf.go": `package helper2
+
+func LeafDetails() map[string]any {
+	return map[string]any{"leaf_key": 1, "extra_key": 2}
+}
+`,
+		"lycaon/internal/helper1/wrap.go": `package helper1
+
+import "github.com/lycaon/lycaon/internal/helper2"
+
+func WrapDetails() map[string]any {
+	return helper2.LeafDetails()
+}
+`,
+		"lycaon/internal/api/server.go": `package api
+
+import (
+	"net/http"
+
+	"github.com/lycaon/lycaon/internal/helper1"
+	wire "github.com/lycaon/lycaon/pkg/api"
+)
+
+type Server struct{}
+
+type operation struct{ id string }
+
+var operationPutWidget = operation{id: "putWidget"}
+
+func (s *Server) registerV1Operation(_ operation, _ http.HandlerFunc) {}
+
+func (s *Server) registerRoutes() {
+	s.registerV1Operation(operationPutWidget, s.handlePut)
+}
+
+func writeBody(_ http.ResponseWriter, _ wire.ErrorResponse) {}
+
+func (s *Server) handlePut(w http.ResponseWriter, _ *http.Request) {
+	writeBody(w, wire.ErrorResponse{Code: wire.WidgetConflict, Details: helper1.WrapDetails()})
+}
+`,
+	}
+	dir := t.TempDir()
+	for rel, body := range fixture {
+		path := filepath.Join(dir, filepath.FromSlash(rel))
+		contractcheck.FailErr(t, "mkdir "+rel, os.MkdirAll(filepath.Dir(path), 0o755))
+		contractcheck.FailErr(t, "write "+rel, os.WriteFile(path, []byte(body), 0o600))
+	}
+	tree := lycaonHandlers
+	tree.register = map[string]bool{"(*" + lycaonModule + "/internal/api.Server).registerV1Operation": true}
+	var handlers []*handlerErrors
+	var details detailEmissions
+	res := invariants.Evaluate(invariants.LoadFixture(dir), invariants.Invariant{
+		Name:    "scan",
+		Anchors: []invariants.Anchor{invariants.Dir("lycaon/internal/api")},
+		Check:   func(r *invariants.Run) { handlers, details = handlerScan(r, tree) },
+	})
+	if res.Failed() {
+		t.Fatalf("scan two-hop details fixture:\n%s", res)
+	}
+	if len(handlers) != 1 {
+		t.Fatalf("handlers = %d, want 1", len(handlers))
+	}
+	var gotKeys []string
+	for k := range details.keys["widget_conflict"] {
+		gotKeys = append(gotKeys, k)
+	}
+	contractcheck.FailSetEqual(t, "two-hop details keys", []string{"leaf_key", "extra_key"}, gotKeys)
+	if len(details.unresolved) != 0 {
+		t.Fatalf("unexpected unresolved detail sites: %v", details.unresolved)
+	}
+	notices := map[string]map[string]bool{"widget_conflict": {"leaf_key": true}}
+	contractcheck.FailSetEqual(t, "two-hop details violations",
+		[]string{"widget_conflict: details.extra_key is not declared by its notice context_schema"},
+		undeclaredDetailViolations(details, func(code string) (map[string]bool, bool) {
+			keys, ok := notices[code]
+			return keys, ok
+		}))
+}

@@ -192,7 +192,6 @@ func typeCheck(g *GoCorpus, env []string) (*Program, error) {
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
 	}
-	runtime.GC()
 	return prog, nil
 }
 
