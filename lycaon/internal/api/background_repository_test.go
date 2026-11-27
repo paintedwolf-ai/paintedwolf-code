@@ -28,7 +28,9 @@ func (p *backgroundRepo) Stop() {
 		p.stop()
 	}
 }
-func (*backgroundRepo) Close() error { return nil }
+func (*backgroundRepo) Close() error  { return nil }
+func (*backgroundRepo) Epoch() uint64 { return 0 }
+func (*backgroundRepo) Busy() bool    { return false }
 
 func (p *backgroundRepo) Wait(ctx context.Context) error {
 	p.once.Do(func() { close(p.entered) })

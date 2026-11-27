@@ -94,6 +94,7 @@ type Server struct {
 	eventOutbox    interface {
 		Wait(context.Context) error
 		Epoch() uint64
+		Busy() bool
 	}
 	presence *events.Presence
 	harness  harnessServices

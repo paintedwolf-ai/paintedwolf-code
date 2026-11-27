@@ -108,6 +108,7 @@ type HostDependencies struct {
 	EventOutbox            interface {
 		Wait(context.Context) error
 		Epoch() uint64
+		Busy() bool
 	}
 	Presence      *events.Presence
 	HostIdentity  hostidentity.Identity

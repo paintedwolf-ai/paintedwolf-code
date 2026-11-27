@@ -132,6 +132,10 @@ func (o *stubEventOutbox) Epoch() uint64 {
 	return o.epoch.Load()
 }
 
+func (o *stubEventOutbox) Busy() bool {
+	return false
+}
+
 func TestWaitForBackgroundLoopsOnOutboxActivityUntilFixedPoint(t *testing.T) {
 	outbox := &stubEventOutbox{}
 	// Exceed the former 16-pass cap to prove there is no silent pass limit.

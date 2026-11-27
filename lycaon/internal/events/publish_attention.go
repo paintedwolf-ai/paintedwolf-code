@@ -105,6 +105,16 @@ func (p *Publisher) AttentionEpoch() uint64 {
 	return p.attentionRevision
 }
 
+// AttentionBusy reports whether an attention rebuild is scheduled or running.
+func (p *Publisher) AttentionBusy() bool {
+	if p == nil {
+		return false
+	}
+	p.attentionMu.Lock()
+	defer p.attentionMu.Unlock()
+	return p.attentionInFlight > 0
+}
+
 // attentionRebuildDone retires one scheduled or running rebuild.
 func (p *Publisher) attentionRebuildDone() {
 	p.attentionMu.Lock()

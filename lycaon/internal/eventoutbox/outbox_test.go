@@ -329,3 +329,40 @@ func TestOutboxWaitBlocksUntilCommitCompletes(t *testing.T) {
 		t.Fatalf("outbox rows after Wait = %d, want 0", n)
 	}
 }
+
+func TestOutboxStartDuringHeldWaitDeliversOnce(t *testing.T) {
+	sqlDB := testDB(t)
+	hub := &recordingHub{}
+	outbox := New(sqlDB, hub)
+	outbox.idle = time.Hour
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var enterOnce sync.Once
+	outbox.OnDelivered = func(context.Context, DeliveredEvent) {
+		enterOnce.Do(func() { close(entered) })
+		<-release
+	}
+	t.Cleanup(func() { _ = outbox.Close() })
+
+	testutil.FailErr(t, "enqueue",
+		outbox.Enqueue(t.Context(), testTopic, events.PublishKey{Project: "018eca20-5608-7a55-824f-920998f472b2", EventID: "ev-race"}, map[string]string{}))
+
+	waited := make(chan error, 1)
+	go func() { waited <- outbox.Wait(t.Context()) }()
+	<-entered
+
+	// Start the dispatcher while the not-started Wait drain is mid-delivery.
+	outbox.Start(t.Context())
+	close(release)
+
+	testutil.FailErr(t, "initial wait", <-waited)
+	testutil.FailErr(t, "wait after start", outbox.Wait(t.Context()))
+
+	if got := hub.deliveries(); !slices.Equal(got, []string{"ev-race"}) {
+		t.Fatalf("deliveries = %v, want [ev-race] (exactly once)", got)
+	}
+	if n := outboxRows(t, sqlDB); n != 0 {
+		t.Fatalf("outbox rows after Start+Wait = %d, want 0", n)
+	}
+}

@@ -47,10 +47,12 @@ type Outbox struct {
 	idle time.Duration
 	// lifecycleMu guards cancel and stopped between concurrent Start, Wait, and Close calls.
 	lifecycleMu sync.Mutex
+	drainMu     sync.Mutex
 	cancel      context.CancelFunc
 	stopped     chan struct{}
 	wg          sync.WaitGroup
 	epoch       atomic.Uint64
+	draining    atomic.Bool
 	// OnDelivered runs after a row reaches the hub.
 	OnDelivered func(context.Context, DeliveredEvent)
 }
@@ -62,6 +64,14 @@ func (o *Outbox) Epoch() uint64 {
 		return 0
 	}
 	return o.epoch.Load()
+}
+
+// Busy reports whether the outbox is currently draining rows.
+func (o *Outbox) Busy() bool {
+	if o == nil {
+		return false
+	}
+	return o.draining.Load()
 }
 
 // idleSweep is the delivery sweep every host runs without a wake.
@@ -233,6 +243,12 @@ func (o *Outbox) run(ctx context.Context, stopped chan struct{}) {
 
 // A crash after publish and before deletion can replay the same event ID.
 func (o *Outbox) drain(ctx context.Context) error {
+	o.drainMu.Lock()
+	o.draining.Store(true)
+	defer func() {
+		o.draining.Store(false)
+		o.drainMu.Unlock()
+	}()
 	for {
 		entry, ok, err := o.next(ctx)
 		if err != nil || !ok {

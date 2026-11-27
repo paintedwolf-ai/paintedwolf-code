@@ -30,12 +30,8 @@ func (s *Server) StopBackground(ctx context.Context) {
 	s.Sources.Watch.Stop(ctx)
 }
 
-// WaitForBackground drains host work to a fixed point: subsystems can hand off
-// work to each other (for example a watch batch scheduling workspace inventory
-// on s.background, outbox delivery scheduling an attention rebuild, or an
-// attention flush publishing downstream work). It loops until a full pass
-// completes with no new detached work, no outbox rows processed, and no
-// attention rebuilds started, or until ctx ends.
+// WaitForBackground drains every host background participant until a pass
+// admits no new work, or returns ctx's error.
 func (s *Server) WaitForBackground(ctx context.Context) error {
 	if s == nil {
 		return nil
@@ -44,7 +40,20 @@ func (s *Server) WaitForBackground(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		watchBefore := s.Sources.Watch.Epoch()
+		briefingBefore := s.fileBriefings.Epoch()
 		bgBefore := s.background.Epoch()
+		var coordBefore, curationBefore uint64
+		if s.sessions != nil {
+			coordBefore = s.sessions.Coordinator.TurnEpoch()
+			if s.sessions.Runner != nil {
+				curationBefore = s.sessions.Runner.Curation.Epoch()
+			}
+		}
+		var repoBefore uint64
+		if s.repoProvider != nil {
+			repoBefore = s.repoProvider.Epoch()
+		}
 		var outboxBefore uint64
 		if s.eventOutbox != nil {
 			outboxBefore = s.eventOutbox.Epoch()
@@ -68,15 +77,18 @@ func (s *Server) WaitForBackground(ctx context.Context) error {
 			s.background.Wait(ctx)
 		}()
 		if s.sessions != nil {
-			wg.Add(2)
+			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				s.sessions.Coordinator.WaitForTurns(ctx)
 			}()
-			go func() {
-				defer wg.Done()
-				s.sessions.Runner.Curation.Wait(ctx)
-			}()
+			if s.sessions.Runner != nil {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					s.sessions.Runner.Curation.Wait(ctx)
+				}()
+			}
 		}
 		wg.Wait()
 		if watchErr != nil {
@@ -104,9 +116,30 @@ func (s *Server) WaitForBackground(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		outboxChanged := s.eventOutbox != nil && s.eventOutbox.Epoch() != outboxBefore
-		attentionChanged := s.eventPublisher != nil && s.eventPublisher.AttentionEpoch() != attentionBefore
-		if s.background.Epoch() == bgBefore && !s.background.Busy() && !outboxChanged && !attentionChanged {
+		// Check idle states before epochs so a handoff landing after an idle
+		// check still shows up as an epoch change.
+		curationBusy := s.sessions != nil && s.sessions.Runner != nil && s.sessions.Runner.Curation.Busy()
+		busy := s.Sources.Watch.Busy() ||
+			s.fileBriefings.Busy() ||
+			s.background.Busy() ||
+			(s.sessions != nil && s.sessions.Coordinator.TurnBusy()) ||
+			curationBusy ||
+			(s.repoProvider != nil && s.repoProvider.Busy()) ||
+			(s.eventOutbox != nil && s.eventOutbox.Busy()) ||
+			(s.eventPublisher != nil && s.eventPublisher.AttentionBusy())
+		if busy {
+			continue
+		}
+		curationMoved := s.sessions != nil && s.sessions.Runner != nil && s.sessions.Runner.Curation.Epoch() != curationBefore
+		moved := s.Sources.Watch.Epoch() != watchBefore ||
+			s.fileBriefings.Epoch() != briefingBefore ||
+			s.background.Epoch() != bgBefore ||
+			(s.sessions != nil && s.sessions.Coordinator.TurnEpoch() != coordBefore) ||
+			curationMoved ||
+			(s.repoProvider != nil && s.repoProvider.Epoch() != repoBefore) ||
+			(s.eventOutbox != nil && s.eventOutbox.Epoch() != outboxBefore) ||
+			(s.eventPublisher != nil && s.eventPublisher.AttentionEpoch() != attentionBefore)
+		if !moved {
 			return nil
 		}
 	}
