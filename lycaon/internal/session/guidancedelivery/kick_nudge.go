@@ -296,7 +296,9 @@ func (m *Service) GateObligations(ctx context.Context, sessionID string, frame i
 	if frame.Runtime.PhaseExit != nil {
 		extras = feedback.WithReviewAgents(extras, frame.Runtime.PhaseExit.ReviewAgents)
 	}
-	extras = feedback.WithReaderFacts(extras, reader.Facts())
+	if readerVars, err := prompts.Vars(reader, nil); err == nil {
+		extras = feedback.WithReaderFacts(extras, readerVars)
+	}
 	rows := fb.ProjectObligations(ctx, leaves, runCtx.AdvanceWhenGateMet, extras)
 	if len(rows) == 0 {
 		return nil

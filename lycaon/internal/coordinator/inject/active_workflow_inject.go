@@ -81,7 +81,11 @@ func RenderActiveWorkflowInject(
 	if snap.BlueprintBody != "" {
 		planBody = snap.BlueprintBody
 	}
-	data = AttachGateObligations(ctx, data, gateFeedback, frame.RunContext.AdvanceWhenGateMet, planBody, reader.Facts())
+	readerVars, err := prompts.Vars(reader, nil)
+	if err != nil {
+		return "", err
+	}
+	data = AttachGateObligations(ctx, data, gateFeedback, frame.RunContext.AdvanceWhenGateMet, planBody, readerVars)
 	block, err := anchor.RenderInformWithReader(ctx, anchor.InjectActiveWorkflow, anchor.MatchContext{Surface: "coordinator", SessionID: sessionID}, renderer, reader, ActiveWorkflowInjectToMap(data, hints, hintCodes))
 	if err != nil {
 		return "", err
