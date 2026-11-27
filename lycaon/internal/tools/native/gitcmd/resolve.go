@@ -49,6 +49,9 @@ func (o *Owners) Resolve(argv commandprogram.Fields) (string, bool) {
 func (o *Owners) PrepareGit(paths *projectpaths.ProgramPaths, filesystem *mutation.Owners, nested commandprogram.NestedCommand, request commandprogram.OperationRequest) (Prepared, error) {
 	name, ok := o.Resolve(request.Argv)
 	if _, served := o.specs[name]; !ok || !served {
+		if err := ValidateGlobalConfig(request.Argv); err != nil {
+			return Prepared{}, err
+		}
 		return Prepared{}, o.unsupported(name, request)
 	}
 	request.OperationID = name

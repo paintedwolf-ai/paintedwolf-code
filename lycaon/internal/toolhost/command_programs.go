@@ -272,7 +272,7 @@ func (t programOwnerTools) gitOperation() (func(*mutation.Owners) command.Native
 		}
 	}
 	return func(filesystem *mutation.Owners) command.NativeOperation {
-		return command.NativeOperation{Tools: identities, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+		return command.NativeOperation{Tools: identities, DisallowGap: func(argv commandprogram.Fields) bool { return gitcmd.ValidateGlobalConfig(argv) != nil }, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 			nested, _ := dispatch.(commandprogram.NestedCommand)
 			prepared, err := owners.PrepareGit(frame, filesystem, nested, request)
 			if err != nil {
