@@ -130,8 +130,8 @@ func TestProgramProgressRejectedOnSurfaceWithoutStandaloneProgress(t *testing.T)
 		},
 	})
 	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "TOOL_DENIED" {
-		t.Fatalf("surface-restricted progress_update err = %v, want TOOL_DENIED", err)
+	if !errors.As(err, &reject) || reject.Code != "TOOL_NOT_OFFERED" {
+		t.Fatalf("surface-restricted progress_update err = %v, want TOOL_NOT_OFFERED", err)
 	}
 	if got := f.Progress(t.Context()); got != "" {
 		t.Fatalf("surface-restricted progress_update committed progress: %q", got)
