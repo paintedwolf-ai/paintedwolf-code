@@ -105,10 +105,29 @@ class BB03LiveWitnessOracleTests(unittest.TestCase):
             db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e1','p1',1,'sleep','sleep','processes','completed','none'), ('e2','p1',2,'sleep','sleep','processes','completed','none'), ('e3','p1',3,'sleep','sleep','processes','interrupted','none')")
             db.commit(); db.close()
             turns = [{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}]
-            wm = {'db_program': {'state': 'interrupted', 'status_code': 130, 'stop_code': 'TOOL_OWNER_INTERRUPTED'}, 'exec_count_at_idle': 3, 'exec_count_after_wait': 3, 'unsettled_children': 0, 'recovery_ok': True, 'st01_st03_stop_fence_separate': True}
+            wm = {
+                'abort_barrier': 'active_child_started', 'aborted_child_started': True, 'aborted_child_invoked': True,
+                'aborted_child_certainty': 'none', 'aborted_child_status': 130,
+                'db_program': {'state': 'interrupted', 'status_code': 130, 'stop_code': 'TOOL_OWNER_INTERRUPTED'},
+                'exec_count_at_idle': 3, 'exec_count_after_wait': 3, 'unsettled_children': 0, 'recovery_ok': True,
+                'st01_st03_stop_fence_separate': True,
+            }
             obs, audit = observe.build_observation(case, session_id='sess1234', identity=IDENT, project_dir=proj, db_path=dbp, sidecar_log=lp, baseline_hashes=base, turn_records=turns, prelude_records=[], witness_meta=wm)
             self.assertEqual(audit['observation_gaps'], [])
             self.assertTrue(grading.grade_case(case, obs, proj, IDENT)['passed'])
+            # Pre-start cancellation control (started=0, invoked=0, certainty=unknown): distinct schedule MUST NOT pass active-child barrier or loosen authority.
+            db = sqlite3.connect(dbp)
+            db.execute("UPDATE invocation_program_executions SET effect_certainty='unknown' WHERE id='e3'")
+            db.commit(); db.close()
+            pre_wm = {**wm, 'aborted_child_started': False, 'aborted_child_invoked': False, 'aborted_child_certainty': 'unknown', 'aborted_child_status': 1}
+            obs_pre, _ = observe.build_observation(case, session_id='sess1234', identity=IDENT, project_dir=proj, db_path=dbp, sidecar_log=lp, baseline_hashes=base, turn_records=turns, prelude_records=[], witness_meta=pre_wm)
+            self.assertFalse(obs_pre['facts']['admission_closed'])
+            g_pre = grading.grade_case(case, obs_pre, proj, IDENT)
+            self.assertFalse(g_pre['dimensions']['authority'])
+            self.assertFalse(g_pre['passed'])
+            db = sqlite3.connect(dbp)
+            db.execute("UPDATE invocation_program_executions SET effect_certainty='none' WHERE id='e3'")
+            db.commit(); db.close()
             # Negative controls: later child admitted, unsettled child, or 'after' file leaked -> fail.
             obs_later, _ = observe.build_observation(case, session_id='sess1234', identity=IDENT, project_dir=proj, db_path=dbp, sidecar_log=lp, baseline_hashes=base, turn_records=turns, prelude_records=[], witness_meta={**wm, 'exec_count_after_wait': 4})
             self.assertFalse(obs_later['facts']['no_later_child'])

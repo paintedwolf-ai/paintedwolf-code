@@ -90,8 +90,14 @@ def inspect_live_witnesses(case, *, project_dir, audit, receipts, effects, last_
         db_prog = wm.get('db_program') or {}
         c_idle, c_after = wm.get('exec_count_at_idle'), wm.get('exec_count_after_wait')
         after_absent = not (proj / 'after').exists()
+        active_child_ok = (
+            wm.get('abort_barrier') == 'active_child_started'
+            and wm.get('aborted_child_started') is True
+            and wm.get('aborted_child_invoked') is True
+            and wm.get('aborted_child_certainty') == 'none'
+        )
         facts['admission_closed'] = bool(
-            db_prog.get('state') == 'interrupted' and db_prog.get('status_code') == 130
+            active_child_ok and db_prog.get('state') == 'interrupted' and db_prog.get('status_code') == 130
             and db_prog.get('stop_code') == 'TOOL_OWNER_INTERRUPTED' and isinstance(c_idle, int) and c_idle >= 3
         )
         facts['no_later_child'] = bool(isinstance(c_idle, int) and c_idle >= 3 and c_after == c_idle and after_absent)
