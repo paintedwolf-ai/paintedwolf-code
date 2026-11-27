@@ -63,12 +63,13 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 		surfaceTools, err := surfaceCommandFormTools(tc.Turn.TurnSurfaceID)
 		if err != nil || (surfaceTools != nil && !surfaceTools["update_progress"]) {
 			return result, &toolrejection.ToolReject{
-				Code:         "TOOL_DENIED",
+				Code:         "TOOL_NOT_OFFERED",
 				OwnerRef:     "progress",
 				BeforeEffect: true,
 				Data: map[string]any{
-					"tool":    "update_progress",
-					"surface": tc.Turn.TurnSurfaceID,
+					"tool":          "update_progress",
+					"surface":       tc.Turn.TurnSurfaceID,
+					"tool_loadable": false,
 				},
 			}
 		}
