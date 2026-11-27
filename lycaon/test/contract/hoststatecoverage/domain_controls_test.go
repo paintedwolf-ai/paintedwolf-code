@@ -23,6 +23,7 @@ type domainVerdict struct {
 // resolved to another value, and a duplicated or unset domain member each
 // fail by name, and the unmodified neighbour passes.
 func TestApprovalPostureDomainGateControls(t *testing.T) {
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	ctx := t.Context()
 	stock, err := promptrender.LoadStock(ctx)
 	if err != nil {
