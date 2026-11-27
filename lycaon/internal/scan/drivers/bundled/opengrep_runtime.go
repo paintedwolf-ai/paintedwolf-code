@@ -1,6 +1,7 @@
 package bundleddriver
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -22,18 +23,20 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/filelock"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/scan"
+	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
 const (
-	opengrepRuntimeFormatVersion = 1
-	opengrepRuntimeDirPrefix     = "v1-"
-	opengrepRuntimeStagePrefix   = ".stage-"
-	opengrepRuntimeLockName      = ".prepare.lock"
-	opengrepRuntimeLeaseSuffix   = ".lease"
-	opengrepRuntimeManifestName  = "manifest.json"
-	opengrepRuntimeCacheSubdir   = "xdg-cache"
-	opengrepRuntimeMaxDiagBytes  = 512
+	opengrepRuntimeFormatRevision = 1
+	opengrepRuntimeDirPrefix      = "v1-"
+	opengrepRuntimeStagePrefix    = ".stage-"
+	opengrepRuntimeLockName       = ".prepare.lock"
+	opengrepRuntimeLeaseSuffix    = ".lease"
+	opengrepRuntimeManifestName   = "manifest.json"
+	opengrepRuntimeCacheSubdir    = "xdg-cache"
+	opengrepRuntimeMaxDiagBytes   = 512
 )
 
 var (
@@ -52,10 +55,10 @@ type verifiedRuntimeRecord struct {
 }
 
 type opengrepRuntimeManifest struct {
-	Version      int                        `json:"version"`
-	BinarySHA256 string                     `json:"binary_sha256"`
-	NoExtract    bool                       `json:"no_extract,omitempty"`
-	Files        []opengrepRuntimeFileEntry `json:"files,omitempty"`
+	FormatRevision int                        `json:"format_revision"`
+	BinarySHA256   string                     `json:"binary_sha256"`
+	NoExtract      bool                       `json:"no_extract,omitempty"`
+	Files          []opengrepRuntimeFileEntry `json:"files,omitempty"`
 }
 
 type opengrepRuntimeFileEntry struct {
@@ -200,22 +203,26 @@ func buildAndPublishRuntime(ctx context.Context, bin, binarySHA256, storeRoot, t
 	}
 
 	manifest := opengrepRuntimeManifest{
-		Version:      opengrepRuntimeFormatVersion,
-		BinarySHA256: binarySHA256,
-		NoExtract:    len(entries) == 0,
-		Files:        entries,
+		FormatRevision: opengrepRuntimeFormatRevision,
+		BinarySHA256:   binarySHA256,
+		NoExtract:      len(entries) == 0,
+		Files:          entries,
 	}
 	if err := sealTreeReadOnly(stagingCache); err != nil {
 		releaseTargetLease()
 		return "", nil, fmt.Errorf("seal runtime read-only: %w", err)
 	}
-	rawManifest, err := json.Marshal(manifest)
+	rawManifest, err := surveyjson.Marshal(manifest)
 	if err != nil {
 		releaseTargetLease()
 		return "", nil, fmt.Errorf("encode runtime manifest: %w", err)
 	}
 	manifestPath := filepath.Join(stagingDir, opengrepRuntimeManifestName)
-	if err := os.WriteFile(manifestPath, rawManifest, 0o444); err != nil {
+	if _, err := fseffect.Replace(fseffect.ReplaceRequest{
+		Location: fseffect.Location{Root: stagingDir, Rel: opengrepRuntimeManifestName},
+		Source:   bytes.NewReader(rawManifest),
+		Mode:     0o444,
+	}); err != nil {
 		releaseTargetLease()
 		return "", nil, fmt.Errorf("write runtime manifest: %w", err)
 	}
@@ -223,7 +230,7 @@ func buildAndPublishRuntime(ctx context.Context, bin, binarySHA256, storeRoot, t
 		releaseTargetLease()
 		return "", nil, fmt.Errorf("seal runtime manifest: %w", err)
 	}
-	if err := os.Rename(stagingDir, targetDir); err != nil {
+	if err := fseffect.Rename(storeRoot, filepath.Base(stagingDir), filepath.Base(targetDir)); err != nil {
 		releaseTargetLease()
 		return "", nil, fmt.Errorf("publish prepared runtime: %w", err)
 	}
@@ -356,8 +363,17 @@ func moveOrCopyDir(src, dst string) error {
 	if !srcInfo.IsDir() || srcInfo.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("prepared runtime source is not a real directory: %s", src)
 	}
-	if err := os.Rename(src, dst); err == nil {
-		return nil
+	if cfgDir, err := configdir.UserConfigDir(); err == nil {
+		fromRel, errFrom := filepath.Rel(cfgDir, src)
+		toRel, errTo := filepath.Rel(cfgDir, dst)
+		if errFrom == nil && errTo == nil && filepath.IsLocal(fromRel) && filepath.IsLocal(toRel) {
+			if err := fseffect.Rename(cfgDir, fromRel, toRel); err == nil {
+				return nil
+			}
+		}
+	}
+	if err := os.MkdirAll(dst, 0o700); err != nil {
+		return err
 	}
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -370,12 +386,11 @@ func moveOrCopyDir(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		target := dst
-		if rel != "." {
-			target = filepath.Join(dst, rel)
-		}
 		if d.IsDir() {
-			return os.MkdirAll(target, 0o700)
+			if rel == "." {
+				return nil
+			}
+			return os.MkdirAll(filepath.Join(dst, rel), 0o700)
 		}
 		if !d.Type().IsRegular() {
 			return fmt.Errorf("unexpected non-regular entry in prepared runtime: %s", path)
@@ -398,21 +413,13 @@ func moveOrCopyDir(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		out, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode) // #nosec G304 -- validated target path
-		if err != nil {
-			_ = in.Close()
-			return err
-		}
-		_, copyErr := io.Copy(out, in)
-		closeOutErr := out.Close()
-		closeInErr := in.Close()
-		if copyErr != nil {
-			return copyErr
-		}
-		if closeOutErr != nil {
-			return closeOutErr
-		}
-		return closeInErr
+		defer func() { _ = in.Close() }()
+		_, err = fseffect.Replace(fseffect.ReplaceRequest{
+			Location: fseffect.Location{Root: dst, Rel: rel},
+			Source:   in,
+			Mode:     mode,
+		})
+		return err
 	})
 }
 
@@ -506,7 +513,7 @@ func verifyPreparedRuntime(targetDir, expectedBinarySHA256 string, metadataOnly 
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		return empty, fmt.Errorf("parse runtime manifest: %w", err)
 	}
-	if manifest.Version != opengrepRuntimeFormatVersion || manifest.BinarySHA256 != expectedBinarySHA256 {
+	if manifest.FormatRevision != opengrepRuntimeFormatRevision || manifest.BinarySHA256 != expectedBinarySHA256 {
 		return empty, fmt.Errorf("runtime manifest provenance mismatch")
 	}
 	if manifest.NoExtract {
