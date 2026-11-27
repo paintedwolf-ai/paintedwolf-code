@@ -4,7 +4,7 @@ import pathlib
 import sqlite3
 import tempfile
 import unittest
-from portable_command import observe, profile_session
+from portable_command import artifacts, grading, observe, profile_session
 from portable_command.contracts import load_suite, materialize
 from portable_command.test_portable_command_harness import create_audit_db
 
@@ -150,3 +150,33 @@ class PortableCommandReadonlyAuthorityTests(unittest.TestCase):
                 'invocation_program_publications': [], 'invocation_program_revision_pins': [],
             }, [])
             self.assertEqual([(r['operation'], r['outcome']) for r in rows], [('sed', 'rejected'), ('awk', 'rejected'), ('touch', 'refused')])
+
+    def test_post_workflow_init_blueprint_snapshot_and_negative_controls(self):
+        case = CASES['read-only-static-refusal']
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            proj = root / 'proj'
+            pre_hashes = materialize(case, proj)
+            bp_dir = proj / '.paintedwolf' / 'blueprints'
+            bp_dir.mkdir(parents=True)
+            bp_file = bp_dir / 'pc-read-only-static-refusal.yaml'
+            bp_file.write_text('id: pc-read-only-static-refusal\n')
+            post_init = artifacts.project_hashes(proj)
+            init_artifacts = profile_session.validate_workflow_init_artifacts(pre_hashes, post_init)
+            self.assertEqual(set(init_artifacts), {'.paintedwolf/blueprints/pc-read-only-static-refusal.yaml'})
+            # Unchanged post-command tree (including blueprint SHA-256) passes artifacts.
+            self.assertTrue(artifacts.grade_artifacts(proj, case, expected_init_hashes=init_artifacts))
+            # Negative control (a): changed blueprint file during the command MUST fail artifacts.
+            bp_file.write_text('id: pc-read-only-static-refusal\nmutated: true\n')
+            self.assertFalse(artifacts.grade_artifacts(proj, case, expected_init_hashes=init_artifacts))
+            bp_file.write_text('id: pc-read-only-static-refusal\n')
+            self.assertTrue(artifacts.grade_artifacts(proj, case, expected_init_hashes=init_artifacts))
+            # Negative control (b): new artifact created during the command MUST fail artifacts.
+            (proj / 'extra.txt').write_text('unwanted\n')
+            self.assertFalse(artifacts.grade_artifacts(proj, case, expected_init_hashes=init_artifacts))
+            (proj / 'extra.txt').unlink()
+            (bp_dir / 'extra.yaml').write_text('unexpected: true\n')
+            self.assertFalse(artifacts.grade_artifacts(proj, case, expected_init_hashes=init_artifacts))
+            # Negative control (c): workflow init creating non-blueprint file raises ValueError.
+            with self.assertRaises(ValueError):
+                profile_session.validate_workflow_init_artifacts(pre_hashes, {**post_init, 'sneaky.txt': 'a' * 64})

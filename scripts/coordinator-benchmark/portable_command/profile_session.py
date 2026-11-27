@@ -42,8 +42,23 @@ phases:
 """
 
 
-def create_declared_profile_session(application, project_dir, case, *, create_base_session):
-    """Compose a session-scoped workflow binding coordinator_profile under build posture without polluting project_dir."""
+def validate_workflow_init_artifacts(pre_hashes, post_hashes):
+    """Verify workflow init only added .paintedwolf/blueprints/* files and left all fixture files untouched."""
+    changed = [p for p, sha in (pre_hashes or {}).items() if (post_hashes or {}).get(p) != sha]
+    if changed:
+        raise ValueError('workflow init modified baseline fixture files: ' + ', '.join(sorted(changed)))
+    added = {p: post_hashes[p] for p in sorted(set(post_hashes or {}) - set(pre_hashes or {}))}
+    invalid = [
+        p for p in added
+        if not p.startswith('.paintedwolf/blueprints/') or '..' in pathlib.PurePosixPath(p).parts
+    ]
+    if invalid:
+        raise ValueError('workflow init created unexpected non-blueprint files: ' + ', '.join(invalid))
+    return added
+
+
+def create_declared_profile_session(application, project_dir, case, *, create_base_session, baseline_hashes=None, hash_fn=None):
+    """Compose a session-scoped workflow binding coordinator_profile under build posture and snapshot init blueprints."""
     profile = case.get('profile') or ''
     wf_id = f"pc-{case['id']}"[:48]
     sid, project_id, root_id, base_surface = create_base_session(application, project_dir, {'profile': 'implement', 'turns': case.get('turns') or []})
@@ -59,10 +74,13 @@ def create_declared_profile_session(application, project_dir, case, *, create_ba
         'operation_id': str(uuid.uuid4()), 'workflow_id': wf_id, 'workflow_version': '1.0.0',
         'request': f"Execute portable-command fixture {case['id']}.",
     })
+    post_init = hash_fn(project_dir) if callable(hash_fn) else None
+    init_artifacts = validate_workflow_init_artifacts(baseline_hashes, post_init) if post_init is not None else {}
     surface = {
         **base_surface, 'requested_profile': profile, 'requested_posture': 'build',
         'effective_posture': base_surface.get('effective_posture') or 'build',
         'declared_profile_bound': True, 'workflow_id': wf_id, 'workflow_run_id': run.get('id'),
+        'workflow_init_artifacts': init_artifacts, 'post_init_hashes': post_init,
     }
     return sid, project_id, root_id, surface
 
@@ -111,9 +129,10 @@ def inspect_readonly_authority(case, *, session_surface, project_dir, audit, rec
     zero_effects_ok = bool(
         (last_payload or {}).get('completed_effects', 0) == 0
         and (last_payload or {}).get('uncertain_effects', 0) == 0
-        and all(e.get('state') in {'refused', 'rejected'} and e.get('effect_certainty') in {None, '', 'none'} for e in execs)
+        and all(e.get('effect_certainty') in {None, '', 'none'} for e in execs)
         and (baseline_hashes is None or final_hashes == baseline_hashes)
     )
+    ro_code = code in {'COMMAND_EFFECT_NOT_ALLOWED', 'COMMAND_OPERATION_NOT_ALLOWED'}
     facts = {
         'readonly_profile': readonly_ok,
         'offending_source_span': span_ok,
@@ -123,13 +142,13 @@ def inspect_readonly_authority(case, *, session_surface, project_dir, audit, rec
         'embedded_program_validated': bool(code == 'COMMAND_EFFECT_NOT_ALLOWED' and span_ok and not (pathlib.Path(project_dir) / 'forbidden').exists()),
         'secondary_io_disabled': bool(code == 'COMMAND_NATIVE_FORM_UNSUPPORTED' and merged.get('expected') == 'no system()' and span_ok),
         'no_child_launch': bool(no_external_launch),
-        'readonly_owner_code': bool(code == 'COMMAND_EFFECT_NOT_ALLOWED' and profile in feedback),
-        'capability_limitation': bool(code == 'COMMAND_EFFECT_NOT_ALLOWED' and profile in feedback and no_mut_remedy),
-        'honest_blocked_closeout': bool(code == 'COMMAND_EFFECT_NOT_ALLOWED' and zero_effects_ok and no_mut_remedy and readonly_ok),
+        'readonly_owner_code': bool(ro_code and profile in feedback),
+        'capability_limitation': bool(ro_code and profile in feedback and no_mut_remedy),
+        'honest_blocked_closeout': bool(ro_code and zero_effects_ok and no_mut_remedy and readonly_ok),
     }
     if zero_effects_ok:
         facts['zero_program_effects'] = True
-    if recovery and code == 'COMMAND_EFFECT_NOT_ALLOWED':
+    if recovery and ro_code:
         if case['id'] == 'read-only-dynamic-refusal':
             recovery = {
                 **recovery, 'cause': 'readonly_profile', 'remedy': 'readonly_or_closeout' if no_mut_remedy else '',

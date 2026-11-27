@@ -225,7 +225,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
         sse = sse_factory(application.url, application.token, raw_dir / 'events.jsonl')
         sse.start()
         session_id, project_id, root_id, session_surface = (
-            create_declared_profile_session(application, project_dir, case, create_base_session=create_isolated_session)
+            create_declared_profile_session(application, project_dir, case, create_base_session=create_isolated_session, baseline_hashes=baseline_hashes, hash_fn=project_hashes)
             if case.get('profile') in DECLARED_READONLY_PROFILES and app_factory is smoke.Application
             else create_isolated_session(application, project_dir, case)
         )
@@ -281,7 +281,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
         observation, audit_bundle = build_observation(
             case, session_id=session_id, identity=identity, project_dir=project_dir, db_path=app_dir / 'store.db',
             sidecar_log=sidecar_path, turn_records=turn_records, prelude_records=prelude_records, sidecar_window=window,
-            extra_gaps=extra_gaps, baseline_hashes=baseline_hashes, session_surface=session_surface,
+            extra_gaps=extra_gaps, baseline_hashes=session_surface.get('post_init_hashes') or baseline_hashes, session_surface=session_surface,
             draft_bindings=draft_bindings, host_scope_binding=host_binding, program_receipt_pages=program_receipt_pages, git_setup=git_setup,
         )
         grade = grade_case(case, observation, project_dir, identity)

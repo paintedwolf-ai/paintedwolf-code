@@ -65,7 +65,7 @@
       "remedy": "readonly_or_closeout",
       "effect_certainty_required": true,
       "source_span_required": true,
-      "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+      "owner_code": "COMMAND_OPERATION_NOT_ALLOWED"
     },
     {
       "case_id": "stale-approval",
@@ -87,7 +87,7 @@
       "remedy": "honest_blocked_closeout",
       "effect_certainty_required": true,
       "source_span_required": false,
-      "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+      "owner_code": "COMMAND_EFFECT_NOT_ALLOWED"
     },
     {
       "case_id": "partial-write-unknown-http",

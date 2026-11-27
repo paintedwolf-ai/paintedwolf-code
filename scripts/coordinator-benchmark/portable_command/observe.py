@@ -279,8 +279,8 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         'program': {'stdout': last_payload.get('stdout', ''), 'stderr': program_stderr,
                     'status': status_code, 'host_stop': host_stop, 'complete': complete},
         'receipts': receipts, 'effects': effects, 'facts': facts, 'deliveries': deliveries, 'obligations': [],
-        'closeout': 'complete' if outcome == 'completed' else 'blocked', 'forbidden_replay': forbidden_replay,
-        'recovery': recovery, 'invocations': cmd_invocations,
+        'closeout': 'complete' if outcome == 'completed' else 'blocked', 'forbidden_replay': forbidden_replay, 'recovery': recovery, 'invocations': cmd_invocations,
+        **({'workflow_init_artifacts': (session_surface or {}).get('workflow_init_artifacts')} if (session_surface or {}).get('declared_profile_bound') else {}),
     }
     audit_bundle = {
         'session_id': session_id, 'session_surface': session_surface or {},

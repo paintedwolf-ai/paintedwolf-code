@@ -556,20 +556,31 @@
       "turns": [
         {
           "program": "cat ./input.txt && rm ./input.txt",
-          "expected_outcome": "rejected"
+          "expected_outcome": "rejected",
+          "expected_rejection": "COMMAND_OPERATION_NOT_ALLOWED"
         }
       ],
       "expected": {
-        "stdout": "",
-        "stderr": "",
-        "status": 2,
+        "stdout": "keep\n",
+        "stderr": "rm: request: The active profile explicitly excludes this operation or its public command form [COMMAND_OPERATION_NOT_ALLOWED]\n",
+        "status": 1,
         "host_stop": "rejected",
         "complete": false,
         "files": {
           "input.txt": "keep\n"
         },
         "absent": [],
-        "receipts": [],
+        "receipts": [
+          {
+            "operation": "read",
+            "outcome": "completed"
+          },
+          {
+            "operation": "delete",
+            "outcome": "rejected",
+            "status": 1
+          }
+        ],
         "effects": [],
         "obligations": [],
         "deliveries": [],
@@ -605,13 +616,14 @@
       "turns": [
         {
           "program": "cmd=$(cat ./selector); \"$cmd\" ./input.txt",
-          "expected_outcome": "rejected"
+          "expected_outcome": "rejected",
+          "expected_rejection": "COMMAND_OPERATION_NOT_ALLOWED"
         }
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
-        "status": 2,
+        "stderr": "rm: request: The active profile explicitly excludes this operation or its public command form [COMMAND_OPERATION_NOT_ALLOWED]\n",
+        "status": 1,
         "host_stop": "rejected",
         "complete": false,
         "files": {
@@ -641,7 +653,7 @@
           "remedy": "readonly_or_closeout",
           "effect_certainty_required": true,
           "source_span_required": true,
-          "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+          "owner_code": "COMMAND_OPERATION_NOT_ALLOWED"
         },
         "closeout": "blocked"
       },
@@ -673,13 +685,14 @@
       "turns": [
         {
           "program": "sed 'w ./forbidden' ./input.txt",
-          "expected_outcome": "rejected"
+          "expected_outcome": "rejected",
+          "expected_rejection": "COMMAND_EFFECT_NOT_ALLOWED"
         }
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
-        "status": 2,
+        "stderr": "sed: request: Its bound effect set is not permitted by the active command surface [COMMAND_EFFECT_NOT_ALLOWED]\n",
+        "status": 1,
         "host_stop": "rejected",
         "complete": false,
         "files": {
@@ -688,7 +701,13 @@
         "absent": [
           "forbidden"
         ],
-        "receipts": [],
+        "receipts": [
+          {
+            "operation": "sed",
+            "outcome": "rejected",
+            "status": 1
+          }
+        ],
         "effects": [],
         "obligations": [],
         "deliveries": [],
@@ -717,18 +736,25 @@
       "turns": [
         {
           "program": "awk 'BEGIN { system(\"fixture-tool\") }'",
-          "expected_outcome": "rejected"
+          "expected_outcome": "rejected",
+          "expected_rejection": "COMMAND_NATIVE_FORM_UNSUPPORTED"
         }
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
+        "stderr": "awk: BEGIN { system(\"fixture-tool\") }: The native command adapter cannot execute this form [COMMAND_NATIVE_FORM_UNSUPPORTED]\n",
         "status": 2,
         "host_stop": "rejected",
         "complete": false,
         "files": {},
         "absent": [],
-        "receipts": [],
+        "receipts": [
+          {
+            "operation": "awk",
+            "outcome": "rejected",
+            "status": 2
+          }
+        ],
         "effects": [],
         "obligations": [],
         "deliveries": [],
@@ -3298,20 +3324,27 @@
       "turns": [
         {
           "program": "sed -i 's/a/b/' ./input.txt",
-          "expected_outcome": "rejected"
+          "expected_outcome": "rejected",
+          "expected_rejection": "COMMAND_EFFECT_NOT_ALLOWED"
         }
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
-        "status": 2,
+        "stderr": "sed: request: Its bound effect set is not permitted by the active command surface [COMMAND_EFFECT_NOT_ALLOWED]\n",
+        "status": 1,
         "host_stop": "rejected",
         "complete": false,
         "files": {
           "input.txt": "a\n"
         },
         "absent": [],
-        "receipts": [],
+        "receipts": [
+          {
+            "operation": "sed",
+            "outcome": "rejected",
+            "status": 1
+          }
+        ],
         "effects": [],
         "obligations": [],
         "deliveries": [],
@@ -3324,7 +3357,7 @@
           "remedy": "honest_blocked_closeout",
           "effect_certainty_required": true,
           "source_span_required": false,
-          "code_binding": "P32 must bind this typed cause to its declared owner/surface code without reusing retired meanings"
+          "owner_code": "COMMAND_EFFECT_NOT_ALLOWED"
         },
         "closeout": "blocked"
       },

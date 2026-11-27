@@ -32,7 +32,7 @@ def grade_case(case, observation, project, identity):
     identities = [row.get('execution_id') for row in receipts]
     dynamic_ids = all(isinstance(i, str) and i for i in identities) and len(set(identities)) == len(identities)
     dimensions = {
-        'artifacts': grade_artifacts(project, case),
+        'artifacts': grade_artifacts(project, case, expected_init_hashes=observation.get('workflow_init_artifacts')),
         'execution': all(same(program.get(k), expected[k]) for k in PROGRAM_FIELDS),
         'receipts': dynamic_ids and exact_records(receipts, expected['receipts']),
         'authority': exact_records(observation.get('effects'), expected['effects']),
