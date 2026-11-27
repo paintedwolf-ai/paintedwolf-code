@@ -109,7 +109,7 @@ assert Fraction(sol[y].p, sol[y].q) == Fraction(9, 7), f"bad y={sol[y]}"
 
 expr = x**3 - 3*x**2 + 2*x + 1
 deriv = sp.diff(expr, x)
-assert deriv.subs(x, sp.Rational(11, 7)) == sp.Rational(164, 49)
+assert deriv.subs(x, sp.Rational(11, 7)) == sp.Rational(-1, 49)
 print("SYMPY_OK", sol[x], sol[y], deriv.subs(x, sp.Rational(11, 7)))
 `
 
