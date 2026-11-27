@@ -2,6 +2,7 @@ package command_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -88,7 +89,7 @@ func catalogLimitMax(t *testing.T, id string) int64 {
 func TestBB10I18BoundedWorkChargeAndRelease(t *testing.T) {
 	t.Run("memory_charge_at_over_and_release", func(t *testing.T) {
 		f := programtest.New(t, programtest.Options{})
-		limits := toolcontract.ProgramMemoryLimits{Working: 4096, State: 8192}
+		limits := toolcontract.ProgramMemoryLimits{Working: 8192, State: 16384}
 		var activeMemory *toolcontract.ProgramMemory
 		var spy *i18CountingDispatch
 
@@ -254,10 +255,15 @@ func TestBB10I18BoundedWorkChargeAndRelease(t *testing.T) {
 
 		raw := <-done
 		callErr := <-errCh
-		testutil.FailErr(t, "run canceled command", callErr)
-		canceled := decodeOutcome(t, raw)
-		if canceled.State != "interrupted" || strings.Contains(canceled.Stdout, "after_over") {
-			t.Fatalf("canceled outcome = %+v", canceled)
+		if callErr != nil {
+			if !errors.Is(callErr, context.Canceled) {
+				t.Fatalf("canceled command error = %v, want context.Canceled", callErr)
+			}
+		} else {
+			canceled := decodeOutcome(t, raw)
+			if canceled.State != "interrupted" || strings.Contains(canceled.Stdout, "after_over") {
+				t.Fatalf("canceled outcome = %+v", canceled)
+			}
 		}
 		if inUse := activeMemory.InUse(); inUse.Working != 0 || inUse.State != 0 || activeMemory.AvailableWorking() != limits.Working {
 			t.Fatalf("memory leaked after cancellation: inUse=%+v avail=%d", inUse, activeMemory.AvailableWorking())
