@@ -119,26 +119,36 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 	if !allowed {
 		t.Fatalf("completed leg cannot wake coordinator: %s", reason)
 	}
-	mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-e2e", anchor.Envelope{})
-
-	testutil.WaitFor(t, "the coordinator answers the loop wake", func() bool {
-		mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
-		msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
-		if err != nil {
-			return false
+	previous := map[string]bool{}
+	for _, msg := range listMessagesHTTP(t, srv, sess.ID) {
+		previous[msg.ID] = true
+	}
+	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
+	ticket := loop.Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-e2e", anchor.Envelope{})
+	wake, err := ticket.Await(t.Context())
+	testutil.FailErr(t, "await leg wake", err)
+	if wake.State != wire.WakeStateDelivered || wake.TurnID == "" {
+		t.Fatalf("leg wake: %+v", wake)
+	}
+	turn, err := loop.Outcomes.For(sess.ID).Turns.Await(t.Context(), wake.TurnID)
+	testutil.FailErr(t, "await leg turn", err)
+	if turn.Outcome != wire.TurnOutcomeKindCompleted || turn.DispatchedAt.IsZero() {
+		t.Fatalf("leg turn: %+v", turn)
+	}
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
+	testutil.FailErr(t, "read leg turn transcript", err)
+	assistants, hasWake := 0, false
+	for _, msg := range msgs {
+		if msg.Role == wire.MessageRoleAssistant {
+			assistants++
 		}
-		assistants := 0
-		hasAuto := false
-		for _, msg := range msgs {
-			if msg.Role == wire.MessageRoleAssistant {
-				assistants++
-			}
-			if msg.Kind == wire.MessageKindHostLoopWake {
-				hasAuto = true
-			}
+		if msg.Kind == wire.MessageKindHostLoopWake && !previous[msg.ID] {
+			hasWake = true
 		}
-		return assistants >= 2 && hasAuto
-	})
+	}
+	if assistants < 2 || !hasWake {
+		t.Fatalf("turn %s: assistants=%d wake message=%v", turn.TurnID, assistants, hasWake)
+	}
 
 	req = AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/messages", nil)
 	w = httptest.NewRecorder()

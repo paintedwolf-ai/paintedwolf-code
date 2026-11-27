@@ -91,6 +91,7 @@ type Reports struct {
 }
 
 type RunControl struct {
+	eventPublisher *events.Publisher
 	Catalog        workflowcatalog.Resolver
 	ManagedSecrets *secretcap.Service
 	Projects       project.Registry
@@ -128,7 +129,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Ha
 	h.BlueprintRoutes = &BlueprintRoutes{Runs: deps.Runs, Blueprints: deps.Blueprints, Catalog: deps.Catalog, Projects: deps.Projects, SessionAdmin: deps.SessionAdmin.Lifecycle, Workflows: deps.Workflows, responses: responses}
 	h.Composition = &Composition{Composer: deps.Composer, EventPublisher: deps.EventPublisher, Persister: deps.Persister, SessionView: deps.SessionView, Sessions: deps.Sessions, SessionStore: deps.Store.Sessions, responses: responses}
 	h.Reports = &Reports{Runs: deps.Runs, Projects: deps.Projects, Scans: deps.Scans, SessionStore: deps.Store.Sessions, TranscriptStore: deps.Store.Transcript, VisualStore: deps.VisualStore, Workers: deps.Workers, Workflows: deps.Workflows, responses: responses}
-	h.RunControl = &RunControl{Runs: deps.Runs, Catalog: deps.Catalog, ManagedSecrets: deps.ManagedSecrets, Projects: deps.Projects, SessionView: deps.SessionView, Sessions: deps.Sessions, SessionStore: deps.Store.Sessions, Workflows: deps.Workflows, responses: responses}
+	h.RunControl = &RunControl{eventPublisher: deps.EventPublisher, Runs: deps.Runs, Catalog: deps.Catalog, ManagedSecrets: deps.ManagedSecrets, Projects: deps.Projects, SessionView: deps.SessionView, Sessions: deps.Sessions, SessionStore: deps.Store.Sessions, Workflows: deps.Workflows, responses: responses}
 	h.Topology = &Topology{Requests: deps.Workflows.Requests, Runs: deps.Runs, Orchestrator: deps.Orchestrator, SessionStore: deps.Store.Sessions, background: background}
 
 	h.BlueprintRoutes.Topology = h.Topology

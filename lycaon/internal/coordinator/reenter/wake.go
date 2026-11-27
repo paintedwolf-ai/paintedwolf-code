@@ -3,6 +3,7 @@ package reenter
 import (
 	"context"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
@@ -10,7 +11,7 @@ import (
 
 // CoordinatorNudger schedules coordinator loop wakes after manifest same-phase re-enter.
 type CoordinatorNudger interface {
-	Nudge(ctx context.Context, sessionID string, wake, inform anchor.ID, legID string, env anchor.Envelope)
+	Nudge(ctx context.Context, sessionID string, wake, inform anchor.ID, legID string, env anchor.Envelope) *actionoutcome.Ticket
 }
 
 // NudgeOnManifestReenter schedules a leg-finished loop wake for same-phase manifest re-enter
@@ -35,5 +36,5 @@ func NudgeOnManifestReenter(
 	if hasDef && anchor.SameInform(def.OnReenter.InjectKick, anchor.WorkerTaskFinished) {
 		return
 	}
-	n.Nudge(ctx, sessionID, anchor.LegFinished, anchor.LegFinished, legID, anchor.Envelope{})
+	_ = n.Nudge(ctx, sessionID, anchor.LegFinished, anchor.LegFinished, legID, anchor.Envelope{})
 }

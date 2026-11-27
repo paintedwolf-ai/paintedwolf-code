@@ -448,3 +448,25 @@ func TestPublishLLMPreservesCallID(t *testing.T) {
 		t.Fatal("no llm event delivered")
 	}
 }
+
+func TestContinuationAndNoticeReachTheSessionSubscriber(t *testing.T) {
+	pub, _, ch, unsub := testPublisher(t)
+	defer unsub()
+	const project = "84a676a3-ccd2-5967-97ed-fd384c0b9003"
+	a := api.ActionContinuation{ContinuationID: "approval", SessionID: "chat", State: api.ContinuationStatePending}
+	pub.PublishContinuation(t.Context(), project, a)
+	got := expectTopic(t, ch, api.EventTopicContinuation)
+	var action api.ActionContinuation
+	testutil.FailErr(t, "decode action", json.Unmarshal(got.Data, &action))
+	if action.ContinuationID != a.ContinuationID || action.SessionID != a.SessionID {
+		t.Fatalf("action = %+v", action)
+	}
+	n := api.ContinuationNotice{ContinuationID: a.ContinuationID, SessionID: a.SessionID, Revision: 2}
+	pub.PublishContinuationNotice(t.Context(), project, n)
+	got = expectTopic(t, ch, api.EventTopicContinuationNotice)
+	var notice api.ContinuationNotice
+	testutil.FailErr(t, "decode notice", json.Unmarshal(got.Data, &notice))
+	if notice != n {
+		t.Fatalf("notice = %+v", notice)
+	}
+}

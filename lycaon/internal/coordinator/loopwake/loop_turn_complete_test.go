@@ -2,12 +2,13 @@ package loopwake
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
 func TestOnTurnCompleteHostProseOnlyDoesNotAutoPark(t *testing.T) {
@@ -351,7 +352,7 @@ func TestUserTurnSettlementClaimOrdersLaterWakeAfterBoundary(t *testing.T) {
 			return true, nil
 		},
 		WorkflowSource:     workflowFixturePorts(activeLoopWorkflow{}),
-		HostWakeActionable: func(context.Context, HostWakeActionableInput) bool { return true },
+		HostWakeActionable: func(context.Context, HostWakeActionableInput) api.WakeReason { return "" },
 		RunPrompt: func(context.Context, string) (*promptresult.Result, error) {
 			prompts++
 			return &promptresult.Result{}, nil

@@ -2,8 +2,6 @@ package promptloop
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolreach"
-	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
@@ -25,7 +23,9 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/workerprogress"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -50,7 +50,7 @@ type ContextDeps struct {
 }
 
 type ContextSurfaceDeps struct {
-	ObservePrompt func(sessionID string) func(inject.CoordinatorTurnFrame)
+	ObservePrompt func(ctx context.Context, sessionID string) func(inject.CoordinatorTurnFrame)
 	// CommitTurnContext advances delivered findings and messages after a successful response.
 	CommitTurnContext  func(context.Context, string, string) error
 	PrepareAgentPolicy func(context.Context, *api.Session, []api.Message) (tools.AgentPolicyBinding, error)

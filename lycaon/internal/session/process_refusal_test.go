@@ -72,7 +72,7 @@ func testHandleCommandRefusalWakesWithDigest(t *testing.T, offered []string) {
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 	reports := make(chan anchor.Envelope, 1)
 	deps := mgr.Coordinator.Loop.Build()
-	deps.HostWakeActionable = func(context.Context, loopwake.HostWakeActionableInput) bool { return true }
+	deps.HostWakeActionable = func(context.Context, loopwake.HostWakeActionableInput) api.WakeReason { return "" }
 	deps.QueueInform = func(_ context.Context, _ string, inform anchor.ID, env anchor.Envelope) {
 		if inform == anchor.ProcessRefused {
 			reports <- env

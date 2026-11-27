@@ -117,6 +117,166 @@ paths:
           description: Zip archive
           content:
             application/zip:
+              x-archive-entries:
+                action-outcomes.json:
+                  description: Retained host outcomes keyed by session ID.
+                  type: object
+                  additionalProperties:
+                    type: object
+                    required:
+                      - host_instance
+                      - wakes
+                      - turns
+                      - continuations
+                    properties:
+                      host_instance:
+                        type: string
+                        format: uuid
+                      wakes:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - sequence
+                            - session_id
+                            - anchor
+                            - state
+                            - steps
+                          properties:
+                            sequence:
+                              type: integer
+                              minimum: 1
+                            session_id:
+                              type: string
+                              format: uuid
+                            anchor:
+                              type: string
+                            state:
+                              $ref: '#/components/schemas/WakeState'
+                            reason:
+                              $ref: '#/components/schemas/WakeReason'
+                            continuation_id:
+                              type: string
+                              format: uuid
+                            turn_id:
+                              type: string
+                              format: uuid
+                            lease_id:
+                              type: string
+                              format: uuid
+                            steps:
+                              type: array
+                              items:
+                                type: object
+                                required:
+                                  - state
+                                properties:
+                                  state:
+                                    $ref: '#/components/schemas/WakeState'
+                                  reason:
+                                    $ref: '#/components/schemas/WakeReason'
+                      defects:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - sequence
+                            - problem
+                            - attempt
+                          properties:
+                            sequence:
+                              type: integer
+                              minimum: 1
+                            problem:
+                              type: string
+                            attempt:
+                              type: object
+                              required:
+                                - state
+                              properties:
+                                state:
+                                  $ref: '#/components/schemas/WakeState'
+                                reason:
+                                  $ref: '#/components/schemas/WakeReason'
+                      turns:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - turn_id
+                            - session_id
+                            - admitted_at
+                          properties:
+                            turn_id:
+                              type: string
+                              format: uuid
+                            session_id:
+                              type: string
+                              format: uuid
+                            admitted_at:
+                              type: string
+                              format: date-time
+                            dispatched_at:
+                              type: string
+                              format: date-time
+                            settled_at:
+                              type: string
+                              format: date-time
+                            outcome:
+                              $ref: '#/components/schemas/TurnOutcomeKind'
+                            lease_id:
+                              type: string
+                              format: uuid
+                            refusal:
+                              $ref: '#/components/schemas/WakeReason'
+                            failure_code:
+                              $ref: '#/components/schemas/NoticeCode'
+                            detail:
+                              type: string
+                            closeout_blocked:
+                              type: object
+                              properties:
+                                code:
+                                  type: string
+                                phase:
+                                  type: string
+                                open_gate_leaves:
+                                  type: array
+                                  items:
+                                    type: string
+                                notice:
+                                  type: string
+                            output_truncated:
+                              type: object
+                              properties:
+                                provider_id:
+                                  type: string
+                                model:
+                                  type: string
+                                finish_reason:
+                                  type: string
+                                max_tokens:
+                                  type: integer
+                                configured_max_tokens:
+                                  type: integer
+                                provider_max_tokens:
+                                  type: integer
+                                low_output_ceiling:
+                                  type: boolean
+                                tool_call_truncated:
+                                  type: boolean
+                                tool_name:
+                                  type: string
+                                tool_args_bytes:
+                                  type: integer
+                                notice:
+                                  type: string
+                            canceled_by:
+                              $ref: '#/components/schemas/TurnCancellationSource'
+                      continuations:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ActionContinuation'
               schema:
                 type: string
                 format: binary
@@ -16010,6 +16170,162 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/NoticeAction'
+    WakeState:
+      type: string
+      enum:
+        - received
+        - queued
+        - deferred
+        - delivered
+        - consumed
+        - routed_to_wait
+        - held
+        - skipped
+        - denied
+        - dropped
+        - superseded
+    WakeReason:
+      type: string
+      enum:
+        - worker_cycle
+        - prompt_active
+        - turn_blocked
+        - human_approval_awaiting
+        - host_obligation_held
+        - pending_user_input
+        - active_hold
+        - workflow_terminal
+        - non_actionable
+        - batch_closed
+        - turn_rearm
+        - no_request
+        - loop_disabled
+        - wrong_session_role
+        - escalated
+        - policy_denied
+        - stale_batch
+        - precedence_busy
+        - job_terminal
+        - budget_exhausted
+        - session_closed
+        - session_missing
+        - no_active_run
+        - lookup_failed
+        - prompt_interrupted
+        - user_stopped
+        - rewound
+        - turn_settled
+        - defect
+    TurnOutcomeKind:
+      type: string
+      enum:
+        - completed
+        - failed
+        - canceled
+        - refused
+    TurnCancellationSource:
+      type: string
+      enum:
+        - user
+        - host
+        - shutdown
+    ContinuationAction:
+      type: string
+      enum:
+        - plan_approval
+        - workflow_start
+        - workflow_resume
+        - feedback
+        - ask_answer
+    ContinuationState:
+      type: string
+      enum:
+        - pending
+        - continued
+        - held
+        - finished
+        - not_continued
+        - failed
+    ContinuationReason:
+      type: string
+      enum:
+        - human_approval_awaiting
+        - host_obligation_held
+        - pending_user_input
+        - active_hold
+        - workflow_paused
+        - workflow_canceled
+        - workflow_completed
+        - no_open_request
+        - turn_budget_reached
+        - run_inactive
+        - session_closed
+        - admission_denied
+        - user_interrupted
+        - action_interrupted
+    HostContinuationFailure:
+      type: string
+      enum:
+        - host_lookup_failed
+        - host_invariant_failed
+    ContinuationNotice:
+      x-go-generate: true
+      type: object
+      required:
+        - session_id
+        - revision
+      additionalProperties: false
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          format: int64
+        continuation_id:
+          type: string
+          format: uuid
+        host_error:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SessionHostError'
+    ActionContinuation:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - continuation_id
+        - session_id
+        - action
+        - state
+        - opened_at
+      properties:
+        continuation_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        action:
+          $ref: '#/components/schemas/ContinuationAction'
+        state:
+          $ref: '#/components/schemas/ContinuationState'
+        reason:
+          $ref: '#/components/schemas/ContinuationReason'
+        turn_id:
+          type: string
+          format: uuid
+        failure_code:
+          x-go-type: string
+          anyOf:
+            - $ref: '#/components/schemas/HostContinuationFailure'
+            - $ref: '#/components/schemas/NoticeCode'
+        opened_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+          x-go-pointer: true
     EventTopic:
       type: string
       enum:
@@ -16020,6 +16336,8 @@ components:
         - board
         - cost
         - llm
+        - continuation_notice
+        - continuation
         - activity
         - oar
         - scan
@@ -16059,6 +16377,8 @@ components:
         - $ref: '#/components/schemas/EventEnvelopeBoard'
         - $ref: '#/components/schemas/EventEnvelopeCost'
         - $ref: '#/components/schemas/EventEnvelopeLlm'
+        - $ref: '#/components/schemas/EventEnvelopeContinuationNotice'
+        - $ref: '#/components/schemas/EventEnvelopeContinuation'
         - $ref: '#/components/schemas/EventEnvelopeActivity'
         - $ref: '#/components/schemas/EventEnvelopeOar'
         - $ref: '#/components/schemas/EventEnvelopeScan'
@@ -16098,6 +16418,8 @@ components:
           board: '#/components/schemas/EventEnvelopeBoard'
           cost: '#/components/schemas/EventEnvelopeCost'
           llm: '#/components/schemas/EventEnvelopeLlm'
+          continuation_notice: '#/components/schemas/EventEnvelopeContinuationNotice'
+          continuation: '#/components/schemas/EventEnvelopeContinuation'
           activity: '#/components/schemas/EventEnvelopeActivity'
           oar: '#/components/schemas/EventEnvelopeOar'
           scan: '#/components/schemas/EventEnvelopeScan'
@@ -17621,6 +17943,10 @@ components:
         - updated_at
       additionalProperties: false
       properties:
+        continuation_id:
+          type: string
+          format: uuid
+          description: Outcome of the continuing action that produced this response.
         id:
           type: string
           format: uuid
@@ -21124,6 +21450,9 @@ components:
         - text
       additionalProperties: false
       properties:
+        recovery_continuation_id:
+          type: string
+          format: uuid
         mode:
           x-go-pointer: true
           $ref: '#/components/schemas/SessionMode'
@@ -21583,6 +21912,13 @@ components:
           description: Replay boundary captured before the snapshot was read
         session:
           $ref: '#/components/schemas/Session'
+        continuation_notice:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ContinuationNotice'
+        continuations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActionContinuation'
         activities:
           type: array
           description: Current host work leases for this session. Omitted when no leases remain.
@@ -27603,6 +27939,7 @@ components:
         - paused_at
         - completed_at
         - ui
+        - continuation_id
       type: object
       required:
         - id
@@ -27616,6 +27953,10 @@ components:
         - updated_at
       additionalProperties: false
       properties:
+        continuation_id:
+          type: string
+          format: uuid
+          description: Outcome of the continuing action that produced this response.
         id:
           type: string
           format: uuid
@@ -28038,6 +28379,7 @@ components:
         - security_disabled
         - grounding_escalated
         - session_spend_ceiling_reached
+        - coordinator_not_continued
         - prompt_failed
         - turn_closeout_tool_call
         - host_fault
@@ -28566,6 +28908,37 @@ components:
           minimum: 1
           description: |
             Moves a pinned session to this 1-based position in its project's pinned order; a position past the end moves it last. The project's pinned chats are renumbered 1…n.
+    NoticeCode:
+      type: string
+      enum:
+        - attachment_scanned_no_text
+        - coordinator_not_continued
+        - grounding_escalated
+        - host_fault
+        - model_refused
+        - project_mutation_in_progress
+        - prompt_failed
+        - provider_context_too_small
+        - provider_empty_completion
+        - provider_not_configured
+        - provider_overloaded
+        - provider_rate_limited
+        - provider_request_rejected
+        - provider_response_interrupted
+        - provider_server_error
+        - provider_silent
+        - provider_tool_calls_in_prose
+        - provider_tool_calls_unsupported
+        - provider_unreachable
+        - session_preparation_failed
+        - session_spend_ceiling_reached
+        - thinking_override_unavailable
+        - turn_closeout_tool_call
+        - user_image_not_visible
+        - workflow_active
+        - workflow_not_runnable
+        - workflow_version_unavailable
+        - worktree_stale
     ActivityKind:
       type: string
       description: Closed host work phase; presentation copy is client-supplied.
@@ -44055,36 +44428,6 @@ components:
         - updated
         - deleted
       description: Durable session lifecycle transition represented by an event.
-    NoticeCode:
-      type: string
-      enum:
-        - attachment_scanned_no_text
-        - grounding_escalated
-        - host_fault
-        - model_refused
-        - project_mutation_in_progress
-        - prompt_failed
-        - provider_context_too_small
-        - provider_empty_completion
-        - provider_not_configured
-        - provider_overloaded
-        - provider_rate_limited
-        - provider_request_rejected
-        - provider_response_interrupted
-        - provider_server_error
-        - provider_silent
-        - provider_tool_calls_in_prose
-        - provider_tool_calls_unsupported
-        - provider_unreachable
-        - session_preparation_failed
-        - session_spend_ceiling_reached
-        - thinking_override_unavailable
-        - turn_closeout_tool_call
-        - user_image_not_visible
-        - workflow_active
-        - workflow_not_runnable
-        - workflow_version_unavailable
-        - worktree_stale
     SessionIdleDisposition:
       type: string
       description: |
@@ -44178,6 +44521,30 @@ components:
               const: llm
             data:
               $ref: '#/components/schemas/LLMCallEvent'
+    EventEnvelopeContinuationNotice:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelopeBase'
+        - type: object
+          required:
+            - topic
+            - data
+          properties:
+            topic:
+              const: continuation_notice
+            data:
+              $ref: '#/components/schemas/ContinuationNotice'
+    EventEnvelopeContinuation:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelopeBase'
+        - type: object
+          required:
+            - topic
+            - data
+          properties:
+            topic:
+              const: continuation
+            data:
+              $ref: '#/components/schemas/ActionContinuation'
     EventEnvelopeActivity:
       allOf:
         - $ref: '#/components/schemas/EventEnvelopeBase'

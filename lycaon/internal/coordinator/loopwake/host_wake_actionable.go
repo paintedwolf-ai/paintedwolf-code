@@ -98,24 +98,24 @@ type HostWakeActionableDeps struct {
 }
 
 // BuildHostWakeActionable returns a LoopDeps.HostWakeActionable closure.
-func BuildHostWakeActionable(deps HostWakeActionableDeps) func(ctx context.Context, in HostWakeActionableInput) bool {
-	return func(ctx context.Context, in HostWakeActionableInput) bool {
+func BuildHostWakeActionable(deps HostWakeActionableDeps) func(ctx context.Context, in HostWakeActionableInput) api.WakeReason {
+	return func(ctx context.Context, in HostWakeActionableInput) api.WakeReason {
 		var msgs []api.Message
 		if deps.GetMessages != nil {
 			var err error
 			if msgs, err = deps.GetMessages(ctx, in.SessionID); err != nil {
-				return true
+				return api.WakeReasonLookupFailed
 			}
 		}
 		// A turn without a request takes no load decision and has nothing to answer.
 		if deps.HasRequest != nil && !deps.HasRequest(ctx, in.SessionID, msgs) {
-			return false
+			return api.WakeReasonNoRequest
 		}
 		if deps.WorkflowObligationsOpen != nil && deps.WorkflowObligationsOpen(ctx, in.SessionID) {
-			return true
+			return ""
 		}
 		if deps.GetMessages == nil {
-			return true
+			return ""
 		}
 		state := surface.ImplementSessionState{}
 		if deps.GetSession != nil && deps.ImplementSessionState != nil {
@@ -125,22 +125,22 @@ func BuildHostWakeActionable(deps HostWakeActionableDeps) func(ctx context.Conte
 			}
 		}
 		if !HostWakeActionableFromHistory(msgs, state) {
-			return false
+			return api.WakeReasonNonActionable
 		}
 		if deps.ActiveRun == nil {
-			return true
+			return ""
 		}
 		run, err := deps.ActiveRun(ctx, in.SessionID)
 		if err != nil {
-			return true
+			return api.WakeReasonLookupFailed
 		}
 		if run != nil && run.Status == api.WorkflowRunStatusRunning {
-			return true
+			return ""
 		}
 		// Without a running workflow, only pending promotion or a worker decision is actionable.
 		if len(state.PendingOverlayIDs) > 0 || historyHasNeedsDecision(msgs) {
-			return true
+			return ""
 		}
-		return false
+		return api.WakeReasonNonActionable
 	}
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/workscope"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type WaitsDeps struct {
@@ -44,9 +45,9 @@ func (l *Waits) InterruptSleep(ctx context.Context, sessionID string) {
 	if store := l.Subscriptions.durableWaitStore(); store != nil {
 		_ = store.InterruptSession(ctx, sessionID, "interrupted")
 	}
-	l.Deliveries.ForgetSession(strings.TrimSpace(sessionID))
+	l.Deliveries.closeWinner(strings.TrimSpace(sessionID), api.WakeReasonPromptInterrupted)
 	l.breakSleep(ctx, sessionID, "user_prompt", false)
-	l.Nudges.ClearPending(sessionID)
+	l.Nudges.ClearPending(sessionID, api.WakeReasonPromptInterrupted)
 }
 func (l *Waits) EnterSleep(ctx context.Context, sessionID string, until time.Time, reason string, triggers []WaitTrigger, processHandles []string, mover SleepMover) {
 	l.enterSleep(ctx, sessionID, sleepArm{until: until, reason: reason, triggers: triggers, processHandles: processHandles, mover: mover})

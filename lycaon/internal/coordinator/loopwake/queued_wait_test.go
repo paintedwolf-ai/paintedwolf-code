@@ -2,6 +2,10 @@ package loopwake
 
 import (
 	"context"
+	"sync/atomic"
+	"testing"
+	"time"
+
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -10,9 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"sync/atomic"
-	"testing"
-	"time"
 )
 
 type queuedWaitFixture struct {
@@ -31,7 +32,7 @@ func newQueuedWaitFixture(t *testing.T) *queuedWaitFixture {
 	f.loop.Subscriptions.SetWaitStore(f.store)
 	f.deps.GetSession = func(context.Context, string) (*api.Session, error) { return &api.Session{ID: "session"}, nil }
 	f.deps.WorkflowSource = workflowFixturePorts(StubLoopWF{run: &api.WorkflowRun{ID: "run", Revision: 5, CurrentPhase: "work", Status: api.WorkflowRunStatusRunning}})
-	f.deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return true }
+	f.deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return "" }
 	f.deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		f.prompts.Add(1)
 		return &promptresult.Result{}, nil
@@ -66,7 +67,7 @@ func (f *queuedWaitFixture) drain(t *testing.T, finish func()) {
 func TestQueuedStartupPhaseAlreadyObservedPreservesWait(t *testing.T) {
 	f := newQueuedWaitFixture(t)
 	finish := f.loop.Admission.BeginPromptExecution(t.Context(), "session")
-	observe := f.loop.Observations.ObservePrompt("session")
+	observe := f.loop.Observations.ObservePrompt(t.Context(), "session")
 	// Startup advances during context assembly, after its sequence boundary.
 	f.loop.Nudges.Nudge(t.Context(), "session", anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 	observe(inject.CoordinatorTurnFrame{WorkflowRevision: 5, RunContext: api.CoordinatorRunContext{RunID: "run"}})
@@ -87,7 +88,7 @@ func TestQueuedFreshPhaseInterruptsWaitBeforePrompt(t *testing.T) {
 		t.Run(map[bool]string{false: "failed model request", true: "older observed revision"}[delivered], func(t *testing.T) {
 			f := newQueuedWaitFixture(t)
 			finish := f.loop.Admission.BeginPromptExecution(t.Context(), "session")
-			observe := f.loop.Observations.ObservePrompt("session")
+			observe := f.loop.Observations.ObservePrompt(t.Context(), "session")
 			f.loop.Nudges.Nudge(t.Context(), "session", anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 			if delivered {
 				observe(inject.CoordinatorTurnFrame{WorkflowRevision: 4, RunContext: api.CoordinatorRunContext{RunID: "run"}})
@@ -117,9 +118,9 @@ func TestQueuedProcessEventsRetainHandlesAndSettleOnlyMatchingWait(t *testing.T)
 		f.loop.Nudges.Nudge(t.Context(), "session", anchor.ProcessFinished, "", handle, anchor.Envelope{})
 	}
 	// Observed completions still require wait-result delivery.
-	f.loop.Observations.ObservePrompt("session")(inject.CoordinatorTurnFrame{})
+	f.loop.Observations.ObservePrompt(t.Context(), "session")(inject.CoordinatorTurnFrame{})
 	f.arm(t)
-	f.deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
+	f.deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return api.WakeReasonNonActionable }
 	f.deps.WorkflowSource = workflowFixturePorts(closedBatchLoopWF(3))
 	f.deps.WorkerCycleIdle = func(context.Context, *api.Session, string) (bool, error) { return false, nil }
 	var resumes atomic.Int32
@@ -152,7 +153,7 @@ func TestQueuedWakeRetainsDecisionAndBatchIdentity(t *testing.T) {
 
 func TestWorkflowObservationDoesNotConsumeAnotherRun(t *testing.T) {
 	f := newQueuedWaitFixture(t)
-	observe := f.loop.Observations.ObservePrompt("session")
+	observe := f.loop.Observations.ObservePrompt(t.Context(), "session")
 	pending := pendingLoopWake{wake: anchor.PhaseAdvanced, seq: f.loop.Nudges.nudgeSeq.Add(1), runID: "run", revision: 5}
 	observe(inject.CoordinatorTurnFrame{WorkflowRevision: 100, RunContext: api.CoordinatorRunContext{RunID: "another-run"}})
 	if f.loop.Observations.wakeConsumed(t.Context(), "session", pending) {
@@ -163,7 +164,7 @@ func TestWorkflowObservationDoesNotConsumeAnotherRun(t *testing.T) {
 func TestWorkflowObservationRequiresTheEventRevisionEvenWhenQueuedBeforeCapture(t *testing.T) {
 	f := newQueuedWaitFixture(t)
 	pending := pendingLoopWake{wake: anchor.PhaseAdvanced, seq: f.loop.Nudges.nudgeSeq.Add(1), runID: "run", revision: 5}
-	f.loop.Observations.ObservePrompt("session")(inject.CoordinatorTurnFrame{WorkflowRevision: 4, RunContext: api.CoordinatorRunContext{RunID: "run"}})
+	f.loop.Observations.ObservePrompt(t.Context(), "session")(inject.CoordinatorTurnFrame{WorkflowRevision: 4, RunContext: api.CoordinatorRunContext{RunID: "run"}})
 	if f.loop.Observations.wakeConsumed(t.Context(), "session", pending) {
 		t.Fatal("sequence order substituted for the required workflow revision")
 	}
@@ -174,7 +175,7 @@ func TestObservedWakeStillDeliversUnconsumedGuidance(t *testing.T) {
 	f.deps.HasQueuedKick = func(string, string) bool { return true }
 	f.loop.SetDeps(f.deps)
 	pending := pendingLoopWake{wake: anchor.PhaseAdvanced, inform: anchor.PhaseAdvanced, informHandled: true, seq: f.loop.Nudges.nudgeSeq.Add(1), runID: "run", revision: 5}
-	f.loop.Observations.ObservePrompt("session")(inject.CoordinatorTurnFrame{WorkflowRevision: 5, RunContext: api.CoordinatorRunContext{RunID: "run"}})
+	f.loop.Observations.ObservePrompt(t.Context(), "session")(inject.CoordinatorTurnFrame{WorkflowRevision: 5, RunContext: api.CoordinatorRunContext{RunID: "run"}})
 	if f.loop.Observations.wakeConsumed(t.Context(), "session", pending) {
 		t.Fatal("queued guidance was discarded with observed board facts")
 	}
@@ -213,7 +214,7 @@ func TestDeferredGuidanceIsQueuedBeforeObservationCanRetireItsWake(t *testing.T)
 	}
 	f.loop.SetDeps(f.deps)
 	f.loop.Nudges.deferNudge(t.Context(), "session", pendingLoopWake{wake: anchor.PhaseAdvanced, inform: anchor.PhaseAdvanced})
-	f.loop.Observations.ObservePrompt("session")(inject.CoordinatorTurnFrame{})
+	f.loop.Observations.ObservePrompt(t.Context(), "session")(inject.CoordinatorTurnFrame{})
 	f.loop.Nudges.flushDeferredNudges(t.Context(), "session")
 	f.loop.Turns.WaitForAsyncTurns(t.Context())
 	if informs.Load() != 1 || f.prompts.Load() != 1 {
@@ -245,7 +246,7 @@ func TestMatchingWaitResultBypassesStaleBatchFilter(t *testing.T) {
 	f := newQueuedWaitFixture(t)
 	f.arm(t)
 	f.deps.WorkflowSource = workflowFixturePorts(closedBatchLoopWF(3))
-	f.deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
+	f.deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return api.WakeReasonNonActionable }
 	var resumes atomic.Int32
 	f.deps.RunWaitResume = func(_ context.Context, _ string, delivery WaitDelivery) (*promptresult.Result, error) {
 		if delivery.LeaseID != f.lease.ID || delivery.Condition.Kind != "process_done" {

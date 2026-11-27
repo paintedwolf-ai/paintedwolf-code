@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/continuation.json",
+  "$ref": "../../openapi/components/schemas/session/continuations.yaml#/components/schemas/ActionContinuation",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ActionContinuation"
+}

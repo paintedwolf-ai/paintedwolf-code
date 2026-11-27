@@ -17,6 +17,7 @@ type HostSignal struct {
 
 // Input is one user-facing or host-authored turn.
 type Input struct {
+	RecoveryContinuationID string `json:"recovery_continuation_id,omitempty"`
 	// ModeIntent applies only when the user submission is admitted.
 	ModeIntent    *api.SessionMode   `json:"-"`
 	SourceContext *api.SourceContext `json:"source_context,omitempty"`
@@ -91,7 +92,7 @@ func (in Input) RidesQueue() bool {
 		strings.TrimSpace(in.ToolProfile) == "" &&
 		strings.TrimSpace(in.WritePinRootID) == "" &&
 		len(in.WritePinGlobs) == 0 &&
-		in.HostSignal == nil &&
+		in.RecoveryContinuationID == "" && in.HostSignal == nil &&
 		!in.ProseFinish && in.Recovery == nil
 }
 

@@ -18,6 +18,10 @@ values:
   - id: llm
     go: LLM
     payload: events.yaml#/components/schemas/LLMCallEvent
+  - id: continuation_notice
+    payload: session/continuations.yaml#/components/schemas/ContinuationNotice
+  - id: continuation
+    payload: session/continuations.yaml#/components/schemas/ActionContinuation
   - id: activity
     payload: events.yaml#/components/schemas/ActivityEvent
     comment: >-

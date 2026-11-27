@@ -144,7 +144,7 @@ export function createNoticeStore() {
     clearSessionHostErrors(sessionId: string): void {
       dropWhere(
         (n) =>
-          n.source === "host_error" &&
+          n.source === "host_error" && n.code !== "coordinator_not_continued" &&
           n.scope.kind === "session" &&
           n.scope.sessionId === sessionId,
       );

@@ -2,11 +2,13 @@ package loopwake
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -61,116 +63,120 @@ func (l *Admission) PromptExecutionActive(sessionID string) bool {
 	return ok
 }
 
-func (l *Admission) ResetBudget(runID string) {
-	if l == nil || strings.TrimSpace(runID) == "" {
-		return
-	}
-	l.budget.Range(func(key, _ any) bool {
-		if budget, ok := key.(loopBudgetKey); ok && budget.runID == runID {
-			l.budget.Delete(key)
-		}
-		return true
-	})
-}
 func (l *Admission) ShouldLoopWake(ctx context.Context, sessionID string, wake anchor.ID) (bool, string, error) {
-	if l.Turns.hostTurnBlocked(ctx, sessionID) {
-		return false, "execution_failed", nil
+	_, reason, err := l.decision(ctx, sessionID)
+	switch reason {
+	case api.WakeReasonTurnBlocked:
+		return false, "execution_failed", err
+	case api.WakeReasonPromptActive:
+		return false, "session_busy", err
+	case api.WakeReasonLoopDisabled:
+		return false, "feature_disabled", err
+	default:
+		return reason == "", string(reason), err
 	}
-	allow, busy := l.evaluate(ctx, sessionID)
-	if busy {
-		return false, "session_busy", nil
-	}
-	if !allow {
-		deps := l.loopDeps()
-		sess, err := deps.GetSession(ctx, sessionID)
-		if err != nil {
-			return false, "", err
-		}
-		if !deps.Limits(ctx, sess).CoordinatorLoopEnabled() {
-			return false, "feature_disabled", nil
-		}
-		run, vars, ok := l.Facts.activeRunAndVars(ctx, sessionID)
-		if !ok || run == nil {
-			return false, "no_active_run", nil
-		}
-		if l.Facts.sessionHumanApprovalAwaiting(ctx, sessionID) {
-			return false, "human_approval_awaiting", nil
-		}
-		if l.Facts.sessionHostObligationHeld(ctx, sessionID) {
-			return false, "host_obligation_held", nil
-		}
-		if scaffoldvars.HasPendingUserInput(vars) {
-			return false, "pending_user_input", nil
-		}
-		return false, "denied", nil
-	}
-	return true, "", nil
 }
-func (l *Admission) evaluate(ctx context.Context, sessionID string) (allow bool, busy bool) {
+func (l *Admission) decision(ctx context.Context, sessionID string) (api.WakeState, api.WakeReason, error) {
 	if l.Turns.hostTurnBlocked(ctx, sessionID) {
-		return false, false
+		return api.WakeStateDeferred, api.WakeReasonTurnBlocked, nil
 	}
 	deps := l.loopDeps()
 	sess, err := deps.GetSession(ctx, sessionID)
-	if err != nil || sess == nil {
-		return false, false
+	if errors.Is(err, store.ErrSessionNotFound) {
+		return api.WakeStateDropped, api.WakeReasonSessionMissing, nil
+	}
+	if err != nil {
+		return api.WakeStateDropped, api.WakeReasonLookupFailed, err
+	}
+	if sess == nil {
+		return api.WakeStateDropped, api.WakeReasonSessionMissing, nil
 	}
 	if !deps.Limits(ctx, sess).CoordinatorLoopEnabled() {
-		return false, false
+		return api.WakeStateDenied, api.WakeReasonLoopDisabled, nil
 	}
 	if deps.IsCoordinatorSession != nil && !deps.IsCoordinatorSession(ctx, sess) {
-		return false, false
+		return api.WakeStateDenied, api.WakeReasonWrongSessionRole, nil
 	}
 	if deps.IsEscalated != nil && deps.IsEscalated(sessionID) {
-		return false, false
+		return api.WakeStateDenied, api.WakeReasonEscalated, nil
 	}
 	if l.PromptExecutionActive(sessionID) {
-		return true, true
+		return api.WakeStateDeferred, api.WakeReasonPromptActive, nil
 	}
-	run, vars, ok := l.Facts.activeRunAndVars(ctx, sessionID)
-	if !ok || run == nil {
-		return false, false
+	source := l.Facts.loopDeps().WorkflowSource
+	if source == nil {
+		return api.WakeStateDropped, api.WakeReasonNoActiveRun, nil
 	}
-	if run.Status != api.WorkflowRunStatusRunning {
-		return false, false
+	run, err := source.Runs.ActiveBySession(ctx, sessionID)
+	if err != nil {
+		return api.WakeStateDropped, api.WakeReasonLookupFailed, err
 	}
-	if l.Facts.sessionHumanApprovalAwaiting(ctx, sessionID) {
-		return false, false
+	if run == nil || run.Status != api.WorkflowRunStatusRunning {
+		return api.WakeStateDropped, api.WakeReasonNoActiveRun, nil
 	}
-	if l.Facts.sessionHostObligationHeld(ctx, sessionID) {
-		return false, false
+	awaiting, err := source.Approvals.HumanApprovalAwaiting(ctx, sessionID)
+	if err != nil {
+		return api.WakeStateDropped, api.WakeReasonLookupFailed, err
+	}
+	if awaiting {
+		return api.WakeStateHeld, api.WakeReasonHumanApprovalAwaiting, nil
+	}
+	held, err := source.Obligations.HostObligationHeld(ctx, sessionID)
+	if err != nil {
+		return api.WakeStateDropped, api.WakeReasonLookupFailed, err
+	}
+	if held {
+		return api.WakeStateHeld, api.WakeReasonHostObligationHeld, nil
+	}
+	vars, err := source.Runs.GetScaffoldVars(ctx, run.ID)
+	if err != nil {
+		return api.WakeStateDropped, api.WakeReasonLookupFailed, err
 	}
 	if scaffoldvars.HasPendingUserInput(vars) {
-		return false, false
+		return api.WakeStateHeld, api.WakeReasonPendingUserInput, nil
 	}
-	return true, false
+	return "", "", nil
 }
-func (l *Admission) ConsumeBudget(ctx context.Context, sessionID, runID string, wake anchor.ID) bool {
-	if strings.TrimSpace(runID) == "" {
-		run, _, ok := l.Facts.activeRunAndVars(ctx, sessionID)
-		if !ok || run == nil {
-			return false
+func (l *Admission) ConsumeBudget(ctx context.Context, sessionID, runID string) api.WakeReason {
+	if runID == "" {
+		source := l.Facts.loopDeps().WorkflowSource
+		if source == nil {
+			return api.WakeReasonNoActiveRun
+		}
+		run, err := source.Runs.ActiveBySession(ctx, sessionID)
+		if err != nil {
+			return api.WakeReasonLookupFailed
+		}
+		if run == nil {
+			return api.WakeReasonNoActiveRun
 		}
 		runID = run.ID
 	}
 	deps := l.loopDeps()
 	sess, err := deps.GetSession(ctx, sessionID)
-	if err != nil || sess == nil {
-		return false
+	if errors.Is(err, store.ErrSessionNotFound) {
+		return api.WakeReasonSessionMissing
+	}
+	if err != nil {
+		return api.WakeReasonLookupFailed
+	}
+	if sess == nil {
+		return api.WakeReasonSessionMissing
 	}
 	max := deps.Limits(ctx, sess).EffectiveMaxCoordinatorLoopCycles()
-	var count int
 	key := loopBudgetKey{sessionID: sessionID, runID: runID}
-	if v, ok := l.budget.Load(key); ok {
-		count, _ = v.(int)
+	for {
+		value, _ := l.budget.LoadOrStore(key, 0)
+		count := value.(int)
+		if count >= max {
+			loopLogBudget(sessionID, runID, count, max, false)
+			return api.WakeReasonBudgetExhausted
+		}
+		if l.budget.CompareAndSwap(key, count, count+1) {
+			loopLogBudget(sessionID, runID, count+1, max, true)
+			return ""
+		}
 	}
-	if count >= max {
-		loopLogBudget(sessionID, runID, count, max, false)
-		return false
-	}
-	l.budget.Store(key, count+1)
-	loopLogBudget(sessionID, runID, count+1, max, true)
-	return true
 }
 
 type loopBudgetKey struct {

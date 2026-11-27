@@ -5,11 +5,15 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // pendingLoopWake preserves wake ordering across prompt execution.
 type pendingLoopWake struct {
+	queue           *sessionNudgeQueue
+	ticket          *actionoutcome.Ticket
 	wake            anchor.ID
 	seq             uint64
 	inform          anchor.ID
@@ -23,8 +27,10 @@ type pendingLoopWake struct {
 }
 
 type sessionNudgeQueue struct {
-	mu     sync.Mutex
-	nudges []pendingLoopWake
+	mu       sync.Mutex
+	nudges   []pendingLoopWake
+	deferred []pendingLoopWake
+	closed   api.WakeReason
 }
 
 func (q *sessionNudgeQueue) push(n pendingLoopWake) {
@@ -33,14 +39,34 @@ func (q *sessionNudgeQueue) push(n pendingLoopWake) {
 	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if q.closed != "" {
+		n.ticket.Record(api.WakeStateDropped, q.closed, "", "")
+		return
+	}
 	// Sequence identity deduplicates retries and preserves their position.
 	index := sort.Search(len(q.nudges), func(i int) bool { return q.nudges[i].seq >= n.seq })
 	if n.seq > 0 && index < len(q.nudges) && q.nudges[index].seq == n.seq {
+		n.ticket.QueuedRetry()
 		return
 	}
+	n.queue = q
+	n.ticket.Record(api.WakeStateQueued, "", "", "")
 	q.nudges = append(q.nudges, pendingLoopWake{})
 	copy(q.nudges[index+1:], q.nudges[index:])
 	q.nudges[index] = n
+}
+
+func (q *sessionNudgeQueue) close(reason api.WakeReason) {
+	q.mu.Lock()
+	q.closed = reason
+	q.nudges = append(q.nudges, q.deferred...)
+	items := q.nudges
+	q.nudges = nil
+	q.deferred = nil
+	q.mu.Unlock()
+	for _, n := range items {
+		n.ticket.Record(api.WakeStateDropped, reason, "", "")
+	}
 }
 
 func (q *sessionNudgeQueue) pop() (pendingLoopWake, bool) {
@@ -63,56 +89,56 @@ func (q *sessionNudgeQueue) peek() (pendingLoopWake, bool) {
 	return q.nudges[0], true
 }
 
-type deferredNudgeQueue struct {
-	mu    sync.Mutex
-	items []pendingLoopWake
-}
-
-func (q *deferredNudgeQueue) push(d pendingLoopWake) {
+func (q *sessionNudgeQueue) deferWorker(d pendingLoopWake) {
 	if d.wake == "" {
 		return
 	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.items = append(q.items, d)
+	if q.closed != "" {
+		d.ticket.Record(api.WakeStateDropped, q.closed, "", "")
+		return
+	}
+	d.queue = q
+	d.ticket.Record(api.WakeStateDeferred, api.WakeReasonWorkerCycle, "", "")
+	q.deferred = append(q.deferred, d)
 }
 
 // removeRunningWorkerWakesForJob drops a terminal job's deferred wakes about it running.
-func (q *deferredNudgeQueue) removeRunningWorkerWakesForJob(jobID string) bool {
+func (q *sessionNudgeQueue) removeRunningWorkerWakesForJob(jobID string) bool {
 	jobID = strings.TrimSpace(jobID)
 	if jobID == "" {
 		return false
 	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	kept := q.items[:0:0]
+	kept := q.deferred[:0:0]
 	found := false
-	for _, it := range q.items {
+	for _, it := range q.deferred {
 		if anchor.AboutRunningWorker(it.wake) && strings.TrimSpace(it.legID) == jobID {
+			it.ticket.Record(api.WakeStateDropped, api.WakeReasonJobTerminal, "", "")
 			found = true
 			continue
 		}
 		kept = append(kept, it)
 	}
-	q.items = kept
+	q.deferred = kept
 	return found
 }
 
-func (q *deferredNudgeQueue) drain() []pendingLoopWake {
+func (q *sessionNudgeQueue) drainDeferred() []pendingLoopWake {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if len(q.items) == 0 {
+	if len(q.deferred) == 0 {
 		return nil
 	}
-	out := append([]pendingLoopWake(nil), q.items...)
-	q.items = nil
+	out := append([]pendingLoopWake(nil), q.deferred...)
+	q.deferred = nil
 	return out
 }
 
-func (q *deferredNudgeQueue) nonEmpty() bool {
+func (q *sessionNudgeQueue) hasDeferred() bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	return len(q.items) > 0
+	return len(q.deferred) > 0
 }
-
-// A failed execution waits for explicit input; queued facts remain available.

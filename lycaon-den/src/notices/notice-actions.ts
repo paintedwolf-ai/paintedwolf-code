@@ -1,3 +1,4 @@
+import { currentContinuationId } from "./continuation-notices.ts";
 import { createSignal } from "solid-js";
 import { invalidateContributionFrame } from "../contributions/contribution-store.ts";
 import type { NoticeAction } from "../api/types.ts";
@@ -19,7 +20,7 @@ export type ShellNoticeActionSinks = {
 /** Prompt recovery handlers registered by one mounted chat. */
 export type SessionPromptActions = {
   retry: () => void;
-  keepGoing: () => void;
+  keepGoing: (continuationId?: string) => void;
   rewindAndRetry: () => void;
 };
 
@@ -81,6 +82,7 @@ function isNoticeAction(value: string): value is NoticeAction {
 function actionFor(
   kind: NoticeAction,
   scope: NoticeScope | undefined,
+  code?: string,
 ): NoticeActionButton | null {
   switch (kind) {
     case "open_ai_providers": {
@@ -101,9 +103,10 @@ function actionFor(
       return chat ? { id: kind, label: "Retry", variant: "primary", run: chat.retry } : null;
     }
     case "prompt_keep_going": {
+      const id = code === "coordinator_not_continued" && scope?.kind === "session" ? currentContinuationId(scope.sessionId) : undefined;
       const chat = promptActionsFor(scope);
       return chat
-        ? { id: kind, label: "Keep going", variant: "primary", run: chat.keepGoing }
+        ? { id: kind, label: "Keep going", variant: "primary", run: id ? () => chat.keepGoing(id) : chat.keepGoing }
         : null;
     }
     case "prompt_rewind_and_retry": {
@@ -121,6 +124,7 @@ function actionFor(
 }
 
 type ActionableNotice = {
+  code?: string;
   actions?: readonly string[];
   /** Prompt actions resolve only against the chat a session scope names. */
   scope?: NoticeScope;
@@ -136,7 +140,7 @@ export function noticeActions(notice: ActionableNotice): readonly NoticeActionBu
   for (const a of notice.actions) {
     const kind = a.trim();
     if (isNoticeAction(kind)) {
-      const act = actionFor(kind, notice.scope);
+      const act = actionFor(kind, notice.scope, notice.code);
       if (act) {
         result.push(act);
       }

@@ -358,7 +358,7 @@ func TestConsumedStartupWakeKeepsWaitingUserTurnBusy(t *testing.T) {
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 	t.Cleanup(func() { loop.ForgetSession(context.Background(), sess.ID) })
 	finish := loop.Admission.BeginPromptExecution(ctx, sess.ID)
-	observe := mgr.Runner.Coordinator.PromptLoop().Context.Deps.ObservePrompt(sess.ID)
+	observe := mgr.Runner.Coordinator.PromptLoop().Context.Deps.ObservePrompt(t.Context(), sess.ID)
 	loop.Nudges.Nudge(ctx, sess.ID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 	observe(inject.CoordinatorTurnFrame{WorkflowRevision: 5, RunContext: api.CoordinatorRunContext{RunID: "run"}})
 	loop.Waits.EnterSleep(ctx, sess.ID, time.Now().Add(time.Hour), "command", []loopwake.WaitTrigger{loopwake.WaitTriggerTimer, loopwake.WaitTriggerProcessDone}, []string{"process"}, loopwake.SleepMoverHost)

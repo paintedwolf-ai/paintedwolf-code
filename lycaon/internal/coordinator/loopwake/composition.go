@@ -1,6 +1,9 @@
 package loopwake
 
+import "github.com/lycaon/lycaon/internal/actionoutcome"
+
 type LoopEngine struct {
+	Outcomes      actionoutcome.Sessions
 	Subscriptions *WaitSubscriptions
 	Deliveries    *WaitDeliveries
 	Policy        *HostWakePolicy
@@ -58,6 +61,7 @@ func NewLoopEngine() *LoopEngine {
 	l.Waits.Deliveries = l.Deliveries
 	l.Waits.Subscriptions = l.Subscriptions
 	l.Waits.Cycles = l.Cycles
+	l.Nudges.outcomes = &l.Outcomes
 	l.Nudges.Admission = l.Admission
 	l.Nudges.Turns = l.Turns
 	l.Nudges.Policy = l.Policy

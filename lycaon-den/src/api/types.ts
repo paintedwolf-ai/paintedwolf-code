@@ -5996,9 +5996,50 @@ export interface components {
             actions?: components["schemas"]["NoticeAction"][];
         };
         /** @enum {string} */
-        EventTopic: "session" | "message" | "worker" | "checkpoint" | "board" | "cost" | "llm" | "activity" | "oar" | "scan" | "providers" | "model_policy" | "settings" | "workflow" | "grounding" | "findings" | "progress" | "queue" | "project" | "project_background" | "process" | "preview" | "attention" | "cli_open" | "source_changed" | "source_operation" | "file_briefing" | "briefing" | "artifact" | "agent_presence" | "editor_document" | "preflight" | "turn_clock" | "turn_load" | "chat_vault" | "source_view";
+        WakeState: "received" | "queued" | "deferred" | "delivered" | "consumed" | "routed_to_wait" | "held" | "skipped" | "denied" | "dropped" | "superseded";
+        /** @enum {string} */
+        WakeReason: "worker_cycle" | "prompt_active" | "turn_blocked" | "human_approval_awaiting" | "host_obligation_held" | "pending_user_input" | "active_hold" | "workflow_terminal" | "non_actionable" | "batch_closed" | "turn_rearm" | "no_request" | "loop_disabled" | "wrong_session_role" | "escalated" | "policy_denied" | "stale_batch" | "precedence_busy" | "job_terminal" | "budget_exhausted" | "session_closed" | "session_missing" | "no_active_run" | "lookup_failed" | "prompt_interrupted" | "user_stopped" | "rewound" | "turn_settled" | "defect";
+        /** @enum {string} */
+        TurnOutcomeKind: "completed" | "failed" | "canceled" | "refused";
+        /** @enum {string} */
+        TurnCancellationSource: "user" | "host" | "shutdown";
+        /** @enum {string} */
+        ContinuationAction: "plan_approval" | "workflow_start" | "workflow_resume" | "feedback" | "ask_answer";
+        /** @enum {string} */
+        ContinuationState: "pending" | "continued" | "held" | "finished" | "not_continued" | "failed";
+        /** @enum {string} */
+        ContinuationReason: "human_approval_awaiting" | "host_obligation_held" | "pending_user_input" | "active_hold" | "workflow_paused" | "workflow_canceled" | "workflow_completed" | "no_open_request" | "turn_budget_reached" | "run_inactive" | "session_closed" | "admission_denied" | "user_interrupted" | "action_interrupted";
+        /** @enum {string} */
+        HostContinuationFailure: "host_lookup_failed" | "host_invariant_failed";
+        ContinuationNotice: {
+            /** Format: uuid */
+            session_id: string;
+            /** Format: int64 */
+            revision: number;
+            /** Format: uuid */
+            continuation_id?: string;
+            host_error?: components["schemas"]["SessionHostError"];
+        };
+        ActionContinuation: {
+            /** Format: uuid */
+            continuation_id: string;
+            /** Format: uuid */
+            session_id: string;
+            action: components["schemas"]["ContinuationAction"];
+            state: components["schemas"]["ContinuationState"];
+            reason?: components["schemas"]["ContinuationReason"];
+            /** Format: uuid */
+            turn_id?: string;
+            failure_code?: components["schemas"]["HostContinuationFailure"] | components["schemas"]["NoticeCode"];
+            /** Format: date-time */
+            opened_at: string;
+            /** Format: date-time */
+            resolved_at?: string;
+        };
+        /** @enum {string} */
+        EventTopic: "session" | "message" | "worker" | "checkpoint" | "board" | "cost" | "llm" | "continuation_notice" | "continuation" | "activity" | "oar" | "scan" | "providers" | "model_policy" | "settings" | "workflow" | "grounding" | "findings" | "progress" | "queue" | "project" | "project_background" | "process" | "preview" | "attention" | "cli_open" | "source_changed" | "source_operation" | "file_briefing" | "briefing" | "artifact" | "agent_presence" | "editor_document" | "preflight" | "turn_clock" | "turn_load" | "chat_vault" | "source_view";
         /** @description Topic-discriminated EventHub SSE envelope. */
-        EventEnvelope: components["schemas"]["EventEnvelopeSession"] | components["schemas"]["EventEnvelopeMessage"] | components["schemas"]["EventEnvelopeWorker"] | components["schemas"]["EventEnvelopeCheckpoint"] | components["schemas"]["EventEnvelopeBoard"] | components["schemas"]["EventEnvelopeCost"] | components["schemas"]["EventEnvelopeLlm"] | components["schemas"]["EventEnvelopeActivity"] | components["schemas"]["EventEnvelopeOar"] | components["schemas"]["EventEnvelopeScan"] | components["schemas"]["EventEnvelopeProviders"] | components["schemas"]["EventEnvelopeModelPolicy"] | components["schemas"]["EventEnvelopeSettings"] | components["schemas"]["EventEnvelopeWorkflow"] | components["schemas"]["EventEnvelopeGrounding"] | components["schemas"]["EventEnvelopeFindings"] | components["schemas"]["EventEnvelopeProgress"] | components["schemas"]["EventEnvelopeQueue"] | components["schemas"]["EventEnvelopeProject"] | components["schemas"]["EventEnvelopeProjectBackground"] | components["schemas"]["EventEnvelopeProcess"] | components["schemas"]["EventEnvelopePreview"] | components["schemas"]["EventEnvelopeAttention"] | components["schemas"]["EventEnvelopeCliOpen"] | components["schemas"]["EventEnvelopeSourceChanged"] | components["schemas"]["EventEnvelopeSourceOperation"] | components["schemas"]["EventEnvelopeFileBriefing"] | components["schemas"]["EventEnvelopeBriefing"] | components["schemas"]["EventEnvelopeArtifact"] | components["schemas"]["EventEnvelopeAgentPresence"] | components["schemas"]["EventEnvelopeEditorDocument"] | components["schemas"]["EventEnvelopePreflight"] | components["schemas"]["EventEnvelopeTurnClock"] | components["schemas"]["EventEnvelopeTurnLoad"] | components["schemas"]["EventEnvelopeChatVault"] | components["schemas"]["EventEnvelopeSourceView"];
+        EventEnvelope: components["schemas"]["EventEnvelopeSession"] | components["schemas"]["EventEnvelopeMessage"] | components["schemas"]["EventEnvelopeWorker"] | components["schemas"]["EventEnvelopeCheckpoint"] | components["schemas"]["EventEnvelopeBoard"] | components["schemas"]["EventEnvelopeCost"] | components["schemas"]["EventEnvelopeLlm"] | components["schemas"]["EventEnvelopeContinuationNotice"] | components["schemas"]["EventEnvelopeContinuation"] | components["schemas"]["EventEnvelopeActivity"] | components["schemas"]["EventEnvelopeOar"] | components["schemas"]["EventEnvelopeScan"] | components["schemas"]["EventEnvelopeProviders"] | components["schemas"]["EventEnvelopeModelPolicy"] | components["schemas"]["EventEnvelopeSettings"] | components["schemas"]["EventEnvelopeWorkflow"] | components["schemas"]["EventEnvelopeGrounding"] | components["schemas"]["EventEnvelopeFindings"] | components["schemas"]["EventEnvelopeProgress"] | components["schemas"]["EventEnvelopeQueue"] | components["schemas"]["EventEnvelopeProject"] | components["schemas"]["EventEnvelopeProjectBackground"] | components["schemas"]["EventEnvelopeProcess"] | components["schemas"]["EventEnvelopePreview"] | components["schemas"]["EventEnvelopeAttention"] | components["schemas"]["EventEnvelopeCliOpen"] | components["schemas"]["EventEnvelopeSourceChanged"] | components["schemas"]["EventEnvelopeSourceOperation"] | components["schemas"]["EventEnvelopeFileBriefing"] | components["schemas"]["EventEnvelopeBriefing"] | components["schemas"]["EventEnvelopeArtifact"] | components["schemas"]["EventEnvelopeAgentPresence"] | components["schemas"]["EventEnvelopeEditorDocument"] | components["schemas"]["EventEnvelopePreflight"] | components["schemas"]["EventEnvelopeTurnClock"] | components["schemas"]["EventEnvelopeTurnLoad"] | components["schemas"]["EventEnvelopeChatVault"] | components["schemas"]["EventEnvelopeSourceView"];
         /** @description One transcript row change. message is always the full post-write row: apply it as a whole-row snapshot ordered by seq, never a field merge onto a cached row — an absent field means the row no longer has it. */
         MessageEvent: {
             /** Format: uuid */
@@ -6632,6 +6673,11 @@ export interface components {
             source_workflow_id?: string;
         };
         Blueprint: {
+            /**
+             * Format: uuid
+             * @description Outcome of the continuing action that produced this response.
+             */
+            continuation_id?: string;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -7994,6 +8040,8 @@ export interface components {
             versions: components["schemas"]["DraftVersion"][];
         };
         PromptRequest: {
+            /** Format: uuid */
+            recovery_continuation_id?: string;
             /** @description Bind or upgrade the session mode at admission. */
             mode?: components["schemas"]["SessionMode"];
             /**
@@ -8201,6 +8249,8 @@ export interface components {
             /** @description Replay boundary captured before the snapshot was read */
             event_cursor: string;
             session: components["schemas"]["Session"];
+            continuation_notice?: components["schemas"]["ContinuationNotice"];
+            continuations?: components["schemas"]["ActionContinuation"][];
             /** @description Current host work leases for this session. Omitted when no leases remain. */
             activities?: components["schemas"]["ActivityEvent"][];
             transcript: components["schemas"]["SessionTranscriptPage"];
@@ -10763,6 +10813,11 @@ export interface components {
             created_by?: string;
         };
         WorkflowRun: {
+            /**
+             * Format: uuid
+             * @description Outcome of the continuing action that produced this response.
+             */
+            continuation_id?: string;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -10850,7 +10905,7 @@ export interface components {
          * @description Closed machine-readable error identity emitted by the private Den-sidecar API.
          * @enum {string}
          */
-        ApiErrorCode: "approval_capacity_exceeded" | "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "prompt_recovery_stale" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "project_not_draft" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "feedback_not_pending" | "feedback_response_required" | "briefing_disabled" | "briefing_target_unavailable" | "briefing_busy" | "briefing_unavailable" | "briefing_record_not_found" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "internal_error" | "invalid_json" | "invalid_path" | "blueprint_content_conflict" | "idempotency_conflict" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "command_program_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "project_settings_need_repair" | "project_approvals_need_repair" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_trash_recovery_unavailable" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "prompt_failed" | "turn_closeout_tool_call" | "host_fault" | "worker_model_timeout" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_mode_locked" | "session_mode_unavailable" | "session_ask_mode_workflow_requires_agent" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_version_unavailable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "presence_unavailable" | "presence_denied" | "presence_required" | "presence_not_required" | "presence_challenge_not_found" | "managed_secret_value_changed" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found";
+        ApiErrorCode: "approval_capacity_exceeded" | "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "prompt_recovery_stale" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "project_not_draft" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "feedback_not_pending" | "feedback_response_required" | "briefing_disabled" | "briefing_target_unavailable" | "briefing_busy" | "briefing_unavailable" | "briefing_record_not_found" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "internal_error" | "invalid_json" | "invalid_path" | "blueprint_content_conflict" | "idempotency_conflict" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "command_program_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "project_settings_need_repair" | "project_approvals_need_repair" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_trash_recovery_unavailable" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "coordinator_not_continued" | "prompt_failed" | "turn_closeout_tool_call" | "host_fault" | "worker_model_timeout" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_mode_locked" | "session_mode_unavailable" | "session_ask_mode_workflow_requires_agent" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_version_unavailable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "presence_unavailable" | "presence_denied" | "presence_required" | "presence_not_required" | "presence_challenge_not_found" | "managed_secret_value_changed" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found";
         /** @enum {string} */
         NoticeAction: "open_ai_providers" | "retry_contribution_frame" | "prompt_retry" | "prompt_keep_going" | "prompt_rewind_and_retry";
         /** @enum {string} */
@@ -11019,6 +11074,8 @@ export interface components {
             /** @description Moves a pinned session to this 1-based position in its project's pinned order; a position past the end moves it last. The project's pinned chats are renumbered 1…n. */
             pin_position?: number;
         };
+        /** @enum {string} */
+        NoticeCode: "attachment_scanned_no_text" | "coordinator_not_continued" | "grounding_escalated" | "host_fault" | "model_refused" | "project_mutation_in_progress" | "prompt_failed" | "provider_context_too_small" | "provider_empty_completion" | "provider_not_configured" | "provider_overloaded" | "provider_rate_limited" | "provider_request_rejected" | "provider_response_interrupted" | "provider_server_error" | "provider_silent" | "provider_tool_calls_in_prose" | "provider_tool_calls_unsupported" | "provider_unreachable" | "session_preparation_failed" | "session_spend_ceiling_reached" | "thinking_override_unavailable" | "turn_closeout_tool_call" | "user_image_not_visible" | "workflow_active" | "workflow_not_runnable" | "workflow_version_unavailable" | "worktree_stale";
         /**
          * @description Closed host work phase; presentation copy is client-supplied.
          * @enum {string}
@@ -17669,8 +17726,6 @@ export interface components {
          * @enum {string}
          */
         SessionEventAction: "created" | "updated" | "deleted";
-        /** @enum {string} */
-        NoticeCode: "attachment_scanned_no_text" | "grounding_escalated" | "host_fault" | "model_refused" | "project_mutation_in_progress" | "prompt_failed" | "provider_context_too_small" | "provider_empty_completion" | "provider_not_configured" | "provider_overloaded" | "provider_rate_limited" | "provider_request_rejected" | "provider_response_interrupted" | "provider_server_error" | "provider_silent" | "provider_tool_calls_in_prose" | "provider_tool_calls_unsupported" | "provider_unreachable" | "session_preparation_failed" | "session_spend_ceiling_reached" | "thinking_override_unavailable" | "turn_closeout_tool_call" | "user_image_not_visible" | "workflow_active" | "workflow_not_runnable" | "workflow_version_unavailable" | "worktree_stale";
         /**
          * @description Why a session went idle, stated so clients tell a stop from an error without reading message text or error strings. `interrupted` is the engine stopping under a live turn — a shutdown signal, or a session still busy at boot after process death — and does not render as an error. It is the session-level peer of the TOOL_OWNER_INTERRUPTED tool result.
          * @enum {string}
@@ -17752,6 +17807,28 @@ export interface components {
              * @enum {string}
              */
             topic: "llm";
+        };
+        EventEnvelopeContinuationNotice: components["schemas"]["EventEnvelopeBase"] & {
+            /** @constant */
+            topic: "continuation_notice";
+            data: components["schemas"]["ContinuationNotice"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            topic: "continuation_notice";
+        };
+        EventEnvelopeContinuation: components["schemas"]["EventEnvelopeBase"] & {
+            /** @constant */
+            topic: "continuation";
+            data: components["schemas"]["ActionContinuation"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            topic: "continuation";
         };
         EventEnvelopeActivity: components["schemas"]["EventEnvelopeBase"] & {
             /** @constant */
@@ -31442,6 +31519,16 @@ export type RepoLayout = components["schemas"]["RepoLayout"];
 export type ReadOutlineResponse = components["schemas"]["ReadOutlineResponse"];
 export type Error = components["schemas"]["Error"];
 export type NoticeCopy = components["schemas"]["NoticeCopy"];
+export type WakeState = components["schemas"]["WakeState"];
+export type WakeReason = components["schemas"]["WakeReason"];
+export type TurnOutcomeKind = components["schemas"]["TurnOutcomeKind"];
+export type TurnCancellationSource = components["schemas"]["TurnCancellationSource"];
+export type ContinuationAction = components["schemas"]["ContinuationAction"];
+export type ContinuationState = components["schemas"]["ContinuationState"];
+export type ContinuationReason = components["schemas"]["ContinuationReason"];
+export type HostContinuationFailure = components["schemas"]["HostContinuationFailure"];
+export type ContinuationNotice = components["schemas"]["ContinuationNotice"];
+export type ActionContinuation = components["schemas"]["ActionContinuation"];
 export type EventTopic = components["schemas"]["EventTopic"];
 export type EventEnvelope = components["schemas"]["EventEnvelope"];
 export type MessageEvent = components["schemas"]["MessageEvent"];
@@ -31908,6 +31995,7 @@ export type SessionBackgroundExecutionJob = components["schemas"]["SessionBackgr
 export type SessionProtectionState = components["schemas"]["SessionProtectionState"];
 export type SessionUiState = components["schemas"]["SessionUiState"];
 export type UpdateSessionRequest = components["schemas"]["UpdateSessionRequest"];
+export type NoticeCode = components["schemas"]["NoticeCode"];
 export type ActivityKind = components["schemas"]["ActivityKind"];
 export type ActivityStatus = components["schemas"]["ActivityStatus"];
 export type CommandActivityStep = components["schemas"]["CommandActivityStep"];
@@ -32529,7 +32617,6 @@ export type EventScopeKind = components["schemas"]["EventScopeKind"];
 export type EventScope = components["schemas"]["EventScope"];
 export type EventEnvelopeBase = components["schemas"]["EventEnvelopeBase"];
 export type SessionEventAction = components["schemas"]["SessionEventAction"];
-export type NoticeCode = components["schemas"]["NoticeCode"];
 export type SessionIdleDisposition = components["schemas"]["SessionIdleDisposition"];
 export type EventEnvelopeSession = components["schemas"]["EventEnvelopeSession"];
 export type EventEnvelopeMessage = components["schemas"]["EventEnvelopeMessage"];
@@ -32538,6 +32625,8 @@ export type EventEnvelopeCheckpoint = components["schemas"]["EventEnvelopeCheckp
 export type EventEnvelopeBoard = components["schemas"]["EventEnvelopeBoard"];
 export type EventEnvelopeCost = components["schemas"]["EventEnvelopeCost"];
 export type EventEnvelopeLlm = components["schemas"]["EventEnvelopeLlm"];
+export type EventEnvelopeContinuationNotice = components["schemas"]["EventEnvelopeContinuationNotice"];
+export type EventEnvelopeContinuation = components["schemas"]["EventEnvelopeContinuation"];
 export type EventEnvelopeActivity = components["schemas"]["EventEnvelopeActivity"];
 export type OAROnFireEvent = components["schemas"]["OAROnFireEvent"];
 export type EventEnvelopeOar = components["schemas"]["EventEnvelopeOar"];

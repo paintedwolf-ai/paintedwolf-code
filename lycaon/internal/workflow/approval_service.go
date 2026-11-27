@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
@@ -89,6 +90,7 @@ func (m *Approvals) ApprovePlan(ctx context.Context, projectID, blueprintPath, p
 		return nil, err
 	}
 	if matched {
+		actionoutcome.MarkReplay(ctx)
 		return target, nil
 	}
 	active, err := m.Runs.ActiveByProjectForBlueprint(ctx, projectID, blueprintPath)

@@ -92,7 +92,7 @@ func RecoverWaitLeases(ctx context.Context, loop *WaitSubscriptions, store *awai
 	}
 	for _, lease := range pending {
 		loop.Deliveries.rememberWaitWinner(lease.SessionID, lease.ID, lease.Winner)
-		loop.Nudges.Nudge(ctx, lease.SessionID, anchor.LoopWake, anchor.LoopWake, lease.ID, anchor.Envelope{})
+		_ = loop.Nudges.Nudge(ctx, lease.SessionID, anchor.LoopWake, anchor.LoopWake, lease.ID, anchor.Envelope{})
 	}
 	return nil
 }

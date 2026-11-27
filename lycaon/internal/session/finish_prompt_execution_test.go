@@ -6,7 +6,6 @@ import (
 	"context"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -71,13 +70,15 @@ func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testin
 	testutil.FailErr(t, "LoadRegistryConfig", err)
 	run, err := wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
-	_ = run
+	testutil.FailErr(t, "seed user request", store.Transcript.AppendMessages(ctx, sess.ID, wire.Message{
+		ID: "opening", WorkflowRunID: run.ID, Role: wire.MessageRoleUser, Origin: wire.MessageOriginUser, Content: "Change the greeting.",
+	}))
 	if err := store.Sessions.SetSessionStatus(ctx, sess.ID, wire.SessionStatusBusy); err != nil {
 		testutil.FailErr(t, "store.SetSessionStatus failed", err)
 	}
 
 	finishExecution := mgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), sess.ID)
-	mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, "leg:"+sess.ID, anchor.Envelope{})
+	ticket := mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, "leg:"+sess.ID, anchor.Envelope{})
 	if _, ok := mgr.Runner.Coordinator.CoordinatorLoop().Nudges.Pending(sess.ID); !ok {
 		t.Fatal("expected deferred loop wake while prompt execution is active")
 	}
@@ -90,18 +91,20 @@ func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testin
 		_ = mgr.Runner.Settlement.Drain(canceled, sess.ID)
 	}()
 
-	testutil.WaitFor(t, "the loop wake message is stored", func() bool {
-		msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
-		if err != nil {
-			return false
+	wake, err := ticket.Await(t.Context())
+	testutil.FailErr(t, "await deferred wake", err)
+	if wake.State != wire.WakeStateDelivered {
+		t.Fatalf("deferred wake = %+v", wake)
+	}
+	mgr.Coordinator.WaitForTurns(ctx)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
+	testutil.FailErr(t, "read wake transcript", err)
+	for _, msg := range msgs {
+		if msg.Kind == wire.MessageKindHostLoopWake {
+			return
 		}
-		for _, msg := range msgs {
-			if msg.Kind == wire.MessageKindHostLoopWake {
-				return true
-			}
-		}
-		return false
-	})
+	}
+	t.Fatal("missing loop wake in transcript")
 }
 
 func setupPlanTripartiteFixture(t *testing.T) coordinatorPromptFixture {
@@ -238,12 +241,12 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 
-	var mu sync.Mutex
-	var reported []error
+	reported := make(chan error, 1)
 	mgr.Runner.Turns.SetFailureSink(func(_ context.Context, _ string, err error) {
-		mu.Lock()
-		reported = append(reported, err)
-		mu.Unlock()
+		select {
+		case reported <- err:
+		default:
+		}
 	})
 
 	wfStore := workflowpersistence.New(sqlDB)
@@ -262,12 +265,15 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	testutil.FailErr(t, "create session in store", err)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
-	_, err = wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
+	run, err := wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
+	testutil.FailErr(t, "seed user request", st.Transcript.AppendMessages(ctx, sess.ID, wire.Message{
+		ID: "opening", WorkflowRunID: run.ID, Role: wire.MessageRoleUser, Origin: wire.MessageOriginUser, Content: "Change the greeting.",
+	}))
 	testutil.FailErr(t, "set session busy", st.Sessions.SetSessionStatus(ctx, sess.ID, wire.SessionStatusBusy))
 
 	finishExecution := mgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), sess.ID)
-	mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished,
+	ticket := mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished,
 		"leg:"+sess.ID, anchor.Envelope{})
 	if _, ok := mgr.Runner.Coordinator.CoordinatorLoop().Nudges.Pending(sess.ID); !ok {
 		t.Fatal("expected a deferred loop wake while prompt execution is active")
@@ -275,17 +281,20 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	finishExecution()
 	mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
 
-	testutil.WaitFor(t, "the failed turn is reported", func() bool {
-		mu.Lock()
-		defer mu.Unlock()
-		return len(reported) > 0
-	})
-
-	mu.Lock()
-	defer mu.Unlock()
-	silent, ok := failure.AsProviderSilent(reported[0])
+	wake, err := ticket.Await(t.Context())
+	testutil.FailErr(t, "await leg completion", err)
+	if wake.State != wire.WakeStateDelivered {
+		t.Fatalf("leg completion wake = %+v", wake)
+	}
+	mgr.Coordinator.WaitForTurns(ctx)
+	select {
+	case err = <-reported:
+	default:
+		t.Fatal("missing provider failure after turn settlement")
+	}
+	silent, ok := failure.AsProviderSilent(err)
 	if !ok {
-		t.Fatalf("want the provider fault to survive to the sink, got %T: %v", reported[0], reported[0])
+		t.Fatalf("want the provider fault to survive to the sink, got %T: %v", err, err)
 	}
 	if silent.ProviderID != "together-1" {
 		t.Fatalf("want the failing provider named, got %q", silent.ProviderID)

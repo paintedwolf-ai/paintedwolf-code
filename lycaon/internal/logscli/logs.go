@@ -37,6 +37,7 @@ commands:
                  they happen (--json to pipe, --agent <type> to filter)
   captures       list every captured session (newest first)
   session        summary for one capture: agents, outcomes, turn/token counts
+  outcomes       session outcomes from a diagnostics bundle (--file PATH --session ID)
   timeline       combined narrative: reasoning, tools, nudges, outcomes (chronological)
   problems       everything that went wrong: failures, rejections, errors
   tools          an agent's tool calls — --agent <id|type> (or all agents)
@@ -112,6 +113,9 @@ func Run(prog string, args []string) error {
 		return err
 	}
 
+	if sub == "outcomes" {
+		return printOutcomes(os.Stdout, f.file, f.session)
+	}
 	cfg, err := logview.LoadConfig()
 	if err != nil {
 		return err

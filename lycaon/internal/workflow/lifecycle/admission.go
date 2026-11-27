@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/hostctx"
 	"github.com/lycaon/lycaon/internal/observability"
@@ -144,6 +145,7 @@ func (m *Admission) startAdmitted(ctx context.Context, sessionID string, req api
 		return nil, err
 	}
 	if replayed, found, replayErr := m.Starts.ReplayStart(ctx, req.OperationID, sessionID, startDigest); replayErr != nil || found {
+		actionoutcome.MarkReplay(ctx)
 		return &workflowStartResult{Run: replayed}, replayErr
 	}
 	var committed *committedWorkflowStart

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/usernotice"
+	wire "github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -47,16 +48,16 @@ func TestUserNoticeContextSchemaDocumented(t *testing.T) {
 		if len(keys) == 0 {
 			continue
 		}
-		// Which producer supplies the vars follows from the delivery surface:
-		// readiness copy is fed by probe Detail, HTTP-only copy by handler error
-		// details (TestAPIHandlersEmitOnlyDeclaredErrors/details), everything else
-		// by ContextFromPromptError.
+		// HTTP handler details have their own contract.
 		if len(entry.Surfaces) == 1 && entry.HasSurface("http") {
 			continue
 		}
 		fixture, ok := preflightFixtures[code]
 		producer := "probe Detail"
-		if !entry.HasSurface("preflight") {
+		if code == string(wire.NoticeCodeCoordinatorNotContinued) {
+			fixture, ok = usernotice.ContinuationContext(string(wire.ContinuationReasonNoOpenRequest), wire.ContinuationActionPlanApproval), true
+			producer = "ContinuationContext"
+		} else if !entry.HasSurface("preflight") {
 			fixture, ok = promptFixtures[code]
 			producer = "ContextFromPromptError"
 		}

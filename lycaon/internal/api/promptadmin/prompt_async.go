@@ -4,8 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/lycaon/lycaon/internal/httpclient"
-	"github.com/lycaon/lycaon/internal/noticeerr"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/observability"
 	sessionexecution "github.com/lycaon/lycaon/internal/session/execution"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
@@ -17,10 +16,6 @@ import (
 
 func renderPromptHostError(catalog *usernotice.Catalog, err error, hasProgress bool) wire.SessionHostError {
 	code := promptHostErrorCode(err)
-	host := wire.NewSessionHostError(code)
-	if catalog == nil {
-		return host
-	}
 	ctx := usernotice.ContextFromPromptError(err)
 	if ctx == nil {
 		ctx = make(map[string]any)
@@ -29,35 +24,11 @@ func renderPromptHostError(catalog *usernotice.Catalog, err error, hasProgress b
 	if hasProgress {
 		ctx[usernotice.ContextTurnProgress] = usernotice.TurnProgressMade
 	}
-	copy := catalog.RenderWire(string(code), ctx)
-	host.Title = copy.Title
-	host.Message = copy.Message
-	host.SuggestedAction = copy.SuggestedAction
-	// Each code's catalog entry owns its actions; informational notices carry none.
-	for _, action := range copy.Actions {
-		host.Actions = append(host.Actions, wire.NoticeAction(action))
-	}
-	// Placement controls notice scope and deduplication.
-	if placement, ok := catalog.Placement(string(code), ctx); ok {
-		host.Tier = wire.NoticeTier(placement.Tier)
-		host.Scope = wire.NoticeScope(placement.Scope)
-		host.Resolution = placement.ID
-	}
-	return host
+	return catalog.HostError(code, ctx)
 }
 
 func promptHostErrorCode(err error) wire.NoticeCode {
-	if err == nil {
-		return wire.NoticeCodePromptFailed
-	}
-	if code, ok := noticeerr.CodeOf(err); ok {
-		return code
-	}
-	// Transport reachability is a predicate over the chain, not one error type.
-	if httpclient.Unreachable(err) {
-		return wire.NoticeCodeProviderUnreachable
-	}
-	return wire.NoticeCodePromptFailed
+	return actionoutcome.PromptFailureCode(err)
 }
 
 func shouldPublishPromptHostError(err error) bool {
@@ -65,7 +36,7 @@ func shouldPublishPromptHostError(err error) bool {
 		return false
 	}
 	// Stopped and active submissions are not host errors.
-	return !errors.Is(err, lifecycle.ErrStopping) &&
+	return !errors.Is(err, actionoutcome.ErrNoRequest) && !errors.Is(err, lifecycle.ErrStopping) &&
 		!errors.Is(err, submissions.ErrInFlight)
 }
 

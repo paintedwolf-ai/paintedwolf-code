@@ -68,16 +68,16 @@ func (l *WaitSubscriptions) durableWaitStore() *awaitstore.Store {
 func (l *WaitSubscriptions) settleDurableWaitWake(
 	ctx context.Context,
 	sessionID string,
-	wake, inform anchor.ID,
-	legID, completingJobID string,
-	env anchor.Envelope,
+	pending pendingLoopWake,
 ) bool {
+	wake, legID, completingJobID, env := pending.wake, pending.legID, pending.completingJobID, pending.env
 	store := l.durableWaitStore()
 	if store == nil {
 		return false
 	}
 	lease, active, err := store.ForSession(ctx, sessionID)
 	if err != nil {
+		pending.ticket.Record(api.WakeStateDropped, api.WakeReasonLookupFailed, "", "")
 		return true
 	}
 	if !active {
@@ -101,13 +101,15 @@ func (l *WaitSubscriptions) settleDurableWaitWake(
 	if strings.TrimSpace(lease.WorkerJobID) != "" {
 		// Only a subscribed event settles a worker-owned wait.
 		if !matched {
-			loopLogNudge(sessionID, wake, inform, legID, completingJobID, "worker_wait_subscription_filtered")
+			pending.ticket.Record(api.WakeStateHeld, api.WakeReasonActiveHold, "", lease.ID)
 			return true
 		}
 		won, settleErr := store.SettleLease(ctx, lease.ID, "resolved", condition)
 		if settleErr != nil || !won {
+			pending.recordLeaseRefusal(settleErr)
 			return true
 		}
+		pending.ticket.Record(api.WakeStateHeld, api.WakeReasonActiveHold, "", lease.ID)
 		l.Waits.breakSleep(ctx, sessionID, string(wake), true)
 		return true
 	}
@@ -121,10 +123,12 @@ func (l *WaitSubscriptions) settleDurableWaitWake(
 		won, err = store.SettleLease(ctx, lease.ID, "interrupted", awaitstore.Condition{})
 	}
 	if err != nil || !won {
+		pending.recordLeaseRefusal(err)
 		return true
 	}
 	if matched {
-		l.Deliveries.rememberWaitWinner(sessionID, lease.ID, condition)
+		winner := l.Deliveries.rememberWaitWinner(sessionID, lease.ID, condition)
+		pending.ticket.Routed(lease.ID, &winner.handoff)
 		l.Waits.breakSleep(ctx, sessionID, string(wake), false)
 		l.Deliveries.runWaitResumeAsync(ctx, sessionID)
 		return true
@@ -271,32 +275,33 @@ func (l *WaitSubscriptions) matchesActiveWait(ctx context.Context, sessionID str
 }
 func (l *WaitSubscriptions) routeWaitWake(ctx context.Context, sessionID string, pending pendingLoopWake) bool {
 	wake, inform, legID, completingJobID, env := pending.wake, pending.inform, pending.legID, pending.completingJobID, pending.env
-	if l.resumePendingWait(ctx, sessionID, wake) {
+	if l.resumePendingWait(ctx, sessionID, pending) {
 		return true
 	}
 	triggers := l.Waits.Triggers(sessionID)
 	if !l.waitWakeAccepted(ctx, sessionID, wake, inform, legID, completingJobID, env) {
 		if shouldDeferForAllWorkersIdle(triggers, wake, completingJobID) && !l.Cycles.workerCycleIdle(ctx, sessionID, completingJobID) {
-			loopLogNudge(sessionID, wake, inform, legID, completingJobID, "defer_subscription_all_idle")
 			l.Nudges.deferNudge(ctx, sessionID, pending)
 		} else {
-			loopLogNudge(sessionID, wake, inform, legID, completingJobID, "subscription_filtered")
+			pending.ticket.Record(api.WakeStateHeld, api.WakeReasonActiveHold, "", "")
 		}
 		return true
 	}
 	if l.Waits.IsSleeping(sessionID) || alwaysBreaksSleep(wake, completingJobID) {
-		if l.settleDurableWaitWake(ctx, sessionID, wake, inform, legID, completingJobID, env) {
+		if l.settleDurableWaitWake(ctx, sessionID, pending) {
 			return true
 		}
 		l.Waits.breakSleep(ctx, sessionID, string(wake), true)
 	}
 	return false
 }
-func (l *WaitSubscriptions) resumePendingWait(ctx context.Context, sessionID string, wake anchor.ID) bool {
-	if _, ready := l.Deliveries.waitWinner(sessionID); !ready {
+func (l *WaitSubscriptions) resumePendingWait(ctx context.Context, sessionID string, pending pendingLoopWake) bool {
+	winner, ready := l.Deliveries.waitWinner(sessionID)
+	if !ready {
 		return false
 	}
-	l.Waits.breakSleep(ctx, sessionID, string(wake), false)
+	pending.ticket.Routed(winner.LeaseID, &winner.handoff)
+	l.Waits.breakSleep(ctx, sessionID, string(pending.wake), false)
 	l.Deliveries.runWaitResumeAsync(ctx, sessionID)
 	return true
 }

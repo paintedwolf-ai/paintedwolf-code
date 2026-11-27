@@ -592,7 +592,7 @@ components:
           type: string
     WorkflowRun:
       x-go-generate: true
-      x-go-field-order: ["id", "session_id", "project_id", "parent_run_id", "workflow_id", "workflow_version", "attach_policy", "status", "revision", "current_phase", "blueprint_path", "pause_reason", "failure", "start_message_id", "end_message_id", "created_at", "updated_at", "paused_at", "completed_at", "ui"]
+      x-go-field-order: ["id", "session_id", "project_id", "parent_run_id", "workflow_id", "workflow_version", "attach_policy", "status", "revision", "current_phase", "blueprint_path", "pause_reason", "failure", "start_message_id", "end_message_id", "created_at", "updated_at", "paused_at", "completed_at", "ui", "continuation_id"]
       type: object
       required:
       - id
@@ -606,6 +606,10 @@ components:
       - updated_at
       additionalProperties: false
       properties:
+        continuation_id:
+          type: string
+          format: uuid
+          description: Outcome of the continuing action that produced this response.
         id:
           type: string
           format: uuid

@@ -10,10 +10,12 @@ import (
 
 // RecordingClient wraps an LLMClient and captures completion requests for tests.
 type RecordingClient struct {
-	Inner modelcall.LLMClient
-	mu    sync.Mutex
-	last  modelcall.CompletionRequest
-	all   []modelcall.CompletionRequest
+	Inner        modelcall.LLMClient
+	changed      chan struct{}
+	responseGate chan struct{}
+	mu           sync.Mutex
+	last         modelcall.CompletionRequest
+	all          []modelcall.CompletionRequest
 }
 
 // NewRecordingClient wraps inner for test observability.
@@ -23,7 +25,9 @@ func NewRecordingClient(inner modelcall.LLMClient) *RecordingClient {
 
 // Complete records req and delegates to Inner.
 func (c *RecordingClient) Complete(ctx context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
-	c.record(req)
+	if err := c.record(ctx, req); err != nil {
+		return nil, err
+	}
 	if c.Inner == nil {
 		return &modelcall.Completion{}, nil
 	}
@@ -32,7 +36,9 @@ func (c *RecordingClient) Complete(ctx context.Context, req modelcall.Completion
 
 // Stream records req and delegates to Inner.
 func (c *RecordingClient) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
-	c.record(req)
+	if err := c.record(ctx, req); err != nil {
+		return nil, err
+	}
 	if c.Inner == nil {
 		ch := make(chan modelcall.StreamChunk)
 		close(ch)
@@ -57,9 +63,51 @@ func (c *RecordingClient) AllRequests() []modelcall.CompletionRequest {
 	return out
 }
 
-func (c *RecordingClient) record(req modelcall.CompletionRequest) {
+func (c *RecordingClient) HoldResponses() func() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	gate := make(chan struct{})
+	c.responseGate = gate
+	c.mu.Unlock()
+	return sync.OnceFunc(func() { close(gate) })
+}
+
+func (c *RecordingClient) record(ctx context.Context, req modelcall.CompletionRequest) error {
+	c.mu.Lock()
+	gate := c.responseGate
 	c.last = req
 	c.all = append(c.all, req)
+	if c.changed != nil {
+		close(c.changed)
+		c.changed = nil
+	}
+	c.mu.Unlock()
+	if gate != nil {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-gate:
+		}
+	}
+	return nil
+}
+
+func (c *RecordingClient) AwaitRequest(ctx context.Context, index int) (modelcall.CompletionRequest, error) {
+	for {
+		c.mu.Lock()
+		if index < len(c.all) {
+			request := c.all[index]
+			c.mu.Unlock()
+			return request, nil
+		}
+		if c.changed == nil {
+			c.changed = make(chan struct{})
+		}
+		changed := c.changed
+		c.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return modelcall.CompletionRequest{}, ctx.Err()
+		case <-changed:
+		}
+	}
 }

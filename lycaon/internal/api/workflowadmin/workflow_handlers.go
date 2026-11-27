@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -49,13 +50,16 @@ func (s *RunControl) HandleStartWorkflowRun(w http.ResponseWriter, r *http.Reque
 		s.WriteWorkflowError(w, r, err)
 		return
 	}
-	run, err := s.Workflows.Starts.Start(hostctx.WithHumanWorkflowStart(r.Context()), sessionID, req)
+	ctx, action := actionoutcome.CaptureOperation(r.Context(), wire.ContinuationActionWorkflowStart, sessionID, req.OperationID)
+	run, err := s.Workflows.Starts.Start(hostctx.WithHumanWorkflowStart(ctx), sessionID, req)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return
 	}
-	s.Topology.StartOrchestratedTopologyForRun(r.Context(), sessionID, run)
-	s.SessionView.WriteWorkflowRun(w, r, http.StatusCreated, run)
+	s.Topology.StartOrchestratedTopologyForRun(ctx, sessionID, run)
+	out := *run
+	out.ContinuationID = s.commitAction(ctx, action, run)
+	s.SessionView.WriteWorkflowRun(w, r, http.StatusCreated, &out)
 }
 
 func (s *RunControl) HandleExitWorkflowRun(w http.ResponseWriter, r *http.Request) {
@@ -118,7 +122,14 @@ func (s *RunControl) HandlePauseWorkflowRun(w http.ResponseWriter, r *http.Reque
 
 func (s *RunControl) HandleResumeWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	s.controlWorkflowRun(w, r, func(ctx context.Context, runID string, _ string) (*wire.WorkflowRun, error) {
-		return s.Workflows.Controls.Resume(ctx, runID)
+		ctx, action := actionoutcome.Capture(ctx, wire.ContinuationActionWorkflowResume)
+		run, err := s.Workflows.Controls.Resume(ctx, runID)
+		if err != nil {
+			return nil, err
+		}
+		out := *run
+		out.ContinuationID = s.commitAction(ctx, action, run)
+		return &out, nil
 	})
 }
 
@@ -146,7 +157,7 @@ func (s *RunControl) HandleAdvanceWorkflowRun(w http.ResponseWriter, r *http.Req
 			if active, gerr := s.Workflows.Store.Runs.Get(r.Context(), runID); gerr == nil && active != nil {
 				// A committed gate rejection emits one coordinator nudge.
 				s.Sessions.Coordinator.Guidance.Emit(r.Context(), active.SessionID, anchor.GateBlocked, anchor.Envelope{})
-				s.Sessions.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(
+				_ = s.Sessions.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(
 					r.Context(),
 					active.SessionID,
 					anchor.PhaseAdvanced,

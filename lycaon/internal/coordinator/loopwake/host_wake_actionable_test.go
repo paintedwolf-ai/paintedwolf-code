@@ -2,12 +2,13 @@ package loopwake_test
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func idleImplementSessionState() surface.ImplementSessionState {
@@ -151,7 +152,7 @@ func TestHostWakeActionableTerminalWorkflowNotActionable(t *testing.T) {
 			return nil, nil
 		},
 	})
-	if fn(context.Background(), loopwake.HostWakeActionableInput{SessionID: "sess"}) {
+	if fn(context.Background(), loopwake.HostWakeActionableInput{SessionID: "sess"}) == "" {
 		t.Fatal("host-cycle must stop when the workflow run is gone")
 	}
 }
@@ -174,7 +175,7 @@ func TestHostWakeActionableTerminalWorkflowKeepsPendingOverlay(t *testing.T) {
 			return nil, nil
 		},
 	})
-	if !fn(context.Background(), loopwake.HostWakeActionableInput{SessionID: "sess"}) {
+	if fn(context.Background(), loopwake.HostWakeActionableInput{SessionID: "sess"}) != "" {
 		t.Fatal("pending overlay must still wake after the run ends")
 	}
 }
@@ -298,7 +299,7 @@ func TestHostWakeActionableObligationsOverrideStaleCloseout(t *testing.T) {
 		},
 		WorkflowObligationsOpen: func(context.Context, string) bool { return true },
 	})
-	if !fn(context.Background(), loopwake.HostWakeActionableInput{SessionID: "sess"}) {
+	if fn(context.Background(), loopwake.HostWakeActionableInput{SessionID: "sess"}) != "" {
 		t.Fatal("open workflow obligations must keep the host wake actionable past a stale closeout")
 	}
 }
@@ -335,7 +336,7 @@ func TestHostWakeWithoutRequestIsNeverActionable(t *testing.T) {
 						return hasRequest
 					},
 				})(t.Context(), loopwake.HostWakeActionableInput{SessionID: "chat"})
-				if actionable != hasRequest {
+				if (actionable == "") != hasRequest {
 					t.Fatalf("with request=%v, actionable=%v", hasRequest, actionable)
 				}
 			}

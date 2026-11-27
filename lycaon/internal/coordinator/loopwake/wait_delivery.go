@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 )
@@ -23,6 +24,7 @@ type WaitDelivery struct {
 }
 
 type waitWinner struct {
+	handoff        actionoutcome.Handoff
 	LeaseID        string
 	Condition      awaitstore.Condition
 	deliveryActive atomic.Bool

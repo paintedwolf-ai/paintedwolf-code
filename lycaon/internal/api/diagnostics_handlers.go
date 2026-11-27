@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/diagnostics"
 	"github.com/lycaon/lycaon/internal/preflight"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -33,8 +34,13 @@ func (s *Activity) handleExportDiagnostics(w http.ResponseWriter, r *http.Reques
 		probes = append(probes, s.preflightProbeWire(res, facts, now))
 	}
 
+	var trails map[string]actionoutcome.Trail
+	if s.sessions != nil {
+		trails = s.sessions.Coordinator.Runtime.CoordinatorLoop().Outcomes.Trails()
+	}
 	raw, err := diagnostics.Build(r.Context(), diagnostics.Input{
-		Health: s.healthPayload(),
+		Health:   s.healthPayload(),
+		Outcomes: trails,
 		Preflight: wire.PreflightReport{
 			Overall:                string(overall),
 			Probes:                 probes,

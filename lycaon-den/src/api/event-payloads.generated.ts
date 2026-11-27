@@ -2,6 +2,7 @@
 // Source: docs/openapi/vocab/EventTopic.yaml
 
 import type {
+  ActionContinuation,
   ActivityEvent,
   AgentPresenceEvent,
   ArtifactEvent,
@@ -13,6 +14,7 @@ import type {
   ChatVault,
   CheckpointEvent,
   CodeScanEvent,
+  ContinuationNotice,
   CostEvent,
   EditorDocumentEvent,
   FileBriefingEvent,
@@ -49,6 +51,8 @@ export type EventPayloadMap = {
   board: BoardEvent;
   cost: CostEvent;
   llm: LLMCallEvent;
+  continuation_notice: ContinuationNotice;
+  continuation: ActionContinuation;
   activity: ActivityEvent;
   oar: OAROnFireEvent;
   scan: CodeScanEvent;

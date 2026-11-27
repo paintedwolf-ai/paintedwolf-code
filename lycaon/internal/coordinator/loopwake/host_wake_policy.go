@@ -13,7 +13,7 @@ import (
 type HostWakePolicyDeps struct {
 	DropPendingKicksBeforeBatchSeq func(sessionID string, liveSeq int)
 	DropPendingKicksForBatchSeq    func(sessionID string, batchSeq int)
-	HostWakeActionable             func(ctx context.Context, in HostWakeActionableInput) bool
+	HostWakeActionable             func(ctx context.Context, in HostWakeActionableInput) api.WakeReason
 	WorkflowSource                 *WorkflowDomains
 }
 type HostWakePolicy struct {
@@ -60,7 +60,7 @@ func (l *HostWakePolicy) dropClosedBatchPendingKicks(ctx context.Context, sessio
 		deps.DropPendingKicksForBatchSeq(sessionID, live.Seq)
 	}
 }
-func (l *HostWakePolicy) hostWakeSkipReason(ctx context.Context, in HostWakeActionableInput) (string, bool) {
+func (l *HostWakePolicy) hostWakeSkipReason(ctx context.Context, in HostWakeActionableInput) (api.WakeReason, bool) {
 	if l == nil {
 		return "", false
 	}
@@ -68,20 +68,21 @@ func (l *HostWakePolicy) hostWakeSkipReason(ctx context.Context, in HostWakeActi
 	// Dormant terminal transitions do not start another model turn.
 	if isAlwaysWakeInform(in.Inform) || (isAlwaysWakeNudge(in.Wake) && strings.TrimSpace(in.CompletingJobID) != "") {
 		if l.workflowRunFinished(ctx, in.SessionID) && !l.Subscriptions.overlayPromoteDue(ctx, in.SessionID) && !in.Env.HasWorkerDecision() {
-			return "skip:workflow_terminal", true
+			return api.WakeReasonWorkflowTerminal, true
 		}
 		if phaseAdvancedWake(in) &&
 			!l.Subscriptions.overlayPromoteDue(ctx, in.SessionID) &&
-			!in.Env.HasWorkerDecision() &&
-			!l.hostWakeActionable(ctx, in) {
-			return "skip:non_actionable", true
+			!in.Env.HasWorkerDecision() {
+			if reason := l.actionabilityReason(ctx, in); reason != "" {
+				return reason, true
+			}
 		}
 		return "", false
 	}
 	live := l.coordinatorBatchState(ctx, in.SessionID)
 	if isStaleBatchSeq(live, in.Env) {
 		l.dropStaleBatchWake(ctx, in.SessionID, live)
-		return "drop:stale_batch_seq", true
+		return api.WakeReasonStaleBatch, true
 	}
 	// Open workflow obligations keep timer wakes actionable.
 	if in.Wake == anchor.WaitTimerFired && l.Facts.workflowObligationsOpen(ctx, in.SessionID) {
@@ -89,7 +90,7 @@ func (l *HostWakePolicy) hostWakeSkipReason(ctx context.Context, in HostWakeActi
 	}
 	if in.Wake == anchor.WaitTimerFired && live.Phase == batch.PhaseClosed {
 		l.Waits.disarmTimerOnClosedBatch(ctx, in.SessionID, live)
-		return "skip:batch_closed", true
+		return api.WakeReasonBatchClosed, true
 	}
 	if l.Subscriptions.overlayPromoteDue(ctx, in.SessionID) {
 		return "", false
@@ -98,22 +99,22 @@ func (l *HostWakePolicy) hostWakeSkipReason(ctx context.Context, in HostWakeActi
 	if in.Env.HasWorkerDecision() {
 		return "", false
 	}
-	actionable := l.hostWakeActionable(ctx, in)
+	reason := l.actionabilityReason(ctx, in)
 	if in.Wake == anchor.WaitTimerFired {
-		if !actionable {
+		if reason != "" {
 			l.Waits.DisarmTimerBackstop(ctx, in.SessionID)
-			return "skip:non_actionable", true
+			return reason, true
 		}
 	}
-	if actionable {
+	if reason == "" {
 		return "", false
 	}
 	if phaseAdvancedWake(in) {
-		return "skip:non_actionable", true
+		return reason, true
 	}
 	// Post-turn drain reuses the existing terminal fact.
 	if in.PostTurnDrain && in.Wake == anchor.WorkerTaskFinished {
-		return "skip:non_actionable", true
+		return reason, true
 	}
 	if in.Wake == anchor.WaitTimerFired {
 		return "", false
@@ -124,11 +125,14 @@ func (l *HostWakePolicy) hostWakeSkipReason(ctx context.Context, in HostWakeActi
 	if l.Cycles.workerCycleIdle(ctx, in.SessionID, in.CompletingJobID) {
 		return "", false
 	}
-	return "skip_turn_rearm", true
+	return api.WakeReasonTurnRearm, true
 }
-func (l *HostWakePolicy) hostWakeActionable(ctx context.Context, in HostWakeActionableInput) bool {
+func (l *HostWakePolicy) actionabilityReason(ctx context.Context, in HostWakeActionableInput) api.WakeReason {
 	deps := l.loopDeps()
-	return deps.HostWakeActionable == nil || deps.HostWakeActionable(ctx, in)
+	if deps.HostWakeActionable == nil {
+		return ""
+	}
+	return deps.HostWakeActionable(ctx, in)
 }
 func (l *HostWakePolicy) workflowRunFinished(ctx context.Context, sessionID string) bool {
 	if l == nil {

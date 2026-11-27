@@ -206,7 +206,7 @@ func (s *Submission) preparePromptAdmission(
 			s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "Recovery cannot add attachments, references, or secrets; send them as a new message")
 			return promptAdmission{}, false
 		}
-		return promptAdmission{input: promptinput.Input{Text: text, Recovery: req.Recovery}}, true
+		return promptAdmission{input: promptinput.Input{Text: text, Recovery: req.Recovery, RecoveryContinuationID: req.RecoveryContinuationID}}, true
 	}
 
 	caps := s.Caps
@@ -267,7 +267,7 @@ func (s *Submission) preparePromptAdmission(
 
 	return promptAdmission{
 		input: promptinput.Input{
-			Text: text, ArtifactIDs: artifactIDs, Recovery: req.Recovery,
+			Text: text, ArtifactIDs: artifactIDs, Recovery: req.Recovery, RecoveryContinuationID: req.RecoveryContinuationID,
 			SourceContext: refResult.SourceContext(),
 			ContentParts:  PromptContentParts(userProse, ingested.Parts, refResult.Parts, secretParts),
 		},

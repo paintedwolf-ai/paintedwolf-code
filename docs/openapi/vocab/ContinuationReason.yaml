@@ -1,0 +1,17 @@
+name: ContinuationReason
+go_const_prefix: ContinuationReason
+values:
+  - id: human_approval_awaiting
+  - id: host_obligation_held
+  - id: pending_user_input
+  - id: active_hold
+  - id: workflow_paused
+  - id: workflow_canceled
+  - id: workflow_completed
+  - id: no_open_request
+  - id: turn_budget_reached
+  - id: run_inactive
+  - id: session_closed
+  - id: admission_denied
+  - id: user_interrupted
+  - id: action_interrupted

@@ -7,13 +7,15 @@ package api
 type EventTopic string
 
 const (
-	EventTopicSession    EventTopic = "session"
-	EventTopicMessage    EventTopic = "message"
-	EventTopicWorker     EventTopic = "worker"
-	EventTopicCheckpoint EventTopic = "checkpoint"
-	EventTopicBoard      EventTopic = "board"
-	EventTopicCost       EventTopic = "cost"
-	EventTopicLLM        EventTopic = "llm"
+	EventTopicSession            EventTopic = "session"
+	EventTopicMessage            EventTopic = "message"
+	EventTopicWorker             EventTopic = "worker"
+	EventTopicCheckpoint         EventTopic = "checkpoint"
+	EventTopicBoard              EventTopic = "board"
+	EventTopicCost               EventTopic = "cost"
+	EventTopicLLM                EventTopic = "llm"
+	EventTopicContinuationNotice EventTopic = "continuation_notice"
+	EventTopicContinuation       EventTopic = "continuation"
 	// EventTopicActivity Session-scoped, host-observed work currently occupying a
 	// live turn. Start and terminal events share one activity id so clients never
 	// infer liveness from transcript timing or model-authored progress prose.
@@ -107,6 +109,8 @@ var allEventTopicValues = []EventTopic{
 	EventTopicBoard,
 	EventTopicCost,
 	EventTopicLLM,
+	EventTopicContinuationNotice,
+	EventTopicContinuation,
 	EventTopicActivity,
 	EventTopicOAR,
 	EventTopicScan,

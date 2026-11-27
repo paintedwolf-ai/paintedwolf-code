@@ -257,6 +257,7 @@ components:
         - security_disabled
         - grounding_escalated
         - session_spend_ceiling_reached
+        - coordinator_not_continued
         - prompt_failed
         - turn_closeout_tool_call
         - host_fault

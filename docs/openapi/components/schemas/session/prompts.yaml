@@ -293,6 +293,7 @@ components:
       - text
       additionalProperties: false
       properties:
+        recovery_continuation_id: {type: string, format: uuid}
         mode:
           x-go-pointer: true
           $ref: 'identity.yaml#/components/schemas/SessionMode'

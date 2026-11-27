@@ -1,0 +1,6 @@
+{
+  "$id": "https://paintedwolf.dev/schemas/events/continuation_notice.json",
+  "$ref": "../../openapi/components/schemas/session/continuations.yaml#/components/schemas/ContinuationNotice",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ContinuationNotice"
+}

@@ -2,9 +2,11 @@ package loopwake
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func interruptedUntilForTest(l *Waits, sessionID string) time.Time {
@@ -53,5 +55,6 @@ func waitLeaseOpenForTest(l *Waits, sessionID string) bool {
 	return strings.TrimSpace(st.activityID) != ""
 }
 func evaluateForTest(l *Admission, ctx context.Context, sessionID string, wake anchor.ID) (allow bool, busy bool) {
-	return l.evaluate(ctx, sessionID)
+	state, reason, _ := l.decision(ctx, sessionID)
+	return state == "" || reason == api.WakeReasonPromptActive, reason == api.WakeReasonPromptActive
 }

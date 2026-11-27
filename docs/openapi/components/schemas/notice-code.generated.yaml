@@ -5,6 +5,7 @@ components:
       type: string
       enum:
         - attachment_scanned_no_text
+        - coordinator_not_continued
         - grounding_escalated
         - host_fault
         - model_refused

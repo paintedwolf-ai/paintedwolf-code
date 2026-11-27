@@ -33,14 +33,17 @@ func TestHumanPlanStartLoopWakesCoordinator(t *testing.T) {
 	var run wire.WorkflowRun
 	testutil.FailErr(t, "decode started run", json.Unmarshal(w.Body.Bytes(), &run))
 
-	testutil.WaitFor(t, "the coordinator loop wakes for the started run", func() bool {
-		msgs, err := h.Store.Transcript.GetMessages(t.Context(), sess.ID)
-		testutil.FailErr(t, "GetMessages", err)
-		for _, msg := range msgs {
-			if !seen[msg.ID] && msg.Kind == wire.MessageKindHostLoopWake && msg.WorkflowRunID == run.ID {
-				return true
-			}
+	outcome, err := h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Outcomes.For(sess.ID).Actions.Await(t.Context(), run.ContinuationID)
+	testutil.FailErr(t, "await workflow start", err)
+	if outcome.State != wire.ContinuationStateContinued {
+		t.Fatalf("start outcome = %+v", outcome)
+	}
+	msgs, err := h.Store.Transcript.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "read started turn", err)
+	for _, msg := range msgs {
+		if !seen[msg.ID] && msg.Kind == wire.MessageKindHostLoopWake && msg.WorkflowRunID == run.ID {
+			return
 		}
-		return false
-	})
+	}
+	t.Fatal("started turn did not record the workflow wake")
 }

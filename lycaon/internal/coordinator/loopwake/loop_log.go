@@ -9,18 +9,6 @@ import (
 
 const loopLogComponent = "coordinator_loop"
 
-func loopLogNudge(sessionID string, wake, inform anchor.ID, legID, completingJobID, outcome string) {
-	slog.Debug("loop nudge",
-		"component", loopLogComponent,
-		"session_id", sessionID,
-		"wake", string(wake),
-		"inform", string(inform),
-		"leg_id", legID,
-		"completing_job_id", completingJobID,
-		"outcome", outcome,
-	)
-}
-
 func loopLogSleep(sessionID, action, reason string, until time.Time) {
 	attrs := []any{
 		"component", loopLogComponent,

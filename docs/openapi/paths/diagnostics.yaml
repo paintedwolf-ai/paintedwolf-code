@@ -15,6 +15,9 @@ paths:
           description: Zip archive
           content:
             application/zip:
+              x-archive-entries:
+                action-outcomes.json:
+                  $ref: '#/components/schemas/ActionOutcomeArchive'
               schema:
                 type: string
                 format: binary
@@ -25,3 +28,98 @@ paths:
           description: Diagnostics export assembly failed (diagnostics_export_failed)
         default:
           $ref: ../components/responses.yaml#/components/responses/Error
+
+components:
+  schemas:
+    ActionOutcomeArchive:
+      description: Retained host outcomes keyed by session ID.
+      type: object
+      additionalProperties:
+        type: object
+        required: [host_instance, wakes, turns, continuations]
+        properties:
+          host_instance: {type: string, format: uuid}
+          wakes:
+            type: array
+            items:
+              type: object
+              required: [sequence, session_id, anchor, state, steps]
+              properties:
+                sequence: {type: integer, minimum: 1}
+                session_id: {type: string, format: uuid}
+                anchor: {type: string}
+                state: {$ref: '#/components/schemas/WakeState'}
+                reason: {$ref: '#/components/schemas/WakeReason'}
+                continuation_id: {type: string, format: uuid}
+                turn_id: {type: string, format: uuid}
+                lease_id: {type: string, format: uuid}
+                steps:
+                  type: array
+                  items: &wakeStep
+                    type: object
+                    required: [state]
+                    properties:
+                      state: {$ref: '#/components/schemas/WakeState'}
+                      reason: {$ref: '#/components/schemas/WakeReason'}
+          defects:
+            type: array
+            items:
+              type: object
+              required: [sequence, problem, attempt]
+              properties:
+                sequence: {type: integer, minimum: 1}
+                problem: {type: string}
+                attempt: *wakeStep
+          turns:
+            type: array
+            items:
+              type: object
+              required: [turn_id, session_id, admitted_at]
+              properties:
+                turn_id: {type: string, format: uuid}
+                session_id: {type: string, format: uuid}
+                admitted_at: {type: string, format: date-time}
+                dispatched_at: {type: string, format: date-time}
+                settled_at: {type: string, format: date-time}
+                outcome: {$ref: '#/components/schemas/TurnOutcomeKind'}
+                lease_id: {type: string, format: uuid}
+                refusal: {$ref: '#/components/schemas/WakeReason'}
+                failure_code: {$ref: '#/components/schemas/NoticeCode'}
+                detail: {type: string}
+                closeout_blocked:
+                  type: object
+                  properties:
+                    code: {type: string}
+                    phase: {type: string}
+                    open_gate_leaves: {type: array, items: {type: string}}
+                    notice: {type: string}
+                output_truncated:
+                  type: object
+                  properties:
+                    provider_id: {type: string}
+                    model: {type: string}
+                    finish_reason: {type: string}
+                    max_tokens: {type: integer}
+                    configured_max_tokens: {type: integer}
+                    provider_max_tokens: {type: integer}
+                    low_output_ceiling: {type: boolean}
+                    tool_call_truncated: {type: boolean}
+                    tool_name: {type: string}
+                    tool_args_bytes: {type: integer}
+                    notice: {type: string}
+                canceled_by: {$ref: '#/components/schemas/TurnCancellationSource'}
+          continuations:
+            type: array
+            items: {$ref: '#/components/schemas/ActionContinuation'}
+    ActionContinuation:
+      $ref: ../components/schemas/session/continuations.yaml#/components/schemas/ActionContinuation
+    NoticeCode:
+      $ref: ../components/schemas/notice-code.generated.yaml#/components/schemas/NoticeCode
+    TurnCancellationSource:
+      $ref: ../components/schemas/turn-cancellation-source.generated.yaml#/components/schemas/TurnCancellationSource
+    TurnOutcomeKind:
+      $ref: ../components/schemas/turn-outcome-kind.generated.yaml#/components/schemas/TurnOutcomeKind
+    WakeReason:
+      $ref: ../components/schemas/wake-reason.generated.yaml#/components/schemas/WakeReason
+    WakeState:
+      $ref: ../components/schemas/wake-state.generated.yaml#/components/schemas/WakeState

@@ -2,15 +2,16 @@ package loopwake
 
 import (
 	"context"
+	"sync/atomic"
+	"testing"
+	"time"
+
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"sync/atomic"
-	"testing"
-	"time"
 )
 
 func TestTerminalAcknowledgementSettlesOnlySubscribedCoordinatorWaits(t *testing.T) {
@@ -40,7 +41,7 @@ func TestTerminalAcknowledgementSettlesOnlySubscribedCoordinatorWaits(t *testing
 			deps.GetSession = func(context.Context, string) (*api.Session, error) {
 				return &api.Session{ID: id, Status: api.SessionStatusBusy}, nil
 			}
-			deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
+			deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return api.WakeReasonNonActionable }
 			deps.WorkerCycleIdle = func(context.Context, *api.Session, string) (bool, error) { return tt.idle, nil }
 			deps.RunWaitResume = func(_ context.Context, _ string, delivery WaitDelivery) (*promptresult.Result, error) {
 				if delivery.Condition.Kind != tt.condition || delivery.Condition.Outcome != "satisfied" {

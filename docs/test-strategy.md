@@ -823,6 +823,8 @@ goroutine stack, and then ends the run. Digests and CI annotations name the
 pending waits. Nothing scales with host load: a test bounds its waits by the
 test, and a timeout handed to product code is the literal the test is about.
 
+For coordinator wake tests, await the ticket returned by the nudge. A delivered ticket carries the admitted turn ID. Use that ID to await turn settlement. Tests of a user action use the response continuation ID to observe the first linked provider dispatch, a declared hold, or a specific failure. Session diagnostics preserve the wake transitions and their reasons.
+
 Compilation artifacts use the persistent Go cache across snapshots, tests,
 fuzzing, and lint. Snapshot worktrees reuse leased directory slots, preserving
 the absolute source paths in Go's compilation cache keys; active descendants

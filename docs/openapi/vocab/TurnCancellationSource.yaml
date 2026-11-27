@@ -1,0 +1,6 @@
+name: TurnCancellationSource
+go_const_prefix: TurnCancellationSource
+values:
+  - id: user
+  - id: host
+  - id: shutdown

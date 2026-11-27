@@ -10,6 +10,19 @@ type AbortSessionRequest struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+// ActionContinuation
+type ActionContinuation struct {
+	ContinuationID string             `json:"continuation_id"`
+	SessionID      string             `json:"session_id"`
+	Action         ContinuationAction `json:"action"`
+	State          ContinuationState  `json:"state"`
+	Reason         ContinuationReason `json:"reason,omitempty"`
+	TurnID         string             `json:"turn_id,omitempty"`
+	FailureCode    string             `json:"failure_code,omitempty"`
+	OpenedAt       time.Time          `json:"opened_at"`
+	ResolvedAt     *time.Time         `json:"resolved_at,omitempty"`
+}
+
 // ActionDescriptor The host's account of one visible action, composed from typed facts on the call, its result or its command activity. Den draws every action card from this and owns only copy and formatting.
 type ActionDescriptor struct {
 	// Verb-first action name from the tool presentation catalog.
@@ -930,9 +943,11 @@ type BlobComparisonSource struct {
 
 // Blueprint
 type Blueprint struct {
-	ID        string `json:"id"`
-	ProjectID string `json:"project_id"`
-	Title     string `json:"title"`
+	// Outcome of the continuing action that produced this response.
+	ContinuationID string `json:"continuation_id,omitempty"`
+	ID             string `json:"id"`
+	ProjectID      string `json:"project_id"`
+	Title          string `json:"title"`
 	// Project-relative path under the overlay blueprints/ directory
 	Path                string          `json:"path"`
 	SourceWorkflowID    string          `json:"source_workflow_id,omitempty"`
@@ -2140,6 +2155,14 @@ type ContentReviewRule struct {
 	Reason string `json:"reason,omitempty"`
 	// Optional pause on this rule. While this instant is in the future, edits matching the rule apply without content review; afterwards the rule asks again. Set by the edit-review card's time-boxed skip.
 	DisabledUntilAt *time.Time `json:"disabled_until_at,omitempty"`
+}
+
+// ContinuationNotice
+type ContinuationNotice struct {
+	SessionID      string            `json:"session_id"`
+	Revision       int64             `json:"revision"`
+	ContinuationID string            `json:"continuation_id,omitempty"`
+	HostError      *SessionHostError `json:"host_error,omitempty"`
 }
 
 // ContributionAgentColors Theme-authored color family for agent chats. Den gives each chat a lightness step around one muted hue and enforces display contrast.
@@ -5596,6 +5619,7 @@ type PromptRecovery struct {
 
 // PromptRequest
 type PromptRequest struct {
+	RecoveryContinuationID string `json:"recovery_continuation_id,omitempty"`
 	// Bind or upgrade the session mode at admission.
 	Mode *SessionMode `json:"mode,omitempty"`
 	// Stable client mutation identity. An exact retry replays the original submission; reusing this id with different input is rejected with 409 idempotency_conflict.
@@ -6885,8 +6909,10 @@ type SessionBackgroundExecutionJob struct {
 // SessionBootstrap
 type SessionBootstrap struct {
 	// Replay boundary captured before the snapshot was read
-	EventCursor string  `json:"event_cursor"`
-	Session     Session `json:"session"`
+	EventCursor        string               `json:"event_cursor"`
+	Session            Session              `json:"session"`
+	ContinuationNotice *ContinuationNotice  `json:"continuation_notice,omitempty"`
+	Continuations      []ActionContinuation `json:"continuations,omitempty"`
 	// Current host work leases for this session. Omitted when no leases remain.
 	Activities        []ActivityEvent           `json:"activities,omitempty"`
 	Transcript        SessionTranscriptPage     `json:"transcript"`
@@ -10004,6 +10030,8 @@ type WorkflowRun struct {
 	PausedAt       *time.Time       `json:"paused_at,omitempty"`
 	CompletedAt    *time.Time       `json:"completed_at,omitempty"`
 	UI             *WorkflowRunUi   `json:"ui,omitempty"`
+	// Outcome of the continuing action that produced this response.
+	ContinuationID string `json:"continuation_id,omitempty"`
 }
 
 // WorkflowRunObligation

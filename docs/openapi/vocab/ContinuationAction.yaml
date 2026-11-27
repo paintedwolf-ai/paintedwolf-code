@@ -1,0 +1,8 @@
+name: ContinuationAction
+go_const_prefix: ContinuationAction
+values:
+  - id: plan_approval
+  - id: workflow_start
+  - id: workflow_resume
+  - id: feedback
+  - id: ask_answer

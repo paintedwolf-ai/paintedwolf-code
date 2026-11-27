@@ -5,16 +5,16 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 )
 
-func (l *PromptObservations) ObservePrompt(sessionID string) func(inject.CoordinatorTurnFrame) {
+func (l *PromptObservations) ObservePrompt(ctx context.Context, sessionID string) func(inject.CoordinatorTurnFrame) {
 	seq := l.Nudges.nextSequence()
 	return func(frame inject.CoordinatorTurnFrame) {
-		l.promptObservedSeq.Store(sessionID, seq)
-		l.promptWorkflow.Store(sessionID, observedWorkflow{frame.RunContext.RunID, frame.WorkflowRevision})
-		slog.Debug("prompt wake observation", "component", loopLogComponent, "session_id", sessionID, "sequence", seq, "run_id", frame.RunContext.RunID, "workflow_revision", frame.WorkflowRevision)
+		l.promptWorkflow.Store(sessionID, observedWorkflow{sequence: seq, runID: frame.RunContext.RunID, revision: frame.WorkflowRevision, turn: actionoutcome.CurrentTurn(ctx)})
+		slog.DebugContext(ctx, "prompt wake observation", "component", loopLogComponent, "session_id", sessionID, "sequence", seq, "run_id", frame.RunContext.RunID, "workflow_revision", frame.WorkflowRevision)
 	}
 }
 func (l *PromptObservations) wakeConsumed(ctx context.Context, sessionID string, pending pendingLoopWake) bool {
@@ -37,33 +37,24 @@ func (l *PromptObservations) wakeConsumed(ctx context.Context, sessionID string,
 	if l.Nudges.kickStillQueued(sessionID, inform) {
 		return false
 	}
-	consumed := pending.seq < l.lastPromptObservedSeq(sessionID)
+	value, ok := l.promptWorkflow.Load(sessionID)
+	if !ok {
+		return false
+	}
+	seen := value.(observedWorkflow)
+	consumed := pending.seq < seen.sequence
 	if pending.wake == anchor.PhaseAdvanced && pending.runID != "" && pending.revision > 0 {
-		// Phase events require an observed revision from the same run.
-		consumed = false
-		if value, ok := l.promptWorkflow.Load(sessionID); ok {
-			observed := value.(observedWorkflow)
-			consumed = observed.runID == pending.runID && observed.revision >= pending.revision
-		}
+		consumed = seen.runID == pending.runID && seen.revision >= pending.revision
 	}
 	if consumed {
-		loopLogNudge(sessionID, pending.wake, pending.inform, pending.legID, pending.completingJobID, "consumed_by_prompt")
+		pending.ticket.Consumed(seen.turn)
 	}
 	return consumed
 }
 
 type PromptObservations struct {
-	promptObservedSeq sync.Map
-	promptWorkflow    sync.Map
-	Nudges            *Nudges
-	Deliveries        *WaitDeliveries
-	Subscriptions     *WaitSubscriptions
-}
-
-func (l *PromptObservations) lastPromptObservedSeq(sessionID string) uint64 {
-	if v, ok := l.promptObservedSeq.Load(sessionID); ok {
-		seq, _ := v.(uint64)
-		return seq
-	}
-	return 0
+	promptWorkflow sync.Map
+	Nudges         *Nudges
+	Deliveries     *WaitDeliveries
+	Subscriptions  *WaitSubscriptions
 }

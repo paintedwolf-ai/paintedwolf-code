@@ -1,0 +1,32 @@
+name: WakeReason
+go_const_prefix: WakeReason
+values:
+  - id: worker_cycle
+  - id: prompt_active
+  - id: turn_blocked
+  - id: human_approval_awaiting
+  - id: host_obligation_held
+  - id: pending_user_input
+  - id: active_hold
+  - id: workflow_terminal
+  - id: non_actionable
+  - id: batch_closed
+  - id: turn_rearm
+  - id: no_request
+  - id: loop_disabled
+  - id: wrong_session_role
+  - id: escalated
+  - id: policy_denied
+  - id: stale_batch
+  - id: precedence_busy
+  - id: job_terminal
+  - id: budget_exhausted
+  - id: session_closed
+  - id: session_missing
+  - id: no_active_run
+  - id: lookup_failed
+  - id: prompt_interrupted
+  - id: user_stopped
+  - id: rewound
+  - id: turn_settled
+  - id: defect

@@ -143,6 +143,10 @@ components:
         - updated_at
       additionalProperties: false
       properties:
+        continuation_id:
+          type: string
+          format: uuid
+          description: Outcome of the continuing action that produced this response.
         id:
           type: string
           format: uuid

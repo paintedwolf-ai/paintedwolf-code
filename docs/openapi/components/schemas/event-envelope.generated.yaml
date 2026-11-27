@@ -12,6 +12,8 @@ components:
       - $ref: '#/components/schemas/EventEnvelopeBoard'
       - $ref: '#/components/schemas/EventEnvelopeCost'
       - $ref: '#/components/schemas/EventEnvelopeLlm'
+      - $ref: '#/components/schemas/EventEnvelopeContinuationNotice'
+      - $ref: '#/components/schemas/EventEnvelopeContinuation'
       - $ref: '#/components/schemas/EventEnvelopeActivity'
       - $ref: '#/components/schemas/EventEnvelopeOar'
       - $ref: '#/components/schemas/EventEnvelopeScan'
@@ -51,6 +53,8 @@ components:
           board: '#/components/schemas/EventEnvelopeBoard'
           cost: '#/components/schemas/EventEnvelopeCost'
           llm: '#/components/schemas/EventEnvelopeLlm'
+          continuation_notice: '#/components/schemas/EventEnvelopeContinuationNotice'
+          continuation: '#/components/schemas/EventEnvelopeContinuation'
           activity: '#/components/schemas/EventEnvelopeActivity'
           oar: '#/components/schemas/EventEnvelopeOar'
           scan: '#/components/schemas/EventEnvelopeScan'
@@ -164,6 +168,30 @@ components:
             const: llm
           data:
             $ref: 'events.yaml#/components/schemas/LLMCallEvent'
+    EventEnvelopeContinuationNotice:
+      allOf:
+      - $ref: 'events.yaml#/components/schemas/EventEnvelopeBase'
+      - type: object
+        required:
+        - topic
+        - data
+        properties:
+          topic:
+            const: continuation_notice
+          data:
+            $ref: 'session/continuations.yaml#/components/schemas/ContinuationNotice'
+    EventEnvelopeContinuation:
+      allOf:
+      - $ref: 'events.yaml#/components/schemas/EventEnvelopeBase'
+      - type: object
+        required:
+        - topic
+        - data
+        properties:
+          topic:
+            const: continuation
+          data:
+            $ref: 'session/continuations.yaml#/components/schemas/ActionContinuation'
     EventEnvelopeActivity:
       allOf:
       - $ref: 'events.yaml#/components/schemas/EventEnvelopeBase'

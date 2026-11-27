@@ -3,7 +3,6 @@ package events
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/messageview"
 	"log/slog"
 	"strings"
 	"sync"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -514,4 +514,20 @@ func (p *Publisher) PublishAgentPresence(ctx context.Context, ev api.AgentPresen
 	}
 	key := PublishKey{Project: ev.ProjectID, Facet: ev.SessionID, EntityRevision: uint64(max(ev.Revision, 0))}
 	logPublishFailure(ctx, "PublishAgentPresence", api.EventTopicAgentPresence, p.Hub.Publish(ctx, api.EventTopicAgentPresence, key, ev))
+}
+
+func (p *Publisher) PublishContinuation(ctx context.Context, projectID string, ev api.ActionContinuation) {
+	if p == nil || p.Hub == nil {
+		return
+	}
+	key := PublishKeyFor(ctx, p.Lookup, projectID, ev.SessionID)
+	logPublishFailure(ctx, "PublishContinuation", api.EventTopicContinuation, p.Hub.Publish(ctx, api.EventTopicContinuation, key, ev))
+}
+
+func (p *Publisher) PublishContinuationNotice(ctx context.Context, projectID string, ev api.ContinuationNotice) {
+	if p == nil || p.Hub == nil {
+		return
+	}
+	key := PublishKeyFor(ctx, p.Lookup, projectID, ev.SessionID)
+	logPublishFailure(ctx, "PublishContinuationNotice", api.EventTopicContinuationNotice, p.Hub.Publish(ctx, api.EventTopicContinuationNotice, key, ev))
 }

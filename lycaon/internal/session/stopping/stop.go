@@ -172,11 +172,11 @@ func (m *Service) workerReleaseContext(ctx context.Context) (context.Context, co
 func (m *Service) cancelTreeTurns(ctx context.Context, tree []store.SessionTreeMember) {
 	rt := m.runtime
 	for _, sess := range tree {
-		m.execution.Cancel(sess.ID)
+		m.execution.CancelByUser(sess.ID)
 		if rt == nil {
 			continue
 		}
-		rt.CoordinatorLoop().Nudges.ClearPending(sess.ID)
+		rt.CoordinatorLoop().Nudges.ClearPending(sess.ID, api.WakeReasonUserStopped)
 		rt.Kicks().ClearPending(sess.ID)
 		rt.CoordinatorLoop().Waits.InterruptSleep(ctx, sess.ID)
 	}

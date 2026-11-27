@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/failure"
@@ -487,6 +488,9 @@ func attachStreamObservers(
 	loopProgress func() *api.CoordinatorLoopProgress,
 ) context.Context {
 	ctx = llm.WithDispatchObserver(ctx, func() {
+		if isCoordinatorTurn {
+			actionoutcome.Dispatch(ctx)
+		}
 		finishPreparing()
 		if l.Projection.Deps.Events == nil || !isCoordinatorTurn {
 			return

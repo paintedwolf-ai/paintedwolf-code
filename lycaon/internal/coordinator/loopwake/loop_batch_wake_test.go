@@ -2,6 +2,10 @@ package loopwake
 
 import (
 	"context"
+	"sync/atomic"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -9,9 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"sync/atomic"
-	"testing"
-	"time"
 )
 
 func closedBatchLoopWF(seq int) StubLoopWF {
@@ -83,7 +84,7 @@ func TestLoopDropScheduledWhenNonActionable(t *testing.T) {
 		prompts.Add(1)
 		return &promptresult.Result{}, nil
 	}
-	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
+	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return api.WakeReasonNonActionable }
 	engine.SetDeps(deps)
 	engine.Nudges.Nudge(context.Background(), "s1", anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
 	engine.Turns.WaitForAsyncTurns(t.Context())
@@ -320,7 +321,7 @@ func TestLoopScheduledRunsWhenObligationsOpenOnClosedBatch(t *testing.T) {
 	}
 	deps.WorkflowSource = workflowFixturePorts(closedBatchLoopWF(2))
 	deps.WorkflowObligationsOpen = func(context.Context, string) bool { return true }
-	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
+	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return api.WakeReasonNonActionable }
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
 		return &promptresult.Result{}, nil
@@ -353,7 +354,7 @@ func TestStackedWakeFactsAreConsumedByOneObservedPrompt(t *testing.T) {
 		},
 	})
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
-		engine.Observations.ObservePrompt("s1")(inject.CoordinatorTurnFrame{})
+		engine.Observations.ObservePrompt(t.Context(), "s1")(inject.CoordinatorTurnFrame{})
 		prompts.Add(1)
 		return &promptresult.Result{}, nil
 	}

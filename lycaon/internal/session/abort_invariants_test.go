@@ -71,7 +71,7 @@ func TestAbortSignalsAndStopsWorkersBeforeSessionRuntimeGate(t *testing.T) {
 
 	canceled := make(chan struct{})
 	var cancelOnce sync.Once
-	mgr.Runner.Execution.RegisterCancel(sess.ID, func() { cancelOnce.Do(func() { close(canceled) }) })
+	mgr.Runner.Execution.RegisterCancel(sess.ID, func(error) { cancelOnce.Do(func() { close(canceled) }) })
 	abort := &capturingWorkerAbort{calledCh: make(chan struct{})}
 	mgr.SetSessionWorkerAbort(abort)
 	gate := mgr.Runner.Execution.Prompt.Acquire(sess.ID)

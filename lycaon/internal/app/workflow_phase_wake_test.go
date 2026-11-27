@@ -78,17 +78,17 @@ func TestCrossPhaseHostAdvanceQueuesCoordinatorWake(t *testing.T) {
 	workersRt.OnWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "triage", "expand")
 
 	nudges := sessionMgr.Coordinator.Runtime.CoordinatorLoop().Nudges
-	nudges.ClearPending(sess.ID)
+	nudges.ClearPending(sess.ID, api.WakeReasonTurnSettled)
 	workersRt.OnWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "", "expand")
 	if starts != 1 {
 		t.Fatalf("initial phase topology starts=%d", starts)
 	}
-	nudges.ClearPending(sess.ID)
+	nudges.ClearPending(sess.ID, api.WakeReasonTurnSettled)
 	workersRt.OnWorkflowRunResumed(ctx, run)
 	if got, ok := nudges.Pending(sess.ID); !ok || got != anchor.PhaseAdvanced {
 		t.Fatalf("resumed run wake=%s,%v", got, ok)
 	}
-	nudges.ClearPending(sess.ID)
+	nudges.ClearPending(sess.ID, api.WakeReasonTurnSettled)
 	stale := *run
 	stale.ID = "stale-run"
 	workersRt.OnWorkflowRunResumed(ctx, &stale)

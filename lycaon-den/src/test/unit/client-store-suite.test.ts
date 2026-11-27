@@ -18,6 +18,8 @@ describe("client + store suite", () => {
         topic === "preview" ||
         topic === "attention" ||
         topic === "activity" ||
+        topic === "continuation" ||
+        topic === "continuation_notice" ||
         topic === "oar" ||
         topic === "cli_open" ||
         topic === "source_changed" ||

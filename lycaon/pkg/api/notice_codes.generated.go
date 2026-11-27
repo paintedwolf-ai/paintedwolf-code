@@ -4,6 +4,7 @@ package api
 
 const (
 	NoticeCodeAttachmentScannedNoText      NoticeCode = "attachment_scanned_no_text"
+	NoticeCodeCoordinatorNotContinued      NoticeCode = "coordinator_not_continued"
 	NoticeCodeGroundingEscalated           NoticeCode = "grounding_escalated"
 	NoticeCodeHostFault                    NoticeCode = "host_fault"
 	NoticeCodeModelRefused                 NoticeCode = "model_refused"

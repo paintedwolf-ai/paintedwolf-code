@@ -708,6 +708,9 @@ const (
 	// ApiErrorCodeSessionSpendCeilingReached opt-in per-session USD spend ceiling
 	// reached (SSE host_error)
 	ApiErrorCodeSessionSpendCeilingReached ApiErrorCode = "session_spend_ceiling_reached"
+	// ApiErrorCodeCoordinatorNotContinued the host could not continue an accepted
+	// workflow action (SSE host_error)
+	ApiErrorCodeCoordinatorNotContinued ApiErrorCode = "coordinator_not_continued"
 	// ApiErrorCodePromptFailed generic async prompt turn failure (SSE host_error)
 	ApiErrorCodePromptFailed ApiErrorCode = "prompt_failed"
 	// ApiErrorCodeTurnCloseoutToolCall the model answered its final, tool-less
@@ -1211,6 +1214,7 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeSecurityDisabled,
 	ApiErrorCodeGroundingEscalated,
 	ApiErrorCodeSessionSpendCeilingReached,
+	ApiErrorCodeCoordinatorNotContinued,
 	ApiErrorCodePromptFailed,
 	ApiErrorCodeTurnCloseoutToolCall,
 	ApiErrorCodeHostFault,
@@ -1545,6 +1549,7 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeSecurityDisabled,
 		ApiErrorCodeGroundingEscalated,
 		ApiErrorCodeSessionSpendCeilingReached,
+		ApiErrorCodeCoordinatorNotContinued,
 		ApiErrorCodeSessionArchived,
 		ApiErrorCodeSessionModeLocked,
 		ApiErrorCodeSessionAskModeWorkflowRequiresAgent,

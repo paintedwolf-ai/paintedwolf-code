@@ -1,0 +1,38 @@
+surfaces: [host_error]
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  required: [reason, action]
+title: Coordinator did not continue
+message: >-
+  {% if reason == "no_open_request" %}The coordinator needs a request before it can continue.
+  {% elif reason == "turn_budget_reached" %}This workflow used its coordinator turn budget. You can continue it with a prompt.
+  {% elif reason == "run_inactive" %}The workflow is no longer running.
+  {% elif reason == "session_closed" %}The chat closed before the coordinator could continue.
+  {% elif reason == "admission_denied" %}The host declined the coordinator turn.
+  {% elif reason == "host_lookup_failed" %}The host could not read the workflow state needed to continue.
+  {% elif reason == "host_invariant_failed" %}The host could not account for the coordinator wake.
+  {% else %}The action was interrupted before the coordinator could continue.{% endif %}
+suggested_action: >-
+  {% if reason == "no_open_request" or reason == "turn_budget_reached" %}Send a prompt describing what to do next.
+  {% elif reason == "session_closed" %}Open a chat to continue the work.
+  {% elif reason == "run_inactive" %}Start a workflow when you are ready to continue.
+  {% else %}Check the current workflow state before trying again.{% endif %}
+actions:
+  - '{% if reason == "no_open_request" or reason == "turn_budget_reached" %}prompt_keep_going{% endif %}'
+scenarios:
+  - id: no_open_request
+    vars: {reason: no_open_request, action: plan_approval}
+  - id: turn_budget_reached
+    vars: {reason: turn_budget_reached, action: plan_approval}
+  - id: run_inactive
+    vars: {reason: run_inactive, action: plan_approval}
+  - id: session_closed
+    vars: {reason: session_closed, action: plan_approval}
+  - id: admission_denied
+    vars: {reason: admission_denied, action: plan_approval}
+  - id: host_lookup_failed
+    vars: {reason: host_lookup_failed, action: plan_approval}
+  - id: host_invariant_failed
+    vars: {reason: host_invariant_failed, action: plan_approval}
+  - id: action_interrupted
+    vars: {reason: action_interrupted, action: plan_approval}

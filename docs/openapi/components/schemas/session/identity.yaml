@@ -222,6 +222,12 @@ components:
           type: string
           description: Replay boundary captured before the snapshot was read
         session: {$ref: '#/components/schemas/Session'}
+        continuation_notice:
+          x-go-pointer: true
+          $ref: continuations.yaml#/components/schemas/ContinuationNotice
+        continuations:
+          type: array
+          items: {$ref: continuations.yaml#/components/schemas/ActionContinuation}
         activities:
           type: array
           description: Current host work leases for this session. Omitted when no leases remain.

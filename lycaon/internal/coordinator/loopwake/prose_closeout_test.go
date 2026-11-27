@@ -2,10 +2,11 @@ package loopwake_test
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestHostWakeProseLifecycle(t *testing.T) {
@@ -40,7 +41,7 @@ func TestHostWakeCommittedProseKeepsWorkflowObligations(t *testing.T) {
 		GetMessages:             func(context.Context, string) ([]api.Message, error) { return history, nil },
 		WorkflowObligationsOpen: func(context.Context, string) bool { return true },
 	})
-	if !actionable(t.Context(), loopwake.HostWakeActionableInput{SessionID: "selection"}) {
+	if actionable(t.Context(), loopwake.HostWakeActionableInput{SessionID: "selection"}) != "" {
 		t.Fatal("committed prose suppressed an outstanding workflow obligation")
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -40,7 +41,9 @@ func (s *Topology) StartOrchestratedTopologyForRun(ctx context.Context, sessionI
 	if _, active := s.activeTopologyRuns.LoadOrStore(run.ID, struct{}{}); active {
 		return
 	}
+	ctx, release := actionoutcome.Producer(ctx)
 	s.background.Go(ctx, func(runCtx context.Context) {
+		defer release()
 		defer s.activeTopologyRuns.Delete(run.ID)
 		_, runErr := s.Orchestrator.Run(runCtx, orchestration.RunRequest{
 			SessionID:       sessionID,

@@ -7,8 +7,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type WaitDeliveriesDeps struct {
@@ -40,10 +42,16 @@ func (l *WaitDeliveries) loopDeps() WaitDeliveriesDeps {
 	defer l.depsMu.RUnlock()
 	return l.deps
 }
-func (l *WaitDeliveries) rememberWaitWinner(sessionID, leaseID string, winner awaitstore.Condition) {
+func (l *WaitDeliveries) rememberWaitWinner(sessionID, leaseID string, winner awaitstore.Condition) *waitWinner {
 	if l != nil && strings.TrimSpace(sessionID) != "" && strings.TrimSpace(winner.Kind) != "" {
-		l.waitWinners.Store(sessionID, &waitWinner{LeaseID: strings.TrimSpace(leaseID), Condition: winner})
+		next := &waitWinner{LeaseID: strings.TrimSpace(leaseID), Condition: winner}
+		prior, loaded := l.waitWinners.Swap(sessionID, next)
+		if loaded {
+			prior.(*waitWinner).handoff.Resolve(actionoutcome.WakeResult(api.WakeReasonTurnSettled))
+		}
+		return next
 	}
+	return nil
 }
 func (l *WaitDeliveries) waitWinner(sessionID string) (*waitWinner, bool) {
 	if l == nil {
@@ -90,12 +98,20 @@ func (l *WaitDeliveries) runWaitResume(ctx context.Context, sessionID string, wi
 		l.scheduleWaitResumeRetry(ctx, sessionID, winner, "wait resume runner unavailable")
 		return
 	}
-	_, err := deps.RunWaitResume(ctx, sessionID, WaitDelivery{
+	_, err := deps.RunWaitResume(actionoutcome.WithLease(ctx, winner.LeaseID, &winner.handoff), sessionID, WaitDelivery{
 		LeaseID: winner.LeaseID, Condition: winner.Condition,
 		Pending:  func() bool { return l.sameWaitWinner(sessionID, winner) },
 		Admitted: func() error { return l.markWaitWinnerDelivered(ctx, sessionID, winner) },
 	})
-	if l.sameWaitWinner(sessionID, winner) && !l.Turns.hostTurnBlocked(ctx, sessionID) {
+	if !l.sameWaitWinner(sessionID, winner) {
+		result := actionoutcome.WakeResult(api.WakeReasonTurnSettled)
+		if err != nil {
+			result = actionoutcome.WakeResult(api.WakeReasonLookupFailed)
+		}
+		winner.handoff.Resolve(result)
+		return
+	}
+	if !l.Turns.hostTurnBlocked(ctx, sessionID) {
 		cause := "wait resume admission was not acknowledged"
 		if err != nil {
 			cause = err.Error()

@@ -2,13 +2,14 @@ package loopwake
 
 import (
 	"context"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"sync"
-	"testing"
-	"time"
 )
 
 // leaseRecorder captures published lease edges in order.
@@ -151,7 +152,7 @@ func TestWaitLeaseRetiresWhenTimerFires(t *testing.T) {
 	loop := NewLoopEngine()
 	deps := leaseTestDeps(rec)
 	// Denied timer wakes retire the lease.
-	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
+	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return api.WakeReasonNonActionable }
 	loop.SetDeps(deps)
 
 	loop.Waits.EnterSleep(

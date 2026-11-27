@@ -2,13 +2,14 @@ package loopwake
 
 import (
 	"context"
+	"sync/atomic"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"sync/atomic"
-	"testing"
-	"time"
 )
 
 func TestEnsureTimerBackstop(t *testing.T) {
@@ -138,8 +139,8 @@ func TestLoopNeedsDecisionWakesThroughAllWorkersIdleWait(t *testing.T) {
 		prompts.Add(1)
 		return &promptresult.Result{}, nil
 	}
-	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool {
-		return false // mid-batch would otherwise skip_turn_rearm
+	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason {
+		return api.WakeReasonNonActionable
 	}
 	loop.SetDeps(deps)
 	loop.Waits.EnterSleep(context.Background(), "s1", time.Now().UTC().Add(30*time.Minute), "waiting for all workers", []WaitTrigger{WaitTriggerTimer, WaitTriggerAllWorkersIdle}, nil, SleepMoverHost)

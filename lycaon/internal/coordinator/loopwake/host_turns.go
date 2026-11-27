@@ -2,12 +2,18 @@ package loopwake
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/noticeerr"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/session/lifecycle"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type HostTurnsDeps struct {
@@ -41,12 +47,14 @@ func (l *HostTurns) loopDeps() HostTurnsDeps {
 	return l.deps
 }
 func (l *HostTurns) runPromptSync(ctx context.Context, sessionID string, pending pendingLoopWake) bool {
+	ticket, finishClaim := pending.ticket.Attempt()
+	pending.ticket = ticket
+	defer finishClaim()
 	if l.hostTurnBlocked(ctx, sessionID) {
 		l.Nudges.enqueuePending(sessionID, pending)
 		return false
 	}
 	if _, loaded := l.promptActive.LoadOrStore(sessionID, struct{}{}); loaded {
-		loopLogNudge(sessionID, pending.wake, pending.inform, pending.legID, pending.completingJobID, "prompt_active_requeue")
 		l.Nudges.deferPromptWake(ctx, sessionID, pending)
 		return false
 	}
@@ -56,7 +64,6 @@ func (l *HostTurns) runPromptSync(ctx context.Context, sessionID string, pending
 		return true
 	}
 	if l.Admission.PromptExecutionActive(sessionID) {
-		loopLogNudge(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "sync_defer_busy")
 		l.Nudges.deferPromptWake(ctx, sessionID, pending)
 		return false
 	}
@@ -64,12 +71,14 @@ func (l *HostTurns) runPromptSync(ctx context.Context, sessionID string, pending
 	if l.Subscriptions.routeWaitWake(ctx, sessionID, pending) {
 		return true
 	}
-	allow, busy := l.Admission.evaluate(ctx, sessionID)
+	state, reason, _ := l.Admission.decision(ctx, sessionID)
+	busy := state == api.WakeStateDeferred
 	if busy {
 		l.Nudges.deferPromptWake(ctx, sessionID, pending)
 		return false
 	}
-	if !allow {
+	if state != "" && !busy {
+		pending.ticket.Record(state, reason, "", "")
 		return true
 	}
 	if pending.completingJobID == "" && !anchor.AboutRunningWorker(wake) && !pending.env.HasWorkerDecision() && !l.Cycles.workerCycleIdle(ctx, sessionID, "") {
@@ -77,30 +86,53 @@ func (l *HostTurns) runPromptSync(ctx context.Context, sessionID string, pending
 		return true
 	}
 	if reason, skip := l.Policy.hostWakeSkipReason(ctx, pending.actionableInput(sessionID)); skip {
-		loopLogNudge(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "drain_"+reason)
+		pending.recordPolicySkip(reason)
 		l.Waits.parkForActiveHold(ctx, sessionID)
 		return true
 	}
 
 	runID := l.Facts.activeRunID(ctx, sessionID)
-	if !l.Admission.ConsumeBudget(ctx, sessionID, runID, wake) {
-		loopLogNudge(sessionID, wake, "", "", "", "budget_exhausted")
+	if reason := l.Admission.ConsumeBudget(ctx, sessionID, runID); reason != "" {
+		pending.ticket.Record(api.WakeStateDropped, reason, "", "")
 		return false
 	}
 	loopLogRunPrompt(sessionID, wake)
 	deps := l.loopDeps()
 	if deps.RunPrompt != nil {
-		_, _ = deps.RunPrompt(ctx, sessionID)
+		_, err := deps.RunPrompt(actionoutcome.WithTicket(ctx, pending.ticket), sessionID)
+		pending.ticket.RefuseBeforeAdmission(preAdmissionReason(err))
+	} else {
+		pending.ticket.Record(api.WakeStateDropped, api.WakeReasonDefect, "", "")
 	}
 	return true
 }
+func preAdmissionReason(err error) api.WakeReason {
+	switch {
+	case err == nil, errors.Is(err, context.Canceled):
+		return api.WakeReasonTurnSettled
+	case errors.Is(err, store.ErrSessionNotFound):
+		return api.WakeReasonSessionMissing
+	case errors.Is(err, lifecycle.ErrStopping):
+		return api.WakeReasonUserStopped
+	}
+	if _, ok := noticeerr.CodeOf(err); ok {
+		return api.WakeReasonPolicyDenied
+	}
+	return api.WakeReasonLookupFailed
+}
+
 func (l *HostTurns) releasePromptActiveAndRedrain(ctx context.Context, sessionID string) {
 	l.promptActive.Delete(sessionID)
 	l.Nudges.schedulePendingDrain(ctx, sessionID, true)
 }
 func (l *HostTurns) spawnAsyncTurn(ctx context.Context, sessionID string, fn func(ctx context.Context)) {
+	finish, open := l.Nudges.lifetimes.enter(sessionID)
+	if !open {
+		return
+	}
+	defer finish()
 	timeout := l.Facts.sessionLimits(ctx, sessionID).CoordinatorHostTurnTimeout()
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	ctx, cancel := context.WithTimeout(actionoutcome.IndependentWork(context.WithoutCancel(ctx)), timeout)
 	work := l.registerAsyncTurn(sessionID, cancel)
 	l.asyncTurns.Add(1)
 	go func() {
