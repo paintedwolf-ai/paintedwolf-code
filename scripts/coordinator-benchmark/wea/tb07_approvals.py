@@ -249,7 +249,7 @@ def _read_pending_checkpoint_for_call(app: Any, session_id: str, call_id: str, *
                 return cp
         return None
 
-    return app.wait_for(poll, "tb07 pending checkpoint", session_id, timeout=timeout)
+    return app.wait_for(poll, "tb07 pending checkpoint", None, timeout=timeout)
 
 
 def _select_option(cp: dict[str, Any], *, rung: str) -> dict[str, Any]:

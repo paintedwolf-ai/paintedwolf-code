@@ -135,6 +135,31 @@ def _make_project(base_dir: pathlib.Path, name: str, approvals_yaml: str | None 
     return proj
 
 
+def _wait_pending_bounded(app: Any, session_id: str, *, timeout_s: float = 20.0) -> dict[str, Any]:
+    """Wait for a pending model turn without tripping on historical aborted/interrupted submissions."""
+    path = f"/harness/llm/pending?session_id={urllib.parse.quote(session_id)}"
+
+    def poll() -> dict[str, Any] | None:
+        val = app.request(path)
+        if not val.get("pending"):
+            return None
+        if val.get("session_id") != session_id:
+            return None
+        return val
+
+    return app.wait_for(poll, "tb07 pending model turn", None, timeout=timeout_s)
+
+
+def _wait_session_idle(app: Any, session_id: str, phase: str, *, timeout_s: float = 20.0) -> None:
+    """Wait for a session to return to idle/aborted without failing on intentional abort/interrupted rows."""
+    app.wait_for(
+        lambda: (app.request(f"/v1/sessions/{session_id}") or {}).get("status") in {"idle", "aborted"},
+        phase,
+        None,
+        timeout=timeout_s,
+    )
+
+
 def _call_with_checkpoint_inspect(
     app: Any,
     session_id: str,
@@ -151,7 +176,7 @@ def _call_with_checkpoint_inspect(
     without opening a checkpoint, returns immediately with `checkpoint.asked == False`
     and the settled `tool_result_json`.
     """
-    req = _wait_pending(app, session_id)
+    req = _wait_pending_bounded(app, session_id, timeout_s=timeout_s)
     call_id = str(uuid.uuid4())
     app.request(
         "/harness/llm/respond",
@@ -207,7 +232,7 @@ def _call_with_checkpoint_inspect(
         return read_tool_result()
 
     try:
-        result = app.wait_for(poll_step, "tb07 checkpoint or tool result", session_id, timeout=timeout_s)
+        result = app.wait_for(poll_step, "tb07 checkpoint or tool result", None, timeout=timeout_s)
     except RuntimeError as exc:
         cp_info["timed_out"] = True
         result = {"outcome": "timeout", "error": str(exc)}
@@ -628,7 +653,7 @@ def _run_warmed_slots(
             if "A02-06-scope-chat-survives-stop" in spec_map:
                 app.request(f"/v1/sessions/{a02_sid}/abort", {})
                 # Wait briefly for session to return to idle after abort
-                app.wait_for(lambda: app.request(f"/v1/sessions/{a02_sid}").get("status") == "idle", "a02 idle after abort", a02_sid)
+                _wait_session_idle(app, a02_sid, "a02 idle after abort")
                 app.request(f"/v1/sessions/{a02_sid}/prompts", {"operation_id": str(uuid.uuid4()), "text": "Post-stop reuse check."})
                 b0 = len(ep1.snapshot()["requests"])
                 c_after = _call_with_checkpoint_inspect(
@@ -959,7 +984,7 @@ def _run_warmed_slots(
                     proj_main,
                     "This is pure chat prose mentioning aws iam create-user and curl http://169.254.169.254/latest/meta-data/ — do not call any tool.",
                 )
-                req = _wait_pending(app, s_chat)
+                req = _wait_pending_bounded(app, s_chat)
                 cps = (app.request(f"/v1/sessions/{s_chat}/checkpoints?status=pending") or {}).get("checkpoints") or []
                 app.request("/harness/llm/respond", {"id": req["id"], "content": "Acknowledged prose only."})
                 abort_session(s_chat)
@@ -1016,7 +1041,7 @@ def _run_warmed_slots(
             # A04-02: Stop while checkpoint pending cancels held effect (0 arrivals) and keeps committed chat grant
             if "A04-02-stop-releases-pending-without-effect" in spec_map:
                 b_ep2 = len(ep2.snapshot()["requests"])
-                req = _wait_pending(app, a04_sid)
+                req = _wait_pending_bounded(app, a04_sid)
                 held_call_id = str(uuid.uuid4())
                 app.request(
                     "/harness/llm/respond",
@@ -1034,7 +1059,7 @@ def _run_warmed_slots(
                 )
                 cp_held = _read_pending_checkpoint_for_call(app, a04_sid, held_call_id)
                 app.request(f"/v1/sessions/{a04_sid}/abort", {})
-                app.wait_for(lambda: app.request(f"/v1/sessions/{a04_sid}").get("status") == "idle", "a04 idle after stop", a04_sid)
+                _wait_session_idle(app, a04_sid, "a04 idle after stop")
                 a_ep2 = len(ep2.snapshot()["requests"])
                 grants_after_stop = (app.request(f"/v1/approval-grants?session_id={a04_sid}") or {}).get("grants") or []
                 ok = bool(cp_held.get("id")) and (a_ep2 - b_ep2) == 0 and len(grants_after_stop) >= 1
@@ -1114,7 +1139,7 @@ def _run_a12_restart_slots(
             if rev_ids:
                 app1.request("/v1/approval-grants/revoke", {"ids": rev_ids})
 
-            req = _wait_pending(app1, session_id)
+            req = _wait_pending_bounded(app1, session_id)
             pending_call_id = str(uuid.uuid4())
             app1.request(
                 "/harness/llm/respond",
@@ -1155,7 +1180,7 @@ def _run_a12_restart_slots(
             # Abort the pre-restart turn (or wait if it settled) so session is clean for A12-02/03 probes
             with contextlib.suppress(Exception):
                 app2.request(f"/v1/sessions/{session_id}/abort", {})
-            app2.wait_for(lambda: app2.request(f"/v1/sessions/{session_id}").get("status") == "idle", "a12 idle after restart", session_id)
+            _wait_session_idle(app2, session_id, "a12 idle after restart")
 
             # A12-02: Chat grant for ep_chat replays without asking in same chat, isolated from session B
             app2.request(f"/v1/sessions/{session_id}/prompts", {"operation_id": str(uuid.uuid4()), "text": "A12 post-restart grant replay."})
@@ -1182,7 +1207,7 @@ def _run_a12_restart_slots(
             sess_b = app2.request("/v1/sessions", {"project_id": project_id, "posture": "build"})
             sid_b = sess_b["id"]
             app2.request("/harness/model-limit", {"session_id": sid_b, "limit": 10})
-            app2.wait_for(lambda: app2.request(f"/v1/sessions/{sid_b}").get("status") == "idle", "a12 sess_b ready", sid_b)
+            _wait_session_idle(app2, sid_b, "a12 sess_b ready")
             app2.request(f"/v1/sessions/{sid_b}/prompts", {"operation_id": str(uuid.uuid4()), "text": "A12 cross-chat check."})
             c_chat_cross = _call_with_checkpoint_inspect(
                 app2, sid_b, "command",
