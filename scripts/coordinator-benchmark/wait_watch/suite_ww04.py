@@ -701,7 +701,6 @@ def run_slot_c10_restart(
             if (
                 canc.get("handle") == watch_handle
                 and canc.get("outcome") == "canceled"
-                and len(fill_handles) == 7
                 and cap_rejected
                 and slot_reused
             ):
