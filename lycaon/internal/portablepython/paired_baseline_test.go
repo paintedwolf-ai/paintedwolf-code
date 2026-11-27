@@ -15,7 +15,10 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/portablepython"
+	"github.com/lycaon/lycaon/internal/pythondocuments"
 	"github.com/lycaon/lycaon/internal/pythonruntime"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
 type pairedSample struct {
@@ -66,27 +69,27 @@ type pairedArtifactSizes struct {
 }
 
 type pairedBaselineReceipt struct {
-	SchemaVersion       string                               `json:"schema_version"`
-	RecordedAt          string                               `json:"recorded_at"`
-	Label               string                               `json:"label"`
-	Platform            string                               `json:"platform"`
-	GOOS                string                               `json:"goos"`
-	GOARCH              string                               `json:"goarch"`
-	GoVersion           string                               `json:"go_version"`
-	LogicalCPUs         int                                  `json:"logical_cpus"`
-	HarnessRevision     string                               `json:"harness_revision"`
-	ProductRevision     string                               `json:"product_revision"`
-	SelectedBackend     string                               `json:"selected_backend"`
-	NativeEngine        *pythonruntime.NativeEngineMetadata  `json:"native_engine,omitempty"`
-	ImageDir            string                               `json:"image_dir"`
-	ImageID             string                               `json:"image_id"`
-	ManifestSHA256      string                               `json:"manifest_sha256"`
-	ImageOverrideUnset  bool                                 `json:"image_override_unset"`
-	EngineOverrideUnset bool                                 `json:"engine_override_unset"`
-	ColdCachePolicy     string                               `json:"cold_cache_policy"`
-	Sizes               pairedArtifactSizes                  `json:"sizes"`
-	Workloads           []pairedWorkloadResult               `json:"workloads"`
-	WorkbookGatePassed  bool                                 `json:"workbook_gate_passed"`
+	SchemaVersion       string                              `json:"schema_version"`
+	RecordedAt          string                              `json:"recorded_at"`
+	Label               string                              `json:"label"`
+	Platform            string                              `json:"platform"`
+	GOOS                string                              `json:"goos"`
+	GOARCH              string                              `json:"goarch"`
+	GoVersion           string                              `json:"go_version"`
+	LogicalCPUs         int                                 `json:"logical_cpus"`
+	HarnessRevision     string                              `json:"harness_revision"`
+	ProductRevision     string                              `json:"product_revision"`
+	SelectedBackend     string                              `json:"selected_backend"`
+	NativeEngine        *pythonruntime.NativeEngineIdentity `json:"native_engine,omitempty"`
+	ImageDir            string                              `json:"image_dir"`
+	ImageID             string                              `json:"image_id"`
+	ManifestSHA256      string                              `json:"manifest_sha256"`
+	ImageOverrideUnset  bool                                `json:"image_override_unset"`
+	EngineOverrideUnset bool                                `json:"engine_override_unset"`
+	ColdCachePolicy     string                              `json:"cold_cache_policy"`
+	Sizes               pairedArtifactSizes                 `json:"sizes"`
+	Workloads           []pairedWorkloadResult              `json:"workloads"`
+	WorkbookGatePassed  bool                                `json:"workbook_gate_passed"`
 }
 
 func pairedMedianFloat64(vals []float64) float64 {
@@ -171,7 +174,7 @@ func pairedSummarizeMode(mode string, initMS float64, samples []pairedSample) *p
 		pages = append(pages, s.PeakMemoryPages)
 	}
 	medPages := pairedMedianUint32(pages)
-	medBytes := uint64(medPages) * 65536
+	medBytes := uint64(medPages) * wasmPageSizeBytes
 	return &pairedModeResult{
 		Mode:                        mode,
 		SampleCount:                 len(samples),
@@ -250,10 +253,11 @@ func TestPY10_PairedBaseline(t *testing.T) {
 	}
 
 	type workloadDef struct {
-		name    string
-		setupWS func(t *testing.T, ws string)
-		code    string
-		script  string
+		name     string
+		setupWS  func(t *testing.T, ws string)
+		code     string
+		script   string
+		artifact string
 	}
 	catalog := map[string]workloadDef{
 		"pass_noop": {
@@ -264,14 +268,18 @@ func TestPY10_PairedBaseline(t *testing.T) {
 		"frozen_workbook": {
 			name: "frozen_workbook",
 			setupWS: func(t *testing.T, ws string) {
-				if err := os.WriteFile(filepath.Join(ws, "repos.yaml"), reposYAML, 0o644); err != nil {
+				if err := os.MkdirAll(filepath.Join(ws, "config"), 0o755); err != nil {
+					t.Fatalf("mkdir config: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(ws, "config", "repos.yaml"), reposYAML, 0o644); err != nil {
 					t.Fatalf("write repos.yaml: %v", err)
 				}
 				if err := os.WriteFile(filepath.Join(ws, "workbook.py"), workbookPy, 0o644); err != nil {
 					t.Fatalf("write workbook.py: %v", err)
 				}
 			},
-			script: "workbook.py",
+			script:   "workbook.py",
+			artifact: "repositories.xlsx",
 		},
 	}
 
@@ -302,34 +310,33 @@ func TestPY10_PairedBaseline(t *testing.T) {
 
 	newServiceTimed := func(t *testing.T, scope string) (*portablepython.Service, float64) {
 		t.Helper()
-		store, err := portablepython.NewReceiptStore(filepath.Join(t.TempDir(), "receipts-"+scope))
-		if err != nil {
-			t.Fatalf("NewReceiptStore: %v", err)
-		}
 		t0 := time.Now()
-		svc, err := portablepython.NewService(portablepython.ServiceConfig{
-			ReceiptStore: store,
+		svc, err := portablepython.NewService(ctx, portablepython.ServiceConfig{
+			ScratchRoot: t.TempDir(),
 		})
 		constrMS := float64(time.Since(t0).Microseconds()) / 1000.0
 		if err != nil {
 			t.Fatalf("NewService (%s): %v", scope, err)
 		}
-		if receipt.SelectedBackend == "" {
-			receipt.SelectedBackend = string(svc.Backend())
-			receipt.NativeEngine = svc.NativeEngineMetadata()
-			receipt.ImageDir = svc.ImageDir()
-			if mf := svc.ImageManifest(); mf != nil {
-				receipt.ImageID = mf.ImageID
-				receipt.ManifestSHA256 = mf.ManifestSHA256
-			}
-			receipt.Sizes.StagedImageBytes = pairedDirSizeBytes(svc.ImageDir())
-			if meta := svc.NativeEngineMetadata(); meta != nil {
-				receipt.Sizes.EngineLibraryBytes = pairedFileSizeBytes(meta.LibraryPath)
-			}
+		info := svc.RuntimeInfo()
+		if info.Backend != pythonruntime.BackendNativeAOT {
+			_ = svc.Close(ctx)
+			t.Fatalf("expected default backend %q, got %q", pythonruntime.BackendNativeAOT, info.Backend)
 		}
-		if svc.Backend() != pythonruntime.BackendNativeAOT {
-			svc.Close()
-			t.Fatalf("expected default backend %q, got %q", pythonruntime.BackendNativeAOT, svc.Backend())
+		if receipt.SelectedBackend == "" {
+			receipt.SelectedBackend = string(info.Backend)
+			receipt.NativeEngine = info.NativeEngine
+			if imgDir, derr := portablepython.DiscoverImageDir(); derr == nil {
+				receipt.ImageDir = imgDir
+				receipt.Sizes.StagedImageBytes = pairedDirSizeBytes(imgDir)
+				receipt.ManifestSHA256, _ = fileDigestAndSize(filepath.Join(imgDir, "image-manifest.json"))
+				if mf, merr := pythonruntime.LoadImageManifest(filepath.Join(imgDir, "image-manifest.json")); merr == nil {
+					receipt.ImageID = mf.ImageID
+				}
+			}
+			if info.NativeEngine != nil {
+				receipt.Sizes.EngineLibraryBytes = pairedFileSizeBytes(info.NativeEngine.LibraryPath)
+			}
 		}
 		return svc, constrMS
 	}
@@ -338,39 +345,58 @@ func TestPY10_PairedBaseline(t *testing.T) {
 		t.Helper()
 		ws := t.TempDir()
 		def.setupWS(t, ws)
-		req := portablepython.RunRequest{
-			WorkspaceRoot: ws,
-			SessionID:     fmt.Sprintf("paired-%s-%s-%d", def.name, mode, idx),
-			RunID:         fmt.Sprintf("run-%s-%s-%d", def.name, mode, idx),
-			Code:          def.code,
-			Script:        def.script,
+		roots := []pythondocuments.HostRootConfig{{ID: "ws-paired", Dir: ws}}
+		door := native.NewPythonMutationDoor(tools.ToolContext{}, roots)
+		req := portablepython.ToolRequest{
+			ExecutionID:  fmt.Sprintf("paired-%s-%s-%d", def.name, mode, idx),
+			CallID:       fmt.Sprintf("call-%s-%s-%d", def.name, mode, idx),
+			SessionID:    "sess-paired-baseline",
+			Actor:        "coordinator",
+			View:         "primary",
+			Surface:      "implement_investigate",
+			Roots:        roots,
+			MutationDoor: door,
+		}
+		if def.script != "" {
+			req.RawArgs = map[string]any{"script": def.script}
+		} else {
+			req.RawArgs = map[string]any{"code": def.code}
 		}
 		t0 := time.Now()
-		res, err := svc.Run(ctx, req)
+		resp, err := svc.ExecuteTool(ctx, req)
 		toolMS := float64(time.Since(t0).Microseconds()) / 1000.0
 		if err != nil {
-			t.Fatalf("%s [%s #%d] Run error: %v", def.name, mode, idx, err)
+			t.Fatalf("%s [%s #%d] ExecuteTool error: %v", def.name, mode, idx, err)
 		}
-		if res.ExitCode != 0 || !res.CleanCompletion || res.StopReason != nil {
-			t.Fatalf("%s [%s #%d] failed: exit=%d clean=%v stop=%v stderr=%q",
-				def.name, mode, idx, res.ExitCode, res.CleanCompletion, res.StopReason, res.Stderr)
+		if resp.ExitCode != 0 || !resp.CleanCompletion || resp.Stop != nil {
+			t.Fatalf("%s [%s #%d] failed: exit=%d clean=%v stop=%+v stderr=%q",
+				def.name, mode, idx, resp.ExitCode, resp.CleanCompletion, resp.Stop, resp.Stderr)
 		}
-		peakBytes := uint64(res.PeakMemoryPages) * 65536
+		if resp.Backend != pythonruntime.BackendNativeAOT {
+			t.Fatalf("%s [%s #%d] expected default backend %q, got %q", def.name, mode, idx, pythonruntime.BackendNativeAOT, resp.Backend)
+		}
+		if def.artifact != "" {
+			artPath := filepath.Join(ws, def.artifact)
+			if _, statErr := os.Stat(artPath); statErr != nil {
+				t.Fatalf("%s [%s #%d] missing expected settled artifact %s: %v", def.name, mode, idx, def.artifact, statErr)
+			}
+		}
+		peakBytes := uint64(resp.Usage.PeakMemoryPages) * wasmPageSizeBytes
 		return pairedSample{
 			Index:                 idx,
 			Mode:                  mode,
-			Backend:               string(svc.Backend()),
+			Backend:               string(resp.Backend),
 			ServiceConstructionMS: constrMS,
 			ToolLatencyMS:         toolMS,
-			RuntimeDurationMS:     float64(res.Duration.Microseconds()) / 1000.0,
+			RuntimeDurationMS:     float64(resp.Usage.Duration.Microseconds()) / 1000.0,
 			TotalTimeMS:           constrMS + toolMS,
-			Fuel:                  res.GuestWork,
-			HostWork:              res.HostWork,
-			PeakMemoryPages:       res.PeakMemoryPages,
+			Fuel:                  resp.Usage.GuestWork,
+			HostWork:              resp.Usage.HostWork,
+			PeakMemoryPages:       resp.Usage.PeakMemoryPages,
 			PeakMemoryBytes:       peakBytes,
 			PeakMemoryMiB:         float64(peakBytes) / (1024.0 * 1024.0),
-			CleanCompletion:       res.CleanCompletion,
-			ExitCode:              res.ExitCode,
+			CleanCompletion:       resp.CleanCompletion,
+			ExitCode:              resp.ExitCode,
 		}
 	}
 
@@ -390,7 +416,7 @@ func TestPY10_PairedBaseline(t *testing.T) {
 			for i := 1; i <= samplesCount; i++ {
 				svc, constrMS := newServiceTimed(t, fmt.Sprintf("%s-cold-%d", def.name, i))
 				s := runGuest(t, svc, def, "cold", i, constrMS)
-				svc.Close()
+				_ = svc.Close(ctx)
 				coldSamples = append(coldSamples, s)
 			}
 			wr.Cold = pairedSummarizeMode("cold", 0, coldSamples)
@@ -407,7 +433,7 @@ func TestPY10_PairedBaseline(t *testing.T) {
 				s := runGuest(t, svc, def, "warm", i, 0)
 				warmSamples = append(warmSamples, s)
 			}
-			svc.Close()
+			_ = svc.Close(ctx)
 			wr.Warm = pairedSummarizeMode("warm", initMS, warmSamples)
 			t.Logf("PAIRED %s [warm n=%d]: init=%.1fms median_tool=%.1fms p95_tool=%.1fms fuel=%d peak_pages=%d",
 				def.name, samplesCount, initMS,
