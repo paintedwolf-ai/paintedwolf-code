@@ -73,7 +73,7 @@ func TestGitDisallowedConfigOverridesRefuseWithoutExternalFallback(t *testing.T)
 		{"nested env fsmonitor override", `env git -c core.fsmonitor=fixture-inert-fsmonitor status`},
 		{"nested env fsmonitor with unknown flag", `env git -c core.fsmonitor=fixture-inert-fsmonitor status --unknown-flag`},
 		{"direct fsmonitor with unknown flag", `git -c core.fsmonitor=fixture-inert-fsmonitor status --unknown-flag`},
-		{"unserved subcommand with fsmonitor override", `git -c core.fsmonitor=fixture-inert-fsmonitor worktree list`},
+		{"unserved subcommand with fsmonitor override", `git -c core.fsmonitor=fixture-inert-fsmonitor count-objects`},
 	}
 
 	for _, tc := range prohibited {
@@ -126,19 +126,19 @@ func TestGitDisallowedConfigOverridesRefuseWithoutExternalFallback(t *testing.T)
 
 	t.Run("unrelated unsupported git form still falls back", func(t *testing.T) {
 		launches.Store(0)
-		outcome := callComposedProgram(t, f, `git worktree list`)
+		outcome := callComposedProgram(t, f, `git count-objects`)
 		if outcome.Refusal != nil || outcome.Status != 0 || outcome.NativeGaps != 1 {
-			t.Fatalf("git worktree list: refusal=%+v status=%d gaps=%d stderr=%q",
+			t.Fatalf("git count-objects: refusal=%+v status=%d gaps=%d stderr=%q",
 				outcome.Refusal, outcome.Status, outcome.NativeGaps, outcome.Stderr)
 		}
-		if !strings.Contains(outcome.Stdout, filepath.Base(f.Dir)) {
-			t.Fatalf("git worktree list stdout=%q, want worktree path", outcome.Stdout)
+		if !strings.Contains(outcome.Stdout, "objects") {
+			t.Fatalf("git count-objects stdout=%q, want objects count", outcome.Stdout)
 		}
 		if got := launches.Load(); got == 0 {
-			t.Fatalf("git worktree list: launch spy recorded 0 launches, want >0")
+			t.Fatalf("git count-objects: launch spy recorded 0 launches, want >0")
 		}
 		if got := gapRows(); got != 1 {
-			t.Fatalf("git worktree list: SQLite recorded %d native_gap rows, want 1", got)
+			t.Fatalf("git count-objects: SQLite recorded %d native_gap rows, want 1", got)
 		}
 	})
 }
