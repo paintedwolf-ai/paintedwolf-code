@@ -3,6 +3,7 @@ package turnguards
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/curationctx"
+	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -56,20 +57,38 @@ func (m *Service) SetAskInstructionCheck(check func(context.Context, string, map
 	m.checkAskInstruction = check
 }
 
-func (m *Service) askWorkerWrites(ctx context.Context, sess *api.Session, tool string, args map[string]any, identity workeradmission.TaskIdentity) bool {
-	if sess == nil || sess.Mode != api.SessionModeAsk {
-		return false
+func (m *Service) observeAskWorkerWrites(ctx context.Context, sess *api.Session, tool string, args map[string]any, identity workeradmission.TaskIdentity, gc *oar.GuardContext) {
+	if gc == nil || sess == nil || sess.Mode != api.SessionModeAsk {
+		return
 	}
+	var reject *toolrejection.ToolReject
 	switch tool {
 	case "task":
-		return workeradmission.RequireAskReadScope(tool, identity.MutationCapable, true, identity.Scope) != nil
+		reject = toolrejection.AsToolReject(workeradmission.RequireAskReadScope(tool, identity.MutationCapable, true, identity.Scope))
+		if reject != nil && identity.AgentType != "" {
+			reject.Data["agent_type"] = identity.AgentType
+		}
 	case "instruct_worker":
 		if m.checkAskInstruction != nil {
-			reject := toolrejection.AsToolReject(m.checkAskInstruction(ctx, sess.ID, args))
-			return reject != nil && reject.Code == "SESSION_ASK_MODE_ACTIVE"
+			reject = toolrejection.AsToolReject(m.checkAskInstruction(ctx, sess.ID, args))
 		}
 	}
-	return false
+	if reject == nil || reject.Code != "SESSION_ASK_MODE_ACTIVE" {
+		return
+	}
+	gc.Workers.AskWorkerWrites = true
+	if gc.ObservationData == nil {
+		gc.ObservationData = map[string]any{}
+	}
+	for k, v := range reject.Data {
+		gc.ObservationData[k] = v
+	}
+	if pm, ok := reject.Data["profile_mutation_capable"].(bool); ok {
+		gc.Workers.ProfileMutationCapable = pm
+	}
+	if sm, ok := reject.Data["scope_mode"].(string); ok {
+		gc.Workers.ScopeMode = sm
+	}
 }
 
 func (m *Service) resolveTaskIdentity(ctx context.Context, sess *api.Session, args map[string]any) (workeradmission.TaskIdentity, error) {

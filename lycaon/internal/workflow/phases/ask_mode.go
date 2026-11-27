@@ -20,6 +20,20 @@ func withAskRound(ctx context.Context, ask bool) context.Context {
 	return context.WithValue(ctx, askRoundKey{}, true)
 }
 
+type askPhaseBlockedError struct {
+	WorkflowID  string
+	Phase       string
+	TargetPhase string
+}
+
+func (e *askPhaseBlockedError) Error() string {
+	return runstate.ErrAskWorkflowRequiresAgent.Error()
+}
+
+func (e *askPhaseBlockedError) Unwrap() error {
+	return runstate.ErrAskWorkflowRequiresAgent
+}
+
 func (m *Service) checkAskPhase(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, target string) error {
 	ask, _ := ctx.Value(askRoundKey{}).(bool)
 	if m.ResolveEffectiveMode == nil {
@@ -35,7 +49,11 @@ func (m *Service) checkAskPhase(ctx context.Context, run *api.WorkflowRun, manif
 	}
 	ask = ask || mode == api.SessionModeAsk
 	if ask && (runstate.IsAmbientRun(run) || target != "" && manifest.PhaseRequiresAgent(target)) {
-		return runstate.ErrAskWorkflowRequiresAgent
+		return &askPhaseBlockedError{
+			WorkflowID:  run.WorkflowID,
+			Phase:       run.CurrentPhase,
+			TargetPhase: target,
+		}
 	}
 	return nil
 }
@@ -44,5 +62,18 @@ func askWorkflowToolError(err error, tool string) error {
 	if !errors.Is(err, runstate.ErrAskWorkflowRequiresAgent) {
 		return err
 	}
-	return &toolrejection.ToolReject{Code: "SESSION_ASK_MODE_WORKFLOW_REQUIRES_AGENT", Data: map[string]any{"tool": tool}}
+	data := map[string]any{"tool": tool}
+	var blocked *askPhaseBlockedError
+	if errors.As(err, &blocked) {
+		if blocked.WorkflowID != "" {
+			data["workflow_id"] = blocked.WorkflowID
+		}
+		if blocked.Phase != "" {
+			data["phase"] = blocked.Phase
+		}
+		if blocked.TargetPhase != "" {
+			data["requested"] = blocked.TargetPhase
+		}
+	}
+	return &toolrejection.ToolReject{Code: "SESSION_ASK_MODE_WORKFLOW_REQUIRES_AGENT", Data: data}
 }

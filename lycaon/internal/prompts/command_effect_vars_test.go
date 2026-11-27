@@ -1,8 +1,13 @@
 package prompts_test
 
 import (
+	"context"
+	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -115,5 +120,208 @@ func TestDeclaredReaderEffectsFollowCatalogs(t *testing.T) {
 		if got.Allows(mutation) != want[0] || got.Allows(programs) != want[1] {
 			t.Errorf("%s effects = %v", scope, got.Classes())
 		}
+	}
+}
+
+func TestCommandSurfaceAndAskCoordinatorGuidanceRenders(t *testing.T) {
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
+	roots := []projectroot.RootRef{
+		{ID: "r1", Label: "app", Path: "/workspace/app", IsPrimary: true},
+	}
+
+	renderCommandSurface := func(t *testing.T, readOnly bool) string {
+		t.Helper()
+		offered := []string{"command", "command_output", "command_stop", "wait", "summarize", "survey_repo", "code_rewrite"}
+		effects := toolcontract.AllCommandEffects()
+		if readOnly {
+			effects = effectSet(t, toolcontract.CommandReadOnly)
+		}
+		reader, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID: prompts.CoordinatorProfileID,
+			Plan:      toolsurface.Compile(offered, nil),
+			Visible:   offered,
+			Profiles: []sandbox.ToolProfile{{
+				ID:             prompts.CoordinatorProfileID,
+				Tools:          toolSetMap(offered),
+				CommandEffects: effects,
+			}},
+			RootCount: len(roots),
+			HasGit:    true,
+			WebSearch: true,
+		})
+		testutil.FailErr(t, "new reader", err)
+		vars := prompts.AgentPromptSurfaceTemplateVars(prompts.AgentPromptSurface{
+			SessionScratchDir: "/scratch/sess-1",
+			Posture:           gate.PostureStrict,
+		})
+		prompts.MergeWorkspaceRootsVars(vars, roots, roots[0].ID)
+		vars, err = prompts.Vars(reader, vars)
+		testutil.FailErr(t, "merge reader vars", err)
+		vars["command_on_floor"] = true
+		out, err := engine.Render(context.Background(), "partials/command-surface.md", vars)
+		testutil.FailErr(t, "render command-surface.md", err)
+		return out
+	}
+
+	readOnlySurface := renderCommandSurface(t, true)
+	for _, want := range []string{
+		"On this read-only surface, `command` runs read-only native utilities and pipelines only; file writes, output redirects to files, and external programs are refused.",
+		"For long output, read the saved copy named in the result.",
+		"One `command` call can chain orientation (`repo-map`, `outline --path`, `summarize`, `rg -n`, `find`, `git status`, `git diff`) and bounded slices (`sed -n 'A,Bp'`, `cat -n`).",
+		"`&` starts a session job; `$!`/`jobs` return its handle. Join with `wait %1`/`wait $!`. Across calls, page `command_output` by cursor; follow `next_cursor`. Stop with `command_stop`. Across turns, use offered `wait` conditions. `ps`/`pgrep` inspect session processes.",
+	} {
+		if !strings.Contains(readOnlySurface, want) {
+			t.Fatalf("read-only command-surface.md missing %q:\n%s", want, readOnlySurface)
+		}
+	}
+	for _, forbidden := range []string{
+		"multi-edit sequences",
+		"replace-lines",
+		"code-rewrite",
+		"jq-edit",
+		"heredocs",
+		"kill %1",
+		"kill $!",
+		"`kill` signals them",
+	} {
+		if strings.Contains(readOnlySurface, forbidden) {
+			t.Fatalf("read-only command-surface.md leaked mutating guidance %q:\n%s", forbidden, readOnlySurface)
+		}
+	}
+	if drift := prompts.RenderedProseStructureDrift(readOnlySurface); len(drift) > 0 {
+		t.Fatalf("read-only command-surface.md prose drift: %v\n%s", drift, readOnlySurface)
+	}
+
+	mutatingSurface := renderCommandSurface(t, false)
+	for _, want := range []string{
+		"multi-edit sequences (`edit`, `replace-lines`, `code-rewrite`, `jq-edit`, heredocs)",
+		"stop with `kill %1`/`kill $!`",
+		"`kill` signals them",
+	} {
+		if !strings.Contains(mutatingSurface, want) {
+			t.Fatalf("mutating command-surface.md missing %q:\n%s", want, mutatingSurface)
+		}
+	}
+	if drift := prompts.RenderedProseStructureDrift(mutatingSurface); len(drift) > 0 {
+		t.Fatalf("mutating command-surface.md prose drift: %v\n%s", drift, mutatingSurface)
+	}
+
+	askReader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		Plan:      toolsurface.Compile([]string{"command", "source_history", "task", "request_tools"}, nil),
+		Visible:   []string{"command", "source_history", "task", "request_tools"},
+		Profiles: []sandbox.ToolProfile{{
+			ID:             prompts.CoordinatorProfileID,
+			Tools:          toolSetMap([]string{"command", "source_history", "task", "request_tools"}),
+			CommandEffects: effectSet(t, toolcontract.CommandReadOnly),
+		}},
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "new ask coordinator reader", err)
+	askVars, err := prompts.Vars(askReader, nil)
+	testutil.FailErr(t, "ask coordinator vars", err)
+	askCoordinator, err := engine.Render(context.Background(), "agents/coordinator-surface-ask.md", askVars)
+	testutil.FailErr(t, "render coordinator-surface-ask.md", err)
+	if !strings.Contains(askCoordinator, "Use `command` to read, search, or query project files and inspect Git status, diffs, and history with read-only native commands and pipelines.") {
+		t.Fatalf("coordinator-surface-ask.md missing command guidance:\n%s", askCoordinator)
+	}
+	if drift := prompts.RenderedProseStructureDrift(askCoordinator); len(drift) > 0 {
+		t.Fatalf("coordinator-surface-ask.md prose drift: %v\n%s", drift, askCoordinator)
+	}
+}
+
+func TestAskCoordinatorGuidancePairedSpecificityAndOmission(t *testing.T) {
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
+	allTools := []string{"command", "command_output", "command_stop", "source_history", "task", "request_tools", "wait", "summarize", "survey_repo"}
+
+	renderAsk := func(t *testing.T, floor, deferred []string, rootCount int, hasGit bool) (string, string) {
+		t.Helper()
+		reader, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: "observe_investigate",
+			Plan:      toolsurface.Compile(floor, deferred),
+			Profiles: []sandbox.ToolProfile{{
+				ID:             prompts.CoordinatorProfileID,
+				Tools:          toolSetMap(allTools),
+				CommandEffects: effectSet(t, toolcontract.CommandReadOnly),
+			}},
+			RootCount: rootCount,
+			HasGit:    hasGit,
+			WebSearch: true,
+		})
+		testutil.FailErr(t, "new reader", err)
+		vars, err := prompts.Vars(reader, nil)
+		testutil.FailErr(t, "reader vars", err)
+		askOut, err := engine.Render(context.Background(), "agents/coordinator-surface-ask.md", vars)
+		testutil.FailErr(t, "render coordinator-surface-ask.md", err)
+		if drift := prompts.RenderedProseStructureDrift(askOut); len(drift) > 0 {
+			t.Fatalf("coordinator-surface-ask.md prose drift: %v\n%s", drift, askOut)
+		}
+		cmdOut, err := engine.Render(context.Background(), "partials/command-surface.md", vars)
+		testutil.FailErr(t, "render command-surface.md", err)
+		if drift := prompts.RenderedProseStructureDrift(cmdOut); len(drift) > 0 {
+			t.Fatalf("command-surface.md prose drift: %v\n%s", drift, cmdOut)
+		}
+		return askOut, cmdOut
+	}
+
+	// 1. Offered vs discoverable-only vs absent (varying tool reach one dimension at a time).
+	floorOut, _ := renderAsk(t, []string{"command", "source_history", "task", "request_tools"}, nil, 1, true)
+	for _, want := range []string{
+		"Use `command` to read, search, or query project files and inspect Git status, diffs, and history with read-only native commands and pipelines.",
+		"Use `source_history` to inspect recorded changes.",
+		"Delegate only to read-scoped workers.",
+	} {
+		if !strings.Contains(floorOut, want) {
+			t.Fatalf("offered floor render missing %q:\n%s", want, floorOut)
+		}
+	}
+
+	deferredOut, _ := renderAsk(t, []string{"request_tools"}, []string{"command", "source_history", "task"}, 1, true)
+	for _, want := range []string{
+		"Load `command` via `request_tools`",
+		"Load `source_history` via `request_tools`",
+		"When delegating via `task` (loaded with `request_tools`), assign only read-scoped workers.",
+	} {
+		if !strings.Contains(deferredOut, want) {
+			t.Fatalf("discoverable-only render missing %q:\n%s", want, deferredOut)
+		}
+	}
+	for _, forbidden := range []string{
+		"Use `command` to read",
+		"Use `source_history` to inspect",
+		"Delegate only to read-scoped workers.",
+	} {
+		if strings.Contains(deferredOut, forbidden) {
+			t.Fatalf("discoverable-only render claimed offered floor tool %q:\n%s", forbidden, deferredOut)
+		}
+	}
+
+	noFolderOut, _ := renderAsk(t, []string{"wait"}, nil, 0, false)
+	for _, forbidden := range []string{"`command`", "`source_history`", "`task`", "Git status"} {
+		if strings.Contains(noFolderOut, forbidden) {
+			t.Fatalf("no-folder render leaked unreachable %q:\n%s", forbidden, noFolderOut)
+		}
+	}
+
+	// 2. Single Git root vs non-Git root vs multi-root (varying only has_git / root_count).
+	nonGitAsk, nonGitCmd := renderAsk(t, []string{"command", "source_history", "task"}, nil, 1, false)
+	if !strings.Contains(nonGitAsk, "Use `command` to read, search, or query project files with read-only native commands and pipelines.") {
+		t.Fatalf("non-Git Ask render missing file-read guidance:\n%s", nonGitAsk)
+	}
+	for _, forbidden := range []string{"Git status", "git status", "git diff"} {
+		if strings.Contains(nonGitAsk, forbidden) || strings.Contains(nonGitCmd, forbidden) {
+			t.Fatalf("non-Git render leaked Git guidance %q:\nask=%s\ncmd=%s", forbidden, nonGitAsk, nonGitCmd)
+		}
+	}
+
+	multiGitAsk, multiGitCmd := renderAsk(t, []string{"command", "source_history", "task"}, nil, 2, true)
+	if !strings.Contains(multiGitAsk, "in Git-backed folders") {
+		t.Fatalf("multi-root Git Ask render missing multi-root qualification:\n%s", multiGitAsk)
+	}
+	if !strings.Contains(multiGitCmd, "in Git folders") {
+		t.Fatalf("multi-root Git command-surface.md missing multi-root qualification:\n%s", multiGitCmd)
 	}
 }

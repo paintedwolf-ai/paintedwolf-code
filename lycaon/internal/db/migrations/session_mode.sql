@@ -27,6 +27,11 @@ ALTER TABLE sessions ADD COLUMN started INTEGER NOT NULL DEFAULT 0 CHECK (
          (parent_session_id IS NOT NULL AND id != root_session_id AND mode IS NULL AND started = 0))
     );
 
+ALTER TABLE sessions ADD COLUMN upgraded_from_ask INTEGER NOT NULL DEFAULT 0 CHECK (
+        upgraded_from_ask IN (0, 1, 2) AND
+        (upgraded_from_ask = 0 OR (parent_session_id IS NULL AND id = root_session_id AND mode = 'agent' AND started = 1))
+    );
+
 WITH used_roots(id) AS (
     SELECT s.root_session_id
     FROM sessions s
@@ -60,19 +65,21 @@ BEGIN
 END;
 
 CREATE TRIGGER IF NOT EXISTS sessions_mode_latch
-BEFORE UPDATE OF mode, started ON sessions
-WHEN OLD.started = 1 AND (NEW.started = 0 OR (OLD.mode = 'agent' AND NEW.mode IS NOT 'agent'))
+BEFORE UPDATE OF mode, started, upgraded_from_ask ON sessions
+WHEN (OLD.started = 1 AND (NEW.started = 0 OR (OLD.mode = 'agent' AND NEW.mode IS NOT 'agent')))
+  OR NEW.upgraded_from_ask < OLD.upgraded_from_ask
 BEGIN
     SELECT RAISE(ABORT, 'started session cannot reset or return to Ask');
 END;
 
 CREATE VIEW IF NOT EXISTS session_mode_authority AS
-SELECT s.id AS session_id, root.id AS root_session_id, root.mode, root.started
+SELECT s.id AS session_id, root.id AS root_session_id, root.mode, root.started, root.upgraded_from_ask
 FROM sessions s
 LEFT JOIN sessions parent ON parent.id = s.parent_session_id
 LEFT JOIN sessions root ON root.id = s.root_session_id AND root.root_session_id = root.id
     AND root.parent_session_id IS NULL AND root.project_id = s.project_id
     AND root.owner_person_id = s.owner_person_id AND root.mode IN ('agent', 'ask') AND root.started IN (0, 1)
+    AND root.upgraded_from_ask IN (0, 1, 2)
     AND ((s.id = root.id AND s.parent_session_id IS NULL) OR
-         (s.id != root.id AND s.mode IS NULL AND s.started = 0 AND parent.root_session_id = root.id
+         (s.id != root.id AND s.mode IS NULL AND s.started = 0 AND s.upgraded_from_ask = 0 AND parent.root_session_id = root.id
             AND parent.project_id = s.project_id AND parent.owner_person_id = s.owner_person_id));

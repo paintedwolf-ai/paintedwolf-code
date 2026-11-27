@@ -20,7 +20,7 @@ const maxAlternateDepth = 5
 func RepositoryDirs(path string) (own, shared []string, ok bool) {
 	path = filepath.Clean(path)
 	gitDir := ""
-	dot := WorktreeEntry(path)
+	dot := filepath.Join(path, dotGit)
 	// Git follows a .git symlink, to a directory or to a gitfile.
 	switch info, err := os.Stat(dot); {
 	case err == nil && info.Mode().IsRegular():

@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
@@ -198,7 +199,7 @@ func (m *Context) procedureReader(ctx context.Context, sess *api.Session, profil
 	if err != nil {
 		return prompts.Reader{}, err
 	}
-	if m != nil && m.Profiles != nil && sess != nil && sess.Posture != "" {
+	if m != nil && m.Profiles != nil && sess != nil {
 		profiles = m.Profiles.ConstrainCommandProfiles(ctx, sess.ID, profiles)
 	}
 	surfaceID := ""
@@ -246,9 +247,20 @@ func (m *Context) procedureReader(ctx context.Context, sess *api.Session, profil
 		visible = append(visible, remaining...)
 	}
 	rootCount := 1
+	var rows []map[string]any
+	var activePath string
 	if m != nil && m.Workspace != nil && sess != nil {
-		_, rootCount, _, _ = m.Workspace.PromptRootRows(ctx, sess)
+		rows, rootCount, activePath, _ = m.Workspace.PromptRootRows(ctx, sess)
 	}
+	dirs := []string{activePath}
+	for _, r := range rows {
+		dir, _ := r["path"].(string)
+		dirs = append(dirs, dir)
+	}
+	if sess != nil {
+		dirs = append(dirs, sess.WorkspacePath)
+	}
+	hasGit := gitrepo.AnyDiscovered(dirs...)
 	return prompts.NewReader(prompts.ReaderInput{
 		ProfileID: resolvedProfileID,
 		SurfaceID: surfaceID,
@@ -257,6 +269,7 @@ func (m *Context) procedureReader(ctx context.Context, sess *api.Session, profil
 		Loaded:    offeredSet,
 		Visible:   visible,
 		RootCount: rootCount,
+		HasGit:    hasGit,
 		WebSearch: m.WebSearchEnabled(),
 	})
 }

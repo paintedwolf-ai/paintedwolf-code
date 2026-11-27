@@ -52,13 +52,6 @@ export function commandActivitySequence(entries: readonly ActivitySpanEntry[]): 
 
 type LiveProgram = (part: ToolPartView) => CommandProgramReceipt | undefined;
 
-function usesCommandProgram(part: ToolPartView): boolean {
-  if (part.tool === "inspect_source") {
-    const operation = part.args?.operation;
-    return !!part.commandProgram || (typeof operation === "string" && operation !== "git_head");
-  }
-  return FORM_PROGRAM_TOOLS.has(part.tool);
-}
 
 export function createCommandActivityProjection(memory = createCommandActivityMemory()) {
   return (entries: readonly ActivitySpanEntry[], live: LiveProgram = () => undefined): ActivitySpanEntry[] => {
@@ -87,7 +80,7 @@ export function createCommandActivityProjection(memory = createCommandActivityMe
       }
       const part = entry.part;
       const state = memory.call(part.id);
-      const programTool = usesCommandProgram(part);
+      const programTool = FORM_PROGRAM_TOOLS.has(part.tool);
       if (!programTool) lastRow = undefined;
 
       if (part.tool === "command_output") {
@@ -176,7 +169,7 @@ function placeDecisions(entries: readonly ActivitySpanEntry[], memory: CommandAc
     const entry = entries[index]!;
     if (entry.kind === "tool") nextTool = entry.part;
     if (entry.kind === "turn_load") {
-      const target = nextTool && usesCommandProgram(nextTool) ? nextTool.id : undefined;
+      const target = nextTool && FORM_PROGRAM_TOOLS.has(nextTool.tool) ? nextTool.id : undefined;
       decisions.set(entry.key, memory.decision(entry.key, target));
     }
   }

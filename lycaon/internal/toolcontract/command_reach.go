@@ -2,6 +2,8 @@ package toolcontract
 
 import (
 	"regexp"
+	"slices"
+	"strings"
 	"sync"
 )
 
@@ -84,13 +86,14 @@ var loadCommandReachTables = sync.OnceValue(func() *commandReachTables {
 				out.aliasForm[alias] = spec.Name
 			}
 		}
-		mutates := false
+		mutates := len(spec.Effects) > 0
 		for _, effect := range spec.Effects {
-			// A wrapper whose child effects are unbound cannot promise
-			// read-only; treat it as mutating so copy stays guarded.
+			// A command with at least one non-mutating mode (e.g. find's default
+			// print or sed's stream-script) is reachable on read-only surfaces;
+			// wrappers whose child effects are unbound on every mode stay guarded.
 			required, err := effect.CommandEffects(nil)
-			if err != nil || required.Allows(mutation) {
-				mutates = true
+			if err == nil && !required.Allows(mutation) {
+				mutates = false
 			}
 		}
 		if mutates {
@@ -191,4 +194,168 @@ func HyphenatedCommandFormsIn(corpus string) []string {
 		}
 	}
 	return out
+}
+
+var backtickedSpan = regexp.MustCompile("`([^`\n]+)`")
+
+// MutatingMixedModeInvocationsIn scans backticked command invocations in corpus
+// and returns the canonical command names whose concrete flags or syntax select
+// a mutating effect mode (such as `sed -i`, `find ... -delete`, `yq -i`, `sort -o`,
+// `iconv -o`, `uniq INPUT OUTPUT`, or archive writes without `-t`/`-l`/`-c`).
+func MutatingMixedModeInvocationsIn(corpus string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, m := range backtickedSpan.FindAllStringSubmatch(corpus, -1) {
+		span := strings.TrimSpace(m[1])
+		for _, seg := range splitBacktickedStatements(span) {
+			words := tokenizeBacktickedWords(seg)
+			if len(words) == 0 {
+				continue
+			}
+			if cmd := mutatingMixedModeCommand(words); cmd != "" && !seen[cmd] {
+				seen[cmd] = true
+				out = append(out, cmd)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+func splitBacktickedStatements(span string) []string {
+	var out []string
+	var cur strings.Builder
+	var quote byte
+	for i := 0; i < len(span); i++ {
+		c := span[i]
+		if quote != 0 {
+			if c == quote {
+				quote = 0
+			}
+			cur.WriteByte(c)
+			continue
+		}
+		if c == '\'' || c == '"' {
+			quote = c
+			cur.WriteByte(c)
+			continue
+		}
+		if c == ';' || c == '|' || c == '&' {
+			if s := strings.TrimSpace(cur.String()); s != "" {
+				out = append(out, s)
+			}
+			cur.Reset()
+			continue
+		}
+		cur.WriteByte(c)
+	}
+	if s := strings.TrimSpace(cur.String()); s != "" {
+		out = append(out, s)
+	}
+	return out
+}
+
+func tokenizeBacktickedWords(seg string) []string {
+	var words []string
+	var cur strings.Builder
+	var quote byte
+	flush := func() {
+		if cur.Len() > 0 {
+			words = append(words, cur.String())
+			cur.Reset()
+		}
+	}
+	for i := 0; i < len(seg); i++ {
+		c := seg[i]
+		if quote != 0 {
+			if c == quote {
+				quote = 0
+			} else {
+				cur.WriteByte(c)
+			}
+			continue
+		}
+		switch c {
+		case '\'', '"':
+			quote = c
+		case ' ', '\t':
+			flush()
+		default:
+			cur.WriteByte(c)
+		}
+	}
+	flush()
+	return words
+}
+
+func mutatingMixedModeCommand(words []string) string {
+	cmd := words[0]
+	args := words[1:]
+	if len(args) == 0 {
+		return ""
+	}
+	switch cmd {
+	case "sed":
+		for _, a := range args {
+			if a == "-i" || a == "-I" || strings.HasPrefix(a, "-i") || strings.HasPrefix(a, "--in-place") {
+				return "sed"
+			}
+		}
+	case "find":
+		for i, a := range args {
+			if a == "-delete" {
+				return "find"
+			}
+			if a == "-exec" && i+1 < len(args) {
+				child := args[i+1:]
+				if end := slices.IndexFunc(child, func(w string) bool { return w == ";" || w == "+" }); end > 0 {
+					child = child[:end]
+				}
+				if len(child) > 0 && !CommandLanguageReachable(child[0], map[string]bool{"command": true}) {
+					return "find"
+				}
+				if mutatingMixedModeCommand(child) != "" {
+					return "find"
+				}
+			}
+		}
+	case "yq":
+		for _, a := range args {
+			if a == "-i" || a == "--inplace" {
+				return "yq"
+			}
+		}
+	case "sort", "iconv":
+		for _, a := range args {
+			if a == "-o" || strings.HasPrefix(a, "-o") || strings.HasPrefix(a, "--output") {
+				return cmd
+			}
+		}
+	case "tar":
+		// Listing (-t / -tf / -ztvf) is read-only; create/extract (-c / -x) mutates.
+		hasList := false
+		hasMutate := false
+		for _, a := range args {
+			if strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") {
+				if strings.ContainsRune(a, 't') {
+					hasList = true
+				}
+				if strings.ContainsAny(a, "cxru") {
+					hasMutate = true
+				}
+			}
+		}
+		if hasMutate && !hasList {
+			return "tar"
+		}
+	case "zip":
+		if !slices.Contains(args, "-l") {
+			return "zip"
+		}
+	case "unzip":
+		if !slices.Contains(args, "-l") && !slices.Contains(args, "-p") && !slices.Contains(args, "-c") {
+			return "unzip"
+		}
+	}
+	return ""
 }

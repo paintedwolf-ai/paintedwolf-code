@@ -68,7 +68,7 @@ var commandFormTools = sync.OnceValues(func() (map[string]bool, error) {
 
 // ProgramResultTool reports whether a tool's result is a command program outcome.
 func ProgramResultTool(name string) bool {
-	return name == "command" || name == "verify" || name == "inspect_source" || CommandFormTool(name)
+	return name == "command" || name == "verify" || CommandFormTool(name)
 }
 
 // RetiredCommandForms returns the native forms that replaced a retired tool, and

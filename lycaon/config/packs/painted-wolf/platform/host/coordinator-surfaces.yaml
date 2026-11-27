@@ -295,7 +295,6 @@ observe_investigate:
   prose_finish: true
   publishes_mid_turn_text: true
   floor:
-    - inspect_source
     - summarize
     - survey_repo
     - recall

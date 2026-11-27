@@ -483,4 +483,10 @@ var staticOccurrenceFactDecls = []factDecl{
 	{"argument_schema_tool", oarcore.TypeString, FactTierHost, ""},
 	{"argument_schema_matches_tool", oarcore.TypeBool, FactTierHost, ""},
 	{"replacement_args_json", oarcore.TypeString, FactTierHost, ""},
+	{"purpose_list_delete_targets", oarcore.TypeBool, FactTierHost, ""},
+	{"purpose_preview_stream", oarcore.TypeBool, FactTierHost, ""},
+	{"purpose_preview_query", oarcore.TypeBool, FactTierHost, ""},
+	{"purpose_dry_run_preview", oarcore.TypeBool, FactTierHost, ""},
+	{"purpose_check_patch", oarcore.TypeBool, FactTierHost, ""},
+	{"purpose_inspect_target", oarcore.TypeBool, FactTierHost, ""},
 }

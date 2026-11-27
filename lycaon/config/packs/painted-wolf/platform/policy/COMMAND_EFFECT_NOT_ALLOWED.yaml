@@ -3,17 +3,22 @@ id: COMMAND_EFFECT_NOT_ALLOWED
 kind: policy
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.expected_form, paintedwolf.rejection_code, paintedwolf.source_column, paintedwolf.source_line, paintedwolf.tool_profile]
+requires_facts: [paintedwolf.can_command, paintedwolf.can_request_tools, paintedwolf.class, paintedwolf.code_instead, paintedwolf.command, paintedwolf.execution_outcome, paintedwolf.expected_form, paintedwolf.mode, paintedwolf.mode_denied, paintedwolf.next_action, paintedwolf.operator, paintedwolf.purpose_check_patch, paintedwolf.purpose_dry_run_preview, paintedwolf.purpose_inspect_target, paintedwolf.purpose_list_delete_targets, paintedwolf.purpose_preview_query, paintedwolf.purpose_preview_stream, paintedwolf.redirect, paintedwolf.rejection_code, paintedwolf.session_mode, paintedwolf.source_column, paintedwolf.source_line, paintedwolf.tool_loadable, paintedwolf.tool_profile, paintedwolf.worker_leg]
 when: paintedwolf.rejection_code == "COMMAND_EFFECT_NOT_ALLOWED"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_effect_admission
 message: bound command effects are outside the active profile
-what: 'This operation{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} is outside {% if paintedwolf.tool_profile %}profile **{{ paintedwolf.tool_profile }}**{% else %}the active permission profile{% endif %}.'
-cause: Its bound effect set is not permitted by the active command surface.
-why: Discovering a command or receiving an outer approval does not authorize its child effects. Earlier completed operations remain authoritative.
-fix: '{% if paintedwolf.expected_form %}Available forms on this surface: {{ paintedwolf.expected_form }}.{% else %}This operation has no available form on the active surface.{% endif %}'
-instead: Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile. Do not retry through external execution or replay the whole program.
+what: >-
+  {% if paintedwolf.redirect %}Output redirect{% if paintedwolf.operator %} `{{ paintedwolf.operator }}`{% endif %}{% else %}{% if paintedwolf.command %}`{{ paintedwolf.command }}`{% if paintedwolf.mode %} (`{{ paintedwolf.mode }}`){% endif %}{% else %}This operation{% endif %}{% endif %}{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}{% if paintedwolf.mode_denied %} was refused under launch-time Ask authority{% else %}{% if paintedwolf.session_mode %} is unavailable in Ask mode{% else %} is outside {% if paintedwolf.tool_profile %}profile **{{ paintedwolf.tool_profile }}**{% else %}the active permission profile{% endif %}{% endif %}{% endif %}.
+cause: >-
+  {% if paintedwolf.mode_denied %}This invocation started while Ask mode was active and kept its launch-time read-only authority across the session upgrade{% if paintedwolf.class %}, which blocks `{{ paintedwolf.class }}`{% endif %}.{% else %}{% if paintedwolf.session_mode %}Ask mode permits only read-only inspection and blocks {% if paintedwolf.class %}`{{ paintedwolf.class }}`{% else %}file writes, network requests, and external execution{% endif %}.{% else %}Its bound effect set{% if paintedwolf.class %} (`{{ paintedwolf.class }}`){% endif %} is not permitted by the active command surface.{% endif %}{% endif %}
+why: >-
+  {% if paintedwolf.execution_outcome %}Earlier statements in this program remain authoritative (`{{ paintedwolf.execution_outcome }}`); do not replay completed work.{% else %}Discovering a command or receiving an outer approval does not authorize its child effects. Earlier completed operations remain authoritative.{% endif %}
+fix: >-
+  {% if paintedwolf.code_instead %}{% if paintedwolf.can_command %}Run {% else %}{% if paintedwolf.tool_loadable %}{% if paintedwolf.can_request_tools %}Load `command` via `request_tools` and run {% endif %}{% endif %}{% endif %}`{{ paintedwolf.code_instead }}`{% if paintedwolf.purpose_list_delete_targets %} to list the paths selected for deletion and report the affected files without deleting them{% else %}{% if paintedwolf.purpose_preview_stream %} to preview the transformed output on stdout without modifying the file in place{% else %}{% if paintedwolf.purpose_preview_query %} to evaluate the query and inspect the output on stdout without modifying the file{% else %}{% if paintedwolf.purpose_dry_run_preview %} to preview the matched changes in dry-run mode without modifying files{% else %}{% if paintedwolf.purpose_check_patch %} to check whether the patch applies cleanly without modifying the worktree{% else %}{% if paintedwolf.purpose_inspect_target %} to inspect the current contents of the target file so you can report the exact change needed{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}.{% else %}{% if paintedwolf.expected_form %}Available{% if paintedwolf.session_mode %} read-only{% endif %} forms on this surface: {{ paintedwolf.expected_form }}.{% else %}Do not retry this operation on the active{% if paintedwolf.session_mode %} read-only{% endif %} surface.{% endif %}{% endif %}
+instead: >-
+  {% if paintedwolf.mode_denied %}Agent mode is now active for new calls; if the change is still needed, issue a fresh Agent-mode call under current permissions without replaying already completed statements.{% else %}{% if paintedwolf.session_mode %}Use the read-only observation or gathered evidence to answer, and explain that the user can switch to Agent mode if they want you to apply the change.{% else %}Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile{% if paintedwolf.worker_leg %} or report the required change to the coordinator{% endif %}. Do not retry through external execution or replay the whole program.{% endif %}{% endif %}
 x-paintedwolf-scenarios:
   - id: read-only-write
     vars:
@@ -22,3 +27,38 @@ x-paintedwolf-scenarios:
       expected_form: read_only
       source_line: 2
       source_column: 3
+  - id: ask-mode-alternative
+    vars:
+      tool: command
+      session_mode: ask
+      command: find
+      mode: -delete
+      class: mutation
+      code_instead: "find src -name '*.tmp'"
+      next_action: list_delete_targets
+      can_command: true
+      source_line: 1
+      source_column: 1
+  - id: ask-mode-no-alternative
+    vars:
+      tool: command
+      session_mode: ask
+      command: mkdir
+      mode: create
+      class: mutation
+      can_command: true
+      source_line: 1
+      source_column: 1
+  - id: delayed-after-upgrade
+    vars:
+      tool: command
+      session_mode: agent
+      mode_denied: true
+      command: sed
+      mode: -i
+      class: mutation
+      code_instead: "sed 's/a/b/' README.md"
+      next_action: preview_stream
+      can_command: true
+      source_line: 1
+      source_column: 1

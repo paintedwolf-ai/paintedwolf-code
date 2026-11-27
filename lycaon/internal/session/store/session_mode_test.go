@@ -187,6 +187,72 @@ func TestSessionModeWorkflowAdmissionRollsBackWithCaller(t *testing.T) {
 	assertSessionMode(t, st, root.ID, root.ID, api.SessionModeAgent, false)
 }
 
+func TestSessionModeAskToAgentUpgradePersistsAcrossSQLReopenAndIgnoresPreStartSwitches(t *testing.T) {
+	ctx := t.Context()
+	dir := t.TempDir()
+	dbPath := dir + "/mode-upgrade.db"
+	sqlDB := testdbfixture.OpenPath(t, dbPath)
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
+	st := NewSQL(sqlDB)
+
+	ask := api.SessionModeAsk
+	// 1. An unstarted Ask chat switched to Agent before any turn begins is an ordinary Agent chat, not an upgrade.
+	ordinary, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Mode: &ask}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create unstarted Ask session", err)
+	_, err = st.Sessions.SetMode(ctx, ordinary.ID, api.SessionModeAgent)
+	testutil.FailErr(t, "switch unstarted Ask session to Agent", err)
+	_, _, err = st.Submissions.PutPromptSubmission(ctx, modePrompt(ordinary, nil))
+	testutil.FailErr(t, "start ordinary Agent session", err)
+	ordAuth, err := st.Sessions.ResolveEffectiveMode(ctx, ordinary.ID)
+	testutil.FailErr(t, "read ordinary Agent authority", err)
+	if ordAuth.UpgradedFromAsk {
+		t.Fatalf("unstarted Ask->Agent switch marked UpgradedFromAsk: %+v", ordAuth)
+	}
+
+	// 2. A started Ask chat switched to Agent records durable UpgradedFromAsk evidence that survives DB reopen.
+	startedAsk, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Mode: &ask}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create started Ask session", err)
+	_, _, err = st.Submissions.PutPromptSubmission(ctx, modePrompt(startedAsk, &ask))
+	testutil.FailErr(t, "admit first Ask prompt", err)
+	_, err = st.Sessions.SetMode(ctx, startedAsk.ID, api.SessionModeAgent)
+	testutil.FailErr(t, "upgrade started Ask session to Agent", err)
+	upAuth, err := st.Sessions.ResolveEffectiveMode(ctx, startedAsk.ID)
+	testutil.FailErr(t, "read upgraded authority before reopen", err)
+	if !upAuth.UpgradedFromAsk || upAuth.AgentNoticeDelivered || upAuth.Mode != api.SessionModeAgent || !upAuth.Started {
+		t.Fatalf("upgraded authority before reopen = %+v", upAuth)
+	}
+	testutil.FailErr(t, "close SQL DB for reopen", sqlDB.Close())
+
+	reopenedDB := testdbfixture.OpenPath(t, dbPath)
+	reopenedStore := NewSQL(reopenedDB)
+	reopenedAuth, err := reopenedStore.Sessions.ResolveEffectiveMode(ctx, startedAsk.ID)
+	testutil.FailErr(t, "read upgraded authority after reopen", err)
+	if !reopenedAuth.UpgradedFromAsk || reopenedAuth.AgentNoticeDelivered || reopenedAuth.Mode != api.SessionModeAgent || !reopenedAuth.Started {
+		t.Fatalf("upgraded authority after reopen = %+v", reopenedAuth)
+	}
+	testutil.FailErr(t, "append agent_enabled notice", reopenedStore.Transcript.AppendMessages(ctx, startedAsk.ID, api.Message{
+		ID:           AgentEnabledMessageID(startedAsk.ID),
+		Role:         api.MessageRoleUser,
+		Origin:       api.MessageOriginHost,
+		Kind:         api.MessageKindHostNudge,
+		HostSignalID: agentModeEnabledSignalID,
+		Content:      "[host:session-agent-enabled]\nAgent mode is now active.",
+	}))
+	deliveredAuth, err := reopenedStore.Sessions.ResolveEffectiveMode(ctx, startedAsk.ID)
+	testutil.FailErr(t, "read authority after notice delivery", err)
+	if !deliveredAuth.UpgradedFromAsk || !deliveredAuth.AgentNoticeDelivered {
+		t.Fatalf("authority after notice delivery = %+v", deliveredAuth)
+	}
+	if _, err := reopenedDB.ExecContext(ctx, "UPDATE sessions SET upgraded_from_ask = 0 WHERE id = ?", startedAsk.ID); err == nil {
+		t.Fatal("SQLite accepted resetting upgraded_from_ask on a started session")
+	}
+	reopenedOrd, err := reopenedStore.Sessions.ResolveEffectiveMode(ctx, ordinary.ID)
+	testutil.FailErr(t, "read ordinary authority after reopen", err)
+	if reopenedOrd.UpgradedFromAsk || reopenedOrd.AgentNoticeDelivered {
+		t.Fatalf("ordinary Agent session marked UpgradedFromAsk after reopen: %+v", reopenedOrd)
+	}
+}
+
 func TestCorruptSessionModeDoesNotPreventDiagnosisOrDelete(t *testing.T) {
 	ctx := t.Context()
 	database := testdbfixture.Open(t, "mode.db")
@@ -225,13 +291,12 @@ func assertSessionMode(t *testing.T, st modeStore, id, rootID string, mode api.S
 	t.Helper()
 	authority, err := st.ResolveEffectiveMode(t.Context(), id)
 	testutil.FailErr(t, "read mode authority", err)
-	want := RootAuthority{RootSessionID: rootID, Mode: mode, Started: started}
-	if authority != want {
-		t.Fatalf("mode authority = %+v, want %+v", authority, want)
+	if authority.RootSessionID != rootID || authority.Mode != mode || authority.Started != started {
+		t.Fatalf("mode authority = %+v, want root=%s mode=%s started=%t", authority, rootID, mode, started)
 	}
 	projected, err := st.Get(t.Context(), id)
 	testutil.FailErr(t, "read session view", err)
 	if projected.RootSessionID != rootID || projected.Mode != mode || projected.Started != started {
-		t.Fatalf("session projection = %+v, want mode %+v", projected, want)
+		t.Fatalf("session projection = %+v, want root=%s mode=%s started=%t", projected, rootID, mode, started)
 	}
 }

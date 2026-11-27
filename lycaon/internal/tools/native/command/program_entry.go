@@ -104,6 +104,8 @@ type SessionOwners interface {
 // programRun is one invocation's frozen frame, surface and ledger bindings.
 type programRun struct {
 	tool string
+	// sessions reads the owning session, for Ask refusals that name its mode.
+	sessions SessionOwners
 	// windows holds source windows its operations returned, until output delivery.
 	windows *tools.ProgramWindows
 	// drafts is the program's view of the person's unsaved documents.
@@ -146,6 +148,12 @@ type programRun struct {
 // freezes frame and surface, records the program, evaluates it under
 // supervision, settles it and returns the bounded owner projection.
 func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext) (string, error) {
+	if tc.Source.AskMode {
+		if reject := tools.AskModeCommandFieldReject(tool, args); reject != nil {
+			return "", reject
+		}
+		tc.Source.ReadOnly = true
+	}
 	ctx = sandbox.WithSessionID(ctx, tc.Identity.SessionID)
 	source, _ := args["command"].(string)
 	if source == "" {
@@ -221,6 +229,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 		}
 	}
 	run.executor, run.registry, run.recorder, run.supervisor, run.progress = r.Executor, r.Registry, r.Recorder, r.Supervisor, r.Progress
+	run.sessions = r.Sessions
 	run.custody = r.Provenance
 	run.externalHidden = r.ExternalHidden
 	run.publishDocument = owners.PublishDocument

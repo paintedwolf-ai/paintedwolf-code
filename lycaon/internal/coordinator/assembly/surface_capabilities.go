@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -221,7 +222,7 @@ func (e *promptSurface) turnReader(
 	if turn != nil && turn.Reader.Valid() && turn.Reader.SurfaceID() == profile.SurfaceID {
 		return turn.Reader, nil
 	}
-	_, rootCount, _, _, ok := e.workspaceRootsForTurn(ctx, sess, turn)
+	roots, rootCount, activePath, _, ok := e.workspaceRootsForTurn(ctx, sess, turn)
 	if !ok {
 		switch {
 		case fallbackRootCount > 0:
@@ -232,6 +233,7 @@ func (e *promptSurface) turnReader(
 			rootCount = 1
 		}
 	}
+	hasGit := workspaceRowsHaveGit(roots, activePath, sess)
 	plan, err := surface.CompileToolPlan(profile, rootCount)
 	if err != nil {
 		return prompts.Reader{}, err
@@ -267,6 +269,7 @@ func (e *promptSurface) turnReader(
 		Loaded:    e.loadedTools(sess),
 		Schemas:   schemas,
 		RootCount: rootCount,
+		HasGit:    hasGit,
 		WebSearch: webSearchEnabled,
 	})
 	if err != nil {
@@ -277,4 +280,18 @@ func (e *promptSurface) turnReader(
 		turn.Reader = reader
 	}
 	return reader, nil
+}
+
+// workspaceRowsHaveGit reports whether the active folder, an attached root or
+// the session's workspace is in Git.
+func workspaceRowsHaveGit(roots []map[string]any, activePath string, sess *api.Session) bool {
+	dirs := []string{activePath}
+	for _, r := range roots {
+		dir, _ := r["path"].(string)
+		dirs = append(dirs, dir)
+	}
+	if sess != nil {
+		dirs = append(dirs, sess.WorkspacePath)
+	}
+	return gitrepo.AnyDiscovered(dirs...)
 }

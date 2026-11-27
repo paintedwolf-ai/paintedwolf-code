@@ -1,13 +1,18 @@
 package promptsource
 
 import (
+	"context"
 	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
+	"github.com/lycaon/lycaon/internal/hostctx"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/loading"
+	"github.com/lycaon/lycaon/internal/session/profiles"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -48,4 +53,109 @@ func TestPromptSurfaceNamesEachToolsSourceAndTheUnitsItAttached(t *testing.T) {
 	if !attached {
 		t.Fatal("no unit names the offered tool that attached it")
 	}
+}
+
+func TestProcedureReaderNarrowsAskModeAcrossPosturesAndZeroesEmptyStoredPosture(t *testing.T) {
+	postures, err := profiles.LoadPostureRegistry()
+	testutil.FailErr(t, "load posture registry", err)
+
+	for _, posture := range []api.SessionPosture{
+		api.SessionPostureSpec,
+		api.SessionPostureVet,
+		api.SessionPostureBuild,
+		api.SessionPostureOrchestrate,
+	} {
+		mem := storetest.New(t, "proj-1")
+		ask := api.SessionModeAsk
+		sess, err := mem.Sessions.Create(t.Context(), api.CreateSessionRequest{
+			Mode:    &ask,
+			Posture: posture,
+		}, "proj-1")
+		testutil.FailErr(t, "create session", err)
+
+		prof := profiles.New(mem.Sessions, nil, nil)
+		prof.SetPostureRegistry(postures)
+		m := &Context{
+			Profiles: prof,
+			Sessions: mem.Sessions,
+		}
+		reader, err := m.procedureReader(t.Context(), &api.Session{
+			ID:      sess.ID,
+			Mode:    api.SessionModeAsk,
+			Posture: posture,
+		}, "implement_investigate", []string{"command", "command_output", "command_stop"})
+		testutil.FailErr(t, "procedureReader", err)
+		vars := reader.Facts()
+		for _, flag := range []string{
+			"profile_command_mutation",
+			"profile_command_external_exec",
+			"profile_command_network_egress",
+			"profile_has_terminal_capture",
+		} {
+			if vars[flag] != false {
+				t.Fatalf("posture %q %s = %v, want false", posture, flag, vars[flag])
+			}
+		}
+
+		// Even if the store upgrades to Agent, a round bound to Ask keeps procedureReader read-only.
+		_, err = mem.Sessions.SetMode(t.Context(), sess.ID, api.SessionModeAgent)
+		testutil.FailErr(t, "upgrade store to agent", err)
+		roundCtx := hostctx.WithRoundMode(t.Context(), sess.ID, api.SessionModeAsk)
+		roundReader, err := m.procedureReader(roundCtx, &api.Session{
+			ID:      sess.ID,
+			Mode:    api.SessionModeAsk,
+			Posture: posture,
+		}, "implement_investigate", []string{"command", "command_output", "command_stop"})
+		testutil.FailErr(t, "procedureReader bound round", err)
+		roundVars := roundReader.Facts()
+		for _, flag := range []string{
+			"profile_command_mutation",
+			"profile_command_external_exec",
+			"profile_command_network_egress",
+		} {
+			if roundVars[flag] != false {
+				t.Fatalf("posture %q round-bound %s = %v, want false", posture, flag, roundVars[flag])
+			}
+		}
+	}
+
+	// An empty stored posture on the session record yields zero command effects in both Agent and Ask modes.
+	for _, mode := range []api.SessionMode{api.SessionModeAgent, api.SessionModeAsk} {
+		prof := profiles.New(emptyPostureSessionStore{mode: mode}, nil, nil)
+		prof.SetPostureRegistry(postures)
+		m := &Context{
+			Profiles: prof,
+		}
+		for _, profileID := range []string{"implement_investigate", "implement"} {
+			reader, err := m.procedureReader(t.Context(), &api.Session{
+				ID:      "empty-posture",
+				Mode:    mode,
+				Posture: "",
+			}, profileID, []string{"command", "command_output", "command_stop"})
+			testutil.FailErr(t, "procedureReader empty posture", err)
+			vars := reader.Facts()
+			for _, flag := range []string{
+				"profile_command_mutation",
+				"profile_command_external_exec",
+				"profile_command_network_egress",
+				"profile_has_terminal_capture",
+			} {
+				if vars[flag] != false {
+					t.Fatalf("empty posture mode=%q profile=%q %s = %v, want false", mode, profileID, flag, vars[flag])
+				}
+			}
+		}
+	}
+}
+
+type emptyPostureSessionStore struct {
+	mode api.SessionMode
+}
+
+func (s emptyPostureSessionStore) Get(_ context.Context, id string) (*api.Session, error) {
+	return &api.Session{ID: id, Mode: s.mode, Posture: ""}, nil
+}
+
+func (s emptyPostureSessionStore) ResolveEffectiveMode(_ context.Context, id string) (store.RootAuthority, error) {
+	return store.RootAuthority{RootSessionID: id, Mode: s.mode}, nil
 }
