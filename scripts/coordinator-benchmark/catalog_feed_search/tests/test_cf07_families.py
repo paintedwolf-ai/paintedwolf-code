@@ -1,4 +1,4 @@
-"""Unit tests for CF07 · Agent discovery evaluators, parsers, and manifest helpers."""
+"""Unit tests and negative/positive controls for CF07 · Agent discovery (Decision 045)."""
 
 from __future__ import annotations
 
@@ -9,14 +9,16 @@ import unittest
 
 from catalog_feed_search.families.cf07_g01 import evaluate_g01_observation
 from catalog_feed_search.families.cf07_g02 import evaluate_g02_pair, parse_survey_json
-from catalog_feed_search.families.cf07_g03 import evaluate_g03_refusal
+from catalog_feed_search.families.cf07_g03 import evaluate_g03_refusal, inspect_model_facing_completeness
 from catalog_feed_search.families.cf07_g04 import (
     evaluate_g04_agreement,
     extract_search_stage_path_lines,
+    is_async_detached_handle,
     parse_rg_path_lines,
 )
 from catalog_feed_search.families.cf07_harness import CapturedToolCall, parse_captured_tool_call
 from catalog_feed_search.families.cf07_runner import compute_gap_rate, write_sha256sums
+from catalog_feed_search.references import WalkEntry
 
 
 def _make_call(
@@ -48,6 +50,10 @@ def _make_call(
         tool_result_json={"outcome": outcome},
         model_facing_message=model_msg,
     )
+
+
+def _walk_entry(path: str, kind: str = "file", boundary: bool = False) -> WalkEntry:
+    return WalkEntry(path=path, kind=kind, size=10 if kind == "file" else 0, sha256=None, hidden=False, boundary=boundary)
 
 
 class TestCF07HarnessParsing(unittest.TestCase):
@@ -103,7 +109,7 @@ class TestCF07HarnessParsing(unittest.TestCase):
         self.assertIn("stale_inventory", parsed.declared_gaps)
 
 
-class TestCF07Evaluators(unittest.TestCase):
+class TestCF07G01Controls(unittest.TestCase):
     def test_g01_cold_warming_flags_f_cf01_01_when_code_absent(self) -> None:
         call = _make_call(outcome="completed", stdout="pkg/a.txt\n")
         ev = evaluate_g01_observation("find", call, cold_no_complete_gen=True, tree_mutated_during_call=False)
@@ -114,85 +120,206 @@ class TestCF07Evaluators(unittest.TestCase):
         ev2 = evaluate_g01_observation("find", refused, cold_no_complete_gen=True, tree_mutated_during_call=False)
         self.assertEqual(ev2["verdict"], "PASS")
 
-    def test_g01_moving_tree_passes_with_or_without_gap(self) -> None:
-        clean = _make_call(outcome="completed", stdout="a.txt\n")
-        self.assertEqual(
-            evaluate_g01_observation("find", clean, cold_no_complete_gen=False, tree_mutated_during_call=True)["verdict"],
-            "PASS",
+    def test_g01_flags_wrong_answer_and_wrong_freshness(self) -> None:
+        # Wrong answer: hallucinated extra file not in reference window -> DEFECT
+        hallucinated = _make_call(outcome="completed", stdout="a.txt\nghost.txt\n")
+        ev_extra = evaluate_g01_observation(
+            "find",
+            hallucinated,
+            cold_no_complete_gen=False,
+            tree_mutated_during_call=False,
+            ref_files_before={"a.txt"},
+            ref_files_after={"a.txt"},
         )
-        gapped = _make_call(outcome="completed", declared_gaps=("catalog_refreshing",))
-        self.assertEqual(
-            evaluate_g01_observation("summarize", gapped, cold_no_complete_gen=False, tree_mutated_during_call=True)["verdict"],
-            "PASS_DECLARED_GAP",
-        )
+        self.assertEqual(ev_extra["verdict"], "DEFECT")
 
-    def test_g02_pair_equivalence_and_empty_repo_guard(self) -> None:
-        payload = json.dumps(
+        # Wrong freshness: tree mutated (new file added), answer served stale pre-mutation set without gap -> DEFECT
+        stale_unmarked = _make_call(outcome="completed", stdout="a.txt\n")
+        ev_stale = evaluate_g01_observation(
+            "find",
+            stale_unmarked,
+            cold_no_complete_gen=False,
+            tree_mutated_during_call=True,
+            ref_files_before={"a.txt"},
+            ref_files_after={"a.txt", "b.txt"},
+        )
+        self.assertEqual(ev_stale["verdict"], "DEFECT")
+
+        # Same stale answer WITH declared freshness gap -> PASS_DECLARED_GAP
+        stale_marked = _make_call(outcome="completed", stdout="a.txt\n", fresh=False, declared_gaps=("stale_inventory",))
+        ev_ok = evaluate_g01_observation(
+            "find",
+            stale_marked,
+            cold_no_complete_gen=False,
+            tree_mutated_during_call=True,
+            ref_files_before={"a.txt"},
+            ref_files_after={"a.txt", "b.txt"},
+        )
+        self.assertEqual(ev_ok["verdict"], "PASS_DECLARED_GAP")
+
+        # Wrong wc line count -> DEFECT
+        bad_wc = _make_call(outcome="completed", stdout="99 a.txt\n")
+        ev_wc = evaluate_g01_observation(
+            "wc",
+            bad_wc,
+            cold_no_complete_gen=False,
+            tree_mutated_during_call=False,
+            expected_wc_lines={2},
+        )
+        self.assertEqual(ev_wc["verdict"], "DEFECT")
+
+
+class TestCF07G02Controls(unittest.TestCase):
+    def test_g02_rejects_equal_but_wrong_inventories_and_boundary_or_exclusion_leaks(self) -> None:
+        ref = [
+            _walk_entry("src", "dir"),
+            _walk_entry("src/app.go", "file"),
+            _walk_entry("src/util.go", "file"),
+            _walk_entry("node_modules", "dir", boundary=True),
+            _walk_entry("subrepo", "dir", boundary=True),
+        ]
+        # Healthy matching pair -> PASS
+        good_payload = json.dumps(
             {
                 "bundle": "layout_overview",
                 "path": ".",
-                "digest": "abc",
-                "total": 4,
+                "digest": "ok",
+                "total": 2,
                 "probes_run": 1,
-                "inventory_entries": 10,
-                "entries_examined": 10,
+                "inventory_entries": 4,
+                "entries_examined": 4,
                 "snapshot": [{"handle": "h1", "kind": "dir", "path": "src"}],
             }
         )
-        s_call = _make_call(tool_name="survey_repo", stdout=payload)
-        r_call = _make_call(tool_name="command", stdout=payload)
+        s_call = _make_call(tool_name="survey_repo", stdout=good_payload)
+        r_call = _make_call(tool_name="command", stdout=good_payload)
         self.assertIsNotNone(parse_survey_json(s_call))
-        ev = evaluate_g02_pair(s_call, r_call, ref_file_count=5)
-        self.assertEqual(ev["verdict"], "PASS")
-        self.assertTrue(ev["schema_match"])
-        self.assertTrue(ev["digest_match"])
+        self.assertEqual(evaluate_g02_pair(s_call, r_call, ref_entries=ref)["verdict"], "PASS")
 
-        empty_payload = json.dumps(
+        # Equal-but-wrong: both claim non-existent path -> DEFECT
+        wrong_payload = json.dumps(
             {
                 "bundle": "layout_overview",
                 "path": ".",
-                "digest": "empty",
-                "total": 0,
+                "digest": "same",
+                "total": 1,
                 "probes_run": 1,
-                "inventory_entries": 0,
-                "entries_examined": 0,
+                "inventory_entries": 4,
+                "entries_examined": 4,
+                "snapshot": [{"handle": "h1", "kind": "file", "path": "phantom/missing.go"}],
             }
         )
-        e_call = _make_call(tool_name="command", stdout=empty_payload)
-        ev_empty = evaluate_g02_pair(e_call, e_call, ref_file_count=5)
-        self.assertEqual(ev_empty["verdict"], "DEFECT")
-        self.assertTrue(ev_empty["empty_claim_violation"])
+        w_call = _make_call(stdout=wrong_payload)
+        self.assertEqual(evaluate_g02_pair(w_call, w_call, ref_entries=ref)["verdict"], "DEFECT")
 
-    def test_g03_refusal_evaluation(self) -> None:
-        ok_call = _make_call(outcome="rejected", rejection_code="GREP_REGEX_UNSUPPORTED", stdout="")
-        self.assertEqual(evaluate_g03_refusal(ok_call, expected_code="GREP_REGEX_UNSUPPORTED")["verdict"], "PASS")
-
-        spurious = _make_call(outcome="rejected", rejection_code="GREP_REGEX_UNSUPPORTED", stdout="oops\n")
-        self.assertEqual(evaluate_g03_refusal(spurious, expected_code="GREP_REGEX_UNSUPPORTED")["verdict"], "DEFECT")
-
-        partial_budget = _make_call(outcome="rejected", rejection_code="GREP_MATCH_BUDGET", stdout="01:aaab\n")
-        self.assertEqual(
-            evaluate_g03_refusal(partial_budget, expected_code="GREP_MATCH_BUDGET", allow_partial_stdout=True)["verdict"],
-            "PASS",
+        # Boundary descent leak (node_modules/pkg/x.js) -> DEFECT
+        bleak_payload = json.dumps(
+            {
+                "bundle": "layout_overview",
+                "path": ".",
+                "digest": "b",
+                "total": 1,
+                "probes_run": 1,
+                "inventory_entries": 4,
+                "entries_examined": 4,
+                "snapshot": [{"handle": "h1", "kind": "file", "path": "node_modules/pkg/x.js"}],
+            }
         )
+        b_call = _make_call(stdout=bleak_payload)
+        self.assertEqual(evaluate_g02_pair(b_call, b_call, ref_entries=ref)["verdict"], "DEFECT")
 
-    def test_g04_agreement_and_exclusions(self) -> None:
-        agent_call = _make_call(stdout="./src/a.txt:2:alpha\n.paintedwolf/x.txt:1:alpha\n")
-        search_resp = {
-            "hits": [
-                {"hit_kind": "code", "path": "src/a.txt", "line": 2},
-                {"hit_kind": "symbol", "path": "src/sym.go", "line": 10},
-            ],
-            "issues": [],
-        }
-        self.assertEqual(parse_rg_path_lines(agent_call.stdout), {("src/a.txt", 2), (".paintedwolf/x.txt", 1)})
-        self.assertEqual(extract_search_stage_path_lines(search_resp), {("src/a.txt", 2)})
-        ev = evaluate_g04_agreement(agent_call, search_resp, {("src/a.txt", 2)})
+        # .paintedwolf path-component exclusion leak -> DEFECT
+        pw_payload = json.dumps(
+            {
+                "bundle": "layout_overview",
+                "path": ".",
+                "digest": "p",
+                "total": 1,
+                "probes_run": 1,
+                "inventory_entries": 4,
+                "entries_examined": 4,
+                "snapshot": [{"handle": "h1", "kind": "file", "path": "sub/.paintedwolf/policy.yaml"}],
+            }
+        )
+        p_call = _make_call(stdout=pw_payload)
+        self.assertEqual(evaluate_g02_pair(p_call, p_call, ref_entries=ref)["verdict"], "DEFECT")
+
+
+class TestCF07G03AndG04Controls(unittest.TestCase):
+    def test_g03_early_stop_visited_unvisited_and_inc02_visibility(self) -> None:
+        ok_call = _make_call(
+            outcome="rejected",
+            rejection_code="GREP_MATCH_BUDGET",
+            stdout="01_first.txt:aaab\n",
+            model_msg="GREP_MATCH_BUDGET regex_work_steps exceeded",
+        )
+        ev = evaluate_g03_refusal(
+            ok_call,
+            expected_code="GREP_MATCH_BUDGET",
+            allow_partial_stdout=True,
+            visited_expected=("aaab",),
+            unvisited_forbidden=("aaab_unvisited",),
+            require_model_partial_marker=True,
+        )
         self.assertEqual(ev["verdict"], "PASS")
 
-        # Disagreement without declared gap -> DEFECT
-        disagree = evaluate_g04_agreement(_make_call(stdout="src/a.txt:2:alpha\n"), {"hits": [], "issues": []}, {("src/a.txt", 2)})
-        self.assertEqual(disagree["verdict"], "DEFECT")
+        leaked = _make_call(
+            outcome="rejected",
+            rejection_code="GREP_MATCH_BUDGET",
+            stdout="01_first.txt:aaab\n03_unvisited.txt:aaab_unvisited\n",
+            model_msg="GREP_MATCH_BUDGET",
+        )
+        ev_leak = evaluate_g03_refusal(
+            leaked,
+            expected_code="GREP_MATCH_BUDGET",
+            allow_partial_stdout=True,
+            unvisited_forbidden=("aaab_unvisited",),
+            require_model_partial_marker=True,
+        )
+        self.assertEqual(ev_leak["verdict"], "DEFECT")
+
+        inc02 = _make_call(
+            outcome="completed",
+            status_code=2,
+            stdout="01_first.txt:alpha first\n",
+            stderr="rg: unreadable: Permission denied\n",
+            model_msg='{"status":2} Command stderr:\nrg: unreadable\n01_first.txt:alpha first\n{"source_verdict":"failed"}',
+        )
+        vis = inspect_model_facing_completeness(inc02)
+        self.assertTrue(vis["model_sees_status_2"])
+        self.assertTrue(vis["model_sees_source_verdict_failed"])
+        self.assertEqual(vis["disposition"], "model_notified_failed_verdict_despite_completed_transport")
+
+    def test_g04_independent_route_controls_and_strict_gap_scoping(self) -> None:
+        ref = {("src/a.txt", 2)}
+        # Two empty responses against positive reference -> DEFECT
+        empty_agent = _make_call(stdout="")
+        empty_stage = {"hits": [], "issues": []}
+        self.assertEqual(evaluate_g04_agreement(empty_agent, empty_stage, ref)["verdict"], "DEFECT")
+
+        # Gap on stage (time_budget) does NOT excuse missing hit on agent -> DEFECT
+        stage_with_gap = {"hits": [], "issues": [{"executor": "code", "reason": "time_budget"}]}
+        self.assertEqual(evaluate_g04_agreement(empty_agent, stage_with_gap, ref)["verdict"], "DEFECT")
+
+        # symbol_pending on stage does NOT excuse code-leg omission -> DEFECT
+        good_agent = _make_call(stdout="src/a.txt:2:alpha\n")
+        sym_gap_stage = {"hits": [], "issues": [{"executor": "symbol", "reason": "symbol_pending"}]}
+        self.assertEqual(evaluate_g04_agreement(good_agent, sym_gap_stage, ref)["verdict"], "DEFECT")
+
+        # Both match reference on common generation -> PASS
+        good_stage = {"hits": [{"hit_kind": "code", "path": "src/a.txt", "line": 2}], "issues": []}
+        self.assertEqual(parse_rg_path_lines(good_agent.stdout), ref)
+        self.assertEqual(extract_search_stage_path_lines(good_stage), ref)
+        ev_ok = evaluate_g04_agreement(good_agent, good_stage, ref, generation_before=5, generation_after=5)
+        self.assertEqual(ev_ok["verdict"], "PASS")
+
+        # Generation drift -> DEFECT
+        ev_drift = evaluate_g04_agreement(good_agent, good_stage, ref, generation_before=5, generation_after=6)
+        self.assertEqual(ev_drift["verdict"], "DEFECT")
+
+        # Async detached handle detector
+        detached = _make_call(model_msg='{"program_id":"p1","state":"running","handle":"h1"}')
+        self.assertTrue(is_async_detached_handle(detached))
 
     def test_runner_gap_rate_and_sha256sums(self) -> None:
         self.assertEqual(compute_gap_rate({"executed_instances": 10, "verdict_counts": {"PASS_DECLARED_GAP": 3}}), 0.3)

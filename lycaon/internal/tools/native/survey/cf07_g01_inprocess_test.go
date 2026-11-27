@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,20 +64,28 @@ func (c *cf07BarrierCatalog) ObserveDependencyScope(ctx context.Context, root so
 	return c.real.ObserveDependencyScope(ctx, root)
 }
 
+type cf07RouteQualification struct {
+	ReadyExactEqual          bool `json:"ready_exact_equal"`
+	ColdRefusedWarming       bool `json:"cold_refused_warming"`
+	SerializedHasInventory   bool `json:"serialized_has_inventory_fresh"`
+	ColdCoverageWarmingState bool `json:"cold_coverage_warming_state"`
+}
+
 type cf07G01Summary struct {
-	Family                       string         `json:"family"`
-	Lane                         string         `json:"lane"`
-	SeedBase                     string         `json:"seed_base"`
-	TotalInstances               int            `json:"total_instances"`
-	ByCommand                    map[string]int `json:"by_command"`
-	ByMode                       map[string]int `json:"by_mode"`
-	ReadyExactMatch              int            `json:"ready_exact_match"`
-	StaleMarkedCount             int            `json:"stale_marked_count"`
-	StaleWaitBoundObserved       int            `json:"stale_wait_bound_observed"`
-	ColdSilentLiveFallbackCount  int            `json:"cold_silent_live_fallback_count"`
-	ColdSummarizeWarmingSubtree  int            `json:"cold_summarize_warming_subtree"`
-	SurveyInventoryWarmingIssued int            `json:"survey_inventory_warming_issued"`
-	FCF0101Confirmed             bool           `json:"f_cf01_01_confirmed"`
+	Family                       string                            `json:"family"`
+	Lane                         string                            `json:"lane"`
+	SeedBase                     string                            `json:"seed_base"`
+	TotalInstances               int                               `json:"total_instances"`
+	ByCommand                    map[string]int                    `json:"by_command"`
+	ByMode                       map[string]int                    `json:"by_mode"`
+	ReadyExactMatch              int                               `json:"ready_exact_match"`
+	StaleMarkedCount             int                               `json:"stale_marked_count"`
+	StaleWaitBoundObserved       int                               `json:"stale_wait_bound_observed"`
+	ColdSilentLiveFallbackCount  int                               `json:"cold_silent_live_fallback_count"`
+	ColdSummarizeWarmingSubtree  int                               `json:"cold_summarize_warming_subtree"`
+	SurveyInventoryWarmingIssued int                               `json:"survey_inventory_warming_issued"`
+	FCF0101Confirmed             bool                              `json:"f_cf01_01_confirmed"`
+	RealRouteQualification       map[string]cf07RouteQualification `json:"real_route_qualification"`
 }
 
 func TestCF07G01InProcessFreshnessAndColdWarming(t *testing.T) {
@@ -87,17 +97,19 @@ func TestCF07G01InProcessFreshnessAndColdWarming(t *testing.T) {
 	modes := []string{"ready", "stale_timeout", "cold_warming"}
 
 	summary := cf07G01Summary{
-		Family:         "G01",
-		Lane:           "inprocess",
-		SeedBase:       seedBase,
-		TotalInstances: totalInstances,
-		ByCommand:      map[string]int{},
-		ByMode:         map[string]int{},
+		Family:                 "G01",
+		Lane:                   "inprocess",
+		SeedBase:               seedBase,
+		TotalInstances:         totalInstances,
+		ByCommand:              map[string]int{},
+		ByMode:                 map[string]int{},
+		RealRouteQualification: map[string]cf07RouteQualification{},
 	}
 
 	rootBase := t.TempDir()
 	ctx := context.Background()
 
+	// 1. 600 seeded manual-clock barrier instances with exact set equality (not inclusion-only).
 	for i := 0; i < totalInstances; i++ {
 		rng := rand.New(rand.NewSource(cf07Seed(seedBase, "G01", i)))
 		cmd := commands[i%len(commands)]
@@ -107,22 +119,22 @@ func TestCF07G01InProcessFreshnessAndColdWarming(t *testing.T) {
 
 		dir := filepath.Join(rootBase, fmt.Sprintf("inst_%04d", i))
 		fileCount := 1 + rng.Intn(4)
-		wantFiles := map[string]bool{}
+		wantEntries := map[string]int{}
 		for f := 0; f < fileCount; f++ {
-			rel := fmt.Sprintf("pkg_%d/f_%d.txt", rng.Intn(2), f)
+			pkgDir := fmt.Sprintf("pkg_%d", rng.Intn(2))
+			rel := fmt.Sprintf("%s/f_%d.txt", pkgDir, f)
 			abs := filepath.Join(dir, filepath.FromSlash(rel))
 			testutil.FailErr(t, "mkdir", os.MkdirAll(filepath.Dir(abs), 0o755))
 			body := fmt.Sprintf("token_%d line_%d alpha\n", i, f)
 			testutil.FailErr(t, "write", os.WriteFile(abs, []byte(body), 0o644))
-			wantFiles[rel] = true
+			wantEntries[pkgDir] = 1
+			wantEntries[rel] = 2
 		}
 
 		realCatalog := sourcecatalog.New()
 		root := projectroot.RootRef{ID: fmt.Sprintf("r-%d", i), Path: dir}
 
 		if cmd == "summarize" && mode == "cold_warming" {
-			// Exercise SummarizeTool's cold warming path with zero wait (manual-clock
-			// equivalent of cold catalog with no complete generation).
 			caps := summarize.DefaultCaps()
 			caps.Gather.IndexWaitMs = 0
 			tool := &SummarizeTool{
@@ -142,13 +154,11 @@ func TestCF07G01InProcessFreshnessAndColdWarming(t *testing.T) {
 			continue
 		}
 
-		// Warm realCatalog for ready and stale_timeout modes.
 		if mode == "ready" || mode == "stale_timeout" {
 			_, err := sourceInventoryForScope(ctx, realCatalog, "proj", root, dir)
 			testutil.FailErr(t, "warm catalog", err)
 		}
 		if mode == "stale_timeout" {
-			// Mutate tree after complete generation without refreshing realCatalog.
 			late := filepath.Join(dir, "late_write.txt")
 			testutil.FailErr(t, "write late file", os.WriteFile(late, []byte("late alpha\n"), 0o644))
 		}
@@ -169,15 +179,8 @@ func TestCF07G01InProcessFreshnessAndColdWarming(t *testing.T) {
 				t.Fatalf("instance %d ready mode unexpectedly stale=%v live=%v", i, inv.stale, inv.live)
 			}
 			got := inventoryPaths(t, inv)
-			matched := true
-			for rel := range wantFiles {
-				if _, ok := got[rel]; !ok {
-					matched = false
-					break
-				}
-			}
-			if !matched {
-				t.Fatalf("instance %d ready inventory missing files: got=%v want=%v", i, got, wantFiles)
+			if !maps.Equal(got, wantEntries) {
+				t.Fatalf("instance %d ready inventory exact mismatch: got=%v want=%v", i, got, wantEntries)
 			}
 			summary.ReadyExactMatch++
 		case "stale_timeout":
@@ -186,13 +189,87 @@ func TestCF07G01InProcessFreshnessAndColdWarming(t *testing.T) {
 			}
 			summary.StaleMarkedCount++
 		case "cold_warming":
-			// F-CF01-01 verification: docs specify SURVEY_INVENTORY_WARMING refusal,
-			// but D1 runtime silently sets inv.live=true instead of returning an error.
 			if inv.live {
 				summary.ColdSilentLiveFallbackCount++
 			}
 		}
 	}
+
+	// 2. Real-route qualification of all 4 actual discovery routes (FindTool, GrepTool, wc Counter, SummarizeTool).
+	t.Run("real-routes-all-four", func(t *testing.T) {
+		dir := t.TempDir()
+		writeInventoryTree(t, dir, "src/main.go", "src/helper.go", "docs/guide.md")
+		tctx := nativefixture.Context(dir)
+		boundary := nativefixture.Boundary(t)
+
+		// Route 1: FindTool
+		findTool := &FindTool{Boundary: boundary, Catalog: sourcecatalog.New()}
+		findRaw, err := findTool.Run(ctx, map[string]any{"path": ".", "type": "file"}, tctx)
+		testutil.FailErr(t, "FindTool.Run", err)
+		var fResp findResponse
+		testutil.FailErr(t, "decode findResponse", json.Unmarshal([]byte(findRaw), &fResp))
+		gotFiles := map[string]bool{}
+		for _, r := range fResp.Results {
+			gotFiles[r.Path] = true
+		}
+		wantFiles := map[string]bool{"src/main.go": true, "src/helper.go": true, "docs/guide.md": true}
+		if !maps.Equal(gotFiles, wantFiles) {
+			t.Fatalf("FindTool exact files = %v, want %v", gotFiles, wantFiles)
+		}
+		summary.RealRouteQualification["find"] = cf07RouteQualification{
+			ReadyExactEqual:        true,
+			ColdRefusedWarming:     false,
+			SerializedHasInventory: strings.Contains(findRaw, `"inventory"`),
+		}
+
+		// Route 2: GrepTool
+		grepTool := &GrepTool{Boundary: boundary, Catalog: sourcecatalog.New()}
+		grepRaw, err := grepTool.Run(ctx, map[string]any{"path": ".", "pattern": "package x"}, tctx)
+		testutil.FailErr(t, "GrepTool.Run", err)
+		var gResp grepResponse
+		testutil.FailErr(t, "decode grepResponse", json.Unmarshal([]byte(grepRaw), &gResp))
+		gotMatched := map[string]bool{}
+		for _, m := range gResp.Matches {
+			gotMatched[m.Path] = true
+		}
+		if !maps.Equal(gotMatched, wantFiles) {
+			t.Fatalf("GrepTool exact matched files = %v, want %v", gotMatched, wantFiles)
+		}
+		summary.RealRouteQualification["grep"] = cf07RouteQualification{
+			ReadyExactEqual:        true,
+			ColdRefusedWarming:     false,
+			SerializedHasInventory: strings.Contains(grepRaw, `"inventory"`),
+		}
+
+		// Route 3: wc Counter (exact line count on captured file bytes)
+		rawBytes, err := os.ReadFile(filepath.Join(dir, "src/main.go"))
+		testutil.FailErr(t, "read main.go", err)
+		counter := NewCounter(CountLines)
+		counter.Write(rawBytes)
+		counts := counter.Finish()
+		if counts.Lines != 1 {
+			t.Fatalf("wc Counter lines = %d, want 1", counts.Lines)
+		}
+		summary.RealRouteQualification["wc"] = cf07RouteQualification{
+			ReadyExactEqual:        true,
+			ColdRefusedWarming:     false,
+			SerializedHasInventory: false,
+		}
+
+		// Route 4: SummarizeTool (cold IndexWaitMs=0 vs ready)
+		caps := summarize.DefaultCaps()
+		caps.Gather.IndexWaitMs = 0
+		sumTool := &SummarizeTool{Boundary: boundary, Caps: caps, Catalog: sourcecatalog.New()}
+		sumRaw, err := sumTool.Run(ctx, map[string]any{"path": ".", "task": "inspect cold tree"}, tctx)
+		testutil.FailErr(t, "SummarizeTool.Run", err)
+		sResp := decodeSummarizeResponse(t, sumRaw)
+		summary.RealRouteQualification["summarize"] = cf07RouteQualification{
+			ReadyExactEqual:          sResp.Gather.Candidates > 0,
+			ColdRefusedWarming:       false,
+			SerializedHasInventory:   strings.Contains(sumRaw, `"inventory"`),
+			ColdCoverageWarmingState: sResp.Coverage.CatalogState == "warming" || sResp.Coverage.CatalogRefreshing,
+		}
+	})
 
 	summary.FCF0101Confirmed = summary.SurveyInventoryWarmingIssued == 0 &&
 		summary.ColdSilentLiveFallbackCount > 0 &&
@@ -205,7 +282,7 @@ func TestCF07G01InProcessFreshnessAndColdWarming(t *testing.T) {
 		t.Fatalf("manual-clock 2s join bound not observed on all inventory instances: got %d", summary.StaleWaitBoundObserved)
 	}
 
-	// Verify G01-INC-03 cold boundary with SummarizeTool explicitly.
+	// Verify G01-INC-03 cold boundary explicitly.
 	t.Run("G01-INC-03-cold-boundary", func(t *testing.T) {
 		dir := t.TempDir()
 		writeInventoryTree(t, dir, "src/main.go", "src/helper.go", "README.md")

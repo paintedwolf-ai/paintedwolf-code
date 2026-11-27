@@ -1,4 +1,4 @@
-"""CF07 G02 · Surveys and the repository map (survey_repo vs repo-map)."""
+"""CF07 G02 · Surveys and the repository map (survey_repo vs repo-map against independent reference)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import tempfile
 
 from ..generators import BoundaryConfig, TreeEntrySpec, TreeGenOptions, TreeSpec, generate_tree_spec, materialize_tree
 from ..live_controls import wait_catalog_settled
-from ..references import reference_walk
+from ..references import WalkEntry, reference_walk
 from ..seeds import ReplaySelector
 from .cf07_harness import AgentToolSession, CapturedToolCall, D1SidecarProcess
 
@@ -41,17 +41,95 @@ def _claims_empty_repo(payload: dict[str, object], raw_text: str) -> bool:
     return False
 
 
+def _has_excluded_component(rel_path: str, component: str = ".paintedwolf") -> bool:
+    parts = [p for p in rel_path.strip("/").split("/") if p]
+    return component in parts
+
+
+def _normalize_scope_path(path_str: str, scope_prefix: str) -> str:
+    norm = path_str.strip().removeprefix("./").rstrip("/")
+    if scope_prefix and scope_prefix != ".":
+        pref = scope_prefix.strip("/") + "/"
+        if norm.startswith(pref):
+            norm = norm[len(pref) :]
+        elif norm == scope_prefix.strip("/"):
+            norm = "."
+    return norm
+
+
+def _validate_against_reference(
+    label: str,
+    payload: dict[str, object],
+    *,
+    ref_entries: list[WalkEntry],
+    scope_prefix: str,
+    boundary_dirs: set[str],
+    nested_checkouts: set[str],
+) -> list[str]:
+    """Validate one survey/repo-map payload independently against the reference walk."""
+    issues: list[str] = []
+    ref_files = {e.path for e in ref_entries if e.kind == "file"}
+    ref_dirs = {e.path for e in ref_entries if e.kind == "dir"}
+    ref_all = ref_files | ref_dirs | {"."}
+
+    # Check bounded projection count against reference (catches equal-but-wrong inventories).
+    inv_entries = payload.get("inventory_entries")
+    entries_exam = payload.get("entries_examined")
+    truncated = bool(payload.get("truncated"))
+    if ref_files:
+        if isinstance(inv_entries, int) and inv_entries == 0:
+            issues.append(f"{label} reported inventory_entries=0 on non-empty reference ({len(ref_files)} files)")
+        if isinstance(entries_exam, int) and entries_exam == 0:
+            issues.append(f"{label} reported entries_examined=0 on non-empty reference ({len(ref_files)} files)")
+        if not truncated and isinstance(inv_entries, int) and inv_entries < len(ref_files):
+            issues.append(
+                f"{label} untruncated inventory_entries={inv_entries} < reference visible files={len(ref_files)}"
+            )
+
+    # Check every snapshot handle path against independent reference, boundaries, nested checkouts, and exclusions.
+    for snap in payload.get("snapshot") or []:
+        if not isinstance(snap, dict):
+            continue
+        raw_p = str(snap.get("path") or "").strip()
+        if not raw_p:
+            continue
+        norm = _normalize_scope_path(raw_p, scope_prefix)
+        if _has_excluded_component(norm, ".paintedwolf"):
+            issues.append(f"{label} exposed excluded .paintedwolf path component: {raw_p!r}")
+        for bdir in boundary_dirs:
+            if norm.startswith(bdir + "/"):
+                issues.append(f"{label} descended into boundary dir {bdir!r}: {raw_p!r}")
+        for nrepo in nested_checkouts:
+            if norm.startswith(nrepo + "/"):
+                issues.append(f"{label} descended into nested checkout {nrepo!r}: {raw_p!r}")
+        # If snapshot names a concrete path, it must exist in the reference walk (or be a parent dir of one).
+        if norm != "." and norm not in ref_all:
+            if not any(r.startswith(norm + "/") for r in ref_all):
+                issues.append(f"{label} claimed path absent from independent reference walk: {raw_p!r}")
+
+    return issues
+
+
 def evaluate_g02_pair(
     survey_call: CapturedToolCall,
     repomap_call: CapturedToolCall,
     *,
-    ref_file_count: int,
+    ref_entries: list[WalkEntry],
+    scope_prefix: str = "",
     expect_non_empty: bool = True,
 ) -> dict[str, object]:
-    """Compare survey_repo tool and command repo-map outputs and schemas."""
+    """Compare survey_repo and repo-map BOTH against each other AND against the independent reference walk."""
     s_json = parse_survey_json(survey_call)
     r_json = parse_survey_json(repomap_call)
     issues: list[str] = []
+
+    ref_file_count = sum(1 for e in ref_entries if e.kind == "file")
+    boundary_dirs = {e.path for e in ref_entries if e.kind == "dir" and e.boundary}
+    nested_checkouts = {
+        e.path
+        for e in ref_entries
+        if e.kind == "dir" and e.boundary and e.path not in {"node_modules", "build", "dist", "target", ".git", "__pycache__", ".venv", ".cache"}
+    }
 
     if s_json is None:
         issues.append(f"survey_repo returned non-JSON or missing bundle (outcome={survey_call.outcome})")
@@ -88,11 +166,27 @@ def evaluate_g02_pair(
                 empty_claim_violation = True
                 issues.append("repo-map bounded brief claimed non-empty repository is empty")
 
-        # Verify .paintedwolf exclusion for agents if present in snapshot handles.
-        for label, payload in (("survey_repo", s_json), ("repo-map", r_json)):
-            for snap in payload.get("snapshot") or []:
-                if isinstance(snap, dict) and ".paintedwolf" in str(snap.get("path") or ""):
-                    issues.append(f"{label} exposed .paintedwolf path {snap.get('path')!r}")
+        # Independent reference checks on BOTH routes (prevents equal-but-wrong passes).
+        issues.extend(
+            _validate_against_reference(
+                "survey_repo",
+                s_json,
+                ref_entries=ref_entries,
+                scope_prefix=scope_prefix,
+                boundary_dirs=boundary_dirs,
+                nested_checkouts=nested_checkouts,
+            )
+        )
+        issues.extend(
+            _validate_against_reference(
+                "repo-map",
+                r_json,
+                ref_entries=ref_entries,
+                scope_prefix=scope_prefix,
+                boundary_dirs=boundary_dirs,
+                nested_checkouts=nested_checkouts,
+            )
+        )
 
     declared_gaps = tuple(dict.fromkeys((*survey_call.declared_gaps, *repomap_call.declared_gaps)))
     if issues:
@@ -109,6 +203,7 @@ def evaluate_g02_pair(
         "digest_match": digest_match,
         "empty_claim_violation": empty_claim_violation,
         "ref_file_count": ref_file_count,
+        "ref_boundary_count": len(boundary_dirs),
         "declared_gaps": list(declared_gaps),
         "survey_summary": {
             "bundle": s_json.get("bundle") if s_json else None,
@@ -148,7 +243,7 @@ def run_g02_sidecar(
             batch_end = min(instances, batch_start + batch_size)
             batch_dir = tmp_path / f"batch_{batch_start:03d}"
             batch_dir.mkdir(parents=True, exist_ok=True)
-            batch_meta: list[tuple[int, ReplaySelector, str, int]] = []
+            batch_meta: list[tuple[int, ReplaySelector, str, list[WalkEntry]]] = []
             for idx in range(batch_start, batch_end):
                 selector = ReplaySelector(base_seed=base_seed, family_id="G02", instance_index=idx)
                 spec = generate_tree_spec(
@@ -166,26 +261,23 @@ def run_g02_sidecar(
                 sub_name = f"tree_{idx:03d}"
                 tree_dir = batch_dir / sub_name
                 materialize_tree(spec, tree_dir)
-                ref_files = [
-                    e
-                    for e in reference_walk(
-                        tree_dir,
-                        boundary_config=boundary_config,
-                        include_hidden=False,
-                        agent_exclusions=(".paintedwolf", ".paintedwolf/**"),
-                    )
-                    if e.kind == "file"
-                ]
-                batch_meta.append((idx, selector, sub_name, len(ref_files)))
+                ref_entries = reference_walk(
+                    tree_dir,
+                    boundary_config=boundary_config,
+                    include_hidden=False,
+                    agent_exclusions=(".paintedwolf", ".paintedwolf/**"),
+                    prune_nested_checkouts=True,
+                )
+                batch_meta.append((idx, selector, sub_name, ref_entries))
 
             pid, rids = sidecar.driver.attach_project([batch_dir])
             wait_catalog_settled(sidecar.driver, pid, rids[0], max_wait_s=25.0)
             session = AgentToolSession(sidecar, pid)
             try:
-                for idx, selector, sub_name, ref_count in batch_meta:
+                for idx, selector, sub_name, ref_entries in batch_meta:
                     s_call = session.invoke_tool("survey_repo", {"bundle": "layout_overview", "path": sub_name})
                     r_call = session.invoke_tool("command", {"command": f"repo-map --path {sub_name}"})
-                    ev = evaluate_g02_pair(s_call, r_call, ref_file_count=ref_count)
+                    ev = evaluate_g02_pair(s_call, r_call, ref_entries=ref_entries, scope_prefix=sub_name)
                     verdict_counts[str(ev["verdict"])] += 1
                     for g in ev["declared_gaps"]:
                         gap_counts[str(g)] += 1
@@ -252,16 +344,13 @@ def run_g02_sidecar(
             edir = tmp_path / edge_name
             spec = TreeSpec(ReplaySelector(base_seed, "G02", 9000 + len(edge_results)), entries)
             materialize_tree(spec, edir)
-            ref_files = [
-                e
-                for e in reference_walk(
-                    edir,
-                    boundary_config=boundary_config,
-                    include_hidden=False,
-                    agent_exclusions=(".paintedwolf", ".paintedwolf/**"),
-                )
-                if e.kind == "file"
-            ]
+            ref_entries = reference_walk(
+                edir,
+                boundary_config=boundary_config,
+                include_hidden=False,
+                agent_exclusions=(".paintedwolf", ".paintedwolf/**"),
+                prune_nested_checkouts=True,
+            )
             pid, rids = sidecar.driver.attach_project([edir])
             wait_catalog_settled(sidecar.driver, pid, rids[0], max_wait_s=15.0)
             session = AgentToolSession(sidecar, pid)
@@ -270,7 +359,7 @@ def run_g02_sidecar(
                 r_call = session.invoke_tool("command", {"command": repomap_cmd})
             finally:
                 session.close()
-            ev = evaluate_g02_pair(s_call, r_call, ref_file_count=len(ref_files))
+            ev = evaluate_g02_pair(s_call, r_call, ref_entries=ref_entries, scope_prefix="")
             edge_results.append(
                 {
                     "edge": edge_name,
