@@ -152,6 +152,30 @@ func TestWorkerCoordinateRestsOnWhatWasDelivered(t *testing.T) {
 	}
 }
 
+func TestWorkerReportRejectsCoordinateOutsideNumberedDelivery(t *testing.T) {
+	t.Parallel()
+	const path = "sample.go"
+	ev := evidence.AssembleLedger(catNumbered(1, path, 1, 2, 3))
+
+	for _, handle := range []string{"", "read#999999"} {
+		t.Run("handle="+handle, func(t *testing.T) {
+			t.Parallel()
+			findings := []WorkerFindingInput{
+				{Evidence: handle, Path: path, Line: 90},
+				{Evidence: "read#3", Path: path, Line: 3, Excerpt: "line 3 of the file"},
+			}
+			result := EvaluateWorkerCitations(evidence.CitationRoots{}, findings, nil, WorkerNarrativeInput{}, ev)
+			if result.Code != WorkerEvidenceHandleUnknownCode || len(result.Offenders) != 1 ||
+				result.Resolutions[0].Verdict != evidence.VerdictUnverifiable {
+				t.Fatalf("unsupported line was not refused: %+v", result)
+			}
+			if got := result.Resolutions[1]; got.Handle != "read#3" || got.Line != 3 || got.Verdict != evidence.VerdictMatched {
+				t.Fatalf("adjacent verified citation = %+v", got)
+			}
+		})
+	}
+}
+
 func TestInlineCodeCitationResolvesOrStaysCode(t *testing.T) {
 	t.Parallel()
 	const path = "cmd/gateway/main.go"
