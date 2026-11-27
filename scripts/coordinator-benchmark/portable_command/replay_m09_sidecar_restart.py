@@ -200,10 +200,11 @@ def run_m09_replay(repo_root, out_path, engine_manifest=None, engine_bin=None):
 
     s2_r_state, s2_r_status = _receipt_state(s2_receipt)
     s3_r_state, s3_r_status = _receipt_state(s3_receipt)
-    s3_non_synthetic = (
+    s3_interrupted = (
         s3_active['state'] in {'running', 'parked'}
-        and not (s3_r_state == 'completed' and s3_r_status == 0)
-        and not (s3_db_row and s3_db_row['state'] == 'completed' and s3_db_row['status_code'] == 0)
+        and s3_r_state == 'interrupted'
+        and s3_r_status is None
+        and bool(s3_db_row and s3_db_row['state'] == 'interrupted' and s3_db_row['status_code'] is None)
     )
     checks = {
         'state1_precommit_restart': (
@@ -219,7 +220,7 @@ def run_m09_replay(repo_root, out_path, engine_manifest=None, engine_bin=None):
             and s2_read['status'] == 0 and s2_read['stdout'] == COMMITTED_BYTES.decode('utf-8')
         ),
         'state3_active_restart_and_recovery': (
-            bool(s3_pid) and s3_non_synthetic
+            bool(s3_pid) and s3_interrupted
             and s3_recovery['status'] == 0 and s3_recovered_sha == sha256_bytes(RECOVERED_BYTES)
         ),
         'provenance_verified': (identity.get('engine_provenance') or {}).get('provenance_verified') is True,
