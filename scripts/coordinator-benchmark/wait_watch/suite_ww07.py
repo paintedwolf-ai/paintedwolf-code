@@ -314,6 +314,8 @@ def run_c23_draft_sidecar_restart(
     app_dir = out_dir / "app"
     project_dir = out_dir / "project"
     raw_dir = out_dir / "raw"
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "README.md").write_text("# WW07 C23 Draft Sidecar Fixture\n", encoding="utf-8")
     raw_dir.mkdir(parents=True, exist_ok=True)
 
     source_obs = SourceObserver(clock_domain="system")
@@ -473,7 +475,6 @@ def run_c24_calendar_sidecar_restart(
                     {
                         "kind": "timer",
                         "calendar": {"days": ["weekdays"], "times": ["09:00"]},
-                        "time_zone": "America/New_York",
                     }
                 ],
             },
@@ -543,6 +544,8 @@ def run_c25_sidecar_dispatch_restart(
     app_dir = out_dir / "app"
     project_dir = out_dir / "project"
     raw_dir = out_dir / "raw"
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "README.md").write_text("# WW07 C23 Draft Sidecar Fixture\n", encoding="utf-8")
     raw_dir.mkdir(parents=True, exist_ok=True)
     source_obs = SourceObserver(clock_domain="system")
     admission_obs = AdmissionObserver(clock_domain="system")
