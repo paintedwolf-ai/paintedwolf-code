@@ -7,8 +7,10 @@ import re
 from change_report import Finding
 from ci_policy import budget_snapshot, resources
 
+ROOT = Path(__file__).resolve().parents[2]
 WARNING_PERCENT = 80
 MIB = 1024 * 1024
+MODULE_PREFIX = "github.com/lycaon/lycaon/"
 REVIEWS_DIR = Path(__file__).with_name("memory-reviews")
 REQUIRED_FIELDS = frozenset({
     "package", "lane", "workstream", "disposition", "reason",
@@ -18,17 +20,76 @@ REQUIRED_FIELDS = frozenset({
 
 def at_or_above_warning(peak_bytes, limit_bytes):
     """Exact integer comparison against the 80% warning line before any display rounding."""
-    return type(peak_bytes) is int and type(limit_bytes) is int and limit_bytes > 0 and peak_bytes * 100 >= limit_bytes * WARNING_PERCENT
+    return (type(peak_bytes) is int and type(limit_bytes) is int
+            and limit_bytes > 0 and peak_bytes * 100 >= limit_bytes * WARNING_PERCENT)
 
 
-def _lane_for(stage, package, limit_bytes):
-    if "race" in stage.lower():
-        return "race"
+def warning_threshold_bytes(limit_bytes):
+    """Largest integer byte count strictly below 80%, so `measured > warn` matches `at_or_above_warning`."""
+    return (limit_bytes * WARNING_PERCENT + 99) // 100 - 1
+
+
+def load_policy():
+    """Load resources.json once per report."""
     try:
-        ordinary = resources.budget(package, race=False)
+        return json.loads(resources.POLICY.read_text())
     except (OSError, ValueError):
-        return "ordinary"
-    return "race" if limit_bytes > ordinary else "ordinary"
+        return {}
+
+
+def _ordinary_budget(policy, package):
+    value = policy.get("packages", {}).get(package, policy.get("default", {}))
+    rss_mib = value.get("rss_mib")
+    return rss_mib * MIB if type(rss_mib) is int and rss_mib >= 64 else None
+
+
+def _lane_for(stage, names, package, limit_bytes, policy):
+    if "race" in stage.lower() or any(isinstance(n, str) and "race" in n.lower() for n in names):
+        return "race"
+    ordinary = _ordinary_budget(policy, package)
+    return "race" if ordinary is not None and limit_bytes > ordinary else "ordinary"
+
+
+def _artifact_id(package):
+    if package.startswith(MODULE_PREFIX):
+        return "lycaon/" + package[len(MODULE_PREFIX):]
+    return package
+
+
+def collect_receipt_observations(record, label, latest, policy):
+    """Merge memory observations from one validated passing receipt into `latest`."""
+    stamp = (float(record.get("finished_at") or record.get("started_at") or 0), str(label))
+    names = record.get("names") if isinstance(record.get("names"), list) else []
+    for evidence in record.get("evidence", []):
+        stage = str(evidence.get("stage") or "")
+        for package, result in evidence.get("results", {}).items():
+            memory = result.get("memory")
+            if not isinstance(memory, dict):
+                continue
+            limit = memory.get("limit_bytes")
+            if type(limit) is not int or limit <= 0:
+                continue
+            lane = _lane_for(stage, names, package, limit, policy)
+            obs_key = (lane, package)
+            previous = latest.get(obs_key)
+            if previous is None or stamp >= previous[0]:
+                latest[obs_key] = (stamp, {
+                    "lane": lane, "stage": stage, "package": package,
+                    "peak_bytes": memory.get("peak_bytes"), "limit_bytes": limit,
+                    "source": str(memory.get("source") or "unknown"),
+                    "lower_bound": bool(memory.get("lower_bound")),
+                })
+
+
+def _batch_matches_tree(batch_dir, tree_sha):
+    """Check the compact batch source.json manifest before reading receipt payloads."""
+    manifest = batch_dir / "source.json"
+    if not manifest.is_file():
+        return True
+    try:
+        return json.loads(manifest.read_text()).get("source_tree") == tree_sha
+    except (OSError, ValueError):
+        return True
 
 
 def latest_observations(artifact_dir, tree_sha):
@@ -40,41 +101,26 @@ def latest_observations(artifact_dir, tree_sha):
     verification_dir = Path(artifact_dir) / "verification"
     if not verification_dir.is_dir():
         return {}, {}
+    policy = load_policy()
     latest = {}
-    for receipt in sorted(verification_dir.glob("*/[0-9]*.json")):
-        if receipt.name.endswith(".progress.json"):
+    for batch_dir in sorted(p for p in verification_dir.iterdir() if p.is_dir()):
+        if not _batch_matches_tree(batch_dir, tree_sha):
             continue
-        try:
-            record = json.loads(receipt.read_text())
-        except (OSError, ValueError):
-            continue
-        if record.get("status") != "passed" or record.get("source_tree") != tree_sha:
-            continue
-        stamp = (float(record.get("finished_at") or record.get("started_at") or 0), str(receipt))
-        for evidence in record.get("evidence", []):
-            stage = str(evidence.get("stage") or "")
-            for package, result in evidence.get("results", {}).items():
-                memory = result.get("memory")
-                if not isinstance(memory, dict):
-                    continue
-                limit = memory.get("limit_bytes")
-                if type(limit) is not int or limit <= 0:
-                    continue
-                lane = _lane_for(stage, package, limit)
-                key = (lane, package)
-                previous = latest.get(key)
-                if previous is None or stamp >= previous[0]:
-                    latest[key] = (stamp, {
-                        "lane": lane, "stage": stage, "package": package,
-                        "peak_bytes": memory.get("peak_bytes"), "limit_bytes": limit,
-                        "source": str(memory.get("source") or "unknown"),
-                        "lower_bound": bool(memory.get("lower_bound")),
-                    })
+        for receipt in sorted(batch_dir.glob("[0-9]*.json")):
+            if receipt.name.endswith(".progress.json"):
+                continue
+            try:
+                record = json.loads(receipt.read_text())
+            except (OSError, ValueError):
+                continue
+            if record.get("status") != "passed" or record.get("source_tree") != tree_sha:
+                continue
+            collect_receipt_observations(record, receipt, latest, policy)
     measured = {}
     unavailable = {}
-    for key, (_, obs) in sorted(latest.items()):
+    for obs_key, (_, obs) in sorted(latest.items()):
         if type(obs["peak_bytes"]) is int and obs["peak_bytes"] > 0:
-            measured[key] = obs
+            measured[obs_key] = obs
         else:
             unavailable.setdefault(obs["lane"], []).append(obs["package"])
     return measured, unavailable
@@ -91,11 +137,11 @@ def _validate_review(review, limit_bytes):
         raise ValueError("invalid memory review shape")
     if not isinstance(review["package"], str) or not review["package"].strip():
         raise ValueError("invalid memory review package")
-    if review["lane"] not in {"ordinary", "race"}:
+    if not isinstance(review["lane"], str) or review["lane"] not in {"ordinary", "race"}:
         raise ValueError("invalid memory review lane")
     if not isinstance(review["workstream"], str) or not re.fullmatch("[a-z0-9-]{1,80}", review["workstream"]):
         raise ValueError("invalid memory review workstream")
-    if review["disposition"] not in {"retain", "refactor"}:
+    if not isinstance(review["disposition"], str) or review["disposition"] not in {"retain", "refactor"}:
         raise ValueError("invalid memory review disposition")
     if (not isinstance(review["reason"], str) or not review["reason"].strip() or len(review["reason"]) > 4096
             or not isinstance(review["reviewed_commit"], str) or not re.fullmatch("[0-9a-f]{40}", review["reviewed_commit"])):
@@ -116,25 +162,29 @@ def _validate_review(review, limit_bytes):
 
 
 def load_reviews(reviews_dir):
-    """Load memory review records keyed by (lane, package). Malformed records are returned as errors."""
+    """Load memory review records keyed by (lane, package). Duplicate or malformed records never retain."""
     directory = Path(reviews_dir)
     if not directory.is_dir():
         return {}, []
-    records, errors = {}, []
+    records, errors, duplicates = {}, [], set()
     for path in sorted(directory.glob("*.json")):
         try:
             data = json.loads(path.read_text())
         except (OSError, ValueError) as exc:
             errors.append((path, f"malformed JSON: {exc}"))
             continue
-        if not isinstance(data, dict) or not isinstance(data.get("package"), str) or data.get("lane") not in {"ordinary", "race"}:
-            errors.append((path, "missing package or lane"))
+        lane = data.get("lane") if isinstance(data, dict) else None
+        package = data.get("package") if isinstance(data, dict) else None
+        if not isinstance(package, str) or not isinstance(lane, str) or lane not in {"ordinary", "race"}:
+            errors.append((path, "missing or invalid package or lane"))
             continue
-        key = (data["lane"], data["package"])
-        if key in records:
-            errors.append((path, f"duplicate review record for {data['package']} ({data['lane']})"))
+        review_key = (lane, package)
+        if review_key in duplicates or review_key in records:
+            records.pop(review_key, None)
+            duplicates.add(review_key)
+            errors.append((path, f"duplicate review record for {package} ({lane}); neither record is applied"))
             continue
-        records[key] = (path, data)
+        records[review_key] = (path, data)
     return records, errors
 
 
@@ -151,6 +201,57 @@ def evaluate_review(review, obs, repo_root):
     return "retained"
 
 
+def tracking_artifacts_from_measured(repo_root, measured, reviews_dir=REVIEWS_DIR):
+    """Build maintainability-snapshot tracking rows for packages at or above 80% of ceiling."""
+    reviews, _ = load_reviews(reviews_dir)
+    rows = []
+    for obs_key, obs in sorted(measured.items()):
+        if not at_or_above_warning(obs["peak_bytes"], obs["limit_bytes"]):
+            continue
+        artifact = _artifact_id(obs["package"])
+        if not budget_snapshot.relative(artifact):
+            continue
+        row = {
+            "category": f"package_memory_{obs['lane']}",
+            "id": artifact,
+            "touched": True,
+            "measured": obs["peak_bytes"],
+            "warn": warning_threshold_bytes(obs["limit_bytes"]),
+            "limit": obs["limit_bytes"],
+            "effective_cap": obs["limit_bytes"],
+            "exception_reason": "",
+            "sources": [artifact],
+            "spans": [],
+        }
+        entry = reviews.get(obs_key)
+        if entry is not None:
+            _, review = entry
+            try:
+                state = evaluate_review(review, obs, repo_root)
+            except ValueError:
+                state = None
+            if state is not None:
+                row["review"] = {
+                    "kind": "test_suite",
+                    "workstream": review["workstream"],
+                    "disposition": review["disposition"],
+                    "reason": review["reason"],
+                    "reviewed_commit": review["reviewed_commit"],
+                    "ceiling": review["ceiling_bytes"],
+                    "boundaries": dict(review["boundaries"]),
+                    "state": state,
+                    "reviewed_shape": "",
+                }
+        rows.append(row)
+    return rows
+
+
+def tracking_artifacts(repo_root, artifact_dir, tree_sha, reviews_dir=REVIEWS_DIR):
+    """Build maintainability-snapshot tracking rows from local qualifying receipts for `tree_sha`."""
+    measured, _ = latest_observations(artifact_dir, tree_sha)
+    return tracking_artifacts_from_measured(repo_root, measured, reviews_dir=reviews_dir)
+
+
 def findings(repo_root, artifact_dir, tree_sha, reviews_dir=REVIEWS_DIR):
     """Non-blocking memory warning findings for ./task budgets."""
     measured, unavailable = latest_observations(artifact_dir, tree_sha)
@@ -160,7 +261,7 @@ def findings(repo_root, artifact_dir, tree_sha, reviews_dir=REVIEWS_DIR):
     out = []
     for path, detail in review_errors:
         out.append(Finding("warning", "memory", f"invalid memory review record {path.name}: {detail}"))
-    for key, obs in sorted(measured.items()):
+    for obs_key, obs in sorted(measured.items()):
         if not at_or_above_warning(obs["peak_bytes"], obs["limit_bytes"]):
             continue
         peak_mib = obs["peak_bytes"] / MIB
@@ -170,7 +271,7 @@ def findings(repo_root, artifact_dir, tree_sha, reviews_dir=REVIEWS_DIR):
         source = f"{obs['source']} lower bound" if obs["lower_bound"] else obs["source"]
         prefix = (f"{obs['package']} ({obs['lane']}): {peak_mib:.1f} MiB of {limit_mib:.1f} MiB "
                   f"({pct:.1f}%, {source}), warning {warn_mib:.1f} MiB")
-        entry = reviews.get(key)
+        entry = reviews.get(obs_key)
         if entry is None:
             out.append(Finding("warning", "memory", f"{prefix}; review retention and ownership or record a bounded review"))
             continue

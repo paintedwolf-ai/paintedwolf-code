@@ -119,6 +119,8 @@ def main():
         report = reports['maintainability']
         source = os.environ.get('GITHUB_SHA') or change_report.git(ROOT, 'rev-parse', 'HEAD').stdout.strip()
         tree = change_report.git(ROOT, 'rev-parse', 'HEAD^{tree}').stdout.strip()
+        report.setdefault('tracking', {}).setdefault('artifacts', []).extend(
+            memory_budgets.tracking_artifacts(ROOT, artifact_root(ROOT), tree))
         seal(report, source, tree, scope.base)
         (artifact_root(ROOT) / 'budgets' / 'reports' / 'maintainability.json').write_text(json.dumps(report) + '\n')
     findings, failed = [], code != 0
