@@ -108,6 +108,62 @@ class TestImageAssetsFpdfPatch(unittest.TestCase):
             rec = (dist_info / "RECORD").read_text(encoding="utf-8")
             self.assertIn(f"fpdf/image_parsing.py,{new_h},{new_sz}", rec)
 
+    def test_pyjwt_xlrd_and_icalendar_wasi_patches(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            pkg_root = Path(td)
+            # PyJWT fixture
+            (pkg_root / "jwt").mkdir()
+            (pkg_root / "pyjwt-2.15.1.dist-info").mkdir()
+            jwks = pkg_root / "jwt" / "jwks_client.py"
+            jwks.write_text(
+                "import urllib.request\nfrom ssl import SSLContext\nfrom typing import Any\n"
+                "class _NoRedirectHandler: pass\n"
+                "class PyJWKClientConnectionError(Exception): pass\n"
+                "class C:\n"
+                "    ssl_context = None\n"
+                "    def fetch_data(self):\n"
+                "        try:\n"
+                "            handlers: list[Any] = [_NoRedirectHandler()]\n"
+                "            if self.ssl_context is not None:\n"
+                "                handlers.append(urllib.request.HTTPSHandler(context=self.ssl_context))\n"
+                "        except Exception:\n"
+                "            raise\n",
+                encoding="utf-8",
+            )
+            (pkg_root / "pyjwt-2.15.1.dist-info" / "RECORD").write_text("jwt/jwks_client.py,sha256=old,1\n", encoding="utf-8")
+
+            # xlrd fixture
+            (pkg_root / "xlrd").mkdir()
+            (pkg_root / "xlrd-2.0.2.dist-info").mkdir()
+            book = pkg_root / "xlrd" / "book.py"
+            book.write_text(
+                "DEBUG = 0\n\nimport mmap\n\nclass Book:\n    def open(self, use_mmap=True):\n        self.use_mmap = use_mmap\n",
+                encoding="utf-8",
+            )
+            (pkg_root / "xlrd-2.0.2.dist-info" / "RECORD").write_text("xlrd/book.py,sha256=old,1\n", encoding="utf-8")
+
+            # icalendar fixture
+            (pkg_root / "icalendar").mkdir()
+            (pkg_root / "icalendar-7.3.2.dist-info").mkdir()
+            ical = pkg_root / "icalendar" / "__init__.py"
+            ical.write_text("from icalendar.cal import Calendar\n", encoding="utf-8")
+            (pkg_root / "icalendar-7.3.2.dist-info" / "RECORD").write_text("icalendar/__init__.py,sha256=old,1\n", encoding="utf-8")
+
+            patches = apply_wasi_package_patches(pkg_root, _record_hash)
+            targets = {p["target"] for p in patches}
+            self.assertEqual(
+                targets,
+                {
+                    "packages/jwt/jwks_client.py",
+                    "packages/xlrd/book.py",
+                    "packages/icalendar/__init__.py",
+                },
+            )
+            self.assertIn("except ImportError:\n    SSLContext = Any", jwks.read_text(encoding="utf-8"))
+            self.assertIn("PyJWKClientConnectionError(", jwks.read_text(encoding="utf-8"))
+            self.assertIn("self.use_mmap = bool(use_mmap and mmap is not None)", book.read_text(encoding="utf-8"))
+            self.assertTrue(ical.read_text(encoding="utf-8").startswith("import dateutil.tz as _pw_dateutil_tz"))
+
 
 if __name__ == "__main__":
     unittest.main()

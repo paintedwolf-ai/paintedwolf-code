@@ -361,20 +361,33 @@ def _pw_bootstrap():
     _pw_install_pytest_defaults()
     _pw_install_interruptible_sleep()
 
+    import types as _pw_types
     try:
         if mode == "code":
-            ns = {"__name__": "__main__", "__file__": "<string>"}
-            exec(compile(cfg["code"], "<string>", "exec"), ns)
+            _main = _pw_types.ModuleType("__main__")
+            _main.__file__ = "<string>"
+            _main.__package__ = None
+            _main.__spec__ = None
+            sys.modules["__main__"] = _main
+            exec(compile(cfg["code"], "<string>", "exec"), _main.__dict__)
         elif mode == "stdin":
             src = sys.stdin.read()
-            ns = {"__name__": "__main__", "__file__": "<stdin>"}
-            exec(compile(src, "<stdin>", "exec"), ns)
+            _main = _pw_types.ModuleType("__main__")
+            _main.__file__ = "<stdin>"
+            _main.__package__ = None
+            _main.__spec__ = None
+            sys.modules["__main__"] = _main
+            exec(compile(src, "<stdin>", "exec"), _main.__dict__)
         elif mode == "script":
             script_path = cfg["script"]
             with open(script_path, "rb") as _f:
                 src = _f.read()
-            ns = {"__name__": "__main__", "__file__": script_path}
-            exec(compile(src, script_path, "exec"), ns)
+            _main = _pw_types.ModuleType("__main__")
+            _main.__file__ = script_path
+            _main.__package__ = None
+            _main.__spec__ = None
+            sys.modules["__main__"] = _main
+            exec(compile(src, script_path, "exec"), _main.__dict__)
         elif mode in ("module", "cli"):
             mod_name = cfg["module"] if mode == "module" else cfg["cli"]
             runpy.run_module(mod_name, run_name="__main__", alter_sys=True)
