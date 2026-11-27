@@ -1,9 +1,11 @@
 package command_test
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -521,8 +524,30 @@ func TestProgramStopExternalTreeAndNativeJob(t *testing.T) {
 			f.Runtime.Clock = clock
 
 			pidFile := filepath.Join(f.Dir, "descendant.pid")
+			fifoPath := filepath.Join(f.Dir, "descendant.fifo")
 			laterFile := filepath.Join(f.Dir, "later.marker")
-			script := `sleep 300 & external -- /bin/sh -c 'sleep 30 & echo $! > descendant.pid; wait' & wait; external -- /bin/sh -c 'echo ran > later.marker'`
+			testutil.FailErr(t, "create descendant fifo", syscall.Mkfifo(fifoPath, 0o600))
+
+			// The descendant holds the FIFO write end open for its entire lifetime.
+			// EOF on the read end is kernel-enforced proof of OS exit on both macOS
+			// and Linux (including inside PID-namespaced sandboxes).
+			descendantReady := make(chan struct{})
+			descendantExited := make(chan struct{})
+			go func() {
+				defer close(descendantExited)
+				rd, err := os.OpenFile(fifoPath, os.O_RDONLY, 0)
+				if err != nil {
+					return
+				}
+				defer func() { _ = rd.Close() }()
+				br := bufio.NewReader(rd)
+				if line, err := br.ReadString('\n'); err == nil && strings.TrimSpace(line) == "ready" {
+					close(descendantReady)
+				}
+				_, _ = io.Copy(io.Discard, br)
+			}()
+
+			script := `sleep 300 & external -- /bin/sh -c '(exec 3>descendant.fifo; echo ready >&3; sleep 300 >&3) & echo $! > descendant.pid; wait' & wait; external -- /bin/sh -c 'echo ran > later.marker'`
 			done := make(chan callResult, 1)
 			go func() {
 				s, e := f.Call(t, t.Context(), script)
@@ -530,11 +555,13 @@ func TestProgramStopExternalTreeAndNativeJob(t *testing.T) {
 			}()
 
 			var descendantPID int
-			testutil.WaitFor(t, "external descendant PID written", func() bool {
+			testutil.WaitFor(t, "external descendant live", func() bool {
 				select {
 				case early := <-done:
-					t.Fatalf("program exited before writing descendant.pid: err=%v content=%s", early.err, early.content)
+					t.Fatalf("program exited before descendant became ready: err=%v content=%s", early.err, early.content)
+				case <-descendantReady:
 				default:
+					return false
 				}
 				raw, err := os.ReadFile(pidFile)
 				if err != nil {
@@ -545,7 +572,7 @@ func TestProgramStopExternalTreeAndNativeJob(t *testing.T) {
 					return false
 				}
 				descendantPID = pid
-				return hostprocess.ProcessExists(descendantPID)
+				return true
 			})
 
 			clock.Advance(toolcontract.ProgramInlineWait)
@@ -585,10 +612,14 @@ func TestProgramStopExternalTreeAndNativeJob(t *testing.T) {
 				}
 			}
 
-			// Confirm observed OS exit of the external descendant.
-			testutil.WaitFor(t, "external descendant exited", func() bool {
-				return !hostprocess.ProcessExists(descendantPID)
-			})
+			// Confirm observed OS exit of the external descendant (FIFO EOF on all Unix
+			// platforms, plus host PID check on macOS where no PID namespace remaps PIDs).
+			testutil.AwaitClosed(t, "external descendant exited (FIFO EOF)", descendantExited)
+			if runtime.GOOS == "darwin" {
+				testutil.WaitFor(t, "external descendant PID gone", func() bool {
+					return !hostprocess.ProcessExists(descendantPID)
+				})
+			}
 			if _, statErr := os.Stat(laterFile); !os.IsNotExist(statErr) {
 				t.Fatalf("later marker written after stop: %v", statErr)
 			}
