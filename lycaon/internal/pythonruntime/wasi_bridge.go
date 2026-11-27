@@ -544,6 +544,30 @@ func (f *workspaceSysFile) Read(buf []byte) (int, experimentalsys.Errno) {
 	return n, ErrnoToSys(errno)
 }
 
+func (f *workspaceSysFile) Pread(buf []byte, offset int64) (int, experimentalsys.Errno) {
+	if offset < 0 {
+		return 0, experimentalsys.EINVAL
+	}
+	if f.fs.latch != nil && f.fs.latch.Stopped() {
+		return 0, experimentalsys.EACCES
+	}
+	if f.fs.meter != nil && len(buf) > 0 && !f.fs.meter.ReserveHostWork(1, "") {
+		return 0, experimentalsys.EACCES
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	origPos, errno := f.file.Seek(0, io.SeekCurrent)
+	if errno != ErrnoSuccess {
+		return 0, ErrnoToSys(errno)
+	}
+	if _, errno = f.file.Seek(offset, io.SeekStart); errno != ErrnoSuccess {
+		return 0, ErrnoToSys(errno)
+	}
+	n, readErr := f.file.Read(buf)
+	_, _ = f.file.Seek(origPos, io.SeekStart)
+	return n, ErrnoToSys(readErr)
+}
+
 func (f *workspaceSysFile) Write(buf []byte) (int, experimentalsys.Errno) {
 	if f.fs.latch != nil && f.fs.latch.Stopped() {
 		return 0, experimentalsys.EACCES
@@ -558,6 +582,35 @@ func (f *workspaceSysFile) Write(buf []byte) (int, experimentalsys.Errno) {
 	}
 	n, errno := f.file.Write(buf)
 	return n, ErrnoToSys(errno)
+}
+
+func (f *workspaceSysFile) Pwrite(buf []byte, offset int64) (int, experimentalsys.Errno) {
+	if offset < 0 {
+		return 0, experimentalsys.EINVAL
+	}
+	if f.fs.latch != nil && f.fs.latch.Stopped() {
+		return 0, experimentalsys.EACCES
+	}
+	if f.fs.meter != nil && len(buf) > 0 {
+		if !f.fs.meter.ReserveStagedBytes(int64(len(buf)), "") {
+			return 0, experimentalsys.EACCES
+		}
+		if !f.fs.meter.ReserveHostWork(1, "") {
+			return 0, experimentalsys.EACCES
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	origPos, errno := f.file.Seek(0, io.SeekCurrent)
+	if errno != ErrnoSuccess {
+		return 0, ErrnoToSys(errno)
+	}
+	if _, errno = f.file.Seek(offset, io.SeekStart); errno != ErrnoSuccess {
+		return 0, ErrnoToSys(errno)
+	}
+	n, writeErr := f.file.Write(buf)
+	_, _ = f.file.Seek(origPos, io.SeekStart)
+	return n, ErrnoToSys(writeErr)
 }
 
 func (f *workspaceSysFile) Seek(offset int64, whence int) (int64, experimentalsys.Errno) {
