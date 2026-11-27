@@ -119,7 +119,6 @@ def main():
         app.wait_for(
             lambda: len(app.request("/harness/llm/pending").get("requests") or ()) == 0,
             "drain pending llm requests after abort",
-            sid,
         )
 
     def pick_approve_option(cp):
