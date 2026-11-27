@@ -731,3 +731,145 @@ raise RuntimeError("boom after buffered writes")
 		}
 	})
 }
+
+func TestPY09_CrossRootRenameEXDEVAndSameRootReplace(t *testing.T) {
+	receiptDir := t.TempDir()
+	svc := newNativeQualService(t, receiptDir)
+
+	ws1 := t.TempDir()
+	ws2 := t.TempDir()
+	for _, d := range []string{filepath.Join(ws1, "shared"), filepath.Join(ws2, "shared")} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(ws1, "shared", "src.txt"), []byte("WS1_SRC_ORIGINAL\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ws2, "shared", "dst.txt"), []byte("WS2_DST_ORIGINAL\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ws1, "shared", "replace_src.txt"), []byte("NEW_REPLACER_CONTENT\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ws1, "shared", "replace_dst.txt"), []byte("OLD_TARGET_CONTENT\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	roots := []pythondocuments.HostRootConfig{
+		{ID: "ws", Dir: ws1},
+		{ID: "ws2", Dir: ws2},
+	}
+	door := native.NewPythonMutationDoor(tools.ToolContext{}, roots)
+
+	code := `
+import errno, json, os, pathlib
+
+res = {}
+
+# 1. Cross-root os.rename must fail with EXDEV
+try:
+    os.rename("shared/src.txt", "@ws2/shared/dst.txt")
+    res["rename_exdev"] = False
+except OSError as e:
+    res["rename_exdev"] = (e.errno == errno.EXDEV)
+    res["rename_errno"] = e.errno
+
+# 2. Cross-root os.replace must fail with EXDEV
+try:
+    os.replace("shared/src.txt", "@ws2/shared/dst.txt")
+    res["replace_exdev"] = False
+except OSError as e:
+    res["replace_exdev"] = (e.errno == errno.EXDEV)
+    res["replace_errno"] = e.errno
+
+# 3. Same-root os.replace must succeed
+os.replace("shared/replace_src.txt", "shared/replace_dst.txt")
+res["same_root_dst"] = pathlib.Path("shared/replace_dst.txt").read_text(encoding="utf-8")
+res["same_root_src_gone"] = not pathlib.Path("shared/replace_src.txt").exists()
+
+# 4. Private guest scratch (/tmp) works inside guest without touching workspace
+pathlib.Path("/tmp/py09_private_scratch.txt").write_text("PRIVATE_ONLY\n", encoding="utf-8")
+res["scratch_read"] = pathlib.Path("/tmp/py09_private_scratch.txt").read_text(encoding="utf-8")
+
+# 5. Unsupported symlink inside workspace must be refused without creating a link
+try:
+    os.symlink("shared/src.txt", "shared/bad_link.txt")
+    res["symlink_refused"] = False
+except OSError as e:
+    res["symlink_refused"] = True
+    res["symlink_errno"] = e.errno
+
+print(json.dumps(res, sort_keys=True))
+`
+	resp, err := svc.ExecuteTool(context.Background(), portablepython.ToolRequest{
+		ExecutionID:  "py09-exdev-replace",
+		CallID:       "call-py09-exdev-replace",
+		SessionID:    "sess-py09-exdev",
+		Actor:        "coordinator",
+		View:         "primary",
+		Surface:      "implement_investigate",
+		Mode:         pythonruntime.ModeCode,
+		Code:         code,
+		Roots:        roots,
+		MutationDoor: door,
+	})
+	contractcheck.FailErr(t, "execute EXDEV/replace test", err)
+	if !resp.CleanCompletion || resp.ExitCode != 0 {
+		t.Fatalf("EXDEV/replace test failed: exit=%d clean=%v stop=%+v stderr=%q",
+			resp.ExitCode, resp.CleanCompletion, resp.Stop, resp.Stderr)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(resp.Stdout)), &parsed); err != nil {
+		t.Fatalf("decode stdout %q: %v", resp.Stdout, err)
+	}
+	if parsed["rename_exdev"] != true || parsed["replace_exdev"] != true {
+		t.Fatalf("expected EXDEV for cross-root rename & replace, got %+v", parsed)
+	}
+	if parsed["same_root_dst"] != "NEW_REPLACER_CONTENT\n" || parsed["same_root_src_gone"] != true {
+		t.Fatalf("same-root os.replace did not produce expected guest state: %+v", parsed)
+	}
+	if parsed["scratch_read"] != "PRIVATE_ONLY\n" || parsed["symlink_refused"] != true {
+		t.Fatalf("unexpected scratch/symlink result: %+v", parsed)
+	}
+
+	// Independently verify BOTH cross-root source & destination are completely unchanged on disk.
+	gotSrc, _ := os.ReadFile(filepath.Join(ws1, "shared", "src.txt"))
+	gotDst, _ := os.ReadFile(filepath.Join(ws2, "shared", "dst.txt"))
+	if string(gotSrc) != "WS1_SRC_ORIGINAL\n" || string(gotDst) != "WS2_DST_ORIGINAL\n" {
+		t.Fatalf("cross-root EXDEV mutated files: src=%q dst=%q", string(gotSrc), string(gotDst))
+	}
+
+	// Independently verify same-root os.replace settled cleanly on disk.
+	if _, statErr := os.Stat(filepath.Join(ws1, "shared", "replace_src.txt")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected ws1/shared/replace_src.txt to be removed after os.replace, statErr=%v", statErr)
+	}
+	gotReplaced, err := os.ReadFile(filepath.Join(ws1, "shared", "replace_dst.txt"))
+	contractcheck.FailErr(t, "read settled replace_dst.txt", err)
+	if string(gotReplaced) != "NEW_REPLACER_CONTENT\n" {
+		t.Fatalf("settled replace_dst.txt=%q want NEW_REPLACER_CONTENT", string(gotReplaced))
+	}
+
+	// Verify no false workspace file from /tmp scratch or refused symlink.
+	if _, statErr := os.Stat(filepath.Join(ws1, "shared", "bad_link.txt")); !os.IsNotExist(statErr) {
+		t.Fatalf("refused symlink must not exist on disk, statErr=%v", statErr)
+	}
+	for _, rec := range resp.AdmissionEvidence.Admissions() {
+		if strings.Contains(rec.Target.RelPath, "py09_private_scratch") {
+			t.Fatalf("private /tmp scratch leaked into workspace admission records: %+v", rec)
+		}
+	}
+
+	// Verify admission record captured the rename operation.
+	foundRename := false
+	for _, rec := range resp.AdmissionEvidence.Admissions() {
+		if rec.Operation == "rename" && strings.Contains(rec.Target.RelPath, "replace_src.txt") {
+			foundRename = true
+			break
+		}
+	}
+	if !foundRename {
+		t.Fatalf("expected rename admission record for replace_src.txt, got %v", extractAdmissionSignature(resp))
+	}
+}

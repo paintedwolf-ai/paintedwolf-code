@@ -445,20 +445,30 @@ func (w *WorkspaceSysFS) Rmdir(p string) experimentalsys.Errno {
 	return ErrnoToSys(errno)
 }
 
-// Rename implements experimental/sys.FS.
-func (w *WorkspaceSysFS) Rename(from, to string) experimentalsys.Errno {
+// RenameErrno performs an admitted rename and returns the exact pythonruntime.Errno
+// (preserving ErrnoEXDEV across roots without lossy translation through wazero's
+// experimental/sys.Errno subset).
+func (w *WorkspaceSysFS) RenameErrno(from, to string) Errno {
 	if w.adapter == nil {
-		return experimentalsys.ENOSYS
+		return ErrnoEIO
 	}
 	relFrom := cleanGuestRelPath(from)
 	relTo := cleanGuestRelPath(to)
 	opID, sysErr := w.admit(EffectFilesystemWrite, "rename", relFrom, map[string]any{"to": relTo})
 	if sysErr != 0 {
-		return sysErr
+		return SysToErrno(sysErr)
 	}
 	errno := w.adapter.Rename(w.ctx, relFrom, relTo)
 	w.recordOutcome(opID, errno, 0, 1)
-	return ErrnoToSys(errno)
+	return errno
+}
+
+// Rename implements experimental/sys.FS.
+func (w *WorkspaceSysFS) Rename(from, to string) experimentalsys.Errno {
+	if w.adapter == nil {
+		return experimentalsys.ENOSYS
+	}
+	return ErrnoToSys(w.RenameErrno(from, to))
 }
 
 // Readlink implements experimental/sys.FS.

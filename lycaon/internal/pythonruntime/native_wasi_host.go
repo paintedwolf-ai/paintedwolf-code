@@ -31,6 +31,7 @@ const (
 	wasiErrnoPerm     uint32 = 63
 	wasiErrnoRofs     uint32 = 69
 	wasiErrnoSpipe    uint32 = 70
+	wasiErrnoXdev     uint32 = 75
 )
 
 // WASI preview1 filetype constants.

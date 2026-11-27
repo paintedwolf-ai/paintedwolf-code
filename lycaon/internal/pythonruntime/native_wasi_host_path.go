@@ -199,7 +199,7 @@ func (h *nativeWASIHost) handlePathRename(mem []byte, args []uint64) uint32 {
 		return wasiErrnoBadf
 	}
 	if oldDir.fs != newDir.fs {
-		return wasiErrnoNotsup
+		return wasiErrnoXdev
 	}
 	oldBytes, ok := memSlice(mem, uint32(args[1]), uint32(args[2]))
 	if !ok {
@@ -214,7 +214,21 @@ func (h *nativeWASIHost) handlePathRename(mem []byte, args []uint64) uint32 {
 	if !ok1 || !ok2 {
 		return wasiErrnoInval
 	}
+	if wsFS, ok := oldDir.fs.(*WorkspaceSysFS); ok {
+		return runtimeErrnoToWASI(wsFS.RenameErrno(oldRel, newRel))
+	}
 	return sysErrnoToWASI(oldDir.fs.Rename(oldRel, newRel))
+}
+
+func runtimeErrnoToWASI(e Errno) uint32 {
+	switch e {
+	case ErrnoSuccess:
+		return wasiErrnoSuccess
+	case ErrnoEXDEV:
+		return wasiErrnoXdev
+	default:
+		return sysErrnoToWASI(ErrnoToSys(e))
+	}
 }
 
 func (h *nativeWASIHost) handlePathReadlink(mem []byte, args []uint64) uint32 {
@@ -261,7 +275,7 @@ func (h *nativeWASIHost) handlePathLink(mem []byte, args []uint64) uint32 {
 		return wasiErrnoBadf
 	}
 	if oldDir.fs != newDir.fs {
-		return wasiErrnoNotsup
+		return wasiErrnoXdev
 	}
 	oldBytes, ok := memSlice(mem, uint32(args[2]), uint32(args[3]))
 	if !ok {
