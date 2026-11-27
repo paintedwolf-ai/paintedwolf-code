@@ -19,17 +19,24 @@ def _is_hex40(value):
 
 
 def materialize_host_facts(host_facts, project_dir):
-    """Materialize supported file-based host_facts (e.g. archive_fixture zip) into project_dir."""
+    """Materialize or verify file-based host_facts (e.g. archive_fixture zip) without altering pinned bytes."""
     if not host_facts:
         return True, {}
     bindings, unhandled = {}, []
     for key, spec in host_facts.items():
         if key == 'archive_fixture' and isinstance(spec, dict) and spec.get('kind') == 'zip':
             zpath = pathlib.Path(project_dir) / 'hostile.zip'
-            with zipfile.ZipFile(zpath, 'w') as zf:
-                for entry in spec.get('entries') or ():
-                    zf.writestr(entry['path'], bytes_value(entry['bytes']))
-            bindings[key] = {'injected': True, 'path': 'hostile.zip', 'entries': len(spec.get('entries') or ())}
+            entries = spec.get('entries') or ()
+            if zpath.is_file():
+                with zipfile.ZipFile(zpath, 'r') as zf:
+                    matched = [(n, zf.read(n)) for n in zf.namelist()] == [(e['path'], bytes_value(e['bytes'])) for e in entries]
+                if not matched:
+                    raise ValueError('existing hostile.zip does not match archive_fixture host_facts')
+            else:
+                with zipfile.ZipFile(zpath, 'w') as zf:
+                    for entry in entries:
+                        zf.writestr(entry['path'], bytes_value(entry['bytes']))
+            bindings[key] = {'injected': True, 'path': 'hostile.zip', 'entries': len(entries)}
         else:
             bindings[key] = {'injected': False}
             unhandled.append(key)
@@ -202,7 +209,11 @@ def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, rece
         facts['disk_provenance'] = True
     if recovery and recovery.get('owner_code'):
         no_escape = not (pathlib.Path(project_dir).parent / 'escape.txt').exists()
-        facts['no_outside_effect'] = bool(recovery['zero_program_effects'] and no_escape and (baseline_hashes is None or final_hashes == baseline_hashes))
+        all_refused = all(e.get('state') in {'refused', 'rejected'} and e.get('effect_certainty') in {None, '', 'none'} for e in execs)
+        zero_ok = bool(recovery.get('zero_program_effects') or (
+            all_refused and last_payload.get('completed_effects', 0) == 0 and last_payload.get('uncertain_effects', 0) == 0
+        ))
+        facts['no_outside_effect'] = bool(zero_ok and no_escape and (baseline_hashes is None or final_hashes == baseline_hashes))
         if any(tok in recovery['owner_code'].lower() for tok in ('zip', 'traversal', 'escape', 'archive', 'path')):
             facts['zip_slip_refused'] = True
     facts.update(verify_tar_bz2(project_dir, receipts, effects, audit['invocation_program_publications'], final_hashes))
