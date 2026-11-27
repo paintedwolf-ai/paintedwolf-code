@@ -14,7 +14,10 @@ from portable_command.provenance import (
 from progress import save
 
 SETUP_GAPS = {'profile_binding_approximate', 'profile_binding_mismatch', 'uninjected_drafts', 'uninjected_host_facts'}
-OBSERVATION_GAPS = {'missing_sidecar_log', 'incomplete_sidecar_log', 'missing_program_status_code'}
+OBSERVATION_GAPS = {
+    'missing_sidecar_log', 'incomplete_sidecar_log', 'missing_program_status_code',
+    'unresolved_command_handle', 'command_wait_timeout', 'command_wait_rejected', 'running_command_without_handle',
+}
 OPENING_MARKERS = ('server listening', 'listening', 'server started', 'startup')
 CLOSING_MARKERS = (
     'shutdown signal received', 'shutdown after spawning process exited',
