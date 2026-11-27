@@ -72,21 +72,25 @@ def run_cf07_sidecar_suite(
 
     family_reports: dict[str, dict[str, object]] = {}
     artifact_files: dict[str, Path] = {}
+    last_provenance = None
+    last_launch_receipt: dict[str, object] = {}
 
-    with tempfile.TemporaryDirectory(prefix="cf07-sidecar-") as sidecar_tmp:
-        with D1SidecarProcess(
-            binary_path=binary_path,
-            repo_root=repo_root,
-            work_dir=Path(sidecar_tmp),
-            rg_bin=rg_bin,
-        ) as sidecar:
-            assert sidecar.provenance is not None
-            launch_path = out_dir / "launch_receipt.json"
-            launch_path.write_text(json.dumps(sidecar.launch_receipt, indent=2) + "\n", encoding="utf-8")
-            artifact_files["launch_receipt"] = launch_path
+    for fam in families:
+        n = effective_counts[fam]
+        with tempfile.TemporaryDirectory(prefix=f"cf07-sidecar-{fam.lower()}-") as sidecar_tmp:
+            with D1SidecarProcess(
+                binary_path=binary_path,
+                repo_root=repo_root,
+                work_dir=Path(sidecar_tmp),
+                rg_bin=rg_bin,
+            ) as sidecar:
+                assert sidecar.provenance is not None
+                last_provenance = sidecar.provenance
+                last_launch_receipt = sidecar.launch_receipt
+                launch_path = out_dir / "launch_receipt.json"
+                launch_path.write_text(json.dumps(sidecar.launch_receipt, indent=2) + "\n", encoding="utf-8")
+                artifact_files["launch_receipt"] = launch_path
 
-            for fam in families:
-                n = effective_counts[fam]
                 if fam == "G01":
                     rep = run_g01_sidecar(sidecar, base_seed=base_seed, instances=n, boundary_config=boundary_cfg)
                 elif fam == "G02":
@@ -108,53 +112,56 @@ def run_cf07_sidecar_suite(
                 )
                 sys.stderr.flush()
 
-            summary = {
-                "card": "CF07",
-                "lane": "sidecar",
-                "base_seed": base_seed,
-                "provenance": sidecar.provenance.to_dict(),
-                "families": {
-                    fam: {
-                        "planned_instances": rep["planned_instances"],
-                        "executed_instances": rep["executed_instances"],
-                        "verdict_counts": rep["verdict_counts"],
-                        "declared_gap_counts": rep["declared_gap_counts"],
-                        "declared_gap_rate": rep["declared_gap_rate"],
-                        "defect_count": len(rep.get("defects") or []),
-                        "edge_count": len(rep.get("edges") or []),
-                    }
-                    for fam, rep in family_reports.items()
-                },
+    assert last_provenance is not None
+    summary = {
+        "card": "CF07",
+        "lane": "sidecar",
+        "base_seed": base_seed,
+        "provenance": last_provenance.to_dict(),
+        "families": {
+            fam: {
+                "planned_instances": rep["planned_instances"],
+                "executed_instances": rep["executed_instances"],
+                "verdict_counts": rep["verdict_counts"],
+                "declared_gap_counts": rep["declared_gap_counts"],
+                "declared_gap_rate": rep["declared_gap_rate"],
+                "defect_count": len(rep.get("defects") or []),
+                "edge_count": len(rep.get("edges") or []),
             }
-            summary_path = out_dir / "summary.json"
-            summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
-            artifact_files["summary"] = summary_path
+            for fam, rep in family_reports.items()
+        },
+    }
+    summary_path = out_dir / "summary.json"
+    summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    artifact_files["summary"] = summary_path
 
-            replay_cmd = [
-                sys.executable,
-                "-m",
-                "catalog_feed_search.families.cf07_runner",
-                "--binary",
-                str(binary_path),
-                "--repo-root",
-                str(repo_root),
-                "--out-dir",
-                str(out_dir),
-                "--seed",
-                base_seed,
-                "--families",
-                ",".join(families),
-            ]
-            write_evidence_manifest(
-                out_dir,
-                sidecar.provenance,
-                artifact_files,
-                extra={"card": "CF07", "base_seed": base_seed, "families": list(families)},
-                replay_command=replay_cmd,
-                launch_receipt=sidecar.launch_receipt,
-            )
-            write_sha256sums(out_dir)
-            return summary
+    replay_cmd = [
+        sys.executable,
+        "-m",
+        "catalog_feed_search.families.cf07_runner",
+        "--binary",
+        str(binary_path),
+        "--repo-root",
+        str(repo_root),
+        "--out-dir",
+        str(out_dir),
+        "--seed",
+        base_seed,
+        "--families",
+        ",".join(families),
+        "--rg-bin",
+        rg_bin,
+    ]
+    write_evidence_manifest(
+        out_dir,
+        last_provenance,
+        artifact_files,
+        extra={"card": "CF07", "base_seed": base_seed, "families": list(families)},
+        replay_command=replay_cmd,
+        launch_receipt=last_launch_receipt,
+    )
+    write_sha256sums(out_dir)
+    return summary
 
 
 def main(argv: list[str] | None = None) -> int:
