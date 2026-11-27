@@ -248,7 +248,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
             results = send_tool_calls(application, session_id, batch, surface=session_surface)
             call_ids = [cid for cid, _ in results]
             await_meta = await_running_handle(application, session_id, results[-1][1], send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface))
-            job_probe = probe_background_job_handles(application, session_id, app_dir / 'store.db', send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface)) if case['id'] == 'owned-background-state' and app_factory is smoke.Application else None
+            job_probe = probe_background_job_handles(application, session_id, app_dir / 'store.db', project_dir=project_dir, create_base_session=create_isolated_session, send_calls=lambda a, s, c: send_tool_calls(a, s, c, surface=session_surface)) if case['id'] == 'owned-background-state' and app_factory is smoke.Application else None
             await_ids = ((await_meta['wait_call_ids'] + await_meta['output_call_ids']) if await_meta else []) + (job_probe['call_ids'] if job_probe else [])
             turn_records.append({
                 'program': turn['program'], 'command_call_id': call_ids[-1], 'call_ids': call_ids, 'await_call_ids': await_ids,

@@ -211,9 +211,11 @@ class PortableCommandQSliceTests(unittest.TestCase):
             (proj / 'input.txt').write_text('alpha\ngamma\n')
             db = sqlite3.connect(db_path)
             db.execute("CREATE TABLE invocation_program_deliveries (id TEXT PRIMARY KEY, output_id TEXT, response_id TEXT, delivery_id TEXT, start_byte INTEGER, end_byte INTEGER, source_owner_ref TEXT, mappings_json TEXT)")
-            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','completed',1), ('r2','sess1234','c2','edit','filesystem','completed',1)")
-            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,'')")
-            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e1','p1',1,'read','cat','filesystem','completed','none')")
+            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','completed',1), ('r2','sess1234','c2','command','processes','completed',1)")
+            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,''), ('p2','r2','completed',0,'')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,accepted_revision,published_revision) VALUES ('e1','p1',1,'read','cat','filesystem','completed','none','',''), ('e2','p2',1,'write','edit','filesystem','completed','completed','rev1','rev2')")
+            db.execute("INSERT INTO invocation_program_revision_pins VALUES ('p2','e2',0,'destination','published_disk','input.txt')")
+            db.execute("INSERT INTO invocation_program_publications VALUES ('p2','sess1234','committed',1)")
             db.execute("INSERT INTO invocation_program_outputs VALUES ('o1','p1','e1','stdout','ref:o1',1,0,'1\\talpha\\n2\\tbeta\\n',0,2,'','b'*64)")
             src_id = 'disk:' + str((proj / 'input.txt').resolve())
             m1 = json.dumps([{'Source': {'SourceID': src_id, 'SHA256': base['input.txt'], 'Representation': 'utf8-no-bom'}, 'SourceStartByte': 0, 'SourceEndByte': 6, 'OutputStartByte': 2, 'OutputEndByte': 8, 'PrintedLine': 1}])
@@ -221,7 +223,7 @@ class PortableCommandQSliceTests(unittest.TestCase):
             db.execute("INSERT INTO invocation_program_deliveries VALUES ('d1','o1','resp1','del1',2,8,'owner:1',?), ('d2','o1','resp1','del1#1',10,15,'owner:1',?)", (m1, m2))
             db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?), ('m2','sess1234',2,'tool','c2',?)", (
                 json.dumps({'outcome': 'completed', 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'completed', 'status': 0, 'stdout': '1\talpha\n2\tbeta\n', 'stderr': ''})}),
-                json.dumps({'outcome': 'completed', 'content': 'Applied edit'}),
+                json.dumps({'outcome': 'completed', 'content': '[command#2]\n' + json.dumps({'program_id': 'p2', 'state': 'completed', 'status': 0, 'stdout': '', 'stderr': ''})}),
             ))
             db.commit(); db.close()
             ident = {'git_head': 'a' * 40}
@@ -230,7 +232,7 @@ class PortableCommandQSliceTests(unittest.TestCase):
                 db_path=db_path, sidecar_log=log_path, baseline_hashes=base,
                 turn_records=[
                     {'program': CASES['literal-delivery-edit']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1'], 'envelope_mode': 'command_only'},
-                    {'program': CASES['literal-delivery-edit']['turns'][1]['program'], 'command_call_id': 'c2', 'call_ids': ['c2'], 'envelope_mode': 'structured_tool'},
+                    {'program': CASES['literal-delivery-edit']['turns'][1]['program'], 'command_call_id': 'c2', 'call_ids': ['c2'], 'envelope_mode': 'command_only'},
                 ],
                 prelude_records=[],
             )
@@ -253,8 +255,9 @@ class PortableCommandQSliceTests(unittest.TestCase):
             self.assertEqual(obs_q6['deliveries'], [{'path': 'input.txt', 'revision': 'baseline:input.txt', 'lines': [1, 1], 'representation': 'literal', 'delivered': True}])
             self.assertTrue(obs_q6['facts']['unseen_ranges_not_read_bases'])
             db = sqlite3.connect(db_q6)
-            m_full = json.dumps([{'Source': {'SourceID': src_id, 'SHA256': base['input.txt'], 'Representation': 'utf8-no-bom'}, 'SourceStartByte': 0, 'SourceEndByte': 11, 'OutputStartByte': 0, 'OutputEndByte': 11}])
-            db.execute("UPDATE invocation_program_deliveries SET end_byte=11, mappings_json=? WHERE id='d1'", (m_full,))
+            full_len = len(CASES['unseen-output-no-edit-base']['setup']['files']['input.txt'].encode('utf-8'))
+            m_full = json.dumps([{'Source': {'SourceID': src_id, 'SHA256': base['input.txt'], 'Representation': 'utf8-no-bom'}, 'SourceStartByte': 0, 'SourceEndByte': full_len, 'OutputStartByte': 0, 'OutputEndByte': full_len}])
+            db.execute("UPDATE invocation_program_deliveries SET end_byte=?, mappings_json=? WHERE id='d1'", (full_len, m_full))
             db.commit(); db.close()
             obs_q6_bad, _ = observe.build_observation(CASES['unseen-output-no-edit-base'], session_id='sess1234', identity=ident, project_dir=proj, db_path=db_q6, sidecar_log=log_path, baseline_hashes=base, turn_records=[{'program': 'cat ./input.txt', 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
             self.assertFalse(obs_q6_bad['facts']['unseen_ranges_not_read_bases'])
@@ -296,7 +299,8 @@ class PortableCommandQSliceTests(unittest.TestCase):
             sample.write_text('same\n')
             self.assertEqual(subprocess.run([str(h_q11 / 'fixture-reader'), str(sample)], capture_output=True, text=True, check=True).stdout, 'same\n')
             h_q16 = provenance.materialize_helpers(None, root / 'bin-q16', case_id='owned-background-state')
-            self.assertEqual(subprocess.run([str(h_q16 / 'fixture-job')], env={**os.environ, 'FIXTURE': 'before'}, capture_output=True, text=True, check=True).stdout, 'before\n')
+            q16_out = subprocess.run([str(h_q16 / 'fixture-job')], cwd=root, env={**os.environ, 'FIXTURE': 'before'}, capture_output=True, text=True, check=True).stdout.splitlines()
+            self.assertEqual(q16_out, ['before', str(root.resolve())])
             # 2) Q11 positive + negative (two different scratch paths -> same_physical_identity=False).
             db_path, log_path, proj = self._base_env(root)
             db = sqlite3.connect(db_path)
@@ -323,14 +327,17 @@ class PortableCommandQSliceTests(unittest.TestCase):
             db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,status_code,effect_certainty,job_handle) VALUES ('e1','p1',1,'command','external','processes','completed',0,'none','job-1'), ('e2','p1',2,'wait','wait','processes','completed',0,'none','')")
             db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (json.dumps({'outcome': 'completed', 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'completed', 'status': 0, 'stdout': 'before\n', 'stderr': ''})}),))
             db.commit(); db.close()
-            obs16, audit16 = observe.build_observation(CASES['owned-background-state'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db16, sidecar_log=log16, baseline_hashes={}, turn_records=[{'program': CASES['owned-background-state']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
+            probe16 = {
+                'handles': ['job-1'], 'call_ids': [], 'wrong_handle_rejected': True,
+                'cross_session_refused': True, 'other_session_usable': True,
+                'handle_outputs': {'job-1': {'outcome': 'completed', 'returned_handle': 'job-1', 'stdout': f'before\n{proj.resolve()}\n', 'running': False, 'exit_code': 0}},
+            }
+            obs16, audit16 = observe.build_observation(CASES['owned-background-state'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db16, sidecar_log=log16, baseline_hashes={}, turn_records=[{'program': CASES['owned-background-state']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1'], 'job_probe': probe16}], prelude_records=[])
             self.assertEqual(audit16['observation_gaps'], [])
             for fact in CASES['owned-background-state']['required_evidence']:
                 self.assertTrue(obs16['facts'][fact], fact)
-            db = sqlite3.connect(db16)
-            db.execute("UPDATE invocation_program_executions SET status_code=7 WHERE id='e2'")
-            db.execute("UPDATE messages SET tool_result_json=? WHERE id='m1'", (json.dumps({'outcome': 'completed', 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'completed', 'status': 7, 'stdout': 'after\n', 'stderr': ''})}),))
-            db.commit(); db.close()
-            obs16_bad, _ = observe.build_observation(CASES['owned-background-state'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db16, sidecar_log=log16, baseline_hashes={}, turn_records=[{'program': CASES['owned-background-state']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
-            self.assertFalse(obs16_bad['facts']['captured_environment_cwd'])
-            self.assertFalse(obs16_bad['facts']['actual_exit'])
+            # Negative control: absent job_probe MUST fail (no fallback to foreground stdout).
+            obs16_noprobe, _ = observe.build_observation(CASES['owned-background-state'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db16, sidecar_log=log16, baseline_hashes={}, turn_records=[{'program': CASES['owned-background-state']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
+            self.assertFalse(obs16_noprobe['facts']['captured_environment_cwd'])
+            self.assertFalse(obs16_noprobe['facts']['actual_exit'])
+            self.assertFalse(obs16_noprobe['facts']['owned_descendants_only'])

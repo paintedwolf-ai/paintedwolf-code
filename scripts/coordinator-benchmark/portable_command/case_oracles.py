@@ -267,7 +267,7 @@ def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, rece
         if any(tok in recovery['owner_code'].lower() for tok in ('zip', 'traversal', 'escape', 'archive', 'path')):
             facts['zip_slip_refused'] = True
     facts.update(verify_tar_bz2(project_dir, receipts, effects, audit['invocation_program_publications'], final_hashes))
-    facts.update(inspect_temp_handoff_and_jobs(case, session_id=session_id, audit=audit, receipts=receipts, sidecar=sidecar, last_payload=last_payload, turn_records=turn_records))
+    facts.update(inspect_temp_handoff_and_jobs(case, session_id=session_id, project_dir=project_dir, audit=audit, receipts=receipts, sidecar=sidecar, last_payload=last_payload, turn_records=turn_records))
     ro_facts, recovery = inspect_readonly_authority(
         case, session_surface=session_surface, project_dir=project_dir, audit=audit, recovery=recovery,
         last_payload=last_payload, last_raw=last_raw, baseline_hashes=baseline_hashes,

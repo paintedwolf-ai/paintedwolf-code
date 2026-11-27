@@ -119,19 +119,19 @@ def extract_deliveries(case, audit, baseline_hashes, project_dir=None):
 
 
 def inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar, baseline_hashes, final_hashes):
-    """Verify structured edit anchoring (Q05), bounded find visits (Q01/Q20), and confined launch (Q21)."""
+    """Verify edit anchoring (Q05), live catalog generation & bounded find visits (Q01/Q20), and confined launch (Q21)."""
     facts = {}
     execs = audit['invocation_program_executions']
     pins = audit['invocation_program_revision_pins']
     segments = audit.get('invocation_program_revision_pin_segments') or []
-    # 1) Q05 anchored_edit: top-level edit receipt in invocation_receipts backed by delivered path + changed bytes.
+    delivered_paths = {d['path'] for d in deliveries if d.get('delivered') is True}
+    # 1) Q05 anchored_edit: top-level edit OR native command edit backed by delivered path + changed bytes.
     edit_receipts = [r for r in audit.get('invocation_receipts') or () if r.get('tool_name') == 'edit' and r.get('status') == 'completed']
     if edit_receipts:
         turn_paths = [
             str((t.get('arguments') or {}).get('path') or '').lstrip('./')
             for t in (case.get('turns') or ()) if t.get('structured_tool') == 'edit'
         ]
-        delivered_paths = {d['path'] for d in deliveries if d.get('delivered') is True}
         anchored = False
         for er, rel_path in zip(edit_receipts, turn_paths):
             changed = bool(rel_path and rel_path in final_hashes and (baseline_hashes is None or final_hashes.get(rel_path) != baseline_hashes.get(rel_path)))
@@ -142,7 +142,28 @@ def inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar,
             if rel_path in delivered_paths and changed:
                 anchored = True
         facts['anchored_edit'] = anchored
-    # 2) Q01/Q20 bounded_visits: completed find pin rows + pin_segments within language.json traversal_visits limit.
+    elif delivered_paths:
+        write_rows = [r for r in receipts if r.get('operation') == 'write' and r.get('outcome') == 'completed' and r.get('published') is True]
+        if write_rows:
+            facts['anchored_edit'] = any(
+                str(r.get('path') or '').lstrip('./') in delivered_paths
+                and (baseline_hashes is None or final_hashes.get(str(r.get('path') or '').lstrip('./')) != baseline_hashes.get(str(r.get('path') or '').lstrip('./')))
+                for r in write_rows
+            )
+    # 2) Q01/Q20 catalog_generation_matches_live & bounded_visits.
+    inv_rows = audit.get('source_inventory_state') or []
+    if inv_rows:
+        expected_files = len((case.get('setup') or {}).get('files') or {}) + sum(int(g.get('count') or 0) for g in (case.get('setup') or {}).get('generators') or ())
+        snaps = {s['id']: s for s in (audit.get('source_snapshots') or ()) if s.get('id')}
+        row = inv_rows[-1]
+        snap = snaps.get(row.get('snapshot_id') or '')
+        snap_ok = (not row.get('snapshot_id')) or (snap is not None and snap.get('file_count') == expected_files)
+        facts['catalog_generation_matches_live'] = bool(
+            expected_files > 0 and row.get('phase') == 'ready'
+            and isinstance(row.get('completed_generation'), int) and row['completed_generation'] >= 0
+            and row['completed_generation'] == row.get('requested_generation')
+            and row.get('file_count') == expected_files and snap_ok
+        )
     find_execs = [e for e in execs if e.get('native_command') == 'find' and e.get('state') == 'completed' and e.get('complete') == 1]
     if find_execs:
         limit = _traversal_visits_limit()

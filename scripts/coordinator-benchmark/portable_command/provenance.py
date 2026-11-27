@@ -62,7 +62,7 @@ def materialize_helpers(helpers, helpers_dir, case_id=None):
         elif kind == 'read-file-arg':
             script.write_text("#!/bin/sh\nexec python3 -c 'import pathlib,sys; sys.stdout.buffer.write(pathlib.Path(sys.argv[1]).read_bytes())' \"$1\"\n")
         elif kind == 'print-env-fixture':
-            script.write_text("#!/bin/sh\nprintf '%s\\n' \"${FIXTURE:-}\"\n")
+            script.write_text("#!/bin/sh\nprintf '%s\\n%s\\n' \"${FIXTURE:-}\" \"$(pwd -P)\"\n")
         else:
             out = shlex.quote(str(spec.get('stdout') or ''))
             err = shlex.quote(str(spec.get('stderr') or ''))

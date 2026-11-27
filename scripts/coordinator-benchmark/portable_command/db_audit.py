@@ -45,6 +45,10 @@ def query_db_audit(db_path, session_id, prelude_call_ids=()):
                    if w['tool_call_id'] not in prelude_set]
         messages = [m for m in _rows(db, 'SELECT id,ord,role,tool_result_call_id,tool_result_json FROM messages WHERE session_id=? AND tool_result_call_id IS NOT NULL AND tool_result_call_id != "" ORDER BY ord', (session_id,))
                     if m['tool_result_call_id'] not in prelude_set]
+        inventory = _rows(db, 'SELECT s.project_id,i.requested_generation,i.completed_generation,i.phase,i.file_count,i.snapshot_id FROM sessions s JOIN source_inventory_state i ON i.project_id=s.project_id WHERE s.id=?', (session_id,)) if _table_exists(db, 'sessions') and _table_exists(db, 'source_inventory_state') else []
+        snap_ids = [r['snapshot_id'] for r in inventory if r.get('snapshot_id')]
+        s_ph = ','.join('?' for _ in snap_ids) or "''"
+        snapshots = _rows(db, f'SELECT id,file_count,capture_quality FROM source_snapshots WHERE id IN ({s_ph})', snap_ids) if snap_ids and _table_exists(db, 'source_snapshots') else []
     return {
         'prelude_receipts': prelude_receipts, 'invocation_receipts': receipts, 'invocation_programs': programs,
         'invocation_program_executions': executions, 'invocation_program_revision_pins': pins,
@@ -52,6 +56,7 @@ def query_db_audit(db_path, session_id, prelude_call_ids=()):
         'invocation_program_progress': program_progress, 'invocation_program_sources': program_sources,
         'session_progress': session_progress, 'invocation_program_deliveries': deliveries,
         'invocation_program_revision_pin_segments': pin_segments,
+        'source_inventory_state': inventory, 'source_snapshots': snapshots,
         'source_command_windows': windows, 'tool_result_messages': messages,
     }
 

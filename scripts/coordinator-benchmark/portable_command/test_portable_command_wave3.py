@@ -78,16 +78,49 @@ class PortableCommandWave3Tests(unittest.TestCase):
             db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,status_code,effect_certainty,job_handle) VALUES ('w1','p1',0,'program &','','processes','completed',0,'none',''), ('e1','p1',1,'command','external','processes','completed',0,'unknown','bg-42'), ('e2','p1',2,'wait','wait','processes','completed',0,'none','')")
             db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (json.dumps({'outcome': 'completed', 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'completed', 'status': 0, 'stdout': '', 'stderr': ''})}),))
             db.commit(); db.close()
-            good_probe = {'handles': ['bg-42'], 'call_ids': [], 'handle_outputs': {'bg-42': {'outcome': 'completed', 'returned_handle': 'bg-42', 'stdout': 'before\n', 'running': False, 'exit_code': 0}}, 'wrong_handle_rejected': True}
+            good_probe = {
+                'handles': ['bg-42'], 'call_ids': [], 'wrong_handle_rejected': True,
+                'cross_session_refused': True, 'other_session_usable': True,
+                'handle_outputs': {'bg-42': {'outcome': 'completed', 'returned_handle': 'bg-42', 'stdout': f'before\n{proj.resolve()}\n', 'running': False, 'exit_code': 0}},
+            }
             ident = {'git_head': 'a' * 40}
             obs, audit = observe.build_observation(case, session_id='sess1234', identity=ident, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=[{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1'], 'job_probe': good_probe}], prelude_records=[])
             self.assertEqual(audit['observation_gaps'], [])
             self.assertTrue(grading.grade_case(case, obs, proj, ident)['passed'])
-            # Negative control (a): wrong-handle control NOT rejected -> owned_descendants_only MUST be False.
-            bad_probe = {**good_probe, 'wrong_handle_rejected': False}
-            obs_w, _ = observe.build_observation(case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=[{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1'], 'job_probe': bad_probe}], prelude_records=[])
-            self.assertFalse(obs_w['facts']['owned_descendants_only'])
-            # Negative control (b): process_control=true escalation -> owned_descendants_only MUST be False.
+            # Negative control (a): cross-session handle NOT refused -> owned_descendants_only MUST be False.
+            obs_x, _ = observe.build_observation(case, session_id='sess1234', identity=ident, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=[{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1'], 'job_probe': {**good_probe, 'cross_session_refused': False}}], prelude_records=[])
+            self.assertFalse(obs_x['facts']['owned_descendants_only'])
+            # Negative control (b): wrong cwd in handle output -> captured_environment_cwd MUST be False.
+            bad_cwd = {**good_probe, 'handle_outputs': {'bg-42': {**good_probe['handle_outputs']['bg-42'], 'stdout': 'before\n/wrong/cwd\n'}}}
+            obs_cwd, _ = observe.build_observation(case, session_id='sess1234', identity=ident, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=[{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1'], 'job_probe': bad_cwd}], prelude_records=[])
+            self.assertFalse(obs_cwd['facts']['captured_environment_cwd'])
+            # Negative control (c): process_control=true escalation -> owned_descendants_only MUST be False.
             log_path.write_text('level=INFO msg="server listening"\nlevel=INFO msg="process boundary selected" host_execution=false process_control=true component=sandbox tool=command session_id=sess1234\nlevel=INFO msg="shutdown signal received"\n')
-            obs_pc, _ = observe.build_observation(case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=[{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1'], 'job_probe': good_probe}], prelude_records=[])
+            obs_pc, _ = observe.build_observation(case, session_id='sess1234', identity=ident, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=[{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1'], 'job_probe': good_probe}], prelude_records=[])
             self.assertFalse(obs_pc['facts']['owned_descendants_only'])
+
+    def test_large_tree_catalog_generation_positive_and_negative_controls(self):
+        case = CASES['large-tree-discovery']
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            db_path, log_path, proj = root / 'store.db', root / 'sidecar.log', root / 'proj'
+            proj.mkdir()
+            create_audit_db(db_path)
+            log_path.write_text('level=INFO msg="server listening"\nlevel=INFO msg="shutdown signal received"\n')
+            db = sqlite3.connect(db_path)
+            db.execute("CREATE TABLE sessions (id TEXT PRIMARY KEY, project_id TEXT)")
+            db.execute("CREATE TABLE source_inventory_state (project_id TEXT, requested_generation INTEGER, completed_generation INTEGER, phase TEXT, file_count INTEGER, snapshot_id TEXT)")
+            db.execute("CREATE TABLE source_snapshots (id TEXT PRIMARY KEY, file_count INTEGER, capture_quality TEXT)")
+            db.execute("INSERT INTO sessions VALUES ('sess1234','proj1')")
+            db.execute("INSERT INTO source_inventory_state VALUES ('proj1',2,2,'ready',10000,'snap1')")
+            db.execute("INSERT INTO source_snapshots VALUES ('snap1',10000,'exact')")
+            db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','completed',1)")
+            db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','completed',0,'')")
+            db.commit(); db.close()
+            obs, _ = observe.build_observation(case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=[{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
+            self.assertTrue(obs['facts']['catalog_generation_matches_live'])
+            db = sqlite3.connect(db_path)
+            db.execute("UPDATE source_inventory_state SET completed_generation=1 WHERE project_id='proj1'")
+            db.commit(); db.close()
+            obs_stale, _ = observe.build_observation(case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=[{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
+            self.assertFalse(obs_stale['facts']['catalog_generation_matches_live'])
