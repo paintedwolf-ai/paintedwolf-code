@@ -18,7 +18,7 @@ from ..generators import BoundaryConfig, TreeEntrySpec, TreeGenOptions, TreeSpec
 from ..live_controls import wait_catalog_settled
 from ..references import reference_walk
 from ..seeds import BASE_SEED_PRIMARY, ReplaySelector, seed_rng
-from .cf03_common import FamilyReport, ManagedSidecar, parse_http_error_json, verify_dir_unreadable
+from .cf03_common import FamilyReport, ManagedSidecar, parse_http_error_json, verify_dir_unreadable, walk_catalog_retry_409
 
 K03_SIDECAR_COUNT = 60
 K03_EDGE_COUNT = 4
@@ -64,7 +64,7 @@ def run_k03_sidecar(
             pid, rids = driver.attach_project([wdir])
             rid = rids[0]
             wait_catalog_settled(driver, pid, rid, max_wait_s=15.0)
-            before = driver.walk_catalog_index(pid, rid, page_limit=5)
+            before = walk_catalog_retry_409(driver, pid, rid, page_limit=200)
 
             # Mutate tree to trigger a new generation, or do a real sidecar restart every 15th instance.
             if idx % 15 == 0:
@@ -73,13 +73,13 @@ def run_k03_sidecar(
                 # Decision 054: observe FIRST readiness immediately after restart (before settle)
                 # to distinguish persisted readiness from a rebuilt view.
                 first_idx = driver.get_source_index(pid)
-                first_read = driver.walk_catalog_index(pid, rid, page_limit=5)
+                first_read = walk_catalog_retry_409(driver, pid, rid, page_limit=200)
                 served_immediately = (
                     len(first_read.items) == len(before.items)
                     and first_read.generation_revision is not None
                 )
                 wait_catalog_settled(driver, pid, rid, max_wait_s=15.0)
-                after_restart = driver.walk_catalog_index(pid, rid, page_limit=5)
+                after_restart = walk_catalog_retry_409(driver, pid, rid, page_limit=200)
                 ref_entries = [e for e in reference_walk(wdir, boundary_config=boundary_config, include_hidden=True) if e.kind == "file"]
                 res = check_catalog(walk_entries_to_catalog_items(ref_entries, root_id=rid), after_restart)
                 extra_meta = {

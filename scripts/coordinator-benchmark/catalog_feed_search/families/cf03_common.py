@@ -354,6 +354,25 @@ def parse_http_error_json(exc: urllib.error.HTTPError) -> dict[str, object]:
     return {}
 
 
+def walk_catalog_retry_409(
+    driver: SidecarDriver,
+    project_id: str,
+    root_id: str,
+    *,
+    page_limit: int = 200,
+    max_attempts: int = 3,
+) -> ProductCatalogAnswer:
+    """Walk settled catalog index, retrying from page 1 if a background refresh triggers HTTP 409."""
+    for attempt in range(max_attempts):
+        try:
+            return driver.walk_catalog_index(project_id, root_id, page_limit=page_limit)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 409 and attempt + 1 < max_attempts:
+                continue
+            raise
+    return driver.walk_catalog_index(project_id, root_id, page_limit=page_limit)
+
+
 def shrink_catalog_failure(
     selector: ReplaySelector,
     spec: TreeSpec,
