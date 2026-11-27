@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
@@ -469,4 +470,6 @@ type TreeStores struct {
 	scopes        ScopeProvider
 	diagMu        sync.Mutex
 	diagSampler   *DiagnosticSampler
+	diagActive    atomic.Bool
+	diagWG        sync.WaitGroup
 }

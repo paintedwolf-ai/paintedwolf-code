@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/repochange"
@@ -198,7 +199,6 @@ func TestDiagnosticRetainedReportDoesNotGrowOnCleanOrDuplicateSamples(t *testing
 		ReportPath:         reportPath,
 	}
 
-	// Clean samples must not create or grow the retained report file.
 	for i := 0; i < 5; i++ {
 		clean, err := catalog.Trees.SampleCatalogDiagnostic(t.Context(), "p", root, cfg, sampler)
 		testutil.FailErr(t, "clean sample", err)
@@ -210,7 +210,6 @@ func TestDiagnosticRetainedReportDoesNotGrowOnCleanOrDuplicateSamples(t *testing
 		t.Fatalf("expected no report file written on clean samples, stat err=%v", err)
 	}
 
-	// Inject disagreements: first sample writes 1 bounded line; repeated samples do not grow file.
 	db, err := openTreeDB(t.Context(), store.file)
 	testutil.FailErr(t, "open db", err)
 	defer func() { _ = db.Close() }()
@@ -238,7 +237,6 @@ func TestDiagnosticRetainedReportDoesNotGrowOnCleanOrDuplicateSamples(t *testing
 		t.Fatalf("report file grew on duplicate samples: %d -> %d", info1.Size(), info2.Size())
 	}
 
-	// Simulate distinct generations to verify retained report cap (MaxRetainedReports=3).
 	for rev := uint64(2); rev <= 6; rev++ {
 		_, err = db.ExecContext(t.Context(), "UPDATE meta SET revision=? WHERE id=1", rev)
 		testutil.FailErr(t, "bump meta revision", err)
@@ -262,48 +260,152 @@ func TestDiagnosticRetainedReportDoesNotGrowOnCleanOrDuplicateSamples(t *testing
 	}
 }
 
-func TestDiagnosticSubtreeReadIsBoundedOnLargeCatalog(t *testing.T) {
+func TestDiagnosticWideDirectoryAndLargeCatalogRemainBounded(t *testing.T) {
 	catalog, root := indexFixture(t)
+	// Unrelated large catalog (>1,000 files).
 	for d := 0; d < 25; d++ {
 		for f := 0; f < 40; f++ {
 			writeIndexFile(t, root.Path, fmt.Sprintf("unrelated_%02d/file_%02d.txt", d, f), "x")
 		}
 	}
-	for f := 0; f < 4; f++ {
-		writeIndexFile(t, root.Path, fmt.Sprintf("focus_pkg/item_%02d.txt", f), "target")
+	// Single wide directory with 120 files.
+	for f := 0; f < 120; f++ {
+		writeIndexFile(t, root.Path, fmt.Sprintf("wide_pkg/entry_%03d.txt", f), "w")
 	}
 	reader := waitIndex(t, catalog, root)
 	testutil.FailErr(t, "close reader", reader.Close())
 
 	report, err := catalog.Trees.SampleCatalogDiagnostic(t.Context(), "p", root, DiagnosticConfig{
 		Enabled:    true,
-		Subtree:    "focus_pkg",
-		MaxDirs:    8,
-		MaxEntries: 32,
+		Subtree:    "wide_pkg",
+		MaxDirs:    4,
+		MaxEntries: 16,
 	}, NewDiagnosticSampler())
-	testutil.FailErr(t, "sample small subtree in large catalog", err)
+	testutil.FailErr(t, "sample wide directory in large catalog", err)
 
 	if len(report.Disagreements) != 0 {
-		t.Fatalf("expected 0 disagreements, got %+v", report.Disagreements)
+		t.Fatalf("healthy wide directory raised false disagreements: %+v", report.Disagreements)
 	}
-	// Catalog has >1,000 rows, but bounded subtree query must only read target rows + coverage + ancestors.
-	if report.DiagnosticReads.CatalogRowsRead > 20 {
-		t.Fatalf("subtree diagnostic scanned too many catalog rows: %d (want <= 20)", report.DiagnosticReads.CatalogRowsRead)
+	if report.DiagnosticReads.DirReads != 1 || report.DiagnosticReads.EntryReads > 16 {
+		t.Fatalf("wide directory exceeded bounded filesystem reads: %+v", report.DiagnosticReads)
 	}
-	if report.DiagnosticReads.DirReads != 1 || report.DiagnosticReads.EntryReads != 4 {
-		t.Fatalf("unexpected direct walk counts: %+v", report.DiagnosticReads)
+	if report.DiagnosticReads.CatalogRowsRead > 25 {
+		t.Fatalf("wide directory scanned too many catalog rows: %d (want <= 25)", report.DiagnosticReads.CatalogRowsRead)
 	}
+}
+
+func TestDiagnosticSymmetricTruncationGuardPreventsFalseMissing(t *testing.T) {
+	catalog, root := indexFixture(t)
+	// Create a healthy tree with enough entries that MaxEntries=6 truncates SQL
+	// (ordered by path: a_00..a_04, then b_00..b_09) while the directory walk
+	// may observe entries past the SQL frontier.
+	for i := 0; i < 20; i++ {
+		writeIndexFile(t, root.Path, fmt.Sprintf("pkg/item_%02d.txt", i), "ok")
+	}
+	writeIndexFile(t, root.Path, "pkg/zzz_late.txt", "ok")
+	reader := waitIndex(t, catalog, root)
+	testutil.FailErr(t, "close reader", reader.Close())
+
+	report, err := catalog.Trees.SampleCatalogDiagnostic(t.Context(), "p", root, DiagnosticConfig{
+		Enabled:    true,
+		Subtree:    "pkg",
+		MaxDirs:    4,
+		MaxEntries: 6,
+	}, NewDiagnosticSampler())
+	testutil.FailErr(t, "sample truncated healthy subtree", err)
+
+	if len(report.Disagreements) != 0 {
+		t.Fatalf("bounded catalog truncation raised false disagreements on healthy tree: %+v", report.Disagreements)
+	}
+}
+
+func TestDiagnosticConcurrentReportPublicationAndWriteFailure(t *testing.T) {
+	reportDir := t.TempDir()
+	reportPath := filepath.Join(reportDir, "concurrent-diagnostic.jsonl")
+	sampler := NewDiagnosticSampler()
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 8)
+	for i := 0; i < 8; i++ {
+		idx := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rep := &DiagnosticReport{
+				ProjectID:            fmt.Sprintf("p-%d", idx),
+				RootID:               fmt.Sprintf("r-%d", idx),
+				GenerationInstance:   uint64(idx + 1),
+				GenerationRevision:   1,
+				GenerationConsistent: true,
+				Subtree:              ".",
+				Disagreements: []DiagnosticDisagreement{
+					{Path: fmt.Sprintf("f_%d.txt", idx), Kind: DisagreementMissingInCatalog, DiskKind: "file"},
+				},
+			}
+			if err := sampler.retainAndWrite(reportPath, rep, 4); err != nil {
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		testutil.FailErr(t, "concurrent retainAndWrite", err)
+	}
+
+	raw, err := os.ReadFile(reportPath)
+	testutil.FailErr(t, "read concurrent jsonl", err)
+	lines := 0
+	sc := bufio.NewScanner(os.NewFile(0, ""))
+	_ = sc
+	for _, line := range slices.DeleteFunc(splitLines(string(raw)), func(s string) bool { return s == "" }) {
+		var dec DiagnosticReport
+		testutil.FailErr(t, "parse concurrent jsonl line", json.Unmarshal([]byte(line), &dec))
+		lines++
+	}
+	if lines != 4 {
+		t.Fatalf("expected 4 atomically retained reports, got %d", lines)
+	}
+
+	// Write failure handling: attempting to replace an existing directory must fail
+	// cleanly and leave sampler.retained unchanged.
+	badTarget := filepath.Join(reportDir, "existing_dir")
+	testutil.FailErr(t, "mkdir bad target", os.MkdirAll(badTarget, 0o700))
+	beforeLen := len(sampler.retained)
+	failErr := sampler.retainAndWrite(badTarget, &DiagnosticReport{
+		ProjectID:     "p-fail",
+		RootID:        "r-fail",
+		Disagreements: []DiagnosticDisagreement{{Path: "x.txt", Kind: DisagreementMissingInCatalog, DiskKind: "file"}},
+	}, 4)
+	if failErr == nil {
+		t.Fatal("expected atomic publication error when target is a directory")
+	}
+	if len(sampler.retained) != beforeLen {
+		t.Fatalf("failed write mutated retained snapshot: %d -> %d", beforeLen, len(sampler.retained))
+	}
+}
+
+func splitLines(s string) []string {
+	var out []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			out = append(out, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		out = append(out, s[start:])
+	}
+	return out
 }
 
 func TestDiagnosticSkipsComparisonWhenLiveChangeOccursDuringSample(t *testing.T) {
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "src/a.txt", "a")
 	reader := waitIndex(t, catalog, root)
-	store := reader.store
 	testutil.FailErr(t, "close reader", reader.Close())
 
-	// Inject a file on disk after publication without updating catalog, AND simulate a
-	// live epoch/invalidation movement occurring during the direct walk.
 	writeIndexFile(t, root.Path, "src/concurrent_new.txt", "new")
 	workBefore, err := catalog.Trees.ProductWorkCounters(t.Context(), "p", root)
 	testutil.FailErr(t, "work before", err)
@@ -331,35 +433,51 @@ func TestDiagnosticSkipsComparisonWhenLiveChangeOccursDuringSample(t *testing.T)
 	if workAfter != workBefore {
 		t.Fatalf("diagnostic modified ordinary product work counters: before=%+v after=%+v", workBefore, workAfter)
 	}
-	_ = store
 }
 
-func TestDiagnosticEnvOptInRunsFromNormalReconcile(t *testing.T) {
-	reportPath := filepath.Join(t.TempDir(), "env-optin-diagnostic.jsonl")
-	t.Setenv("LYCAON_CATALOG_DIAGNOSTIC", "1")
-	t.Setenv("LYCAON_CATALOG_DIAGNOSTIC_FILE", reportPath)
-	t.Setenv("LYCAON_CATALOG_DIAGNOSTIC_SUBTREE", "src")
+func TestDiagnosticDevBoundaryAndAsyncDispatch(t *testing.T) {
+	t.Run("disabled_without_LYCAON_DEV", func(t *testing.T) {
+		t.Setenv("LYCAON_DEV", "")
+		t.Setenv("LYCAON_CATALOG_DIAGNOSTIC", "1")
+		t.Setenv("LYCAON_CATALOG_DIAGNOSTIC_FILE", filepath.Join(t.TempDir(), "should-not-run.jsonl"))
 
-	catalog, root := indexFixture(t)
-	writeIndexFile(t, root.Path, "src/a.txt", "a")
+		catalog, root := indexFixture(t)
+		writeIndexFile(t, root.Path, "src/a.txt", "a")
+		reader := waitIndex(t, catalog, root)
+		testutil.FailErr(t, "close reader", reader.Close())
+		catalog.Trees.WaitDiagnostics()
 
-	// Normal product reconciliation triggers maybeSampleCatalogDiagnostic end-to-end.
-	reader := waitIndex(t, catalog, root)
-	store := reader.store
-	testutil.FailErr(t, "close reader", reader.Close())
+		catalog.Trees.diagMu.Lock()
+		samplerInit := catalog.Trees.diagSampler != nil
+		catalog.Trees.diagMu.Unlock()
+		if samplerInit {
+			t.Fatal("diagnostic must remain disabled when LYCAON_DEV is not set")
+		}
+	})
 
-	// Verify the per-TreeStores diagnostic sampler was initialized by the normal path
-	// (clean run writes no file, proving zero growth on no-disagreement runs).
-	catalog.Trees.diagMu.Lock()
-	samplerInit := catalog.Trees.diagSampler != nil
-	catalog.Trees.diagMu.Unlock()
-	if !samplerInit {
-		t.Fatal("expected LYCAON_CATALOG_DIAGNOSTIC=1 to invoke diagnostic sampler during normal publishFinal")
-	}
-	if _, err := os.Stat(reportPath); !os.IsNotExist(err) {
-		t.Fatalf("clean normal reconcile should not write report file, stat err=%v", err)
-	}
-	_ = store
+	t.Run("enabled_with_LYCAON_DEV_dispatches_off_critical_path", func(t *testing.T) {
+		reportPath := filepath.Join(t.TempDir(), "dev-optin-diagnostic.jsonl")
+		t.Setenv("LYCAON_DEV", "1")
+		t.Setenv("LYCAON_CATALOG_DIAGNOSTIC", "1")
+		t.Setenv("LYCAON_CATALOG_DIAGNOSTIC_FILE", reportPath)
+		t.Setenv("LYCAON_CATALOG_DIAGNOSTIC_SUBTREE", "src")
+
+		catalog, root := indexFixture(t)
+		writeIndexFile(t, root.Path, "src/a.txt", "a")
+		reader := waitIndex(t, catalog, root)
+		testutil.FailErr(t, "close reader", reader.Close())
+		catalog.Trees.WaitDiagnostics()
+
+		catalog.Trees.diagMu.Lock()
+		samplerInit := catalog.Trees.diagSampler != nil
+		catalog.Trees.diagMu.Unlock()
+		if !samplerInit {
+			t.Fatal("expected LYCAON_DEV=1 + LYCAON_CATALOG_DIAGNOSTIC=1 to dispatch diagnostic sampler")
+		}
+		if _, err := os.Stat(reportPath); !os.IsNotExist(err) {
+			t.Fatalf("clean normal reconcile should not write report file, stat err=%v", err)
+		}
+	})
 }
 
 func TestDiagnosticEnabledAndDisabledMatchAnswersAndProductWorkCounters(t *testing.T) {

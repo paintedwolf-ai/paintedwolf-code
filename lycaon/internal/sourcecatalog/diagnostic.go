@@ -1,10 +1,11 @@
 package sourcecatalog
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -15,7 +16,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/debugpaths"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/repochange"
 )
 
@@ -93,11 +96,20 @@ const (
 	defaultDiagnosticMaxDisagreements   = 64
 	defaultDiagnosticMaxRetainedReports = 32
 	diagnosticSubtreeEnv                = "LYCAON_CATALOG_DIAGNOSTIC_SUBTREE"
+	diagnosticDevEnv                    = "LYCAON_DEV"
 )
 
-// DiagnosticConfigFromEnv builds a DiagnosticConfig gated on LYCAON_CATALOG_DIAGNOSTIC.
+// devCatalogDiagnosticEnabled enforces the repository's development activation
+// boundary: both LYCAON_DEV and LYCAON_CATALOG_DIAGNOSTIC must be enabled.
+func devCatalogDiagnosticEnabled() bool {
+	return configdir.EnvTruthy(os.Getenv(diagnosticDevEnv)) &&
+		debugpaths.Enabled(debugpaths.KindCatalogDiagnostic)
+}
+
+// DiagnosticConfigFromEnv builds a DiagnosticConfig gated on both LYCAON_DEV
+// and LYCAON_CATALOG_DIAGNOSTIC.
 func DiagnosticConfigFromEnv() DiagnosticConfig {
-	enabled := debugpaths.Enabled(debugpaths.KindCatalogDiagnostic)
+	enabled := devCatalogDiagnosticEnabled()
 	subtree := strings.TrimSpace(os.Getenv(diagnosticSubtreeEnv))
 	if subtree == "" {
 		subtree = "."
@@ -166,8 +178,8 @@ type diagnosticDedupKey struct {
 	kind      DiagnosticDisagreementKind
 }
 
-// DiagnosticSampler deduplicates disagreements across samples and maintains
-// a bounded retained local JSONL report.
+// DiagnosticSampler deduplicates disagreements across samples and atomically
+// publishes a serialized, bounded retained local JSONL report.
 type DiagnosticSampler struct {
 	mu       sync.Mutex
 	seen     map[diagnosticDedupKey]struct{}
@@ -202,6 +214,9 @@ func (s *DiagnosticSampler) recordUnique(key diagnosticDedupKey) bool {
 	return true
 }
 
+// retainAndWrite serializes ownership of the retained snapshot and publishes
+// atomically through fseffect.Replace while holding the sampler lock so
+// concurrent roots cannot overwrite newer retained state with an older snapshot.
 func (s *DiagnosticSampler) retainAndWrite(reportPath string, report *DiagnosticReport, maxRetained int) error {
 	if strings.TrimSpace(reportPath) == "" || report == nil || len(report.Disagreements) == 0 {
 		return nil
@@ -209,20 +224,22 @@ func (s *DiagnosticSampler) retainAndWrite(reportPath string, report *Diagnostic
 	if maxRetained <= 0 {
 		maxRetained = defaultDiagnosticMaxRetainedReports
 	}
-	var snapshot []DiagnosticReport
-	if s != nil {
-		s.mu.Lock()
-		s.retained = append(s.retained, *report)
-		if len(s.retained) > maxRetained {
-			s.retained = s.retained[len(s.retained)-maxRetained:]
-		}
-		snapshot = make([]DiagnosticReport, len(s.retained))
-		copy(snapshot, s.retained)
-		s.mu.Unlock()
-	} else {
-		snapshot = []DiagnosticReport{*report}
+	if s == nil {
+		return writeAtomicDiagnosticReports(reportPath, []DiagnosticReport{*report})
 	}
-	return writeBoundedDiagnosticReports(reportPath, snapshot)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := make([]DiagnosticReport, len(s.retained), len(s.retained)+1)
+	copy(next, s.retained)
+	next = append(next, *report)
+	if len(next) > maxRetained {
+		next = next[len(next)-maxRetained:]
+	}
+	if err := writeAtomicDiagnosticReports(reportPath, next); err != nil {
+		return err
+	}
+	s.retained = next
+	return nil
 }
 
 func (c *TreeStores) diagnosticSampler() *DiagnosticSampler {
@@ -234,18 +251,38 @@ func (c *TreeStores) diagnosticSampler() *DiagnosticSampler {
 	return c.diagSampler
 }
 
-// maybeSampleCatalogDiagnostic is the opt-in dev entry point invoked after a
-// catalog generation publishes. When LYCAON_CATALOG_DIAGNOSTIC is unset, it
-// returns immediately with zero work.
-func (c *TreeStores) maybeSampleCatalogDiagnostic(ctx context.Context, projectID string, root Root) {
-	if c == nil || !debugpaths.Enabled(debugpaths.KindCatalogDiagnostic) {
+// scheduleCatalogDiagnostic dispatches an opt-in dev diagnostic sample off the
+// ordinary publication critical path. When LYCAON_DEV or LYCAON_CATALOG_DIAGNOSTIC
+// is unset, it returns immediately with zero work. At most one background sample
+// runs at a time per TreeStores to prevent goroutine pileup.
+func (c *TreeStores) scheduleCatalogDiagnostic(projectID string, root Root) {
+	if c == nil || !devCatalogDiagnosticEnabled() {
 		return
 	}
 	cfg := DiagnosticConfigFromEnv()
 	if !cfg.Enabled {
 		return
 	}
-	_, _ = c.SampleCatalogDiagnostic(ctx, projectID, root, cfg, c.diagnosticSampler())
+	if !c.diagActive.CompareAndSwap(false, true) {
+		return
+	}
+	sampler := c.diagnosticSampler()
+	c.diagWG.Add(1)
+	go func() {
+		defer c.diagWG.Done()
+		defer c.diagActive.Store(false)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, _ = c.SampleCatalogDiagnostic(ctx, projectID, root, cfg, sampler)
+	}()
+}
+
+// WaitDiagnostics waits for any in-flight background dev diagnostic samples to finish.
+func (c *TreeStores) WaitDiagnostics() {
+	if c == nil {
+		return
+	}
+	c.diagWG.Wait()
 }
 
 type catalogNodeRecord struct {
@@ -351,7 +388,7 @@ func (c *TreeStores) sampleCatalogDiagnosticWithHook(
 		_ = db.Close()
 	}()
 
-	coverage, faults, refusedDirs, catalogEntries, catalogRowsRead, catalogTruncated, err := readBoundedDiagnosticCatalogSnapshot(
+	coverage, faults, refusedDirs, catalogEntries, maxCatalogPath, catalogRowsRead, catalogTruncated, err := readBoundedDiagnosticCatalogSnapshot(
 		ctx, tx, pinnedStatus, cfg.Subtree, cfg.MaxEntries,
 	)
 	if err != nil {
@@ -367,7 +404,7 @@ func (c *TreeStores) sampleCatalogDiagnosticWithHook(
 		return report, nil
 	}
 
-	diskEntries, sampledDirs, dirStamps, reads, truncatedWalk, err := walkDirectSubtree(
+	diskEntries, fullSampledDirs, dirStamps, reads, truncatedWalk, err := walkDirectSubtree(
 		s.root.Path, cfg, policy, faults, refusedDirs,
 	)
 	if err != nil {
@@ -391,11 +428,13 @@ func (c *TreeStores) sampleCatalogDiagnosticWithHook(
 	rawDisagreements := compareCatalogAndDisk(
 		catalogEntries,
 		diskEntries,
-		sampledDirs,
+		fullSampledDirs,
 		faults,
 		refusedDirs,
 		policy,
-		truncatedWalk || catalogTruncated,
+		truncatedWalk,
+		catalogTruncated,
+		maxCatalogPath,
 	)
 
 	report.TotalObserved = len(rawDisagreements)
@@ -467,23 +506,17 @@ func subtreePrefixBounds(subtree string) (string, string) {
 	return subtree + "/", subtree + "0"
 }
 
+// readBoundedDiagnosticCatalogSnapshot reads ONLY ancestor boundaries plus
+// bounded subtree rows using the unique path index (no global count(*) scans).
 func readBoundedDiagnosticCatalogSnapshot(
 	ctx context.Context,
 	tx *sql.Tx,
 	status TreeStatus,
 	subtree string,
 	maxEntries int,
-) (IndexCoverage, map[string]struct{}, map[string]string, map[string]catalogNodeRecord, int, bool, error) {
+) (IndexCoverage, map[string]struct{}, map[string]string, map[string]catalogNodeRecord, string, int, bool, error) {
 	rowsRead := 0
 	coverage := CoverageFromStatus(status)
-	err := tx.QueryRowContext(ctx, `SELECT
-		(SELECT count(*) FROM nodes WHERE refused<>'' AND refused<>'lazy'),
-		(SELECT count(*) FROM faults)`).Scan(&coverage.BoundedDirectories, &coverage.FailedDirectories)
-	rowsRead++
-	if err != nil {
-		return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
-	}
-
 	faults := make(map[string]struct{})
 	refusedDirs := make(map[string]string)
 
@@ -498,43 +531,44 @@ func readBoundedDiagnosticCatalogSnapshot(
 		// #nosec G202 -- Fixed placeholder list with bound ancestor paths.
 		fRows, qErr := tx.QueryContext(ctx, "SELECT path FROM faults WHERE path IN ("+placeholders+")", args...)
 		if qErr != nil {
-			return IndexCoverage{}, nil, nil, nil, rowsRead, false, qErr
+			return IndexCoverage{}, nil, nil, nil, "", rowsRead, false, qErr
 		}
 		for fRows.Next() {
 			var p string
 			if err := fRows.Scan(&p); err != nil {
 				_ = fRows.Close()
-				return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+				return IndexCoverage{}, nil, nil, nil, "", rowsRead, false, err
 			}
 			faults[p] = struct{}{}
 			rowsRead++
 		}
 		if err := fRows.Close(); err != nil {
-			return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+			return IndexCoverage{}, nil, nil, nil, "", rowsRead, false, err
 		}
 
 		// #nosec G202 -- Fixed placeholder list with bound ancestor paths.
 		rRows, qErr := tx.QueryContext(ctx, "SELECT path, refused FROM nodes WHERE refused<>'' AND path IN ("+placeholders+")", args...)
 		if qErr != nil {
-			return IndexCoverage{}, nil, nil, nil, rowsRead, false, qErr
+			return IndexCoverage{}, nil, nil, nil, "", rowsRead, false, qErr
 		}
 		for rRows.Next() {
 			var p, ref string
 			if err := rRows.Scan(&p, &ref); err != nil {
 				_ = rRows.Close()
-				return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+				return IndexCoverage{}, nil, nil, nil, "", rowsRead, false, err
 			}
 			refusedDirs[p] = ref
 			rowsRead++
 		}
 		if err := rRows.Close(); err != nil {
-			return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+			return IndexCoverage{}, nil, nil, nil, "", rowsRead, false, err
 		}
 	}
 
 	// 2. Read bounded faults inside the selected subtree.
 	limit := maxEntries + 1
 	var subFaultRows *sql.Rows
+	var err error
 	if subtree == "." {
 		subFaultRows, err = tx.QueryContext(ctx, "SELECT path FROM faults ORDER BY path LIMIT ?", limit)
 	} else {
@@ -542,19 +576,19 @@ func readBoundedDiagnosticCatalogSnapshot(
 		subFaultRows, err = tx.QueryContext(ctx, "SELECT path FROM faults WHERE path=? OR (path>=? AND path<?) ORDER BY path LIMIT ?", subtree, lo, hi, limit)
 	}
 	if err != nil {
-		return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+		return IndexCoverage{}, nil, nil, nil, "", rowsRead, false, err
 	}
 	for subFaultRows.Next() {
 		var p string
 		if err := subFaultRows.Scan(&p); err != nil {
 			_ = subFaultRows.Close()
-			return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+			return IndexCoverage{}, nil, nil, nil, "", rowsRead, false, err
 		}
 		faults[p] = struct{}{}
 		rowsRead++
 	}
 	if err := subFaultRows.Close(); err != nil {
-		return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+		return IndexCoverage{}, nil, nil, nil, "", rowsRead, false, err
 	}
 
 	// 3. Read bounded nodes inside the selected subtree using the unique path index.
@@ -567,15 +601,16 @@ func readBoundedDiagnosticCatalogSnapshot(
 		nodeRows, err = tx.QueryContext(ctx, "SELECT path, is_dir, symlink, regular, refused, indexed FROM nodes WHERE path=? OR (path>=? AND path<?) ORDER BY path LIMIT ?", subtree, lo, hi, limit)
 	}
 	if err != nil {
-		return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+		return IndexCoverage{}, nil, nil, nil, "", rowsRead, false, err
 	}
 	scannedNodes := 0
+	maxCatalogPath := ""
 	for nodeRows.Next() {
 		var p, refused string
 		var isDir, isSymlink, isRegular, indexed bool
 		if err := nodeRows.Scan(&p, &isDir, &isSymlink, &isRegular, &refused, &indexed); err != nil {
 			_ = nodeRows.Close()
-			return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+			return IndexCoverage{}, nil, nil, nil, "", rowsRead, false, err
 		}
 		rowsRead++
 		scannedNodes++
@@ -584,6 +619,9 @@ func readBoundedDiagnosticCatalogSnapshot(
 		}
 		if p == "." || !indexed || scannedNodes > maxEntries {
 			continue
+		}
+		if p > maxCatalogPath {
+			maxCatalogPath = p
 		}
 		entries[p] = catalogNodeRecord{
 			path:      p,
@@ -595,10 +633,18 @@ func readBoundedDiagnosticCatalogSnapshot(
 		}
 	}
 	if err := nodeRows.Close(); err != nil {
-		return IndexCoverage{}, nil, nil, nil, rowsRead, false, err
+		return IndexCoverage{}, nil, nil, nil, "", rowsRead, false, err
 	}
 
-	return coverage, faults, refusedDirs, entries, rowsRead, scannedNodes > maxEntries, nil
+	// Derive scoped coverage counts from the bounded sample (no global table scan).
+	coverage.FailedDirectories = len(faults)
+	for _, reason := range refusedDirs {
+		if reason != "" && reason != "lazy" {
+			coverage.BoundedDirectories++
+		}
+	}
+
+	return coverage, faults, refusedDirs, entries, maxCatalogPath, rowsRead, scannedNodes > maxEntries, nil
 }
 
 func walkDirectSubtree(
@@ -620,7 +666,7 @@ func walkDirectSubtree(
 	}
 
 	diskEntries := make(map[string]diskNodeRecord)
-	sampledDirs := make(map[string]struct{})
+	fullSampledDirs := make(map[string]struct{})
 	dirStamps := make(map[string]DirectoryStamp)
 	var reads DiagnosticReadCounts
 	truncated := false
@@ -630,7 +676,7 @@ func walkDirectSubtree(
 		item := queue[0]
 		queue = queue[1:]
 
-		if reads.DirReads >= cfg.MaxDirs {
+		if reads.DirReads >= cfg.MaxDirs || reads.EntryReads >= cfg.MaxEntries {
 			truncated = true
 			break
 		}
@@ -643,23 +689,28 @@ func walkDirectSubtree(
 			continue
 		}
 		dirInfo, statErr := f.Stat()
-		dirEntries, readErr := f.ReadDir(-1)
+		remaining := cfg.MaxEntries - reads.EntryReads
+		// Bound the underlying ReadDir syscall and working set to remaining+1 entries.
+		dirEntries, readErr := f.ReadDir(remaining + 1)
 		_ = f.Close()
 		reads.DirReads++
-		if readErr != nil {
+		if readErr != nil && readErr != io.EOF {
 			continue
 		}
-		sampledDirs[item.dir] = struct{}{}
+		dirFullyRead := len(dirEntries) <= remaining
+		if !dirFullyRead {
+			truncated = true
+			dirEntries = dirEntries[:remaining]
+		}
 		if statErr == nil {
 			dirStamps[item.dir] = directoryStampOf(dirInfo)
+		}
+		if dirFullyRead {
+			fullSampledDirs[item.dir] = struct{}{}
 		}
 
 		sort.Slice(dirEntries, func(i, j int) bool { return dirEntries[i].Name() < dirEntries[j].Name() })
 		for _, de := range dirEntries {
-			if reads.EntryReads >= cfg.MaxEntries {
-				truncated = true
-				break
-			}
 			reads.EntryReads++
 			name := de.Name()
 			rel := name
@@ -704,17 +755,19 @@ func walkDirectSubtree(
 		}
 	}
 
-	return diskEntries, sampledDirs, dirStamps, reads, truncated, nil
+	return diskEntries, fullSampledDirs, dirStamps, reads, truncated, nil
 }
 
 func compareCatalogAndDisk(
 	catalogEntries map[string]catalogNodeRecord,
 	diskEntries map[string]diskNodeRecord,
-	sampledDirs map[string]struct{},
+	fullSampledDirs map[string]struct{},
 	faults map[string]struct{},
 	refusedDirs map[string]string,
 	policy walkPolicy,
 	truncatedWalk bool,
+	catalogTruncated bool,
+	maxCatalogPath string,
 ) []DiagnosticDisagreement {
 	var out []DiagnosticDisagreement
 
@@ -731,6 +784,11 @@ func compareCatalogAndDisk(
 		}
 		cat, ok := catalogEntries[p]
 		if !ok {
+			// Symmetric truncation guard: if the bounded SQL sample truncated, any path
+			// at or past the SQL frontier (or when frontier is empty) was never proven absent.
+			if catalogTruncated && (maxCatalogPath == "" || p >= maxCatalogPath) {
+				continue
+			}
 			out = append(out, DiagnosticDisagreement{
 				Path:     p,
 				Kind:     DisagreementMissingInCatalog,
@@ -759,7 +817,8 @@ func compareCatalogAndDisk(
 			continue
 		}
 		parent := normalizeDir(path.Dir(p))
-		if _, sampled := sampledDirs[parent]; !sampled {
+		// Only report extra_in_catalog when the parent directory was fully read on disk.
+		if _, fullySampled := fullSampledDirs[parent]; !fullySampled {
 			continue
 		}
 		if truncatedWalk {
@@ -826,27 +885,24 @@ func typedEntryKind(isDir, isSymlink, isRegular bool) string {
 	}
 }
 
-func writeBoundedDiagnosticReports(reportPath string, reports []DiagnosticReport) error {
+func writeAtomicDiagnosticReports(reportPath string, reports []DiagnosticReport) error {
 	if strings.TrimSpace(reportPath) == "" || len(reports) == 0 {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(reportPath), 0o700); err != nil {
-		return err
-	}
-	var buf []byte
+	var buf bytes.Buffer
 	for _, r := range reports {
 		encoded, err := json.Marshal(r)
 		if err != nil {
 			return err
 		}
-		buf = append(buf, encoded...)
-		buf = append(buf, '\n')
+		buf.Write(encoded)
+		buf.WriteByte('\n')
 	}
-	f, err := os.OpenFile(reportPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		return err
-	}
-	_, writeErr := f.Write(buf)
-	closeErr := f.Close()
-	return errors.Join(writeErr, closeErr)
+	_, err := fseffect.Replace(fseffect.ReplaceRequest{
+		Location: fseffect.PathLocation(reportPath),
+		Source:   bytes.NewReader(buf.Bytes()),
+		Mode:     0o600,
+		DirMode:  0o700,
+	})
+	return err
 }
