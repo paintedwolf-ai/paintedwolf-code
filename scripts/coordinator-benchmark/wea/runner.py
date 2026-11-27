@@ -14,9 +14,11 @@ from __future__ import annotations
 import contextlib
 import json
 import pathlib
+import re
 import sqlite3
 import subprocess
 import sys
+import urllib.parse
 import uuid
 from typing import Any
 
@@ -38,6 +40,9 @@ from wea.observers import (
 )
 from wea.provenance import REPO_ROOT, collect_provenance, resolve_engine_binary
 from wea.replay import export_sanitized_bundle
+
+_URL_RE = re.compile(r"https?://127\.0\.0\.1:\d+[^\s'\"\\)]*")
+_CODE_LINE_RE = re.compile(r"\bCode:\s*([A-Z][A-Z0-9_]{2,})\b")
 
 
 def _save_json(path: pathlib.Path, data: Any) -> None:
@@ -179,21 +184,30 @@ def _send_tool_call(
 
 def _extract_refusal_code(result: dict[str, Any]) -> str:
     """Extract the actual typed rejection code from tool_result_json; return '' if none."""
-    for key in ("rejection", "refusal"):
+    if not isinstance(result, dict):
+        return ""
+    for key in ("rejection", "refusal", "isolation"):
         sub = result.get(key)
         if isinstance(sub, dict) and sub.get("code"):
             return str(sub["code"])
     for fb in result.get("feedback") or ():
         if isinstance(fb, dict) and fb.get("code"):
             return str(fb["code"])
-    inv_fail = (result.get("invocation") or {}).get("failure") or {}
-    if isinstance(inv_fail, dict) and inv_fail.get("code"):
-        return str(inv_fail["code"])
+    inv = result.get("invocation") or {}
+    if isinstance(inv, dict):
+        for sub_key in ("failure", "isolation"):
+            sub = inv.get(sub_key)
+            if isinstance(sub, dict) and sub.get("code"):
+                return str(sub["code"])
     cp_dec = result.get("checkpoint_decision") or {}
     if isinstance(cp_dec, dict) and cp_dec.get("status") == "rejected":
         return str(cp_dec.get("code") or "CHECKPOINT_REJECTED")
     codes = result.get("codes") or []
-    return str(codes[0]) if codes else ""
+    if codes:
+        return str(codes[0])
+    content = str(result.get("content") or "")
+    m = _CODE_LINE_RE.search(content)
+    return m.group(1) if m else ""
 
 
 def _extract_worker_landing_from_db(
@@ -203,35 +217,80 @@ def _extract_worker_landing_from_db(
     promote_result: dict[str, Any],
     expected_post_hashes: dict[str, str],
 ) -> dict[str, Any]:
-    """Extract real worker landing claims strictly from SQLite records + promote_overlay tool result."""
-    rows = (worker_obs.get("sqlite_records") or {}).get("rows") or {}
-    landed_rows = [r for r in rows.get("landed_changes") or [] if r.get("worker_job_id") == job_id]
-    result_rows = [r for r in rows.get("worker_results") or [] if r.get("worker_job_id") == job_id]
-    disp_rows = list(rows.get("worker_result_dispositions") or [])
+    """Extract worker producer result paths INDEPENDENTLY from landing claims.
 
-    # Extract changed paths from real landed_changes.changed_paths_json and promote_overlay result.
-    result_paths: list[str] = []
+    - `result_paths` comes strictly from the producer's settled `worker_results.result_json`
+      / `worker_jobs.result_json` (NEVER from `landed_changes` or `promote_overlay`).
+    - `landed_paths` comes strictly from `landed_changes.changed_paths_json` joined with
+      the product's `source_versions.content_sha256` (NEVER copied from disk hashes).
+    """
+    rows = (worker_obs.get("sqlite_records") or {}).get("rows") or {}
+    job_rows = [r for r in rows.get("worker_jobs") or [] if r.get("id") == job_id]
+    result_rows = [r for r in rows.get("worker_results") or [] if r.get("worker_job_id") == job_id]
+    landed_rows = [r for r in rows.get("landed_changes") or [] if r.get("worker_job_id") == job_id]
+    result_ids = [str(r["id"]) for r in result_rows if r.get("id")]
+    attempt_ids = [str(r["worker_attempt_id"]) for r in result_rows if r.get("worker_attempt_id")]
+    disp_rows = [
+        r for r in (rows.get("worker_result_dispositions") or [])
+        if r.get("result_id") in set(result_ids)
+    ]
+
+    # 1. Producer-side result_paths from worker_results / worker_jobs (independent of landed_changes).
+    producer_paths: list[str] = []
+    for src in [*result_rows, *job_rows]:
+        raw_res = src.get("result_json") or ""
+        if not raw_res:
+            continue
+        try:
+            parsed = json.loads(raw_res) if isinstance(raw_res, str) else raw_res
+        except ValueError:
+            continue
+        if isinstance(parsed, dict):
+            for key in ("changed_paths", "modified_paths", "touched_paths", "paths", "files"):
+                val = parsed.get(key)
+                if isinstance(val, list):
+                    for item in val:
+                        if isinstance(item, str) and item:
+                            producer_paths.append(item.lstrip("./"))
+                        elif isinstance(item, dict) and item.get("path"):
+                            producer_paths.append(str(item["path"]).lstrip("./"))
+            report = parsed.get("completion_report")
+            if isinstance(report, dict):
+                for key in ("changed_paths", "files"):
+                    val = report.get(key)
+                    if isinstance(val, list):
+                        producer_paths.extend(str(p).lstrip("./") for p in val if isinstance(p, str) and p)
+
+    # Also check scope_paths / source_effects written by child_session_id if worker_results stores only summary.
+    child_sids = {str(j.get("child_session_id")) for j in job_rows if j.get("child_session_id")}
+    db_path = pathlib.Path((worker_obs.get("sqlite_records") or {}).get("db_path") or "")
+    if not producer_paths and db_path.is_file() and child_sids:
+        with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+            for csid in sorted(child_sids):
+                eff_rows = conn.execute(
+                    "SELECT DISTINCT se.path FROM source_effects se "
+                    "JOIN source_operations so ON so.id = se.operation_id "
+                    "WHERE so.session_id = ?",
+                    (csid,),
+                ).fetchall()
+                producer_paths.extend(str(r[0]).lstrip("./") for r in eff_rows if r and r[0])
+
+    # 2. Landing-side paths from landed_changes + product source_versions SHA-256.
+    claimed_landed: list[str] = []
     for lr in landed_rows:
         raw_paths = lr.get("changed_paths_json") or "[]"
         try:
             parsed = json.loads(raw_paths) if isinstance(raw_paths, str) else raw_paths
             if isinstance(parsed, list):
-                result_paths.extend(str(p).lstrip("./") for p in parsed if p)
+                claimed_landed.extend(str(p).lstrip("./") for p in parsed if p)
         except ValueError:
             pass
-    if not result_paths and isinstance(promote_result, dict):
-        for key in ("changed_paths", "landed_paths", "paths"):
-            val = promote_result.get(key)
-            if isinstance(val, list):
-                result_paths.extend(str(p).lstrip("./") for p in val if p)
 
-    # Extract version hashes recorded by the product in source_versions (if present in DB).
     landed_paths: dict[str, str] = {}
-    db_path = pathlib.Path((worker_obs.get("sqlite_records") or {}).get("db_path") or "")
-    if db_path.is_file() and result_paths:
+    if db_path.is_file() and claimed_landed:
         with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
             conn.row_factory = sqlite3.Row
-            for rel in sorted(set(result_paths)):
+            for rel in sorted(set(claimed_landed)):
                 row = conn.execute(
                     "SELECT content_sha256 FROM source_versions WHERE path = ? AND branch_id = '' "
                     "ORDER BY seq DESC LIMIT 1",
@@ -241,11 +300,13 @@ def _extract_worker_landing_from_db(
 
     return {
         "job_id": job_id,
+        "worker_result_ids": result_ids,
+        "worker_attempt_ids": attempt_ids,
+        "disposition_states": [str(r.get("change_state") or "") for r in disp_rows if r.get("change_state")],
+        "require_complete_proof": True,
         "promote_outcome": promote_result.get("outcome") if isinstance(promote_result, dict) else None,
-        "worker_result_ids": [r.get("id") for r in result_rows if r.get("id")],
-        "disposition_states": [r.get("change_state") for r in disp_rows],
         "landed_paths": landed_paths,
-        "result_paths": sorted(set(result_paths)),
+        "result_paths": sorted(set(producer_paths)),
         "expected_post_hashes": expected_post_hashes,
         "clean_rebase_paths": [],
     }
@@ -257,9 +318,14 @@ def _extract_edit_records_from_db(
     rel_path: str,
     read_result: dict[str, Any],
     write_result: dict[str, Any],
+    disk_sha_before_write: str,
     expected_after_sha: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Extract real author attribution, read basis, and after-version hash from SQLite + tool results."""
+    """Extract real author attribution, read basis, and after-version hash from SQLite + tool results.
+
+    `disk_sha256_at_apply` is passed from the independent host-side disk hash captured
+    immediately before the write (NEVER set equal to `read_basis_sha`).
+    """
     rows = (edits_obs.get("sqlite_records") or {}).get("rows") or {}
     versions = [
         v for v in (rows.get("source_versions") or [])
@@ -306,13 +372,60 @@ def _extract_edit_records_from_db(
             "read_outcome": read_result.get("outcome") if isinstance(read_result, dict) else None,
             "write_outcome": write_result.get("outcome") if isinstance(write_result, dict) else None,
             "read_basis_sha256": read_basis_sha,
-            "disk_sha256_at_apply": read_basis_sha,
+            "disk_sha256_at_apply": disk_sha_before_write,
             "recorded_after_sha256": recorded_after_sha,
             "expected_after_sha256": expected_after_sha,
             "accepted": bool(read_ok and write_ok),
         }
     ]
     return attributions, edit_operations
+
+
+def _extract_product_network_witnesses(
+    auth_obs: dict[str, Any],
+    *,
+    allowed_call_id: str,
+    allowed_tool_result: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Extract real destination-bearing product network witnesses from SQLite + tool_result_json.
+
+    NEVER reads or copies addresses from the fixture observer! Extracts actual destination
+    URLs from `authz_events`, `invocation_receipts`, `command_invocations`, or `tool_result_json`.
+    """
+    rows = (auth_obs.get("sqlite_records") or {}).get("rows") or {}
+    blobs: list[str] = []
+
+    for table in ("invocation_receipts", "command_invocations", "authz_events"):
+        for r in rows.get(table) or []:
+            if allowed_call_id and r.get("tool_call_id") not in {None, "", allowed_call_id}:
+                continue
+            status = str(r.get("status") or r.get("outcome") or "")
+            if status in {"rejected", "denied", "error", "failed"}:
+                continue
+            blobs.append(json.dumps(r))
+
+    if isinstance(allowed_tool_result, dict) and allowed_tool_result.get("outcome") == "completed":
+        blobs.append(json.dumps(allowed_tool_result))
+
+    seen: set[tuple[str, str, str]] = set()
+    witnesses: list[dict[str, Any]] = []
+    for blob in blobs:
+        for match in _URL_RE.findall(blob):
+            parsed = urllib.parse.urlparse(match)
+            if not parsed.netloc:
+                continue
+            key = (parsed.netloc, "GET", parsed.path or "/")
+            if key not in seen:
+                seen.add(key)
+                witnesses.append({
+                    "address": parsed.netloc,
+                    "method": "GET",
+                    "path": parsed.path or "/",
+                    "allowed": True,
+                    "tool_call_id": allowed_call_id,
+                    "source": "product_record",
+                })
+    return witnesses
 
 
 def _ctrl_workers(
@@ -323,7 +436,7 @@ def _ctrl_workers(
     project_dir: pathlib.Path | None = None,
     export_dir: pathlib.Path | None = None,
 ) -> dict[str, Any]:
-    """Per-track control 1: real task dispatch -> child worker edit -> promote_overlay -> DB & disk verification."""
+    """Per-track control 1: update_progress -> task dispatch -> child worker edit -> promote_overlay."""
     run_id = f"ctrl-workers-{uuid.uuid4().hex[:8]}"
     canaries = CanaryGenerator(run_id)
     canary_val = canaries.mint("workers")
@@ -360,6 +473,14 @@ def _ctrl_workers(
             f"/v1/sessions/{session_id}/prompts",
             {"operation_id": str(uuid.uuid4()), "text": "Dispatch an implementer worker to update worker_target.txt and promote it."},
         )
+        # 0. Establish required progress checklist before calling `task` (avoids PROGRESS_MISSING).
+        _send_tool_call(
+            app,
+            session_id,
+            "update_progress",
+            {"content": "## Progress\n- [ ] Update worker_target.txt\n- [ ] Land and verify\n"},
+        )
+
         # 1. Coordinator dispatches a real write worker via `task`.
         _, task_res, _ = _send_tool_call(
             app,
@@ -455,7 +576,7 @@ def _ctrl_workers(
             track="workers",
             case_id="ctrl_workers",
             fixture_files=fixture_files,
-            steps=[{"tool": "task", "path": "worker_target.txt"}, {"tool": "promote_overlay"}],
+            steps=[{"tool": "update_progress"}, {"tool": "task", "path": "worker_target.txt"}, {"tool": "promote_overlay"}],
             expected={"verdict": "pass", "landed_path": "worker_target.txt", "expected_sha256": expected_post_hashes["worker_target.txt"]},
             baseline_hashes=baseline_hashes,
             receipt=receipt,
@@ -474,7 +595,7 @@ def _ctrl_edits(
     project_dir: pathlib.Path | None = None,
     export_dir: pathlib.Path | None = None,
 ) -> dict[str, Any]:
-    """Per-track control 2: read via active compiled route + edit + verify real DB versions/effects/author against disk."""
+    """Per-track control 2: read via active route + independent pre-write disk hash + edit + DB verification."""
     run_id = f"ctrl-edits-{uuid.uuid4().hex[:8]}"
     canaries = CanaryGenerator(run_id)
     canary_val = canaries.mint("edits")
@@ -497,6 +618,7 @@ def _ctrl_edits(
     open_docs: dict[str, Any] = {}
     read_result: dict[str, Any] = {}
     write_result: dict[str, Any] = {}
+    disk_sha_before_write = ""
     try:
         app.ready()
         session_id, project_id, root_id = _open_session(app, proj)
@@ -507,7 +629,6 @@ def _ctrl_edits(
             f"/v1/sessions/{session_id}/prompts",
             {"operation_id": str(uuid.uuid4()), "text": "Read notes.txt and append gamma."},
         )
-        # Obtain read via active compiled route (`read` if offered, else `command` `cat`).
         first_req = _wait_pending(app, session_id)
         offered = set(first_req.get("tools") or ())
         if "read" in offered:
@@ -515,7 +636,9 @@ def _ctrl_edits(
         else:
             _, read_result, _ = _send_tool_call(app, session_id, "command", {"command": "cat notes.txt"})
 
-        # Perform write via active compiled route (`write` if offered, else `command` write).
+        # Independently capture the host-side disk hash immediately before the write.
+        disk_sha_before_write = str(hash_file(proj / "notes.txt").get("sha256") or "")
+
         next_req = _wait_pending(app, session_id)
         if "write" in (next_req.get("tools") or ()):
             _, write_result, _ = _send_tool_call(app, session_id, "write", {"path": "notes.txt", "content": expected_after})
@@ -547,6 +670,7 @@ def _ctrl_edits(
         rel_path="notes.txt",
         read_result=read_result,
         write_result=write_result,
+        disk_sha_before_write=disk_sha_before_write,
         expected_after_sha=expected_after_sha,
     )
     canary_scan = scan_for_canaries(canaries.tokens, sqlite_dbs=[app_dir / "store.db"], paths=[app_dir / "sidecar.log"])
@@ -647,12 +771,12 @@ def _ctrl_authority(
                 f"/v1/sessions/{session_id}/prompts",
                 {"operation_id": str(uuid.uuid4()), "text": "Test write boundary and network fixtures."},
             )
-            # 1. Refused write outside admitted root — NO fallback code if absent.
+            # 1. Refused write outside admitted root via native command redirect (emits WRITE_SCOPE_DENIED / SANDBOX_TRY_WRITE_ROOT).
             _, refused_res, _ = _send_tool_call(
                 app,
                 session_id,
                 "command",
-                {"command": f"python3 -B -c \"from pathlib import Path; Path({str(outside_target)!r}).write_text('mutated\\n')\""},
+                {"command": f"printf 'mutated\\n' > {outside_target}"},
                 checkpoint_policy="reject",
             )
             refused_code = _extract_refusal_code(refused_res)
@@ -697,29 +821,18 @@ def _ctrl_authority(
         network_fixtures=[allowed_snap, refused_snap],
     )
     auth_obs["instrumentation_complete"] = True
-    # Combine all live-observed connections across both fixture endpoints.
     auth_obs["network_connections"] = [
         {"address": snap["address"], "method": r["method"], "path": r["path"]}
         for snap in (allowed_snap, refused_snap)
         for r in snap["requests"]
     ]
 
-    # Build product_records.recorded_connections strictly from real completed invocation_receipts + tool_result_json.
-    inv_rows = ((auth_obs.get("sqlite_records") or {}).get("rows") or {}).get("invocation_receipts") or []
-    allowed_inv_completed = any(
-        r.get("tool_call_id") == allowed_call_id and r.get("status") == "completed"
-        for r in inv_rows
-    ) or (isinstance(allowed_net_result, dict) and allowed_net_result.get("outcome") == "completed")
-
-    recorded_connections: list[dict[str, Any]] = []
-    if allowed_inv_completed:
-        recorded_connections.append({
-            "address": allowed_snap["address"],
-            "method": "GET",
-            "path": "/ping",
-            "allowed": True,
-            "tool_call_id": allowed_call_id,
-        })
+    # Extract product-side network witnesses strictly from real product DB/tool records (NEVER from fixture snaps).
+    recorded_connections = _extract_product_network_witnesses(
+        auth_obs,
+        allowed_call_id=allowed_call_id,
+        allowed_tool_result=allowed_net_result,
+    )
 
     outside_unchanged = auth_obs["host_fs"]["outside_target"]["unchanged"]
     inside_hash_info = hash_file(inside_target)

@@ -18,9 +18,10 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/presence"
 )
 
-// manualClock provides deterministic time control for in-process expiry and commit checks (D3).
+// manualClock provides deterministic time control for in-process service expiry checks (D3).
 type manualClock struct {
 	mu  sync.Mutex
 	now time.Time
@@ -94,28 +95,35 @@ func gitRev(t *testing.T, ref string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func countChatGrantsRO(t *testing.T, ctx context.Context, dbPath, grantID string) int {
+func readVaultUnlockEndReasonRO(t *testing.T, ctx context.Context, dbPath, unlockID string) (string, bool) {
 	t.Helper()
 	ro, err := db.OpenReadOnly(ctx, dbPath)
 	if err != nil {
 		t.Fatalf("db.OpenReadOnly failed: %v", err)
 	}
 	defer ro.Close()
-	var n int
-	if err := ro.QueryRowContext(ctx, "SELECT COUNT(*) FROM chat_grants WHERE id = ?", grantID).Scan(&n); err != nil {
-		t.Fatalf("read-only chat_grants query failed: %v", err)
+	var reason sql.NullString
+	err = ro.QueryRowContext(ctx, "SELECT end_reason FROM vault_unlocks WHERE id = ?", unlockID).Scan(&reason)
+	if err == sql.ErrNoRows {
+		return "", false
 	}
-	return n
+	if err != nil {
+		t.Fatalf("read-only vault_unlocks query failed: %v", err)
+	}
+	return reason.String, true
 }
 
-func TestInProcessLaneChatGrantExpiryDependsOnManualClockAndBarrier(t *testing.T) {
+// TestInProcessLanePresenceServiceExpiryWithManualClockAndBarrier exercises the real
+// `internal/presence` Unlocks service using its existing injected `SetClock` hook,
+// persists its unlock-ended callback to the real migrated SQLite `vault_unlocks` table,
+// and independently verifies both pre- and post-expiry states via `db.OpenReadOnly`.
+func TestInProcessLanePresenceServiceExpiryWithManualClockAndBarrier(t *testing.T) {
 	ctx := t.Context()
 	overlaySHA := testOverlayDigest(t)
 	if len(overlaySHA) != 64 {
 		t.Fatalf("unexpected overlay digest length: %d", len(overlaySHA))
 	}
 
-	// Open the real migrated SQLite store in an isolated temporary profile.
 	dbPath := filepath.Join(t.TempDir(), "wea-inproc.db")
 	store, err := db.Open(dbPath)
 	if err != nil {
@@ -129,10 +137,9 @@ func TestInProcessLaneChatGrantExpiryDependsOnManualClockAndBarrier(t *testing.T
 
 	clk := newManualClock(time.Date(2026, 11, 27, 19, 0, 0, 0, time.UTC))
 	t0 := clk.Now()
-	expiresAt := t0.Add(10 * time.Minute)
 	nowStr := t0.Format(time.RFC3339)
 
-	// Read the migrated owner person ID and seed a real project + session to satisfy chat_grants foreign keys.
+	// Read migrated owner person ID and seed a real project + session for vault_unlocks FKs.
 	var ownerPersonID string
 	if err := store.QueryRowContext(ctx, `SELECT id FROM people WHERE role = 'owner' LIMIT 1`).Scan(&ownerPersonID); err != nil {
 		t.Fatalf("read owner person: %v", err)
@@ -143,78 +150,103 @@ func TestInProcessLaneChatGrantExpiryDependsOnManualClockAndBarrier(t *testing.T
 	); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
+	const chatSessionID = "sess-wea-inproc"
 	if _, err := store.ExecContext(ctx,
 		`INSERT INTO sessions (id, project_id, owner_person_id, root_session_id, mode, posture, created_at, updated_at, activity_at)
-		 VALUES ('sess-wea-inproc', 'proj-wea', ?, 'sess-wea-inproc', 'agent', 'build', ?, ?, ?)`,
-		ownerPersonID, nowStr, nowStr, nowStr,
+		 VALUES (?, 'proj-wea', ?, ?, 'agent', 'build', ?, ?, ?)`,
+		chatSessionID, ownerPersonID, chatSessionID, nowStr, nowStr, nowStr,
 	); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
 
-	q := db.New(store)
-	const grantID = "grant-wea-expiring-001"
-	if err := q.UpsertChatGrant(ctx, db.UpsertChatGrantParams{
-		ChatSessionID: "sess-wea-inproc",
-		ID:            grantID,
-		CheckpointID:  "cp-wea-001",
-		DeltaJson:     `{"kind":"lease","scope":"chat"}`,
-		CreatedAt:     nowStr,
-		ExpiresAt:     sql.NullString{String: expiresAt.Format(time.RFC3339), Valid: true},
-	}); err != nil {
-		t.Fatalf("UpsertChatGrant failed: %v", err)
+	// Construct the real product presence.Broker + presence.Unlocks service with injected manual clock.
+	broker := presence.NewBroker()
+	broker.SetClock(clk.Now)
+	unlocks := presence.NewUnlocks(broker)
+	unlocks.SetClock(clk.Now)
+
+	const unlockID = "11111111-2222-3333-4444-555555555555"
+	const tsFmt = "2006-01-02T15:04:05.000000000Z"
+	var persistErr error
+	unlocks.SetObserver(presence.UnlockObserver{
+		Ended: func(u presence.Unlock, reason presence.EndReason, endedAt time.Time) {
+			_, persistErr = store.ExecContext(ctx,
+				`INSERT INTO vault_unlocks (id, project_id, chat_session_id, person_id, authenticator, window_label, unlocked_at, ended_at, end_reason)
+				 VALUES (?, 'proj-wea', ?, ?, ?, ?, ?, ?, ?)
+				 ON CONFLICT(id) DO UPDATE SET ended_at = excluded.ended_at, end_reason = excluded.end_reason`,
+				u.ID, u.ChatSessionID, u.PersonID, u.Authenticator, u.WindowLabel,
+				u.UnlockedAt.UTC().Format(tsFmt), endedAt.UTC().Format(tsFmt), string(reason),
+			)
+		},
+	})
+
+	opened := presence.NewUnlock(chatSessionID, presence.Verified{
+		ChallengeID:   unlockID,
+		PersonID:      ownerPersonID,
+		Authenticator: presence.AuthenticatorMacOS,
+		WindowLabel:   "wea-inproc-window",
+		VerifiedAt:    t0,
+	})
+	if !unlocks.Open(opened) {
+		t.Fatalf("presence.Unlocks.Open returned false")
 	}
 
-	// Phase 1: Run DeleteExpiredChatGrants at t0 (before expiry) -> grant MUST remain persisted.
-	if err := q.DeleteExpiredChatGrants(ctx, sql.NullString{String: clk.Now().Format(time.RFC3339), Valid: true}); err != nil {
-		t.Fatalf("DeleteExpiredChatGrants(t0) failed: %v", err)
+	// Phase 1: Advance just shy of UnlockIdle -> service MUST report unlock still active, 0 ended rows in DB.
+	clk.Advance(presence.UnlockIdle - time.Second)
+	if _, active := unlocks.Active(chatSessionID); !active {
+		t.Fatalf("expected presence unlock to stay active before UnlockIdle")
 	}
-	preCount := countChatGrantsRO(t, ctx, dbPath, grantID)
-	if preCount != 1 {
-		t.Fatalf("expected grant to persist before expiry at %s, got count=%d", t0.Format(time.RFC3339), preCount)
+	if _, found := readVaultUnlockEndReasonRO(t, ctx, dbPath, unlockID); found {
+		t.Fatalf("expected no ended vault_unlocks row before idle expiry")
 	}
 
-	// Phase 2: Hold the expiry sweep on a deterministic barrier, advance manual clock past expiresAt,
-	// release the barrier, and verify the real store commits the deletion.
+	// Phase 2: Hold Active check behind deterministic barrier, advance clock past UnlockIdle,
+	// release barrier, and verify the real presence service expires the unlock as EndIdle
+	// and persists the outcome to the real SQLite store.
 	gate := newBarrier()
-	errCh := make(chan error, 1)
+	activeAfterCh := make(chan bool, 1)
 	go func() {
 		if err := gate.Wait(ctx); err != nil {
-			errCh <- err
 			return
 		}
-		errCh <- q.DeleteExpiredChatGrants(ctx, sql.NullString{String: clk.Now().Format(time.RFC3339), Valid: true})
+		_, ok := unlocks.Active(chatSessionID)
+		activeAfterCh <- ok
 	}()
 
 	<-gate.entered
-	t1 := clk.Advance(15 * time.Minute)
+	t1 := clk.Advance(2 * time.Second)
 	gate.Release()
 
 	select {
-	case err := <-errCh:
-		if err != nil {
-			t.Fatalf("DeleteExpiredChatGrants(t1) failed: %v", err)
+	case active := <-activeAfterCh:
+		if active {
+			t.Fatalf("expected presence unlock to lapse after advancing past UnlockIdle")
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatalf("timed out waiting for barrier-gated expiry sweep")
+		t.Fatalf("timed out waiting for barrier-gated presence service check")
 	}
 
-	postCount := countChatGrantsRO(t, ctx, dbPath, grantID)
-	if postCount != 0 {
-		t.Fatalf("expected grant to expire after clock advanced to %s, got count=%d", t1.Format(time.RFC3339), postCount)
+	if persistErr != nil {
+		t.Fatalf("persisting ended vault_unlock failed: %v", persistErr)
+	}
+	endReason, found := readVaultUnlockEndReasonRO(t, ctx, dbPath, unlockID)
+	if !found || endReason != string(presence.EndIdle) {
+		t.Fatalf("read-only vault_unlocks mismatch: found=%v end_reason=%q want=%q", found, endReason, presence.EndIdle)
 	}
 
 	receipt := map[string]any{
-		"schema":                 "wea-inproc-control-v1",
-		"lane":                   "in-process",
-		"product_git_head":       gitRev(t, "HEAD"),
-		"product_git_tree":       gitRev(t, "HEAD^{tree}"),
-		"test_overlay_digest":    overlaySHA,
-		"grant_id":               grantID,
-		"manual_clock_t0":        t0.Format(time.RFC3339),
-		"expires_at":             expiresAt.Format(time.RFC3339),
-		"manual_clock_t1":        t1.Format(time.RFC3339),
-		"pre_expiry_grant_count": preCount,
-		"post_expiry_grant_count": postCount,
+		"schema":              "wea-inproc-control-v1",
+		"lane":                "in-process",
+		"service":             "internal/presence.Unlocks",
+		"product_git_head":    gitRev(t, "HEAD"),
+		"product_git_tree":    gitRev(t, "HEAD^{tree}"),
+		"test_overlay_digest": overlaySHA,
+		"unlock_id":           unlockID,
+		"manual_clock_t0":     t0.Format(time.RFC3339),
+		"manual_clock_t1":     t1.Format(time.RFC3339),
+		"pre_expiry_active":   true,
+		"post_expiry_active":  false,
+		"persisted_end_reason": endReason,
 	}
 	encoded, err := json.Marshal(receipt)
 	if err != nil {

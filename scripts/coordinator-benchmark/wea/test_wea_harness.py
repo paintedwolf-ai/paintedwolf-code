@@ -257,8 +257,9 @@ class TestFailClosedCheckerAndAllControls(unittest.TestCase):
     def test_all_defect_healthy_and_missing_controls(self) -> None:
         report = run_qualification_controls()
         self.assertTrue(report["qualified"], json.dumps(report, indent=2))
-        self.assertEqual(len(report["defect_controls"]), 10)
+        self.assertEqual(len(report["defect_controls"]), 11)
         self.assertEqual(len(report["healthy_controls"]), 5)
+        self.assertEqual(len(report["missing_controls"]), 4)
 
         expected_defects = {
             "wrong_author": "wrong_author",
@@ -271,6 +272,7 @@ class TestFailClosedCheckerAndAllControls(unittest.TestCase):
             "empty_claimed_paths_with_real_change": "landed_path_absent_from_result",
             "unverified_source_witness": "unverified_source_witness",
             "surplus_duplicate_connection": "unrecorded_connection",
+            "surplus_product_connection": "unobserved_product_connection",
         }
         self.assertEqual(set(report["defect_controls"].keys()), set(expected_defects.keys()))
         for name, expected_rule in expected_defects.items():
@@ -281,8 +283,33 @@ class TestFailClosedCheckerAndAllControls(unittest.TestCase):
         for name, res in report["healthy_controls"].items():
             self.assertEqual(res["actual_verdict"], "pass", name)
 
-        self.assertEqual(report["missing_instrumentation_control"]["actual_verdict"], "unknown")
-        self.assertEqual(report["missing_network_witness_control"]["actual_verdict"], "unknown")
+        for name, res in report["missing_controls"].items():
+            self.assertEqual(res["actual_verdict"], "unknown", name)
+
+    def test_edit_failed_tool_outcome_and_independent_worker_result_extraction(self) -> None:
+        ev = copy.deepcopy(make_healthy_baseline())
+        ev["product_records"]["edit_operations"][0]["read_outcome"] = "error"
+        res = check_evidence(ev)
+        self.assertEqual(res["verdict"], "fail")
+        self.assertIn("edit_tool_not_completed", res["failed_rule_ids"])
+
+        # Product network witness extractor must ONLY extract destination URLs present in product records.
+        witnesses = runner._extract_product_network_witnesses(
+            {"sqlite_records": {"rows": {"invocation_receipts": [{"tool_call_id": "c1", "status": "completed", "args_json": "{\"command\":\"curl http://127.0.0.1:45555/ping\"}"}]}}},
+            allowed_call_id="c1",
+            allowed_tool_result={"outcome": "completed"},
+        )
+        self.assertEqual(len(witnesses), 1)
+        self.assertEqual(witnesses[0]["address"], "127.0.0.1:45555")
+        self.assertEqual(witnesses[0]["path"], "/ping")
+
+        # Generic completed invocation without destination URL must NOT fabricate a connection witness.
+        empty_witnesses = runner._extract_product_network_witnesses(
+            {"sqlite_records": {"rows": {"invocation_receipts": [{"tool_call_id": "c2", "status": "completed", "args_json": "{\"command\":\"echo ok\"}"}]}}},
+            allowed_call_id="c2",
+            allowed_tool_result={"outcome": "completed"},
+        )
+        self.assertEqual(empty_witnesses, [])
 
     def test_clean_rebase_fails_if_combined_bytes_mismatch(self) -> None:
         ev = copy.deepcopy(build_healthy_controls()["clean_rebase"])

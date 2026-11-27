@@ -1,15 +1,18 @@
 """Deterministic, fail-closed WEA checker (TB02).
 
 Verdict semantics:
-  - "unknown": required instrumentation, observer fields, or live witnesses are missing
-    (never returns "pass"). Explicit empty observations (`[]` paired with `live_witness: true`)
-    are valid; missing observations (`None` or missing `live_witness`) yield "unknown".
+  - "unknown": required instrumentation, observer fields, live witnesses, or required
+    product-side records (worker result/version hashes, edit attribution/version hashes)
+    are missing (never returns "pass"). Explicit empty observations (`[]` paired with
+    `live_witness: true`) are valid; missing observations (`None` or missing
+    `live_witness`) yield "unknown".
   - "fail": one or more invariant/defect rules fired (including unverified product source
-    witness, empty claimed paths with real disk change, surplus duplicate connections,
-    or mismatched expected bytes), each reported with its exact `rule_id`.
-  - "pass": all required instrumentation and product source witnesses are verified (or an
-    explicit expected `retention_gap` is declared for pruned historical bodies) and every
-    applicable rule passes.
+    witness, empty claimed paths with real disk change, bidirectional connection
+    cardinality mismatch, wrong author, stale read basis, cross-chat grant match,
+    canary leak, or mismatched expected bytes), each reported with its exact `rule_id`.
+  - "pass": all required instrumentation, independent observers, and product source
+    witnesses are complete and verified (or an explicit expected `retention_gap` is
+    declared for pruned historical bodies) and every applicable rule passes.
 """
 
 from __future__ import annotations
@@ -59,17 +62,52 @@ def _check_instrumentation(evidence: dict[str, Any]) -> list[str]:
             if val is None:
                 missing.append(f"missing_instrumentation:observer.{field}")
             elif field == "network_connections":
-                # Explicit empty list is valid ONLY when paired with live_witness=True.
                 nw = obs.get("network_witness")
                 if not isinstance(nw, dict) or nw.get("live_witness") is not True:
                     missing.append("missing_instrumentation:observer.network_witness")
             elif isinstance(val, dict) and not val and not _is_retention_gap(val):
                 missing.append(f"missing_instrumentation:observer.{field}")
             elif isinstance(val, list) and not val:
-                # Empty list in required_observers requires an explicit live witness flag on observer.
                 nw = obs.get("network_witness")
                 if field == "network_fixtures" and (not isinstance(nw, dict) or nw.get("live_witness") is not True):
                     missing.append(f"missing_instrumentation:observer.{field}")
+
+    # Product-side completeness checks: missing required product proofs MUST yield unknown.
+    prod = evidence.get("product_records")
+    if isinstance(prod, dict) and prod:
+        wl = prod.get("worker_landing")
+        if isinstance(wl, dict):
+            if wl.get("result_paths") is None:
+                missing.append("missing_instrumentation:product_records.worker_landing.result_paths")
+            if wl.get("require_complete_proof", False):
+                if not wl.get("job_id"):
+                    missing.append("missing_instrumentation:product_records.worker_landing.job_id")
+                if not wl.get("worker_result_ids"):
+                    missing.append("missing_instrumentation:product_records.worker_landing.worker_result_ids")
+                if not wl.get("disposition_states"):
+                    missing.append("missing_instrumentation:product_records.worker_landing.disposition_states")
+            landed_paths = wl.get("landed_paths")
+            if isinstance(landed_paths, dict):
+                for rel, sha in landed_paths.items():
+                    if not sha:
+                        missing.append(f"missing_instrumentation:product_records.worker_landing.version_hash:{rel}")
+
+        edit_ops = prod.get("edit_operations")
+        if isinstance(edit_ops, list) and edit_ops:
+            attrs = prod.get("attributions")
+            attr_paths = {a.get("path") for a in (attrs or []) if isinstance(a, dict) and a.get("author")}
+            for idx, op in enumerate(edit_ops):
+                if not isinstance(op, dict):
+                    continue
+                rel = op.get("path") or f"op[{idx}]"
+                if not op.get("read_basis_sha256"):
+                    missing.append(f"missing_instrumentation:product_records.edit_operations.read_basis:{rel}")
+                if not op.get("disk_sha256_at_apply"):
+                    missing.append(f"missing_instrumentation:product_records.edit_operations.disk_at_apply:{rel}")
+                if op.get("accepted") is True and not op.get("recorded_after_sha256"):
+                    missing.append(f"missing_instrumentation:product_records.edit_operations.recorded_after:{rel}")
+                if op.get("path") and op.get("path") not in attr_paths:
+                    missing.append(f"missing_instrumentation:product_records.attributions:{rel}")
 
     # Distinguish expected retention_gap on historical bodies from missing required evidence.
     hist = evidence.get("historical_bodies")
@@ -146,17 +184,15 @@ def check_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
         expected_post_hashes = worker_landing.get("expected_post_hashes") or {}
         clean_rebase_expected = worker_landing.get("clean_rebase_expected_sha256") or {}
 
-        # Every path claimed as landed must exist in post primary tree with matching SHA-256.
         for rel, expected_sha in landed_paths.items():
             actual_sha = primary_post.get(rel)
-            if actual_sha is None or (expected_sha and actual_sha != expected_sha):
+            if actual_sha is None or actual_sha != expected_sha:
                 failures.append({
                     "rule_id": "missing_landed_path",
                     "message": f"Claimed landed path '{rel}' is missing or hash-mismatched in post primary tree.",
                     "details": {"path": rel, "expected_sha256": expected_sha, "actual_sha256": actual_sha},
                 })
 
-        # Verify expected post-landing bytes when declared by the control/fixture.
         for rel, expected_sha in expected_post_hashes.items():
             actual_sha = primary_post.get(rel)
             if actual_sha != expected_sha:
@@ -166,7 +202,6 @@ def check_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
                     "details": {"path": rel, "expected_sha256": expected_sha, "actual_sha256": actual_sha},
                 })
 
-        # Verify compatible clean-rebase combined bytes when declared.
         for rel, combined_sha in clean_rebase_expected.items():
             actual_sha = primary_post.get(rel)
             if actual_sha != combined_sha:
@@ -177,7 +212,7 @@ def check_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
                 })
 
         # Every path modified in primary tree (excluding clean-rebase concurrent unrelated edits)
-        # MUST be present in the worker's result_paths — even when result_paths is empty!
+        # MUST be present in the worker's independent result_paths — even when result_paths is empty!
         changed_in_primary = {
             rel for rel, sha in primary_post.items()
             if primary_pre.get(rel) != sha
@@ -207,10 +242,22 @@ def check_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
                 "details": {"path": path, "recorded_author": recorded_author, "expected_author": expected_author},
             })
 
-    # 4. Stale read-basis acceptance & expected edit bytes check (`stale_read_basis_accepted`, `unexpected_post_bytes`)
+    # 4. Stale read-basis, tool completion & expected edit bytes check
     edit_ops = prod.get("edit_operations") or []
     primary_post = obs.get("primary_post_hashes") or {}
     for op in edit_ops:
+        if op.get("read_outcome") is not None and op.get("read_outcome") != "completed":
+            failures.append({
+                "rule_id": "edit_tool_not_completed",
+                "message": f"Read tool for '{op.get('path')}' did not complete: {op.get('read_outcome')}.",
+                "details": op,
+            })
+        if op.get("write_outcome") is not None and op.get("write_outcome") != "completed":
+            failures.append({
+                "rule_id": "edit_tool_not_completed",
+                "message": f"Write tool for '{op.get('path')}' did not complete: {op.get('write_outcome')}.",
+                "details": op,
+            })
         read_basis = op.get("read_basis_sha256")
         current_disk = op.get("disk_sha256_at_apply")
         accepted = op.get("accepted") is True
@@ -228,7 +275,7 @@ def check_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
         recorded_after = op.get("recorded_after_sha256")
         disk_after = primary_post.get(op.get("path"))
         if expected_after:
-            if disk_after != expected_after or (recorded_after and recorded_after != expected_after):
+            if disk_after != expected_after or recorded_after != expected_after:
                 failures.append({
                     "rule_id": "unexpected_post_bytes",
                     "message": f"Post-edit bytes for '{op.get('path')}' do not match expected content SHA-256.",
@@ -257,7 +304,7 @@ def check_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
                 },
             })
 
-    # 6. Network fixture vs. product record check with exact multiset cardinality (`unrecorded_connection`)
+    # 6. Bidirectional multiset connection cardinality (`unrecorded_connection` & `unobserved_product_connection`)
     fixture_conns = obs.get("network_connections")
     recorded_conns = prod.get("recorded_connections") or []
     if isinstance(fixture_conns, list):
@@ -270,7 +317,8 @@ def check_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
             for c in recorded_conns
             if c.get("allowed", True) is True
         )
-        for key, obs_n in sorted(obs_counts.items()):
+        for key in sorted(set(obs_counts) | set(prod_counts)):
+            obs_n = obs_counts.get(key, 0)
             prod_n = prod_counts.get(key, 0)
             if obs_n > prod_n:
                 failures.append({
@@ -285,11 +333,27 @@ def check_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
                         "path": key[2],
                         "observed_count": obs_n,
                         "recorded_count": prod_n,
-                        "surplus_count": obs_n - prod_n,
+                        "surplus_observed": obs_n - prod_n,
+                    },
+                })
+            elif prod_n > obs_n:
+                failures.append({
+                    "rule_id": "unobserved_product_connection",
+                    "message": (
+                        f"Product recorded {prod_n} allowed connection(s) for {key}, "
+                        f"but fixture endpoint observed only {obs_n}."
+                    ),
+                    "details": {
+                        "address": key[0],
+                        "method": key[1],
+                        "path": key[2],
+                        "observed_count": obs_n,
+                        "recorded_count": prod_n,
+                        "surplus_product": prod_n - obs_n,
                     },
                 })
 
-    # 7. Negative-claim / expected refusal check (typed refusal + unchanged host bytes + passing adjacent positive control)
+    # 7. Negative-claim / expected refusal check
     refusal = evidence.get("expected_refusal")
     if isinstance(refusal, dict):
         if not refusal.get("typed_refusal_code"):
@@ -319,7 +383,6 @@ def check_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
                 "details": {"expected_sha256": exp_pos_sha, "actual_sha256": act_pos_sha},
             })
 
-    # Benign timing/presentation annotations (healthy_lag, late_card) are recorded as notes only, never failures.
     if obs.get("lag_ms"):
         notes.append(f"Benign lag observed ({obs['lag_ms']}ms); elapsed time is diagnostic only.")
     if obs.get("late_card_arrived"):
