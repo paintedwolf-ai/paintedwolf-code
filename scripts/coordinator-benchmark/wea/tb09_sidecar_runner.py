@@ -256,6 +256,10 @@ class RecordingOpenAIFixture:
         with self._lock:
             return [r for r in self._records[index:] if "/chat/completions" in r.get("path", "")]
 
+    def all_paths_since(self, index: int) -> list[str]:
+        with self._lock:
+            return [str(r.get("path") or "") for r in self._records[index:]]
+
     def total_count(self) -> int:
         with self._lock:
             return len(self._records)
@@ -549,29 +553,10 @@ def _send_http_request_with_secret_option(
     *,
     timeout_s: float = 45.0,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
-    """Drive the first-class `http_request` tool directly through the sidecar's `outbound_http`
-    owner, approving loopback capability once and answering the real `secret_screen` checkpoint.
+    """Drive `command` with native `curl` (which routes through the `http_request` owner's
+    complete lifecycle: loopback approval + outbound `secret_screen` checkpoint).
     """
     req = _wait_pending(app, session_id)
-    if "http_request" not in (req.get("tools") or ()) and "request_tools" in (req.get("tools") or ()):
-        load_id = str(uuid.uuid4())
-        app.request(
-            "/harness/llm/respond",
-            {"id": req["id"], "tool_calls": [{"id": load_id, "name": "request_tools", "args": {"need": "http_request"}}]},
-        )
-        db_path = app.directory / "store.db"
-        dl = time.monotonic() + 20.0
-        while time.monotonic() < dl:
-            with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
-                row = conn.execute(
-                    "SELECT tool_result_json FROM messages WHERE session_id=? AND tool_result_call_id=?",
-                    (session_id, load_id),
-                ).fetchone()
-            if row:
-                break
-            time.sleep(0.1)
-        req = _wait_pending(app, session_id)
-
     call_id = str(uuid.uuid4())
     app.request(
         "/harness/llm/respond",
@@ -579,13 +564,9 @@ def _send_http_request_with_secret_option(
             "id": req["id"],
             "tool_calls": [{
                 "id": call_id,
-                "name": "http_request",
+                "name": "command",
                 "args": {
-                    "method": "POST",
-                    "url": url,
-                    "headers": [{"name": "Authorization", "value": f"Bearer {canary}"}],
-                    "body": f"token={canary}",
-                    "capability_request": {"loopback_connect": {"ports": [port]}},
+                    "command": f"curl -s -X POST {url} -H 'Authorization: Bearer {canary}' -d 'token={canary}'",
                 },
             }],
         },
@@ -873,55 +854,72 @@ def _run_a10_model_slots(
                     )
 
                 elif spec.option == "host_composed":
-                    # Trigger a real host-composed utility call (project briefing) after placing canary in project.
-                    (proj_dir / "host_composed_note.txt").write_text(f"note={slot_canary}\n", encoding="utf-8")
-                    st_b, b_resp = _api_call(
-                        app_m,
-                        f"/v1/projects/{project_id}/briefings",
-                        {"kind": "overview"},
-                        method="POST",
-                    )
-                    time.sleep(0.5)
-                    recs = primary_ep.chat_records_since(before_p)
-                    if len(recs) == 0:
-                        # Briefing endpoint did not emit a live model request in this fixture -> honestly report unknown.
-                        results[spec.slot_id] = build_slot_receipt(
-                            spec,
-                            provenance=prov,
-                            typed_result={"briefing_status": st_b, "briefing_response": b_resp},
-                            independent_observation={
-                                "live_product_driven": True,
-                                "primary_chat_requests": 0,
-                                "note": "host-composed briefing did not dispatch a live utility model call in this fixture",
-                            },
-                            canary_tokens=canaries.tokens,
-                            verdict="unknown",
-                        )
-                    else:
-                        ok = all(not r["saw_canary"] for r in recs)
-                        results[spec.slot_id] = build_slot_receipt(
-                            spec,
-                            provenance=prov,
-                            typed_result={"briefing_status": st_b},
-                            independent_observation={
-                                "live_product_driven": True,
-                                "primary_chat_requests": len(recs),
-                                "any_saw_canary": any(r["saw_canary"] for r in recs),
-                                "any_saw_redacted_marker": any(r["saw_redacted_marker"] for r in recs),
-                                "requests": recs,
-                            },
-                            canary_tokens=canaries.tokens,
-                            passed=ok,
-                        )
-
-                elif spec.option == "held_no_retry":
-                    # Configure secondary provider in policy and withhold on primary -> 0 sends to both!
+                    # Point `lite` at `tb09-model-secondary` so the host-composed session-title utility
+                    # request dispatches to `secondary_ep` automatically on prompt submission.
                     _api_call(
                         app_m,
                         "/v1/settings/model-policy",
                         {
                             "coordinator": {"provider_id": "tb09-model-primary", "model": "tb09-m1"},
                             "lite": {"provider_id": "tb09-model-secondary", "model": "tb09-m2"},
+                            "agent_pool": {
+                                "selection": "first",
+                                "models": [{"provider_id": "tb09-model-primary", "model": "tb09-m1"}],
+                            },
+                        },
+                        method="PATCH",
+                    )
+                    turn = _drive_model_prompt_with_secret_option(
+                        app_m,
+                        project_id,
+                        f"Host composed title test carrying {slot_canary}.",
+                        "withhold",
+                        expect_secret_card=False,
+                        endpoint=secondary_ep,
+                        endpoint_before=before_s,
+                        timeout_s=20.0,
+                    )
+                    recs_s = secondary_ep.chat_records_since(before_s)
+                    if len(recs_s) == 0:
+                        results[spec.slot_id] = build_slot_receipt(
+                            spec,
+                            provenance=prov,
+                            typed_result={"turn": turn},
+                            independent_observation={
+                                "live_product_driven": True,
+                                "secondary_lite_requests": 0,
+                                "secondary_all_paths": secondary_ep.all_paths_since(before_s),
+                                "note": "host-composed lite utility call did not dispatch within window",
+                            },
+                            canary_tokens=[*canaries.tokens, *a10_probe_canaries.tokens],
+                            verdict="unknown",
+                        )
+                    else:
+                        ok = all(not r["saw_canary"] for r in recs_s)
+                        results[spec.slot_id] = build_slot_receipt(
+                            spec,
+                            provenance=prov,
+                            typed_result={"turn": turn},
+                            independent_observation={
+                                "live_product_driven": True,
+                                "secondary_lite_requests": len(recs_s),
+                                "any_saw_canary": any(r["saw_canary"] for r in recs_s),
+                                "any_saw_redacted_marker": any(r["saw_redacted_marker"] for r in recs_s),
+                                "requests": recs_s,
+                            },
+                            canary_tokens=[*canaries.tokens, *a10_probe_canaries.tokens],
+                            passed=ok,
+                        )
+
+                elif spec.option == "held_no_retry":
+                    # Keep lite on primary so title generation does not hit secondary; put secondary
+                    # only as a fallback pool entry so a withheld coordinator send must produce 0 secondary hits.
+                    _api_call(
+                        app_m,
+                        "/v1/settings/model-policy",
+                        {
+                            "coordinator": {"provider_id": "tb09-model-primary", "model": "tb09-m1"},
+                            "lite": {"provider_id": "tb09-model-primary", "model": "tb09-m1"},
                             "agent_pool": {
                                 "selection": "first",
                                 "models": [
@@ -1347,7 +1345,7 @@ def run_tb09_sidecar_slots(
                         app,
                         sess_a1,
                         "command",
-                        {"command": f"printf 'MODEL_LITERAL=%s\\n' '{literal_val}' > .env"},
+                        {"command": f"printf 'MODEL_LITERAL=%s\\n' '{literal_val}' | tee .env"},
                         checkpoint_policy="approve_once",
                     )
                     _, r_res, _ = _send_tool_call(
