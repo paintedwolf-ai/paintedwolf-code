@@ -267,18 +267,19 @@ class RenderedInputObserver:
         pending_payload: dict[str, Any],
         *,
         presentation_kind: str = "new_model_presentation",
-        session_id: str = "",
+        session_id: str | None = None,
         job_id: str = "",
         handle: str = "",
         invocation_id: str = "",
         occurrence_id: str = "",
         claim_id: str = "",
-        attempt: int = 1,
-        revision: int = 1,
+        attempt: int | None = None,
+        revision: int | None = None,
         event_seq: int | None = None,
         exit_code: int | None = None,
         report: str = "",
         report_readable: bool | None = None,
+        evidence_refs: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         if presentation_kind not in {"new_model_presentation", "history_reread", "sse_reconnect_repaint"}:
             raise ValueError(f"unsupported presentation_kind: {presentation_kind}")
@@ -286,13 +287,16 @@ class RenderedInputObserver:
             self._turn_counter += 1
         serialized = json.dumps(pending_payload, sort_keys=True, ensure_ascii=False)
         digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+        observed_session_id = pending_payload.get("session_id") or ""
+        if session_id is not None:
+            observed_session_id = session_id
         rec = {
-            "event_seq": event_seq if event_seq is not None else len(self.presentations) + 1,
+            "event_seq": event_seq,
             "turn": self._turn_counter,
             "clock_domain": self.clock_domain,
             "presentation_kind": presentation_kind,
             "request_id": pending_payload.get("id") or "",
-            "session_id": session_id or pending_payload.get("session_id") or "",
+            "session_id": observed_session_id,
             "job_id": job_id,
             "handle": handle,
             "invocation_id": invocation_id,
@@ -303,6 +307,7 @@ class RenderedInputObserver:
             "exit_code": exit_code,
             "report": report,
             "report_readable": report_readable if report_readable is not None else bool(report),
+            "evidence_refs": dict(evidence_refs or {}),
             "tools": list(pending_payload.get("tools") or ()),
             "message_count": len(pending_payload.get("messages") or ()),
             "payload_sha256": digest,

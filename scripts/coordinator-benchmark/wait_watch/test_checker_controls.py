@@ -23,10 +23,21 @@ from wait_watch import cli  # noqa: E402
 
 
 class TestCheckerControls(unittest.TestCase):
-    def test_all_eleven_controls_pass(self) -> None:
+    def test_all_thirteen_controls_pass(self) -> None:
         report = run_checker_controls()
         self.assertTrue(report["all_passed"], json.dumps(report, indent=2))
-        self.assertEqual(report["control_count"], 11)
+        self.assertEqual(report["control_count"], 13)
+
+    def test_missing_exit_code_and_missing_report_publication_yield_unknown(self) -> None:
+        controls = build_control_bundles()
+        for name, expected_missing in (
+            ("missing_exit_code_in_rendered_input", "missing_observation:rendered_input.exit_code"),
+            ("release_without_report_publication", "missing_report_publication_after_release"),
+        ):
+            with self.subTest(control=name):
+                got = check_bundle(controls[name]["bundle"])
+                self.assertEqual(got["verdict"], "unknown", json.dumps(got, indent=2))
+                self.assertIn(expected_missing, got["missing_instrumentation"])
 
     def test_five_negative_defects_detected(self) -> None:
         controls = build_control_bundles()
@@ -82,7 +93,7 @@ class TestCheckerControls(unittest.TestCase):
             self.assertTrue(report_path.is_file())
             data = json.loads(report_path.read_text(encoding="utf-8"))
             self.assertTrue(data["all_passed"])
-            self.assertEqual(data["control_count"], 11)
+            self.assertEqual(data["control_count"], 13)
 
 
 if __name__ == "__main__":

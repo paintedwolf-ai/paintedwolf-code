@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -65,9 +66,9 @@ class _FakeApp:
         with sqlite3.connect(self._db_path) as db:
             db.executescript(
                 """
-                CREATE TABLE wait_leases (id TEXT PRIMARY KEY, session_id TEXT, status TEXT);
+                CREATE TABLE wait_leases (id TEXT PRIMARY KEY, session_id TEXT, tool_call_id TEXT, status TEXT);
                 CREATE TABLE watch_registrations (watch_id TEXT PRIMARY KEY, session_id TEXT, state TEXT);
-                CREATE TABLE watch_matches (match_id TEXT PRIMARY KEY, watch_id TEXT, outcome TEXT);
+                CREATE TABLE watch_matches (match_id TEXT PRIMARY KEY, watch_id TEXT, source_occurrence_id TEXT, outcome TEXT);
                 CREATE TABLE watch_deliveries (delivery_id TEXT PRIMARY KEY, session_id TEXT, state TEXT);
                 CREATE TABLE watch_wait_selections (lease_id TEXT, watch_id TEXT);
                 CREATE TABLE watch_session_state (session_id TEXT PRIMARY KEY, next_seq INTEGER);
@@ -76,7 +77,7 @@ class _FakeApp:
                 CREATE TABLE prompt_submissions (id TEXT PRIMARY KEY, session_id TEXT, status TEXT, error_code TEXT, admission_seq INTEGER);
                 CREATE TABLE messages (id TEXT PRIMARY KEY, session_id TEXT, ord INTEGER, role TEXT, tool_result_call_id TEXT, tool_result_json TEXT);
                 CREATE TABLE invocation_receipts (id TEXT PRIMARY KEY, session_id TEXT, tool_call_id TEXT, tool_name TEXT, status TEXT);
-                CREATE TABLE invocation_programs (id TEXT PRIMARY KEY, parent_receipt_id TEXT, session_id TEXT, state TEXT, status_code INTEGER);
+                CREATE TABLE invocation_programs (id TEXT PRIMARY KEY, parent_receipt_id TEXT, session_id TEXT, state TEXT, status_code INTEGER, published_at_ns INTEGER);
                 CREATE TABLE invocation_program_outputs (id TEXT PRIMARY KEY, program_id TEXT, stream TEXT, preview TEXT);
                 """
             )
@@ -101,10 +102,11 @@ class _FakeApp:
         out, _ = proc.communicate(timeout=15)
         self._stdout = out
         self._exit_code = proc.returncode
+        pub_ns = time.time_ns()
         with sqlite3.connect(self._db_path) as db:
             db.execute(
-                "INSERT INTO invocation_programs(id, parent_receipt_id, session_id, state, status_code) VALUES (?, ?, ?, 'completed', ?)",
-                ("prog-1", receipt_id, "sess-fake", proc.returncode),
+                "INSERT INTO invocation_programs(id, parent_receipt_id, session_id, state, status_code, published_at_ns) VALUES (?, ?, ?, 'completed', ?, ?)",
+                ("prog-1", receipt_id, "sess-fake", proc.returncode, pub_ns),
             )
             db.execute(
                 "UPDATE wait_leases SET status='resolved' WHERE session_id='sess-fake' AND status='armed'"
@@ -190,7 +192,7 @@ class _FakeApp:
                 else:
                     self._parked = True
                     with sqlite3.connect(self._db_path) as db:
-                        db.execute("INSERT INTO wait_leases(id, session_id, status) VALUES ('lease-1', 'sess-fake', 'armed')")
+                        db.execute("INSERT INTO wait_leases(id, session_id, tool_call_id, status) VALUES ('lease-1', 'sess-fake', ?, 'armed')", (cid,))
                     self._record_tool_result(
                         cid,
                         {"outcome": "completed", "content": json.dumps({"status": "parked"})},

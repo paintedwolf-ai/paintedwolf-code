@@ -119,6 +119,7 @@ def check_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     ]
 
     defects: list[dict[str, Any]] = []
+    missing_observations: list[str] = []
     expected_outcome = expectations.get("expected_outcome", "delivered")
     owed_recipients = set(expectations.get("owed_recipients") or ())
     owed_occurrences = list(expectations.get("owed_occurrences") or ())
@@ -126,10 +127,21 @@ def check_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     expected_invocation_id = expectations.get("expected_invocation_id")
     expected_revision = expectations.get("expected_revision")
     expected_exit_code = expectations.get("expected_exit_code")
+    expected_handle = expectations.get("expected_handle")
     expected_report_sha256 = expectations.get("expected_report_sha256")
+    source_events = [e for e in (source.get("events") or ()) if isinstance(e, dict)]
+    source_facts = source.get("facts") or {}
     report_published_seq = expectations.get("report_published_seq")
     if report_published_seq is None:
-        report_published_seq = (source.get("facts") or {}).get("report_published_seq")
+        report_published_seq = source_facts.get("report_published_seq")
+    report_published_ts_ns = source_facts.get("report_published_ts_ns")
+    has_barrier_released = any(e.get("kind") == "barrier_released" for e in source_events)
+    has_report_published_event = any(e.get("kind") == "report_published" for e in source_events)
+
+    # If barrier release was observed but report publication was never independently observed,
+    # ordering cannot be established -> unknown (never pass).
+    if has_barrier_released and not has_report_published_event and report_published_seq is None and report_published_ts_ns is None:
+        missing_observations.append("missing_report_publication_after_release")
 
     # 1. Expected refusal control path.
     if expected_outcome == "refused":
@@ -158,6 +170,9 @@ def check_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
         # 2. Check wrong_recipient across all new model presentations.
         if owed_recipients:
             for p in new_presentations:
+                if not p.get("destination_scope") and not p.get("session_id") and not p.get("job_id"):
+                    missing_observations.append("missing_observation:rendered_input.recipient")
+                    continue
                 scope = _normalize_scope(p)
                 if scope not in owed_recipients:
                     defects.append({
@@ -245,20 +260,32 @@ def check_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
             if not is_terminal:
                 continue
             delivery_seq = p.get("event_seq")
-            if (
-                report_published_seq is not None
-                and delivery_seq is not None
-                and delivery_seq < report_published_seq
-            ):
-                defects.append({
-                    "code": "terminal_before_report",
-                    "detail": (
-                        f"terminal delivery event_seq={delivery_seq} preceded "
-                        f"report_published_seq={report_published_seq}"
-                    ),
-                    "presentation_seq": delivery_seq,
-                    "report_published_seq": report_published_seq,
-                })
+            delivery_ts_ns = p.get("captured_at_ns")
+            if report_published_seq is not None and delivery_seq is not None:
+                if delivery_seq < report_published_seq:
+                    defects.append({
+                        "code": "terminal_before_report",
+                        "detail": (
+                            f"terminal delivery event_seq={delivery_seq} preceded "
+                            f"report_published_seq={report_published_seq}"
+                        ),
+                        "presentation_seq": delivery_seq,
+                        "report_published_seq": report_published_seq,
+                    })
+            elif report_published_ts_ns is not None and delivery_ts_ns is not None:
+                if delivery_ts_ns < report_published_ts_ns:
+                    defects.append({
+                        "code": "terminal_before_report",
+                        "detail": (
+                            f"terminal delivery captured_at_ns={delivery_ts_ns} preceded "
+                            f"report_published_ts_ns={report_published_ts_ns}"
+                        ),
+                        "captured_at_ns": delivery_ts_ns,
+                        "report_published_ts_ns": report_published_ts_ns,
+                    })
+            elif expectations.get("require_publication_order", False):
+                missing_observations.append("unorderable_publication_vs_delivery")
+
             if p.get("report_readable") is False:
                 defects.append({
                     "code": "terminal_before_report",
@@ -281,12 +308,26 @@ def check_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
                             "detail": "terminal delivery report digest does not match published report",
                             "presentation_seq": delivery_seq,
                         })
-            if expected_exit_code is not None and p.get("exit_code") is not None and p.get("exit_code") != expected_exit_code:
-                defects.append({
-                    "code": "wrong_attempt",
-                    "detail": f"exit_code {p.get('exit_code')} != expected {expected_exit_code}",
-                    "presentation_seq": delivery_seq,
-                })
+            if expected_handle:
+                observed_handle = p.get("handle")
+                if not observed_handle:
+                    missing_observations.append("missing_observation:rendered_input.handle")
+                elif observed_handle != expected_handle:
+                    defects.append({
+                        "code": "wrong_attempt",
+                        "detail": f"handle {observed_handle!r} != expected {expected_handle!r}",
+                        "presentation_seq": delivery_seq,
+                    })
+            if expected_exit_code is not None:
+                observed_exit = p.get("exit_code")
+                if observed_exit is None:
+                    missing_observations.append("missing_observation:rendered_input.exit_code")
+                elif observed_exit != expected_exit_code:
+                    defects.append({
+                        "code": "wrong_attempt",
+                        "detail": f"exit_code {observed_exit} != expected {expected_exit_code}",
+                        "presentation_seq": delivery_seq,
+                    })
 
     # Check for leaked armed leases if expectations require settled leases.
     if expectations.get("require_zero_armed_leases") and (storage.get("armed_lease_count") or 0) > 0:
@@ -296,15 +337,22 @@ def check_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
         })
 
     defect_codes = list(dict.fromkeys(d["code"] for d in defects))
+    missing_obs_unique = list(dict.fromkeys(missing_observations))
     diagnostics["new_model_presentations"] = len(new_presentations)
     diagnostics["total_rendered_observations"] = len(presentations)
     diagnostics["defect_codes"] = defect_codes
+    if defects:
+        verdict = "fail"
+    elif missing_obs_unique:
+        verdict = "unknown"
+    else:
+        verdict = "pass"
     return {
         "schema_version": SCHEMA_VERSION,
-        "verdict": "fail" if defects else "pass",
+        "verdict": verdict,
         "defects": defects,
         "defect_codes": defect_codes,
-        "missing_instrumentation": [],
+        "missing_instrumentation": missing_obs_unique,
         "diagnostics": diagnostics,
     }
 
@@ -531,14 +579,43 @@ def build_control_bundles() -> dict[str, dict[str, Any]]:
         "kind": "instrumentation",
         "expected_verdict": "unknown",
         "expected_defect": None,
+        "expected_missing": "observer:rendered_input",
         "bundle": missing_inst,
+    }
+
+    # Control: rendered model input omits exit code -> verdict='unknown' (never 'pass')
+    missing_exit = copy.deepcopy(base)
+    missing_exit["observers"]["rendered_input"]["presentations"][0]["exit_code"] = None
+    controls["missing_exit_code_in_rendered_input"] = {
+        "kind": "instrumentation",
+        "expected_verdict": "unknown",
+        "expected_defect": None,
+        "expected_missing": "missing_observation:rendered_input.exit_code",
+        "bundle": missing_exit,
+    }
+
+    # Control: barrier release is observed, but report_published is missing -> verdict='unknown' (never 'pass')
+    release_no_pub = copy.deepcopy(base)
+    release_no_pub["expectations"]["report_published_seq"] = None
+    release_no_pub["observers"]["source"]["facts"]["report_published_seq"] = None
+    release_no_pub["observers"]["source"]["facts"].pop("report_published_ts_ns", None)
+    release_no_pub["observers"]["source"]["events"] = [
+        {"event_seq": 1, "kind": "barrier_reached"},
+        {"event_seq": 2, "kind": "barrier_released"},
+    ]
+    controls["release_without_report_publication"] = {
+        "kind": "instrumentation",
+        "expected_verdict": "unknown",
+        "expected_defect": None,
+        "expected_missing": "missing_report_publication_after_release",
+        "bundle": release_no_pub,
     }
 
     return controls
 
 
 def run_checker_controls() -> dict[str, Any]:
-    """Execute all 11 checker controls and return a structured qualification report."""
+    """Execute all 13 checker controls and return a structured qualification report."""
     controls = build_control_bundles()
     results: dict[str, Any] = {}
     all_passed = True
@@ -546,15 +623,19 @@ def run_checker_controls() -> dict[str, Any]:
         got = check_bundle(spec["bundle"])
         expected_verdict = spec["expected_verdict"]
         expected_defect = spec["expected_defect"]
+        expected_missing = spec.get("expected_missing")
         ok = got["verdict"] == expected_verdict
         if expected_defect is not None:
             ok = ok and (expected_defect in got.get("defect_codes", []))
+        if expected_missing is not None:
+            ok = ok and (expected_missing in got.get("missing_instrumentation", []))
         if not ok:
             all_passed = False
         results[name] = {
             "kind": spec["kind"],
             "expected_verdict": expected_verdict,
             "expected_defect": expected_defect,
+            "expected_missing": expected_missing,
             "actual_verdict": got["verdict"],
             "actual_defect_codes": got.get("defect_codes", []),
             "missing_instrumentation": got.get("missing_instrumentation", []),

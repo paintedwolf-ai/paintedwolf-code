@@ -115,37 +115,202 @@ def _extract_exit_code_from_text(text: str) -> int | None:
     return None
 
 
-def _extract_report_from_pending(pending_payload: dict[str, Any], handle: str) -> tuple[str, int | None]:
-    """Extract the terminal completion report and exit code from the serialized /harness/llm/pending messages."""
+def _extract_handle_from_text(text: str) -> str:
+    m = re.search(r"\bhandle=([^\s,;\]]+)", text)
+    if m:
+        return m.group(1).strip()
+    m2 = re.search(r'"handle"\s*:\s*"([^"]+)"', text)
+    if m2:
+        return m2.group(1).strip()
+    return ""
+
+
+def _extract_report_from_pending(pending_payload: dict[str, Any], expected_handle: str = "") -> tuple[str, int | None, str]:
+    """Extract the terminal completion report, exit code, and handle actually observed in /harness/llm/pending."""
     messages = pending_payload.get("messages") or []
     for msg in reversed(messages):
         content = msg.get("content")
         if not isinstance(content, str):
             continue
-        if handle and handle not in content:
-            continue
+        obs_handle = _extract_handle_from_text(content)
         exit_code = _extract_exit_code_from_text(content)
-        if exit_code is not None or "termination=" in content or "process_done" in content:
-            return content, exit_code
-    return "", None
+        if obs_handle or exit_code is not None or "termination=" in content or "process_done" in content:
+            if expected_handle and not obs_handle and expected_handle in content:
+                obs_handle = expected_handle
+            return content, exit_code, obs_handle
+    return "", None, ""
 
 
-def _extract_report_from_wait_result(wait_result: dict[str, Any], handle: str) -> tuple[str, int | None]:
+def _extract_report_from_wait_result(wait_result: dict[str, Any]) -> tuple[str, int | None, str]:
     payload = parse_content_json(wait_result)
     conditions = payload.get("conditions") or []
     for cond in conditions:
         if not isinstance(cond, dict):
             continue
         handles = cond.get("handles") or []
-        if handle and handles and handle not in handles:
-            continue
+        obs_handle = str(handles[0]) if handles else ""
         report = cond.get("report") or ""
         if report:
-            return str(report), _extract_exit_code_from_text(str(report))
+            if not obs_handle:
+                obs_handle = _extract_handle_from_text(str(report))
+            return str(report), _extract_exit_code_from_text(str(report)), obs_handle
     raw_content = wait_result.get("content") or wait_result.get("result") or ""
-    if isinstance(raw_content, str) and (not handle or handle in raw_content):
-        return raw_content, _extract_exit_code_from_text(raw_content)
-    return "", None
+    if isinstance(raw_content, str) and raw_content.strip():
+        return raw_content, _extract_exit_code_from_text(raw_content), _extract_handle_from_text(raw_content)
+    return "", None, ""
+
+
+def _observe_product_identities(storage_snap: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str], list[str]]:
+    """Correlate actual product-exposed IDs from SQLite records (never fabricate expected IDs)."""
+    tables = storage_snap.get("tables") or {}
+    ids: dict[str, Any] = {
+        "invocation_id": "",
+        "occurrence_id": "",
+        "claim_id": "",
+        "program_id": "",
+        "lease_id": "",
+        "exit_code": None,
+    }
+    refs: dict[str, str] = {}
+    limitations: list[str] = []
+
+    programs = tables.get("invocation_programs") or []
+    if programs:
+        prog = programs[-1]
+        if prog.get("id"):
+            ids["program_id"] = str(prog["id"])
+            refs["program_id"] = f"storage:invocation_programs:{prog['id']}"
+        if isinstance(prog.get("status_code"), int):
+            ids["exit_code"] = prog["status_code"]
+            refs["storage_exit_code"] = f"storage:invocation_programs:{prog.get('id', '')}.status_code"
+
+    leases = tables.get("wait_leases") or []
+    if leases:
+        lease = leases[-1]
+        if lease.get("id"):
+            ids["lease_id"] = str(lease["id"])
+            refs["lease_id"] = f"storage:wait_leases:{lease['id']}"
+        if lease.get("tool_call_id"):
+            ids["invocation_id"] = str(lease["tool_call_id"])
+            refs["invocation_id"] = f"storage:wait_leases:{lease.get('id', '')}.tool_call_id"
+
+    if not ids["invocation_id"]:
+        receipts = [r for r in (tables.get("invocation_receipts") or []) if r.get("tool_name") == "wait"]
+        if receipts and receipts[-1].get("tool_call_id"):
+            ids["invocation_id"] = str(receipts[-1]["tool_call_id"])
+            refs["invocation_id"] = f"storage:invocation_receipts:{receipts[-1].get('id', '')}.tool_call_id"
+
+    matches = tables.get("watch_matches") or []
+    if matches and matches[-1].get("source_occurrence_id"):
+        ids["occurrence_id"] = str(matches[-1]["source_occurrence_id"])
+        refs["occurrence_id"] = f"storage:watch_matches:{matches[-1].get('match_id', '')}.source_occurrence_id"
+    elif ids["program_id"]:
+        # Direct wait(process_done) without a watch registration uses the program record as occurrence anchor.
+        ids["occurrence_id"] = ids["program_id"]
+        refs["occurrence_id"] = f"storage:invocation_programs:{ids['program_id']}"
+    else:
+        limitations.append("product_occurrence_id_not_exposed_in_storage")
+
+    claims = tables.get("watch_presentation_claims") or []
+    if claims and claims[-1].get("claim_id"):
+        ids["claim_id"] = str(claims[-1]["claim_id"])
+        refs["claim_id"] = f"storage:watch_presentation_claims:{claims[-1]['claim_id']}"
+    elif ids["lease_id"]:
+        ids["claim_id"] = ids["lease_id"]
+        refs["claim_id"] = f"storage:wait_leases:{ids['lease_id']}"
+    else:
+        limitations.append("product_claim_id_not_exposed_in_storage")
+
+    return ids, refs, limitations
+
+
+def _parse_rfc3339_ns(val: Any) -> int | None:
+    if isinstance(val, int):
+        return val
+    if not isinstance(val, str) or not val.strip():
+        return None
+    from datetime import datetime, timezone
+    text = val.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(text)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp() * 1_000_000_000)
+    except ValueError:
+        return None
+
+
+def _observe_report_publication(
+    db_path: pathlib.Path,
+    sse_path: pathlib.Path,
+    session_id: str,
+) -> dict[str, Any] | None:
+    """Independently observe owning report publication from storage or SSE (never from barrier release)."""
+    snap = StorageObserver(db_path).snapshot(session_id)
+    tables = snap.get("tables") or {}
+    progs = tables.get("invocation_programs") or []
+    terminal_prog = next(
+        (p for p in reversed(progs) if (p.get("state") in {"completed", "failed", "exited"}) or isinstance(p.get("status_code"), int)),
+        None,
+    )
+    outputs = tables.get("invocation_program_outputs") or []
+    leases = tables.get("wait_leases") or []
+    resolved_lease = next((l for l in reversed(leases) if l.get("status") == "resolved"), None)
+
+    sse_pub_seq: int | None = None
+    sse_pub_type = ""
+    if sse_path.is_file():
+        for idx, line in enumerate(sse_path.read_text(encoding="utf-8", errors="replace").splitlines(), start=1):
+            text = line.strip()
+            if not text:
+                continue
+            try:
+                frame = json.loads(text)
+            except ValueError:
+                continue
+            etype = str(frame.get("type") or frame.get("event") or "")
+            if any(tok in etype.lower() for tok in ("process.finished", "program.finished", "report_published", "wait_lease.resolved", "command.finished")):
+                sse_pub_seq = idx
+                sse_pub_type = etype
+
+    if terminal_prog is None and resolved_lease is None and sse_pub_seq is None:
+        return None
+
+    pub_ts_ns = None
+    evidence_ref = ""
+    if terminal_prog is not None:
+        evidence_ref = f"storage:invocation_programs:{terminal_prog.get('id', '')}"
+        for col in ("published_at_ns", "ended_at", "updated_at", "completed_at", "created_at"):
+            parsed = _parse_rfc3339_ns(terminal_prog.get(col))
+            if parsed is not None:
+                pub_ts_ns = parsed
+                break
+    if resolved_lease is not None:
+        if not evidence_ref:
+            evidence_ref = f"storage:wait_leases:{resolved_lease.get('id', '')}"
+        if pub_ts_ns is None:
+            for col in ("resolved_at", "updated_at"):
+                parsed = _parse_rfc3339_ns(resolved_lease.get(col))
+                if parsed is not None:
+                    pub_ts_ns = parsed
+                    break
+    if sse_pub_seq is not None and not evidence_ref:
+        evidence_ref = f"sse:{sse_pub_type}#{sse_pub_seq}"
+
+    return {
+        "observed": True,
+        "evidence_ref": evidence_ref,
+        "program_id": (terminal_prog or {}).get("id", ""),
+        "program_state": (terminal_prog or {}).get("state", ""),
+        "program_status_code": (terminal_prog or {}).get("status_code"),
+        "output_count": len(outputs),
+        "resolved_lease_id": (resolved_lease or {}).get("id", ""),
+        "sse_event_seq": sse_pub_seq,
+        "sse_event_type": sse_pub_type,
+        "published_at_ns": pub_ts_ns,
+    }
 
 
 class WaitWatchDriver:
@@ -399,9 +564,10 @@ def run_case(
     wait_call_id = ""
     parked_proof: dict[str, Any] = {}
     barrier_error: dict[str, Any] | None = None
-    report_published_seq = 2
-    occurrence_id = f"proc-exit:{case_id}:seed-{seed}"
-    claim_id = f"claim:{case_id}:seed-{seed}"
+    report_pub_fact: dict[str, Any] | None = None
+    report_published_ts_ns: int | None = None
+    instrumentation_gaps: list[str] = []
+    identity_limitations: list[str] = []
 
     try:
         application.ready()
@@ -432,14 +598,21 @@ def run_case(
         source_obs.record_event("barrier_reached", handle=handle, sentinel=reached_info)
 
         if case_id == "c01-fast-exit":
-            # Fast-exit: release gate and confirm exited & report persisted BEFORE calling wait.
+            # Fast-exit: release gate (distinct event from exit/publication).
             rel_info = barrier.release()
             source_obs.record_event("barrier_released", handle=handle, **rel_info)
+
+            # Independently observe process exit & report publication in storage BEFORE calling wait.
             persisted = _confirm_process_persisted_before_wait(
                 app_dir / "store.db", session_id, handle, timeout_s, driver._dump_state
             )
-            pub_ev = source_obs.record_event("report_published", handle=handle, persisted=persisted)
-            report_published_seq = pub_ev["event_seq"]
+            source_obs.record_event("process_exited", handle=handle, persisted=persisted)
+            report_pub_fact = _observe_report_publication(app_dir / "store.db", sse_path, session_id)
+            if report_pub_fact is not None:
+                pub_ev = source_obs.record_event("report_published", handle=handle, **report_pub_fact)
+                report_published_ts_ns = report_pub_fact.get("published_at_ns") or pub_ev["ts_ns"]
+            else:
+                instrumentation_gaps.append("missing_report_publication_after_release")
 
             # Call wait after process already exited.
             wait_call_id, wait_res, wait_parsed = driver.call_wait(
@@ -448,26 +621,45 @@ def run_case(
                 timeout_ms=int(timeout_s * 1000),
                 reason="C01 fast-exit control",
             )
-            report_text, observed_exit = _extract_report_from_wait_result(wait_res, handle)
             # Capture the next pending model turn (which carries the in-turn wait tool result).
             next_req = driver.await_pending("c01-fast-exit:post_wait_pending")
+            report_text, observed_exit, observed_handle = _extract_report_from_pending(next_req, expected_handle=handle)
+            report_ref = "rendered_input:pending.messages"
             if not report_text:
-                report_text, observed_exit = _extract_report_from_pending(next_req, handle)
+                w_report, w_exit, w_handle = _extract_report_from_wait_result(wait_res)
+                if w_report:
+                    report_text = w_report
+                    report_ref = f"tool_result:{wait_call_id}"
+                if observed_exit is None:
+                    observed_exit = w_exit
+                if not observed_handle:
+                    observed_handle = w_handle
+
+            storage_now = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id)
+            prod_ids, prod_refs, prod_lims = _observe_product_identities(storage_now)
+            identity_limitations.extend(prod_lims)
+            ev_refs = {
+                "session_id": "rendered_input:pending.session_id",
+                "report": report_ref,
+                **prod_refs,
+            }
+            if observed_handle:
+                ev_refs["handle"] = report_ref
+            if observed_exit is not None:
+                ev_refs["exit_code"] = report_ref
             rendered_obs.record_pending(
                 next_req,
                 presentation_kind="new_model_presentation",
-                session_id=session_id,
-                handle=handle,
-                invocation_id=wait_call_id,
-                occurrence_id=occurrence_id,
-                claim_id=claim_id,
-                attempt=1,
-                revision=1,
-                event_seq=report_published_seq + 1,
-                exit_code=observed_exit if observed_exit is not None else 17,
+                handle=observed_handle,
+                invocation_id=prod_ids["invocation_id"],
+                occurrence_id=prod_ids["occurrence_id"],
+                claim_id=prod_ids["claim_id"],
+                exit_code=observed_exit,
                 report=report_text,
                 report_readable=bool(report_text),
+                evidence_refs=ev_refs,
             )
+            source_obs.record_event("receipt_delivered", handle=observed_handle, request_id=next_req.get("id", ""))
             driver.finish_turn(next_req, f"Fast exit verified for {handle}.")
 
         elif case_id == "c01-parked-exit":
@@ -490,29 +682,53 @@ def run_case(
             )
             source_obs.record_event("parked_lease_confirmed", handle=handle, proof=parked_proof)
 
-            # Release barrier gate while parked.
+            # Release barrier gate while parked (distinct from process exit and report publication!).
             rel_info = barrier.release()
-            pub_ev = source_obs.record_event("report_published", handle=handle, **rel_info)
-            report_published_seq = pub_ev["event_seq"]
+            source_obs.record_event("barrier_released", handle=handle, **rel_info)
 
             # Wait for resumed /harness/llm/pending carrying the terminal receipt.
             resumed_req = driver.await_pending("c01-parked-exit:resumed_pending")
-            report_text, observed_exit = _extract_report_from_pending(resumed_req, handle)
+            report_text, observed_exit, observed_handle = _extract_report_from_pending(resumed_req, expected_handle=handle)
+
+            # Independently observe process exit & report publication from storage/SSE.
+            storage_now = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id)
+            report_pub_fact = _observe_report_publication(app_dir / "store.db", sse_path, session_id)
+            if report_pub_fact is not None:
+                source_obs.record_event(
+                    "process_exited",
+                    handle=handle,
+                    program_id=report_pub_fact.get("program_id", ""),
+                    status_code=report_pub_fact.get("program_status_code"),
+                )
+                source_obs.record_event("report_published", handle=handle, **report_pub_fact)
+                report_published_ts_ns = report_pub_fact.get("published_at_ns")
+            else:
+                instrumentation_gaps.append("missing_report_publication_after_release")
+
+            prod_ids, prod_refs, prod_lims = _observe_product_identities(storage_now)
+            identity_limitations.extend(prod_lims)
+            ev_refs = {
+                "session_id": "rendered_input:pending.session_id",
+                "report": "rendered_input:pending.messages",
+                **prod_refs,
+            }
+            if observed_handle:
+                ev_refs["handle"] = "rendered_input:pending.messages"
+            if observed_exit is not None:
+                ev_refs["exit_code"] = "rendered_input:pending.messages"
             rendered_obs.record_pending(
                 resumed_req,
                 presentation_kind="new_model_presentation",
-                session_id=session_id,
-                handle=handle,
-                invocation_id=wait_call_id,
-                occurrence_id=occurrence_id,
-                claim_id=claim_id,
-                attempt=1,
-                revision=1,
-                event_seq=report_published_seq + 1,
-                exit_code=observed_exit if observed_exit is not None else 17,
+                handle=observed_handle,
+                invocation_id=prod_ids["invocation_id"],
+                occurrence_id=prod_ids["occurrence_id"],
+                claim_id=prod_ids["claim_id"],
+                exit_code=observed_exit,
                 report=report_text,
                 report_readable=bool(report_text),
+                evidence_refs=ev_refs,
             )
+            source_obs.record_event("receipt_delivered", handle=observed_handle, request_id=resumed_req.get("id", ""))
             driver.finish_turn(resumed_req, f"Parked exit verified for {handle}.")
 
         admission_obs.capture_http(
@@ -533,15 +749,21 @@ def run_case(
     if proc is not None:
         checkpoint_closed_store(app_dir / "store.db", proc)
     admission_obs.load_sse_jsonl(sse_path)
+
+    storage_snap = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id or None)
+    final_prod_ids, final_prod_refs, _ = _observe_product_identities(storage_snap)
     source_facts = {
         **barrier.source_facts(),
-        "report_published_seq": report_published_seq,
+        "report_publication": report_pub_fact,
+        "report_published_ts_ns": report_published_ts_ns,
         "handle": handle,
         "parked_proof": parked_proof,
+        "product_identities": final_prod_ids,
+        "product_identity_refs": final_prod_refs,
+        "identity_limitations": list(dict.fromkeys(identity_limitations)),
     }
     source_obs.set_facts(source_facts)
 
-    storage_snap = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id or None)
     source_snap = source_obs.snapshot()
     admission_snap = admission_obs.snapshot()
     rendered_snap = rendered_obs.snapshot()
@@ -557,13 +779,13 @@ def run_case(
             "session_id": session_id,
             "job_id": "",
             "handle": handle,
-            "invocation_id": wait_call_id or command_call_id,
+            "invocation_id": final_prod_ids.get("invocation_id") or wait_call_id or command_call_id,
             "workspace_id": project_id,
-            "occurrence_id": occurrence_id,
-            "claim_id": claim_id,
+            "occurrence_id": final_prod_ids.get("occurrence_id") or "",
+            "claim_id": final_prod_ids.get("claim_id") or "",
             "turn": rendered_snap.get("new_model_presentation_count", 0),
             "revision": 1,
-            "event_seq": report_published_seq + 1,
+            "event_seq": len(source_obs.events),
             "clock_domain": "system",
         },
     )
@@ -581,6 +803,7 @@ def run_case(
     bundle_path = out_path / "evidence-bundle.json"
     replay_command = f"python3 -m wait_watch.cli --replay {bundle_path} --out <fresh-out-dir>"
 
+    owed_occurrences = [final_prod_ids["occurrence_id"]] if final_prod_ids.get("occurrence_id") else []
     bundle: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "run_id": run_id,
@@ -601,15 +824,15 @@ def run_case(
             "process_barrier": barrier.source_facts(),
             "timeout_abort": barrier_error,
         },
+        "instrumentation_gaps": list(dict.fromkeys(instrumentation_gaps)),
         "expectations": {
             "expected_outcome": "delivered",
             "owed_recipients": [f"session:{session_id}"] if session_id else [],
-            "owed_occurrences": [occurrence_id],
-            "expected_attempt": 1,
+            "owed_occurrences": owed_occurrences,
+            "expected_handle": handle,
             "expected_invocation_id": wait_call_id or command_call_id,
-            "expected_revision": 1,
             "expected_exit_code": 17,
-            "report_published_seq": report_published_seq,
+            "require_publication_order": True,
             "require_zero_armed_leases": True,
         },
         "observers": observers,
