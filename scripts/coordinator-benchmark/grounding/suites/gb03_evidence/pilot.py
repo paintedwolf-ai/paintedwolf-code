@@ -20,20 +20,13 @@ import sys
 import tempfile
 from typing import Any
 
-from grounding.delivery_log import DeliveryLog, LineRange
+from grounding.friction_probe import probe_store_db
 from grounding.generators import generate_v02
-from grounding.reference_resolver import Citation, PermittedScope, resolve_citation
 from grounding.sidecar_driver import (
     IsolatedSidecarProcess,
     ScriptedTurn,
-    read_d10_friction_snapshot,
     run_scripted_session,
 )
-
-
-def _d10_delta(before: dict[str, int], after: dict[str, int]) -> dict[str, int]:
-    keys = sorted(set(before) | set(after))
-    return {k: int(after.get(k, 0)) - int(before.get(k, 0)) for k in keys}
 
 
 def _extract_verdicts_summary(artifact_dict: dict[str, Any]) -> dict[str, Any]:
@@ -94,10 +87,10 @@ def run_gb03_pilot(
         # ------------------------------------------------------------------
         # Slot 1: V01-05-append-only-ordinals
         # ------------------------------------------------------------------
-        s1_before = read_d10_friction_snapshot(sidecar.store_db_path)
         sess1 = client.create_session(pid)
         sid1 = sess1["id"]
         client.wait_session_ready(sid1)
+        s1_before = probe_store_db(sidecar.store_db_path, sid1)
         p1 = client.send_prompt(sid1, "Read first.go then second.go and report line 3 of each.")
         art1 = run_scripted_session(
             client,
@@ -116,7 +109,7 @@ def run_gb03_pilot(
             run_manifest=manifest,
             poll_timeout=60.0,
         )
-        s1_after = read_d10_friction_snapshot(sidecar.store_db_path)
+        s1_after = probe_store_db(sidecar.store_db_path, sid1)
         art1_d = art1.to_dict()
         (out_dir / "V01-05-append-only-ordinals.json").write_text(
             json.dumps(art1_d, indent=2, sort_keys=True), encoding="utf-8"
@@ -132,9 +125,9 @@ def run_gb03_pilot(
             "selector": "V01-05-append-only-ordinals",
             "family_id": "V01",
             "passed": s1_ok,
-            "d10_before": s1_before,
-            "d10_after": s1_after,
-            "d10_delta": _d10_delta(s1_before, s1_after),
+            "d10_before": s1_before.to_dict(),
+            "d10_after": s1_after.to_dict(),
+            "d10_delta": s1_after.delta_observed(s1_before),
             "summary": _extract_verdicts_summary(art1_d),
         })
         if not s1_ok:
@@ -147,10 +140,10 @@ def run_gb03_pilot(
         # ------------------------------------------------------------------
         # Slot 2: V01-07-command-error-outcome-receipt
         # ------------------------------------------------------------------
-        s2_before = read_d10_friction_snapshot(sidecar.store_db_path)
         sess2 = client.create_session(pid)
         sid2 = sess2["id"]
         client.wait_session_ready(sid2)
+        s2_before = probe_store_db(sidecar.store_db_path, sid2)
         p2 = client.send_prompt(sid2, "Run failing command and report outcome.")
         unsup_err_reply = 'Verified failure at [command#1] and fabricated pass [command#1 "ALL TESTS PASSED"].'
         art2 = run_scripted_session(
@@ -170,7 +163,7 @@ def run_gb03_pilot(
             run_manifest=manifest,
             poll_timeout=60.0,
         )
-        s2_after = read_d10_friction_snapshot(sidecar.store_db_path)
+        s2_after = probe_store_db(sidecar.store_db_path, sid2)
         art2_d = art2.to_dict()
         (out_dir / "V01-07-command-error-outcome-receipt.json").write_text(
             json.dumps(art2_d, indent=2, sort_keys=True), encoding="utf-8"
@@ -181,9 +174,9 @@ def run_gb03_pilot(
             "selector": "V01-07-command-error-outcome-receipt",
             "family_id": "V01",
             "passed": s2_ok,
-            "d10_before": s2_before,
-            "d10_after": s2_after,
-            "d10_delta": _d10_delta(s2_before, s2_after),
+            "d10_before": s2_before.to_dict(),
+            "d10_after": s2_after.to_dict(),
+            "d10_delta": s2_after.delta_observed(s2_before),
             "summary": _extract_verdicts_summary(art2_d),
         })
         if not s2_ok:
@@ -196,10 +189,10 @@ def run_gb03_pilot(
         # ------------------------------------------------------------------
         # Slot 3: V02-lookalike-20261127-0
         # ------------------------------------------------------------------
-        s3_before = read_d10_friction_snapshot(sidecar.store_db_path)
         sess3 = client.create_session(pid)
         sid3 = sess3["id"]
         client.wait_session_ready(sid3)
+        s3_before = probe_store_db(sidecar.store_db_path, sid3)
         p3 = client.send_prompt(sid3, "Inspect lookalike.txt.")
         art3 = run_scripted_session(
             client,
@@ -218,7 +211,7 @@ def run_gb03_pilot(
             run_manifest=manifest,
             poll_timeout=60.0,
         )
-        s3_after = read_d10_friction_snapshot(sidecar.store_db_path)
+        s3_after = probe_store_db(sidecar.store_db_path, sid3)
         art3_d = art3.to_dict()
         (out_dir / "V02-lookalike-20261127-0.json").write_text(
             json.dumps(art3_d, indent=2, sort_keys=True), encoding="utf-8"
@@ -230,9 +223,9 @@ def run_gb03_pilot(
             "family_id": "V02",
             "seed": v02_case.seed.to_dict(),
             "passed": s3_ok,
-            "d10_before": s3_before,
-            "d10_after": s3_after,
-            "d10_delta": _d10_delta(s3_before, s3_after),
+            "d10_before": s3_before.to_dict(),
+            "d10_after": s3_after.to_dict(),
+            "d10_delta": s3_after.delta_observed(s3_before),
             "summary": _extract_verdicts_summary(art3_d),
         })
         if not s3_ok:
@@ -245,10 +238,10 @@ def run_gb03_pilot(
         # ------------------------------------------------------------------
         # Slot 4: V04-10-copied-second-file-tag (GB01-F3 independent replay)
         # ------------------------------------------------------------------
-        s4_before = read_d10_friction_snapshot(sidecar.store_db_path)
         sess4 = client.create_session(pid)
         sid4 = sess4["id"]
         client.wait_session_ready(sid4)
+        s4_before = probe_store_db(sidecar.store_db_path, sid4)
         p4 = client.send_prompt(sid4, "Read first.go and second.go with cat -n and cite second.go.")
         art4 = run_scripted_session(
             client,
@@ -267,7 +260,7 @@ def run_gb03_pilot(
             run_manifest=manifest,
             poll_timeout=60.0,
         )
-        s4_after = read_d10_friction_snapshot(sidecar.store_db_path)
+        s4_after = probe_store_db(sidecar.store_db_path, sid4)
         art4_d = art4.to_dict()
         (out_dir / "V04-10-copied-second-file-tag.json").write_text(
             json.dumps(art4_d, indent=2, sort_keys=True), encoding="utf-8"
@@ -276,15 +269,16 @@ def run_gb03_pilot(
         # then verified excerpt settles cleanly. Record as explicit D1 divergence!
         s4_refused_copied_tag = len(art4.refusals) >= 1
         s4_recovered_excerpt = len(art4.cited_evidence) >= 1
+        s4_delta = s4_after.delta_observed(s4_before)
         slots_report.append({
             "selector": "V04-10-copied-second-file-tag",
             "family_id": "V04",
             "passed": not s4_refused_copied_tag,
             "reproduced_gb01_f3_false_reject": s4_refused_copied_tag,
             "recovered_via_verified_excerpt": s4_recovered_excerpt,
-            "d10_before": s4_before,
-            "d10_after": s4_after,
-            "d10_delta": _d10_delta(s4_before, s4_after),
+            "d10_before": s4_before.to_dict(),
+            "d10_after": s4_after.to_dict(),
+            "d10_delta": s4_delta,
             "summary": _extract_verdicts_summary(art4_d),
         })
         if s4_refused_copied_tag:
@@ -294,7 +288,7 @@ def run_gb03_pilot(
                 "finding_ref": "GB01-F3",
                 "detail": (
                     "D1 refused exact copied host coverage tag [read#2 second.go:1-3] "
-                    f"({len(art4.refusals)} refusal(s), d10_delta={_d10_delta(s4_before, s4_after)}), "
+                    f"({len(art4.refusals)} refusal(s), d10_delta={s4_delta}), "
                     f"then verified-excerpt recovery settled={s4_recovered_excerpt}."
                 ),
             })
