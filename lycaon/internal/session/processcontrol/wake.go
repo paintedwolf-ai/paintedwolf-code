@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/observability/watchdiag"
 	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -98,6 +99,7 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 		RecordedAt:  publishedAt,
 		ReferenceAt: completion.FinishedAt.UTC(),
 	})
+	observeProcessReportDelivery(completion.SessionID, handle, occID, completion.ToolCallID, publishedAt)
 	env := anchor.Envelope{
 		Subject:                 handle,
 		CommandCompletionDigest: digest,
@@ -145,6 +147,40 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 		}
 		m.Guidance.Emit(ctx, completion.SessionID, anchor.ProcessFinished, env)
 	}
+}
+
+func observeProcessReportDelivery(sessionID, handle, occID, evidenceRef string, publishedAt time.Time) {
+	if !watchdiag.Enabled() {
+		return
+	}
+	watchdiag.Observe(watchdiag.Observation{
+		SessionID:   sessionID,
+		Handle:      handle,
+		ClockDomain: watchdiag.ClockDomainSystem,
+		OwningSource: watchdiag.OwningSource{
+			Component:   "processcontrol",
+			Phase:       watchdiag.PhaseProcessReportPublished,
+			ClockDomain: watchdiag.ClockDomainSystem,
+			EvidenceRef: evidenceRef,
+		},
+		PublicationPhases: []watchdiag.PublicationPhaseFact{
+			{
+				SessionID:    sessionID,
+				Handle:       handle,
+				OccurrenceID: occID,
+				Phase:        watchdiag.PhaseProcessReportPublished,
+				RecordedAt:   publishedAt,
+				ClockDomain:  watchdiag.ClockDomainSystem,
+				OwningSource: watchdiag.OwningSource{
+					Component:   "processcontrol",
+					Phase:       watchdiag.PhaseProcessReportPublished,
+					ClockDomain: watchdiag.ClockDomainSystem,
+					EvidenceRef: evidenceRef,
+				},
+				EvidenceRef: evidenceRef,
+			},
+		},
+	})
 }
 
 func (m *Service) claimDirectProcessWait(ctx context.Context, sessionID, occID, handle string, fact watch.ProcessCompletionFact) {
