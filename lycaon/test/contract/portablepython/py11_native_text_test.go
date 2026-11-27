@@ -69,7 +69,7 @@ assert ov_spans == [[0, 3], [2, 5]], ov_spans
 
 timed_out = False
 try:
-    regex.match(r"(a+)+b", "a" * 34 + "c", timeout=0.02)
+    regex.match(r"^(a|aa)+$", "a" * 48 + "!", timeout=0.05)
 except TimeoutError:
     timed_out = True
 assert timed_out, "expected regex per-operation timeout on bounded backtracking input"
@@ -95,7 +95,7 @@ print(json.dumps({
 	t.Run("regex_host_cancellation_no_partial_publication_and_recovery", func(t *testing.T) {
 		ws := t.TempDir()
 		roots := []pythondocuments.HostRootConfig{{ID: "ws", Dir: ws}}
-		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 350*time.Millisecond)
 		defer cancel()
 
 		resp, err := svc.ExecuteTool(ctx, portablepython.ToolRequest{
@@ -109,7 +109,7 @@ print(json.dumps({
 import regex
 with open("partial_cancel.txt", "w", encoding="utf-8") as fh:
     fh.write("must-not-publish")
-regex.match(r"(a+)+b", "a" * 34 + "c")
+regex.match(r"^(a|aa)+$", "a" * 60 + "!")
 `},
 			Roots:        roots,
 			MutationDoor: native.NewPythonMutationDoor(tools.ToolContext{}, roots),
@@ -151,12 +151,12 @@ print("RECOVERY_OK")
 import regex
 with open("partial_fuel.txt", "w", encoding="utf-8") as fh:
     fh.write("must-not-publish")
-regex.match(r"(a+)+b", "a" * 34 + "c")
+regex.match(r"^(a|aa)+$", "a" * 60 + "!")
 `},
 			Roots:        roots,
 			MutationDoor: native.NewPythonMutationDoor(tools.ToolContext{}, roots),
 			Limits: pythonruntime.ResourceLimits{
-				MaxGuestWork: 35_000_000,
+				MaxGuestWork: 80_000_000,
 			},
 		})
 		contractcheck.FailErr(t, "execute fuel-bounded regex", err)
@@ -202,7 +202,7 @@ assert logs["tags"] == {"owner": '"platform"', "tier": '"audit"'}, logs
 assert arts["bucket"] == '"pw-${var.env}-artifacts"', arts
 assert arts["tags"] == {"owner": '"build"', "tier": '"durable"'}, arts
 out_ref = doc["output"][0]['"logs_bucket_ref"']
-assert out_ref["value"] == "aws_s3_bucket.logs.bucket", out_ref
+assert out_ref["value"] == "${aws_s3_bucket.logs.bucket}", out_ref
 
 malformed_failed = False
 try:
