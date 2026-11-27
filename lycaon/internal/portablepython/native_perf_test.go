@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/portablepython"
 	"github.com/lycaon/lycaon/internal/pythondocuments"
+	"github.com/lycaon/lycaon/internal/pythonruntime"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
@@ -34,24 +36,25 @@ type workbookPhaseTiming struct {
 }
 
 type workbookCallRecord struct {
-	Kind                   string              `json:"kind"` // "cold" or "warm"
-	Index                  int                 `json:"index"`
-	ServiceInitMs          float64             `json:"service_init_ms,omitempty"`
-	LaunchToFirstResultMs  float64             `json:"launch_to_first_result_ms,omitempty"`
-	ToolLatencyMs          float64             `json:"tool_latency_ms"`
-	RuntimeDurationMs      float64             `json:"runtime_duration_ms"`
-	Phases                 workbookPhaseTiming `json:"phases"`
-	GuestWork              uint64              `json:"guest_work"`
-	HostWork               uint64              `json:"host_work"`
-	PeakMemoryPages        uint32              `json:"peak_memory_pages"`
-	PeakMemoryBytes        uint64              `json:"peak_memory_bytes"`
-	StdoutBytes            int64               `json:"stdout_bytes"`
-	StderrBytes            int64               `json:"stderr_bytes"`
-	StagedBytes            int64               `json:"staged_bytes"`
-	WorkbookBytes          int64               `json:"workbook_bytes"`
-	WorkbookSHA256         string              `json:"workbook_sha256"`
-	CleanCompletion        bool                `json:"clean_completion"`
-	ExitCode               int                 `json:"exit_code"`
+	Kind                  string              `json:"kind"` // "cold" or "warm"
+	Index                 int                 `json:"index"`
+	Backend               string              `json:"backend"`
+	ServiceInitMs         float64             `json:"service_init_ms,omitempty"`
+	LaunchToFirstResultMs float64             `json:"launch_to_first_result_ms,omitempty"`
+	ToolLatencyMs         float64             `json:"tool_latency_ms"`
+	RuntimeDurationMs     float64             `json:"runtime_duration_ms"`
+	Phases                workbookPhaseTiming `json:"phases"`
+	GuestWork             uint64              `json:"guest_work"`
+	HostWork              uint64              `json:"host_work"`
+	PeakMemoryPages       uint32              `json:"peak_memory_pages"`
+	PeakMemoryBytes       uint64              `json:"peak_memory_bytes"`
+	StdoutBytes           int64               `json:"stdout_bytes"`
+	StderrBytes           int64               `json:"stderr_bytes"`
+	StagedBytes           int64               `json:"staged_bytes"`
+	WorkbookBytes         int64               `json:"workbook_bytes"`
+	WorkbookSHA256        string              `json:"workbook_sha256"`
+	CleanCompletion       bool                `json:"clean_completion"`
+	ExitCode              int                 `json:"exit_code"`
 }
 
 type phaseMedians struct {
@@ -76,36 +79,40 @@ type workbookBenchSummary struct {
 }
 
 type workbookBenchReceipt struct {
-	SchemaVersion      string               `json:"schema_version"`
-	RecordedAt         string               `json:"recorded_at"`
-	ConfigLabel        string               `json:"config_label"`
-	Platform           string               `json:"platform"`
-	GOOS               string               `json:"goos"`
-	GOARCH             string               `json:"goarch"`
-	GoVersion          string               `json:"go_version"`
-	Revision           string               `json:"revision"`
-	SelectedBackend    string               `json:"selected_backend"`
-	ImageVariant       string               `json:"image_variant"`
-	ImageDir           string               `json:"image_dir"`
-	ImageOverrideUnset bool                 `json:"image_override_unset"`
-	ImageID            string               `json:"image_id"`
-	InterpreterVersion string               `json:"interpreter_version"`
-	WasmSHA256         string               `json:"wasm_sha256"`
-	StdlibSHA256       string               `json:"stdlib_sha256"`
-	ManifestSHA256     string               `json:"manifest_sha256"`
-	Toolchain          string               `json:"toolchain"`
-	SigningFlags       string               `json:"signing_flags"`
-	HostLoadBefore     string               `json:"host_load_before"`
-	CPUInfo            string               `json:"cpu_info"`
-	BinaryPath         string               `json:"binary_path,omitempty"`
-	BinarySizeBytes    int64                `json:"binary_size_bytes,omitempty"`
-	BinarySHA256       string               `json:"binary_sha256,omitempty"`
-	EngineArtifactPath string               `json:"engine_artifact_path,omitempty"`
-	EngineSizeBytes    int64                `json:"engine_size_bytes,omitempty"`
-	EngineSHA256       string               `json:"engine_sha256,omitempty"`
-	ColdRuns           []workbookCallRecord `json:"cold_runs"`
-	WarmRuns           []workbookCallRecord `json:"warm_runs"`
-	Summary            workbookBenchSummary `json:"summary"`
+	SchemaVersion      string                              `json:"schema_version"`
+	RecordedAt         string                              `json:"recorded_at"`
+	ConfigLabel        string                              `json:"config_label"`
+	Platform           string                              `json:"platform"`
+	GOOS               string                              `json:"goos"`
+	GOARCH             string                              `json:"goarch"`
+	GoVersion          string                              `json:"go_version"`
+	Revision           string                              `json:"revision"`
+	RequestedBackend   string                              `json:"requested_backend"`
+	DefaultBackendUsed bool                                `json:"default_backend_used"`
+	SelectedBackend    string                              `json:"selected_backend"`
+	NativeEngine       *pythonruntime.NativeEngineIdentity `json:"native_engine,omitempty"`
+	ImageVariant       string                              `json:"image_variant"`
+	ImageDir           string                              `json:"image_dir"`
+	ImageSizeBytes     int64                               `json:"image_size_bytes"`
+	ImageOverrideUnset bool                                `json:"image_override_unset"`
+	ImageID            string                              `json:"image_id"`
+	InterpreterVersion string                              `json:"interpreter_version"`
+	WasmSHA256         string                              `json:"wasm_sha256"`
+	StdlibSHA256       string                              `json:"stdlib_sha256"`
+	ManifestSHA256     string                              `json:"manifest_sha256"`
+	Toolchain          string                              `json:"toolchain"`
+	SigningFlags       string                              `json:"signing_flags"`
+	HostLoadBefore     string                              `json:"host_load_before"`
+	CPUInfo            string                              `json:"cpu_info"`
+	BinaryPath         string                              `json:"binary_path,omitempty"`
+	BinarySizeBytes    int64                               `json:"binary_size_bytes,omitempty"`
+	BinarySHA256       string                              `json:"binary_sha256,omitempty"`
+	EngineArtifactPath string                              `json:"engine_artifact_path,omitempty"`
+	EngineSizeBytes    int64                               `json:"engine_size_bytes,omitempty"`
+	EngineSHA256       string                              `json:"engine_sha256,omitempty"`
+	ColdRuns           []workbookCallRecord                `json:"cold_runs"`
+	WarmRuns           []workbookCallRecord                `json:"warm_runs"`
+	Summary            workbookBenchSummary                `json:"summary"`
 }
 
 func envIntOrDefault(key string, def int) int {
@@ -130,6 +137,45 @@ func fileDigestAndSize(path string) (string, int64) {
 	}
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:]), int64(len(b))
+}
+
+func dirTotalSizeBytes(root string) int64 {
+	if strings.TrimSpace(root) == "" {
+		return 0
+	}
+	var total int64
+	_ = filepath.WalkDir(root, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if info, err := d.Info(); err == nil {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
+}
+
+func parseRequestedBackend(raw string) (pythonruntime.BackendKind, error) {
+	v := strings.TrimSpace(raw)
+	switch v {
+	case "", "default":
+		// Empty BackendKind exercises the production default backend route.
+		return "", nil
+	case "wazero-control":
+		if runtime.GOOS == "darwin" {
+			return pythonruntime.BackendWazeroInterpreter, nil
+		}
+		return pythonruntime.BackendWazeroCompiler, nil
+	case string(pythonruntime.BackendNativeAOT):
+		return pythonruntime.BackendNativeAOT, nil
+	case string(pythonruntime.BackendWazeroCompiler):
+		return pythonruntime.BackendWazeroCompiler, nil
+	case string(pythonruntime.BackendWazeroInterpreter):
+		return pythonruntime.BackendWazeroInterpreter, nil
+	default:
+		return "", fmt.Errorf("unsupported PW_PERF_BACKEND=%q", raw)
+	}
 }
 
 func parseWorkbookPhases(stdout string) (workbookPhaseTiming, error) {
@@ -232,6 +278,7 @@ func verifySettledWorkbook(t *testing.T, path string) (int64, string) {
 func runSingleWorkbookCall(
 	t *testing.T,
 	svc *portablepython.Service,
+	expectedBackend pythonruntime.BackendKind,
 	script string,
 	yamlBytes []byte,
 	kind string,
@@ -265,6 +312,9 @@ func runSingleWorkbookCall(
 	if !resp.CleanCompletion || resp.ExitCode != 0 {
 		t.Fatalf("%s run %d did not complete cleanly: exit=%d stop=%+v stderr=%s", kind, idx, resp.ExitCode, resp.Stop, resp.Stderr)
 	}
+	if resp.Backend != "" && resp.Backend != expectedBackend {
+		t.Fatalf("%s run %d backend mismatch: got %q want %q", kind, idx, resp.Backend, expectedBackend)
+	}
 	phases, err := parseWorkbookPhases(resp.Stdout)
 	if err != nil {
 		t.Fatalf("%s run %d parse phases: %v\nstdout:\n%s", kind, idx, err, resp.Stdout)
@@ -274,6 +324,7 @@ func runSingleWorkbookCall(
 	rec := workbookCallRecord{
 		Kind:              kind,
 		Index:             idx,
+		Backend:           string(expectedBackend),
 		ToolLatencyMs:     elapsedMs,
 		RuntimeDurationMs: math.Round(float64(resp.Usage.Duration.Microseconds())/1000.0*1000.0) / 1000.0,
 		Phases:            phases,
@@ -293,8 +344,8 @@ func runSingleWorkbookCall(
 		rec.ServiceInitMs = serviceInitMs
 		rec.LaunchToFirstResultMs = math.Round((serviceInitMs+elapsedMs)*1000.0) / 1000.0
 	}
-	t.Logf("[%s #%d] init=%.1fms tool=%.1fms launch_to_first=%.1fms | yaml_imp=%.1fms openpyxl_imp=%.1fms parse=%.1fms build_save=%.1fms reopen=%.1fms | guest_work=%d host_work=%d peak_pages=%d",
-		kind, idx, rec.ServiceInitMs, rec.ToolLatencyMs, rec.LaunchToFirstResultMs,
+	t.Logf("[%s #%d backend=%s] init=%.1fms tool=%.1fms launch_to_first=%.1fms | yaml_imp=%.1fms openpyxl_imp=%.1fms parse=%.1fms build_save=%.1fms reopen=%.1fms | guest_work=%d host_work=%d peak_pages=%d",
+		kind, idx, rec.Backend, rec.ServiceInitMs, rec.ToolLatencyMs, rec.LaunchToFirstResultMs,
 		phases.YAMLImportMs, phases.OpenpyxlImportMs, phases.YAMLParseMs,
 		phases.WorkbookBuildSaveMs, phases.WorkbookReopenVerifyMs,
 		rec.GuestWork, rec.HostWork, rec.PeakMemoryPages)
@@ -305,7 +356,6 @@ func resolveFixturePath(envKey, relFromRepo string) (string, error) {
 	if p := strings.TrimSpace(os.Getenv(envKey)); p != "" {
 		return p, nil
 	}
-	// Walk upward from cwd to locate scripts/portable-python-qual/bench/fixtures/...
 	dir, err := os.Getwd()
 	if err != nil {
 		return "", err
@@ -324,19 +374,13 @@ func resolveFixturePath(envKey, relFromRepo string) (string, error) {
 	return "", fmt.Errorf("could not locate %s (set %s)", relFromRepo, envKey)
 }
 
-func defaultBackendLabel() string {
-	if b := strings.TrimSpace(os.Getenv("PW_PERF_BACKEND")); b != "" {
-		return b
-	}
-	if runtime.GOOS == "darwin" {
-		return "wazero-interpreter"
-	}
-	return "wazero-compiler"
-}
-
 // TestPY06NativePerfWorkbookMatrix runs the PY06 idle-host benchmark matrix:
 // 5 cold calls (each from a freshly constructed Service) followed by 5 warm
 // calls (5 fresh guests on a warm Service), writing structured JSON receipts.
+// Supports all 4 configurations:
+//   - PW_PERF_BACKEND=wazero-control (or wazero-interpreter / wazero-compiler)
+//   - PW_PERF_BACKEND="" / "default" (proves default route selects native-aot)
+//   - PW_PERF_BACKEND=native-aot
 // Guarded by PW_PERF_RUN=1 so standard go test ./... is unaffected.
 func TestPY06NativePerfWorkbookMatrix(t *testing.T) {
 	if strings.TrimSpace(os.Getenv("PW_PERF_RUN")) != "1" {
@@ -360,27 +404,44 @@ func TestPY06NativePerfWorkbookMatrix(t *testing.T) {
 		t.Fatalf("read repos.yaml: %v", err)
 	}
 
+	rawBackend := strings.TrimSpace(os.Getenv("PW_PERF_BACKEND"))
+	reqBackend, err := parseRequestedBackend(rawBackend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defaultBackendUsed := reqBackend == ""
+
 	coldCount := envIntOrDefault("PW_PERF_COLD_RUNS", 5)
 	warmCount := envIntOrDefault("PW_PERF_WARM_RUNS", 5)
 	explicitImageDir := strings.TrimSpace(os.Getenv("PW_PERF_IMAGE_DIR"))
+	explicitEngineDir := strings.TrimSpace(os.Getenv("PW_PERF_ENGINE_DIR"))
 	imageOverrideUnset := strings.TrimSpace(os.Getenv(portablepython.EnvImageDir)) == "" && explicitImageDir == ""
 
 	var coldRuns []workbookCallRecord
 	var warmService *portablepython.Service
 	var resolvedImageDir string
 	var imageID, interpVersion, wasmSHA, stdlibSHA, manifestSHA string
+	var rtInfo pythonruntime.RuntimeInfo
 
 	for i := 1; i <= coldCount; i++ {
 		initStart := time.Now()
 		svc, err := portablepython.NewService(context.Background(), portablepython.ServiceConfig{
 			ImageDir:    explicitImageDir,
+			Backend:     reqBackend,
+			EngineDir:   explicitEngineDir,
 			ScratchRoot: t.TempDir(),
 		})
 		initMs := math.Round(float64(time.Since(initStart).Microseconds())/1000.0*1000.0) / 1000.0
 		if err != nil {
-			t.Fatalf("cold run %d NewService failed: %v", i, err)
+			t.Fatalf("cold run %d NewService(backend=%q) failed: %v", i, reqBackend, err)
+		}
+		info := svc.RuntimeInfo()
+		if defaultBackendUsed && info.Backend != pythonruntime.BackendNativeAOT {
+			_ = svc.Close(context.Background())
+			t.Fatalf("default backend route expected %q on %s/%s, got %q", pythonruntime.BackendNativeAOT, runtime.GOOS, runtime.GOARCH, info.Backend)
 		}
 		if i == 1 {
+			rtInfo = info
 			resolvedImageDir = svc.ImageDir()
 			if m := svc.RuntimeManifest(); m != nil {
 				imageID = m.ImageID
@@ -391,11 +452,10 @@ func TestPY06NativePerfWorkbookMatrix(t *testing.T) {
 			manifestSHA, _ = fileDigestAndSize(filepath.Join(resolvedImageDir, "image-manifest.json"))
 		}
 
-		rec := runSingleWorkbookCall(t, svc, string(scriptBytes), yamlBytes, "cold", i, initMs)
+		rec := runSingleWorkbookCall(t, svc, info.Backend, string(scriptBytes), yamlBytes, "cold", i, initMs)
 		coldRuns = append(coldRuns, rec)
 
 		if i == coldCount {
-			// Retain the final freshly warmed Service for the warm-guest series.
 			warmService = svc
 		} else {
 			_ = svc.Close(context.Background())
@@ -409,11 +469,10 @@ func TestPY06NativePerfWorkbookMatrix(t *testing.T) {
 
 	var warmRuns []workbookCallRecord
 	for i := 1; i <= warmCount; i++ {
-		rec := runSingleWorkbookCall(t, warmService, string(scriptBytes), yamlBytes, "warm", i, 0)
+		rec := runSingleWorkbookCall(t, warmService, rtInfo.Backend, string(scriptBytes), yamlBytes, "warm", i, 0)
 		warmRuns = append(warmRuns, rec)
 	}
 
-	// Compute summary medians.
 	var coldInits, coldLaunches, coldLatencies, warmLatencies []float64
 	var warmGuestWork, warmHostWork, warmPeakPages, warmPeakBytes []uint64
 	for _, r := range coldRuns {
@@ -451,7 +510,13 @@ func TestPY06NativePerfWorkbookMatrix(t *testing.T) {
 	binSHA, binSize := fileDigestAndSize(binPath)
 
 	enginePath := strings.TrimSpace(os.Getenv("PW_PERF_ENGINE_ARTIFACT_PATH"))
+	if enginePath == "" && rtInfo.NativeEngine != nil && strings.TrimSpace(rtInfo.NativeEngine.LibraryPath) != "" {
+		enginePath = rtInfo.NativeEngine.LibraryPath
+	}
 	engineSHA, engineSize := fileDigestAndSize(enginePath)
+	if engineSHA == "" && rtInfo.NativeEngine != nil {
+		engineSHA = rtInfo.NativeEngine.LibrarySHA256
+	}
 
 	receipt := workbookBenchReceipt{
 		SchemaVersion:      "portable-python.py06-perf/v1",
@@ -462,9 +527,13 @@ func TestPY06NativePerfWorkbookMatrix(t *testing.T) {
 		GOARCH:             runtime.GOARCH,
 		GoVersion:          runtime.Version(),
 		Revision:           strings.TrimSpace(os.Getenv("PW_PERF_REVISION")),
-		SelectedBackend:    defaultBackendLabel(),
+		RequestedBackend:   rawBackend,
+		DefaultBackendUsed: defaultBackendUsed,
+		SelectedBackend:    string(rtInfo.Backend),
+		NativeEngine:       rtInfo.NativeEngine,
 		ImageVariant:       strings.TrimSpace(os.Getenv("PW_PERF_IMAGE_VARIANT")),
 		ImageDir:           resolvedImageDir,
+		ImageSizeBytes:     dirTotalSizeBytes(resolvedImageDir),
 		ImageOverrideUnset: imageOverrideUnset,
 		ImageID:            imageID,
 		InterpreterVersion: interpVersion,
@@ -502,8 +571,8 @@ func TestPY06NativePerfWorkbookMatrix(t *testing.T) {
 		t.Logf("wrote JSON receipt to %s", outPath)
 	}
 
-	fmt.Printf("PY06_PERF_SUMMARY config=%s backend=%s variant=%s cold_init_med=%.1fms cold_launch_med=%.1fms cold_tool_med=%.1fms warm_tool_med=%.1fms guest_work=%d host_work=%d peak_pages=%d\n",
-		receipt.ConfigLabel, receipt.SelectedBackend, receipt.ImageVariant,
+	fmt.Printf("PY06_PERF_SUMMARY config=%s backend=%s default=%v variant=%s cold_init_med=%.1fms cold_launch_med=%.1fms cold_tool_med=%.1fms warm_tool_med=%.1fms guest_work=%d host_work=%d peak_pages=%d\n",
+		receipt.ConfigLabel, receipt.SelectedBackend, receipt.DefaultBackendUsed, receipt.ImageVariant,
 		summary.ColdServiceInitMedianMs, summary.ColdLaunchToFirstResultMedianMs,
 		summary.ColdToolLatencyMedianMs, summary.WarmToolLatencyMedianMs,
 		summary.WarmGuestWorkMedian, summary.WarmHostWorkMedian, summary.WarmPeakMemoryPagesMedian)

@@ -48,18 +48,19 @@ def render_markdown(receipts: list[dict[str, Any]]) -> str:
         "",
         "## Overview",
         "",
-        "| Platform | Config | Backend | Image | Cold Init Med | Launch->1st Med | Cold Tool Med | Warm Tool Med | Guest Work | Host Work | Peak Mem | Bin Size | Engine Size |",
-        "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Platform | Config | Backend (Default?) | Image | Cold Init Med | Launch->1st Med | Cold Tool Med | Warm Tool Med | Guest Work | Host Work | Peak Mem | Bin Size | Engine Size | Image Size |",
+        "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for r in receipts:
         s = r["summary"]
         peak_str = f"{s['warm_peak_memory_pages_median']}p ({fmt_mb(s['warm_peak_memory_bytes_median'])})"
+        b_label = f"`{r['selected_backend']}`" + (" (default)" if r.get("default_backend_used") else " (control)")
         lines.append(
-            f"| {r['platform']} | `{r['config_label']}` | `{r['selected_backend']}` | `{r['image_variant']}` "
+            f"| {r['platform']} | `{r['config_label']}` | {b_label} | `{r['image_variant']}` "
             f"| {fmt_ms(s['cold_service_init_median_ms'])} | {fmt_s(s['cold_launch_to_first_result_median_ms'])} "
             f"| {fmt_s(s['cold_tool_latency_median_ms'])} | {fmt_s(s['warm_tool_latency_median_ms'])} "
             f"| {s['warm_guest_work_median']:,} | {s['warm_host_work_median']:,} "
-            f"| {peak_str} | {fmt_mb(r.get('binary_size_bytes', 0))} | {fmt_mb(r.get('engine_size_bytes', 0))} |"
+            f"| {peak_str} | {fmt_mb(r.get('binary_size_bytes', 0))} | {fmt_mb(r.get('engine_size_bytes', 0))} | {fmt_mb(r.get('image_size_bytes', 0))} |"
         )
 
     lines.extend([
@@ -78,7 +79,7 @@ def render_markdown(receipts: list[dict[str, Any]]) -> str:
 
     lines.extend([
         "",
-        "## Individual Per-Call Timings",
+        "## Individual Per-Call Timings & Provenance",
         "",
     ])
     for r in receipts:
@@ -86,7 +87,17 @@ def render_markdown(receipts: list[dict[str, Any]]) -> str:
         warm_vals = ", ".join(fmt_s(c["tool_latency_ms"]) for c in r["warm_runs"])
         init_vals = ", ".join(fmt_ms(c["service_init_ms"]) for c in r["cold_runs"])
         lines.append(f"### `{r['config_label']}` ({r['platform']})")
-        lines.append(f"- **Revision:** `{r['revision']}` · **Image ID:** `{r['image_id']}` · **Override unset:** `{r['image_override_unset']}`")
+        lines.append(
+            f"- **Revision:** `{r['revision']}` · **Backend:** `{r['selected_backend']}` "
+            f"(default_route=`{r.get('default_backend_used', False)}`) · **Image ID:** `{r['image_id']}`"
+        )
+        if r.get("native_engine"):
+            ne = r["native_engine"]
+            lines.append(
+                f"- **Native Engine:** `{ne.get('engine_tag')}` · commit `{ne.get('source_commit')}` · "
+                f"ABI `{ne.get('abi_version')}` · imports `{ne.get('import_count')}` · "
+                f"WABT `{ne.get('wabt_version')}` · lib SHA-256 `{(r.get('engine_sha256') or '')[:16]}...`"
+            )
         lines.append(f"- **Toolchain:** `{r['toolchain']}` · **Signing:** `{r['signing_flags']}`")
         lines.append(f"- **Host:** `{r['cpu_info']}` · **Load before:** `{r['host_load_before']}`")
         lines.append(f"- **Cold service init (1..{len(r['cold_runs'])}):** {init_vals}")
@@ -113,7 +124,7 @@ def render_markdown(receipts: list[dict[str, Any]]) -> str:
     mac_cands = [
         r
         for r in receipts
-        if r["goos"] == "darwin" and "aot" in r["selected_backend"].lower()
+        if r["goos"] == "darwin" and r["selected_backend"] == "native-aot"
     ]
     if mac_base and mac_cands:
         base_warm = mac_base["summary"]["warm_tool_latency_median_ms"]
@@ -129,7 +140,7 @@ def render_markdown(receipts: list[dict[str, Any]]) -> str:
                 f"speedup `{speedup:.2f}x` (`>= 5.0x`: {pass_5x}) -> **{verdict}**"
             )
     else:
-        lines.append("- **macOS arm64:** Baseline recorded; awaiting Phase B native AOT candidate receipts for 5.0s / 5x gate evaluation.")
+        lines.append("- **macOS arm64:** Awaiting complete baseline + native-aot receipts for 5.0s / 5x gate evaluation.")
 
     linux_wazero_by_variant = {
         r["image_variant"]: r
@@ -139,7 +150,7 @@ def render_markdown(receipts: list[dict[str, Any]]) -> str:
     linux_cands = [
         r
         for r in receipts
-        if r["goos"] == "linux" and "aot" in r["selected_backend"].lower()
+        if r["goos"] == "linux" and r["selected_backend"] == "native-aot"
     ]
     if linux_cands:
         for c in linux_cands:
@@ -151,14 +162,15 @@ def render_markdown(receipts: list[dict[str, Any]]) -> str:
             warm_ratio = c["summary"]["warm_tool_latency_median_ms"] / ctrl["summary"]["warm_tool_latency_median_ms"]
             parity_ok = all(x["clean_completion"] for x in c["cold_runs"] + c["warm_runs"])
             within_10 = cold_ratio <= 1.10 and warm_ratio <= 1.10
-            rec = "ELIGIBLE_TO_SWITCH_LINUX_DEFAULT" if (parity_ok and within_10) else "KEEP_LINUX_WAZERO_DEFAULT"
+            verdict = "PASS (SHIP_NATIVE_AOT_DEFAULT)" if (parity_ok and within_10) else "FAIL (REVERT_TO_LINUX_WAZERO_DEFAULT)"
             lines.append(
                 f"- **Linux amd64 (`{c['config_label']}` vs `{ctrl['config_label']}`):** "
-                f"cold ratio `{cold_ratio:.3f}x`, warm ratio `{warm_ratio:.3f}x` (`<= 1.10x`: {within_10}), "
-                f"parity={parity_ok} -> **{rec}**"
+                f"cold `{fmt_s(c['summary']['cold_tool_latency_median_ms'])}` vs `{fmt_s(ctrl['summary']['cold_tool_latency_median_ms'])}` (`{cold_ratio:.3f}x`), "
+                f"warm `{fmt_s(c['summary']['warm_tool_latency_median_ms'])}` vs `{fmt_s(ctrl['summary']['warm_tool_latency_median_ms'])}` (`{warm_ratio:.3f}x`), "
+                f"within 10%: {within_10}, parity={parity_ok} -> **{verdict}**"
             )
     else:
-        lines.append("- **Linux amd64:** Baseline recorded; awaiting Phase B native AOT candidate receipts for 10% gate & default recommendation.")
+        lines.append("- **Linux amd64:** Awaiting complete wazero control + native-aot receipts for 10% gate evaluation.")
 
     lines.append("")
     return "\n".join(lines)
