@@ -77,15 +77,23 @@ try {
     break;
   }
 
-  // Wait for the reopened project "py09-den-reopen" to load in Recents / sidebar, then click it.
+  // Wait up to 45s for the reopened project "py09-den-reopen" to appear, then click it if we're on Home/Recents.
   const projText = page.getByText("py09-den-reopen", { exact: true }).first();
-  await projText.waitFor({ state: "visible", timeout: 25_000 });
-  await projText.click({ timeout: 10_000 });
-  await page.waitForTimeout(3000);
+  await projText.waitFor({ state: "visible", timeout: 45_000 });
+  const bodyBeforeProj = await page.locator("body").innerText();
+  if (!bodyBeforeProj.includes("All chats")) {
+    await projText.click({ timeout: 10_000 });
+    await page.waitForTimeout(3000);
+  }
 
-  // If the session isn't already open in Den, click it in the project session list.
-  const bodyAfterProj = await page.locator("body").innerText();
-  if (!bodyAfterProj.includes("PY09 witness completed") && !bodyAfterProj.includes("py09_witness.py")) {
+  // Click the reopened Finished chat in the Chats list (clicking a project defaults to a fresh "Created" chat).
+  const finishedChat = page.locator("button, a, [role='button'], [role='treeitem'], li").filter({
+    hasText: /Finished/i,
+  }).first();
+  if (await finishedChat.count()) {
+    await finishedChat.click({ timeout: 10_000 }).catch(() => {});
+    await page.waitForTimeout(3000);
+  } else {
     const sessItem = page.locator("button, a, [role='button'], [role='treeitem'], li").filter({
       hasText: /Run py09_witness|PY09 witness|py09_witness/i,
     }).first();
