@@ -371,6 +371,10 @@ def main():
             "LYCAON_LLM_DEBUG_FILE": str(llm_debug_file),
             "NO_PROXY": "127.0.0.1,localhost",
         }
+        # Locate sibling staged pw-document-core sidecar if present (as Tauri provides to Painted Wolf Code engine.app).
+        doc_core_candidates = sorted((repo_root / "lycaon-den" / "src-tauri" / "binaries").glob("pw-document-core*"))
+        if doc_core_candidates:
+            env["LYCAON_DOCUMENT_CORE_BINARY"] = str(doc_core_candidates[0])
         assert "PW_PORTABLE_PYTHON_IMAGE_DIR" not in env
         assert "PW_PORTABLE_PYTHON_ENGINE_DIR" not in env
 
