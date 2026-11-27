@@ -87,6 +87,10 @@ components:
         - invalid_path
         - blueprint_content_conflict
         - idempotency_conflict
+        - home_start_not_found
+        - home_start_conflict
+        - home_start_closed
+        - home_start_admitted
         - invalid_arguments
         - invalid_query
         - command_disabled

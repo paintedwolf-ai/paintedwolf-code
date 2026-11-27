@@ -1201,8 +1201,6 @@ ORDER BY id
 LIMIT ?
 `
 
-// Startup recovery reads ids without hydrating session projections. Each id
-// leaves the filter once settled, so the order only needs to be stable.
 func (q *Queries) ListBusySessionIDs(ctx context.Context, limit int64) ([]string, error) {
 	rows, err := q.db.QueryContext(ctx, listBusySessionIDs, limit)
 	if err != nil {
@@ -1450,6 +1448,38 @@ func (q *Queries) ListPinnedSessions(ctx context.Context, projectID string) ([]L
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPreparingSessionIDs = `-- name: ListPreparingSessionIDs :many
+SELECT id
+FROM sessions
+WHERE status = 'preparing'
+ORDER BY created_at, id
+`
+
+// Startup recovery reads ids without hydrating session projections. Each id
+// leaves the filter once settled, so the order only needs to be stable.
+func (q *Queries) ListPreparingSessionIDs(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listPreparingSessionIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

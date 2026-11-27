@@ -984,6 +984,12 @@ SELECT id, project_id, kind, label, parent_id, session_id, turn,
        created_ordinal, created_ts FROM source_checkpoints
 WHERE project_id = ? AND kind = ? ORDER BY created_ts ASC LIMIT 1;
 
+-- name: GetSessionStartCheckpoint :one
+SELECT id, project_id, kind, label, parent_id, session_id, turn,
+       created_ordinal, created_ts FROM source_checkpoints
+WHERE project_id = ? AND kind = 'session' AND session_id = ?
+ORDER BY created_ordinal ASC, created_ts ASC LIMIT 1;
+
 -- name: GetTurnCheckpointForSession :one
 SELECT id, project_id, kind, label, parent_id, session_id, turn,
        created_ordinal, created_ts FROM source_checkpoints

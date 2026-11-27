@@ -230,6 +230,18 @@ func registerServerHooks(b *serveBuilder, extensionJournal *extensionstate.SQLJo
 		return err
 	}
 	if err := b.registerRecovery(bootrecovery.Entry{
+		Name: "preparing-sessions", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
+		Run: b.server.Server.Admin.SessionAdmin.Lifecycle.ResumePreparingSessions,
+	}); err != nil {
+		return err
+	}
+	if err := b.registerRecovery(bootrecovery.Entry{
+		Name: "home-starts", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
+		After: []string{"preparing-sessions"}, Run: b.server.Server.Admin.HomeStart.ResumeUnfinished,
+	}); err != nil {
+		return err
+	}
+	if err := b.registerRecovery(bootrecovery.Entry{
 		Name: "project-promotions", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		Run: b.server.Server.Admin.Project.Promotion.RecoverPromotions,
 	}); err != nil {

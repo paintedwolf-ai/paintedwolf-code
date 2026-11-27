@@ -31,6 +31,21 @@ func (q *Queries) GetStoreMetaValue(ctx context.Context, key string) (string, er
 	return value, err
 }
 
+const insertStoreMetaIfAbsent = `-- name: InsertStoreMetaIfAbsent :exec
+INSERT INTO store_meta (key, value) VALUES (?, ?)
+ON CONFLICT(key) DO NOTHING
+`
+
+type InsertStoreMetaIfAbsentParams struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+func (q *Queries) InsertStoreMetaIfAbsent(ctx context.Context, arg InsertStoreMetaIfAbsentParams) error {
+	_, err := q.db.ExecContext(ctx, insertStoreMetaIfAbsent, arg.Key, arg.Value)
+	return err
+}
+
 const upsertStoreMeta = `-- name: UpsertStoreMeta :exec
 INSERT INTO store_meta (key, value) VALUES (?, ?)
 ON CONFLICT(key) DO UPDATE SET value = excluded.value

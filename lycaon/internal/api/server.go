@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/extensionadmin"
 	"github.com/lycaon/lycaon/internal/api/gitadmin"
 	"github.com/lycaon/lycaon/internal/api/historyadmin"
+	"github.com/lycaon/lycaon/internal/api/homestartadmin"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/mcpadmin"
 	"github.com/lycaon/lycaon/internal/api/modeladmin"
@@ -50,6 +51,7 @@ type administrativeHandlers struct {
 	SessionAdmin  sessionadmin.Handler
 	SessionView   sessionview.Projector
 	Git           gitadmin.Handler
+	HomeStart     *homestartadmin.Handler
 	mcpAdmin      *mcpadmin.Handler
 	researchAdmin *researchadmin.Handler
 	Models        *modeladmin.Handler

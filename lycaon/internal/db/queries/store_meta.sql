@@ -9,3 +9,7 @@ ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 -- name: DeleteStoreMeta :exec
 DELETE FROM store_meta WHERE key = ?;
+
+-- name: InsertStoreMetaIfAbsent :exec
+INSERT INTO store_meta (key, value) VALUES (?, ?)
+ON CONFLICT(key) DO NOTHING;

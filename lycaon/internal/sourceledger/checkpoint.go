@@ -88,6 +88,22 @@ func (s *Checkpoints) CreateStructuralCheckpoint(ctx context.Context, in Structu
 	return s.createCheckpoint(ctx, in)
 }
 
+// EnsureSessionCheckpoint records a chat's task-start boundary once, so a
+// resumed preparation keeps the boundary recorded before it was interrupted.
+func (s *Checkpoints) EnsureSessionCheckpoint(ctx context.Context, projectID, sessionID, label string) error {
+	_, err := s.queries.GetSessionStartCheckpoint(ctx, db.GetSessionStartCheckpointParams{ProjectID: projectID, SessionID: sessionID})
+	if err == nil {
+		return nil
+	}
+	if !db.IsNoRows(err) {
+		return err
+	}
+	_, err = s.createCheckpoint(ctx, StructuralCheckpointInput{
+		ProjectID: projectID, Kind: CheckpointSession, Label: label, SessionID: sessionID,
+	})
+	return err
+}
+
 // CreatePin stores a named history boundary.
 func (s *Checkpoints) CreatePin(ctx context.Context, projectID, label string) (Pin, error) {
 	checkpoint, err := s.createCheckpoint(ctx, StructuralCheckpointInput{

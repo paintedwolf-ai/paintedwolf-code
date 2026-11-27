@@ -330,6 +330,35 @@ func (q *Queries) GetDeletedSourcePathHead(ctx context.Context, arg GetDeletedSo
 	return i, err
 }
 
+const getSessionStartCheckpoint = `-- name: GetSessionStartCheckpoint :one
+SELECT id, project_id, kind, label, parent_id, session_id, turn,
+       created_ordinal, created_ts FROM source_checkpoints
+WHERE project_id = ? AND kind = 'session' AND session_id = ?
+ORDER BY created_ordinal ASC, created_ts ASC LIMIT 1
+`
+
+type GetSessionStartCheckpointParams struct {
+	ProjectID string `json:"project_id"`
+	SessionID string `json:"session_id"`
+}
+
+func (q *Queries) GetSessionStartCheckpoint(ctx context.Context, arg GetSessionStartCheckpointParams) (SourceCheckpoints, error) {
+	row := q.db.QueryRowContext(ctx, getSessionStartCheckpoint, arg.ProjectID, arg.SessionID)
+	var i SourceCheckpoints
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Kind,
+		&i.Label,
+		&i.ParentID,
+		&i.SessionID,
+		&i.Turn,
+		&i.CreatedOrdinal,
+		&i.CreatedTs,
+	)
+	return i, err
+}
+
 const getSourceBlobObject = `-- name: GetSourceBlobObject :one
 SELECT sha256, size, stored_size, storage_relpath, git_oid_sha1, git_oid_sha256
 FROM source_blob_objects WHERE sha256 = ?

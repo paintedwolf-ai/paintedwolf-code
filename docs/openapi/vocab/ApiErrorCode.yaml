@@ -334,6 +334,24 @@ values:
     status: 409
     comment: >-
       operation id was reused with different input (every operation_id-bearing endpoint)
+  - id: home_start_not_found
+    status: 404
+    comment: >-
+      The caller has no Home start under this launch id.
+  - id: home_start_conflict
+    status: 409
+    comment: >-
+      The launch id was reused with different choices, another person holds it, or a
+      replacement named a stale revision or operation.
+  - id: home_start_closed
+    status: 409
+    comment: >-
+      The Home start was stopped or retired, or its operation was replaced; it admits no
+      further work.
+  - id: home_start_admitted
+    status: 409
+    comment: >-
+      The first prompt was already admitted; a changed prompt is a follow-up turn.
   - id: invalid_arguments
     status: 400
     comment: >-

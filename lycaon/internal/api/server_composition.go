@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/extensionadmin"
 	"github.com/lycaon/lycaon/internal/api/gitadmin"
 	"github.com/lycaon/lycaon/internal/api/historyadmin"
+	"github.com/lycaon/lycaon/internal/api/homestartadmin"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/mcpadmin"
 	"github.com/lycaon/lycaon/internal/api/modeladmin"
@@ -28,6 +29,7 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/extensionstate"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/homestart"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -113,6 +115,11 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 		ProjectRules: deps.Source.ProjectRules, ScanCadence: deps.Scans.ScanCadence, Store: deps.Core.Store, Sessions: deps.Core.Sessions,
 		Settings: deps.Core.Settings, WorkerBranchRoot: s.workerBranchRoot,
 		Workers: deps.Workflow.Workers, Sources: &s.Sources, Git: &s.Admin.Git,
+	})
+	s.Admin.HomeStart = homestartadmin.New(&s.responses, &s.background, homestartadmin.Deps{
+		Store: homestart.NewStore(deps.Core.Database), People: deps.Core.Store.People, Projects: deps.Core.Projects,
+		ProjectEffects: s.Admin.Project.Projects, Sessions: s.Admin.SessionAdmin.Lifecycle, SessionStore: deps.Core.Store.Sessions,
+		LLMService: deps.Providers.LLM, FirstTurns: homestartadmin.HostFirstTurns(deps.Core.Sessions),
 	})
 	attachmentStore = s.Admin.Prompt.Attachments.AttachmentStore
 	tryRunPromotion = s.Admin.Project.Promotion.TryRunPromotion

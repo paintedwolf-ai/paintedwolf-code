@@ -130,6 +130,8 @@ var (
 	operationGetGitWorktree                     = generatedOperation{ID: "getGitWorktree", Method: "GET", Path: "/v1/sessions/{id}/git-worktree", Params: []string{"id"}}
 	operationGetHealth                          = generatedOperation{ID: "getHealth", Method: "GET", Path: "/health"}
 	operationGetHistoryStorage                  = generatedOperation{ID: "getHistoryStorage", Method: "GET", Path: "/v1/history-storage"}
+	operationGetHomeStart                       = generatedOperation{ID: "getHomeStart", Method: "GET", Path: "/v1/home-starts/{launch_id}", Params: []string{"launch_id"}}
+	operationGetHomeStartCapabilities           = generatedOperation{ID: "getHomeStartCapabilities", Method: "GET", Path: "/v1/home-starts/capabilities"}
 	operationGetHost                            = generatedOperation{ID: "getHost", Method: "GET", Path: "/v1/host"}
 	operationGetHostResources                   = generatedOperation{ID: "getHostResources", Method: "GET", Path: "/v1/host-resources"}
 	operationGetLimitsSettings                  = generatedOperation{ID: "getLimitsSettings", Method: "GET", Path: "/v1/settings/limits"}
@@ -263,6 +265,7 @@ var (
 	operationRefreshMcpProvider                 = generatedOperation{ID: "refreshMcpProvider", Method: "POST", Path: "/v1/mcp/providers/{provider_id}/refresh", Params: []string{"provider_id"}}
 	operationRefreshPricingSource               = generatedOperation{ID: "refreshPricingSource", Method: "POST", Path: "/v1/settings/pricing/sources/{source_id}/refresh", Params: []string{"source_id"}}
 	operationRefreshProviderModels              = generatedOperation{ID: "refreshProviderModels", Method: "POST", Path: "/v1/providers/{provider_id}/refresh", Params: []string{"provider_id"}}
+	operationReissueHomeStartFirstPrompt        = generatedOperation{ID: "reissueHomeStartFirstPrompt", Method: "POST", Path: "/v1/home-starts/{launch_id}/reissue-first-prompt", Params: []string{"launch_id"}, RecordsPersonAction: true}
 	operationReleaseSourcePresentation          = generatedOperation{ID: "releaseSourcePresentation", Method: "DELETE", Path: "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}", Params: []string{"id", "view_id", "presentation_id"}}
 	operationReleaseSourceView                  = generatedOperation{ID: "releaseSourceView", Method: "DELETE", Path: "/v1/projects/{id}/source/views/{view_id}", Params: []string{"id", "view_id"}}
 	operationReleaseSourceViewportInterest      = generatedOperation{ID: "releaseSourceViewportInterest", Method: "DELETE", Path: "/v1/projects/{id}/source/views/{view_id}/interests/{interest_id}", Params: []string{"id", "view_id", "interest_id"}}
@@ -281,6 +284,7 @@ var (
 	operationReplaceWebResearchCredential       = generatedOperation{ID: "replaceWebResearchCredential", Method: "PUT", Path: "/v1/web-research/providers/{provider_id}/credential", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationRequestBriefing                    = generatedOperation{ID: "requestBriefing", Method: "POST", Path: "/v1/projects/{id}/briefings", Params: []string{"id"}}
 	operationRequestFileBriefing                = generatedOperation{ID: "requestFileBriefing", Method: "POST", Path: "/v1/projects/{id}/source/file-briefings", Params: []string{"id"}}
+	operationReserveHomeStart                   = generatedOperation{ID: "reserveHomeStart", Method: "PUT", Path: "/v1/home-starts/{launch_id}", Params: []string{"launch_id"}, RecordsPersonAction: true}
 	operationResetStore                         = generatedOperation{ID: "resetStore", Method: "POST", Path: "/v1/store/reset", RecordsPersonAction: true}
 	operationResolveCheckpoint                  = generatedOperation{ID: "resolveCheckpoint", Method: "POST", Path: "/v1/sessions/{id}/checkpoints/{checkpoint_id}", Params: []string{"id", "checkpoint_id"}, RecordsPersonAction: true}
 	operationResolveContributionChoices         = generatedOperation{ID: "resolveContributionChoices", Method: "POST", Path: "/v1/projects/{id}/commands/{command_id}/choices/{step_id}", Params: []string{"id", "command_id", "step_id"}}
@@ -318,6 +322,7 @@ var (
 	operationStartWorkflowRun                   = generatedOperation{ID: "startWorkflowRun", Method: "POST", Path: "/v1/sessions/{id}/workflow-runs", Params: []string{"id"}, RecordsPersonAction: true}
 	operationStashGit                           = generatedOperation{ID: "stashGit", Method: "POST", Path: "/v1/projects/{id}/git/repos/{repo_id}/stash", Params: []string{"id", "repo_id"}, RecordsPersonAction: true}
 	operationStopBackgroundProcess              = generatedOperation{ID: "stopBackgroundProcess", Method: "POST", Path: "/v1/sessions/{id}/background/{process_id}/stop", Params: []string{"id", "process_id"}, RecordsPersonAction: true}
+	operationStopHomeStart                      = generatedOperation{ID: "stopHomeStart", Method: "POST", Path: "/v1/home-starts/{launch_id}/stop", Params: []string{"launch_id"}, RecordsPersonAction: true}
 	operationStopProjectBackgroundProcess       = generatedOperation{ID: "stopProjectBackgroundProcess", Method: "POST", Path: "/v1/projects/{id}/background/{process_id}/stop", Params: []string{"id", "process_id"}, RecordsPersonAction: true}
 	operationStreamSession                      = generatedOperation{ID: "streamSession", Method: "GET", Path: "/v1/sessions/{id}/stream", Params: []string{"id"}}
 	operationSubmitEditorDocumentUpdate         = generatedOperation{ID: "submitEditorDocumentUpdate", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/updates", Params: []string{"id", "document_id"}}
@@ -478,6 +483,8 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetGitWorktree,
 	operationGetHealth,
 	operationGetHistoryStorage,
+	operationGetHomeStart,
+	operationGetHomeStartCapabilities,
 	operationGetHost,
 	operationGetHostResources,
 	operationGetLimitsSettings,
@@ -611,6 +618,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationRefreshMcpProvider,
 	operationRefreshPricingSource,
 	operationRefreshProviderModels,
+	operationReissueHomeStartFirstPrompt,
 	operationReleaseSourcePresentation,
 	operationReleaseSourceView,
 	operationReleaseSourceViewportInterest,
@@ -629,6 +637,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationReplaceWebResearchCredential,
 	operationRequestBriefing,
 	operationRequestFileBriefing,
+	operationReserveHomeStart,
 	operationResetStore,
 	operationResolveCheckpoint,
 	operationResolveContributionChoices,
@@ -666,6 +675,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationStartWorkflowRun,
 	operationStashGit,
 	operationStopBackgroundProcess,
+	operationStopHomeStart,
 	operationStopProjectBackgroundProcess,
 	operationStreamSession,
 	operationSubmitEditorDocumentUpdate,

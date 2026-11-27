@@ -4106,6 +4106,57 @@ type HistoryStorageStatus struct {
 	Protections []HistoryProtection    `json:"protections"`
 }
 
+// HomeStart The caller's view of one Home submission. IDs appear once their rows are committed; revision increases with every change.
+type HomeStart struct {
+	LaunchID string `json:"launch_id"`
+	// reserved, project_created and session_bound record creation progress. stopped and retired admit no further work; failed carries failure.
+	Phase    string `json:"phase"`
+	Revision int64  `json:"revision"`
+	// Absent for a launch stopped before its PUT.
+	Choices       *HomeStartChoices    `json:"choices,omitempty"`
+	ProjectID     string               `json:"project_id,omitempty"`
+	SessionID     string               `json:"session_id,omitempty"`
+	SessionStatus SessionStatus        `json:"session_status,omitempty"`
+	FirstPrompt   HomeStartFirstPrompt `json:"first_prompt"`
+	Failure       *HomeStartFailure    `json:"failure,omitempty"`
+}
+
+// HomeStartCapabilities What a client binds a Home submission to before replaying it. A changed store or person means saved launches belong to another host.
+type HomeStartCapabilities struct {
+	ProtocolVersion int `json:"protocol_version"`
+	// Durable identity of this host store; survives restarts.
+	StoreID string `json:"store_id"`
+	// The acting person.
+	PersonID string `json:"person_id"`
+}
+
+// HomeStartChoices Immutable creation choices of one Home submission. The prompt itself is sent separately through the session prompt endpoint.
+type HomeStartChoices struct {
+	// Initial chat mode. Defaults to Agent.
+	Mode *SessionMode `json:"mode,omitempty"`
+	// Explicit coordinator provider for the chat.
+	ProviderID string `json:"provider_id,omitempty"`
+	// Explicit coordinator model for the chat.
+	Model string `json:"model,omitempty"`
+}
+
+// HomeStartFailure
+type HomeStartFailure struct {
+	Code string `json:"code"`
+	// The same PUT resumes the failed step.
+	Resumable bool `json:"resumable"`
+}
+
+// HomeStartFirstPrompt
+type HomeStartFirstPrompt struct {
+	// The only operation that may admit this chat's first prompt.
+	OperationID string `json:"operation_id"`
+	// A durable prompt receipt exists for operation_id in the bound chat.
+	Admitted bool `json:"admitted"`
+	// The receipt status once admitted.
+	Status string `json:"status,omitempty"`
+}
+
 // HostInfo The host a client is connected to, the contract it serves, and who the client is on it. A client reads this before relying on any other route.
 type HostInfo struct {
 	// Stable identity of this install, derived from its public key. It survives restarts and store resets, and changes only when the host key is replaced.
@@ -5864,6 +5915,15 @@ type RedactedSpan struct {
 	RuleTitle string `json:"rule_title,omitempty"`
 }
 
+// ReissueHomeStartFirstPromptRequest
+type ReissueHomeStartFirstPromptRequest struct {
+	ExpectedRevision int64 `json:"expected_revision"`
+	// The first-prompt operation being replaced.
+	OperationID string `json:"operation_id"`
+	// Fresh operation the changed first prompt will use.
+	ReplacementOperationID string `json:"replacement_operation_id"`
+}
+
 // RenameProjectSourceRequest Same-root rename or move of one file or folder. Missing parent folders
 // on to are created. Cross-root moves are refused.
 type RenameProjectSourceRequest struct {
@@ -5940,6 +6000,11 @@ type RepoLayout struct {
 	Files []string `json:"files,omitempty"`
 	// Small/medium tier — top-level dirs (trailing /) and promoted root files.
 	TopLevel []string `json:"top_level,omitempty"`
+}
+
+// ReserveHomeStartRequest
+type ReserveHomeStartRequest struct {
+	Choices HomeStartChoices `json:"choices"`
 }
 
 // ResolveEditorDocumentRequest

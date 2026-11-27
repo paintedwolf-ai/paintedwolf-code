@@ -7,6 +7,14 @@ components:
       schema:
         type: string
         format: uuid
+    LaunchId:
+      name: launch_id
+      in: path
+      required: true
+      description: Client-generated identity of one Home submission.
+      schema:
+        type: string
+        format: uuid
     CommandReceiptScopes:
       name: scopes
       in: query

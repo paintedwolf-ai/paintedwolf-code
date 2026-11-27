@@ -147,6 +147,14 @@ func (s *Submission) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 			s.responses.Fail(w, wire.ApiErrorCodeIdempotencyConflict, "this operation_id was already used for a different prompt")
 			return
 		}
+		if errors.Is(err, store.ErrHomeStartOperationClosed) {
+			s.responses.Fail(w, wire.ApiErrorCodeHomeStartClosed, "this first prompt was stopped or replaced")
+			return
+		}
+		if errors.Is(err, store.ErrHomeStartOperationMismatch) {
+			s.responses.Fail(w, wire.ApiErrorCodeHomeStartConflict, "this operation_id belongs to another chat's first prompt")
+			return
+		}
 		s.responses.InternalError(w, r, err)
 		return
 	}

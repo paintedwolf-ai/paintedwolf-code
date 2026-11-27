@@ -16,6 +16,7 @@ type SessionRepository interface {
 	Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)
 	CreateChild(ctx context.Context, parent *api.Session, req api.SpawnChildRequest) (*api.Session, error)
 	CreateWithStatus(ctx context.Context, req api.CreateSessionRequest, projectID string, status api.SessionStatus) (*api.Session, error)
+	CreateReserved(ctx context.Context, id string, req api.CreateSessionRequest, projectID string, status api.SessionStatus, commit func(context.Context, *sql.Tx) error) (*api.Session, error)
 	Delete(ctx context.Context, id string) error
 	DeleteWorktreeBinding(ctx context.Context, sessionID string) error
 	ExistingSessionIDs(ctx context.Context, ids []string) (map[string]bool, error)
@@ -26,6 +27,7 @@ type SessionRepository interface {
 	List(ctx context.Context) ([]*api.Session, error)
 	ListAttentionCandidates(ctx context.Context) ([]attention.Candidate, error)
 	ListBusySessionIDs(ctx context.Context, limit int) ([]string, error)
+	ListPreparingSessionIDs(ctx context.Context) ([]string, error)
 	ListProjectSummaries(ctx context.Context, q SummaryQuery) (SummaryPage, error)
 	MarkSessionSeen(ctx context.Context, id string, seenAt time.Time) error
 	MovePinnedSession(ctx context.Context, id string, position int) error

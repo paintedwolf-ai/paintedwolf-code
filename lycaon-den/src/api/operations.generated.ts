@@ -230,6 +230,8 @@ export const API_OPERATIONS = {
   getHistoryStorage: { method: "GET", path: "/v1/history-storage", query: [
     {"name":"project_id","type":"string"},
   ] },
+  getHomeStart: { method: "GET", path: "/v1/home-starts/{launch_id}" },
+  getHomeStartCapabilities: { method: "GET", path: "/v1/home-starts/capabilities" },
   getHost: { method: "GET", path: "/v1/host" },
   getHostResources: { method: "GET", path: "/v1/host-resources", query: [
     {"name":"project_id","type":"string"},
@@ -592,6 +594,7 @@ export const API_OPERATIONS = {
   ] },
   refreshPricingSource: { method: "POST", path: "/v1/settings/pricing/sources/{source_id}/refresh" },
   refreshProviderModels: { method: "POST", path: "/v1/providers/{provider_id}/refresh" },
+  reissueHomeStartFirstPrompt: { method: "POST", path: "/v1/home-starts/{launch_id}/reissue-first-prompt" },
   releaseSourcePresentation: { method: "DELETE", path: "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}" },
   releaseSourceView: { method: "DELETE", path: "/v1/projects/{id}/source/views/{view_id}" },
   releaseSourceViewportInterest: { method: "DELETE", path: "/v1/projects/{id}/source/views/{view_id}/interests/{interest_id}" },
@@ -616,6 +619,7 @@ export const API_OPERATIONS = {
   replaceWebResearchCredential: { method: "PUT", path: "/v1/web-research/providers/{provider_id}/credential" },
   requestBriefing: { method: "POST", path: "/v1/projects/{id}/briefings" },
   requestFileBriefing: { method: "POST", path: "/v1/projects/{id}/source/file-briefings" },
+  reserveHomeStart: { method: "PUT", path: "/v1/home-starts/{launch_id}" },
   resetStore: { method: "POST", path: "/v1/store/reset" },
   resolveCheckpoint: { method: "POST", path: "/v1/sessions/{id}/checkpoints/{checkpoint_id}" },
   resolveContributionChoices: { method: "POST", path: "/v1/projects/{id}/commands/{command_id}/choices/{step_id}" },
@@ -701,6 +705,7 @@ export const API_OPERATIONS = {
     {"name":"session_id","type":"string"},
   ] },
   stopBackgroundProcess: { method: "POST", path: "/v1/sessions/{id}/background/{process_id}/stop" },
+  stopHomeStart: { method: "POST", path: "/v1/home-starts/{launch_id}/stop" },
   stopProjectBackgroundProcess: { method: "POST", path: "/v1/projects/{id}/background/{process_id}/stop" },
   streamSession: { method: "GET", path: "/v1/sessions/{id}/stream", query: [
     {"name":"message","type":"string"},
@@ -900,6 +905,8 @@ export type OperationPathParameters = {
   getGitWorktree: { id: string | number; };
   getHealth: Record<string, never>;
   getHistoryStorage: Record<string, never>;
+  getHomeStart: { launch_id: string | number; };
+  getHomeStartCapabilities: Record<string, never>;
   getHost: Record<string, never>;
   getHostResources: Record<string, never>;
   getLimitsSettings: Record<string, never>;
@@ -1033,6 +1040,7 @@ export type OperationPathParameters = {
   refreshMcpProvider: { provider_id: string | number; };
   refreshPricingSource: { source_id: string | number; };
   refreshProviderModels: { provider_id: string | number; };
+  reissueHomeStartFirstPrompt: { launch_id: string | number; };
   releaseSourcePresentation: { id: string | number; view_id: string | number; presentation_id: string | number; };
   releaseSourceView: { id: string | number; view_id: string | number; };
   releaseSourceViewportInterest: { id: string | number; view_id: string | number; interest_id: string | number; };
@@ -1051,6 +1059,7 @@ export type OperationPathParameters = {
   replaceWebResearchCredential: { provider_id: string | number; };
   requestBriefing: { id: string | number; };
   requestFileBriefing: { id: string | number; };
+  reserveHomeStart: { launch_id: string | number; };
   resetStore: Record<string, never>;
   resolveCheckpoint: { id: string | number; checkpoint_id: string | number; };
   resolveContributionChoices: { id: string | number; command_id: string | number; step_id: string | number; };
@@ -1088,6 +1097,7 @@ export type OperationPathParameters = {
   startWorkflowRun: { id: string | number; };
   stashGit: { id: string | number; repo_id: string | number; };
   stopBackgroundProcess: { id: string | number; process_id: string | number; };
+  stopHomeStart: { launch_id: string | number; };
   stopProjectBackgroundProcess: { id: string | number; process_id: string | number; };
   streamSession: { id: string | number; };
   submitEditorDocumentUpdate: { id: string | number; document_id: string | number; };

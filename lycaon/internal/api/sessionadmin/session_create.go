@@ -2,6 +2,7 @@ package sessionadmin
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -17,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -73,7 +73,7 @@ func (s *Lifecycle) HandleCreateSession(w http.ResponseWriter, r *http.Request) 
 	}
 	perf.Mark("validate")
 
-	sess, err := s.createPreparingSession(r.Context(), req)
+	sess, err := s.createPreparingSession(r.Context(), req, nil)
 	if err != nil {
 		s.WriteSessionCreationError(w, r, err)
 		return
@@ -85,12 +85,54 @@ func (s *Lifecycle) HandleCreateSession(w http.ResponseWriter, r *http.Request) 
 	s.PublishSessionCreated(r.Context(), sess)
 	outcome = "accepted"
 	httpio.WriteJSON(w, http.StatusAccepted, sess)
-	s.sourceWatch.ScheduleSourceInventory(r.Context(), sess.ProjectID)
-	s.prepareCreatedSession(r.Context(), req, sess)
+	s.scheduleCreatedSession(r.Context(), req, sess)
 	perf.Mark("publish")
 }
 
-func (s *Lifecycle) createPreparingSession(ctx context.Context, req wire.CreateSessionRequest) (*wire.Session, error) {
+// SessionReservation names an ID reserved before creation and the write that
+// commits with the chat.
+type SessionReservation struct {
+	ID     string
+	Commit func(context.Context, *sql.Tx) error
+}
+
+// CreateReservedSession commits a preparing chat under a reserved ID and then
+// prepares it in the background as an ordinary create does.
+func (s *Lifecycle) CreateReservedSession(ctx context.Context, req wire.CreateSessionRequest, reservation SessionReservation) (*wire.Session, error) {
+	sess, err := s.createPreparingSession(ctx, req, &reservation)
+	if err != nil {
+		return nil, err
+	}
+	s.PublishSessionCreated(ctx, sess)
+	s.scheduleCreatedSession(ctx, req, sess)
+	return sess, nil
+}
+
+// ResumePreparingSessions restarts preparation that an engine stop interrupted.
+func (s *Lifecycle) ResumePreparingSessions(ctx context.Context) error {
+	ids, err := s.SessionStore.ListPreparingSessionIDs(ctx)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		sess, err := s.SessionStore.Get(ctx, id)
+		if err != nil {
+			return err
+		}
+		req := wire.CreateSessionRequest{ProjectID: sess.ProjectID, WorkspaceRootID: sess.WorkspaceRootID, Posture: sess.Posture}
+		s.recordTaskStart(ctx, sess)
+		s.SessionView.HydrateSessionWorkspace(ctx, sess)
+		s.scheduleCreatedSession(ctx, req, sess)
+	}
+	return nil
+}
+
+func (s *Lifecycle) scheduleCreatedSession(ctx context.Context, req wire.CreateSessionRequest, sess *wire.Session) {
+	s.sourceWatch.ScheduleSourceInventory(ctx, sess.ProjectID)
+	s.prepareCreatedSession(ctx, req, sess)
+}
+
+func (s *Lifecycle) createPreparingSession(ctx context.Context, req wire.CreateSessionRequest, reservation *SessionReservation) (*wire.Session, error) {
 	projectID := strings.TrimSpace(req.ProjectID)
 	p, err := s.Projects.Get(ctx, projectID)
 	if err != nil {
@@ -106,20 +148,29 @@ func (s *Lifecycle) createPreparingSession(ctx context.Context, req wire.CreateS
 		}
 		req.WorkspaceRootID = rootID
 	}
-	sess, err := s.SessionStore.CreateWithStatus(ctx, req, projectID, wire.SessionStatusPreparing)
+	var sess *wire.Session
+	if reservation == nil {
+		sess, err = s.SessionStore.CreateWithStatus(ctx, req, projectID, wire.SessionStatusPreparing)
+	} else {
+		sess, err = s.SessionStore.CreateReserved(ctx, reservation.ID, req, projectID, wire.SessionStatusPreparing, reservation.Commit)
+	}
 	if err != nil {
 		return nil, err
 	}
-	if s.sourceWorkspace.SourceLedger != nil {
-		if _, checkpointErr := s.sourceWorkspace.SourceLedger.Checkpoints.CreateStructuralCheckpoint(ctx, sourceledger.StructuralCheckpointInput{
-			ProjectID: projectID, Kind: sourceledger.CheckpointSession,
-			Label: "Task start", SessionID: sess.ID,
-		}); checkpointErr != nil {
-			slog.WarnContext(ctx, "create task review checkpoint", "project_id", projectID, "session_id", sess.ID, "err", checkpointErr)
-		}
-	}
+	s.recordTaskStart(ctx, sess)
 	s.SessionView.HydrateSessionWorkspace(ctx, sess)
 	return sess, nil
+}
+
+// recordTaskStart records the boundary task review compares against before any
+// turn can change the workspace.
+func (s *Lifecycle) recordTaskStart(ctx context.Context, sess *wire.Session) {
+	if s.sourceWorkspace.SourceLedger == nil {
+		return
+	}
+	if err := s.sourceWorkspace.SourceLedger.Checkpoints.EnsureSessionCheckpoint(ctx, sess.ProjectID, sess.ID, "Task start"); err != nil {
+		slog.WarnContext(ctx, "create task review checkpoint", "project_id", sess.ProjectID, "session_id", sess.ID, "err", err)
+	}
 }
 
 func (s *Lifecycle) prepareCreatedSession(parent context.Context, req wire.CreateSessionRequest, sess *wire.Session) {
