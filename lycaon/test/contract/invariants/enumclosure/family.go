@@ -148,8 +148,8 @@ func workerPromoteReasonsAreReferenced(r *invariants.Run) {
 	}
 }
 
-func sortedKeys[V any](m map[string]V) []string {
-	keys := make([]string, 0, len(m))
+func sortedKeys[K ~string, V any](m map[K]V) []K {
+	keys := make([]K, 0, len(m))
 	for key := range m {
 		keys = append(keys, key)
 	}
