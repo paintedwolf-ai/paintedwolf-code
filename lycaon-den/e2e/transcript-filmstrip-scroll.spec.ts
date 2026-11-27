@@ -1,6 +1,7 @@
 import { expect } from "@playwright/test";
 import { buildTestFilmstripZip } from "../src/chat/visual/filmstrip-zip.fixture.ts";
 import { FILMSTRIP_MIME } from "../src/chat/visual/filmstrip-zip.ts";
+import { scrollSettled } from "./fixtures/settle.ts";
 import {
   apiSeedSessionTranscript,
   bootstrapChatSession,
@@ -91,12 +92,14 @@ modelIndependentWebE2e("filmstrip thumbnails pass vertical scrolling through to 
     return pastThreshold;
   }).toBe(true);
   await expect(chat.getByTestId("stream-scroll-jump")).toHaveAttribute("aria-hidden", "false");
+  await scrollSettled(stream);
 
   await hoverVisibleThumbnail();
   const raised = await thumbnailTop();
   // Remain outside the tail-follow zone while checking downward native input.
   await page.mouse.wheel(0, 40);
   await expect.poll(thumbnailTop).toBeLessThan(raised - 20);
+  await scrollSettled(stream);
 
   await hoverVisibleThumbnail();
   const vertical = await thumbnailTop();

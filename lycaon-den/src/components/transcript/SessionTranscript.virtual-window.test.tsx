@@ -220,6 +220,49 @@ describe("SessionTranscript virtual window", () => {
     reconcile.mockRestore();
   });
 
+  it("coalesces repeated off-tail extent changes into one deferred frame while pinned-tail geometry transitions reconcile before paint", async () => {
+    geometry.width = 640;
+    const message = (index: number): Message => ({
+      id: `coalesce-${index}`, role: "user", origin: "user", authority: "user",
+      trust_tier: "trusted", content: `row ${index}`,
+      created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, index)).toISOString(), ord: index + 1,
+    });
+    const [messages, setMessages] = createSignal(Array.from({ length: 40 }, (_, index) => message(index)));
+    const { container } = render(() => (
+      <SessionTranscript layout="chat" sessionId="s-coalesce" messages={messages()} />
+    ));
+    await new Promise(requestAnimationFrame);
+    const host = container.querySelector<HTMLElement>(".den-chat-stream")!;
+    const motion = requireScrollportMotionForViewport(host);
+
+    // Off-tail: repeated extent changes stay on the deferred frame path with zero immediate work.
+    motion.tail.setTailPin(() => false);
+    const notify = vi.spyOn(motion, "notifyLayoutMutated");
+    const schedule = vi.spyOn(motion, "scheduleLayoutReconcile");
+    for (let i = 0; i < 5; i += 1) {
+      setMessages((previous) => [...previous, message(40 + i)]);
+    }
+    await Promise.resolve();
+    expect(notify).not.toHaveBeenCalled();
+    expect(schedule.mock.calls.length).toBeGreaterThan(0);
+    await new Promise(requestAnimationFrame);
+    expect(notify).toHaveBeenCalledOnce();
+
+    // Pinned to live tail during a geometry transition: reconciles synchronously without scheduling a frame.
+    notify.mockClear();
+    schedule.mockClear();
+    motion.tail.setTailPin(() => true);
+    try {
+      setTranscriptSpacing({ ...DEFAULT_TRANSCRIPT_SPACING, messageGap: 2 });
+      expect(schedule).not.toHaveBeenCalled();
+      expect(notify).toHaveBeenCalledOnce();
+    } finally {
+      setTranscriptSpacing(DEFAULT_TRANSCRIPT_SPACING);
+      notify.mockRestore();
+      schedule.mockRestore();
+    }
+  });
+
   it("renders the virtual window in normal flow when layout is unavailable", async () => {
     clearTranscriptRowHeightsForTests();
     const messages: Message[] = Array.from({ length: 6 }, (_, i) => ({

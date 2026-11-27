@@ -339,6 +339,29 @@ runs:
       shell: bash
       run: ./task nix:check -- --prepare
 
+    # Hosts that restrict unprivileged user namespaces to profiled programs deny
+    # the Nix scanner builder until its exact-path AppArmor grant is loaded.
+    - name: Grant the Nix scanner builder user namespaces
+      if: inputs.lookup-only != 'true' && (runner.os == 'Linux' && inputs.nix == 'true')
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" == 1 ]]; then
+          export PATH="/nix/var/nix/profiles/default/bin:${PATH}"
+          derivation="$(python3 -c 'import os; from scripts.linux_release import nix, nix_closure_notices as tools; print(tools.command(nix.NIX, "git+file://" + os.getcwd(), dict(os.environ))[1]["derivation"])')"
+          output="$(nix build --extra-experimental-features 'nix-command flakes' --no-link --print-out-paths --no-write-lock-file "${derivation}^out")"
+          shopt -s nullglob
+          grants=("${output}"/share/painted-wolf-code/apparmor/paintedwolf-scanner-builder-*)
+          if [[ ${#grants[@]} -eq 0 ]]; then
+            echo "Nix scanner builder produced no AppArmor userns grant in ${output}" >&2
+            exit 1
+          fi
+          for grant in "${grants[@]}"; do
+            sudo install -m 0644 "${grant}" "/etc/apparmor.d/$(basename "${grant}")"
+            sudo apparmor_parser -r "/etc/apparmor.d/$(basename "${grant}")"
+          done
+        fi
+
     - name: Set up reference userland images
       if: inputs.lookup-only != 'true' && (inputs.userlands == 'true')
       uses: ./.github/actions/setup-reference-userlands

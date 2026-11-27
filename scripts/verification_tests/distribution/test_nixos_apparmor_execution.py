@@ -170,3 +170,29 @@ class NixAppArmorGrantTests(unittest.TestCase):
                 nix_apparmor.main(["engine", str(executable), str(other)])
             self.assertEqual(refused.exception.code, 1)
             self.assertFalse((other / "share").exists())
+
+    def test_verification_setup_loads_exact_scanner_builder_grant_after_nix_provisioning(self):
+        import yaml
+
+        action_path = SOURCE.parents[2] / ".github/actions/setup-verification/action.yml"
+        action = yaml.safe_load(action_path.read_text(encoding="utf-8"))
+        steps = action["runs"]["steps"]
+        nix_prepare = next(
+            i for i, step in enumerate(steps)
+            if step.get("name") == "Provision pinned Nix and locked inputs"
+        )
+        grant_step = next(
+            (i, step) for i, step in enumerate(steps)
+            if step.get("name") == "Grant the Nix scanner builder user namespaces"
+        )
+        self.assertGreater(grant_step[0], nix_prepare)
+        condition = grant_step[1].get("if", "")
+        self.assertIn("inputs.nix == 'true'", condition)
+        self.assertIn("runner.os == 'Linux'", condition)
+        self.assertIn("inputs.lookup-only != 'true'", condition)
+        script = grant_step[1].get("run", "")
+        self.assertIn("apparmor_restrict_unprivileged_userns", script)
+        self.assertIn("nix_closure_notices", script)
+        self.assertIn("paintedwolf-scanner-builder-*", script)
+        self.assertIn("apparmor_parser -r", script)
+        self.assertNotIn("/nix/store/**", script)

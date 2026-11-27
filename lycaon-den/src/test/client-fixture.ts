@@ -1,20 +1,26 @@
-import { vi } from "vitest";
 import type { LycaonClient } from "../api/client.ts";
 import { OperationContractError } from "../api/operation-contract-error.ts";
 
 export type ClientStubs = Partial<Record<keyof LycaonClient, unknown>>;
 
 type Method = (...args: unknown[]) => unknown;
-const { createLycaonClient } = await vi.importActual<typeof import("../api/client-impl.ts")>("../api/client-impl.ts");
-const probeClient = createLycaonClient({ baseUrl: "http://probe.invalid", apiToken: "" });
+const probeClient = await createProbeClient();
 const originals = new WeakMap<Method, Method>();
 const wrappers = new WeakMap<Method, Map<PropertyKey, Method>>();
+
+async function createProbeClient(): Promise<LycaonClient | undefined> {
+  if (!import.meta.env.VITEST) return undefined;
+  const { vi } = await import("vitest");
+  const { createLycaonClient } = await vi.importActual<typeof import("../api/client-impl.ts")>("../api/client-impl.ts");
+  return createLycaonClient({ baseUrl: "http://probe.invalid", apiToken: "" });
+}
 
 export function stubbedFunction(value: unknown): unknown {
   return typeof value === "function" ? originals.get(value as Method) ?? value : value;
 }
 
 function probeMethod(property: PropertyKey, override: Method): Method {
+  if (!probeClient) return override;
   const real = Reflect.get(probeClient, property) as unknown;
   if (typeof real !== "function") return override;
   const original = originals.get(override) ?? override;

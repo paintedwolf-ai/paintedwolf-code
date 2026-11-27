@@ -57,6 +57,9 @@ func TestCancellationTerminatesEngineTree(t *testing.T) {
 	}
 	drain := awaitNoEngineProcesses(t)
 	owned := obs.seenRunDirs()
+	if len(owned) == 0 {
+		t.Fatal("observer never attributed a run directory on the cancel path")
+	}
 	if leaked := survivingDirs(owned); len(leaked) > 0 {
 		t.Errorf("run directories leaked on the cancel path: %v", leaked)
 	}
@@ -101,6 +104,9 @@ func TestHardLimitTimeoutTerminatesEngineTree(t *testing.T) {
 	overshoot := elapsed - time.Duration(hard)*time.Second
 	drain := awaitNoEngineProcesses(t)
 	owned := obs.seenRunDirs()
+	if len(owned) == 0 {
+		t.Fatal("observer never attributed a run directory on the timeout path")
+	}
 	if leaked := survivingDirs(owned); len(leaked) > 0 {
 		t.Errorf("run directories leaked on the timeout path: %v", leaked)
 	}

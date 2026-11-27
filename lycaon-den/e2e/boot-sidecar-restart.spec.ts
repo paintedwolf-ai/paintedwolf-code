@@ -43,7 +43,6 @@ webE2e("interrupted tool settles after restart and preserves the unsent draft", 
     id: pending.id, tool_calls: [{ id: "bounded-command", name: "command", args: {
       // Each wait stays inside the inline budget, so the call runs instead of parking.
       command: "printf 'recovery started\\n'; sleep 9; sleep 9; sleep 9; printf 'recovery finished\\n'",
-      timeout_ms: 60000,
     } }],
   });
   try {
