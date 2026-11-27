@@ -22,7 +22,11 @@ from catalog_feed_search.driver_adapters import (
     map_source_index_coverage,
     map_sse_source_changed_to_answer,
 )
-from catalog_feed_search.driver_inprocess import build_task_digest_argv, parse_digest_output, run_inprocess_suite
+from catalog_feed_search.driver_inprocess import (
+    build_task_digest_argv,
+    parse_receipt_and_go_json,
+    run_inprocess_suite,
+)
 from catalog_feed_search.driver_provenance import collect_run_provenance, file_sha256, parse_proc_mounts_fs
 from catalog_feed_search.driver_sidecar import SidecarDriver
 from catalog_feed_search.driver_sse import LiveSSESubscriber
@@ -384,7 +388,7 @@ class SidecarLiveSSESubscriberAndControlsTests(unittest.TestCase):
                                 "project_id": "proj-1",
                                 "workspace_id": "ws_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                                 "resync": False,
-                                "changes": [{"root_id": "root-1", "path": DRAIN_SENTINEL_REL_PATH, "op": "create"}],
+                                "changes": [{"root_id": "root-1", "path": DRAIN_SENTINEL_REL_PATH, "op": "write"}],
                             },
                         },
                     ],
@@ -478,6 +482,7 @@ class SidecarLiveSSESubscriberAndControlsTests(unittest.TestCase):
                         ],
                         "matches": [
                             {"root_id": "root-1", "path": "docs/readme.md", "highlights": []},
+                            {"root_id": "root-1", "path": DRAIN_SENTINEL_REL_PATH, "highlights": []},
                             {"root_id": "root-1", "path": "src/alpha.txt", "highlights": []},
                             {"root_id": "root-1", "path": "src/control_write.txt", "highlights": []},
                         ],
@@ -575,7 +580,7 @@ class SidecarLiveSSESubscriberAndControlsTests(unittest.TestCase):
                                         {
                                             "root_id": "root-1",
                                             "path": DRAIN_SENTINEL_REL_PATH,
-                                            "op": "create",
+                                            "op": "write",
                                             "origin": "external",
                                             "changed_at": "2026-11-27T19:00:01Z",
                                         }
@@ -730,7 +735,7 @@ class SidecarLiveSSESubscriberAndControlsTests(unittest.TestCase):
                             "data": {
                                 "project_id": "proj-1",
                                 "resync": False,
-                                "changes": [{"root_id": "root-1", "path": DRAIN_SENTINEL_REL_PATH, "op": "create"}],
+                                "changes": [{"root_id": "root-1", "path": DRAIN_SENTINEL_REL_PATH, "op": "write"}],
                             },
                         }
                     ],
@@ -785,36 +790,92 @@ class SidecarLiveSSESubscriberAndControlsTests(unittest.TestCase):
 
 
 class InProcessAndCLITests(unittest.TestCase):
-    def test_inprocess_runner_requires_observed_pilot_cases(self) -> None:
+    def test_inprocess_runner_requires_receipt_and_go_json_pilot_run_and_pass(self) -> None:
         argv = build_task_digest_argv(REPO_ROOT, "./internal/search/...", pilot_test="TestCodeBudget")
         self.assertTrue(argv[0].endswith("/task"))
-        self.assertIn("-v", argv)
         self.assertIn("^TestCodeBudget$", argv)
 
-        # Exit 0 with 0 observed executed cases -> UNKNOWN, NOT qualified!
-        empty_res = parse_digest_output(argv, 0, "ok  \tgithub.com/lycaon/lycaon/internal/search\t0.01s\n", "", pilot_test="TestCodeBudget")
-        self.assertFalse(empty_res.qualified)
-        self.assertEqual(empty_res.verdict, "UNKNOWN")
-        self.assertEqual(empty_res.executed_cases, 0)
-
-        # Exit 0 with a different test passing (pilot missing) -> UNKNOWN!
-        other_res = parse_digest_output(argv, 0, "--- PASS: TestOther (0.01s)\n", "", pilot_test="TestCodeBudget")
-        self.assertFalse(other_res.qualified)
-        self.assertEqual(other_res.verdict, "UNKNOWN")
-        self.assertFalse(other_res.pilot_matched)
-
-        # Exit 0 with selected pilot passing -> PASS & qualified!
-        ok_out = "--- PASS: TestCodeBudget (0.01s)\nok  \tgithub.com/lycaon/lycaon/internal/search\t0.02s\n"
-        ok_res = run_inprocess_suite(
-            REPO_ROOT,
-            "./internal/search/...",
+        # 1. Exit 0 with missing receipt -> UNKNOWN, NOT qualified.
+        missing_res = parse_receipt_and_go_json(
+            argv,
+            0,
+            "Request test:digest: passed, exit 0.\n",
+            "",
             pilot_test="TestCodeBudget",
-            executor=lambda _argv, _cwd: (0, ok_out, ""),
         )
-        self.assertTrue(ok_res.qualified)
-        self.assertEqual(ok_res.verdict, "PASS")
-        self.assertEqual(ok_res.executed_cases, 1)
-        self.assertTrue(ok_res.pilot_matched)
+        self.assertFalse(missing_res.qualified)
+        self.assertEqual(missing_res.verdict, "UNKNOWN")
+        self.assertEqual(missing_res.executed_cases, 0)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            artifact_dir = Path(tmp)
+            go_json = artifact_dir / "stage-001-go.json"
+            receipt_file = artifact_dir / "req-001.json"
+            receipt_payload = {
+                "request": "req-001",
+                "status": "passed",
+                "source_commit": "3bb1464d22dd0a38a149d37610810e7a0324e8cf",
+                "evidence": [
+                    {
+                        "stage": "test:digest",
+                        "results": {
+                            "github.com/lycaon/lycaon/internal/search": {
+                                "status": "passed",
+                                "stage_id": "stage-001",
+                                "raw": str(go_json),
+                            }
+                        },
+                    }
+                ],
+            }
+            receipt_file.write_text(json.dumps(receipt_payload), encoding="utf-8")
+
+            # 2. Valid receipt whose Go JSON lacks the selected pilot -> UNKNOWN.
+            go_json.write_text(
+                "\n".join(
+                    [
+                        json.dumps({"Action": "run", "Package": "p", "Test": "TestOther"}),
+                        json.dumps({"Action": "pass", "Package": "p", "Test": "TestOther"}),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            no_pilot = parse_receipt_and_go_json(
+                argv,
+                0,
+                f"Receipt: {receipt_file}\n",
+                "",
+                pilot_test="TestCodeBudget",
+            )
+            self.assertFalse(no_pilot.qualified)
+            self.assertEqual(no_pilot.verdict, "UNKNOWN")
+            self.assertFalse(no_pilot.pilot_matched)
+
+            # 3. Valid receipt + Go JSON with pilot run + pass -> PASS & qualified!
+            go_json.write_text(
+                "\n".join(
+                    [
+                        json.dumps({"Action": "run", "Package": "p", "Test": "TestCodeBudget"}),
+                        json.dumps({"Action": "pass", "Package": "p", "Test": "TestCodeBudget"}),
+                        json.dumps({"Action": "pass", "Package": "p"}),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            ok_res = run_inprocess_suite(
+                REPO_ROOT,
+                "./internal/search/...",
+                pilot_test="TestCodeBudget",
+                executor=lambda _argv, _cwd: (0, f"Request test:digest: passed, exit 0.\nReceipt: {receipt_file}\n", ""),
+            )
+            self.assertTrue(ok_res.qualified)
+            self.assertEqual(ok_res.verdict, "PASS")
+            self.assertEqual(ok_res.executed_cases, 1)
+            self.assertTrue(ok_res.pilot_matched)
+            self.assertEqual(ok_res.source_digest, "3bb1464d22dd0a38a149d37610810e7a0324e8cf")
+            self.assertEqual(ok_res.receipt_path, str(receipt_file))
 
     def test_cli_controls_and_replay_subcommands(self) -> None:
         buf_ctrl = io.StringIO()

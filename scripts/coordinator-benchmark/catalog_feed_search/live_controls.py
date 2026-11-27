@@ -293,7 +293,7 @@ def run_live_control_change_feed(
         before_sentinel_idx = len(frames)
         sentinel_script = ChangeScript(
             selector=ReplaySelector(BASE_SEED_PRIMARY, "CONTROL_FEED_SENTINEL", 0),
-            ops=(ChangeOp("create", sentinel_path, content=b"drain sentinel\n"),),
+            ops=(ChangeOp("edit", sentinel_path, content=b"drain sentinel updated\n"),),
         )
         sentinel_log = runner.run(root_dir, sentinel_script)
         logged_entries.extend(_retag_write_log(sentinel_log, root_id, seq_offset=len(logged_entries)))
@@ -411,6 +411,7 @@ def build_live_control_fixture(root_dir: Path) -> None:
         entries=(
             TreeEntrySpec("src/alpha.txt", "file", b"PaintedWolfControlToken line one\n"),
             TreeEntrySpec("src/control_write.txt", "file", b"initial content\n"),
+            TreeEntrySpec(DRAIN_SENTINEL_REL_PATH, "file", b"drain sentinel initial\n"),
             TreeEntrySpec("docs/readme.md", "file", b"control fixture readme\n"),
         ),
     )
