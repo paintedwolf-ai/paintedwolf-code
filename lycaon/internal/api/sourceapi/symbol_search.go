@@ -176,8 +176,15 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 		return symbolProjectResult{err: err}
 	}
 	if !symbolEpochsCurrent(entry.stamp) {
-		entry.discovery = nil
+		entry.reset("", nil)
 		return symbolProjectResult{coverage: projectsource.DeclarationCoverage{Gaps: []projectsource.DeclarationGap{{Reason: projectsource.DeclarationCatalogRefreshing}}}}
+	}
+	if result.Incomplete {
+		entry.recordMatchFiles(p, result.Symbols)
+	} else {
+		// Completed searches do not retain disposable resume state; subsequent
+		// requests re-validate live file bytes instead of replaying stale hits.
+		entry.reset("", nil)
 	}
 	if !entry.retained {
 		for i, gap := range result.Coverage.Gaps {

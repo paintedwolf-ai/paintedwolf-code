@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -24,14 +26,69 @@ type symbolProgressCache struct {
 	entries map[[32]byte]*symbolProgressEntry
 }
 
+type symbolFileVersion struct {
+	Size        int64
+	ModTimeNano int64
+}
+
 type symbolProgressEntry struct {
-	retained  bool
-	gate      chan struct{}
-	users     int
-	used      time.Time
-	stamp     string
-	state     symbolsearch.Progress
-	discovery projectsource.DeclarationSearch
+	retained     bool
+	gate         chan struct{}
+	users        int
+	used         time.Time
+	stamp        string
+	state        symbolsearch.Progress
+	discovery    projectsource.DeclarationSearch
+	fileVersions map[string]symbolFileVersion
+}
+
+func (e *symbolProgressEntry) reset(stamp string, discovery projectsource.DeclarationSearch) {
+	e.state = symbolsearch.Progress{}
+	e.discovery = discovery
+	e.stamp = stamp
+	e.fileVersions = nil
+}
+
+func (e *symbolProgressEntry) recordMatchFiles(p *project.Project, matches []symbolsearch.Match) {
+	if len(matches) == 0 {
+		e.fileVersions = nil
+		return
+	}
+	rootsByID := make(map[string]string, len(p.Roots))
+	for _, r := range p.Roots {
+		rootsByID[r.ID] = r.Path
+	}
+	versions := make(map[string]symbolFileVersion, len(matches))
+	for _, m := range matches {
+		rootPath, ok := rootsByID[m.RootID]
+		if !ok {
+			continue
+		}
+		abs := filepath.Join(rootPath, filepath.FromSlash(m.Path))
+		if _, seen := versions[abs]; seen {
+			continue
+		}
+		info, err := os.Stat(abs)
+		if err != nil {
+			versions[abs] = symbolFileVersion{Size: -1}
+			continue
+		}
+		versions[abs] = symbolFileVersion{Size: info.Size(), ModTimeNano: info.ModTime().UnixNano()}
+	}
+	e.fileVersions = versions
+}
+
+func (e *symbolProgressEntry) matchFilesCurrent() bool {
+	for abs, want := range e.fileVersions {
+		info, err := os.Stat(abs)
+		if err != nil {
+			return false
+		}
+		if info.Size() != want.Size || info.ModTime().UnixNano() != want.ModTimeNano {
+			return false
+		}
+	}
+	return true
 }
 
 type symbolSourceStamp struct {
@@ -134,10 +191,8 @@ func (c *symbolProgressCache) acquire(ctx context.Context, p *project.Project, l
 		release()
 		return nil, nil, err
 	}
-	if entry.discovery == nil || entry.stamp != stamp || !symbolEpochsCurrent(entry.stamp) {
-		entry.state = symbolsearch.Progress{}
-		entry.discovery = declarationSearchIn(leg.DiscoveryScope(), leg.Flags.Include, leg.Flags.Exclude, leg.IncludeDependencies)
-		entry.stamp = stamp
+	if entry.discovery == nil || entry.stamp != stamp || !symbolEpochsCurrent(entry.stamp) || !entry.matchFilesCurrent() {
+		entry.reset(stamp, declarationSearchIn(leg.DiscoveryScope(), leg.Flags.Include, leg.Flags.Exclude, leg.IncludeDependencies))
 	}
 	return entry, release, nil
 }
