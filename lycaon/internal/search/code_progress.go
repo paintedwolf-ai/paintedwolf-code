@@ -94,7 +94,7 @@ func (e *CodeExecutor) candidatePageScan(ctx context.Context, gen codeGeneration
 			return coverage.DiscoveryComplete && !coverage.Refreshing, nil
 		}
 		files := codeFilesFromEntries(gen.root, gen.rootID, gen.rootPath, entries)
-		jobs, warming := e.contentJobs(ctx, gen, paths.codeScope(), entries, files, spec, &report.Code, nil, nil)
+		jobs, warming, _ := e.contentJobs(ctx, gen, paths.codeScope(), entries, files, spec, &report.Code, nil, nil, nil, nil)
 		candidates := make(map[string]codeScanJob, len(jobs))
 		for _, job := range jobs {
 			candidates[job.file.rel] = job

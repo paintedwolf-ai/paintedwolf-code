@@ -5,9 +5,14 @@ import (
 	"strings"
 )
 
-// codeDraftOverlayMaxDocs bounds how many dirty editor drafts are projected
-// for a single searched root in one code-search leg.
-const codeDraftOverlayMaxDocs = 256
+const (
+	// codeDraftOverlayMaxDocs bounds how many dirty editor drafts are
+	// materialized for a single searched root in one code-search leg.
+	codeDraftOverlayMaxDocs = 256
+	// codeDraftOverlayMaxTotalBytes bounds total materialized dirty draft bytes
+	// across one searched root in one code-search leg.
+	codeDraftOverlayMaxTotalBytes int64 = 8 << 20
+)
 
 // CodeDraft is an authorized caller's unsaved editor buffer for one path
 // inside a searched project root.
@@ -16,10 +21,18 @@ type CodeDraft struct {
 	Content string
 }
 
+// CodeDraftOverlay pairs materialized dirty buffers with the exact paths of
+// dirty drafts omitted by row, per-document byte, or total materialized byte
+// caps so the code leg excludes stale on-disk bytes and reports skipped files.
+type CodeDraftOverlay struct {
+	Drafts       []CodeDraft
+	OmittedPaths []string
+}
+
 // CodeDraftProvider returns bounded active dirty editor drafts visible to ctx
 // for one (projectID, rootID) pair. Implementations must derive caller and
 // workspace authorization from ctx/request rather than trusting IDs alone.
-type CodeDraftProvider func(ctx context.Context, projectID, rootID string, maxDocs int, maxBytes int64) ([]CodeDraft, error)
+type CodeDraftProvider func(ctx context.Context, projectID, rootID string, maxDocs int, maxDocBytes, maxTotalBytes int64) (CodeDraftOverlay, error)
 
 // validExactDraftRelPath validates a root-relative POSIX path without trimming
 // whitespace or rewriting literal backslashes, preserving exact filename

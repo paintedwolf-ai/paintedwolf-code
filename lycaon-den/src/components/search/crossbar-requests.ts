@@ -11,6 +11,7 @@ export const SEARCH_DEBOUNCE_MS = 280;
 export type CrossbarRequestOptions = {
   open: () => boolean;
   originProjectId: () => string | null;
+  originSessionId?: () => string | null | undefined;
   mode: () => CrossbarMode;
   hasLocalFileArm: () => boolean;
   activeSource: () => unknown;
@@ -21,7 +22,7 @@ export type CrossbarRequestOptions = {
   setSearching: (busy: boolean) => void;
 };
 
-export function createCrossbarRequests({ open, originProjectId, mode, hasLocalFileArm,
+export function createCrossbarRequests({ open, originProjectId, originSessionId, mode, hasLocalFileArm,
   activeSource, matchPrefs, setHits, setSearchCoverage, setSearchErrorNote, setSearching,
 }: CrossbarRequestOptions) {
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -61,6 +62,7 @@ export function createCrossbarRequests({ open, originProjectId, mode, hasLocalFi
     if (presentation === "foreground") setSearching(true);
     try {
       const prefs = matchPrefs();
+      const sessionId = originSessionId?.()?.trim() || undefined;
       const result = await client.search(
         crossbarServerQuery(trimmed, mode()),
         originProjectId() ?? undefined,
@@ -70,6 +72,7 @@ export function createCrossbarRequests({ open, originProjectId, mode, hasLocalFi
           wholeWord: prefs.wholeWord,
           include: parseGlobField(prefs.include),
           exclude: parseGlobField(prefs.exclude),
+          ...(sessionId ? { sessionId } : {}),
           budget: "interactive",
         },
         controller.signal,

@@ -33,6 +33,8 @@ type CodeExecutor struct {
 	rerank decide.Reranker
 	// drafts overlays authorized caller dirty editor buffers over disk bytes.
 	drafts CodeDraftProvider
+	// draftTotalByteCap overrides codeDraftOverlayMaxTotalBytes in tests; 0 uses default.
+	draftTotalByteCap int64
 	// legDeadline injects the leg's deadline context in tests; nil in production.
 	legDeadline func(ctx context.Context, leg *CodePlanLeg) (context.Context, context.CancelFunc)
 }

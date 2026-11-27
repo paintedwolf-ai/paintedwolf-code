@@ -66,45 +66,72 @@ type DirtyRootDraft struct {
 	Draft string
 }
 
+// DirtyRootDrafts holds materialized dirty drafts within budget alongside the
+// exact paths of dirty drafts omitted by row, per-document byte, or total
+// materialized byte caps so callers never fall back to stale on-disk bytes.
+type DirtyRootDrafts struct {
+	Drafts       []DirtyRootDraft
+	OmittedPaths []string
+}
+
 // DirtyDraftsForRoot returns dirty drafts for a single (projectID, branch,
 // rootID), projecting only (path, draft) with SQL-level root/branch filtering
-// and bounded by maxDocs and maxBytes per draft.
-func (s *Service) DirtyDraftsForRoot(ctx context.Context, projectID string, branch sourcebranch.ID, rootID string, maxDocs int, maxBytes int64) ([]DirtyRootDraft, error) {
+// and enforcing maxDocs, maxDocBytes, and maxTotalBytes. Oversized or capped
+// dirty paths are reported in OmittedPaths without materializing their bytes.
+func (s *Service) DirtyDraftsForRoot(ctx context.Context, projectID string, branch sourcebranch.ID, rootID string, maxDocs int, maxDocBytes, maxTotalBytes int64) (DirtyRootDrafts, error) {
 	if s == nil || s.store == nil {
-		return nil, nil
+		return DirtyRootDrafts{}, nil
 	}
 	rootID = strings.TrimSpace(rootID)
-	if rootID == "" || maxDocs <= 0 {
-		return nil, nil
+	if rootID == "" {
+		return DirtyRootDrafts{}, nil
 	}
 	p, err := s.projectBranch(ctx, strings.TrimSpace(projectID), branch)
 	if err != nil {
-		return nil, err
+		return DirtyRootDrafts{}, err
 	}
 	targetBranch := p.BranchForRoot(rootID)
-	query := `SELECT path, draft FROM editor_documents WHERE project_id = ? AND branch_id = ? AND root_id = ? AND dirty = 1`
-	args := []any{p.ID, targetBranch, rootID}
-	if maxBytes > 0 {
-		query += ` AND length(CAST(draft AS BLOB)) <= ?`
-		args = append(args, maxBytes)
+	var (
+		query string
+		args  []any
+	)
+	if maxDocBytes > 0 {
+		query = `SELECT path, length(CAST(draft AS BLOB)), CASE WHEN length(CAST(draft AS BLOB)) <= ? THEN draft ELSE '' END FROM editor_documents WHERE project_id = ? AND branch_id = ? AND root_id = ? AND dirty = 1 ORDER BY path, id`
+		args = []any{maxDocBytes, p.ID, targetBranch, rootID}
+	} else {
+		query = `SELECT path, length(CAST(draft AS BLOB)), draft FROM editor_documents WHERE project_id = ? AND branch_id = ? AND root_id = ? AND dirty = 1 ORDER BY path, id`
+		args = []any{p.ID, targetBranch, rootID}
 	}
-	query += ` ORDER BY path, id LIMIT ?`
-	args = append(args, maxDocs)
 	rows, err := s.store.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return DirtyRootDrafts{}, err
 	}
 	defer func() { _ = rows.Close() }()
-	var out []DirtyRootDraft
+	var (
+		out        DirtyRootDrafts
+		totalBytes int64
+	)
 	for rows.Next() {
-		var item DirtyRootDraft
-		if err := rows.Scan(&item.Path, &item.Draft); err != nil {
-			return nil, err
+		var (
+			rel      string
+			docBytes int64
+			draft    string
+		)
+		if err := rows.Scan(&rel, &docBytes, &draft); err != nil {
+			return DirtyRootDrafts{}, err
 		}
-		out = append(out, item)
+		overDocs := maxDocs > 0 && len(out.Drafts) >= maxDocs
+		overDocBytes := maxDocBytes > 0 && docBytes > maxDocBytes
+		overTotalBytes := maxTotalBytes > 0 && totalBytes+docBytes > maxTotalBytes
+		if overDocs || overDocBytes || overTotalBytes {
+			out.OmittedPaths = append(out.OmittedPaths, rel)
+			continue
+		}
+		totalBytes += docBytes
+		out.Drafts = append(out.Drafts, DirtyRootDraft{Path: rel, Draft: draft})
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return DirtyRootDrafts{}, err
 	}
 	return out, nil
 }

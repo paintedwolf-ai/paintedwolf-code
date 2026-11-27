@@ -185,41 +185,44 @@ func (s *Handler) searchService(r *http.Request) *search.Service {
 // (projectID, branch, rootID).
 func (s *Handler) authorizedCodeDrafts(r *http.Request) search.CodeDraftProvider {
 	sessionID := strings.TrimSpace(r.URL.Query().Get("session_id"))
-	return func(ctx context.Context, projectID, rootID string, maxDocs int, maxBytes int64) ([]search.CodeDraft, error) {
+	return func(ctx context.Context, projectID, rootID string, maxDocs int, maxDocBytes, maxTotalBytes int64) (search.CodeDraftOverlay, error) {
 		caller, ok := people.Caller(ctx)
 		if !ok || !people.MayInvoke(caller, "openEditorDocument") {
-			return nil, nil
+			return search.CodeDraftOverlay{}, nil
 		}
 		p, err := s.projectRegistry.Get(ctx, strings.TrimSpace(projectID))
 		if err != nil || p == nil {
-			return nil, nil
+			return search.CodeDraftOverlay{}, nil
 		}
 		if sessionID != "" {
 			if s.sessionStore == nil {
-				return nil, nil
+				return search.CodeDraftOverlay{}, nil
 			}
 			scoped, err := requestscope.ResolveSessionProject(s.sessionStore, ctx, p, sessionID)
 			if err != nil {
 				// Invalid, cross-project, or stale workspace session never falls back to trunk drafts.
-				return nil, nil
+				return search.CodeDraftOverlay{}, nil
 			}
 			// A session bound to a separate worktree workspace does not share trunk drafts.
 			if scoped.Binding != nil || scoped.Project.WorkspaceID() != p.WorkspaceID() {
-				return nil, nil
+				return search.CodeDraftOverlay{}, nil
 			}
 			p = scoped.Project
 		}
 		branch := p.BranchForRoot(rootID)
 		if branch != sourcebranch.Trunk {
-			return nil, nil
+			return search.CodeDraftOverlay{}, nil
 		}
-		docs, err := s.editorDocuments.DirtyDraftsForRoot(ctx, p.ID, branch, rootID, maxDocs, maxBytes)
-		if err != nil || len(docs) == 0 {
-			return nil, err
+		docs, err := s.editorDocuments.DirtyDraftsForRoot(ctx, p.ID, branch, rootID, maxDocs, maxDocBytes, maxTotalBytes)
+		if err != nil || (len(docs.Drafts) == 0 && len(docs.OmittedPaths) == 0) {
+			return search.CodeDraftOverlay{}, err
 		}
-		out := make([]search.CodeDraft, 0, len(docs))
-		for _, d := range docs {
-			out = append(out, search.CodeDraft{Path: d.Path, Content: d.Draft})
+		out := search.CodeDraftOverlay{
+			Drafts:       make([]search.CodeDraft, 0, len(docs.Drafts)),
+			OmittedPaths: docs.OmittedPaths,
+		}
+		for _, d := range docs.Drafts {
+			out.Drafts = append(out.Drafts, search.CodeDraft{Path: d.Path, Content: d.Draft})
 		}
 		return out, nil
 	}

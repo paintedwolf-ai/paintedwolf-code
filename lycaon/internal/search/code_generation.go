@@ -125,14 +125,16 @@ func (e *CodeExecutor) scanGeneration(ctx context.Context, gen codeGeneration, p
 	if !spec.wantLines || spec.lineCap <= 0 {
 		return nil
 	}
-	draftsByPath := e.rootDrafts(ctx, gen, paths, *spec)
+	draftsByPath, omittedDrafts := e.rootDrafts(ctx, gen, paths, *spec)
 	seenDrafts := make(map[string]bool, len(draftsByPath))
+	seenOmitted := make(map[string]bool, len(omittedDrafts))
 	indexWarming := false
 	err = visitCodePages(ctx, gen, paths, spec.lineExcludes, func(entries []sourcecatalog.Entry, files []codeFile) bool {
 		if !spec.wantFiles {
 			report.Code.FilesListed += len(files)
 		}
-		jobs, warming := e.contentJobs(ctx, gen, paths.codeScope(), entries, files, *spec, &report.Code, draftsByPath, seenDrafts)
+		jobs, warming, skippedOmitted := e.contentJobs(ctx, gen, paths.codeScope(), entries, files, *spec, &report.Code, draftsByPath, seenDrafts, omittedDrafts, seenOmitted)
+		report.SkippedFiles += skippedOmitted
 		indexWarming = indexWarming || warming
 		contentSpec := *spec
 		contentSpec.wantFiles = false
@@ -145,6 +147,9 @@ func (e *CodeExecutor) scanGeneration(ctx context.Context, gen codeGeneration, p
 		spec.lineCap -= len(result.hits)
 		return spec.lineCap > 0
 	})
+	if len(omittedDrafts) > len(seenOmitted) {
+		report.SkippedFiles += len(omittedDrafts) - len(seenOmitted)
+	}
 	if err == nil && len(draftsByPath) > len(seenDrafts) && spec.lineCap > 0 && ctx.Err() == nil {
 		extraPaths := make([]string, 0, len(draftsByPath)-len(seenDrafts))
 		for rel := range draftsByPath {
@@ -185,31 +190,53 @@ func (e *CodeExecutor) scanGeneration(ctx context.Context, gen codeGeneration, p
 	return err
 }
 
-func (e *CodeExecutor) rootDrafts(ctx context.Context, gen codeGeneration, paths pathGlobFilter, spec codeScanSpec) map[string]string {
+func (e *CodeExecutor) rootDrafts(ctx context.Context, gen codeGeneration, paths pathGlobFilter, spec codeScanSpec) (map[string]string, map[string]bool) {
 	if e.drafts == nil || gen.ephemeral {
-		return nil
+		return nil, nil
 	}
-	list, err := e.drafts(ctx, gen.root.ProjectID, gen.rootID, codeDraftOverlayMaxDocs, spec.maxBytes)
-	if err != nil || len(list) == 0 {
-		return nil
+	totalCap := e.draftTotalByteCap
+	if totalCap <= 0 {
+		totalCap = codeDraftOverlayMaxTotalBytes
 	}
-	out := make(map[string]string, len(list))
-	for _, d := range list {
-		if !validExactDraftRelPath(d.Path) {
+	overlay, err := e.drafts(ctx, gen.root.ProjectID, gen.rootID, codeDraftOverlayMaxDocs, spec.maxBytes, totalCap)
+	if err != nil || (len(overlay.Drafts) == 0 && len(overlay.OmittedPaths) == 0) {
+		return nil, nil
+	}
+	var (
+		out        map[string]string
+		omitted    map[string]bool
+		totalBytes int64
+	)
+	markOmitted := func(rel string) {
+		if omitted == nil {
+			omitted = map[string]bool{}
+		}
+		omitted[rel] = true
+	}
+	for _, rel := range overlay.OmittedPaths {
+		if !validExactDraftRelPath(rel) || underDependencyDir(rel, spec.lineExcludes) || !paths.allowsCode(rel) {
 			continue
 		}
-		if underDependencyDir(d.Path, spec.lineExcludes) || !paths.allowsCode(d.Path) {
+		markOmitted(rel)
+	}
+	for _, d := range overlay.Drafts {
+		if !validExactDraftRelPath(d.Path) || underDependencyDir(d.Path, spec.lineExcludes) || !paths.allowsCode(d.Path) {
 			continue
 		}
-		if spec.maxBytes > 0 && int64(len(d.Content)) > spec.maxBytes {
+		docBytes := int64(len(d.Content))
+		if (spec.maxBytes > 0 && docBytes > spec.maxBytes) ||
+			len(out) >= codeDraftOverlayMaxDocs ||
+			(totalCap > 0 && totalBytes+docBytes > totalCap) {
+			markOmitted(d.Path)
 			continue
 		}
+		if out == nil {
+			out = make(map[string]string, len(overlay.Drafts))
+		}
+		totalBytes += docBytes
 		out[d.Path] = d.Content
 	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
+	return out, omitted
 }
 
 // visitCodePages seeks past each excluded directory; its rows can outnumber
@@ -243,7 +270,7 @@ func visitCodePages(ctx context.Context, gen codeGeneration, paths pathGlobFilte
 	}
 }
 
-func (e *CodeExecutor) contentJobs(ctx context.Context, gen codeGeneration, scope sourcecatalog.FileScope, entries []sourcecatalog.Entry, files []codeFile, spec codeScanSpec, stats *CodeLegReport, draftsByPath map[string]string, seenDrafts map[string]bool) ([]codeScanJob, bool) {
+func (e *CodeExecutor) contentJobs(ctx context.Context, gen codeGeneration, scope sourcecatalog.FileScope, entries []sourcecatalog.Entry, files []codeFile, spec codeScanSpec, stats *CodeLegReport, draftsByPath map[string]string, seenDrafts map[string]bool, omittedDrafts map[string]bool, seenOmitted map[string]bool) ([]codeScanJob, bool, int) {
 	var candidates map[string]bool
 	warming := false
 	if spec.prefilter.active() && !gen.ephemeral {
@@ -268,7 +295,13 @@ func (e *CodeExecutor) contentJobs(ctx context.Context, gen codeGeneration, scop
 		}
 	}
 	jobs := make([]codeScanJob, 0, len(files))
+	skippedOmitted := 0
 	for _, file := range files {
+		if omittedDrafts[file.rel] {
+			seenOmitted[file.rel] = true
+			skippedOmitted++
+			continue
+		}
 		if draftText, hasDraft := draftsByPath[file.rel]; hasDraft {
 			seenDrafts[file.rel] = true
 			text := draftText
@@ -282,5 +315,5 @@ func (e *CodeExecutor) contentJobs(ctx context.Context, gen codeGeneration, scop
 		jobs = append(jobs, codeScanJob{file: file, content: true})
 		stats.ContentCandidates++
 	}
-	return jobs, warming
+	return jobs, warming, skippedOmitted
 }
