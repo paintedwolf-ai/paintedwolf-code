@@ -190,5 +190,133 @@ class TestTB06ObserversAndEvaluators(unittest.TestCase):
         self.assertTrue(parsed["E05"]["disk_conflict_refused"])
 
 
+class TestTB06InprocManifestAndSidecarRunner(unittest.TestCase):
+    def test_inproc_manifest_matches_go_selectors_and_pinned_owner(self) -> None:
+        wea_dir = pathlib.Path(__file__).resolve().parent
+        repo_root = wea_dir.parent.parent.parent
+        manifest_path = wea_dir / "tb06_inproc_manifest.json"
+        self.assertTrue(manifest_path.is_file())
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(manifest["card"], "TB06")
+        self.assertEqual(manifest["family"], "E06")
+        self.assertEqual(manifest["lane"], "in-process")
+        self.assertEqual(manifest["slot_count"], 8)
+        self.assertEqual(len(manifest["slots"]), 8)
+        self.assertEqual(manifest["product_owner_source"]["git_short_head"], "bbeb46e72c")
+        self.assertEqual(
+            manifest["product_owner_source"]["git_head"],
+            "bbeb46e72ce3d1cfc052259cadcce29185bb40bd",
+        )
+        self.assertEqual(
+            manifest["test_only_overlay_files"],
+            ["lycaon/test/wea/tb06_history_test.go"],
+        )
+
+        go_test_src = (repo_root / "lycaon" / "test" / "wea" / "tb06_history_test.go").read_text(encoding="utf-8")
+        slot_ids = set()
+        for slot in manifest["slots"]:
+            self.assertEqual(slot["family"], "E06")
+            self.assertEqual(slot["lane"], "in-process")
+            self.assertNotIn(slot["slot_id"], slot_ids)
+            slot_ids.add(slot["slot_id"])
+            self.assertIn(f't.Run("{slot["variant"]}"', go_test_src)
+            self.assertIn(slot["variant"], slot["go_test_selector"])
+
+    def test_sidecar_slot_catalog_matches_50_slot_ledger(self) -> None:
+        from collections import Counter
+        from wea.tb06_sidecar_runner import TB06_SIDECAR_SLOTS, main as sidecar_main
+
+        self.assertEqual(len(TB06_SIDECAR_SLOTS), 50)
+        counts = Counter(s.family for s in TB06_SIDECAR_SLOTS)
+        self.assertEqual(dict(counts), {"E04": 18, "E05": 12, "E06": 10, "E07": 5, "E09": 5})
+        self.assertEqual(len({s.slot_id for s in TB06_SIDECAR_SLOTS}), 50)
+
+        e04_pairs = {(s.params["branch"], s.params["author"]) for s in TB06_SIDECAR_SLOTS if s.family == "E04"}
+        self.assertEqual(len(e04_pairs), 18)
+
+        restart_slots = [s.slot_id for s in TB06_SIDECAR_SLOTS if s.requires_restart]
+        self.assertEqual(len(restart_slots), 2)
+        self.assertTrue(all(sid.startswith("E06-") for sid in restart_slots))
+
+        # CLI --list-slots returns 0 cleanly.
+        import io
+        from contextlib import redirect_stdout
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = sidecar_main(["--list-slots"])
+        self.assertEqual(rc, 0)
+        listed = json.loads(buf.getvalue())
+        self.assertEqual(len(listed), 50)
+
+    def test_sidecar_batch_receipt_schema_and_warmed_reuse(self) -> None:
+        from unittest import mock
+        from wea import tb06_sidecar_runner as sr
+
+        created_apps: list[pathlib.Path] = []
+
+        class _FakeApp:
+            def __init__(self, d: pathlib.Path) -> None:
+                self.directory = d
+                self.closed = False
+
+            def ready(self) -> None:
+                pass
+
+            def close(self, cleanup: bool = True) -> None:
+                self.closed = True
+
+        def fake_create(app_dir, **_kwargs):
+            created_apps.append(pathlib.Path(app_dir))
+            return _FakeApp(pathlib.Path(app_dir))
+
+        fake_prov = {
+            "product_source": {
+                "executable_path": "/opt/lycaon-dev",
+                "executable_sha256": "a" * 64,
+                "go_build_id": "bid-bbeb46e72c",
+                "effective_git_head": "bbeb46e72ce3d1cfc052259cadcce29185bb40bd",
+                "verified": True,
+            },
+            "harness_source": {"git_head": "5af39d87b9", "dirty": False},
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = pathlib.Path(tmp) / "out"
+            with (
+                mock.patch.object(sr, "_create_application", side_effect=fake_create),
+                mock.patch.object(sr, "collect_provenance", return_value=fake_prov),
+                mock.patch.object(sr, "_drive_e04_slot", return_value=({"ok": True}, {"sha": "abc"}, [])),
+                mock.patch.object(sr, "_drive_e07_slot", return_value=({"ok": True}, {"marks": 1}, [])),
+            ):
+                summary = sr.run_tb06_sidecar_batch(
+                    out_dir,
+                    slot_ids={"E04-01-trunk-person", "E04-02-trunk-agent", "E07-01-initial_marks_and_ai_counts"},
+                )
+
+            # All 3 non-restart slots reused ONE warmed sidecar!
+            self.assertEqual(len(created_apps), 1)
+            self.assertEqual(summary["total_slots"], 3)
+            self.assertEqual(summary["passed"], 3)
+            self.assertEqual(summary["failed"], 0)
+            self.assertTrue((out_dir / "summary.json").is_file())
+            for rpath in summary["slot_receipts"]:
+                rec = json.loads(pathlib.Path(rpath).read_text(encoding="utf-8"))
+                for key in (
+                    "slot_id",
+                    "family",
+                    "lane",
+                    "product_source",
+                    "harness_source",
+                    "typed_result",
+                    "independent_observation",
+                    "verdict",
+                ):
+                    self.assertIn(key, rec)
+                self.assertEqual(rec["lane"], "sidecar")
+                self.assertEqual(rec["verdict"], "pass")
+
+
 if __name__ == "__main__":
     unittest.main()
