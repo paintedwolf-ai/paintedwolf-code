@@ -74,27 +74,22 @@ class _LoopbackDropServer:
                 buf = b''
                 while b'\r\n\r\n' not in buf and len(buf) < 65536:
                     chunk = self.request.recv(4096)
-                    if not chunk:
-                        break
+                    if not chunk: break
                     buf += chunk
-                if b'\r\n\r\n' not in buf:
-                    return
+                if b'\r\n\r\n' not in buf: return
                 head, rest = buf.split(b'\r\n\r\n', 1)
                 lines = head.decode('latin-1', errors='replace').split('\r\n')
                 parts = lines[0].split(' ')
                 method, path = (parts[0] if parts else ''), (parts[1] if len(parts) > 1 else '')
                 headers = {k.strip().lower(): v.strip() for ln in lines[1:] if ':' in ln for k, v in [ln.split(':', 1)]}
-                length = int(headers.get('content-length', '0') or '0')
-                body = rest
+                length, body = int(headers.get('content-length', '0') or '0'), rest
                 while len(body) < length:
                     chunk = self.request.recv(min(4096, length - len(body)))
-                    if not chunk:
-                        break
+                    if not chunk: break
                     body += chunk
                 with owner._lock:
                     owner.requests.append({'seq': len(owner.requests) + 1, 'method': method, 'path': path, 'body': body[:length].decode('utf-8', errors='replace')})
-                if method == 'POST' and path == '/commit':
-                    return
+                if method == 'POST' and path == '/commit': return
                 self.request.sendall(b'HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n')
 
         class _Srv(socketserver.ThreadingTCPServer):
@@ -106,14 +101,11 @@ class _LoopbackDropServer:
         return self._server.server_address[1]
 
     def snapshot(self):
-        with self._lock:
-            return [dict(r) for r in self.requests]
+        with self._lock: return [dict(r) for r in self.requests]
 
     def close(self):
-        if self._server is not None:
-            self._server.shutdown(); self._server.server_close()
-        if self._thread is not None:
-            self._thread.join(timeout=3)
+        if self._server is not None: self._server.shutdown(); self._server.server_close()
+        if self._thread is not None: self._thread.join(timeout=3)
 
 
 class _RebindServer:
@@ -127,12 +119,9 @@ class _RebindServer:
             def handle(self):
                 self.request.settimeout(2.0)
                 data = b''
-                with contextlib.suppress(OSError):
-                    data = self.request.recv(4096)
-                with owner._lock:
-                    owner.hits.append(data.decode('latin-1', errors='replace'))
-                with contextlib.suppress(OSError):
-                    self.request.sendall(b'HTTP/1.1 200 OK\r\nContent-Length: 9\r\nConnection: close\r\n\r\nunrelated')
+                with contextlib.suppress(OSError): data = self.request.recv(4096)
+                with owner._lock: owner.hits.append(data.decode('latin-1', errors='replace'))
+                with contextlib.suppress(OSError): self.request.sendall(b'HTTP/1.1 200 OK\r\nContent-Length: 9\r\nConnection: close\r\n\r\nunrelated')
 
         class _Srv(socketserver.ThreadingTCPServer):
             allow_reuse_address, daemon_threads = True, True
@@ -142,14 +131,11 @@ class _RebindServer:
         self._thread.start()
 
     def hit_count(self):
-        with self._lock:
-            return len(self.hits)
+        with self._lock: return len(self.hits)
 
     def close(self):
-        if self._server is not None:
-            self._server.shutdown(); self._server.server_close()
-        if self._thread is not None:
-            self._thread.join(timeout=3)
+        if self._server is not None: self._server.shutdown(); self._server.server_close()
+        if self._thread is not None: self._thread.join(timeout=3)
 
 
 class _CheckpointPoller:
