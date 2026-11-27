@@ -150,7 +150,7 @@ async function reloadToSession(page: Page, projectId: string, sessionId: string)
   await expect.poll(() => settledChatSessionId(page), { timeout: 30_000 }).toBe(sessionId);
 }
 
-test.describe("portable command desktop smoke", () => {
+test.describe.serial("portable command desktop smoke", () => {
   test("M10: portable command live-to-settled receipts, document pages, reload persistence, and bounded L01/L07 counts", async ({ page, request }, testInfo) => {
     test.setTimeout(180_000);
     await ensureManualLLM(request);
@@ -303,6 +303,7 @@ test.describe("portable command desktop smoke", () => {
 
   test("M12: pending command tool approval checkpoint survives reload and clears cleanly when approved", async ({ page, request }) => {
     test.setTimeout(180_000);
+    await ensureManualLLM(request);
     await seedAppState(page);
     const project = await bootstrapChatSession(page, request);
     const sessionId = await settledChatSessionId(page);
