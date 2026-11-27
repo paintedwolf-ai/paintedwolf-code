@@ -228,7 +228,7 @@ print("OPENPYXL_OFFLINE_OK")
 			RawArgs:      map[string]any{"code": fmt.Sprintf("import requests\nr = requests.Session().get(%q, timeout=5)\nassert r.status_code == 200 and r.json()['status'] == 'admitted'\nprint('HTTPS_OK')\n", tlsSrv.URL+"/api")},
 			Roots:        roots,
 			MutationDoor: native.NewPythonMutationDoor(tools.ToolContext{}, roots),
-			HTTP: portablepython.HTTPPolicyConfig{
+			HTTP: portablepython.HTTPRequestOptions{
 				Client:             tlsSrv.Client(),
 				CredentialScreener: pythonadmission.StrictCredentialScreener(),
 			},
@@ -431,16 +431,17 @@ func gradePY14StagedPackageCatalog(pin py14StagedCatalogPin, obs py14ObservedSta
 func TestPY14_StagedPackageGraderAndNegativeControls(t *testing.T) {
 	svc := newPY10Service(t, t.TempDir())
 	info := svc.RuntimeInfo()
-	if info.ImageDir == "" {
-		t.Fatal("staged RuntimeInfo.ImageDir is empty")
+	imageDir := svc.ImageDir()
+	if imageDir == "" {
+		t.Fatal("staged Service.ImageDir() is empty")
 	}
 
-	manifestPath := filepath.Join(info.ImageDir, "image-manifest.json")
+	manifestPath := filepath.Join(imageDir, "image-manifest.json")
 	manifest, err := pythonruntime.LoadImageManifest(manifestPath)
 	contractcheck.FailErr(t, "load staged image-manifest.json", err)
 
 	// Independently hash the staged python.wasm binary on disk.
-	wasmBytes, err := os.ReadFile(filepath.Join(info.ImageDir, filepath.FromSlash(manifest.Interpreter.WasmPath)))
+	wasmBytes, err := os.ReadFile(filepath.Join(imageDir, filepath.FromSlash(manifest.Interpreter.WasmPath)))
 	contractcheck.FailErr(t, "read staged wasm binary", err)
 	wasmSum := sha256.Sum256(wasmBytes)
 	actualWasmSHA := hex.EncodeToString(wasmSum[:])
@@ -460,7 +461,7 @@ func TestPY14_StagedPackageGraderAndNegativeControls(t *testing.T) {
 		if dist.DistInfoPath != "" {
 			rel := filepath.ToSlash(filepath.Join(manifest.PackagesRoot, dist.DistInfoPath))
 			requiredResources = append(requiredResources, rel)
-			if _, statErr := os.Stat(filepath.Join(info.ImageDir, filepath.FromSlash(rel))); statErr == nil {
+			if _, statErr := os.Stat(filepath.Join(imageDir, filepath.FromSlash(rel))); statErr == nil {
 				presentFiles[rel] = true
 			}
 		}
@@ -468,7 +469,7 @@ func TestPY14_StagedPackageGraderAndNegativeControls(t *testing.T) {
 	for _, font := range manifest.BundledFonts {
 		if font.ImagePath != "" {
 			requiredResources = append(requiredResources, font.ImagePath)
-			if _, statErr := os.Stat(filepath.Join(info.ImageDir, filepath.FromSlash(font.ImagePath))); statErr == nil {
+			if _, statErr := os.Stat(filepath.Join(imageDir, filepath.FromSlash(font.ImagePath))); statErr == nil {
 				presentFiles[font.ImagePath] = true
 			}
 		}
@@ -511,7 +512,7 @@ print(json.dumps(resolved))
 		RequiredPublicImports:      pubImports,
 	}
 	obs := py14ObservedStagedImage{
-		ImageDir:        info.ImageDir,
+		ImageDir:        imageDir,
 		Manifest:        manifest,
 		ActualWasmSHA:   actualWasmSHA,
 		EngineIdentity:  info.NativeEngine,
