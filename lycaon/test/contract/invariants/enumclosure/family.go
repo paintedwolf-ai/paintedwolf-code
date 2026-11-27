@@ -5,6 +5,7 @@ package enumclosure
 
 import (
 	"go/ast"
+	"go/constant"
 	"go/types"
 	"slices"
 	"strings"
@@ -14,6 +15,8 @@ import (
 
 // Family is the enum-closure rule table.
 var Family = invariants.Family{Name: "enum-closure", Invariants: []invariants.Invariant{
+	discoveryRule,
+	emitDoorRule,
 	{Name: "extension-diagnostics-are-registered-and-graded", Anchors: []invariants.Anchor{invariants.Decl("internal/extpacks", "allDiagnosticCodes"), invariants.Decl("internal/extpacks", "diagnosticSeverity")}, Check: extensionDiagnosticsRegisteredAndGraded},
 	{Name: "worker-promote-outcomes-are-emitted", Anchors: []invariants.Anchor{invariants.Decl("pkg/api", "WorkerPromotePathOutcome")}, Check: workerPromoteOutcomesAreEmitted},
 	{Name: "worker-promote-reasons-are-referenced", Anchors: []invariants.Anchor{invariants.Package("pkg/api")}, Check: workerPromoteReasonsAreReferenced},
@@ -30,6 +33,32 @@ func consts(r *invariants.Run, dir string, keep func(*types.Const) bool) map[str
 	}
 	r.Expect(len(out), "constants in "+dir)
 	return out
+}
+
+// stringEnumValues returns named string constants of the declared type, keyed
+// by value. A second name for an existing value must be an explicit policy choice.
+func stringEnumValues(r *invariants.Run, dir, typeName string) map[string]string {
+	named, ok := r.TypedPackage(dir).Types.Scope().Lookup(typeName).(*types.TypeName)
+	if !ok {
+		r.Fatalf("%s.%s is not a type in the typed package", dir, typeName)
+	}
+	selected := consts(r, dir, func(c *types.Const) bool {
+		return types.Identical(c.Type(), named.Type())
+	})
+	values := make(map[string]string, len(selected))
+	for _, name := range sortedKeys(selected) {
+		c := selected[name]
+		if c.Val().Kind() != constant.String {
+			r.ReportAt(c.Pos(), "%s.%s must have a string value", dir, name)
+			continue
+		}
+		value := constant.StringVal(c.Val())
+		if previous, duplicate := values[value]; duplicate {
+			r.ReportAt(c.Pos(), "%s.%s duplicates %s with value %q", dir, name, previous, value)
+		}
+		values[value] = name
+	}
+	return values
 }
 
 // referenced reports the constants of want that production code below dirs
@@ -119,8 +148,8 @@ func workerPromoteReasonsAreReferenced(r *invariants.Run) {
 	}
 }
 
-func sortedKeys[V any](m map[string]V) []string {
-	keys := make([]string, 0, len(m))
+func sortedKeys[K ~string, V any](m map[K]V) []K {
+	keys := make([]K, 0, len(m))
 	for key := range m {
 		keys = append(keys, key)
 	}
