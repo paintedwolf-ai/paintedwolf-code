@@ -205,6 +205,140 @@ BREAKER_ADVISORY_CODES: frozenset[str] = frozenset(
     }
 )
 
+_WORKER_GROUNDING_CODE_PREFIXES: tuple[str, ...] = (
+    "WORKER_",
+    "GROUNDING_",
+    "CITATION_",
+)
+_STRUCTURED_CODE_LINE_RE = re.compile(r"^Code:\s*([A-Z][A-Z0-9_]+)\s*$", re.MULTILINE)
+
+
+@dataclass(frozen=True)
+class WorkerReportRefusalSummary:
+    """Decision 040 worker-surface friction measure derived strictly from transcript structure + typed rejection Code."""
+
+    session_id: str
+    worker_report_refusals: int
+    refusal_codes: tuple[str, ...]
+    finally_accepted: bool
+    total_submissions: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "session_id": self.session_id,
+            "worker_report_refusals": self.worker_report_refusals,
+            "refusal_codes": list(self.refusal_codes),
+            "finally_accepted": self.finally_accepted,
+            "total_submissions": self.total_submissions,
+        }
+
+
+def probe_worker_report_refusals(
+    db_path: str | pathlib.Path,
+    session_id: str,
+) -> WorkerReportRefusalSummary:
+    """Count `complete_leg` report submissions refused with a typed grounding code in `store.db`.
+
+    Uses transcript structure (`tool_calls_json` / `tool_result_json`) and persisted structured
+    rejection `Code` only (never prose). Separate from `friction_units`, which stays 0 for worker
+    children on D1 per Decision 040.
+    """
+    db_file = pathlib.Path(db_path)
+    if not db_file.is_file():
+        return WorkerReportRefusalSummary(session_id, 0, (), False, 0)
+
+    complete_leg_call_ids: set[str] = set()
+    refusal_codes: list[str] = []
+    total_submissions = 0
+    finally_accepted = False
+
+    with contextlib.closing(sqlite3.connect(f"file:{db_file}?mode=ro", uri=True)) as conn:
+        conn.row_factory = sqlite3.Row
+        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        if "messages" not in tables:
+            return WorkerReportRefusalSummary(session_id, 0, (), False, 0)
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(messages)").fetchall()}
+        select_cols = ["id", "role"]
+        for opt in ("tool_calls_json", "tool_result_json", "content_parts_json", "workflow_feedback_json", "grounding_json", "content"):
+            if opt in cols:
+                select_cols.append(opt)
+        order_col = "ord, id" if "ord" in cols else "rowid"
+        rows = conn.execute(
+            f"SELECT {', '.join(select_cols)} FROM messages WHERE session_id = ? ORDER BY {order_col}",
+            (session_id,),
+        ).fetchall()
+
+        for row in rows:
+            tc_raw = row["tool_calls_json"] if "tool_calls_json" in cols else ""
+            if tc_raw:
+                try:
+                    tcs = json.loads(tc_raw)
+                except (TypeError, ValueError):
+                    tcs = []
+                if isinstance(tcs, list):
+                    for tc in tcs:
+                        if isinstance(tc, Mapping) and str(tc.get("name") or "") == "complete_leg":
+                            cid = str(tc.get("id") or "")
+                            if cid:
+                                complete_leg_call_ids.add(cid)
+
+        for row in rows:
+            tr_raw = row["tool_result_json"] if "tool_result_json" in cols else ""
+            if not tr_raw:
+                continue
+            try:
+                tr = json.loads(tr_raw)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(tr, Mapping):
+                continue
+            call_id = str(tr.get("tool_call_id") or "")
+            tool_name = str(tr.get("tool_name") or tr.get("tool") or "")
+            if tool_name != "complete_leg" and call_id not in complete_leg_call_ids:
+                continue
+
+            total_submissions += 1
+            outcome = str(tr.get("outcome") or "").lower()
+            if outcome == "completed":
+                finally_accepted = True
+                continue
+
+            # Extract typed rejection Code from structured fields only (never prose)
+            codes: set[str] = set()
+            codes |= _extract_codes_from_json(tr_raw)
+            if "workflow_feedback_json" in cols:
+                codes |= _extract_codes_from_json(row["workflow_feedback_json"])
+            if "grounding_json" in cols:
+                codes |= _extract_codes_from_json(row["grounding_json"])
+            if "content_parts_json" in cols and row["content_parts_json"]:
+                try:
+                    parts = json.loads(row["content_parts_json"])
+                except (TypeError, ValueError):
+                    parts = []
+                if isinstance(parts, list):
+                    for part in parts:
+                        if isinstance(part, Mapping):
+                            pcontent = str(part.get("content") or "")
+                            if part.get("source") == "policy_feedback":
+                                codes |= _extract_codes_from_json(pcontent)
+                            for m in _STRUCTURED_CODE_LINE_RE.finditer(pcontent):
+                                codes.add(m.group(1))
+            if "content" in cols and row["content"]:
+                for m in _STRUCTURED_CODE_LINE_RE.finditer(str(row["content"])):
+                    codes.add(m.group(1))
+
+            typed = sorted(c for c in codes if c.startswith(_WORKER_GROUNDING_CODE_PREFIXES))
+            if typed:
+                refusal_codes.append(typed[0])
+
+    return WorkerReportRefusalSummary(
+        session_id=session_id,
+        worker_report_refusals=len(refusal_codes),
+        refusal_codes=tuple(refusal_codes),
+        finally_accepted=finally_accepted,
+        total_submissions=total_submissions,
+    )
+
 
 @dataclass(frozen=True)
 class CounterObservation:
