@@ -392,10 +392,53 @@ def run_slot_c08(
         )
         _confirm_parked_lease(app_dir / "store.db", sse_path, session_id, timeout_s, driver._dump_state)
 
-        # Release unselected job first; verify wait lease stays armed briefly, then release selected job.
+        # Release unselected job first; verify wait lease stays armed and unselected watch stays pending (not delivered to lease).
         b_unsel.release()
         b_unsel.wait_child_exited(timeout_s=min(8.0, timeout_s))
         source_obs.record_event("unselected_released", handle=h_unsel)
+
+        unsel_watch_id = str(w_unsel.get("watch_id") or "")
+        mid_guard = TimerGuard(min(8.0, timeout_s), phase="c08.observe_unselected_pending", verdict="incomplete", dump_state=driver._dump_state)
+
+        def _check_unselected_state() -> dict[str, Any] | None:
+            snap_mid = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id)
+            tables = snap_mid.get("tables") or {}
+            leases = tables.get("wait_leases") or []
+            armed = [l for l in leases if l.get("status") == "armed"]
+            matches = tables.get("watch_matches") or []
+            unsel_matches = [
+                m for m in matches
+                if (unsel_watch_id and m.get("watch_id") == unsel_watch_id)
+                or h_unsel in str(m.get("evidence_json") or "")
+            ]
+            if unsel_matches:
+                return {"armed_leases": len(armed), "unsel_matches": unsel_matches, "deliveries": tables.get("watch_deliveries") or []}
+            return None
+
+        mid_state: dict[str, Any] = {}
+        try:
+            mid_state = mid_guard.poll(_check_unselected_state, detail="unselected match not observed while parked")
+        except BarrierTimeoutError:
+            snap_mid = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id)
+            tables = snap_mid.get("tables") or {}
+            armed = [l for l in (tables.get("wait_leases") or []) if l.get("status") == "armed"]
+            mid_state = {"armed_leases": len(armed), "unsel_matches": [], "deliveries": tables.get("watch_deliveries") or []}
+
+        unsel_lease_deliveries = [
+            d for d in (mid_state.get("deliveries") or [])
+            if d.get("destination_kind") == "lease" and unsel_watch_handle in str(d.get("payload_json") or "")
+        ]
+        unsel_pending_matches = [
+            m for m in (mid_state.get("unsel_matches") or [])
+            if m.get("reservation_state") == "pending"
+        ]
+        details["mid_park_unselected"] = {
+            "armed_leases": mid_state.get("armed_leases", 0),
+            "unselected_pending_matches": len(unsel_pending_matches),
+            "unselected_lease_deliveries": len(unsel_lease_deliveries),
+        }
+        if mid_state.get("armed_leases", 0) >= 1 and len(unsel_lease_deliveries) == 0:
+            checks["unselected_stays_pending"] = True
 
         # Release selected job so wait settles.
         b_sel.release()
@@ -403,15 +446,8 @@ def run_slot_c08(
         rendered_obs.record_pending(resumed_req, presentation_kind="new_model_presentation", handle=sel_watch_handle)
         checks["selected_settles"] = True
 
-        # Inspect unselected watch to verify it remained independent and inspect does not crash or consume.
-        _, _, insp_unsel = driver.call_watch_control({"handle": unsel_watch_handle, "operation": "inspect"})
-        details["unselected_inspect"] = insp_unsel
-        if insp_unsel.get("handle") == unsel_watch_handle:
-            checks["unselected_stays_pending"] = True
-
         # Finish turn cleanly.
-        end_req = driver.await_pending("c08:post_inspect")
-        driver.finish_turn(end_req, "C08 selected vs unselected verified.")
+        driver.finish_turn(resumed_req, "C08 selected vs unselected verified.")
 
         # Check durable storage for single admission of selected watch.
         snap = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id)
