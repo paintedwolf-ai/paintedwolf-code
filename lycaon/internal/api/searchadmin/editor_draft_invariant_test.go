@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
@@ -364,5 +365,41 @@ func TestSearchCodeDraftRespectsHiddenAndDependencyExclusionBoundaries(t *testin
 	depResp := f.searchCode(t, ownerCtx, "/v1/search", proj.ID, "project:current kind:code dep_dirty_excluded_token", wire.SearchBudgetComplete)
 	if len(depResp.Hits) != 0 {
 		t.Fatalf("excluded dependency draft leaked into default code search: %+v", depResp.Hits)
+	}
+}
+
+func TestSearchCodeDraftCompletesWhileWriterTransactionIsHeld(t *testing.T) {
+	f := newDraftSearchFixture(t)
+	ownerCtx, cancel := context.WithTimeout(people.WithCaller(t.Context(), f.owner), 5*time.Second)
+	defer cancel()
+
+	proj := f.addProject(t, "proj-reader-pool", "root-rp", map[string]string{
+		"draft_target.txt": "disk_seed_rp\n",
+	})
+	doc, err := f.editors.Open(t.Context(), proj, "draft_target.txt", proj.Roots[0].ID, "", "window-1", nil)
+	testutil.FailErr(t, "open draft_target.txt", err)
+	_, err = f.editors.ReplaceSnapshot(t.Context(), doc.ID, proj.ID, editordoc.SnapshotReplacement{
+		DocumentCommand: editordoc.DocumentCommand{
+			ClientID:         "window-1",
+			OperationID:      uuid.NewString(),
+			ExpectedRevision: doc.Revision,
+		},
+		Content: "writer_held_draft_token\n",
+		EOL:     "lf",
+	})
+	testutil.FailErr(t, "dirty draft_target.txt", err)
+
+	// Hold the single durable writer transaction open with an active write lock.
+	wtx, err := f.database.BeginTx(t.Context(), nil)
+	testutil.FailErr(t, "begin writer tx", err)
+	defer func() { _ = wtx.Rollback() }()
+	_, err = wtx.ExecContext(t.Context(), `INSERT OR REPLACE INTO store_meta(key, value) VALUES ('cf06_writer_lock', 'held')`)
+	testutil.FailErr(t, "acquire writer lock", err)
+
+	// Draft-enabled search MUST use BeginReadTx on the concurrent reader pool
+	// and complete immediately without blocking on the held writer transaction.
+	resp := f.searchCode(t, ownerCtx, "/v1/search", proj.ID, "project:current kind:code writer_held_draft_token", wire.SearchBudgetInteractive)
+	if len(resp.Hits) != 1 || resp.Hits[0].Path != "draft_target.txt" {
+		t.Fatalf("search while writer tx held = %+v, want 1 hit at draft_target.txt", resp.Hits)
 	}
 }

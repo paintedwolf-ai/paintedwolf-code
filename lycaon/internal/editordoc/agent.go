@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 
+	storedb "github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -93,7 +94,12 @@ func (s *Service) DirtyDraftsForRoot(ctx context.Context, projectID string, bran
 		return DirtyRootDrafts{}, err
 	}
 	targetBranch := p.BranchForRoot(rootID)
-	tx, err := s.store.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	var tx *sql.Tx
+	if reader, ok := s.store.db.(storedb.ReadHandle); ok {
+		tx, err = reader.BeginReadTx(ctx)
+	} else {
+		tx, err = s.store.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	}
 	if err != nil {
 		return DirtyRootDrafts{}, err
 	}
