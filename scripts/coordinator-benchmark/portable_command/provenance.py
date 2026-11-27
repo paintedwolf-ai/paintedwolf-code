@@ -132,7 +132,10 @@ def inject_drafts(application, project_id, root_id, drafts):
                 'operation_id': str(uuid.uuid4()), 'client_id': 'portable-command-harness',
                 'expected_revision': opened['revision'], 'content': text, 'eol': 'lf',
             }, method='PUT')
-            bindings[rel_path] = {'injected': True, 'document_id': updated['id'], 'revision': updated['revision'], 'alias': spec.get('revision')}
+            bindings[rel_path] = {
+                'injected': True, 'document_id': updated['id'], 'revision': updated['revision'],
+                'alias': spec.get('revision'), 'sha256': hashlib.sha256(bytes_value(spec['bytes'])).hexdigest(),
+            }
         except Exception as exc:
             all_ok = False
             bindings[rel_path] = {'injected': False, 'alias': spec.get('revision'), 'error': str(exc)}

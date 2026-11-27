@@ -131,13 +131,17 @@ def receipt_rows(audit, progress_receipts, draft_bindings=None):
                 row['path'] = effect['path'] = toks[-1].lstrip('./')
         if op == 'read' and draft_bindings:
             src_pin = next((p for p in audit['invocation_program_revision_pins']
-                            if p['execution_id'] == ex['id'] and p.get('role') == 'source' and p.get('mode') == 'accepted_document'), None)
+                            if p['execution_id'] == ex['id'] and p.get('role') == 'source' and p.get('mode') in {'accepted_document', 'published_disk'}), None)
             if src_pin:
                 b = draft_bindings.get(str(src_pin.get('path') or '').lstrip('./'))
-                if (isinstance(b, dict) and b.get('injected') is True and b.get('alias')
-                        and b.get('revision') == src_pin.get('document_revision')
-                        and (not src_pin.get('document_id') or b.get('document_id') == src_pin.get('document_id'))):
-                    row['input_revision'] = b['alias']
+                if isinstance(b, dict) and b.get('injected') is True and b.get('alias'):
+                    doc_ok = (not src_pin.get('document_id') or b.get('document_id') == src_pin.get('document_id'))
+                    if src_pin.get('mode') == 'accepted_document' and b.get('revision') == src_pin.get('document_revision') and doc_ok:
+                        row['input_revision'] = b['alias']
+                    elif src_pin.get('mode') == 'published_disk' and doc_ok:
+                        pin_sha = src_pin.get('content_sha256') or src_pin.get('disk_sha256') or ''
+                        if len(pin_sha) == 64 and b.get('sha256') == pin_sha and (not src_pin.get('document_revision') or b.get('revision') == src_pin.get('document_revision')):
+                            row['input_revision'] = b['alias']
         if op in {'write', 'code_rewrite'} or op_id in {'write', 'edit', 'code_rewrite'} or ex.get('accepted_revision') or ex.get('published_revision'):
             pub = pubs_by_prog.get(ex['program_id'])
             pub_committed = bool(pub and pub.get('state') == 'committed' and pub.get('materialized') == 1)

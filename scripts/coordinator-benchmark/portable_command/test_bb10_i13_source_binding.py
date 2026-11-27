@@ -152,3 +152,18 @@ class BB10I13SourceBindingTests(unittest.TestCase):
         ])
         _, bad_facts = extract_deliveries(case, audit, {'input.txt': sha})
         self.assertFalse(bad_facts.get('exact_mapped_ranges', False))
+
+    def test_clean_open_draft_read_input_revision_requires_exact_pin_digest(self):
+        from portable_command.db_audit import receipt_rows
+        sha = _sha('alpha\nbeta\n')
+        base_audit = {
+            'invocation_receipts': [], 'invocation_programs': [], 'invocation_program_publications': [],
+            'invocation_program_executions': [{'id': 'e1', 'program_id': 'p1', 'operation_id': 'read', 'native_command': 'head', 'owner': 'filesystem', 'state': 'completed', 'effect_certainty': 'none'}],
+            'invocation_program_revision_pins': [{'execution_id': 'e1', 'role': 'source', 'mode': 'published_disk', 'path': 'input.txt', 'content_sha256': sha, 'disk_sha256': sha}],
+        }
+        good_bind = {'input.txt': {'injected': True, 'document_id': 'd1', 'revision': 2, 'alias': 'draft-r1', 'sha256': sha}}
+        rows, _, _ = receipt_rows(base_audit, [], draft_bindings=good_bind)
+        self.assertEqual(rows[0].get('input_revision'), 'draft-r1')
+        bad_bind = {'input.txt': {**good_bind['input.txt'], 'sha256': '0' * 64}}
+        rows_bad, _, _ = receipt_rows(base_audit, [], draft_bindings=bad_bind)
+        self.assertNotIn('input_revision', rows_bad[0])
