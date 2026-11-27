@@ -82,7 +82,13 @@ def start_deterministic_provider(req_log_path: Path, tool_result_path: Path):
                 body = {"raw": raw.decode("utf-8", errors="replace")}
 
             if self.path.endswith("/api/show"):
-                resp = {"model_info": {"context_length": 65536}}
+                resp = {
+                    "capabilities": ["completion", "tools"],
+                    "model_info": {
+                        "general.context_length": 65536,
+                        "qwen3.context_length": 65536,
+                    },
+                }
                 payload = json.dumps(resp).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
