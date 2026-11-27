@@ -138,6 +138,11 @@ const outDir: string = cfg.out_dir;
 const needle: string = cfg.needle;
 const projects: Record<string, { id: string; root_id: string; name: string; root_dir?: string }> = cfg.projects;
 const warmingRoots: Record<string, string> = cfg.warming_roots ?? {};
+const slotFilter: Set<string> | null = Array.isArray(cfg.slots) && cfg.slots.length > 0 ? new Set(cfg.slots) : null;
+const wantSlot = (surface: string, state: string) => slotFilter === null || slotFilter.has(`${surface}:${state}`);
+const wantState = (state: string) =>
+  slotFilter === null ||
+  ["search_stage", "replace_review", "quick_open", "files_tree"].some((s) => slotFilter.has(`${s}:${state}`));
 
 async function apiPost(p: string, body: unknown) {
   const res = await fetch(`${apiUrl}${p}`, {
@@ -196,6 +201,7 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
   await expectShellReady(page);
 
   for (const state of ["failed", "incomplete", "warming", "refreshing"] as const) {
+    if (!wantState(state) || !projects[state]) continue;
     const proj = projects[state];
     await activateProject(page, proj.id);
     await page.locator('[data-testid="workspace-opening"]').waitFor({ state: "hidden", timeout: 10_000 }).catch(() => {});
@@ -204,6 +210,7 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
     const scopedQuery = `project:current ${needle}`;
 
     // 1. Search stage (GlobalSearchView) — prepare UI FIRST, then trigger fresh warming root or refresh burst.
+    if (wantSlot("search_stage", state) || wantSlot("replace_review", state)) {
     await page.keyboard.press("ControlOrMeta+Shift+f");
     const searchInput = page.getByTestId("search-query-input");
     if (!(await searchInput.isVisible({ timeout: 3000 }).catch(() => false))) {
@@ -253,6 +260,7 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
     const searchNoResultsVisible = await page.getByTestId("search-no-results").isVisible().catch(() => false);
     const searchShot = path.join(outDir, `macos_search_stage_${state}.png`);
     await page.screenshot({ path: searchShot });
+    if (wantSlot("search_stage", state)) {
     observations.push({
       surface: "search_stage",
       state,
@@ -271,8 +279,10 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
       empty_final_shown: searchNoResultsVisible,
       screenshot_path: path.basename(searchShot),
     });
+    }
 
     // 2. Replace review — trigger fresh warming root or refresh burst while Search stage is already open.
+    if (wantSlot("replace_review", state)) {
     if (state === "warming") {
       await attachWarmingRoot(proj.id, warmingRoots.replace_review);
     } else if (state === "refreshing") {
@@ -325,8 +335,11 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
     if (await toggleReplace.isVisible({ timeout: 500 }).catch(() => false)) {
       await toggleReplace.click();
     }
+    }
+    }
 
     // 3. Quick open (Crossbar) — open Crossbar FIRST, then trigger fresh warming root or refresh burst.
+    if (wantSlot("quick_open", state)) {
     await page.keyboard.press("Escape");
     await page.keyboard.press("ControlOrMeta+k");
     await expect(page.getByTestId("crossbar-input")).toBeVisible({ timeout: 10_000 });
@@ -402,13 +415,16 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
       }),
     });
     await page.keyboard.press("Escape");
+    }
 
-    // 4. Files tree — open Files FIRST, then trigger fresh warming root or refresh burst and correlate with Den's own /source/index response.
+    // 4. Files tree — open Files FIRST, wait for pane ready, then trigger fresh warming root or refresh burst and correlate with Den's own /source/index response.
+    if (wantSlot("files_tree", state)) {
     const filesNav = page.locator('[data-testid="nav-files"], [aria-label="Files"]').first();
     if (await filesNav.isVisible({ timeout: 3000 }).catch(() => false)) {
       await filesNav.click();
-      await page.waitForTimeout(400);
     }
+    await page.getByTestId("files-tree-pane").waitFor({ state: "visible", timeout: 10_000 }).catch(() => {});
+    await page.waitForTimeout(300);
     let selectedRootId = proj.root_id;
     let selectedRootDir = proj.root_dir ?? "";
     const indexRespPromise = page.waitForResponse(
@@ -416,7 +432,7 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
         res.url().includes(`/v1/projects/${proj.id}/source/index`) &&
         res.request().method() === "GET" &&
         res.ok(),
-      { timeout: 6_000 },
+      { timeout: 8_000 },
     ).catch(() => null);
     if (state === "warming" && warmingRoots.files_tree) {
       const newRootId = await attachWarmingRoot(proj.id, warmingRoots.files_tree);
@@ -425,13 +441,10 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
         selectedRootDir = warmingRoots.files_tree;
       }
       const newRootLabel = path.basename(warmingRoots.files_tree);
-      await page
-        .getByTestId("files-tree-pane")
-        .getByText(newRootLabel, { exact: false })
-        .first()
-        .click({ timeout: 2_000 })
-        .catch(() => {});
-      await page.waitForTimeout(300);
+      const rootNode = page.getByTestId("files-tree-pane").getByText(newRootLabel, { exact: false }).first();
+      await rootNode.waitFor({ state: "visible", timeout: 8_000 }).catch(() => {});
+      await rootNode.click({ timeout: 2_000 }).catch(() => {});
+      await page.waitForTimeout(400);
     } else if (state === "refreshing") {
       mutateRefreshingTree(proj.root_dir, 4);
       await page.waitForTimeout(300);
@@ -499,6 +512,7 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
       screenshot_path: path.basename(filesShot),
       notes: retryVisible ? `${treeNoticeText} [retry-file-index]` : treeNoticeText,
     });
+    }
   }
 
   fs.writeFileSync(
@@ -517,7 +531,8 @@ def run_macos_native(
     engine_bin: Path,
     out_dir: Path,
     baseline_commit: str,
-    warming_files: int = 5000,
+    warming_files: int = 30000,
+    slots: list[str] | None = None,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     port = _free_port()
@@ -538,14 +553,26 @@ def run_macos_native(
         fx_dir.mkdir(parents=True, exist_ok=True)
 
         try:
+            needed_states = (
+                {s.split(":", 1)[1] for s in slots if ":" in s}
+                if slots
+                else set(COVERAGE_STATES)
+            )
+            needed_warming_surfaces = (
+                {s.split(":", 1)[0] for s in slots if s.endswith(":warming")}
+                if slots
+                else set(SURFACES)
+            )
             for st in COVERAGE_STATES:
+                if st not in needed_states:
+                    continue
                 fixtures.append(
                     build_coverage_fixture(fx_dir, st, warming_file_count=warming_files)
                 )
-            # Pre-build 4 fresh unattached large roots so each warming surface attaches its own
-            # real work window AFTER the workspace and surface UI are already ready.
             warming_roots: dict[str, str] = {}
             for surf in SURFACES:
+                if surf not in needed_warming_surfaces:
+                    continue
                 wdir = (fx_dir / f"cf09_warming_{surf}").resolve()
                 populate_large_tree(wdir, file_count=warming_files, include_needle=True)
                 warming_roots[surf] = str(wdir)
@@ -637,6 +664,7 @@ def run_macos_native(
                         "needle": NEEDLE_TOKEN,
                         "projects": projects_meta,
                         "warming_roots": warming_roots,
+                        "slots": slots or [],
                     },
                     indent=2,
                 ),
@@ -733,13 +761,16 @@ def main(argv: list[str] | None = None) -> int:
         default="3bb1464d22dd0a38a149d37610810e7a0324e8cf",
     )
     parser.add_argument("--warming-files", type=int, default=30000)
+    parser.add_argument("--slots", default="", help="Optional comma-separated surface:state subset")
     args = parser.parse_args(argv)
+    slots = [s.strip() for s in args.slots.split(",") if s.strip()] if args.slots else None
     report = run_macos_native(
         den_repo=args.den_repo,
         engine_bin=args.engine_bin,
         out_dir=args.out_dir,
         baseline_commit=args.baseline_commit,
         warming_files=args.warming_files,
+        slots=slots,
     )
     print(f"CF09 macOS presentation report written to {report}")
     return 0
