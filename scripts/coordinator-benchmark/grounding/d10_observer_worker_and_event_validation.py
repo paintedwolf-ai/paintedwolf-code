@@ -259,7 +259,7 @@ def run_d10_worker_and_event_validation(
             deadline = time.monotonic() + 180.0
             child_req = None
             while time.monotonic() < deadline:
-                pend = client.request("GET", "/harness/llm/pending")
+                pend = client.request("/harness/llm/pending")
                 if isinstance(pend, dict) and pend.get("pending"):
                     psid = str(pend.get("session_id") or "")
                     if psid == root_sid:
