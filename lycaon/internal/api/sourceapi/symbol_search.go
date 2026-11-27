@@ -28,10 +28,11 @@ type SymbolLegBudget func(ctx context.Context, budget search.SearchBudget) (cont
 // discovery nominates files, their cached outlines confirm declarations, and
 // names rank by how they match, the pipeline Go to definition shares.
 type SymbolExecutor struct {
-	registry     project.Registry
-	progress     symbolProgressCache
-	legBudget    SymbolLegBudget
-	beforeRetain func() // nil in production; test hook between outline extraction and retention
+	registry      project.Registry
+	progress      symbolProgressCache
+	legBudget     SymbolLegBudget
+	beforeRetain  func()                  // nil in production; test hook between outline extraction and retention
+	onRevalidated func(files int, b int64) // nil in production; test observer for bounded revalidation work
 }
 
 // NewSymbolExecutor returns the symbol leg over the project registry.
@@ -160,6 +161,20 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 		return known && rootFilter.Admits(path, name)
 	}
 	started := time.Now()
+	revalidateBudget := allocation.Outline
+	if revalidateBudget <= 0 {
+		revalidateBudget = symbolsearch.DiscoveryWall
+	}
+	revalidateCtx, cancelRevalidate := context.WithTimeout(ctx, revalidateBudget)
+	revalFiles, revalBytes := entry.revalidateRetainedMatches(revalidateCtx, p, symbolRevalidateByteLimit)
+	cancelRevalidate()
+	if e.onRevalidated != nil {
+		e.onRevalidated(revalFiles, revalBytes)
+	}
+	outlineLeft := allocation.Outline
+	if outlineLeft > 0 {
+		outlineLeft = max(outlineLeft-time.Since(started), time.Nanosecond)
+	}
 	result, err := symbolsearch.Run(ctx, p, symbolsearch.Request{
 		Query:            leg.Name,
 		RootIDs:          target.rootIDs,
@@ -170,7 +185,7 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 		Admits:           admits,
 		Wall:             allocation.Discovery,
 		AbbreviationWall: allocation.Abbreviation,
-		OutlineWall:      allocation.Outline,
+		OutlineWall:      outlineLeft,
 		Progress:         &entry.state,
 	}, entry.discovery)
 	if err != nil {

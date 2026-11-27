@@ -76,8 +76,10 @@ func TestSymbolExecutorInvalidatesPendingProgressOnRestoredMtimeSameSizeEdit(t *
 			t.Fatalf("stale pending match survived restored-mtime same-size edit: %+v", hit)
 		}
 	}
-	if len(second.Hits) != 48 {
-		t.Fatalf("expected pending progress to restart at 48 hits, got %d", len(second.Hits))
+	// Surgical invalidation drops & re-outlines only f000.go while preserving
+	// the 47 clean matches from slice 1 and finishing the remaining 12 files.
+	if len(second.Hits) != 59 || len(second.Issues) != 0 {
+		t.Fatalf("second = %d hits, issues=%+v; want 59 fresh hits and 0 issues", len(second.Hits), second.Issues)
 	}
 }
 
@@ -108,8 +110,9 @@ func TestSymbolExecutorInvalidatesEditBetweenOutlineExtractionAndRetention(t *te
 	if !mutated {
 		t.Fatal("expected beforeRetain hook to fire")
 	}
-	if len(first.Hits) != 48 {
-		t.Fatalf("first hits = %d, want 48 pending slice", len(first.Hits))
+	// First response explicitly declares pending/incomplete freshness.
+	if len(first.Hits) != 48 || len(first.Issues) == 0 {
+		t.Fatalf("first = %d hits, issues=%+v; want 48 hits with explicit incomplete issue", len(first.Hits), first.Issues)
 	}
 
 	// Next call must NOT reuse the stale f000.go declaration extracted before
@@ -122,7 +125,49 @@ func TestSymbolExecutorInvalidatesEditBetweenOutlineExtractionAndRetention(t *te
 			t.Fatalf("stale match adopted newer version between outline extraction and retention: %+v", hit)
 		}
 	}
-	if len(second.Hits) != 48 {
-		t.Fatalf("expected pending progress to restart at 48 hits, got %d", len(second.Hits))
+	if len(second.Hits) != 59 || len(second.Issues) != 0 {
+		t.Fatalf("second = %d hits, issues=%+v; want 59 fresh hits and 0 issues", len(second.Hits), second.Issues)
+	}
+}
+
+func TestSymbolExecutorContinuesAcrossThreeSlicesWithBoundedRevalidation(t *testing.T) {
+	// 120 distinct matching files with Cap=200 spans 3 slices (48 + 48 + 24),
+	// proving eventual continuation never resets or alternates when >48 files
+	// contribute retained matches, while keeping reread bytes bounded.
+	e, _, leg := symbolProgressFixture(t, 120)
+	var revalFiles []int
+	var revalBytes []int64
+	e.onRevalidated = func(files int, bytes int64) {
+		revalFiles = append(revalFiles, files)
+		revalBytes = append(revalBytes, bytes)
+	}
+
+	s1, err := e.Run(t.Context(), search.PlanLeg{Symbol: leg})
+	testutil.FailErr(t, "slice 1", err)
+	if len(s1.Hits) != 48 || len(s1.Issues) == 0 {
+		t.Fatalf("slice 1 = %d hits, issues=%+v; want 48 hits + symbol_pending", len(s1.Hits), s1.Issues)
+	}
+
+	s2, err := e.Run(t.Context(), search.PlanLeg{Symbol: leg})
+	testutil.FailErr(t, "slice 2", err)
+	if len(s2.Hits) != 96 || len(s2.Issues) == 0 {
+		t.Fatalf("slice 2 = %d hits, issues=%+v; want 96 hits + symbol_pending", len(s2.Hits), s2.Issues)
+	}
+
+	s3, err := e.Run(t.Context(), search.PlanLeg{Symbol: leg})
+	testutil.FailErr(t, "slice 3", err)
+	if len(s3.Hits) != 120 || len(s3.Issues) != 0 {
+		t.Fatalf("slice 3 = %d hits, issues=%+v; want 120 hits and 0 issues", len(s3.Hits), s3.Issues)
+	}
+
+	// Verify bounded revalidation work: slice 1 does 0 rereads; each resumed
+	// slice stays strictly within symbolRevalidateByteLimit.
+	if len(revalFiles) != 3 || revalFiles[0] != 0 || revalFiles[1] != 48 || revalFiles[2] != 96 {
+		t.Fatalf("revalFiles = %v, want [0 48 96]", revalFiles)
+	}
+	for i, b := range revalBytes {
+		if b > symbolRevalidateByteLimit {
+			t.Fatalf("slice %d reread %d bytes > limit %d", i+1, b, symbolRevalidateByteLimit)
+		}
 	}
 }

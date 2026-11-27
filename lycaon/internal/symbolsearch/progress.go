@@ -37,6 +37,57 @@ func (p *Progress) RetainedFileDigests() map[projectsource.DeclarationFileKey]st
 	return out
 }
 
+// DropAndRequeueFiles surgically discards retained matches for files whose
+// content changed (or could not be proved fresh within the revalidation
+// budget) and re-queues those paths into pending so the next slice re-outlines
+// them without discarding clean progress from earlier slices.
+func (p *Progress) DropAndRequeueFiles(stale map[projectsource.DeclarationFileKey]bool) {
+	if p == nil || len(stale) == 0 {
+		return
+	}
+	kept := p.matches[:0]
+	for _, m := range p.matches {
+		if stale[projectsource.DeclarationFileKey{RootID: m.RootID, Path: m.Path}] {
+			continue
+		}
+		kept = append(kept, m)
+	}
+	clear(p.matches[len(kept):])
+	p.matches = kept
+	for key := range stale {
+		delete(p.fileDigests, key)
+	}
+	alreadyPending := make(map[projectsource.DeclarationFileKey]bool, len(p.pending))
+	for _, hit := range p.pending {
+		alreadyPending[projectsource.DeclarationFileKey{
+			RootID: hit.RootID,
+			Path:   strings.ReplaceAll(strings.TrimSpace(hit.Path), "\\", "/"),
+		}] = true
+	}
+	requeued := make([]projectsource.DeclarationSearchHit, 0, len(stale))
+	for key := range stale {
+		if alreadyPending[key] {
+			continue
+		}
+		requeued = append(requeued, projectsource.DeclarationSearchHit{
+			RootID: key.RootID,
+			Path:   key.Path,
+		})
+	}
+	if len(requeued) > 0 {
+		sort.Slice(requeued, func(i, j int) bool {
+			if requeued[i].RootID != requeued[j].RootID {
+				return requeued[i].RootID < requeued[j].RootID
+			}
+			return requeued[i].Path < requeued[j].Path
+		})
+		p.pending = append(requeued, p.pending...)
+		if p.phase >= 2 {
+			p.phase = 0
+		}
+	}
+}
+
 func (r *symbolSearchRun) advance(ctx context.Context, query string, limit int, wall, abbreviationWall, outlineWall time.Duration, state *Progress, resume bool) (bool, error) {
 	discoveryEnd := time.Now().Add(wall)
 	outlineLeft := outlineWall

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -19,10 +20,11 @@ import (
 const symbolProgressLimit = 16
 const symbolProgressTTL = 2 * time.Minute
 
-// symbolRevalidateFileLimit bounds per-resume content revalidation so resuming
-// retained progress stays bounded under normal symbol budgets; coverage whose
-// retained files exceed this bound is discarded rather than reused unverified.
-const symbolRevalidateFileLimit = symbolsearch.OutlineFileCap
+// symbolRevalidateByteLimit bounds total bytes re-read during one resumed
+// slice's freshness check under the normal outline allocation. Retained files
+// that cannot be verified within this budget (or within the outline deadline)
+// are surgically dropped and re-queued rather than resetting all progress.
+const symbolRevalidateByteLimit int64 = 2 << 20
 
 type symbolProgressCache struct {
 	mu      sync.Mutex
@@ -45,31 +47,57 @@ func (e *symbolProgressEntry) reset(stamp string, discovery projectsource.Declar
 	e.stamp = stamp
 }
 
-// matchFilesCurrent re-observes every file contributing retained matches
-// through the root-confined projectsource reader and confirms its raw content
-// SHA-256 still matches the digest captured at the exact source read that
-// produced those declarations.
-func (e *symbolProgressEntry) matchFilesCurrent(ctx context.Context, p *project.Project) bool {
+// revalidateRetainedMatches re-observes retained match files through the
+// root-confined projectsource reader under ctx and byteLimit, confirming each
+// file's raw content SHA-256 still matches the digest captured at the exact
+// source read that produced those declarations. Changed or unverified files are
+// surgically dropped and re-queued without discarding clean earlier slices.
+func (e *symbolProgressEntry) revalidateRetainedMatches(ctx context.Context, p *project.Project, byteLimit int64) (revalidatedFiles int, rereadBytes int64) {
 	digests := e.state.RetainedFileDigests()
 	if len(digests) == 0 {
-		return true
+		return 0, 0
 	}
-	if len(digests) > symbolRevalidateFileLimit {
-		return false
+	keys := make([]projectsource.DeclarationFileKey, 0, len(digests))
+	for key := range digests {
+		keys = append(keys, key)
 	}
-	for key, wantSHA := range digests {
-		if ctx.Err() != nil || wantSHA == "" {
-			return false
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].RootID != keys[j].RootID {
+			return keys[i].RootID < keys[j].RootID
+		}
+		return keys[i].Path < keys[j].Path
+	})
+	var stale map[projectsource.DeclarationFileKey]bool
+	markStale := func(key projectsource.DeclarationFileKey) {
+		if stale == nil {
+			stale = map[projectsource.DeclarationFileKey]bool{}
+		}
+		stale[key] = true
+	}
+	for _, key := range keys {
+		wantSHA := digests[key]
+		if ctx.Err() != nil || wantSHA == "" || (byteLimit > 0 && rereadBytes >= byteLimit) {
+			markStale(key)
+			continue
 		}
 		obs, err := projectsource.ObserveProjectSource(p, projectsource.SourceReadRequest{
 			RootID: key.RootID,
 			Path:   key.Path,
 		})
-		if err != nil || obs.OverLimit || obs.Revision.SHA256 != wantSHA {
-			return false
+		if err != nil || obs.OverLimit {
+			markStale(key)
+			continue
+		}
+		revalidatedFiles++
+		rereadBytes += obs.SizeBytes
+		if obs.Revision.SHA256 != wantSHA {
+			markStale(key)
 		}
 	}
-	return true
+	if len(stale) > 0 {
+		e.state.DropAndRequeueFiles(stale)
+	}
+	return revalidatedFiles, rereadBytes
 }
 
 type symbolSourceStamp struct {
@@ -172,7 +200,7 @@ func (c *symbolProgressCache) acquire(ctx context.Context, p *project.Project, l
 		release()
 		return nil, nil, err
 	}
-	if entry.discovery == nil || entry.stamp != stamp || !symbolEpochsCurrent(entry.stamp) || !entry.matchFilesCurrent(ctx, p) {
+	if entry.discovery == nil || entry.stamp != stamp || !symbolEpochsCurrent(entry.stamp) {
 		entry.reset(stamp, declarationSearchIn(leg.DiscoveryScope(), leg.Flags.Include, leg.Flags.Exclude, leg.IncludeDependencies))
 	}
 	return entry, release, nil
