@@ -2,6 +2,7 @@
 import contextlib
 import json
 import pathlib
+import re
 import sqlite3
 import uuid
 from orchestration_evidence import waves
@@ -144,15 +145,8 @@ def dispatch_call(script):
 
 def worker_name(result):
     content = str(result.get('content') or '')
-    idx = content.find('{')
-    if idx >= 0:
-        try:
-            payload = json.loads(content[idx:])
-            if isinstance(payload, dict) and payload.get('worker'):
-                return str(payload['worker'])
-        except json.JSONDecodeError:
-            pass
-    return ''
+    match = re.search(r'"worker"\s*:\s*"([^"]+)"', content)
+    return match.group(1) if match else ''
 
 
 def job_id(result, application=None, seen=None):

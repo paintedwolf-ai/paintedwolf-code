@@ -21,7 +21,7 @@ type workspaceReceiptBinder interface {
 
 // Verify uses the ordinary confined verifier and evidence recorder
 // while the deterministic runner owns the worker's claim.
-func (m *Service) Verify(ctx context.Context, child *api.Session, job *api.WorkerTask, command string) (*tools.SourceRunCapture, error) {
+func (m *Service) Verify(ctx context.Context, child *api.Session, job *api.WorkerTask, command string) (_ *tools.SourceRunCapture, retErr error) {
 	if !configdir.IsHarnessChannel() {
 		return nil, fmt.Errorf("worker preparation requires an isolated harness")
 	}
@@ -49,13 +49,12 @@ func (m *Service) Verify(ctx context.Context, child *api.Session, job *api.Worke
 			return nil, digestErr
 		}
 		receipt, beginErr := m.invocations.Begin(ctx, invocation.Start{
-			ProjectID:          child.ProjectID,
-			SessionID:          child.ID,
-			AssistantMessageID: tctx.Identity.MessageID,
-			ToolCallID:         tctx.Identity.ToolCallID,
-			ToolName:           "verify",
-			Args:               args,
-			Contract:           contract,
+			ProjectID:  child.ProjectID,
+			SessionID:  child.ID,
+			ToolCallID: tctx.Identity.ToolCallID,
+			ToolName:   "verify",
+			Args:       args,
+			Contract:   contract,
 		})
 		if beginErr != nil {
 			return nil, beginErr
@@ -73,8 +72,12 @@ func (m *Service) Verify(ctx context.Context, child *api.Session, job *api.Worke
 		}
 		defer func() {
 			status := api.InvocationStatusCompleted
-			if err != nil {
-				status = api.InvocationStatusError
+			if retErr != nil {
+				if ctx.Err() != nil {
+					status = api.InvocationStatusInterrupted
+				} else {
+					status = api.InvocationStatusError
+				}
 			}
 			var rev, rootDigest, verdict string
 			if tctx.Effects.Out != nil && tctx.Effects.Out.SourceRun != nil {
@@ -82,13 +85,15 @@ func (m *Service) Verify(ctx context.Context, child *api.Session, job *api.Worke
 				rootDigest = tctx.Effects.Out.SourceRun.SourceRootDigest
 				verdict = tctx.Effects.Out.SourceRun.Verdict
 			}
-			_, _ = m.invocations.Settle(context.WithoutCancel(ctx), receipt.ID, invocation.Settlement{
+			if _, settleErr := m.invocations.Settle(context.WithoutCancel(ctx), receipt.ID, invocation.Settlement{
 				Status:           status,
 				Invoked:          true,
 				SourceRevision:   rev,
 				SourceRootDigest: rootDigest,
 				SourceVerdict:    verdict,
-			})
+			}); settleErr != nil && retErr == nil {
+				retErr = fmt.Errorf("settle child verification receipt: %w", settleErr)
+			}
 		}()
 	}
 	_, err = m.tools.Run(ctx, "verify", args, tctx)
