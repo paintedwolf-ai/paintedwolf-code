@@ -252,6 +252,11 @@ def run_slot_c07(
         if bad_outcome == "rejected" or "WATCH_CONDITION_INVALID" in bad_text:
             checks["actionable_recovery_on_invalid_arg"] = True
 
+        details["scope_note"] = (
+            "Sidecar slot covers live verbatim watch_match round-trip and actionable invalid-arg recovery; "
+            "coordinator/worker/restricted/closed surface placement and pruning are verified in "
+            "TestWW04_C07_SurfacesCoordinatorAndWorker (lycaon/internal/watch/ww04_agent_watches_test.go)."
+        )
         # 4. Submit verbatim wait_condition unchanged to wait tool, then release barrier.
         if isinstance(wait_condition, dict):
             _, wait_res, wait_parsed = driver.call_wait(
@@ -271,7 +276,9 @@ def run_slot_c07(
             barrier.release()
             resumed_req = driver.await_pending("c07:resumed_pending")
             rendered_obs.record_pending(resumed_req, presentation_kind="new_model_presentation", handle=watch_handle)
-            checks["watch_settled_cleanly"] = True
+            resumed_blob = json.dumps(resumed_req.get("messages") or [], default=str)
+            if (watch_handle and watch_handle in resumed_blob) or (cmd_handle and cmd_handle in resumed_blob):
+                checks["watch_settled_cleanly"] = True
             driver.finish_turn(resumed_req, "C07 verbatim watch_match verified.")
 
         admission_obs.capture_http(application, session_id=session_id, project_id=project_id, submission_ids=[sub_id])
@@ -437,24 +444,43 @@ def run_slot_c08(
             "unselected_pending_matches": len(unsel_pending_matches),
             "unselected_lease_deliveries": len(unsel_lease_deliveries),
         }
-        if mid_state.get("armed_leases", 0) >= 1 and len(unsel_lease_deliveries) == 0:
+        if (
+            mid_state.get("armed_leases", 0) >= 1
+            and len(unsel_pending_matches) >= 1
+            and len(unsel_lease_deliveries) == 0
+        ):
             checks["unselected_stays_pending"] = True
 
-        # Release selected job so wait settles.
+        # Release selected job so wait settles; verify selected watch/handle appears in resumed rendered input.
         b_sel.release()
         resumed_req = driver.await_pending("c08:resumed_after_selected")
         rendered_obs.record_pending(resumed_req, presentation_kind="new_model_presentation", handle=sel_watch_handle)
-        checks["selected_settles"] = True
+        resumed_blob = json.dumps(resumed_req.get("messages") or [], default=str)
+        sel_in_rendered = bool(
+            (sel_watch_handle and sel_watch_handle in resumed_blob)
+            or (h_sel and h_sel in resumed_blob)
+        )
+        details["selected_observed_in_rendered_input"] = sel_in_rendered
+        if sel_in_rendered:
+            checks["selected_settles"] = True
 
         # Finish turn cleanly.
         driver.finish_turn(resumed_req, "C08 selected vs unselected verified.")
 
-        # Check durable storage for single admission of selected watch.
+        # Check durable storage for exact single admission (== 1) of selected watch.
+        sel_watch_id = str(w_sel.get("watch_id") or "")
         snap = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id)
         deliveries = snap.get("tables", {}).get("watch_deliveries") or []
-        sel_deliveries = [d for d in deliveries if sel_watch_handle in str(d.get("payload_json") or "")]
+        sel_deliveries = [
+            d for d in deliveries
+            if d.get("destination_kind") != "final_receipt"
+            and (
+                (sel_watch_handle and sel_watch_handle in str(d.get("payload_json") or ""))
+                or (sel_watch_id and sel_watch_id in str(d.get("watch_ids_json") or ""))
+            )
+        ]
         details["selected_delivery_count"] = len(sel_deliveries)
-        checks["single_durable_admission"] = len(sel_deliveries) <= 1
+        checks["single_durable_admission"] = len(sel_deliveries) == 1
 
         admission_obs.capture_http(application, session_id=session_id, project_id=project_id, submission_ids=[sub_id])
         application.request(f"/v1/sessions/{session_id}/abort", {})
@@ -632,13 +658,57 @@ def run_slot_c10_restart(
             if insp.get("handle") == watch_handle and insp.get("state") == "live":
                 checks["expiring_watch_survives_restart"] = True
 
+            # Fill remaining explicit watch capacity (1 restarted + 7 new = 8 live watches),
+            # verify 9th watch is rejected with WATCH_CAPACITY_REACHED, then cancel the restarted
+            # watch and register a replacement to prove capacity reuse after restart.
+            fill_handles: list[str] = []
+            for _ in range(7):
+                _, f_res, f_parsed = driver2.call_watch(
+                    {
+                        "conditions": [{"kind": "timer", "delay_ms": 120000}],
+                        "expires_at": expires_at,
+                        "delivery": "collect",
+                    }
+                )
+                if (f_res or {}).get("outcome") != "rejected" and f_parsed.get("handle"):
+                    fill_handles.append(str(f_parsed["handle"]))
+            _, over_res, over_parsed = driver2.call_watch(
+                {
+                    "conditions": [{"kind": "timer", "delay_ms": 120000}],
+                    "expires_at": expires_at,
+                    "delivery": "collect",
+                }
+            )
+            over_text = json.dumps(over_res, default=str)
+            cap_rejected = (over_res or {}).get("outcome") == "rejected" or "WATCH_CAPACITY_REACHED" in over_text
+            details["capacity_fill_count"] = len(fill_handles)
+            details["ninth_watch_rejected"] = cap_rejected
+            details["ninth_watch_parsed"] = over_parsed
+
             _, _, canc = driver2.call_watch_control({"handle": watch_handle, "operation": "cancel"})
             details["post_restart_cancel"] = canc
-            if canc.get("handle") == watch_handle and canc.get("outcome") == "canceled":
+
+            _, reuse_res, reuse_parsed = driver2.call_watch(
+                {
+                    "conditions": [{"kind": "timer", "delay_ms": 120000}],
+                    "expires_at": expires_at,
+                    "delivery": "collect",
+                }
+            )
+            reused_handle = str(reuse_parsed.get("handle") or "")
+            slot_reused = (reuse_res or {}).get("outcome") != "rejected" and bool(reused_handle)
+            details["replacement_after_cancel"] = {"handle": reused_handle, "outcome": (reuse_res or {}).get("outcome")}
+            if (
+                canc.get("handle") == watch_handle
+                and canc.get("outcome") == "canceled"
+                and len(fill_handles) == 7
+                and cap_rejected
+                and slot_reused
+            ):
                 checks["cancel_after_restart_frees_slot"] = True
 
             end_req = driver2.await_pending("c10:post_restart_finish")
-            driver2.finish_turn(end_req, f"Canceled {watch_handle} after restart.")
+            driver2.finish_turn(end_req, f"Canceled {watch_handle} and reused freed slot after restart.")
             admission_obs.capture_http(app, session_id=session_id, project_id=project_id, submission_ids=[sub2])
             app.request(f"/v1/sessions/{session_id}/abort", {})
     except BarrierTimeoutError as exc:
@@ -746,8 +816,17 @@ def run_slot_c12(
         # 2. Fast-exit background command using Bash brace group `{ ...; } &`.
         _, fast_res, fast_handle = driver.call_command('{ echo fast_bg_done; } & echo "pid=$!"')
         fast_parsed = parse_content_json(fast_res)
-        details["fast_bg"] = {"handle": fast_handle, "outcome": (fast_res or {}).get("outcome"), "bg_jobs": fast_parsed.get("background_jobs")}
-        if (fast_res or {}).get("outcome") != "rejected" and (bool(fast_handle) or bool(fast_parsed.get("background_jobs"))):
+        fast_stdout = str(fast_parsed.get("stdout") or "")
+        fast_bg_jobs = fast_parsed.get("background_jobs") or []
+        fast_exit_code = fast_parsed.get("exit_code")
+        details["fast_bg"] = {
+            "handle": fast_handle,
+            "outcome": (fast_res or {}).get("outcome"),
+            "exit_code": fast_exit_code,
+            "stdout": fast_stdout,
+            "bg_jobs": fast_bg_jobs,
+        }
+        if (fast_res or {}).get("outcome") != "rejected" and (bool(fast_handle) or bool(fast_bg_jobs)):
             checks["fast_exit_bg_handled"] = True
 
         # 3. Two background jobs launched via real Bash brace groups `{ ...; } & { ...; } &`.
@@ -761,7 +840,7 @@ def run_slot_c12(
         if len(bg_jobs) >= 2:
             checks["two_bg_jobs_launched"] = True
 
-        # 4. Wait on launched handles (if any) and verify shell status separate from model delivery.
+        # 4. Wait on launched handles and verify shell foreground status is separate from background delivery.
         wait_handles = [j["handle"] for j in bg_jobs if isinstance(j, dict) and j.get("handle")]
         if not wait_handles and two_handle:
             wait_handles = [two_handle]
@@ -775,8 +854,37 @@ def run_slot_c12(
             details["wait_parsed"] = wait_parsed
         end_req = driver.await_pending("c12:final_pending")
         rendered_obs.record_pending(end_req, presentation_kind="new_model_presentation", handle=two_handle)
+        end_blob = json.dumps(end_req.get("messages") or [], default=str)
         driver.finish_turn(end_req, "C12 Bash command handoff verified.")
-        checks["shell_status_separate_from_delivery"] = True
+
+        # Independently verify foreground shell status (exit_code=0, pid= in stdout without watch- pollution)
+        # is separate from background job handoff / SQLite derived watch & program records.
+        snap_c12 = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id)
+        c12_tables = snap_c12.get("tables") or {}
+        c12_progs = c12_tables.get("invocation_programs") or []
+        c12_watches = c12_tables.get("watch_registrations") or []
+        bg_handles_observed = {
+            h for h in [fast_handle, two_handle, *wait_handles]
+            if h and (
+                h in end_blob
+                or any(h in str(p) for p in c12_progs)
+                or any(h == str(w.get("derived_command_handle") or "") for w in c12_watches)
+            )
+        }
+        fg_status_clean = (
+            (fast_res or {}).get("outcome") != "rejected"
+            and (fast_exit_code in (0, None))
+            and ("pid=" in fast_stdout or "pid=" in json.dumps(fast_res, default=str))
+            and ("watch-" not in fast_stdout)
+        )
+        details["shell_status_separation"] = {
+            "fg_status_clean": fg_status_clean,
+            "bg_handles_independently_observed": sorted(bg_handles_observed),
+            "derived_watch_count": len([w for w in c12_watches if w.get("derived_command_handle")]),
+            "program_row_count": len(c12_progs),
+        }
+        if fg_status_clean and bool(fast_bg_jobs) and bool(bg_handles_observed):
+            checks["shell_status_separate_from_delivery"] = True
 
         admission_obs.capture_http(application, session_id=session_id, project_id=project_id, submission_ids=[sub_id])
         application.request(f"/v1/sessions/{session_id}/abort", {})
