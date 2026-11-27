@@ -33,6 +33,9 @@ func applyCitationRange(finding WorkerFindingInput, ev evidence.Ledger, res evid
 		}
 		start, end := finding.Line+shift, finding.EndLine+shift
 		support := evidence.CoordinateSupport(rec, res.Path, start, end)
+		if support == evidence.CoordinateUnsupported && citesFullDeliveryCoverage(finding, handle, rec, res.Path) {
+			support = evidence.CoordinateDelivered
+		}
 		if support != evidence.CoordinateObserved && evidence.ExcerptVerifiesRange(rec, res.Path, excerpt, start, end) {
 			support = evidence.CoordinateObserved
 		}
@@ -110,10 +113,27 @@ func countedCoordinate(finding WorkerFindingInput, ev evidence.Ledger, res evide
 		}
 	}
 	res.Verdict = evidence.VerdictUnverifiable
-	if evidence.CoordinateSupport(rec, res.Path, finding.Line, finding.Line) == evidence.CoordinateDelivered {
+	if evidence.CoordinateSupport(rec, res.Path, finding.Line, finding.Line) == evidence.CoordinateDelivered ||
+		citesFullDeliveryCoverage(finding, res.Handle, rec, res.Path) {
 		res.Verdict = evidence.VerdictTraced
 	}
 	return res
+}
+
+// citesFullDeliveryCoverage recognizes the host tag's whole observation when
+// the output printed numbers from a different coordinate system, as cat -n
+// does for later files. A subset still needs its own line evidence.
+func citesFullDeliveryCoverage(finding WorkerFindingInput, handle string, rec evidence.Record, path string) bool {
+	fact := rec.SourceDelivery
+	if fact == nil || !fact.PrintedOtherNumbers || strings.TrimSpace(finding.Evidence) != handle ||
+		strings.TrimSpace(finding.Path) == "" || strings.TrimSpace(finding.Excerpt) != "" {
+		return false
+	}
+	end := finding.EndLine
+	if end == 0 {
+		end = finding.Line
+	}
+	return finding.Line == fact.StartLine && end == fact.EndLine && evidence.RangeObserved(rec, path, finding.Line, end)
 }
 
 // rangeCandidates lists the records that could support the range. An explicit
