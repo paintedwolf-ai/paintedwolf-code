@@ -125,12 +125,14 @@ func (e *CodeExecutor) scanGeneration(ctx context.Context, gen codeGeneration, p
 	if !spec.wantLines || spec.lineCap <= 0 {
 		return nil
 	}
+	draftsByPath := e.rootDrafts(ctx, gen, paths, *spec)
+	seenDrafts := make(map[string]bool, len(draftsByPath))
 	indexWarming := false
 	err = visitCodePages(ctx, gen, paths, spec.lineExcludes, func(entries []sourcecatalog.Entry, files []codeFile) bool {
 		if !spec.wantFiles {
 			report.Code.FilesListed += len(files)
 		}
-		jobs, warming := e.contentJobs(ctx, gen, paths.codeScope(), entries, files, *spec, &report.Code)
+		jobs, warming := e.contentJobs(ctx, gen, paths.codeScope(), entries, files, *spec, &report.Code, draftsByPath, seenDrafts)
 		indexWarming = indexWarming || warming
 		contentSpec := *spec
 		contentSpec.wantFiles = false
@@ -143,10 +145,72 @@ func (e *CodeExecutor) scanGeneration(ctx context.Context, gen codeGeneration, p
 		spec.lineCap -= len(result.hits)
 		return spec.lineCap > 0
 	})
+	if err == nil && len(draftsByPath) > len(seenDrafts) && spec.lineCap > 0 && ctx.Err() == nil {
+		extraPaths := make([]string, 0, len(draftsByPath)-len(seenDrafts))
+		for rel := range draftsByPath {
+			if !seenDrafts[rel] {
+				extraPaths = append(extraPaths, rel)
+			}
+		}
+		sort.Strings(extraPaths)
+		extraJobs := make([]codeScanJob, 0, len(extraPaths))
+		for _, rel := range extraPaths {
+			text := draftsByPath[rel]
+			extraJobs = append(extraJobs, codeScanJob{
+				file: codeFile{
+					root:   gen.root,
+					rootID: gen.rootID,
+					rel:    rel,
+					abs:    filepath.Join(gen.rootPath, filepath.FromSlash(rel)),
+				},
+				content: true,
+				draft:   &text,
+			})
+			report.Code.FilesListed++
+			report.Code.ContentCandidates++
+		}
+		contentSpec := *spec
+		contentSpec.wantFiles = false
+		result := scanCodeFiles(ctx, extraJobs, contentSpec)
+		report.Hits = append(report.Hits, result.hits...)
+		report.Limited = report.Limited || result.partial
+		report.SkippedFiles += result.skipped
+		report.Code.FilesOpened += result.opened
+		report.Code.PrefilterSkipped += result.prefilterSkipped
+		spec.lineCap -= len(result.hits)
+	}
 	if indexWarming {
 		report.Code.IndexWarmingRoots++
 	}
 	return err
+}
+
+func (e *CodeExecutor) rootDrafts(ctx context.Context, gen codeGeneration, paths pathGlobFilter, spec codeScanSpec) map[string]string {
+	if e.drafts == nil || gen.ephemeral {
+		return nil
+	}
+	list, err := e.drafts(ctx, gen.root.ProjectID, gen.rootID)
+	if err != nil || len(list) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(list))
+	for _, d := range list {
+		rel, ok := normalizeDraftRelPath(d.Path)
+		if !ok {
+			continue
+		}
+		if underDependencyDir(rel, spec.lineExcludes) || !paths.allowsCode(rel) {
+			continue
+		}
+		if spec.maxBytes > 0 && int64(len(d.Content)) > spec.maxBytes {
+			continue
+		}
+		out[rel] = d.Content
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // visitCodePages seeks past each excluded directory; its rows can outnumber
@@ -180,7 +244,7 @@ func visitCodePages(ctx context.Context, gen codeGeneration, paths pathGlobFilte
 	}
 }
 
-func (e *CodeExecutor) contentJobs(ctx context.Context, gen codeGeneration, scope sourcecatalog.FileScope, entries []sourcecatalog.Entry, files []codeFile, spec codeScanSpec, stats *CodeLegReport) ([]codeScanJob, bool) {
+func (e *CodeExecutor) contentJobs(ctx context.Context, gen codeGeneration, scope sourcecatalog.FileScope, entries []sourcecatalog.Entry, files []codeFile, spec codeScanSpec, stats *CodeLegReport, draftsByPath map[string]string, seenDrafts map[string]bool) ([]codeScanJob, bool) {
 	var candidates map[string]bool
 	warming := false
 	if spec.prefilter.active() && !gen.ephemeral {
@@ -206,6 +270,13 @@ func (e *CodeExecutor) contentJobs(ctx context.Context, gen codeGeneration, scop
 	}
 	jobs := make([]codeScanJob, 0, len(files))
 	for _, file := range files {
+		if draftText, hasDraft := draftsByPath[file.rel]; hasDraft {
+			seenDrafts[file.rel] = true
+			text := draftText
+			jobs = append(jobs, codeScanJob{file: file, content: true, draft: &text})
+			stats.ContentCandidates++
+			continue
+		}
 		if candidates != nil && !candidates[file.rel] {
 			continue
 		}

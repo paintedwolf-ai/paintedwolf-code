@@ -6,8 +6,10 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
+	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/search"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 )
 
 func (s *Handler) searchCompileContext(ctx context.Context, originProjectID string) search.CompileContext {
@@ -162,6 +164,37 @@ func searchProjectDisplayName(p *project.Project) string {
 }
 
 // searchService reads the evidence index through the host database.
-func (s *Handler) searchService() *search.Service {
-	return search.NewService(s.database, s.rerank, s.symbolExecutor)
+// When includeDrafts is true, the code leg overlays dirty editor buffers
+// visible to the authorized caller in ctx (never used for exports or
+// unauthorized callers).
+func (s *Handler) searchService(includeDrafts bool) *search.Service {
+	var drafts search.CodeDraftProvider
+	if includeDrafts && s.editorDocuments != nil {
+		drafts = s.authorizedCodeDrafts()
+	}
+	return search.NewServiceWithDrafts(s.database, s.rerank, s.symbolExecutor, drafts)
+}
+
+// authorizedCodeDrafts resolves dirty trunk editor drafts strictly from the
+// authorized caller context. A project ID or root ID alone never authorizes
+// reading a dirty draft, and worker-branch or cross-project drafts are excluded.
+func (s *Handler) authorizedCodeDrafts() search.CodeDraftProvider {
+	return func(ctx context.Context, projectID, rootID string) ([]search.CodeDraft, error) {
+		caller, ok := people.Caller(ctx)
+		if !ok || !people.MayInvoke(caller, "openEditorDocument") {
+			return nil, nil
+		}
+		docs, err := s.editorDocuments.DirtyDocuments(ctx, projectID, sourcebranch.Trunk)
+		if err != nil || len(docs) == 0 {
+			return nil, err
+		}
+		out := make([]search.CodeDraft, 0, len(docs))
+		for _, d := range docs {
+			if d == nil || !d.Dirty || d.ProjectID != projectID || d.RootID != rootID || d.BranchID != sourcebranch.Trunk {
+				continue
+			}
+			out = append(out, search.CodeDraft{Path: d.Path, Content: d.Draft})
+		}
+		return out, nil
+	}
 }

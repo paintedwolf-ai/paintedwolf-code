@@ -31,6 +31,8 @@ type CodeExecutor struct {
 	catalog *sourcecatalog.Catalog
 	// rerank blends the decision engine into the leg's hits.
 	rerank decide.Reranker
+	// drafts overlays authorized caller dirty editor buffers over disk bytes.
+	drafts CodeDraftProvider
 	// legDeadline injects the leg's deadline context in tests; nil in production.
 	legDeadline func(ctx context.Context, leg *CodePlanLeg) (context.Context, context.CancelFunc)
 }
@@ -49,6 +51,12 @@ func (e *CodeExecutor) bindLegContext(ctx context.Context, leg *CodePlanLeg) (co
 // NewCodeExecutor returns a CodeExecutor on the process catalog.
 func NewCodeExecutor(rerank decide.Reranker) *CodeExecutor {
 	return &CodeExecutor{catalog: sourcecatalog.Process(), rerank: rerank}
+}
+
+// NewCodeExecutorWithDrafts returns a CodeExecutor that overlays authorized
+// caller editor drafts over cataloged disk bytes during line search.
+func NewCodeExecutorWithDrafts(rerank decide.Reranker, drafts CodeDraftProvider) *CodeExecutor {
+	return &CodeExecutor{catalog: sourcecatalog.Process(), rerank: rerank, drafts: drafts}
 }
 
 func (e *CodeExecutor) Source() string { return ExecutorCode }

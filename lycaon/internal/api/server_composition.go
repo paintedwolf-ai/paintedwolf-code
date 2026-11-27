@@ -75,7 +75,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 		SourceLedger: deps.Source.SourceLedger, SourceMutations: deps.Source.SourceMutations, VisualStore: deps.Source.VisualStore,
 		Workers: deps.Workflow.Workers, AttachmentStore: func(ctx context.Context, id string) (blobstore.Store, bool) { return attachmentStore(ctx, id) }, TryRunPromotion: func(ctx context.Context, id string) { tryRunPromotion(ctx, id) },
 	})
-	s.Search = searchadmin.New(&s.responses, searchadmin.Dependencies{Database: deps.Core.Database, Projects: deps.Core.Projects, Rerank: deps.Providers.Rerank, SourceMutations: deps.Source.SourceMutations, ChatAffiliation: s.Sources.Workspace.UserSourceChatAffiliation, WriteSourceError: s.Sources.Workspace.WriteProjectSourceError})
+	s.Search = searchadmin.New(&s.responses, searchadmin.Dependencies{Database: deps.Core.Database, Projects: deps.Core.Projects, Rerank: deps.Providers.Rerank, EditorDocuments: deps.Source.EditorDocuments, SourceMutations: deps.Source.SourceMutations, ChatAffiliation: s.Sources.Workspace.UserSourceChatAffiliation, WriteSourceError: s.Sources.Workspace.WriteProjectSourceError})
 	s.Admin.Prompt = promptadmin.New(&s.responses, &s.background, promptadmin.Deps{
 		DataDir: s.dataDir, EventPublisher: deps.Host.EventPublisher, HintConfig: deps.Source.HintConfig,
 		ManagedSecrets: deps.Approvals.ManagedSecrets, Projects: deps.Core.Projects, Store: deps.Core.Store, Sessions: deps.Core.Sessions,
