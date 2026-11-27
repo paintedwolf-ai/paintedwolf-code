@@ -35,9 +35,8 @@ func TestMain(m *testing.M) {
 }
 
 // TestInvariants evaluates every rule of every family against the repository.
-// Running typed families before untyped families sequentially avoids a 450-way
-// goroutine fanout under -race and releases go/types tables before prompt-render
-// and later package tests run.
+// Running families sequentially avoids a 450-way goroutine fanout under -race
+// while keeping the shared typed program usable for the process lifetime.
 func TestInvariants(t *testing.T) {
 	corpus, err := invariants.Shared()
 	contractcheck.FailErr(t, "invariants.Shared failed", err)
@@ -74,7 +73,6 @@ func TestInvariants(t *testing.T) {
 			runFamily(family)
 		}
 	}
-	corpus.ReleaseTypes()
 	for _, family := range families {
 		if !typedFamilies[family.Name] {
 			runFamily(family)

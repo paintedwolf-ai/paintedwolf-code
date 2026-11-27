@@ -59,12 +59,6 @@ func (c *Corpus) Types() *Program {
 	return prog
 }
 
-// ReleaseTypes drops the retained type-checked program once typed rules have
-// finished so subsequent tests do not keep go/types tables live.
-func (c *Corpus) ReleaseTypes() {
-	c.typed.value = nil
-}
-
 type listedPackage struct {
 	ImportPath string
 	Dir        string
