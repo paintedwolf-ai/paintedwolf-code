@@ -46,11 +46,14 @@ def materialize_helpers(helpers, helpers_dir):
     for name, spec in helpers.items():
         if not name or '/' in name or '\\' in name or name in {'.', '..'}:
             raise ValueError('invalid helper executable name: ' + str(name))
-        out = shlex.quote(str(spec.get('stdout') or ''))
-        err = shlex.quote(str(spec.get('stderr') or ''))
-        code = int(spec.get('status', 0))
         script = dest / name
-        script.write_text(f"#!/bin/sh\nprintf '%s' {out}\nprintf '%s' {err} >&2\nexit {code}\n")
+        if spec.get('kind') == 'argv-json':
+            script.write_text("#!/bin/sh\nexec python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' \"$@\"\n")
+        else:
+            out = shlex.quote(str(spec.get('stdout') or ''))
+            err = shlex.quote(str(spec.get('stderr') or ''))
+            code = int(spec.get('status', 0))
+            script.write_text(f"#!/bin/sh\nprintf '%s' {out}\nprintf '%s' {err} >&2\nexit {code}\n")
         script.chmod(0o755)
     return dest
 
