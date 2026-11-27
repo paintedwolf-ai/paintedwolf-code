@@ -1,4 +1,4 @@
-"""Transport-agnostic mappers from D1 /v1 JSON & SSE payloads to checker domain types."""
+"""Transport-agnostic mappers from exact D1 /v1 OpenAPI JSON & SSE payloads to checker types."""
 
 from __future__ import annotations
 
@@ -54,29 +54,34 @@ class AgentDiscoveryObservation:
 
 
 def map_source_index_coverage(coverage_list: list[dict[str, object]]) -> tuple[DeclaredGap, ...]:
-    """Map SourceIndexRootCoverage entries from /source/index or /source/search to DeclaredGaps."""
+    """Map exact D1 SourceIndexRootCoverage entries to DeclaredGaps.
+
+    Real D1 fields: root_id, state (warming|ready|failed), discovery_complete,
+    refreshing, bounded_directories, failed_directories, error.
+    A readable partial root (state="ready" with discovery_complete=False,
+    bounded_directories > 0, failed_directories > 0, or non-empty error)
+    NEVER appears complete.
+    """
     gaps: list[DeclaredGap] = []
     for item in coverage_list:
         root_id = str(item["root_id"]) if item.get("root_id") else None
-        state = str(item.get("state") or item.get("status") or "").lower()
-        reason_map = {
-            "warming": "catalog_warming",
-            "preparing": "catalog_warming",
-            "incomplete": "catalog_incomplete",
-            "partial": "catalog_incomplete",
-            "bounded": "catalog_bounded",
-            "refreshing": "catalog_refreshing",
-            "failed": "catalog_failed",
-            "refresh_failed": "catalog_refresh_failed",
-            "unavailable": "catalog_failed",
-        }
-        mapped = reason_map.get(state)
-        if mapped:
-            gaps.append(DeclaredGap(reason=mapped, root_id=root_id))
-        if item.get("refreshing") is True and mapped != "catalog_refreshing":
-            gaps.append(DeclaredGap(reason="catalog_refreshing", root_id=root_id))
-        if int(item.get("unreadable_dirs") or 0) > 0:
+        state = str(item.get("state") or "").lower()
+        if state == "warming":
+            gaps.append(DeclaredGap(reason="catalog_warming", root_id=root_id))
+        elif state == "failed":
             gaps.append(DeclaredGap(reason="catalog_failed", root_id=root_id))
+
+        if item.get("discovery_complete") is False and state != "warming":
+            gaps.append(DeclaredGap(reason="catalog_incomplete", root_id=root_id))
+        if item.get("refreshing") is True:
+            gaps.append(DeclaredGap(reason="catalog_refreshing", root_id=root_id))
+        if int(item.get("bounded_directories") or 0) > 0:
+            gaps.append(DeclaredGap(reason="catalog_bounded", root_id=root_id))
+        if int(item.get("failed_directories") or 0) > 0:
+            gaps.append(DeclaredGap(reason="catalog_failed", root_id=root_id))
+        if str(item.get("error") or "").strip():
+            err_reason = "catalog_refresh_failed" if state == "ready" else "catalog_failed"
+            gaps.append(DeclaredGap(reason=err_reason, root_id=root_id))
     return tuple(gaps)
 
 
@@ -87,7 +92,7 @@ def map_search_issues(
     next_cursor: str | None = None,
     continuation_required: bool = False,
 ) -> tuple[DeclaredGap, ...]:
-    """Map OpenAPI SearchIssue entries (router.go) to scoped DeclaredGap records."""
+    """Map OpenAPI SearchIssue entries to scoped DeclaredGap records."""
     gaps: list[DeclaredGap] = []
     for issue in issues:
         reason = str(issue.get("reason") or "")
@@ -115,28 +120,49 @@ def map_search_issues(
     return tuple(gaps)
 
 
-def map_catalog_browse_to_answer(
+def map_browse_entries_to_answer(
     entries_by_root: dict[str, list[dict[str, object]]],
     coverage_list: list[dict[str, object]] | None = None,
     *,
+    generation_revision: int | None = None,
     instrumentation_complete: bool = True,
 ) -> ProductCatalogAnswer:
-    """Map browsed catalog entries + /source/index coverage to ProductCatalogAnswer."""
+    """Map D1 /source/browse entries (`name`, `is_dir`) + coverage to ProductCatalogAnswer(projection='browse')."""
     items: list[CatalogItem] = []
     for root_id, entries in sorted(entries_by_root.items()):
         for entry in entries:
             path = str(entry.get("path") or entry.get("name") or "").removeprefix("./")
-            raw_kind = str(entry.get("kind") or entry.get("type") or "file").lower()
-            kind = "dir" if raw_kind in ("dir", "directory", "folder") else (
-                "symlink" if raw_kind in ("symlink", "link") else "file"
-            )
-            sha = str(entry["sha256"]) if entry.get("sha256") else None
-            items.append(CatalogItem(path=path, kind=kind, root_id=root_id, sha256=sha))
-    gaps = map_source_index_coverage(coverage_list or [])
+            kind = "dir" if bool(entry.get("is_dir")) else "file"
+            items.append(CatalogItem(path=path, kind=kind, root_id=root_id))
     return ProductCatalogAnswer(
         items=tuple(items),
-        declared_gaps=gaps,
+        declared_gaps=map_source_index_coverage(coverage_list or []),
         instrumentation_complete=instrumentation_complete,
+        projection="browse",
+        generation_revision=generation_revision,
+    )
+
+
+def map_catalog_index_matches_to_answer(
+    matches: list[dict[str, object]],
+    coverage_list: list[dict[str, object]] | None = None,
+    *,
+    generation_revision: int | None = None,
+    instrumentation_complete: bool = True,
+) -> ProductCatalogAnswer:
+    """Map D1 catalog-backed `/source/search` file matches to ProductCatalogAnswer(projection='catalog')."""
+    items: list[CatalogItem] = []
+    for m in matches:
+        root_id = str(m.get("root_id") or "root-0")
+        path = str(m.get("path") or "").removeprefix("./")
+        if path:
+            items.append(CatalogItem(path=path, kind="file", root_id=root_id))
+    return ProductCatalogAnswer(
+        items=tuple(items),
+        declared_gaps=map_source_index_coverage(coverage_list or []),
+        instrumentation_complete=instrumentation_complete,
+        projection="catalog",
+        generation_revision=generation_revision,
     )
 
 
@@ -144,6 +170,7 @@ def map_sse_source_changed_to_answer(
     frames: list[dict[str, object]],
     *,
     project_id: str | None = None,
+    workspace_id: str | None = None,
     default_root_id: str = "root-0",
     reconciled_walk: tuple[CatalogItem, ...] | None = None,
     reference_post_walk: tuple[CatalogItem, ...] | None = None,
@@ -152,7 +179,7 @@ def map_sse_source_changed_to_answer(
     claims_batch_effect: bool = False,
     instrumentation_complete: bool = True,
 ) -> ProductFeedAnswer:
-    """Map /v1/events EventEnvelopeSourceChanged frames to ProductFeedAnswer."""
+    """Map D1 /v1/events EventEnvelopeSourceChanged frames (`SourceChangesEvent` / `SourceChange`)."""
     events: list[FeedEvent] = []
     gaps: list[DeclaredGap] = []
 
@@ -162,9 +189,13 @@ def map_sse_source_changed_to_answer(
         data = frame.get("data")
         if not isinstance(data, dict):
             continue
-        if project_id and data.get("project_id") and str(data["project_id"]) != project_id:
+        if project_id and str(data.get("project_id") or "") != project_id:
             continue
-        batch_id = str(frame.get("id") or data.get("batch_id") or f"sse-{frame_idx}")
+        ev_ws = str(data.get("workspace_id") or "")
+        if workspace_id and ev_ws and ev_ws != workspace_id:
+            continue
+        env_id = str(frame.get("id") or f"sse-{frame_idx}")
+        batch_id = f"{ev_ws}:{env_id}" if ev_ws else env_id
         if data.get("resync") is True:
             gaps.append(DeclaredGap(reason="resync", root_id=default_root_id))
         raw_changes = data.get("changes") or []
@@ -175,20 +206,26 @@ def map_sse_source_changed_to_answer(
                 path = str(ch.get("path") or "").removeprefix("./")
                 if not path:
                     continue
-                op = str(ch.get("kind") or ch.get("op") or ch.get("action") or "change").lower()
+                op = str(ch.get("op") or "write").lower()
                 root_id = str(ch.get("root_id") or default_root_id)
-                effect_id = str(ch["effect_id"]) if ch.get("effect_id") else None
-                seq_val = int(ch["seq"]) if ch.get("seq") is not None else None
                 events.append(
                     FeedEvent(
                         path=path,
                         batch_id=batch_id,
                         op=op,
-                        effect_id=effect_id,
                         root_id=root_id,
-                        seq=seq_val,
                     )
                 )
+                from_path = str(ch.get("from_path") or "").removeprefix("./")
+                if from_path:
+                    events.append(
+                        FeedEvent(
+                            path=from_path,
+                            batch_id=batch_id,
+                            op=op,
+                            root_id=root_id,
+                        )
+                    )
 
     return ProductFeedAnswer(
         events=tuple(events),
@@ -210,8 +247,15 @@ def map_search_response_to_answer(
     continuation_required: bool = False,
     instrumentation_complete: bool = True,
 ) -> ProductSearchAnswer:
-    """Map POST /v1/search SearchResponse JSON to ProductSearchAnswer."""
+    """Map D1 POST /v1/search SearchResponse JSON to ProductSearchAnswer.
+
+    D1 SearchHit carries `path`, `line`, `hit_id`, `hit_kind`, `root_id`, `title`,
+    and `snippet`, NOT `byte_offset`/`byte_end`/`match_text`. We never invent 0/snippet
+    offsets: hits without explicit spans are marked `span_available=False` and the
+    answer uses `projection="path_line"`.
+    """
     hits: list[ScopedSearchHit] = []
+    any_missing_span = False
     raw_hits = response.get("hits") or []
     if isinstance(raw_hits, list):
         for h in raw_hits:
@@ -219,11 +263,14 @@ def map_search_response_to_answer(
                 continue
             path = str(h.get("path") or "").removeprefix("./")
             line = int(h.get("line") or 1)
+            has_span = ("byte_offset" in h and "byte_end" in h and "match_text" in h)
+            if not has_span:
+                any_missing_span = True
             col = int(h.get("column") or 1)
-            byte_offset = int(h.get("byte_offset") or 0)
-            byte_end = int(h.get("byte_end") or byte_offset)
-            match_text = str(h.get("match_text") or h.get("snippet") or h.get("title") or "")
-            line_text = str(h.get("line_text") or h.get("snippet") or "")
+            byte_offset = int(h["byte_offset"]) if has_span else -1
+            byte_end = int(h["byte_end"]) if has_span else -1
+            match_text = str(h["match_text"]) if has_span else ""
+            line_text = str(h.get("snippet") or "")
             root_id = str(h.get("root_id") or default_root_id)
             raw_kind = str(h.get("hit_kind") or "").lower()
             leg = _HIT_KIND_TO_LEG.get(raw_kind, default_leg)
@@ -240,6 +287,7 @@ def map_search_response_to_answer(
                     ),
                     root_id=root_id,
                     leg=leg,
+                    span_available=has_span,
                 )
             )
 
@@ -256,6 +304,7 @@ def map_search_response_to_answer(
         hits=tuple(hits),
         declared_gaps=gaps,
         instrumentation_complete=instrumentation_complete,
+        projection="path_line" if (any_missing_span or not hits) else "exact_span",
     )
 
 
@@ -289,7 +338,9 @@ def map_replace_apply_to_answer(
         skipped = bool(item.get("skipped"))
         reason = str(item.get("reason") or "").lower()
         is_drifted = key in drifted
-        refused_drift = (not applied) and skipped and ("drift" in reason or "sha" in reason or "changed" in reason or "conflict" in reason)
+        refused_drift = (not applied) and skipped and (
+            "drift" in reason or "sha" in reason or "changed" in reason or "conflict" in reason
+        )
         observations.append(
             ReplaceFileObservation(
                 path=path,

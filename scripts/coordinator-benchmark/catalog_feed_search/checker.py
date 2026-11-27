@@ -1,4 +1,4 @@
-"""D4 Differential Checker for catalog and search domains (Decisions 006/009/012)."""
+"""D4 Differential Checker for catalog and search domains (Decisions 006/009/012/015)."""
 
 from __future__ import annotations
 
@@ -26,11 +26,13 @@ class CatalogItem:
 
 @dataclass(frozen=True)
 class ProductCatalogAnswer:
-    """Product catalog response captured with its declared coverage facts."""
+    """Product catalog response captured with its declared coverage facts and projection."""
 
     items: tuple[CatalogItem, ...]
     declared_gaps: tuple[DeclaredGap, ...] = ()
     instrumentation_complete: bool = True
+    projection: str = "catalog"  # "catalog" | "browse"
+    generation_revision: int | None = None
 
 
 @dataclass(frozen=True)
@@ -40,8 +42,11 @@ class ScopedSearchHit:
     hit: SearchHit
     root_id: str = "root-0"
     leg: str = "code"
+    span_available: bool = True
 
-    def key(self) -> tuple[str, str, str, int, int, int, str]:
+    def key(self, projection: str = "exact_span") -> tuple[object, ...]:
+        if projection == "path_line":
+            return (self.root_id, self.leg, self.hit.path, self.hit.line_number)
         return (
             self.root_id,
             self.leg,
@@ -52,23 +57,27 @@ class ScopedSearchHit:
             self.hit.match_text,
         )
 
-    def label(self) -> str:
+    def label(self, projection: str = "exact_span") -> str:
+        if projection == "path_line":
+            return f"{self.root_id}:{self.leg}:{self.hit.path}:{self.hit.line_number}"
         return f"{self.root_id}:{self.leg}:{self.hit.path}:{self.hit.line_number}:{self.hit.byte_offset}"
 
 
 @dataclass(frozen=True)
 class ProductSearchAnswer:
-    """Product search response with hits, declared gaps, and pagination metadata."""
+    """Product search response with hits, declared gaps, and projection metadata."""
 
     hits: tuple[ScopedSearchHit, ...]
     declared_gaps: tuple[DeclaredGap, ...] = ()
     instrumentation_complete: bool = True
+    projection: str = "exact_span"  # "exact_span" | "path_line"
 
 
 def _validate_result_limit_gap(
     gap: DeclaredGap,
     reference_hits: tuple[ScopedSearchHit, ...],
     product_hits: tuple[ScopedSearchHit, ...],
+    projection: str,
 ) -> tuple[bool, str]:
     """Decision 006: result_limit requires reported truncation, ordered retained prefix, and continuation."""
     if gap.truncated is not True:
@@ -93,7 +102,7 @@ def _validate_result_limit_gap(
     if len(scoped_prod) > len(scoped_ref):
         return False, "result_limit retained more hits than reference"
     for idx, prod_hit in enumerate(scoped_prod):
-        if prod_hit.key() != scoped_ref[idx].key():
+        if prod_hit.key(projection) != scoped_ref[idx].key(projection):
             return False, f"result_limit retained hits out of order at index {idx}"
     return True, ""
 
@@ -179,27 +188,47 @@ def check_catalog(
 def check_search(
     reference_hits: tuple[ScopedSearchHit, ...],
     answer: ProductSearchAnswer,
+    *,
+    projection: str | None = None,
 ) -> CheckResult:
-    """Compare product search hits against reference search in strict D4 order."""
+    """Compare product search hits against reference search in strict D4 order.
+
+    Supports `exact_span` (full byte range + match_text) and `path_line` (the
+    documented projection for D1 `POST /v1/search`, preserving line multiplicity).
+    If `exact_span` is requested when any hit lacks span instrumentation, returns UNKNOWN.
+    """
     if not answer.instrumentation_complete:
         return CheckResult(Verdict.UNKNOWN, "search", reason="missing instrumentation")
 
+    eff_proj = projection or answer.projection
+    if eff_proj not in ("exact_span", "path_line"):
+        raise ValueError(f"unsupported search projection: {eff_proj}")
+
+    if eff_proj == "exact_span" and any(not h.span_available for h in answer.hits):
+        return CheckResult(
+            Verdict.UNKNOWN,
+            "search",
+            reason="exact_span comparison requested on hits without span instrumentation",
+        )
+
     declared_names = tuple(dict.fromkeys(g.reason for g in answer.declared_gaps))
-    ref_counts = Counter(h.key() for h in reference_hits)
-    prod_counts = Counter(h.key() for h in answer.hits)
+    ref_counts = Counter(h.key(eff_proj) for h in reference_hits)
+    prod_counts = Counter(h.key(eff_proj) for h in answer.hits)
 
     extra: list[str] = []
     wrong: list[str] = []
-    seen_prod: set[tuple[str, str, str, int, int, int, str]] = set()
+    seen_prod: set[tuple[object, ...]] = set()
     for h in answer.hits:
-        k = h.key()
+        k = h.key(eff_proj)
         if k in seen_prod:
             continue
         seen_prod.add(k)
         if k not in ref_counts:
-            extra.append(h.label())
+            extra.append(h.label(eff_proj))
         elif prod_counts[k] > ref_counts[k]:
-            wrong.append(f"duplicate_hit:{h.label()} observed={prod_counts[k]} expected={ref_counts[k]}")
+            wrong.append(
+                f"duplicate_hit:{h.label(eff_proj)} observed={prod_counts[k]} expected={ref_counts[k]}"
+            )
 
     if extra or wrong:
         return CheckResult(
@@ -214,7 +243,7 @@ def check_search(
     missing_hits: list[ScopedSearchHit] = []
     remaining_prod = Counter(prod_counts)
     for h in reference_hits:
-        k = h.key()
+        k = h.key(eff_proj)
         if remaining_prod[k] > 0:
             remaining_prod[k] -= 1
         else:
@@ -225,12 +254,12 @@ def check_search(
 
     for gap in answer.declared_gaps:
         if gap.reason == "result_limit":
-            ok, msg = _validate_result_limit_gap(gap, reference_hits, answer.hits)
+            ok, msg = _validate_result_limit_gap(gap, reference_hits, answer.hits, eff_proj)
             if not ok:
                 return CheckResult(
                     Verdict.DEFECT,
                     "search",
-                    missing_claims=tuple(h.label() for h in missing_hits),
+                    missing_claims=tuple(h.label(eff_proj) for h in missing_hits),
                     declared_gaps=declared_names,
                     reason=msg,
                 )
@@ -241,14 +270,14 @@ def check_search(
         return CheckResult(
             Verdict.DEFECT,
             "search",
-            missing_claims=tuple(h.label() for h in missing_hits),
+            missing_claims=tuple(h.label(eff_proj) for h in missing_hits),
             declared_gaps=declared_names,
             reason=warm_msg,
         )
 
     return evaluate_omissions(
         domain="search",
-        missing_items=[(h.root_id, h.leg, h.hit.path, h.label()) for h in missing_hits],
+        missing_items=[(h.root_id, h.leg, h.hit.path, h.label(eff_proj)) for h in missing_hits],
         declared_gaps=answer.declared_gaps,
     )
 

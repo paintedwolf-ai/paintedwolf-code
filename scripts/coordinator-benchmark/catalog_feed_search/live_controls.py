@@ -1,4 +1,4 @@
-"""The three runbook live controls (settled catalog, single logged write, literal search)."""
+"""The three runbook live controls (settled catalog, live SSE write, path/line literal search)."""
 
 from __future__ import annotations
 
@@ -7,13 +7,14 @@ import json
 from pathlib import Path
 from typing import Callable
 
-from .change_runner import ChangeOp, ChangeRunner, ChangeScript
+from .change_runner import ChangeOp, ChangeRunner, ChangeScript, WriteLog, WriteLogEntry
 from .checker import ScopedSearchHit, check_catalog, check_search, walk_entries_to_catalog_items
 from .checker_feed import check_change_feed
 from .checker_types import CheckResult, Verdict
 from .driver_adapters import map_sse_source_changed_to_answer
 from .driver_provenance import RunProvenance, write_evidence_manifest
 from .driver_sidecar import SidecarDriver
+from .driver_sse import SSESubscription
 from .generators import BoundaryConfig, TreeEntrySpec, TreeSpec, materialize_tree
 from .queries import CodeQuerySpec
 from .references import reference_search, reference_walk
@@ -68,43 +69,83 @@ def run_live_control_catalog(
     *,
     boundary_config: BoundaryConfig | None = None,
 ) -> LiveControlResult:
-    """Control 1: settled tree whose catalog equals reference_walk."""
-    ref_entries = reference_walk(root_dir, boundary_config=boundary_config, include_hidden=True)
+    """Control 1: settled catalog-backed file index equals file projection of reference_walk."""
+    ref_entries = [
+        e
+        for e in reference_walk(root_dir, boundary_config=boundary_config, include_hidden=True)
+        if e.kind == "file"
+    ]
     ref_items = walk_entries_to_catalog_items(ref_entries, root_id=root_id)
-    answer = driver.walk_catalog(project_id, [root_id])
+    answer = driver.walk_catalog_index(project_id, root_id)
     res = check_catalog(ref_items, answer)
     return LiveControlResult(
         name="settled_catalog_equals_reference_walk",
         passed=(res.verdict == Verdict.PASS),
         check=res,
-        evidence={"reference_count": len(ref_items), "product_count": len(answer.items)},
+        evidence={
+            "projection": answer.projection,
+            "generation_revision": answer.generation_revision,
+            "reference_count": len(ref_items),
+            "product_count": len(answer.items),
+        },
     )
+
+
+def _has_matching_change(
+    frames: list[dict[str, object]],
+    project_id: str,
+    root_id: str,
+    rel_path: str,
+) -> bool:
+    for frame in frames:
+        if frame.get("topic") != "source_changed":
+            continue
+        data = frame.get("data")
+        if not isinstance(data, dict) or str(data.get("project_id") or "") != project_id:
+            continue
+        if data.get("resync") is True:
+            return True
+        for ch in data.get("changes") or []:
+            if (
+                isinstance(ch, dict)
+                and str(ch.get("path") or "").removeprefix("./") == rel_path
+                and str(ch.get("root_id") or root_id) == root_id
+            ):
+                return True
+    return False
 
 
 def run_live_control_change_feed(
     root_dir: Path,
     project_id: str,
     root_id: str,
-    collect_sse_frames: Callable[[], list[dict[str, object]]],
+    sse_subscription: SSESubscription,
     *,
     rel_path: str = "src/control_write.txt",
     clock_fn: Callable[[], int] | None = None,
     clock_domain: str = "monotonic_ns",
 ) -> LiveControlResult:
-    """Control 2: single logged write that appears once in the source_changed stream."""
-    sel = ReplaySelector(BASE_SEED_PRIMARY, "CONTROL_FEED", 0)
-    script = ChangeScript(
-        selector=sel,
-        ops=(ChangeOp("edit", rel_path, content=b"live control write payload\n"),),
-    )
-    runner = ChangeRunner(clock_fn=clock_fn, clock_domain=clock_domain)
-    write_log = runner.run(root_dir, script)
-    # Re-tag root_id on logged entries to match the attached project root.
-    if write_log.entries and write_log.entries[0].root_id != root_id:
-        from .change_runner import WriteLog, WriteLogEntry
+    """Control 2: open live /v1/events stream, wait for readiness barrier, write once, drain."""
+    sse_subscription.start()
+    try:
+        ready = sse_subscription.wait_ready()
+        if not ready:
+            return LiveControlResult(
+                name="single_logged_write_once_in_change_stream",
+                passed=False,
+                check=CheckResult(Verdict.UNKNOWN, "feed", reason="SSE stream failed to open before write"),
+                evidence={"sse_ready": False},
+            )
 
+        sel = ReplaySelector(BASE_SEED_PRIMARY, "CONTROL_FEED", 0)
+        script = ChangeScript(
+            selector=sel,
+            ops=(ChangeOp("edit", rel_path, content=b"live control write payload\n"),),
+        )
+        runner = ChangeRunner(clock_fn=clock_fn, clock_domain=clock_domain)
+        raw_log = runner.run(root_dir, script)
         write_log = WriteLog(
-            clock_domain=write_log.clock_domain,
+            clock_domain=raw_log.clock_domain,
             entries=tuple(
                 WriteLogEntry(
                     seq=e.seq,
@@ -119,11 +160,16 @@ def run_live_control_change_feed(
                     after_mode=e.after_mode,
                     root_id=root_id,
                 )
-                for e in write_log.entries
+                for e in raw_log.entries
             ),
         )
 
-    frames = collect_sse_frames()
+        frames = sse_subscription.wait_for_frames(
+            lambda fs: _has_matching_change(fs, project_id, root_id, rel_path)
+        )
+    finally:
+        sse_subscription.close()
+
     answer = map_sse_source_changed_to_answer(
         frames,
         project_id=project_id,
@@ -134,7 +180,12 @@ def run_live_control_change_feed(
         name="single_logged_write_once_in_change_stream",
         passed=(res.verdict == Verdict.PASS),
         check=res,
-        evidence={"write_log": write_log.to_dict(), "observed_event_count": len(answer.events)},
+        evidence={
+            "sse_ready": True,
+            "write_log": write_log.to_dict(),
+            "observed_event_count": len(answer.events),
+            "batch_ids": sorted({e.batch_id for e in answer.events}),
+        },
     )
 
 
@@ -147,7 +198,7 @@ def run_live_control_literal_search(
     token: str = "PaintedWolfControlToken",
     rg_bin: str = "rg",
 ) -> LiveControlResult:
-    """Control 3: single literal search that equals reference_search."""
+    """Control 3: single literal search compared on documented D1 path/line projection."""
     query = CodeQuerySpec(form="literal", pattern=token, case_sensitive=True)
     ref = reference_search(root_dir, query, rg_bin=rg_bin, include_hidden=False)
     ref_hits = tuple(ScopedSearchHit(hit=h, root_id=root_id, leg="code") for h in ref.hits)
@@ -159,12 +210,13 @@ def run_live_control_literal_search(
         default_root_id=root_id,
         default_leg="code",
     )
-    res = check_search(ref_hits, answer)
+    res = check_search(ref_hits, answer, projection="path_line")
     return LiveControlResult(
         name="literal_search_equals_reference_search",
         passed=(res.verdict == Verdict.PASS),
         check=res,
         evidence={
+            "projection": "path_line",
             "rg_version": ref.rg_version,
             "reference_hit_count": len(ref_hits),
             "product_hit_count": len(answer.hits),
@@ -189,7 +241,7 @@ def build_live_control_fixture(root_dir: Path) -> None:
 def run_three_live_controls(
     driver: SidecarDriver,
     root_dir: Path,
-    collect_sse_frames: Callable[[], list[dict[str, object]]],
+    sse_subscription: SSESubscription,
     *,
     provenance: RunProvenance | None = None,
     out_dir: Path | None = None,
@@ -208,7 +260,7 @@ def run_three_live_controls(
         root_dir,
         project_id,
         root_id,
-        collect_sse_frames,
+        sse_subscription,
         clock_fn=clock_fn,
         clock_domain=clock_domain,
     )

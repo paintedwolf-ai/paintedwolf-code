@@ -12,8 +12,9 @@ from typing import Sequence
 from .change_runner import generate_change_script
 from .checker_types import Verdict
 from .controls import run_all_controls, run_broken_reference_proof
-from .driver_provenance import collect_run_provenance, write_evidence_manifest
+from .driver_provenance import collect_run_provenance
 from .driver_sidecar import HTTPTransport, SidecarDriver
+from .driver_sse import LiveSSESubscriber
 from .generators import generate_tree_spec, materialize_tree
 from .live_controls import run_three_live_controls
 from .queries import S01_QUERY_FORMS, generate_s01_query
@@ -77,18 +78,14 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
 
 def _cmd_live_controls(args: argparse.Namespace) -> int:
+    """Run the 3 runbook live controls against a live sidecar using a real /v1/events SSE stream."""
     transport = HTTPTransport(args.url, args.token)
     driver = SidecarDriver(transport)
     repo_root = Path(args.repo_root).resolve() if args.repo_root else Path(__file__).resolve().parents[3]
     out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    sse_frames: list[dict[str, object]] = []
-    if args.sse_jsonl:
-        for line in Path(args.sse_jsonl).read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                sse_frames.append(json.loads(line))
-
+    sse_sub = LiveSSESubscriber(args.url, args.token, out_jsonl=out_dir / "sse_events.jsonl")
     with tempfile.TemporaryDirectory() as tmp:
         work_root = Path(tmp) / "fixture"
         provenance = collect_run_provenance(
@@ -102,7 +99,7 @@ def _cmd_live_controls(args: argparse.Namespace) -> int:
         report = run_three_live_controls(
             driver,
             work_root,
-            lambda: sse_frames,
+            sse_sub,
             provenance=provenance,
             out_dir=out_dir,
             rg_bin=args.rg_bin,
@@ -127,7 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_rep.add_argument("--out-dir", default="", help="Optional target directory to materialize tree")
     p_rep.set_defaults(func=_cmd_replay)
 
-    p_live = sub.add_parser("live-controls", help="Run the 3 runbook live controls against a sidecar")
+    p_live = sub.add_parser("live-controls", help="Run the 3 runbook live controls against a live sidecar")
     p_live.add_argument("--url", required=True, help="Sidecar base URL (e.g. http://127.0.0.1:PORT)")
     p_live.add_argument("--token", required=True, help="Sidecar bearer auth token")
     p_live.add_argument("--engine-bin", default="", help="Path to D1 product binary for provenance")
@@ -136,7 +133,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_live.add_argument("--out-dir", required=True, help="Output directory for evidence & manifest")
     p_live.add_argument("--rg-bin", default="rg", help="Path to ripgrep 15.x executable")
     p_live.add_argument("--repo-root", default="", help="Harness repo root for git provenance")
-    p_live.add_argument("--sse-jsonl", default="", help="Captured SSE frames JSONL for feed control")
     p_live.set_defaults(func=_cmd_live_controls)
 
     return parser
