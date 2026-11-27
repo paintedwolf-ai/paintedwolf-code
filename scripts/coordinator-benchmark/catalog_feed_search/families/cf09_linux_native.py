@@ -336,6 +336,7 @@ def run_linux_native(
             sidecar_log = (out_dir / "sidecar_linux.log").open("wb")
             sidecar_proc = subprocess.Popen(
                 [str(engine_bin), "serve", "--db", str(cfg_dir / "store.db")],
+                cwd=str(den_repo),
                 env=sidecar_env,
                 stdout=sidecar_log,
                 stderr=subprocess.STDOUT,
