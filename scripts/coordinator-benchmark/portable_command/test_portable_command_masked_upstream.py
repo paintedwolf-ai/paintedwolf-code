@@ -51,10 +51,11 @@ class MaskedUpstreamFailureControlTests(unittest.TestCase):
             _write_db(db_path, published=published)
             sidecar = root / 'sidecar.log'
             sidecar.write_text('')
+            ident = {'provenance_verified': True, 'engine_provenance': {'provenance_verified': True}}
             obs = build_observation(
                 case,
                 session_id='s1',
-                identity={'provenance_verified': True, 'engine_provenance': {'provenance_verified': True}},
+                identity=ident,
                 project_dir=proj,
                 db_path=db_path,
                 sidecar_log=sidecar,
@@ -62,7 +63,7 @@ class MaskedUpstreamFailureControlTests(unittest.TestCase):
                 prelude_records=[],
                 baseline_hashes={'result.txt': '2c0e3f276f2a2d677615a5656b9282b90c66509427029608d3790c178b56684f'},
             )
-            return obs, grade_case(case, obs)
+            return obs, grade_case(case, obs, proj, ident)
 
     def test_declined_redirect_preserves_bytes_and_passes(self):
         obs, grade = self._run_control(published=False, final_bytes=b'old\n')
