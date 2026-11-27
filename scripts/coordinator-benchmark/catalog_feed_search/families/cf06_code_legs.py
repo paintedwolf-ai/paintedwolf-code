@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import threading
 import time
+import uuid
 
 from ..checker import ProductSearchAnswer, ScopedSearchHit, check_search
 from ..checker_types import Verdict
@@ -280,17 +281,20 @@ def run_s02_sidecar(
     try:
         saved_file = edir / "saved_control.txt"
         saved_file.write_text("saved_s02_positive_control\n", encoding="utf-8")
-        disk_before_bytes = target.read_bytes()
+        draft_file = edir / "draft_target.txt"
+        draft_file.write_text("disk_only_original_s02\n", encoding="utf-8")
+        wait_for_catalog_ready(driver, pid)
+        disk_before_bytes = draft_file.read_bytes()
         opened_resp = driver._transport.request(  # noqa: SLF001
             f"/v1/projects/{pid}/editor-documents",
-            {"path": "live.txt", "root_id": roots[0], "client_id": "cfs-driver"},
+            {"path": "draft_target.txt", "root_id": roots[0], "client_id": "cfs-driver"},
             method="POST",
         )
         doc_id = str(opened_resp.get("id") or "")
         updated_resp = driver._transport.request(  # noqa: SLF001
             f"/v1/projects/{pid}/editor-documents/{doc_id}",
             {
-                "operation_id": f"s02-draft-{int(time.time() * 1000)}",
+                "operation_id": str(uuid.uuid4()),
                 "client_id": "cfs-driver",
                 "expected_revision": opened_resp.get("revision"),
                 "content": "unsaved_draft_s02_token\n",
@@ -310,14 +314,14 @@ def run_s02_sidecar(
             )
         except Exception as reread_exc:
             reread_resp = {"reread_error": str(reread_exc)}
-        disk_after_bytes = target.read_bytes()
+        disk_after_bytes = draft_file.read_bytes()
         saved_pos = _filter_code_hits(
             driver.search("project:current kind:code saved_s02_positive_control", default_root_id=roots[0], origin_project_id=pid, budget="complete")
         )
         draft_dsl = "project:current kind:code unsaved_draft_s02_token"
         ans2 = _filter_code_hits(driver.search(draft_dsl, default_root_id=roots[0], origin_project_id=pid, budget="complete"))
         summary.record_edge(
-            any(h.hit.path == "live.txt" for h in ans2.hits),
+            any(h.hit.path == "draft_target.txt" for h in ans2.hits),
             {
                 "edge": "s02_2_unsaved_editor_draft",
                 "hits": len(ans2.hits),
