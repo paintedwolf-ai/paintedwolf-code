@@ -115,7 +115,7 @@ const apiUrl: string = cfg.api_url;
 const token: string = cfg.token;
 const outDir: string = cfg.out_dir;
 const needle: string = cfg.needle;
-const projects: Record<string, { id: string; root_id: string; name: string }> = cfg.projects;
+const projects: Record<string, { id: string; root_id: string; name: string; root_dir?: string }> = cfg.projects;
 
 async function apiGet(p: string) {
   const res = await fetch(`${apiUrl}${p}`, {
@@ -141,6 +141,19 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
   const observations: unknown[] = [];
 
   await seedAppState(page);
+
+  const latestSourceIndexByProject = new Map<string, { url: string; body: unknown }>();
+  page.on("response", async (res) => {
+    const url = res.url();
+    const match = url.match(/\/v1\/projects\/([^/]+)\/source\/index(?:\?|$)/);
+    if (!match || res.request().method() !== "GET" || !res.ok()) return;
+    const pid = match[1];
+    const body = await res.json().catch(() => null);
+    if (body !== null) {
+      latestSourceIndexByProject.set(pid, { url, body });
+    }
+  });
+
   await page.goto("/");
   await expectShellReady(page);
 
@@ -304,19 +317,43 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
     });
     await page.keyboard.press("Escape");
 
-    // 4. Files tree — correlate with /source/index for this exact project and read actual rendered coverage/status notice.
+    // 4. Files tree — correlate with Den's own /source/index response for this project
+    // and scope both coverage notice & retry button to the selected root's summary card.
+    const indexRespPromise = page.waitForResponse(
+      (res) =>
+        res.url().includes(`/v1/projects/${proj.id}/source/index`) &&
+        res.request().method() === "GET" &&
+        res.ok(),
+      { timeout: 6_000 },
+    ).catch(() => null);
     const filesNav = page.locator('[data-testid="nav-files"], [aria-label="Files"]').first();
     if (await filesNav.isVisible({ timeout: 3000 }).catch(() => false)) {
       await filesNav.click();
       await page.waitForTimeout(600);
     }
-    const indexApi = await apiGet(`/v1/projects/${proj.id}/source/index`);
+    const freshIndexRes = await indexRespPromise;
+    let correlatedIndex = latestSourceIndexByProject.get(proj.id) ?? null;
+    if (freshIndexRes) {
+      const freshBody = await freshIndexRes.json().catch(() => null);
+      if (freshBody !== null) {
+        correlatedIndex = { url: freshIndexRes.url(), body: freshBody };
+        latestSourceIndexByProject.set(proj.id, correlatedIndex);
+      }
+    }
     const treeVisible = await page.getByTestId("files-tree-pane").isVisible().catch(() => false);
+    const rootSummaries = page.getByTestId("files-root-summary");
+    const rootSummary = proj.root_dir
+      ? rootSummaries.filter({
+          has: page.getByTestId("files-root-summary-path").filter({ hasText: proj.root_dir }),
+        }).first()
+      : rootSummaries.first();
+    const rootSummaryVisible = await rootSummary.isVisible({ timeout: 1500 }).catch(() => false);
+    const noticeScope = rootSummaryVisible ? rootSummary : page.getByTestId("files-tree-pane");
     const noticeCandidates = [
-      { testid: "files-root-summary-coverage", loc: page.getByTestId("files-root-summary-coverage").first() },
-      { testid: "source-watch-notice", loc: page.getByTestId("source-watch-notice").first() },
-      { testid: "files-tree-coverage-note", loc: page.getByTestId("files-tree-coverage-note").first() },
-      { testid: "review-inventory-status", loc: page.getByTestId("review-inventory-status").first() },
+      { testid: "files-root-summary-coverage", loc: noticeScope.getByTestId("files-root-summary-coverage").first() },
+      { testid: "source-watch-notice", loc: noticeScope.getByTestId("source-watch-notice").first() },
+      { testid: "files-tree-coverage-note", loc: noticeScope.getByTestId("files-tree-coverage-note").first() },
+      { testid: "review-inventory-status", loc: noticeScope.getByTestId("review-inventory-status").first() },
     ];
     let treeNoticeTestId = "";
     let treeNoticeText = "";
@@ -330,7 +367,9 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
         }
       }
     }
-    const retryVisible = await page.getByTestId("retry-file-index").first().isVisible({ timeout: 500 }).catch(() => false);
+    const retryVisible = rootSummaryVisible
+      ? await rootSummary.getByTestId("retry-file-index").first().isVisible({ timeout: 500 }).catch(() => false)
+      : false;
     const treeNoticeVisible = treeNoticeTestId.length > 0 && treeNoticeText.length > 0;
     const treeFilterEmpty = await page.getByTestId("files-tree-filter-empty").isVisible().catch(() => false);
     const filesShot = path.join(outDir, `linux_files_tree_${state}.png`);
@@ -341,12 +380,13 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
       platform: "linux",
       native_window: true,
       project_id: proj.id,
+      selected_root_id: proj.root_id,
       query: "",
       scope: "project:current",
-      request_url: `${apiUrl}/v1/projects/${proj.id}/source/index`,
-      request_correlated: true,
+      request_url: correlatedIndex?.url ?? "",
+      request_correlated: correlatedIndex !== null,
       workspace_ready: treeVisible,
-      api_response: indexApi,
+      api_response: correlatedIndex?.body ?? {},
       coverage_note_visible: treeNoticeVisible,
       coverage_note_testid: treeNoticeTestId,
       results_visible_count: treeVisible ? 1 : 0,
@@ -442,6 +482,7 @@ def run_linux_native(
                     "id": str(resp["id"]),
                     "root_id": root_id,
                     "name": f"CF09-{fx.state}",
+                    "root_dir": str(fx.root_dir),
                 }
                 if fx.state == "refreshing":
                     # Wait briefly for initial index then mutate to trigger refreshing.
@@ -547,6 +588,7 @@ def run_linux_native(
                             **item,
                             "coverage_note_visible": cls.visible,
                             "coverage_note_testid": cls.testid,
+                            "coverage_notice_categories": cls.categories,
                         }
                     )
                 verdicts.append(verify_presentation_observation(obs))

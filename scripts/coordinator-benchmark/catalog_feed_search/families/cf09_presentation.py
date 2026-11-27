@@ -245,8 +245,16 @@ def mutate_for_refreshing(fixture: CoverageFixture, burst_count: int = 250) -> i
     return burst_count
 
 
-def extract_declared_facts(api_response: dict[str, Any]) -> tuple[str, ...]:
-    """Extract typed coverage facts from a D1 search, source/search, replace, or index response."""
+def extract_declared_facts(
+    api_response: dict[str, Any],
+    *,
+    root_id: str = "",
+) -> tuple[str, ...]:
+    """Extract typed coverage facts from a D1 search, source/search, replace, or index response.
+
+    When `root_id` is provided and `coverage` contains per-root entries, only the
+    matching root's coverage record is evaluated so another root's state cannot leak.
+    """
     facts: set[str] = set()
 
     for issue in api_response.get("issues") or []:
@@ -272,6 +280,8 @@ def extract_declared_facts(api_response: dict[str, Any]) -> tuple[str, ...]:
     for root in api_response.get("coverage") or []:
         if not isinstance(root, dict):
             continue
+        if root_id and str(root.get("root_id") or "") not in ("", root_id):
+            continue
         r_state = str(root.get("state") or "")
         r_err = str(root.get("error") or "")
         if r_err or r_state == "failed":
@@ -288,6 +298,18 @@ def extract_declared_facts(api_response: dict[str, Any]) -> tuple[str, ...]:
     return tuple(sorted(facts))
 
 
+DECLARED_TO_NOTICE_CATEGORIES: dict[str, frozenset[str]] = {
+    "catalog_failed": frozenset({"catalog_failed"}),
+    "catalog_refresh_failed": frozenset({"catalog_failed"}),
+    "executor_error": frozenset({"catalog_failed"}),
+    "catalog_bounded": frozenset({"catalog_bounded"}),
+    "catalog_warming": frozenset({"catalog_warming"}),
+    "index_warming": frozenset({"catalog_warming"}),
+    "catalog_incomplete": frozenset({"catalog_incomplete", "catalog_warming", "catalog_bounded"}),
+    "catalog_refreshing": frozenset({"catalog_refreshing"}),
+}
+
+
 @dataclass(frozen=True)
 class PresentationObservation:
     """Typed observation of one native Den surface in one coverage state."""
@@ -299,12 +321,14 @@ class PresentationObservation:
     api_response: dict[str, Any]
     coverage_note_visible: bool
     coverage_note_testid: str = ""
+    coverage_notice_categories: tuple[str, ...] = ()
     results_visible_count: int = 0
     empty_final_shown: bool = False
     apply_all_disabled: bool | None = None
     screenshot_path: str = ""
     notes: str = ""
     project_id: str = ""
+    selected_root_id: str = ""
     query: str = ""
     scope: str = ""
     request_url: str = ""
@@ -338,7 +362,7 @@ def verify_presentation_observation(obs: PresentationObservation) -> Presentatio
     if obs.state not in COVERAGE_STATES:
         raise ValueError(f"unsupported state: {obs.state!r}")
 
-    facts = extract_declared_facts(obs.api_response)
+    facts = extract_declared_facts(obs.api_response, root_id=obs.selected_root_id)
     violations: list[str] = []
 
     # Decision 037: separate fixture bring-up / missing observation from genuine presentation divergence.
@@ -409,6 +433,26 @@ def verify_presentation_observation(obs: PresentationObservation) -> Presentatio
         violations.append(
             f"missing_coverage_presentation: declared facts {list(non_routine_facts)} did not reach the screen"
         )
+    elif non_routine_facts and (obs.surface == "files_tree" or obs.coverage_notice_categories):
+        rendered_categories = set(obs.coverage_notice_categories)
+        if not rendered_categories and obs.notes:
+            rendered_categories = set(
+                classify_files_tree_notice(
+                    obs.notes,
+                    testid=obs.coverage_note_testid,
+                ).categories
+            )
+        unmatched = [
+            f
+            for f in non_routine_facts
+            if f in DECLARED_TO_NOTICE_CATEGORIES
+            and not (rendered_categories & DECLARED_TO_NOTICE_CATEGORIES[f])
+        ]
+        if unmatched:
+            violations.append(
+                f"mismatched_coverage_presentation: declared facts {unmatched} "
+                f"not matched by rendered notice categories {sorted(rendered_categories)}"
+            )
 
     # Replace review contract (R01 / docs/search.md):
     if obs.surface == "replace_review":

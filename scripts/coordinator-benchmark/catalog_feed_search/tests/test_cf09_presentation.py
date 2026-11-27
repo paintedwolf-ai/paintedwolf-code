@@ -237,6 +237,69 @@ class TestCF09Presentation(unittest.TestCase):
         self.assertEqual(verdict.verdict, "DEFECT")
         self.assertTrue(any("missing_coverage_presentation" in v for v in verdict.violations))
 
+        # Decision 075 visible-but-wrong-notice control: a visible catalog_failed notice
+        # MUST NOT score credit for a declared catalog_bounded condition.
+        wrong_notice_obs = PresentationObservation(
+            surface="files_tree",
+            state="incomplete",
+            platform="macos",
+            native_window=True,
+            selected_root_id="r-selected",
+            api_response={
+                "coverage": [
+                    {"root_id": "r-other", "state": "ready", "discovery_complete": True, "failed_directories": 1},
+                    {"root_id": "r-selected", "state": "ready", "discovery_complete": True, "bounded_directories": 1},
+                ]
+            },
+            coverage_note_visible=failed_cls.visible,
+            coverage_note_testid=failed_cls.testid,
+            coverage_notice_categories=failed_cls.categories,
+            results_visible_count=12,
+            empty_final_shown=False,
+            notes=failed_cls.raw_text,
+        )
+        wrong_verdict = verify_presentation_observation(wrong_notice_obs)
+        self.assertEqual(wrong_verdict.verdict, "DEFECT")
+        self.assertEqual(wrong_verdict.declared_facts, ("catalog_bounded",))
+        self.assertTrue(any("mismatched_coverage_presentation" in v for v in wrong_verdict.violations))
+
+        # Matching typed category for the selected root passes.
+        matched_obs = PresentationObservation(
+            surface="files_tree",
+            state="incomplete",
+            platform="macos",
+            native_window=True,
+            selected_root_id="r-selected",
+            api_response={
+                "coverage": [
+                    {"root_id": "r-other", "state": "ready", "discovery_complete": True, "failed_directories": 1},
+                    {"root_id": "r-selected", "state": "ready", "discovery_complete": True, "bounded_directories": 1},
+                ]
+            },
+            coverage_note_visible=bounded_cls.visible,
+            coverage_note_testid=bounded_cls.testid,
+            coverage_notice_categories=bounded_cls.categories,
+            results_visible_count=12,
+            empty_final_shown=False,
+            notes=bounded_cls.raw_text,
+        )
+        self.assertEqual(verify_presentation_observation(matched_obs).verdict, "PASS")
+
+        # Decision 075 ready-tree-without-correlated-source-index control: must remain unresolved.
+        uncorrelated_tree = PresentationObservation(
+            surface="files_tree",
+            state="failed",
+            platform="macos",
+            native_window=True,
+            selected_root_id="r-selected",
+            api_response={},
+            coverage_note_visible=False,
+            results_visible_count=1,
+            request_correlated=False,
+            workspace_ready=True,
+        )
+        self.assertEqual(verify_presentation_observation(uncorrelated_tree).verdict, "MISSING_OBSERVATION")
+
     def test_write_presentation_evidence_writes_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "CF09"
