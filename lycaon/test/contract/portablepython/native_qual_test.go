@@ -24,8 +24,8 @@ import (
 )
 
 const (
-	expectedNativeEngineTag    = "pw-cpython-wasi-engine-v0.1.0"
-	expectedNativeEngineCommit = "c8dc215cbd465623592b996f56c394124053d3b2"
+	expectedNativeEngineTag    = "pw-cpython-wasi-engine-v0.2.0"
+	expectedNativeEngineCommit = "e8d3a33d388dbf9eda9f06814f606e732cc3fb95"
 	expectedNativeEngineABI    = uint32(1)
 )
 
