@@ -6,14 +6,14 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
 func TestTouchCoordinatorWriteScopeRefusal(t *testing.T) {
 	for _, name := range []string{"no previous effect", "previous operand committed"} {
 		t.Run(name, func(t *testing.T) {
 			const profile = toolcontract.CoordinatorProfileID
-			boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true},
-				[]sandbox.ToolProfile{{ID: profile, Tools: map[string]bool{"write": true}}})
+			boundary := nativefixture.Boundary(t)
 			boundary.SetPathScopes(sandbox.PathScopeRegistry{
 				toolcontract.CoordinatorProductWriteScope: {
 					Write: []string{"allowed.txt", "later.txt"},
