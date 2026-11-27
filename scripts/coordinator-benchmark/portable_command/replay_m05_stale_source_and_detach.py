@@ -208,12 +208,12 @@ def main():
         if not root_b_id or root_b_id == root_a_id:
             raise RuntimeError(f"distinct root ids required: a={root_a_id!r} b={root_b_id!r}")
 
+        detach_resp = http_delete(f"/v1/projects/{proj2['id']}/roots/{root_b_id}")
         s2 = start_session(proj2["id"], root_a_id, "Exercise M05 detached-root refusal.")
         send_tool_calls(
             app, s2, [{"name": "update_progress", "args": {"content": "- [ ] Verify detached root refusal"}}], surface={}
         )
         s2_receipts = {}
-        detach_resp = http_delete(f"/v1/projects/{proj2['id']}/roots/{root_b_id}")
 
         detached_attempt = run_cmd(
             s2,
