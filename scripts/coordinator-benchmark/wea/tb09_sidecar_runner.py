@@ -270,7 +270,7 @@ def _run_a10_seam_slot(
             app,
             f"/v1/providers/{prov_id}",
             {"secret_screen_trusted": False},
-            method="PUT",
+            method="PATCH",
         )
         # Clean up synthetic provider.
         with contextlib.suppress(Exception):
