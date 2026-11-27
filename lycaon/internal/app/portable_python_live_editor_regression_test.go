@@ -14,13 +14,10 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/documentcore"
-	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/portablepython"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
-	"github.com/lycaon/lycaon/internal/sourceledger"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -91,17 +88,10 @@ func TestPortablePythonLiveEditorSubdirectoryAndExistingFileEdit(t *testing.T) {
 	sess := mustCreateSessionHTTP(t, ts.URL, proj.ID)
 	rootID := proj.Roots[0].ID
 
-	// Wire the REAL production editordoc.Service + editorDocumentsAdapter.
-	// When pw-document-core is installed (e.g., ./task test), use appInst's live
-	// Watch.EditorDocuments directly; under bare `go test`, use editordoc.New
-	// with its in-process core over the same ProjectRegistry.
-	editorDocs := appInst.Server.Sources.Workspace.Watch.EditorDocuments
 	if _, binErr := documentcore.Binary(); binErr != nil {
-		editorDB := testdbfixture.Open(t, "editor.db")
-		editorLedger := sourceledger.New(editorDB, t.TempDir(), sourceledger.Timing{})
-		editorDocs = editordoc.New(editordoc.NewStore(editorDB), editorLedger, editorLedger.History, appInst.Server.Sources.Workspace.ProjectRegistry)
-		t.Cleanup(func() { _ = editorDocs.Close(ctx) })
+		t.Skipf("pw-document-core not configured (%v); run through ./task or set LYCAON_DOCUMENT_CORE_BINARY", binErr)
 	}
+	editorDocs := appInst.Server.Sources.Workspace.Watch.EditorDocuments
 
 	mkTC := func(callID string) tools.ToolContext {
 		return tools.ToolContext{
