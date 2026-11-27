@@ -195,30 +195,30 @@ func NewDiagnosticSampler() *DiagnosticSampler {
 	}
 }
 
-func (s *DiagnosticSampler) recordUnique(key diagnosticDedupKey) bool {
+func (s *DiagnosticSampler) isSeen(key diagnosticDedupKey) bool {
 	if s == nil {
-		return true
+		return false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.seen == nil {
-		s.seen = make(map[diagnosticDedupKey]struct{})
-	}
-	if _, exists := s.seen[key]; exists {
 		return false
 	}
-	if s.maxSeen > 0 && len(s.seen) >= s.maxSeen {
-		return false
-	}
-	s.seen[key] = struct{}{}
-	return true
+	_, exists := s.seen[key]
+	return exists
 }
 
 // retainAndWrite serializes ownership of the retained snapshot and publishes
-// atomically through fseffect.Replace while holding the sampler lock so
-// concurrent roots cannot overwrite newer retained state with an older snapshot.
-func (s *DiagnosticSampler) retainAndWrite(reportPath string, report *DiagnosticReport, maxRetained int) error {
-	if strings.TrimSpace(reportPath) == "" || report == nil || len(report.Disagreements) == 0 {
+// atomically through fseffect.Replace while holding the sampler lock. Dedup
+// keys are committed ONLY after atomic publication succeeds, so a failed write
+// never permanently suppresses the same disagreement on a subsequent sample.
+func (s *DiagnosticSampler) retainAndWrite(
+	reportPath string,
+	report *DiagnosticReport,
+	keys []diagnosticDedupKey,
+	maxRetained int,
+) error {
+	if report == nil || len(report.Disagreements) == 0 {
 		return nil
 	}
 	if maxRetained <= 0 {
@@ -229,14 +229,56 @@ func (s *DiagnosticSampler) retainAndWrite(reportPath string, report *Diagnostic
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.seen == nil {
+		s.seen = make(map[diagnosticDedupKey]struct{})
+	}
+	filtered := make([]DiagnosticDisagreement, 0, len(report.Disagreements))
+	filteredKeys := make([]diagnosticDedupKey, 0, len(keys))
+	for i, d := range report.Disagreements {
+		var k diagnosticDedupKey
+		if i < len(keys) {
+			k = keys[i]
+		} else {
+			k = diagnosticDedupKey{
+				projectID: report.ProjectID,
+				rootID:    report.RootID,
+				instance:  report.GenerationInstance,
+				revision:  report.GenerationRevision,
+				path:      d.Path,
+				kind:      d.Kind,
+			}
+		}
+		if _, exists := s.seen[k]; exists {
+			report.DedupedCount++
+			continue
+		}
+		filtered = append(filtered, d)
+		filteredKeys = append(filteredKeys, k)
+	}
+	report.Disagreements = filtered
+	if len(filtered) == 0 {
+		return nil
+	}
 	next := make([]DiagnosticReport, len(s.retained), len(s.retained)+1)
 	copy(next, s.retained)
 	next = append(next, *report)
 	if len(next) > maxRetained {
 		next = next[len(next)-maxRetained:]
 	}
-	if err := writeAtomicDiagnosticReports(reportPath, next); err != nil {
-		return err
+	if strings.TrimSpace(reportPath) != "" {
+		if err := writeAtomicDiagnosticReports(reportPath, next); err != nil {
+			return err
+		}
+	}
+	for _, k := range filteredKeys {
+		if s.maxSeen <= 0 || len(s.seen) < s.maxSeen {
+			s.seen[k] = struct{}{}
+		}
+	}
+	for _, k := range keys {
+		if s.maxSeen <= 0 || len(s.seen) < s.maxSeen {
+			s.seen[k] = struct{}{}
+		}
 	}
 	s.retained = next
 	return nil
@@ -251,38 +293,44 @@ func (c *TreeStores) diagnosticSampler() *DiagnosticSampler {
 	return c.diagSampler
 }
 
-// scheduleCatalogDiagnostic dispatches an opt-in dev diagnostic sample off the
-// ordinary publication critical path. When LYCAON_DEV or LYCAON_CATALOG_DIAGNOSTIC
-// is unset, it returns immediately with zero work. At most one background sample
-// runs at a time per TreeStores to prevent goroutine pileup.
-func (c *TreeStores) scheduleCatalogDiagnostic(projectID string, root Root) {
-	if c == nil || !devCatalogDiagnosticEnabled() {
+// scheduleDiagnostic dispatches an opt-in dev diagnostic sample bound directly
+// to this already-published indexStore and generation, admitted under the store's
+// owner lifecycle (canceled and joined by retireTreeStore / TreeStores.Drain /
+// root removal without ever recreating a detached store).
+func (s *indexStore) scheduleDiagnostic(published TreeStatus) {
+	if s == nil || s.stores == nil || !devCatalogDiagnosticEnabled() {
 		return
 	}
 	cfg := DiagnosticConfigFromEnv()
 	if !cfg.Enabled {
 		return
 	}
-	if !c.diagActive.CompareAndSwap(false, true) {
+	s.mu.Lock()
+	if s.retired || s.diagDone != nil {
+		s.mu.Unlock()
 		return
 	}
-	sampler := c.diagnosticSampler()
-	c.diagWG.Add(1)
-	go func() {
-		defer c.diagWG.Done()
-		defer c.diagActive.Store(false)
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_, _ = c.SampleCatalogDiagnostic(ctx, projectID, root, cfg, sampler)
-	}()
-}
+	diagCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	done := make(chan struct{})
+	s.diagCancel = cancel
+	s.diagDone = done
+	hook := s.diagHook
+	s.mu.Unlock()
 
-// WaitDiagnostics waits for any in-flight background dev diagnostic samples to finish.
-func (c *TreeStores) WaitDiagnostics() {
-	if c == nil {
-		return
-	}
-	c.diagWG.Wait()
+	sampler := s.stores.diagnosticSampler()
+	go func() {
+		defer func() {
+			cancel()
+			s.mu.Lock()
+			if s.diagDone == done {
+				s.diagCancel = nil
+				s.diagDone = nil
+			}
+			s.mu.Unlock()
+			close(done)
+		}()
+		_, _ = sampleStoreDiagnosticWithHook(diagCtx, s, published, cfg, sampler, hook)
+	}()
 }
 
 type catalogNodeRecord struct {
@@ -337,26 +385,63 @@ func (c *TreeStores) sampleCatalogDiagnosticWithHook(
 	sampler *DiagnosticSampler,
 	afterWalk func(),
 ) (*DiagnosticReport, error) {
-	cfg = cfg.normalized()
-
 	s, err := c.indexStore(ctx, projectID, root)
 	if err != nil {
 		return nil, err
 	}
+	s.mu.Lock()
+	status := s.status
+	s.mu.Unlock()
+	return sampleStoreDiagnosticWithHook(ctx, s, status, cfg, sampler, afterWalk)
+}
+
+func sampleStoreDiagnosticWithHook(
+	ctx context.Context,
+	s *indexStore,
+	expectedStatus TreeStatus,
+	cfg DiagnosticConfig,
+	sampler *DiagnosticSampler,
+	afterWalk func(),
+) (*DiagnosticReport, error) {
+	cfg = cfg.normalized()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	s.mu.Lock()
+	retired := s.retired
 	beforeStatus := s.status
 	beforeStatus.Instance = s.instance
 	beforeStatus.Refreshing = s.refreshingLocked()
 	beforeSettledEpoch := s.epoch
 	policy := s.policy
+	projectID := s.projectID
+	root := s.root
 	s.mu.Unlock()
 
-	beforeEpoch := repochange.CurrentEpoch(s.root.Path)
+	if retired {
+		return nil, context.Canceled
+	}
+	if expectedStatus.Revision != 0 && beforeStatus.Revision != expectedStatus.Revision {
+		return &DiagnosticReport{
+			ProjectID:            projectID,
+			RootID:               root.ID,
+			GenerationInstance:   beforeStatus.Instance,
+			GenerationRevision:   beforeStatus.Revision,
+			GenerationConsistent: false,
+			Subtree:              cfg.Subtree,
+			Coverage:             CoverageFromStatus(beforeStatus),
+			Disagreements:        []DiagnosticDisagreement{},
+			ProductWork:          s.work.snapshot(),
+			RecordedAt:           time.Now().UTC(),
+		}, nil
+	}
+
+	beforeEpoch := repochange.CurrentEpoch(root.Path)
 
 	report := &DiagnosticReport{
 		ProjectID:            projectID,
-		RootID:               s.root.ID,
+		RootID:               root.ID,
 		GenerationInstance:   beforeStatus.Instance,
 		GenerationRevision:   beforeStatus.Revision,
 		GenerationConsistent: true,
@@ -368,7 +453,7 @@ func (c *TreeStores) sampleCatalogDiagnosticWithHook(
 	}
 
 	// A warming, failed, or on-demand root has a declared coverage gap at root scope.
-	if beforeStatus.State != StateReady || s.root.OnDemand || policy.rootOnDemand() {
+	if beforeStatus.State != StateReady || root.OnDemand || policy.rootOnDemand() {
 		return report, nil
 	}
 	// If the repository epoch already moved past what the catalog settled, skip comparison.
@@ -405,7 +490,7 @@ func (c *TreeStores) sampleCatalogDiagnosticWithHook(
 	}
 
 	diskEntries, fullSampledDirs, dirStamps, reads, truncatedWalk, err := walkDirectSubtree(
-		s.root.Path, cfg, policy, faults, refusedDirs,
+		root.Path, cfg, policy, faults, refusedDirs,
 	)
 	if err != nil {
 		return nil, err
@@ -418,8 +503,12 @@ func (c *TreeStores) sampleCatalogDiagnosticWithHook(
 		afterWalk()
 	}
 
-	// Generation consistency assertion: verify neither the published generation,
-	// nor repochange epoch, nor any sampled directory stamp moved during the walk.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// Generation consistency assertion: verify neither retirement, nor published
+	// generation, nor repochange epoch, nor any sampled directory stamp moved.
 	if !verifyGenerationConsistency(s, pinnedStatus, beforeEpoch, dirStamps) {
 		report.GenerationConsistent = false
 		return report, nil
@@ -438,19 +527,21 @@ func (c *TreeStores) sampleCatalogDiagnosticWithHook(
 	)
 
 	report.TotalObserved = len(rawDisagreements)
+	candidateKeys := make([]diagnosticDedupKey, 0, len(rawDisagreements))
 	for _, d := range rawDisagreements {
 		key := diagnosticDedupKey{
 			projectID: projectID,
-			rootID:    s.root.ID,
+			rootID:    root.ID,
 			instance:  pinnedStatus.Instance,
 			revision:  pinnedStatus.Revision,
 			path:      d.Path,
 			kind:      d.Kind,
 		}
-		if !sampler.recordUnique(key) {
+		if sampler.isSeen(key) {
 			report.DedupedCount++
 			continue
 		}
+		candidateKeys = append(candidateKeys, key)
 		if len(report.Disagreements) >= cfg.MaxDisagreements {
 			report.Truncated = true
 			continue
@@ -458,7 +549,7 @@ func (c *TreeStores) sampleCatalogDiagnosticWithHook(
 		report.Disagreements = append(report.Disagreements, d)
 	}
 
-	if err := sampler.retainAndWrite(cfg.ReportPath, report, cfg.MaxRetainedReports); err != nil {
+	if err := sampler.retainAndWrite(cfg.ReportPath, report, candidateKeys, cfg.MaxRetainedReports); err != nil {
 		return report, err
 	}
 	return report, nil
@@ -471,11 +562,16 @@ func verifyGenerationConsistency(
 	dirStamps map[string]DirectoryStamp,
 ) bool {
 	s.mu.Lock()
+	retired := s.retired
 	afterStatus := s.status
 	afterStatus.Instance = s.instance
 	afterRefreshing := s.refreshingLocked()
 	afterSettledEpoch := s.epoch
 	s.mu.Unlock()
+
+	if retired {
+		return false
+	}
 
 	afterEpoch := repochange.CurrentEpoch(s.root.Path)
 	if afterStatus.Instance != pinnedStatus.Instance || afterStatus.Revision != pinnedStatus.Revision {

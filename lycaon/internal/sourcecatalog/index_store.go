@@ -92,8 +92,11 @@ type indexStore struct {
 	projections int
 	// holders counts open views that keep this root resident between reads;
 	// guarded by mu. Eviction passes over a held store.
-	holders int
-	work    atomicWorkCounters
+	holders    int
+	work       atomicWorkCounters
+	diagCancel context.CancelFunc
+	diagDone   chan struct{}
+	diagHook   func()
 }
 
 func (s *indexStore) schema() string { return indexSchema }

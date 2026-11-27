@@ -342,7 +342,7 @@ func TestDiagnosticConcurrentReportPublicationAndWriteFailure(t *testing.T) {
 					{Path: fmt.Sprintf("f_%d.txt", idx), Kind: DisagreementMissingInCatalog, DiskKind: "file"},
 				},
 			}
-			if err := sampler.retainAndWrite(reportPath, rep, 4); err != nil {
+			if err := sampler.retainAndWrite(reportPath, rep, nil, 4); err != nil {
 				errs <- err
 			}
 		}()
@@ -368,20 +368,43 @@ func TestDiagnosticConcurrentReportPublicationAndWriteFailure(t *testing.T) {
 	}
 
 	// Write failure handling: attempting to replace an existing directory must fail
-	// cleanly and leave sampler.retained unchanged.
+	// cleanly, leave sampler.retained unchanged, AND NOT mark the disagreement seen
+	// so a subsequent write to a valid path publishes that same disagreement.
 	badTarget := filepath.Join(reportDir, "existing_dir")
 	testutil.FailErr(t, "mkdir bad target", os.MkdirAll(badTarget, 0o700))
 	beforeLen := len(sampler.retained)
-	failErr := sampler.retainAndWrite(badTarget, &DiagnosticReport{
-		ProjectID:     "p-fail",
-		RootID:        "r-fail",
-		Disagreements: []DiagnosticDisagreement{{Path: "x.txt", Kind: DisagreementMissingInCatalog, DiskKind: "file"}},
-	}, 4)
+	failReport := &DiagnosticReport{
+		ProjectID:          "p-fail",
+		RootID:             "r-fail",
+		GenerationInstance: 99,
+		GenerationRevision: 1,
+		Disagreements:      []DiagnosticDisagreement{{Path: "x.txt", Kind: DisagreementMissingInCatalog, DiskKind: "file"}},
+	}
+	failErr := sampler.retainAndWrite(badTarget, failReport, nil, 4)
 	if failErr == nil {
 		t.Fatal("expected atomic publication error when target is a directory")
 	}
 	if len(sampler.retained) != beforeLen {
 		t.Fatalf("failed write mutated retained snapshot: %d -> %d", beforeLen, len(sampler.retained))
+	}
+
+	// Retry the exact same disagreement to a valid path: it must NOT be discarded as duplicate.
+	retryPath := filepath.Join(reportDir, "recovered-diagnostic.jsonl")
+	retryReport := &DiagnosticReport{
+		ProjectID:          "p-fail",
+		RootID:             "r-fail",
+		GenerationInstance: 99,
+		GenerationRevision: 1,
+		Disagreements:      []DiagnosticDisagreement{{Path: "x.txt", Kind: DisagreementMissingInCatalog, DiskKind: "file"}},
+	}
+	testutil.FailErr(t, "retry after write failure", sampler.retainAndWrite(retryPath, retryReport, nil, 4))
+	if len(retryReport.Disagreements) != 1 || retryReport.DedupedCount != 0 {
+		t.Fatalf("failed-write disagreement was wrongly deduplicated on retry: len=%d deduped=%d", len(retryReport.Disagreements), retryReport.DedupedCount)
+	}
+	recoveredRaw, err := os.ReadFile(retryPath)
+	testutil.FailErr(t, "read recovered jsonl", err)
+	if len(recoveredRaw) == 0 {
+		t.Fatal("expected recovered report bytes on retry")
 	}
 }
 
@@ -445,7 +468,7 @@ func TestDiagnosticDevBoundaryAndAsyncDispatch(t *testing.T) {
 		writeIndexFile(t, root.Path, "src/a.txt", "a")
 		reader := waitIndex(t, catalog, root)
 		testutil.FailErr(t, "close reader", reader.Close())
-		catalog.Trees.WaitDiagnostics()
+		testutil.FailErr(t, "drain catalog", catalog.Drain(t.Context()))
 
 		catalog.Trees.diagMu.Lock()
 		samplerInit := catalog.Trees.diagSampler != nil
@@ -466,7 +489,7 @@ func TestDiagnosticDevBoundaryAndAsyncDispatch(t *testing.T) {
 		writeIndexFile(t, root.Path, "src/a.txt", "a")
 		reader := waitIndex(t, catalog, root)
 		testutil.FailErr(t, "close reader", reader.Close())
-		catalog.Trees.WaitDiagnostics()
+		testutil.FailErr(t, "drain catalog", catalog.Drain(t.Context()))
 
 		catalog.Trees.diagMu.Lock()
 		samplerInit := catalog.Trees.diagSampler != nil
@@ -478,6 +501,69 @@ func TestDiagnosticDevBoundaryAndAsyncDispatch(t *testing.T) {
 			t.Fatalf("clean normal reconcile should not write report file, stat err=%v", err)
 		}
 	})
+}
+
+func TestDiagnosticLifecycleDetachAndDrainWinWithoutRecreatingStore(t *testing.T) {
+	reportPath := filepath.Join(t.TempDir(), "detach-barrier.jsonl")
+	t.Setenv("LYCAON_DEV", "1")
+	t.Setenv("LYCAON_CATALOG_DIAGNOSTIC", "1")
+	t.Setenv("LYCAON_CATALOG_DIAGNOSTIC_FILE", reportPath)
+	t.Setenv("LYCAON_CATALOG_DIAGNOSTIC_SUBTREE", "src")
+
+	catalog, root := indexFixture(t)
+	writeIndexFile(t, root.Path, "src/a.txt", "a")
+	reader := waitIndex(t, catalog, root)
+	store := reader.store
+	testutil.FailErr(t, "close reader", reader.Close())
+	testutil.FailErr(t, "drain initial diagnostic", catalog.Drain(t.Context()))
+
+	// Deterministic barrier inside the async diagnostic sample.
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	store.mu.Lock()
+	store.retired = false
+	store.diagHook = func() {
+		close(entered)
+		<-release
+	}
+	published := store.status
+	store.mu.Unlock()
+
+	// Schedule off critical path: must return immediately before barrier releases.
+	store.scheduleDiagnostic(published)
+	<-entered
+
+	// Retire and remove the store from catalog.Trees while the diagnostic is paused at the barrier.
+	catalog.Trees.mu.Lock()
+	for k, s := range catalog.Trees.trees {
+		if s == store {
+			delete(catalog.Trees.trees, k)
+		}
+	}
+	catalog.Trees.mu.Unlock()
+	if !retireTreeStore(store) {
+		t.Fatal("expected retireTreeStore to succeed on detached store")
+	}
+
+	// Capture diagDone so we verify clean exit after releasing barrier.
+	store.mu.Lock()
+	done := store.diagDone
+	store.mu.Unlock()
+	close(release)
+	if done != nil {
+		<-done
+	}
+
+	// Detached store must NOT be recreated in catalog.Trees and no report written.
+	catalog.Trees.mu.Lock()
+	remaining := len(catalog.Trees.trees)
+	catalog.Trees.mu.Unlock()
+	if remaining != 0 {
+		t.Fatalf("detached store was recreated in catalog.Trees: count=%d", remaining)
+	}
+	if _, err := os.Stat(reportPath); !os.IsNotExist(err) {
+		t.Fatalf("retired diagnostic sample should not write report file, stat err=%v", err)
+	}
 }
 
 func TestDiagnosticEnabledAndDisabledMatchAnswersAndProductWorkCounters(t *testing.T) {
