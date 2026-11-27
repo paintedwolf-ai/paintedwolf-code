@@ -57,7 +57,7 @@ func TestNativeEngineLiveExecutionPolicyFuelAndCancel(t *testing.T) {
 	if info.Backend != pythonruntime.BackendNativeAOT {
 		t.Fatalf("RuntimeInfo.Backend=%q want %q", info.Backend, pythonruntime.BackendNativeAOT)
 	}
-	if info.NativeEngine == nil || info.NativeEngine.EngineTag != "pw-cpython-wasi-engine-v0.1.0" {
+	if info.NativeEngine == nil || info.NativeEngine.EngineTag != "pw-cpython-wasi-engine-v0.2.0" {
 		t.Fatalf("unexpected NativeEngine identity: %+v", info.NativeEngine)
 	}
 	t.Logf("verified native engine: tag=%s platform=%s commit=%s abi=%d",
