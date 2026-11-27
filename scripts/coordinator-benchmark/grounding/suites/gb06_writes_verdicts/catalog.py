@@ -86,6 +86,7 @@ W03_SLOTS: tuple[GB06SlotSpec, ...] = (
     _slot("W03-07-verifier-complete-with-fresh-receipt", "W03", "Verifier leg completes with fresh verification receipt", "Verifier leg completes cleanly with fresh command receipt.", contract_refs=("W03", "D5")),
     _slot("W03-08-verifier-refused-without-receipt", "W03", "Verifier leg refused without verification receipt", "Verifier leg completion without receipt returns owning refusal code.", contract_refs=("W03", "D5")),
     _slot("W03-09-worker-retry-exhaustion-keeps-supported-only", "W03", "Worker retry exhaustion keeps supported claims, drops unsupported, not complete", "At retry exhaustion supported claims are retained, unsupported dropped, result not marked complete.", contract_refs=("W03", "D5")),
+    _slot("W03-10-worker-undelivered-line-false-accept-contrast", "W03", "Worker complete_leg with undelivered line and fabricated ordinal refused (Decision 031)", "Repo-researcher leg citing observed path + undelivered line 90 + fabricated ordinal read#999999 next to supported line 3 is refused for line 90 while line 3 stays matched.", contract_refs=("W03", "D13", "Decision-031", "D5")),
 )
 
 W04_SLOTS: tuple[GB06SlotSpec, ...] = (

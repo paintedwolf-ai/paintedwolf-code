@@ -18,16 +18,16 @@ from grounding.suites.gb06_writes_verdicts import (
 class TestGB06CatalogAndFixtures(unittest.TestCase):
     def test_catalog_matches_ledger_and_d5_tripling(self) -> None:
         summary = validate_gb06_catalog()
-        self.assertEqual(summary["sidecar_slots"], 31)
+        self.assertEqual(summary["sidecar_slots"], 32)
         self.assertEqual(summary["in_process_slots"], 0)
-        self.assertEqual(summary["base_slots"], 31)
-        self.assertEqual(summary["d5_tripled_per_platform"], 93)
-        self.assertEqual(len(ALL_GB06_SLOTS), 31)
-        self.assertEqual(len(SLOTS_BY_SELECTOR), 31)
+        self.assertEqual(summary["base_slots"], 32)
+        self.assertEqual(summary["d5_tripled_per_platform"], 96)
+        self.assertEqual(len(ALL_GB06_SLOTS), 32)
+        self.assertEqual(len(SLOTS_BY_SELECTOR), 32)
 
     def test_all_93_wording_fixtures_pass_and_are_wording_invariant(self) -> None:
         fixtures = build_all_gb06_fixtures()
-        self.assertEqual(len(fixtures), 93)
+        self.assertEqual(len(fixtures), 96)
         for spec in ALL_GB06_SLOTS:
             verdicts = []
             for w in WORDING_VARIANTS:
