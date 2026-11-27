@@ -343,10 +343,16 @@ def _execute_slot(
         # broker lineage descriptor survives across fork/exec/setsid (Python defaults close_fds=True).
         script_path = project_dir / "_a06_08_lineage.py"
         url = f"{allowed_ep.base_url}/ping"
+        child_src = f"import urllib.request; print(urllib.request.urlopen({json.dumps(url)}, timeout=5).read().decode())"
         script_path.write_text(
             "import subprocess, sys\n"
-            f"child = 'import urllib.request; print(urllib.request.urlopen({url!r}, timeout=5).read().decode())'\n"
-            "subprocess.run([sys.executable, '-B', '-c', child], start_new_session=True, close_fds=False, check=True)\n",
+            f"child = {json.dumps(child_src)}\n"
+            "res = subprocess.run([sys.executable, '-B', '-c', child], start_new_session=True, close_fds=False, capture_output=True, text=True)\n"
+            "if res.stdout:\n"
+            "    print(res.stdout, end='')\n"
+            "if res.stderr:\n"
+            "    print(res.stderr, end='', file=sys.stderr)\n"
+            "sys.exit(res.returncode)\n",
             encoding="utf-8",
         )
         typed = call_cmd(
@@ -558,17 +564,24 @@ def run_tb08_sidecar_slots(
         )
         try:
             app.ready()
-            session_by_family: dict[str, str] = {}
+            session_by_bucket: dict[str, str] = {}
+            family_slot_idx: Counter[str] = Counter()
             for slot in selected:
                 fam = slot["family"]
-                if fam not in session_by_family:
+                slot_idx = family_slot_idx[fam]
+                family_slot_idx[fam] += 1
+                # Rotate fresh sessions every 4 slots per family (and dedicated session for
+                # multi-call A08-12) so consecutive-rejection / doom-loop guards never stall
+                # unrelated refusal slots while still reusing the single warmed sidecar.
+                bucket = slot["slot_id"] if slot["slot_id"] == "A08-12" else f"{fam}-{slot_idx // 4}"
+                if bucket not in session_by_bucket:
                     sid, _, _ = open_sess(app, project_dir)
                     app.request(
                         f"/v1/sessions/{sid}/prompts",
-                        {"operation_id": str(uuid.uuid4()), "text": f"TB08 sidecar family {fam} verification."},
+                        {"operation_id": str(uuid.uuid4()), "text": f"TB08 sidecar bucket {bucket} verification."},
                     )
-                    session_by_family[fam] = sid
-                sid = session_by_family[fam]
+                    session_by_bucket[bucket] = sid
+                sid = session_by_bucket[bucket]
                 slot_t0 = time.monotonic()
                 typed, obs, fails = _execute_slot(
                     slot,
@@ -598,7 +611,7 @@ def run_tb08_sidecar_slots(
                 _save_json(receipts_dir / f"{slot['slot_id']}.json", rec)
                 receipts.append(rec)
 
-            for sid in session_by_family.values():
+            for sid in session_by_bucket.values():
                 try:
                     app.request(f"/v1/sessions/{sid}/abort", {})
                 except Exception:

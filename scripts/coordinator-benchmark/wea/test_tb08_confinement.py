@@ -371,9 +371,24 @@ class TestTB08SidecarRunner(unittest.TestCase):
                 if m:
                     port = int(m.group(1))
                 elif "_a06_08_lineage.py" in cmd:
+                    # Actually execute the generated _a06_08_lineage.py script to catch syntax/quoting bugs!
+                    script_file = created_apps[0].directory.parent / "project" / "_a06_08_lineage.py"
+                    subprocess.run([sys.executable, "-B", str(script_file)], check=True)
                     ports = ((args.get("capability_request") or {}).get("loopback_connect") or {}).get("ports") or []
-                    if ports:
-                        port = int(ports[0])
+                    return call_id, {
+                        "outcome": "completed",
+                        "external_access": {
+                            "endpoints": [
+                                {
+                                    "host": "127.0.0.1",
+                                    "port": int(ports[0]) if ports else 0,
+                                    "visibility": "observed",
+                                    "decision": "allow",
+                                    "allowed_count": 1,
+                                }
+                            ]
+                        },
+                    }, {}
                 if port is not None:
                     with urllib.request.urlopen(f"http://127.0.0.1:{port}/ping", timeout=3) as resp:
                         resp.read()
