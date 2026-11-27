@@ -27,6 +27,11 @@ func (s *Handler) HandlePreviewSearchReplacement(w http.ResponseWriter, r *http.
 	}
 	origin := strings.TrimSpace(req.OriginProjectID)
 	compileCtx := s.searchCompileContext(r.Context(), origin)
+	if origin != "" {
+		compileCtx.AttachedProjectIDs = func() ([]string, error) {
+			return []string{origin}, nil
+		}
+	}
 	compileCtx.IncludeDependencies = req.IncludeDependencies
 	compileCtx.Flags = matchFlagsFromReplacePreview(req)
 	plan, err := search.CompileQuery(query, compileCtx)

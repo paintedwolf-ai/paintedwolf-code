@@ -2,6 +2,7 @@ package searchadmin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -51,6 +52,9 @@ func (s *Handler) rootsForSearchProject(ctx context.Context) func(projectID stri
 	return func(projectID string) ([]search.CodeRoot, error) {
 		p, err := s.projectRegistry.Get(ctx, strings.TrimSpace(projectID))
 		if err != nil {
+			if errors.Is(err, project.ErrNotFound) {
+				return nil, nil
+			}
 			return nil, err
 		}
 		var roots []search.CodeRoot

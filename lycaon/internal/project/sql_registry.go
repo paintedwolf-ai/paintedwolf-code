@@ -109,16 +109,22 @@ func (r *SQLRegistry) List(ctx context.Context) ([]Project, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	rows, err := r.queries.ListProjects(ctx)
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}
-	allRoots, err := r.queries.ListAllProjectRoots(ctx)
+	defer func() { _ = tx.Rollback() }()
+	q := r.queries.WithTx(tx)
+	rows, err := q.ListProjects(ctx)
+	if err != nil {
+		return nil, err
+	}
+	allRoots, err := q.ListAllProjectRoots(ctx)
 	if err != nil {
 		return nil, err
 	}
 	rootsByProject := projectRootsByProjectID(allRoots)
-	outsideRows, err := r.queries.ListProjectOutsideRoots(ctx)
+	outsideRows, err := q.ListProjectOutsideRoots(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +132,7 @@ func (r *SQLRegistry) List(ctx context.Context) ([]Project, error) {
 	for _, row := range outsideRows {
 		outside[row.ProjectID] = row.ID
 	}
-	promotionRows, err := r.queries.ListProjectPromotions(ctx)
+	promotionRows, err := q.ListProjectPromotions(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -140,6 +146,12 @@ func (r *SQLRegistry) List(ctx context.Context) ([]Project, error) {
 	}
 	out := make([]Project, 0, len(rows))
 	for _, row := range rows {
+		// Delete removes child project_roots (including the outside namespace)
+		// in bounded batches before deleting the projects row; omit projects
+		// already mid-removal rather than exposing half-deleted entries.
+		if strings.TrimSpace(outside[row.ID]) == "" {
+			continue
+		}
 		p, err := projectFromListRow(row, rootsByProject[row.ID])
 		if err != nil {
 			return nil, err

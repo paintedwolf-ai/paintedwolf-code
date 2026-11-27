@@ -167,6 +167,9 @@ func loadProject(ctx context.Context, q *db.Queries, id string) (*Project, error
 	}
 	outsideID, err := q.GetProjectOutsideRootID(ctx, id)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
+		}
 		return nil, fmt.Errorf("project outside namespace: %w", err)
 	}
 	p.Outside = outsideRoot(p.ID, outsideID, p.CreatedAt)
