@@ -1,6 +1,7 @@
 package repochange
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -100,5 +101,50 @@ func TestAdoptCreatedTreeEmitsResyncWhenBudgetExhausted(t *testing.T) {
 	}
 	if cov := w.coverage(); cov.Truncated == 0 || cov.Complete {
 		t.Fatalf("coverage after budget exhaustion = %+v, want Truncated>0 Complete=false", cov)
+	}
+}
+
+func TestAdoptCreatedTreeBoundsInspectedEntriesInWideExcludedDirectory(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve root", err)
+	cfg, err := sourcescope.DefaultConfig()
+	testutil.FailErr(t, "default scope config", err)
+
+	wide := filepath.Join(root, "wide")
+	testutil.FailErr(t, "mkdir wide", os.MkdirAll(wide, 0o755))
+	// Populate 2,000 entries inside a newly created directory, plus a symlink
+	// pointing outside root to prove root confinement and bounded chunk reads.
+	outside := t.TempDir()
+	testutil.FailErr(t, "write outside sentinel", os.WriteFile(filepath.Join(outside, "outside.txt"), []byte("x"), 0o644))
+	testutil.FailErr(t, "symlink outside", os.Symlink(outside, filepath.Join(wide, "escape")))
+	for i := range 2000 {
+		// Include boundary-excluded .DS_Store / normal files so excluded entries
+		// are also charged against the cap.
+		name := fmt.Sprintf("f-%04d.txt", i)
+		testutil.FailErr(t, "write wide file", os.WriteFile(filepath.Join(wide, name), nil, 0o644))
+	}
+
+	platform := &errorTestWatcher{events: make(chan fsnotify.Event), errors: make(chan error), resync: make(chan struct{})}
+	w := &worktreeWatcher{
+		root:    root,
+		watcher: platform,
+		budget:  watchfd.NewBudget(64),
+		maxDirs: 64,
+		done:    make(chan struct{}),
+		watched: map[string]int{root: 1},
+		scope:   sourcescope.New(root, sourcescope.Options{Plane: cfg.Catalog}),
+	}
+
+	changes, inspected := w.adoptCreatedTreeMeasured(wide, "wide")
+	if len(changes) != 1 || changes[0].Path != "." || changes[0].Kind != WorktreeChangeResync {
+		t.Fatalf("wide directory adoption = %+v, want single bare resync", changes)
+	}
+	// Chunked ReadDir must stop immediately upon crossing maxAdoptedChanges
+	// rather than reading all 2,000 directory entries.
+	if inspected != maxAdoptedChanges+1 {
+		t.Fatalf("inspected entries = %d, want %d (bounded stop)", inspected, maxAdoptedChanges+1)
+	}
+	if w.watchesDir(filepath.Join(wide, "escape")) {
+		t.Fatal("symlinked outside directory was registered")
 	}
 }
