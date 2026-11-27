@@ -37,10 +37,30 @@ func (p *Progress) RetainedFileDigests() map[projectsource.DeclarationFileKey]st
 	return out
 }
 
+// DropDeferredFiles discards retained matches for files whose revalidation was
+// deferred due to the validation byte/time budget WITHOUT prepending them to
+// pending, so forward continuation through later candidates is never starved.
+func (p *Progress) DropDeferredFiles(deferred map[projectsource.DeclarationFileKey]bool) {
+	if p == nil || len(deferred) == 0 {
+		return
+	}
+	kept := p.matches[:0]
+	for _, m := range p.matches {
+		if deferred[projectsource.DeclarationFileKey{RootID: m.RootID, Path: m.Path}] {
+			continue
+		}
+		kept = append(kept, m)
+	}
+	clear(p.matches[len(kept):])
+	p.matches = kept
+	for key := range deferred {
+		delete(p.fileDigests, key)
+	}
+}
+
 // DropAndRequeueFiles surgically discards retained matches for files whose
-// content changed (or could not be proved fresh within the revalidation
-// budget) and re-queues those paths into pending so the next slice re-outlines
-// them without discarding clean progress from earlier slices.
+// content changed and re-queues those paths into pending so the next slice
+// re-outlines them without discarding clean progress from earlier slices.
 func (p *Progress) DropAndRequeueFiles(stale map[projectsource.DeclarationFileKey]bool) {
 	if p == nil || len(stale) == 0 {
 		return

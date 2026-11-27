@@ -166,7 +166,7 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 		revalidateBudget = symbolsearch.DiscoveryWall
 	}
 	revalidateCtx, cancelRevalidate := context.WithTimeout(ctx, revalidateBudget)
-	revalFiles, revalBytes := entry.revalidateRetainedMatches(revalidateCtx, p, symbolRevalidateByteLimit)
+	revalFiles, revalBytes, deferredFiles := entry.revalidateRetainedMatches(revalidateCtx, p, symbolRevalidateByteLimit)
 	cancelRevalidate()
 	if e.onRevalidated != nil {
 		e.onRevalidated(revalFiles, revalBytes)
@@ -190,6 +190,14 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 	}, entry.discovery)
 	if err != nil {
 		return symbolProjectResult{err: err}
+	}
+	if deferredFiles > 0 {
+		result.Coverage.Gaps = append(result.Coverage.Gaps, projectsource.DeclarationGap{
+			Reason: projectsource.DeclarationSymbolBudget,
+			Count:  deferredFiles,
+			Limit:  int(symbolRevalidateByteLimit),
+		})
+		result.Incomplete = true
 	}
 	if !symbolEpochsCurrent(entry.stamp) {
 		entry.reset("", nil)

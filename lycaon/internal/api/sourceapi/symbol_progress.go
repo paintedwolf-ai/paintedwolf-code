@@ -48,14 +48,15 @@ func (e *symbolProgressEntry) reset(stamp string, discovery projectsource.Declar
 }
 
 // revalidateRetainedMatches re-observes retained match files through the
-// root-confined projectsource reader under ctx and byteLimit, confirming each
-// file's raw content SHA-256 still matches the digest captured at the exact
-// source read that produced those declarations. Changed or unverified files are
-// surgically dropped and re-queued without discarding clean earlier slices.
-func (e *symbolProgressEntry) revalidateRetainedMatches(ctx context.Context, p *project.Project, byteLimit int64) (revalidatedFiles int, rereadBytes int64) {
+// root-confined projectsource reader under ctx and byteLimit, enforcing the
+// byte budget BEFORE reading at the source owner. Changed files are surgically
+// dropped and re-queued; over-budget or timed-out files are classified as
+// deferred (dropped without prepending to pending so later candidates are never
+// starved) and reported via deferredCount for explicit scoped gap reporting.
+func (e *symbolProgressEntry) revalidateRetainedMatches(ctx context.Context, p *project.Project, byteLimit int64) (revalidatedFiles int, rereadBytes int64, deferredCount int) {
 	digests := e.state.RetainedFileDigests()
 	if len(digests) == 0 {
-		return 0, 0
+		return 0, 0, 0
 	}
 	keys := make([]projectsource.DeclarationFileKey, 0, len(digests))
 	for key := range digests {
@@ -67,37 +68,58 @@ func (e *symbolProgressEntry) revalidateRetainedMatches(ctx context.Context, p *
 		}
 		return keys[i].Path < keys[j].Path
 	})
-	var stale map[projectsource.DeclarationFileKey]bool
-	markStale := func(key projectsource.DeclarationFileKey) {
-		if stale == nil {
-			stale = map[projectsource.DeclarationFileKey]bool{}
+	var changed map[projectsource.DeclarationFileKey]bool
+	var deferred map[projectsource.DeclarationFileKey]bool
+	markChanged := func(key projectsource.DeclarationFileKey) {
+		if changed == nil {
+			changed = map[projectsource.DeclarationFileKey]bool{}
 		}
-		stale[key] = true
+		changed[key] = true
+	}
+	markDeferred := func(key projectsource.DeclarationFileKey) {
+		if deferred == nil {
+			deferred = map[projectsource.DeclarationFileKey]bool{}
+		}
+		deferred[key] = true
 	}
 	for _, key := range keys {
 		wantSHA := digests[key]
-		if ctx.Err() != nil || wantSHA == "" || (byteLimit > 0 && rereadBytes >= byteLimit) {
-			markStale(key)
+		if wantSHA == "" {
+			markChanged(key)
 			continue
 		}
-		obs, err := projectsource.ObserveProjectSource(p, projectsource.SourceReadRequest{
+		remaining := byteLimit - rereadBytes
+		if ctx.Err() != nil || (byteLimit > 0 && remaining <= 0) {
+			markDeferred(key)
+			continue
+		}
+		obs, err := projectsource.ObserveProjectSourceBounded(p, projectsource.SourceReadRequest{
 			RootID: key.RootID,
 			Path:   key.Path,
-		})
-		if err != nil || obs.OverLimit {
-			markStale(key)
+		}, remaining)
+		if err != nil {
+			markChanged(key)
+			continue
+		}
+		if obs.OverLimit {
+			// File exceeds remaining pre-read validation budget (or max read cap):
+			// defer without reading bytes and without starving later candidates.
+			markDeferred(key)
 			continue
 		}
 		revalidatedFiles++
 		rereadBytes += obs.SizeBytes
 		if obs.Revision.SHA256 != wantSHA {
-			markStale(key)
+			markChanged(key)
 		}
 	}
-	if len(stale) > 0 {
-		e.state.DropAndRequeueFiles(stale)
+	if len(changed) > 0 {
+		e.state.DropAndRequeueFiles(changed)
 	}
-	return revalidatedFiles, rereadBytes
+	if len(deferred) > 0 {
+		e.state.DropDeferredFiles(deferred)
+	}
+	return revalidatedFiles, rereadBytes, len(deferred)
 }
 
 type symbolSourceStamp struct {

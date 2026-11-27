@@ -1,11 +1,16 @@
 package sourceapi
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/search"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
+	catalogtest "github.com/lycaon/lycaon/internal/testsetup/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -169,5 +174,77 @@ func TestSymbolExecutorContinuesAcrossThreeSlicesWithBoundedRevalidation(t *test
 		if b > symbolRevalidateByteLimit {
 			t.Fatalf("slice %d reread %d bytes > limit %d", i+1, b, symbolRevalidateByteLimit)
 		}
+	}
+}
+
+func TestSymbolExecutorContinuesUnderValidationBytePressure(t *testing.T) {
+	// 60 realistic ~64 KiB Go files (~3.84 MiB total, exceeding the 2 MiB
+	// pre-read validation allowance). Proves:
+	//  1. Pre-read byte budget is strictly enforced (rereadBytes <= 2 MiB).
+	//  2. Deferred files are NOT prepended to pending, so slice 2 makes forward
+	//     progress into all tail candidates f048.go..f059.go (no prefix starvation).
+	//  3. Omitted/deferred files are reported explicitly via a scoped symbol_budget
+	//     issue carrying the exact deferred count and byte limit.
+	root := t.TempDir()
+	pad := "// " + strings.Repeat("x", 64*1024) + "\n"
+	for i := range 60 {
+		body := "package p\nfunc Target() {}\n" + pad
+		testutil.FailErr(t, "write padded source", os.WriteFile(filepath.Join(root, fmt.Sprintf("f%03d.go", i)), []byte(body), 0o600))
+	}
+	registry := projecttest.NewRegistry(t)
+	p, err := projecttest.CreateWithRoot(t.Context(), registry, root)
+	testutil.FailErr(t, "create project", err)
+	testutil.FailErr(t, "prepare index", catalogtest.AwaitIndex(t.Context(), sourcecatalog.Process(), p.ID, sourcecatalog.Root{ID: p.Roots[0].ID, Path: p.Roots[0].Path}))
+	leg := &search.SymbolPlanLeg{
+		Name:  "Target",
+		Query: search.TextExpr{Text: "Target"},
+		Roots: []search.CodeRoot{{ProjectID: p.ID, RootID: p.Roots[0].ID, Path: p.Roots[0].Path}},
+		Cap:   200,
+		Flags: search.MatchFlags{WholeWord: true},
+	}
+	e := NewSymbolExecutor(registry)
+	e.legBudget = unboundedSymbolLegBudget
+	var revalFiles []int
+	var revalBytes []int64
+	e.onRevalidated = func(files int, bytes int64) {
+		revalFiles = append(revalFiles, files)
+		revalBytes = append(revalBytes, bytes)
+	}
+
+	s1, err := e.Run(t.Context(), search.PlanLeg{Symbol: leg})
+	testutil.FailErr(t, "slice 1", err)
+	if len(s1.Hits) != 48 || len(s1.Issues) == 0 {
+		t.Fatalf("slice 1 = %d hits, issues=%+v; want 48 hits + symbol_pending", len(s1.Hits), s1.Issues)
+	}
+
+	s2, err := e.Run(t.Context(), search.PlanLeg{Symbol: leg})
+	testutil.FailErr(t, "slice 2", err)
+	if len(revalBytes) != 2 || revalBytes[1] > symbolRevalidateByteLimit {
+		t.Fatalf("slice 2 exceeded pre-read validation budget: revalBytes=%v limit=%d", revalBytes, symbolRevalidateByteLimit)
+	}
+	if revalFiles[1] == 0 || revalFiles[1] >= 48 {
+		t.Fatalf("expected partial validation under 2 MiB pressure (0 < n < 48), got revalFiles=%v", revalFiles)
+	}
+	// Verify every tail candidate f048.go..f059.go was outlined and returned.
+	seen := make(map[string]bool, len(s2.Hits))
+	for _, h := range s2.Hits {
+		seen[h.Path] = true
+	}
+	for i := 48; i < 60; i++ {
+		want := fmt.Sprintf("f%03d.go", i)
+		if !seen[want] {
+			t.Fatalf("tail candidate %s was starved under validation byte pressure (hits=%d)", want, len(s2.Hits))
+		}
+	}
+	// Verify explicit scoped symbol_budget gap accounts for deferred files.
+	wantDeferred := 48 - revalFiles[1]
+	foundGap := false
+	for _, iss := range s2.Issues {
+		if iss.Reason == search.IssueReason("symbol_budget") && iss.Count == wantDeferred && iss.Limit == int(symbolRevalidateByteLimit) {
+			foundGap = true
+		}
+	}
+	if !foundGap {
+		t.Fatalf("expected scoped symbol_budget gap (count=%d limit=%d), got issues=%+v", wantDeferred, symbolRevalidateByteLimit, s2.Issues)
 	}
 }
