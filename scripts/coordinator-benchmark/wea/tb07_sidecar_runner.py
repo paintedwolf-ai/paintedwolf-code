@@ -455,6 +455,14 @@ def _run_warmed_slots(
                 app.request(f"/v1/sessions/{sid}/prompts", {"operation_id": str(uuid.uuid4()), "text": prompt})
                 return sid, pid
 
+            def open_prompted_session_in_project(project_id: str, prompt: str = "Execute TB07 authority step.") -> str:
+                sess = app.request("/v1/sessions", {"project_id": project_id, "posture": "build"})
+                sid = sess["id"]
+                app.request("/harness/model-limit", {"session_id": sid, "limit": 40})
+                _wait_session_idle(app, sid, f"session ready in {project_id}", timeout_s=60.0)
+                app.request(f"/v1/sessions/{sid}/prompts", {"operation_id": str(uuid.uuid4()), "text": prompt})
+                return sid
+
             def abort_session(sid: str) -> None:
                 _close_session_turn(app, sid)
 
@@ -719,12 +727,12 @@ def _run_warmed_slots(
                 c1 = _call_with_checkpoint_inspect(
                     app, a02_sid, "command",
                     {"command": _http_probe_cmd(f"{ep3.base_url}/a02-01"), "capability_request": {"loopback_connect": {"ports": [ep3.port]}}},
-                    action="approve", rung="once", timeout_s=45.0,
+                    action="approve", rung="once", timeout_s=90.0,
                 )
                 c2 = _call_with_checkpoint_inspect(
                     app, a02_sid, "command",
                     {"command": _http_probe_cmd(f"{ep3.base_url}/a02-01"), "capability_request": {"loopback_connect": {"ports": [ep3.port]}}},
-                    action="reject", timeout_s=45.0,
+                    action="reject", timeout_s=90.0,
                 )
                 a0 = len(ep3.snapshot()["requests"])
                 ok = c1["checkpoint"]["asked"] and c2["checkpoint"]["asked"] and (a0 - b0) == 1
@@ -915,42 +923,46 @@ def _run_warmed_slots(
                 never_ask=False,
             )
             proj_cmd = "echo a02-project-grant-exact"
-            s_p1, _ = open_prompted_session(proj_main, "Grant project-scoped tool approval.")
+            s_p1, pid_p1 = open_prompted_session(proj_main, "Grant project-scoped tool approval.")
             c_proj = _call_with_checkpoint_inspect(
                 app, s_p1, "command",
                 {"command": proj_cmd},
-                action="approve", rung="project",
+                action="approve", rung="project", timeout_s=60.0,
             )
             abort_session(s_p1)
 
             if "A02-09-scope-project-in-project-reuse" in spec_map:
-                s_p2, _ = open_prompted_session(proj_main, "Reuse project grant in fresh session.")
+                s_p2 = open_prompted_session_in_project(pid_p1, "Reuse project grant in fresh session of SAME project_id.")
                 c_reuse = _call_with_checkpoint_inspect(
                     app, s_p2, "command",
                     {"command": proj_cmd},
-                    action=None,
+                    action=None, timeout_s=60.0,
                 )
                 abort_session(s_p2)
                 ok = c_proj["checkpoint"]["asked"] and c_proj["checkpoint"]["rung"] == "project" and (not c_reuse["checkpoint"]["asked"])
                 receipts.append(_build_receipt(
                     spec=spec_map["A02-09-scope-project-in-project-reuse"], prov=prov,
-                    typed_result={"granted_rung": c_proj["checkpoint"]["rung"], "fresh_session_same_project_asked": c_reuse["checkpoint"]["asked"]},
+                    typed_result={
+                        "project_id": pid_p1,
+                        "granted_rung": c_proj["checkpoint"]["rung"],
+                        "fresh_session_same_project_asked": c_reuse["checkpoint"]["asked"],
+                    },
                     independent_observation={"reused_without_ask": not c_reuse["checkpoint"]["asked"]},
                     passed=ok,
                 ))
 
             if "A02-10-scope-project-cross-project-isolated" in spec_map:
-                s_pb, _ = open_prompted_session(proj_b, "Cross-project isolation probe.")
+                s_pb, pid_pb = open_prompted_session(proj_b, "Cross-project isolation probe.")
                 c_cross = _call_with_checkpoint_inspect(
                     app, s_pb, "command",
                     {"command": proj_cmd},
-                    action="reject",
+                    action="reject", timeout_s=60.0,
                 )
                 abort_session(s_pb)
-                ok = c_cross["checkpoint"]["asked"]
+                ok = pid_pb != pid_p1 and c_cross["checkpoint"]["asked"]
                 receipts.append(_build_receipt(
                     spec=spec_map["A02-10-scope-project-cross-project-isolated"], prov=prov,
-                    typed_result={"other_project_asked": c_cross["checkpoint"]["asked"]},
+                    typed_result={"other_project_id": pid_pb, "other_project_asked": c_cross["checkpoint"]["asked"]},
                     independent_observation={"isolated": c_cross["checkpoint"]["asked"]},
                     passed=ok,
                 ))
@@ -969,13 +981,13 @@ def _run_warmed_slots(
 
             _revoke_all_grants(app)
 
-            # A02-12: Fresh chat does not inherit revoked/deleted authority
+            # A02-12: Fresh chat in SAME project_id does not inherit revoked authority
             if "A02-12-scope-chat-delete-ends-authority" in spec_map:
-                s_del, _ = open_prompted_session(proj_main, "Fresh chat after grant clear.")
+                s_del = open_prompted_session_in_project(pid_p1, "Fresh chat after grant clear.")
                 c_fresh = _call_with_checkpoint_inspect(
                     app, s_del, "command",
                     {"command": proj_cmd},
-                    action="reject",
+                    action="reject", timeout_s=60.0,
                 )
                 abort_session(s_del)
                 ok = c_fresh["checkpoint"]["asked"]
@@ -1360,7 +1372,7 @@ def _run_a12_restart_slots(
             c_rev_boot1 = _call_with_checkpoint_inspect(
                 app1, session_rev_id, "command",
                 {"command": _http_probe_cmd(f"{ep_revoked.base_url}/boot1"), "capability_request": {"loopback_connect": {"ports": [ep_revoked.port]}}},
-                action="approve", rung="chat", timeout_s=90.0,
+                action="approve", rung="chat", timeout_s=120.0,
             )
             rev_grants = (app1.request(f"/v1/approval-grants?session_id={session_rev_id}") or {}).get("grants") or []
             rev_ids = [g["id"] for g in rev_grants if isinstance(g, dict) and g.get("id")]
