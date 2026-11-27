@@ -218,13 +218,16 @@ def write_evidence_manifest(
     provenance: RunProvenance,
     artifact_files: dict[str, Path],
     extra: dict[str, object] | None = None,
+    *,
+    replay_command: list[str] | None = None,
+    launch_receipt: dict[str, object] | None = None,
 ) -> Path:
-    """Write manifest.json binding provenance and SHA-256 digests of every artifact file."""
-    out = Path(out_dir)
+    """Write manifest.json with locally-resolvable relative artifact paths, replay_command, and launch_receipt."""
+    out = Path(out_dir).resolve()
     out.mkdir(parents=True, exist_ok=True)
     digests = {
         name: {
-            "path": str(Path(p)),
+            "path": Path(os.path.relpath(Path(p).resolve(), out)).as_posix(),
             "sha256": file_sha256(Path(p)),
             "size_bytes": Path(p).stat().st_size,
         }
@@ -235,6 +238,10 @@ def write_evidence_manifest(
         "provenance": provenance.to_dict(),
         "artifacts": digests,
     }
+    if replay_command is not None:
+        payload["replay_command"] = list(replay_command)
+    if launch_receipt is not None:
+        payload["launch_receipt"] = dict(launch_receipt)
     if extra:
         payload["summary"] = extra
     manifest_path = out / "manifest.json"

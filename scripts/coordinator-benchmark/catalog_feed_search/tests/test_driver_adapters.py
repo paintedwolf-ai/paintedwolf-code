@@ -600,6 +600,8 @@ class SidecarLiveSSESubscriberAndControlsTests(unittest.TestCase):
                 sse_factory,
                 provenance=provenance,
                 out_dir=out_dir,
+                replay_command=["python3", "-m", "catalog_feed_search.cli", "live-controls", "--out-dir", "."],
+                launch_receipt={"pid": 12345, "url": "http://127.0.0.1:9999", "binary_sha256": "abc123"},
                 clock_fn=lambda: next(ticks),
                 clock_domain="manual",
             )
@@ -609,6 +611,18 @@ class SidecarLiveSSESubscriberAndControlsTests(unittest.TestCase):
             self.assertTrue(created_subs[0].started and created_subs[0].ready_checked and created_subs[0].closed)
             self.assertEqual(report.controls[0].evidence["projection"], "catalog")
             self.assertEqual(report.controls[0].evidence["generation_revision"], 7)
+            self.assertIn("raw_index_summary", report.controls[0].evidence)
+            self.assertIn("raw_search_response", report.controls[2].evidence)
+            self.assertEqual(
+                report.controls[2].evidence["projected_product_hits"],
+                report.controls[2].evidence["projected_reference_hits"],
+            )
+
+            # Verify manifest uses locally-resolvable relative paths + replay_command + launch_receipt.
+            manifest = json.loads(report.manifest_path.read_text(encoding="utf-8"))  # type: ignore[union-attr]
+            self.assertEqual(manifest["artifacts"]["live_controls"]["path"], "live_controls.json")
+            self.assertEqual(manifest["replay_command"][0], "python3")
+            self.assertEqual(manifest["launch_receipt"]["pid"], 12345)
 
             # Verify browse projection descends `is_dir: True` and labels projection="browse".
             browse_ans = driver.walk_browse("proj-1", ["root-1"])

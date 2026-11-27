@@ -85,6 +85,34 @@ def _cmd_live_controls(args: argparse.Namespace) -> int:
     out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    launch_receipt: dict[str, object] | None = None
+    extra_artifacts: dict[str, Path] = {}
+    if args.launch_receipt:
+        lr_path = Path(args.launch_receipt).resolve()
+        launch_receipt = json.loads(lr_path.read_text(encoding="utf-8"))
+        extra_artifacts["launch_receipt"] = lr_path
+
+    replay_cmd = [
+        "python3",
+        "-m",
+        "catalog_feed_search.cli",
+        "live-controls",
+        "--url",
+        args.url,
+        "--token",
+        "<REDACTED>",
+        "--engine-bin",
+        args.engine_bin,
+        "--d1-commit",
+        args.d1_commit,
+        "--d1-tree",
+        args.d1_tree,
+        "--out-dir",
+        ".",
+        "--rg-bin",
+        args.rg_bin,
+    ]
+
     with tempfile.TemporaryDirectory() as tmp:
         work_root = Path(tmp) / "fixture"
         provenance = collect_run_provenance(
@@ -96,6 +124,7 @@ def _cmd_live_controls(args: argparse.Namespace) -> int:
             rg_bin=args.rg_bin,
         )
         sse_path = out_dir / "sse_events.jsonl"
+        extra_artifacts["sse_events"] = sse_path
         report = run_three_live_controls(
             driver,
             work_root,
@@ -107,7 +136,9 @@ def _cmd_live_controls(args: argparse.Namespace) -> int:
             ),
             provenance=provenance,
             out_dir=out_dir,
-            extra_artifacts={"sse_events": sse_path},
+            extra_artifacts=extra_artifacts,
+            replay_command=replay_cmd,
+            launch_receipt=launch_receipt,
             rg_bin=args.rg_bin,
         )
     print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
@@ -139,6 +170,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_live.add_argument("--out-dir", required=True, help="Output directory for evidence & manifest")
     p_live.add_argument("--rg-bin", default="rg", help="Path to ripgrep 15.x executable")
     p_live.add_argument("--repo-root", default="", help="Harness repo root for git provenance")
+    p_live.add_argument("--launch-receipt", default="", help="Optional JSON receipt binding sidecar PID/URL/binary")
     p_live.set_defaults(func=_cmd_live_controls)
 
     return parser
