@@ -100,13 +100,17 @@ class CompletionWakeTests(unittest.TestCase):
                 }
                 db.execute('INSERT INTO messages VALUES(?,?,?)', ('sess', 1, json.dumps(result)))
             app = Mock(directory=root)
+            token = 'b' * 64
+            request = {'messages': [{'role': 'system', 'content': json.dumps({'reconciliation': {'token': token}})}]}
             updated = smoke_workers.progress_args(
                 app,
                 'sess',
                 {'content': '## Progress\n- [x] First leg\n- [ ] Second leg\n'},
+                request=request,
             )
             self.assertEqual(updated['expected_revision'], 'a' * 64)
             self.assertEqual(updated['item_ids'], ['item-1', 'item-2'])
+            self.assertEqual(updated['reconciliation_token'], token)
             fresh = smoke_workers.progress_args(app, 'other-sess', {'content': '- [ ] New\n'})
             self.assertEqual(fresh, {'content': '- [ ] New\n'})
 

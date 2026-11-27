@@ -33,7 +33,12 @@ def respond(application, session, calls):
         if any(name not in request['tools'] for name in tools):
             raise RuntimeError('coordinator tools were not loaded: ' + ','.join(missing))
     ids = [str(uuid.uuid4()) for _ in calls]
-    application.request('/harness/llm/respond', {'id': request['id'], 'tool_calls': [{'id': i, **c} for i, c in zip(ids, calls)]})
+    resolved_calls = [
+        {**c, 'args': progress_args(application, session, c.get('args') or {}, request=request)}
+        if c.get('name') == 'update_progress' else c
+        for c in calls
+    ]
+    application.request('/harness/llm/respond', {'id': request['id'], 'tool_calls': [{'id': i, **c} for i, c in zip(ids, resolved_calls)]})
     return [terminal(application, session, i) for i in ids]
 
 
@@ -77,37 +82,67 @@ def _latest_progress_snapshot(application, session):
     return None
 
 
-def progress_args(application, session, args):
-    if 'expected_revision' in args:
-        return args
-    snapshot = _latest_progress_snapshot(application, session)
-    if not snapshot:
-        return args
+def _reconciliation_token_from_request(request):
+    if not isinstance(request, dict):
+        return ''
+    texts = []
+    for key in ('system', 'system_prompt', 'prompt'):
+        val = request.get(key)
+        if isinstance(val, str):
+            texts.append(val)
+    for msg in request.get('messages') or ():
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get('content')
+        if isinstance(content, str):
+            texts.append(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and isinstance(part.get('text'), str):
+                    texts.append(part['text'])
+    patterns = (
+        re.compile(r'"reconciliation"\s*:\s*\{[^{}]*"token"\s*:\s*"([0-9a-f]{64})"'),
+        re.compile(r'"reconciliation_token"\s*:\s*"([0-9a-f]{64})"'),
+    )
+    for text in reversed(texts):
+        for pattern in patterns:
+            match = pattern.search(text)
+            if match:
+                return match.group(1)
+    return ''
+
+
+def progress_args(application, session, args, request=None):
     updated = dict(args)
-    updated['expected_revision'] = snapshot['revision']
-    if 'item_ids' not in updated:
-        prev_labels = _checklist_labels(snapshot.get('content', ''))
-        prev_ids = list(snapshot.get('item_ids') or ())
-        by_label = {}
-        for label, item_id in zip(prev_labels, prev_ids):
-            by_label.setdefault(label, []).append(item_id)
-        new_labels = _checklist_labels(updated.get('content', ''))
-        aligned = []
-        for idx, label in enumerate(new_labels):
-            bucket = by_label.get(label)
-            if bucket:
-                aligned.append(bucket.pop(0))
-            elif idx < len(prev_ids) and len(new_labels) == len(prev_labels):
-                aligned.append(prev_ids[idx])
-            else:
-                aligned.append('')
-        updated['item_ids'] = aligned
+    if 'expected_revision' not in updated:
+        snapshot = _latest_progress_snapshot(application, session)
+        if snapshot:
+            updated['expected_revision'] = snapshot['revision']
+            if 'item_ids' not in updated:
+                prev_labels = _checklist_labels(snapshot.get('content', ''))
+                prev_ids = list(snapshot.get('item_ids') or ())
+                by_label = {}
+                for label, item_id in zip(prev_labels, prev_ids):
+                    by_label.setdefault(label, []).append(item_id)
+                new_labels = _checklist_labels(updated.get('content', ''))
+                aligned = []
+                for idx, label in enumerate(new_labels):
+                    bucket = by_label.get(label)
+                    if bucket:
+                        aligned.append(bucket.pop(0))
+                    elif idx < len(prev_ids) and len(new_labels) == len(prev_labels):
+                        aligned.append(prev_ids[idx])
+                    else:
+                        aligned.append('')
+                updated['item_ids'] = aligned
+    if 'reconciliation_token' not in updated:
+        token = _reconciliation_token_from_request(request)
+        if token:
+            updated['reconciliation_token'] = token
     return updated
 
 
 def invoke(application, session, tool, args):
-    if tool == 'update_progress':
-        args = progress_args(application, session, args)
     return respond(application, session, [{'name': tool, 'args': args}])[0]
 
 
