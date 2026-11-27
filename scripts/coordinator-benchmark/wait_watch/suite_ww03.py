@@ -1038,6 +1038,28 @@ def run_slot_c06(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed
     return bundle
 
 
+def _resolve_engine_root(engine_bin: pathlib.Path | None) -> pathlib.Path | None:
+    """Locate an engine-root containing gitengine/bin/git for bundled git tests."""
+    candidates: list[pathlib.Path] = []
+    if env_root := os.environ.get("LYCAON_ENGINE_ROOT", "").strip():
+        candidates.append(pathlib.Path(env_root))
+    candidates.append(REPO_ROOT / "lycaon-den/src-tauri/engine-root")
+    if engine_bin is not None:
+        eb = engine_bin.resolve()
+        candidates.extend([
+            eb.parent / "engine-root",
+            eb.parent,
+            eb.parent.parent / "engine-root",
+            eb.parent.parent / "lycaon-den/src-tauri/engine-root",
+        ])
+    for cand in candidates:
+        if (cand / "gitengine" / "bin" / "git").is_file():
+            return cand
+    # Fall back to the canonical repo engine-root if it exists.
+    default_root = REPO_ROOT / "lycaon-den/src-tauri/engine-root"
+    return default_root if default_root.is_dir() else None
+
+
 def run_slot_c06_git_ssh(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | None, seed: int, timeout_s: float) -> dict[str, Any]:
     """C06-git-ssh-transport-refusal: invoke real #2708 Git SSH transport refusal & receipt parity fixture."""
     started = time.monotonic() * 1000.0
@@ -1055,11 +1077,16 @@ def run_slot_c06_git_ssh(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | No
         "^TestGitSSHTransport(DeliveryParityAndReceiptReopen|SetupDialUnknownAndMultiRemoteIsolation)$",
         "./test/wiring/commands",
     ]
+    env = dict(os.environ)
+    engine_root = _resolve_engine_root(engine_bin)
+    if engine_root is not None:
+        env["LYCAON_ENGINE_ROOT"] = str(engine_root)
     timed_out = False
     try:
         proc = subprocess.run(
             cmd,
             cwd=REPO_ROOT,
+            env=env,
             capture_output=True,
             text=True,
             timeout=max(300.0, timeout_s * 10.0),
@@ -1100,6 +1127,7 @@ def run_slot_c06_git_ssh(out_dir: pathlib.Path, *, engine_bin: pathlib.Path | No
         "seed": seed,
         "elapsed_ms": round(time.monotonic() * 1000.0 - started, 2),
         "command": cmd,
+        "lycaon_engine_root": str(engine_root) if engine_root is not None else "",
         "returncode": returncode,
         "timed_out": timed_out,
         "log_path": str(log_path),
