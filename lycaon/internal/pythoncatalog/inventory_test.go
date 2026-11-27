@@ -200,7 +200,7 @@ func TestCompactDiscoverySummaryAndTargetedHelp(t *testing.T) {
 
 	summary := RenderCompactDiscoverySummary(m)
 	for _, want := range []string{
-		"56 public packages",
+		"58 public packages",
 		"Offline Office & PDF creation",
 		"SVG charts",
 		"Legacy XLS",
@@ -228,6 +228,8 @@ func TestCompactDiscoverySummaryAndTargetedHelp(t *testing.T) {
 		{query: "spdx", wantMatch: "license_expression", wantOmit: "tinycss2"},
 		{query: "graphql", wantMatch: "build_schema", wantOmit: "tinycss2"},
 		{query: "css", wantMatch: "tinycss2", wantOmit: "PyJWT"},
+		{query: "Unicode text boundaries", wantMatch: "regex", wantOmit: "hcl2"},
+		{query: "read Terraform blocks", wantMatch: "hcl2", wantOmit: "tinycss2"},
 	}
 	for _, tc := range targetedCases {
 		got := RenderTargetedHelp(m, tc.query)

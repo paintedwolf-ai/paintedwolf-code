@@ -59,6 +59,7 @@ var legacyImportAliases = map[string]string{
 	"python_dotenv":      "dotenv",
 	"license-expression": "license_expression",
 	"graphql-core":       "graphql",
+	"python_hcl2":        "hcl2",
 }
 
 // portableNumericOutOfScope lists numeric/dataframe/plotting packages outside

@@ -72,6 +72,10 @@ func taskSummaryForPY11Distribution(normalizedName string) string {
 		return "parse and validate GraphQL operations against a local schema"
 	case "tinycss2":
 		return "parse CSS stylesheets, at-rules and custom properties"
+	case "regex":
+		return "Unicode text boundaries (\\X graphemes), script properties, overlapping matches and timeouts"
+	case "python-hcl2":
+		return "read Terraform blocks and HCL2 configurations as structured data"
 	default:
 		return ""
 	}
@@ -227,6 +231,20 @@ func py11OnDemandExamples() []CapabilityExample {
 			Distribution: "tinycss2",
 			TaskPhrases:  []string{"css", "parse css", "stylesheet", "tinycss2"},
 			Snippet:      "import tinycss2\nrules = tinycss2.parse_stylesheet('@media screen { :root { --x: \"a;b\"; } }', skip_whitespace=True)",
+		},
+		{
+			ID:           "regex",
+			Title:        "Match Unicode text boundaries (\\X graphemes), properties and overlapping spans",
+			Distribution: "regex",
+			TaskPhrases:  []string{"Unicode text boundaries", "grapheme clusters", "unicode properties", "overlapping matches", "regex"},
+			Snippet:      "import regex\nclusters = regex.findall(r'\\X', 'e\\u0301\\U0001f469\\u200d\\U0001f4bb')\ngreek = regex.findall(r'\\p{Script=Greek}+', 'alpha \\u03b1\\u03b2\\u03b3 123')\nspans = [m.span() for m in regex.finditer(r'aba', 'ababa', overlapped=True, timeout=1.0)]",
+		},
+		{
+			ID:           "python-hcl2",
+			Title:        "Read Terraform blocks and HCL2 expressions with python-hcl2",
+			Distribution: "python-hcl2",
+			TaskPhrases:  []string{"read Terraform blocks", "terraform", "hcl2", "python-hcl2"},
+			Snippet:      "import hcl2\nwith open('main.tf', 'r', encoding='utf-8') as fh:\n    data = hcl2.load(fh)\nresources = data.get('resource', [])",
 		},
 	}
 }

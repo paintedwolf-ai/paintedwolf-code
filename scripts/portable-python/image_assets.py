@@ -92,6 +92,7 @@ def write_third_party_notices(
         "- libxml2 2.12.9 & libxslt 1.1.42 (MIT) — built into WASI guest for lxml.etree XPath/XML support",
         "- Pillow 11.1.0 built-in PIL._imaging C extension (MIT-CMU)",
         "- lxml 5.3.0 built-in lxml.etree & lxml._elementpath Cython/C extensions (BSD-3-Clause)",
+        "- regex 2024.11.6 built-in regex._regex C extension (Apache-2.0)",
         "",
         "Bundled Python Distributions:",
     ]
