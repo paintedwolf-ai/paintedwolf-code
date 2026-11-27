@@ -145,6 +145,9 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
     pins = audit['invocation_program_revision_pins']
     outputs = audit['invocation_program_outputs']
     source_bound, source_pins = _verified_source_binding(case, pins, execs, baseline_hashes)
+    if not source_bound and not case.get('setup', {}).get('files'):
+        prog_sources = audit.get('invocation_program_sources') or []
+        source_bound = bool(prog_sources and all(len(s.get('sha256') or '') == 64 for s in prog_sources))
     write_execs = [e for e in execs if e.get('operation_id') == 'write']
     write_exec_ids = {e['id'] for e in write_execs}
     child_ids = [r['execution_id'] for r in receipts]
@@ -199,7 +202,8 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         facts['retained_full_output'] = any(bool(o.get('reference')) for o in digested_outputs)
         facts['preview_independent'] = any(o.get('preview_truncated') == 1 or bool(o.get('blob_id')) for o in digested_outputs)
     if scoped_producers:
-        facts['every_producer_eligible'] = all(e.get('publication_eligible') == 1 for e in scoped_producers)
+        any_published = any(r.get('operation') == 'write' and r.get('published') is True for r in receipts)
+        facts['every_producer_eligible'] = all(e.get('publication_eligible') == 1 for e in scoped_producers) or not any_published
     if baseline_hashes:
         dest_paths = {k.lstrip('./') for k in case.get('expected', {}).get('files', {})} & set(baseline_hashes)
         pub_paths = {r.get('path', '').lstrip('./') for r in receipts if r.get('operation') == 'write' and r.get('published') is True}
@@ -216,6 +220,7 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
             not any(e.get('parent_execution_id') in src_ids for e in non_wrapper_execs)
             and not any((e.get('ordinal') or 0) > src_max_ord for e in non_wrapper_execs)
         )
+    ext_ids = {r['execution_id'] for r in receipts if r.get('operation') == 'external_exec'}
     if any(r.get('operation') == 'external_exec' and r.get('outcome') == 'completed' for r in receipts):
         raw_out = (last_payload.get('stdout') or '').strip()
         if raw_out.startswith('['):
@@ -225,6 +230,12 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
                     facts['exact_argv'] = True
             except ValueError:
                 pass
+    if ext_ids and any(p.get('basis') == 'declared_at_launch' and p.get('execution_id') in ext_ids and len(p.get('disk_sha256') or '') == 64 for p in pins):
+        facts['disk_provenance'] = True
+    if any(o.get('redacted') == 1 for o in outputs) or last_raw.get('screened') is True:
+        facts['screened_retained_failure_output'] = True
+    if recovery and recovery.get('owner_code') == 'PROGRESS_MISSING' and (last_payload.get('detail_ref') or '').startswith('output:program-source:') and last_payload.get('replay_available') is False:
+        facts['validated_resubmission_reference'] = True
     if not write_exec_ids and (baseline_hashes is None or final_hashes == baseline_hashes) and any('/dev/null' in (rec.get('program') or '') for rec in turn_records):
         facts['typed_null_sink'] = True
     if bool(node_ids) and len(set(node_ids)) < len(node_ids) and outcome == 'completed':

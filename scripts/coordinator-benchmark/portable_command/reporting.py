@@ -78,18 +78,13 @@ FACT_OWNERS = {
     'same_physical_identity': 'temp_owner', 'session_authored_paths': 'git_owner',
     'temp_path_owned': 'temp_owner', 'typed_null_sink': 'program_runtime',
     'validated_resubmission_reference': 'progress_owner', 'verification_source_match': 'verification_owner',
-    'screened_retained_failure_output': 'security_screen_owner',
-    'retained_full_output': 'output_retention_owner',
-    'full_stream_digest': 'output_retention_owner',
-    'preview_independent': 'output_retention_owner',
-    'every_producer_eligible': 'program_runtime',
-    'progress_committed_separately': 'progress_owner',
-    'no_gated_effect': 'program_runtime',
-    'fresh_resubmission_only': 'program_runtime',
-    'destination_unchanged': 'filesystem_owner',
-    'accepted_then_published': 'publication_owner',
-    'no_source_statement_started': 'source_owner',
-    'zip_slip_refused': 'archive_owner', 'no_outside_effect': 'filesystem_owner', 'owner_refusal': 'archive_owner',
+    'screened_retained_failure_output': 'security_screen_owner', 'retained_full_output': 'output_retention_owner',
+    'full_stream_digest': 'output_retention_owner', 'preview_independent': 'output_retention_owner',
+    'every_producer_eligible': 'program_runtime', 'progress_committed_separately': 'progress_owner',
+    'no_gated_effect': 'program_runtime', 'fresh_resubmission_only': 'program_runtime',
+    'destination_unchanged': 'filesystem_owner', 'accepted_then_published': 'publication_owner',
+    'no_source_statement_started': 'source_owner', 'zip_slip_refused': 'archive_owner',
+    'no_outside_effect': 'filesystem_owner', 'owner_refusal': 'archive_owner',
 }
 
 
@@ -128,7 +123,8 @@ def extract_recovery(case_id, payload, raw_result, audit, unexpected_cmd):
         cause, remedy = code.lower(), ('focused_command_help' if has_help else '')
     zero_effects = (
         payload.get('completed_effects', 0) == 0 and payload.get('uncertain_effects', 0) == 0
-        and not audit['invocation_program_executions'] and details.get('command_execution') in {None, 'not_started'}
+        and all(e.get('state') in {'refused', 'rejected'} and e.get('effect_certainty') in {None, '', 'none'} for e in audit['invocation_program_executions'])
+        and details.get('command_execution') in {None, 'not_started'}
     )
     inv_failure = (raw_result.get('invocation') or {}).get('failure') or {}
     replay_fact = details.get('program_replay_available')
