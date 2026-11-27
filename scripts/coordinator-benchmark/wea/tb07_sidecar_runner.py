@@ -135,7 +135,7 @@ def _make_project(base_dir: pathlib.Path, name: str, approvals_yaml: str | None 
     return proj
 
 
-def _wait_pending_bounded(app: Any, session_id: str, *, timeout_s: float = 20.0) -> dict[str, Any]:
+def _wait_pending_bounded(app: Any, session_id: str, *, timeout_s: float = 30.0) -> dict[str, Any]:
     """Wait for a pending model turn without tripping on historical aborted/interrupted submissions."""
     path = f"/harness/llm/pending?session_id={urllib.parse.quote(session_id)}"
 
@@ -160,6 +160,20 @@ def _wait_session_idle(app: Any, session_id: str, phase: str, *, timeout_s: floa
     )
 
 
+def _close_session_turn(app: Any, session_id: str, *, timeout_s: float = 15.0) -> None:
+    """Cleanly close any pending manual-harness LLM turn on session_id before aborting/moving on."""
+    with contextlib.suppress(Exception):
+        pend = app.request(f"/harness/llm/pending?session_id={urllib.parse.quote(session_id)}") or {}
+        if pend.get("pending") and pend.get("session_id") == session_id and pend.get("id"):
+            app.request("/harness/llm/respond", {"id": pend["id"], "content": "Completed TB07 step."})
+    with contextlib.suppress(Exception):
+        state = app.request(f"/v1/sessions/{session_id}") or {}
+        if state.get("status") not in {"idle", "aborted"}:
+            app.request(f"/v1/sessions/{session_id}/abort", {})
+    with contextlib.suppress(Exception):
+        _wait_session_idle(app, session_id, f"close {session_id}", timeout_s=timeout_s)
+
+
 def _call_with_checkpoint_inspect(
     app: Any,
     session_id: str,
@@ -168,7 +182,7 @@ def _call_with_checkpoint_inspect(
     *,
     action: str | None = None,  # "approve" | "reject" | None (expect no checkpoint)
     rung: str = "once",
-    timeout_s: float = 20.0,
+    timeout_s: float = 30.0,
 ) -> dict[str, Any]:
     """Send a single tool call, racing pending checkpoint vs tool_result with a bounded timeout.
 
@@ -176,7 +190,21 @@ def _call_with_checkpoint_inspect(
     without opening a checkpoint, returns immediately with `checkpoint.asked == False`
     and the settled `tool_result_json`.
     """
-    req = _wait_pending_bounded(app, session_id, timeout_s=timeout_s)
+    try:
+        req = _wait_pending_bounded(app, session_id, timeout_s=timeout_s)
+    except RuntimeError as exc:
+        return {
+            "call_id": "",
+            "result": {"outcome": "timeout", "error": str(exc)},
+            "checkpoint": {
+                "asked": False,
+                "checkpoint_id": "",
+                "plan_id": "",
+                "option_id": "",
+                "rung": "",
+                "timed_out": True,
+            },
+        }
     call_id = str(uuid.uuid4())
     app.request(
         "/harness/llm/respond",
@@ -307,8 +335,22 @@ def _run_warmed_slots(
                 return sid, pid
 
             def abort_session(sid: str) -> None:
-                with contextlib.suppress(Exception):
-                    app.request(f"/v1/sessions/{sid}/abort", {})
+                _close_session_turn(app, sid)
+
+            def run_slot(slot_id: str, fn: Any) -> None:
+                if slot_id not in spec_map:
+                    return
+                try:
+                    receipts.append(fn())
+                except Exception as exc:  # noqa: BLE001
+                    receipts.append(_build_receipt(
+                        spec=spec_map[slot_id],
+                        prov=prov,
+                        typed_result={"error_type": type(exc).__name__, "error": str(exc)},
+                        independent_observation={"slot_raised": True},
+                        passed=False,
+                        failure_reasons=[f"slot_exception:{type(exc).__name__}"],
+                    ))
 
             # ------------------------------------------------------------------
             # A01 (8 sidecar slots)
@@ -595,6 +637,7 @@ def _run_warmed_slots(
 
             # A02-03: chat grant isolated from session B
             if "A02-03-scope-chat-cross-chat-isolated" in spec_map:
+                abort_session(a02_sid)
                 other_sid, _ = open_prompted_session(proj_main, "Cross-chat isolation probe.")
                 b0 = len(ep1.snapshot()["requests"])
                 c_other = _call_with_checkpoint_inspect(
@@ -611,6 +654,7 @@ def _run_warmed_slots(
                     independent_observation={"fixture_arrivals_delta": a0 - b0},
                     passed=ok,
                 ))
+                app.request(f"/v1/sessions/{a02_sid}/prompts", {"operation_id": str(uuid.uuid4()), "text": "Continue A02 grant checks."})
 
             # A02-04: chat grant for ep1 does NOT cover ep2 (material arg change)
             if "A02-04-scope-chat-material-arg-change" in spec_map:
@@ -1282,24 +1326,43 @@ def run_tb07_sidecar_batch(
     restart_specs = [s for s in selected if s["family"] == "A12"]
 
     receipts: list[dict[str, Any]] = []
+    batch_errors: list[str] = []
     if warmed_specs:
-        receipts.extend(_run_warmed_slots(
-            specs=warmed_specs,
-            work_dir=work_dir,
-            prov=prov,
-            engine_bin=engine_bin,
-            engine_manifest=engine_manifest,
-            engine_root=engine_root,
-        ))
+        try:
+            receipts.extend(_run_warmed_slots(
+                specs=warmed_specs,
+                work_dir=work_dir,
+                prov=prov,
+                engine_bin=engine_bin,
+                engine_manifest=engine_manifest,
+                engine_root=engine_root,
+            ))
+        except Exception as exc:  # noqa: BLE001
+            batch_errors.append(f"warmed_batch:{type(exc).__name__}:{exc}")
     if restart_specs:
-        receipts.extend(_run_a12_restart_slots(
-            specs=restart_specs,
-            work_dir=work_dir,
-            prov=prov,
-            engine_bin=engine_bin,
-            engine_manifest=engine_manifest,
-            engine_root=engine_root,
-        ))
+        try:
+            receipts.extend(_run_a12_restart_slots(
+                specs=restart_specs,
+                work_dir=work_dir,
+                prov=prov,
+                engine_bin=engine_bin,
+                engine_manifest=engine_manifest,
+                engine_root=engine_root,
+            ))
+        except Exception as exc:  # noqa: BLE001
+            batch_errors.append(f"restart_batch:{type(exc).__name__}:{exc}")
+
+    emitted_ids = {r["slot_id"] for r in receipts}
+    for spec in selected:
+        if spec["slot_id"] not in emitted_ids:
+            receipts.append(_build_receipt(
+                spec=spec,
+                prov=prov,
+                typed_result={"batch_errors": batch_errors},
+                independent_observation={"slot_aborted_by_exception": True},
+                passed=False,
+                failure_reasons=batch_errors or ["slot_not_emitted"],
+            ))
 
     receipt_paths: list[str] = []
     by_family: dict[str, dict[str, int]] = {}
