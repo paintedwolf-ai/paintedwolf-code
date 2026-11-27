@@ -1,6 +1,9 @@
 name: Portable Python Paired Timing
 
 on:
+  push:
+    branches:
+      - portable-python/py10-paired-baseline
   workflow_dispatch:
     inputs:
       mode:
@@ -14,16 +17,8 @@ on:
         description: Baseline product git revision
         type: string
         default: ed905e29c75951c52e6be180630c45d2c9f07a8d
-      candidate-product-rev:
-        description: Candidate product git revision (compare mode only)
-        type: string
-        default: ''
       artifact-base-url:
-        description: Optional read-only HTTPS base URL hosting engine/ and image/ tarballs (blank uses bundled-manifest.yaml URLs)
-        type: string
-        default: ''
-      candidate-artifact-base-url:
-        description: Optional read-only HTTPS base URL for candidate engine/ and image/ tarballs (compare mode)
+        description: Optional read-only HTTPS base URL hosting engine/ and image/ tarballs (blank uses ephemeral encrypted transport)
         type: string
         default: ''
       samples:
@@ -43,40 +38,32 @@ permissions:
   contents: read
 
 jobs:
-  paired-timing:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: macos-arm64
-            runs-on: macos-15
-            expected_arch: arm64
-            platform_slug: darwin-arm64
-            target_triple: aarch64-apple-darwin
-            engine_archive: pw-cpython-wasi-engine-v0.2.0-darwin-arm64.tar.gz
-            engine_manifest: artifact-manifest-darwin-arm64.json
-          - name: linux-amd64
-            runs-on: ubuntu-24.04
-            expected_arch: x86_64
-            platform_slug: linux-amd64
-            target_triple: x86_64-unknown-linux-gnu
-            engine_archive: pw-cpython-wasi-engine-v0.2.0-linux-amd64.tar.gz
-            engine_manifest: artifact-manifest-linux-amd64.json
-    name: Paired timing (${{ matrix.name }})
-    runs-on: ${{ matrix.runs-on }}
-    timeout-minutes: 45
+  macos-arm64-baseline:
+    name: Paired baseline (macos-15 arm64)
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      EXPECTED_ARCH: arm64
+      ENGINE_ARCHIVE: pw-cpython-wasi-engine-v0.2.0-darwin-arm64.tar.gz
+      ENGINE_ARCHIVE_SHA256: 9987fed688b2a04d962b1b5b68912889d897fa3602afae4eb35ca5a003bf6376
+      IMAGE_ARCHIVE: portable-python-image-pyc.tar.gz
+      IMAGE_ARCHIVE_SHA256: a17b6d837216eb0824edfd6d5555fd2bd725a03212ac570fd1f6b475129393b6
+      PRODUCT_REV: ${{ inputs.product-rev || 'ed905e29c75951c52e6be180630c45d2c9f07a8d' }}
+      SAMPLES: ${{ inputs.samples || '5' }}
+      MIN_IDLE: ${{ inputs.min-idle || '90' }}
+      PRECHECK_SECONDS: ${{ inputs.precheck-seconds || '30' }}
     steps:
       - name: Assert effective architecture and capture runner metadata
         shell: bash
         run: |
           set -euo pipefail
           ACTUAL_ARCH="$(uname -m)"
-          echo "Expected arch: ${{ matrix.expected_arch }}, actual arch: ${ACTUAL_ARCH}"
-          test "${ACTUAL_ARCH}" = "${{ matrix.expected_arch }}"
+          echo "Expected arch: ${EXPECTED_ARCH}, actual arch: ${ACTUAL_ARCH}"
+          test "${ACTUAL_ARCH}" = "${EXPECTED_ARCH}"
           OUT_DIR="${RUNNER_TEMP}/paired-out"
           mkdir -p "${OUT_DIR}"
           {
-            echo "job_name=${{ matrix.name }}"
+            echo "job_name=macos-arm64-baseline"
             echo "runner_os=${RUNNER_OS}"
             echo "runner_arch=${RUNNER_ARCH}"
             echo "image_os=${ImageOS:-unknown}"
@@ -86,17 +73,32 @@ jobs:
             echo "github_run_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             echo "github_sha=${GITHUB_SHA}"
             echo "uname=$(uname -a)"
-            if [[ "${RUNNER_OS}" == "macOS" ]]; then
-              echo "logical_cpus=$(sysctl -n hw.logicalcpu)"
-              echo "cpu_brand=$(sysctl -n machdep.cpu.brand_string || true)"
-              echo "mem_bytes=$(sysctl -n hw.memsize)"
-              sw_vers
-            else
-              echo "logical_cpus=$(nproc)"
-              echo "glibc=$(ldd --version | head -n 1)"
-              lsb_release -a 2>/dev/null || true
-            fi
+            echo "logical_cpus=$(sysctl -n hw.logicalcpu)"
+            echo "cpu_brand=$(sysctl -n machdep.cpu.brand_string || true)"
+            echo "mem_bytes=$(sysctl -n hw.memsize)"
+            sw_vers
           } | tee "${OUT_DIR}/runner-metadata.txt"
+
+      - name: Generate ephemeral RSA-4096 keypair (pre-timing)
+        if: ${{ inputs.artifact-base-url == '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY_DIR="${RUNNER_TEMP}/ephemeral-key"
+          mkdir -p "${KEY_DIR}"
+          chmod 700 "${KEY_DIR}"
+          openssl genrsa -out "${KEY_DIR}/priv.pem" 4096 2>/dev/null
+          openssl rsa -in "${KEY_DIR}/priv.pem" -pubout -out "${KEY_DIR}/pub.pem" 2>/dev/null
+          echo "Generated ephemeral RSA-4096 public key for run ${GITHUB_RUN_ID}:"
+          shasum -a 256 "${KEY_DIR}/pub.pem"
+
+      - name: Upload ephemeral public key artifact
+        if: ${{ inputs.artifact-base-url == '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ephemeral-pubkey-${{ github.run_id }}
+          path: ${{ runner.temp }}/ephemeral-key/pub.pem
+          retention-days: 1
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -105,7 +107,50 @@ jobs:
           go-version-file: lycaon/go.mod
           cache: false
 
-      - name: Fetch read-only PY10 baseline artifacts (pre-timing)
+      - name: Fetch and decrypt frozen PY10 artifacts from ephemeral transport ref (pre-timing)
+        if: ${{ inputs.artifact-base-url == '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          REF="refs/heads/tmp/py10-transport-${GITHUB_RUN_ID}"
+          echo "Waiting for encrypted transport ref ${REF} (up to 300s)..."
+          FOUND=0
+          for i in $(seq 1 60); do
+            if git ls-remote --exit-code --heads origin "${REF}" >/dev/null 2>&1; then
+              FOUND=1
+              echo "Found ${REF} on poll ${i}"
+              break
+            fi
+            sleep 5
+          done
+          if [[ "${FOUND}" != "1" ]]; then
+            echo "ERROR: timed out waiting for ${REF}" >&2
+            exit 1
+          fi
+
+          TDIR="${RUNNER_TEMP}/transport-extract"
+          mkdir -p "${TDIR}"
+          git fetch --depth=1 origin "${REF}:refs/remotes/origin/py10-transport" --quiet
+          git archive "refs/remotes/origin/py10-transport" | tar -C "${TDIR}" -xf -
+
+          (
+            cd "${TDIR}"
+            cat chunk_* > payload.enc
+            shasum -a 256 -c payload.enc.sha256
+            openssl pkeyutl -decrypt -inkey "${RUNNER_TEMP}/ephemeral-key/priv.pem" -pkeyopt rsa_padding_mode:oaep -in sym.key.enc -out sym.key
+            DST="${HOME}/.local/share/paintedwolf-portable-python/results/PY10"
+            mkdir -p "${DST}"
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -pass file:sym.key -in payload.enc | tar -C "${DST}" -xf -
+          )
+          rm -rf "${TDIR}" "${RUNNER_TEMP}/ephemeral-key"
+
+          # Independently verify pinned PY10 SHA-256 digests BEFORE staging.
+          DST="${HOME}/.local/share/paintedwolf-portable-python/results/PY10"
+          echo "${ENGINE_ARCHIVE_SHA256}  ${DST}/engine/${ENGINE_ARCHIVE}" | shasum -a 256 -c -
+          echo "${IMAGE_ARCHIVE_SHA256}  ${DST}/image/${IMAGE_ARCHIVE}" | shasum -a 256 -c -
+          echo "PY10_FROZEN_ARTIFACTS_VERIFIED_OK"
+
+      - name: Fetch read-only PY10 baseline artifacts from HTTPS URL (pre-timing)
         if: ${{ inputs.artifact-base-url != '' }}
         shell: bash
         env:
@@ -114,14 +159,15 @@ jobs:
           set -euo pipefail
           DST="${HOME}/.local/share/paintedwolf-portable-python/results/PY10"
           mkdir -p "${DST}/engine" "${DST}/image"
-          curl -fsSL "${BASE_URL}/engine/${{ matrix.engine_archive }}" -o "${DST}/engine/${{ matrix.engine_archive }}"
+          curl -fsSL "${BASE_URL}/engine/${ENGINE_ARCHIVE}" -o "${DST}/engine/${ENGINE_ARCHIVE}"
           curl -fsSL "${BASE_URL}/engine/release-manifest.json" -o "${DST}/engine/release-manifest.json"
-          curl -fsSL "${BASE_URL}/engine/${{ matrix.engine_manifest }}" -o "${DST}/engine/${{ matrix.engine_manifest }}"
-          curl -fsSL "${BASE_URL}/image/portable-python-image-pyc.tar.gz" -o "${DST}/image/portable-python-image-pyc.tar.gz"
+          curl -fsSL "${BASE_URL}/engine/artifact-manifest-darwin-arm64.json" -o "${DST}/engine/artifact-manifest-darwin-arm64.json"
+          curl -fsSL "${BASE_URL}/image/${IMAGE_ARCHIVE}" -o "${DST}/image/${IMAGE_ARCHIVE}"
           curl -fsSL "${BASE_URL}/image/image-manifest.json" -o "${DST}/image/image-manifest.json"
+          echo "${ENGINE_ARCHIVE_SHA256}  ${DST}/engine/${ENGINE_ARCHIVE}" | shasum -a 256 -c -
+          echo "${IMAGE_ARCHIVE_SHA256}  ${DST}/image/${IMAGE_ARCHIVE}" | shasum -a 256 -c -
 
       - name: Run paired baseline (overrides UNSET, pre-compiled before timing)
-        if: ${{ inputs.mode == 'baseline' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -135,20 +181,20 @@ jobs:
             --repo-root "${GITHUB_WORKSPACE}" \
             --engine-root "${STAGE_DIR}" \
             --out-dir "${OUT_DIR}" \
-            --product-rev "${{ inputs.product-rev }}" \
-            --image-archive "${DST}/image/portable-python-image-pyc.tar.gz" \
-            --engine-archive "${DST}/engine/${{ matrix.engine_archive }}" \
-            --samples "${{ inputs.samples }}" \
-            --min-idle "${{ inputs.min-idle }}" \
-            --precheck-seconds "${{ inputs.precheck-seconds }}" \
+            --product-rev "${PRODUCT_REV}" \
+            --image-archive "${DST}/image/${IMAGE_ARCHIVE}" \
+            --engine-archive "${DST}/engine/${ENGINE_ARCHIVE}" \
+            --samples "${SAMPLES}" \
+            --min-idle "${MIN_IDLE}" \
+            --precheck-seconds "${PRECHECK_SECONDS}" \
             --max-attempts 3 \
             --retry-wait 30
 
-      - name: Upload paired timing evidence
+      - name: Upload paired timing evidence (receipts and telemetry only)
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: portable-python-paired-${{ inputs.mode }}-${{ matrix.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: portable-python-paired-baseline-macos-arm64-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/paired-out/
           if-no-files-found: warn
           retention-days: 14
