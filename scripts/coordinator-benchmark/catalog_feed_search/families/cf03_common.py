@@ -47,7 +47,7 @@ class ManagedSidecar:
         *,
         repo_root: Path | None = None,
         token: str | None = None,
-        startup_timeout_s: float = 20.0,
+        startup_timeout_s: float = 45.0,
     ) -> None:
         self.binary_path = Path(binary_path).resolve()
         self.config_dir = Path(config_dir).resolve()
@@ -81,6 +81,7 @@ class ManagedSidecar:
         self._log_file = open(log_path, "ab")
         self.proc = subprocess.Popen(
             [str(self.binary_path), "serve", "--db", str(self.config_dir / "store.db")],
+            cwd=str(self.repo_root) if self.repo_root is not None else None,
             env=env,
             stdout=self._log_file,
             stderr=subprocess.STDOUT,
