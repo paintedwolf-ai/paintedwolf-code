@@ -49,31 +49,35 @@ func TestPublishedDigestDoesNotAdoptAnOutsideWriteBeforeDelivery(t *testing.T) {
 	}
 }
 
-// D10 invariant test for CF05-DEF-01 (F04-EDGE-02, Decision 043):
-// A host rename without foreground content hashing suppresses both its destination
-// write echo and source delete echo using owner-captured stat + ctime proof, while
-// still delivering any subsequent genuine external edit (including preserved mtime+size),
-// atomic replace, chmod, delete, or source recreation.
+// D10 invariant test for CF05-DEF-01 (F04-EDGE-02, Decisions 043/056/059):
+// A host rename backed by the committed ledger's known AfterSHA256 + pre-rename AfterMode
+// (zero foreground content hashing) suppresses its own destination write echo and source
+// delete echo, while still delivering every genuine external edit — including the combined
+// adversarial same-inode, different-bytes, same-size, preserved-mtime edit!
 func TestHostRenameSuppressesEchoWithoutBlockingSubsequentExternalEdits(t *testing.T) {
+	seedBytes := []byte("seed content\n")
+	seedSum := sha256.Sum256(seedBytes)
+	seedSHA := hex.EncodeToString(seedSum[:])
+
 	for _, followUp := range []string{"outside_write", "same_size_and_mtime", "atomic_replace", "chmod", "delete", "recreate_source"} {
 		t.Run(followUp, func(t *testing.T) {
 			dir := t.TempDir()
 			src := filepath.Join(dir, "seed.txt")
 			dst := filepath.Join(dir, "renamed.txt")
-			testutil.FailErr(t, "seed", os.WriteFile(src, []byte("seed content\n"), 0o644))
+			testutil.FailErr(t, "seed", os.WriteFile(src, seedBytes, 0o644))
+			infoBefore, err := os.Lstat(src)
+			testutil.FailErr(t, "stat before rename", err)
 			testutil.FailErr(t, "rename", os.Rename(src, dst))
-			infoBefore, err := os.Stat(dst)
-			testutil.FailErr(t, "stat renamed", err)
 
-			receipt, ok := CaptureMetadataReceipt(dst)
-			if !ok || receipt == nil {
-				t.Fatal("CaptureMetadataReceipt did not capture rename metadata")
-			}
-			absent := hostWriteState{absent: true}
-			noteHostWritePaths([]hostWriteTarget{
-				{path: dst, preCaptured: &receipt.state},
-				{path: src, preCaptured: &absent},
-			})
+			prepared, err := prepareChanges([]Change{{
+				ProjectID: "proj-f04", WorkspaceID: "ws-f04", WorkspaceKind: "project",
+				RootID: "r1", Path: "renamed.txt", FromPath: "seed.txt",
+				AbsPath: dst, FromAbsPath: src,
+				AfterSHA256: seedSHA, AfterMode: infoBefore.Mode(),
+				Op: "rename", Origin: "user",
+			}}, false)
+			testutil.FailErr(t, "prepareChanges", err)
+			noteHostWritePaths(prepared.writePaths)
 
 			if !isRecentHostWrite(dst) {
 				t.Fatal("host rename destination echo was not suppressed")
@@ -89,7 +93,6 @@ func TestHostRenameSuppressesEchoWithoutBlockingSubsequentExternalEdits(t *testi
 					t.Fatal("subsequent external write to renamed file was falsely suppressed")
 				}
 			case "same_size_and_mtime":
-				// Same byte length as "seed content\n" (13 bytes) and restored mtime; ctime still advances.
 				testutil.FailErr(t, "same-size write", os.WriteFile(dst, []byte("USER CONTENT\n"), 0o644))
 				testutil.FailErr(t, "preserve mtime", os.Chtimes(dst, infoBefore.ModTime(), infoBefore.ModTime()))
 				if isRecentHostWrite(dst) {
@@ -97,10 +100,10 @@ func TestHostRenameSuppressesEchoWithoutBlockingSubsequentExternalEdits(t *testi
 				}
 			case "atomic_replace":
 				tmp := filepath.Join(dir, ".tmp.renamed.txt")
-				testutil.FailErr(t, "write tmp", os.WriteFile(tmp, []byte("seed content\n"), 0o644))
+				testutil.FailErr(t, "write tmp", os.WriteFile(tmp, []byte("USER CONTENT\n"), 0o644))
 				testutil.FailErr(t, "replace", os.Rename(tmp, dst))
 				if isRecentHostWrite(dst) {
-					t.Fatal("subsequent external atomic replace (new inode) was falsely suppressed")
+					t.Fatal("subsequent external atomic replace was falsely suppressed")
 				}
 			case "chmod":
 				testutil.FailErr(t, "chmod", os.Chmod(dst, 0o600))
@@ -122,126 +125,72 @@ func TestHostRenameSuppressesEchoWithoutBlockingSubsequentExternalEdits(t *testi
 	}
 }
 
-// Decision 043 barrier test: a concurrent external write to dst or recreation of src
-// occurring AFTER the rename owner captured its receipt and BEFORE DeliverCommitted()
-// publishes echo suppression must NEVER be adopted as the host mutation's state.
-func TestHostRenameReceiptBarrierDoesNotAdoptConcurrentOutsideChange(t *testing.T) {
-	dir := t.TempDir()
-	src := filepath.Join(dir, "seed.txt")
-	dst := filepath.Join(dir, "renamed.txt")
-	testutil.FailErr(t, "seed", os.WriteFile(src, []byte("seed content\n"), 0o644))
-	testutil.FailErr(t, "rename", os.Rename(src, dst))
+// Decision 043 / 056 / 059 combined adversarial pre-capture & barrier control:
+// Even if an external writer performs a same-inode in-place edit with DIFFERENT bytes,
+// SAME size, and PRESERVED mtime between os.Rename() and DeliverCommitted() (the exact
+// pre-capture window that fooled stat-only receipts), binding the suppression receipt to
+// the committed ledger's pre-rename AfterSHA256 + AfterMode never adopts the outside edit
+// and guarantees it reaches reconciliation.
+func TestHostRenameAdversarialPreCaptureAndBarrierControls(t *testing.T) {
+	seedBytes := []byte("seed content\n")
+	seedSum := sha256.Sum256(seedBytes)
+	seedSHA := hex.EncodeToString(seedSum[:])
 
-	receipt, ok := CaptureMetadataReceipt(dst)
-	if !ok || receipt == nil {
-		t.Fatal("CaptureMetadataReceipt failed")
-	}
-
-	// Stage delivery with the committed rename owner's receipt, pausing before DeliverCommitted().
-	prepared, err := prepareChanges([]Change{{
-		ProjectID: "proj-barrier", WorkspaceID: "ws-barrier", WorkspaceKind: "project",
-		RootID: "r1", Path: "renamed.txt", FromPath: "seed.txt",
-		AbsPath: dst, FromAbsPath: src, MetadataReceipt: receipt,
-		Op: "rename", Origin: "user",
-	}}, false)
-	testutil.FailErr(t, "prepareChanges", err)
-
-	// Barrier: concurrent outside writer mutates dst AND recreates src BEFORE receipt publication!
-	testutil.FailErr(t, "concurrent outside dst write", os.WriteFile(dst, []byte("concurrent outside edit\n"), 0o644))
-	testutil.FailErr(t, "concurrent outside src recreate", os.WriteFile(src, []byte("recreated outside\n"), 0o644))
-
-	// Now publish the staged receipt (simulating DeliverCommitted after the barrier).
-	noteHostWritePaths(prepared.writePaths)
-
-	if isRecentHostWrite(dst) {
-		t.Fatal("receipt publication adopted concurrent outside write on destination path")
-	}
-	if isRecentHostWrite(src) {
-		t.Fatal("receipt publication adopted concurrent outside recreation on source path")
-	}
-
-	// Also verify fail-open when MetadataReceipt is nil (no owner proof).
-	noProof, err := prepareChanges([]Change{{
-		ProjectID: "proj-barrier", WorkspaceID: "ws-barrier", WorkspaceKind: "project",
-		RootID: "r1", Path: "renamed.txt", FromPath: "seed.txt",
-		AbsPath: dst, FromAbsPath: src,
-		Op: "rename", Origin: "user",
-	}}, false)
-	testutil.FailErr(t, "prepareChanges nil receipt", err)
-	for _, wp := range noProof.writePaths {
-		if wp.path == dst {
-			t.Fatal("rename without owner MetadataReceipt must fail open for destination")
-		}
-	}
-}
-
-// Decision 056 pre-capture window controls:
-// 1. Simple matching rename binds post-rename receipt to pre-rename owner metadata and suppresses echo.
-// 2. Replacement between rename and capture fails open (nil receipt -> external change observed).
-// 3. Same-inode outside write between rename and capture fails open (nil receipt -> external change observed).
-func TestHostRenamePreCaptureWindowControls(t *testing.T) {
-	t.Run("simple_matching_rename", func(t *testing.T) {
+	t.Run("adversarial_same_inode_same_size_preserved_mtime_before_publish", func(t *testing.T) {
 		dir := t.TempDir()
 		src := filepath.Join(dir, "seed.txt")
 		dst := filepath.Join(dir, "renamed.txt")
-		testutil.FailErr(t, "seed", os.WriteFile(src, []byte("seed content\n"), 0o644))
-		before, ok := CaptureMetadataReceipt(src)
-		if !ok || before == nil {
-			t.Fatal("pre-rename CaptureMetadataReceipt failed")
-		}
+		testutil.FailErr(t, "seed", os.WriteFile(src, seedBytes, 0o644))
+		infoBefore, err := os.Lstat(src)
+		testutil.FailErr(t, "stat before rename", err)
 		testutil.FailErr(t, "rename", os.Rename(src, dst))
-		after, ok := CaptureVerifiedRenameReceipt(dst, before)
-		if !ok || after == nil {
-			t.Fatal("CaptureVerifiedRenameReceipt rejected matching rename")
-		}
+
+		// Adversarial in-place write in the pre-capture window BEFORE commit/publish:
+		// same inode, same size (13 bytes), same mode (0o644), preserved exact mtime!
+		f, err := os.OpenFile(dst, os.O_WRONLY|os.O_TRUNC, 0o644)
+		testutil.FailErr(t, "open dst in place", err)
+		_, err = f.Write([]byte("EVIL CONTENT\n"))
+		testutil.FailErr(t, "write adversarial bytes", err)
+		testutil.FailErr(t, "close dst", f.Close())
+		testutil.FailErr(t, "restore mtime", os.Chtimes(dst, infoBefore.ModTime(), infoBefore.ModTime()))
+		testutil.FailErr(t, "concurrent outside src recreate", os.WriteFile(src, []byte("recreated\n"), 0o644))
+
+		// Now commit/publish stages the ledger's pre-rename AfterSHA256 + pre-rename AfterMode.
 		prepared, err := prepareChanges([]Change{{
-			ProjectID: "proj-prec", WorkspaceID: "ws-prec", WorkspaceKind: "project",
+			ProjectID: "proj-adv", WorkspaceID: "ws-adv", WorkspaceKind: "project",
 			RootID: "r1", Path: "renamed.txt", FromPath: "seed.txt",
-			AbsPath: dst, FromAbsPath: src, MetadataReceipt: after,
+			AbsPath: dst, FromAbsPath: src,
+			AfterSHA256: seedSHA, AfterMode: infoBefore.Mode(),
 			Op: "rename", Origin: "user",
 		}}, false)
 		testutil.FailErr(t, "prepareChanges", err)
 		noteHostWritePaths(prepared.writePaths)
-		if !isRecentHostWrite(dst) || !isRecentHostWrite(src) {
-			t.Fatal("matching rename did not suppress both destination and source echoes")
+
+		if isRecentHostWrite(dst) {
+			t.Fatal("adversarial same-inode/same-size/preserved-mtime edit before publish was falsely suppressed")
+		}
+		if isRecentHostWrite(src) {
+			t.Fatal("concurrent outside recreation of source path before publish was falsely suppressed")
 		}
 	})
 
-	t.Run("replacement_before_capture_fails_open", func(t *testing.T) {
+	t.Run("missing_ledger_digest_fails_open", func(t *testing.T) {
 		dir := t.TempDir()
 		src := filepath.Join(dir, "seed.txt")
 		dst := filepath.Join(dir, "renamed.txt")
-		testutil.FailErr(t, "seed", os.WriteFile(src, []byte("seed content\n"), 0o644))
-		before, ok := CaptureMetadataReceipt(src)
-		if !ok || before == nil {
-			t.Fatal("pre-rename CaptureMetadataReceipt failed")
-		}
+		testutil.FailErr(t, "seed", os.WriteFile(src, seedBytes, 0o644))
 		testutil.FailErr(t, "rename", os.Rename(src, dst))
-		// External replacement happens BEFORE post-rename receipt capture.
-		tmp := filepath.Join(dir, ".tmp.replace")
-		testutil.FailErr(t, "write replacement", os.WriteFile(tmp, []byte("seed content\n"), 0o644))
-		testutil.FailErr(t, "replace dst", os.Rename(tmp, dst))
-		after, ok := CaptureVerifiedRenameReceipt(dst, before)
-		if ok || after != nil {
-			t.Fatal("CaptureVerifiedRenameReceipt adopted a replaced inode before capture")
-		}
-	})
-
-	t.Run("same_inode_outside_write_before_capture_fails_open", func(t *testing.T) {
-		dir := t.TempDir()
-		src := filepath.Join(dir, "seed.txt")
-		dst := filepath.Join(dir, "renamed.txt")
-		testutil.FailErr(t, "seed", os.WriteFile(src, []byte("seed content\n"), 0o644))
-		before, ok := CaptureMetadataReceipt(src)
-		if !ok || before == nil {
-			t.Fatal("pre-rename CaptureMetadataReceipt failed")
-		}
-		testutil.FailErr(t, "rename", os.Rename(src, dst))
-		// Same-inode external write happens BEFORE post-rename receipt capture.
-		testutil.FailErr(t, "same-inode outside write", os.WriteFile(dst, []byte("outside mutated before capture\n"), 0o644))
-		after, ok := CaptureVerifiedRenameReceipt(dst, before)
-		if ok || after != nil {
-			t.Fatal("CaptureVerifiedRenameReceipt adopted a same-inode outside write before capture")
+		prepared, err := prepareChanges([]Change{{
+			ProjectID: "proj-open", WorkspaceID: "ws-open", WorkspaceKind: "project",
+			RootID: "r1", Path: "renamed.txt", FromPath: "seed.txt",
+			AbsPath: dst, FromAbsPath: src,
+			Op: "rename", Origin: "user",
+		}}, false)
+		testutil.FailErr(t, "prepareChanges nil digest", err)
+		for _, wp := range prepared.writePaths {
+			if wp.path == dst {
+				t.Fatal("rename without committed ledger AfterSHA256 must fail open for destination")
+			}
 		}
 	})
 }

@@ -10,82 +10,15 @@ import (
 	"time"
 )
 
-// MetadataReceipt captures stat-only file identity and change-time proof
-// at the committed rename owner without reading or hashing file contents.
-type MetadataReceipt struct {
-	state hostWriteState
-}
-
-// CaptureMetadataReceipt records stat-only identity, mode, size, mtime, and ctime
-// for absPath without opening or hashing the file. Returns (nil, false) when the
-// platform cannot supply change-time proof so echo suppression fails open.
-func CaptureMetadataReceipt(absPath string) (*MetadataReceipt, bool) {
-	if absPath == "" {
-		return nil, false
-	}
-	key, err := filepath.Abs(absPath)
-	if err != nil {
-		return nil, false
-	}
-	state, ok := readHostWriteState(key, "", true)
-	if !ok || state.absent {
-		return nil, false
-	}
-	return &MetadataReceipt{state: state}, true
-}
-
-// CaptureVerifiedRenameReceipt performs a single Lstat on toAbs and binds the
-// resulting post-rename receipt to pre-rename owner proof `before`. If the entry
-// was replaced (different inode) or mutated (mode, size, or mtime diverged from
-// before) between rename and capture, it returns (nil, false) to fail open.
-func CaptureVerifiedRenameReceipt(toAbs string, before *MetadataReceipt) (*MetadataReceipt, bool) {
-	if before == nil || before.state.absent || before.state.info == nil {
-		return nil, false
-	}
-	after, ok := CaptureMetadataReceipt(toAbs)
-	if !ok || after == nil || after.state.info == nil {
-		return nil, false
-	}
-	if !os.SameFile(before.state.info, after.state.info) {
-		return nil, false
-	}
-	if after.state.mode != before.state.mode ||
-		after.state.size != before.state.size ||
-		after.state.modTimeNano != before.state.modTimeNano {
-		return nil, false
-	}
-	return after, true
-}
-
 type hostWriteTarget struct {
 	path, digest string
 	preCaptured  *hostWriteState
 }
 
 type hostWriteState struct {
-	digest       string
-	mode         os.FileMode
-	absent       bool
-	metadataOnly bool
-	size         int64
-	modTimeNano  int64
-	changeTime   [2]int64
-	info         os.FileInfo
-}
-
-func (s hostWriteState) matches(other hostWriteState) bool {
-	if s.absent || other.absent {
-		return s.absent && other.absent
-	}
-	if s.metadataOnly {
-		return other.metadataOnly &&
-			s.mode == other.mode &&
-			s.size == other.size &&
-			s.modTimeNano == other.modTimeNano &&
-			s.changeTime == other.changeTime &&
-			s.info != nil && other.info != nil && os.SameFile(s.info, other.info)
-	}
-	return !other.metadataOnly && s.digest == other.digest && s.mode == other.mode
+	digest string
+	mode   os.FileMode
+	absent bool
 }
 
 type hostWriteReceipt struct {
@@ -135,7 +68,7 @@ func noteHostWritePaths(paths []hostWriteTarget) {
 			observed[key] = hostWriteReceipt{at: time.Now(), hostWriteState: *target.preCaptured}
 			continue
 		}
-		if state, ok := readHostWriteState(key, target.digest, false); ok {
+		if state, ok := readHostWriteState(key, target.digest); ok {
 			observed[key] = hostWriteReceipt{at: time.Now(), hostWriteState: state}
 		}
 	}
@@ -157,7 +90,7 @@ func noteHostWritePaths(paths []hostWriteTarget) {
 	}
 }
 
-func readHostWriteState(path, digest string, metadataOnly bool) (hostWriteState, bool) {
+func readHostWriteState(path, digest string) (hostWriteState, bool) {
 	info, err := os.Lstat(path)
 	if os.IsNotExist(err) {
 		if digest != "" {
@@ -165,27 +98,7 @@ func readHostWriteState(path, digest string, metadataOnly bool) (hostWriteState,
 		}
 		return hostWriteState{absent: true}, true
 	}
-	if err != nil {
-		return hostWriteState{}, false
-	}
-	if metadataOnly {
-		if !info.Mode().IsRegular() && !info.IsDir() {
-			return hostWriteState{}, false
-		}
-		ctime, ok := statChangeTime(info)
-		if !ok {
-			return hostWriteState{}, false
-		}
-		return hostWriteState{
-			mode:         info.Mode(),
-			metadataOnly: true,
-			size:         info.Size(),
-			modTimeNano:  info.ModTime().UnixNano(),
-			changeTime:   ctime,
-			info:         info,
-		}, true
-	}
-	if !info.Mode().IsRegular() {
+	if err != nil || !info.Mode().IsRegular() {
 		return hostWriteState{}, false
 	}
 	if digest == "" {
@@ -239,6 +152,6 @@ func isRecentHostWrite(absPath string) bool {
 	if !ok || time.Since(receipt.at) > selfWriteWindow {
 		return false
 	}
-	current, ok := readHostWriteState(key, "", receipt.metadataOnly)
-	return ok && receipt.hostWriteState.matches(current)
+	current, ok := readHostWriteState(key, "")
+	return ok && current == receipt.hostWriteState
 }

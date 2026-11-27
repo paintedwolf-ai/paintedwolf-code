@@ -41,9 +41,11 @@ type Change struct {
 	// AbsPath and FromAbsPath suppress watcher echoes.
 	AbsPath     string    `json:",omitempty"`
 	FromAbsPath string    `json:",omitempty"`
-	// MetadataReceipt carries stat-only proof captured by the committed rename owner.
-	MetadataReceipt *MetadataReceipt `json:"-"`
-	TS              time.Time        `json:",omitempty"`
+	// AfterMode carries the pre-rename file mode when HasAfterMode is true so rename
+	// echo suppression binds (AfterSHA256, AfterMode) without live-FS adoption or foreground hashing.
+	AfterMode    os.FileMode `json:"-"`
+	HasAfterMode bool        `json:"-"`
+	TS           time.Time   `json:",omitempty"`
 }
 
 // Sink delivers source events durably.
@@ -300,12 +302,17 @@ func prepareChanges(changes []Change, resync bool) (preparedChanges, error) {
 		if writePaths == nil {
 			writePaths = make([]hostWriteTarget, 0, len(changes))
 		}
-		// Metadata-only rename echoes are suppressed only from owner-captured stat proof
-		// (never reconstructed from live disk after the fact) and direct source absence.
-		if change.Op == api.SourceChangeOpRename && change.AfterSHA256 == "" {
-			if change.AbsPath != "" && change.MetadataReceipt != nil {
-				state := change.MetadataReceipt.state
-				writePaths = append(writePaths, hostWriteTarget{path: change.AbsPath, preCaptured: &state})
+		// Rename echoes are suppressed only when the committed ledger supplies the
+		// file's known AfterSHA256 (zero foreground disk read/hashing). When absent,
+		// fail open for the destination while suppressing the known source absence.
+		if change.Op == api.SourceChangeOpRename {
+			if change.AbsPath != "" && change.AfterSHA256 != "" {
+				if change.HasAfterMode || change.AfterMode != 0 {
+					state := hostWriteState{digest: change.AfterSHA256, mode: change.AfterMode}
+					writePaths = append(writePaths, hostWriteTarget{path: change.AbsPath, preCaptured: &state})
+				} else {
+					writePaths = append(writePaths, hostWriteTarget{path: change.AbsPath, digest: change.AfterSHA256})
+				}
 			}
 			if change.FromAbsPath != "" {
 				absent := hostWriteState{absent: true}

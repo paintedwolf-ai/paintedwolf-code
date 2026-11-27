@@ -339,7 +339,7 @@ func (s *Store) recordEffectWithCache(ctx context.Context, q *db.Queries, operat
 		return err
 	}
 	if recorded != nil {
-		*recorded = TrackedFile{FileID: fileID, VersionID: afterVersionID}
+		*recorded = TrackedFile{FileID: fileID, VersionID: afterVersionID, ContentSHA256: afterSHA}
 	}
 	ordinal, err := cache.advanceOrdinal(ctx, q, in.ProjectID)
 	if err != nil {

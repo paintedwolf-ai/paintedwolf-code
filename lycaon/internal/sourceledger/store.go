@@ -174,7 +174,7 @@ type TrackInput struct {
 }
 
 type TrackedFile struct {
-	FileID, VersionID string
+	FileID, VersionID, ContentSHA256 string
 }
 
 type FileTracker interface {

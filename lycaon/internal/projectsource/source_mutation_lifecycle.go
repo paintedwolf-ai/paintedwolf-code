@@ -82,6 +82,7 @@ func (s *SourceMutationService) lifecycle(ctx context.Context, operationID strin
 		plan.AfterSize = info.Size()
 		if kind == "rename" {
 			plan.BeforeSize = info.Size()
+			plan.BeforeMode = info.Mode()
 		}
 		if kind == "copy" {
 			plan.NativeTrash = &sourceTrashRecovery{}
