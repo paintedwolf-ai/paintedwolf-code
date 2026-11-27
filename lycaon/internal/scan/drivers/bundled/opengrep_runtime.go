@@ -332,6 +332,13 @@ func overrideEnv(base []string, pins map[string]string) []string {
 }
 
 func moveOrCopyDir(src, dst string) error {
+	srcInfo, err := os.Lstat(src)
+	if err != nil {
+		return err
+	}
+	if !srcInfo.IsDir() || srcInfo.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("prepared runtime source is not a real directory: %s", src)
+	}
 	if err := os.Rename(src, dst); err == nil {
 		return nil
 	}
@@ -356,8 +363,14 @@ func moveOrCopyDir(src, dst string) error {
 		if !d.Type().IsRegular() {
 			return fmt.Errorf("unexpected non-regular entry in prepared runtime: %s", path)
 		}
-		info, err := d.Info()
+		info, err := os.Lstat(path)
 		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("unexpected non-regular entry in prepared runtime: %s", path)
+		}
+		if err := checkSingleLink(path, info); err != nil {
 			return err
 		}
 		mode := os.FileMode(0o600)
@@ -404,8 +417,14 @@ func collectRuntimeEntries(cacheDir string) ([]opengrepRuntimeFileEntry, error) 
 		if !d.Type().IsRegular() {
 			return fmt.Errorf("unexpected non-regular entry in prepared runtime: %s", path)
 		}
-		info, err := d.Info()
+		info, err := os.Lstat(path)
 		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("unexpected non-regular entry in prepared runtime: %s", path)
+		}
+		if err := checkSingleLink(path, info); err != nil {
 			return err
 		}
 		rel, err := filepath.Rel(cacheDir, path)
@@ -516,6 +535,9 @@ func verifyPreparedRuntime(targetDir, expectedBinarySHA256 string, metadataOnly 
 		if !d.Type().IsRegular() {
 			return fmt.Errorf("unexpected non-regular runtime entry: %s", path)
 		}
+		if err := checkSingleLink(path, info); err != nil {
+			return err
+		}
 		rel, err := filepath.Rel(cacheDir, path)
 		if err != nil {
 			return err
@@ -588,17 +610,36 @@ func forgetVerifiedInProcess(targetDir string) {
 }
 
 func sealTreeReadOnly(root string) error {
+	rootInfo, err := os.Lstat(root)
+	if err != nil {
+		return err
+	}
+	if !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("cannot seal non-directory runtime root: %s", root)
+	}
 	var dirs []string
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("cannot seal symlink in runtime tree: %s", path)
 		}
 		if d.IsDir() {
 			dirs = append(dirs, path)
 			return nil
 		}
-		info, err := d.Info()
+		if !d.Type().IsRegular() {
+			return fmt.Errorf("cannot seal non-regular entry in runtime tree: %s", path)
+		}
+		info, err := os.Lstat(path)
 		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("cannot seal non-regular entry in runtime tree: %s", path)
+		}
+		if err := checkSingleLink(path, info); err != nil {
 			return err
 		}
 		mode := os.FileMode(0o444)
@@ -620,17 +661,29 @@ func sealTreeReadOnly(root string) error {
 }
 
 func removeReadOnlyTree(root string) error {
-	if _, err := os.Lstat(root); errors.Is(err, os.ErrNotExist) {
+	info, err := os.Lstat(root)
+	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
+	if err != nil {
+		return err
+	}
+	// Never follow or chmod a symlink at root; unlink it directly.
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return os.Remove(root)
+	}
+	// Unlinking regular files and symlinks only requires write+exec on their
+	// parent directories. Never chmod non-directories or symlinks so cleanup
+	// cannot alter permissions on symlink targets or hard-linked external files.
 	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return nil
 		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
 		if d.IsDir() {
 			_ = os.Chmod(path, 0o700)
-		} else {
-			_ = os.Chmod(path, 0o600)
 		}
 		return nil
 	})

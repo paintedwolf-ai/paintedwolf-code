@@ -247,3 +247,104 @@ func TestPrepareOpengrepRuntimePlainBinarySkipsRepeatedProbes(t *testing.T) {
 		t.Fatalf("plain binary probed %d times across 3 calls, want 1", got)
 	}
 }
+
+func TestRemoveReadOnlyTreePreservesExternalSentinels(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission and link semantics require macOS or Linux")
+	}
+	root := t.TempDir()
+	externalDir := filepath.Join(root, "external")
+	testutil.FailErr(t, "create external dir", os.MkdirAll(externalDir, 0o700))
+
+	sentinelPath := filepath.Join(externalDir, "sentinel.txt")
+	const sentinelBody = "external-sentinel-bytes"
+	testutil.FailErr(t, "write sentinel", os.WriteFile(sentinelPath, []byte(sentinelBody), 0o640))
+	testutil.FailErr(t, "chmod sentinel", os.Chmod(sentinelPath, 0o640))
+
+	hardTargetPath := filepath.Join(externalDir, "hard-target.txt")
+	const hardTargetBody = "external-hardlink-bytes"
+	testutil.FailErr(t, "write hard target", os.WriteFile(hardTargetPath, []byte(hardTargetBody), 0o640))
+	testutil.FailErr(t, "chmod hard target", os.Chmod(hardTargetPath, 0o640))
+
+	dirSentinelPath := filepath.Join(externalDir, "dir-sentinel.txt")
+	testutil.FailErr(t, "write dir sentinel", os.WriteFile(dirSentinelPath, []byte("keep"), 0o640))
+
+	damaged := filepath.Join(root, "damaged-runtime")
+	nested := filepath.Join(damaged, "sub")
+	testutil.FailErr(t, "create damaged tree", os.MkdirAll(nested, 0o700))
+	testutil.FailErr(t, "write read-only file", os.WriteFile(filepath.Join(nested, "ro.bin"), []byte("x"), 0o444))
+	testutil.FailErr(t, "symlink to sentinel", os.Symlink(sentinelPath, filepath.Join(nested, "link-sentinel")))
+	testutil.FailErr(t, "symlink to external dir", os.Symlink(externalDir, filepath.Join(damaged, "link-external-dir")))
+	testutil.FailErr(t, "hardlink to external file", os.Link(hardTargetPath, filepath.Join(nested, "hard-external")))
+	testutil.FailErr(t, "seal nested dir", os.Chmod(nested, 0o555))
+	testutil.FailErr(t, "seal damaged root", os.Chmod(damaged, 0o555))
+
+	testutil.FailErr(t, "removeReadOnlyTree", removeReadOnlyTree(damaged))
+
+	if _, err := os.Lstat(damaged); !os.IsNotExist(err) {
+		t.Fatalf("damaged tree still exists: err=%v", err)
+	}
+	assertSentinelIntact := func(path, wantBody string, wantPerm os.FileMode) {
+		t.Helper()
+		st, err := os.Lstat(path)
+		testutil.FailErr(t, "stat "+path, err)
+		if st.Mode().Perm() != wantPerm {
+			t.Fatalf("%s mode = %o, want unchanged %o", path, st.Mode().Perm(), wantPerm)
+		}
+		got, err := os.ReadFile(path)
+		testutil.FailErr(t, "read "+path, err)
+		if string(got) != wantBody {
+			t.Fatalf("%s body = %q, want %q", path, got, wantBody)
+		}
+	}
+	assertSentinelIntact(sentinelPath, sentinelBody, 0o640)
+	assertSentinelIntact(hardTargetPath, hardTargetBody, 0o640)
+	assertSentinelIntact(dirSentinelPath, "keep", 0o640)
+}
+
+func TestPrepareOpengrepRuntimeRejectsSymlinksAndHardlinks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission and link semantics require macOS or Linux")
+	}
+	admissiontest.Enable(t)
+	root := t.TempDir()
+	store := filepath.Join(root, "runtime-store")
+
+	// 1. Failed preparation containing a symlink to an external sentinel must
+	// reject publication, clean up staging, and preserve the sentinel's mode and bytes.
+	sentinel := filepath.Join(root, "external-sentinel")
+	testutil.FailErr(t, "write sentinel", os.WriteFile(sentinel, []byte("untouched"), 0o640))
+	testutil.FailErr(t, "chmod sentinel", os.Chmod(sentinel, 0o640))
+
+	badBin := filepath.Join(root, "opengrep-symlink")
+	badScript := fmt.Sprintf("#!/bin/sh\nset -e\nmkdir -p \"$XDG_CACHE_HOME/opengrep\"\nln -s %q \"$XDG_CACHE_HOME/opengrep/escape\"\nprintf '1.30.0\\n'\n", sentinel)
+	testutil.FailErr(t, "write bad symlink binary", os.WriteFile(badBin, []byte(badScript), 0o700))
+	t.Cleanup(func() { _ = removeReadOnlyTree(store) })
+
+	if _, _, err := prepareOpengrepRuntimeInStore(t.Context(), badBin, "", store); err == nil {
+		t.Fatal("preparation unexpectedly accepted a symlink in unpacked runtime")
+	}
+	st, err := os.Lstat(sentinel)
+	testutil.FailErr(t, "stat external sentinel after rejected prep", err)
+	if st.Mode().Perm() != 0o640 {
+		t.Fatalf("external sentinel mode mutated to %o, want 0640", st.Mode().Perm())
+	}
+	raw, err := os.ReadFile(sentinel)
+	testutil.FailErr(t, "read external sentinel after rejected prep", err)
+	if string(raw) != "untouched" {
+		t.Fatalf("external sentinel content = %q, want untouched", raw)
+	}
+
+	// 2. sealTreeReadOnly must refuse hard-linked files without mutating the external inode.
+	hardTree := filepath.Join(root, "hard-tree")
+	testutil.FailErr(t, "create hard-tree", os.MkdirAll(hardTree, 0o700))
+	testutil.FailErr(t, "hardlink sentinel", os.Link(sentinel, filepath.Join(hardTree, "linked")))
+	if err := sealTreeReadOnly(hardTree); err == nil {
+		t.Fatal("sealTreeReadOnly unexpectedly sealed a hard-linked file")
+	}
+	st, err = os.Lstat(sentinel)
+	testutil.FailErr(t, "stat sentinel after rejected seal", err)
+	if st.Mode().Perm() != 0o640 {
+		t.Fatalf("hard-linked external sentinel mode mutated to %o, want 0640", st.Mode().Perm())
+	}
+}
