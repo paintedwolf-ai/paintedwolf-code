@@ -123,17 +123,14 @@ def main():
         )
 
     def pick_approve_option(cp):
-        plan = cp.get("approval_plan") or {}
+        ta = cp.get("tool_approval") or {}
+        plan = (ta.get("plan") if isinstance(ta, dict) else None) or cp.get("approval_plan") or {}
         if isinstance(plan, dict):
             for o in (plan.get("options") or ()):
                 if isinstance(o, dict) and not o.get("disabled") and o.get("decision_action") == "approve" and o.get("id"):
                     return o["id"]
             if plan.get("recommended_option_id"):
                 return plan["recommended_option_id"]
-        for key in ("options", "approval_options"):
-            for o in (cp.get(key) or ()):
-                if isinstance(o, dict) and not o.get("disabled") and (o.get("id") or o.get("option_id")):
-                    return o.get("id") or o.get("option_id")
         return "allow_once"
 
     try:
