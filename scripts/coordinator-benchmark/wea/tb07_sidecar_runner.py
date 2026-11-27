@@ -907,16 +907,18 @@ def _run_warmed_slots(
             abort_session(a02_sid)
             _revoke_all_grants(app)
 
-            # A02-09..12: project scope (ApprovalCategoryTool offers the project rung in slot 4)
+            # A02-09..12: project scope (ApprovalCategoryTool offers the project rung in slot 4;
+            # command grants bind exact command identity, so same command reuses in-project and asks cross-project)
             _patch_global_approvals(
                 app, posture="balanced",
                 rules=[{"category": "tool", "pattern": "command", "effect": "ask"}],
                 never_ask=False,
             )
+            proj_cmd = "echo a02-project-grant-exact"
             s_p1, _ = open_prompted_session(proj_main, "Grant project-scoped tool approval.")
             c_proj = _call_with_checkpoint_inspect(
                 app, s_p1, "command",
-                {"command": "echo a02-project-grant-1"},
+                {"command": proj_cmd},
                 action="approve", rung="project",
             )
             abort_session(s_p1)
@@ -925,7 +927,7 @@ def _run_warmed_slots(
                 s_p2, _ = open_prompted_session(proj_main, "Reuse project grant in fresh session.")
                 c_reuse = _call_with_checkpoint_inspect(
                     app, s_p2, "command",
-                    {"command": "echo a02-project-grant-2"},
+                    {"command": proj_cmd},
                     action=None,
                 )
                 abort_session(s_p2)
@@ -941,7 +943,7 @@ def _run_warmed_slots(
                 s_pb, _ = open_prompted_session(proj_b, "Cross-project isolation probe.")
                 c_cross = _call_with_checkpoint_inspect(
                     app, s_pb, "command",
-                    {"command": "echo a02-project-cross-denied"},
+                    {"command": proj_cmd},
                     action="reject",
                 )
                 abort_session(s_pb)
@@ -972,7 +974,7 @@ def _run_warmed_slots(
                 s_del, _ = open_prompted_session(proj_main, "Fresh chat after grant clear.")
                 c_fresh = _call_with_checkpoint_inspect(
                     app, s_del, "command",
-                    {"command": "echo a02-after-revoke"},
+                    {"command": proj_cmd},
                     action="reject",
                 )
                 abort_session(s_del)
@@ -1345,7 +1347,7 @@ def _run_a12_restart_slots(
             _call_with_checkpoint_inspect(
                 app1, session_id, "command",
                 {"command": _http_probe_cmd(f"{ep_chat.base_url}/boot1"), "capability_request": {"loopback_connect": {"ports": [ep_chat.port]}}},
-                action="approve", rung="chat",
+                action="approve", rung="chat", timeout_s=90.0,
             )
             _close_session_turn(app1, session_id)
 
@@ -1353,15 +1355,21 @@ def _run_a12_restart_slots(
             sess_rev = app1.request("/v1/sessions", {"project_id": project_id, "posture": "build"})
             session_rev_id = sess_rev["id"]
             app1.request("/harness/model-limit", {"session_id": session_rev_id, "limit": 10})
-            _wait_session_idle(app1, session_rev_id, "a12 session_rev ready")
+            _wait_session_idle(app1, session_rev_id, "a12 session_rev ready", timeout_s=60.0)
             app1.request(f"/v1/sessions/{session_rev_id}/prompts", {"operation_id": str(uuid.uuid4()), "text": "A12 pre-restart revoked grant setup."})
-            _call_with_checkpoint_inspect(
+            c_rev_boot1 = _call_with_checkpoint_inspect(
                 app1, session_rev_id, "command",
                 {"command": _http_probe_cmd(f"{ep_revoked.base_url}/boot1"), "capability_request": {"loopback_connect": {"ports": [ep_revoked.port]}}},
-                action="approve", rung="chat",
+                action="approve", rung="chat", timeout_s=90.0,
             )
             rev_grants = (app1.request(f"/v1/approval-grants?session_id={session_rev_id}") or {}).get("grants") or []
             rev_ids = [g["id"] for g in rev_grants if isinstance(g, dict) and g.get("id")]
+            if not rev_ids:
+                all_grants = (app1.request("/v1/approval-grants") or {}).get("grants") or []
+                rev_ids = [
+                    g["id"] for g in all_grants
+                    if isinstance(g, dict) and g.get("id") and g.get("chat_session_id") == session_rev_id
+                ]
             if rev_ids:
                 app1.request("/v1/approval-grants/revoke", {"ids": rev_ids})
                 revoked_before_restart = len(rev_ids)
@@ -1480,6 +1488,9 @@ def _run_a12_restart_slots(
         receipts.append(_build_receipt(
             spec=spec_map["A12-03-restart-revoked-grant-stays-revoked"], prov=prov,
             typed_result={
+                "boot1_asked": c_rev_boot1["checkpoint"]["asked"],
+                "boot1_rung": c_rev_boot1["checkpoint"]["rung"],
+                "boot1_outcome": c_rev_boot1["result"].get("outcome"),
                 "revoked_before_restart": revoked_before_restart,
                 "revoked_grant_asked_after_restart": c_rev_after["checkpoint"]["asked"],
             },
