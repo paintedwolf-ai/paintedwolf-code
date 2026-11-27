@@ -351,7 +351,7 @@ def _run_darwin_fs_usage_controls(
         ctrl_shape = write_scalefixture_tree(ctrl_tree, 20)
         ctrl_dirs, ctrl_files = _collect_inventory_rels(ctrl_tree)
 
-        def _trace_py(code: str, duration_s: int = 3) -> str:
+        def _trace_py(code: str, duration_s: int = 4) -> str:
             p = subprocess.Popen([sys.executable, "-c", code, str(ctrl_tree)])
             fu = subprocess.run(
                 ["sudo", "-n", "fs_usage", "-w", "-f", "filesys", "-t", str(duration_s), str(p.pid)],
@@ -364,7 +364,7 @@ def _run_darwin_fs_usage_controls(
 
         # Control A: scandir-only (directory reads, 0 per-file stats)
         code_a = (
-            "import os, sys, time; time.sleep(0.8)\n"
+            "import os, sys, time; time.sleep(1.8)\n"
             "def walk(d):\n"
             "  with os.scandir(d) as it:\n"
             "    for e in it:\n"
@@ -380,7 +380,7 @@ def _run_darwin_fs_usage_controls(
 
         # Control B: scandir + lstat on every file (directory reads + 20 per-file stats)
         code_b = (
-            "import os, sys, time; time.sleep(0.8)\n"
+            "import os, sys, time; time.sleep(1.8)\n"
             "def walk(d):\n"
             "  with os.scandir(d) as it:\n"
             "    for e in it:\n"
