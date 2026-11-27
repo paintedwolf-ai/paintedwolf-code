@@ -172,28 +172,37 @@ def run_worker_refusals_validation(
     run_id: str,
 ) -> dict[str, Any]:
     out_dir.mkdir(parents=True, exist_ok=True)
-    workspace = out_dir / "workspace"
-    config_dir = out_dir / "config"
-    _init_git_workspace(workspace)
 
-    sidecar = IsolatedSidecarProcess(
-        engine_bin,
-        product_root=product_root,
-        config_dir=config_dir,
-        workspace_dir=workspace,
-        expected_sha256=expected_engine_sha256,
-        trace_friction=True,
-    )
+    def _run_isolated(case_name: str, *, inject_bad_first_report: bool) -> tuple[dict[str, Any], dict[str, Any], str]:
+        case_dir = out_dir / case_name
+        workspace = case_dir / "workspace"
+        config_dir = case_dir / "config"
+        _init_git_workspace(workspace)
+        sidecar = IsolatedSidecarProcess(
+            engine_bin,
+            product_root=product_root,
+            config_dir=config_dir,
+            workspace_dir=workspace,
+            expected_sha256=expected_engine_sha256,
+            trace_friction=True,
+        )
+        with sidecar as client:
+            manifest = sidecar.build_run_manifest().to_dict()
+            plat = "macos" if sidecar.provenance.platform == "darwin" else "linux"
+            pid = client.create_project(workspace)["id"]
+            seen: set[str] = set()
+            result = _run_worker_job(
+                client,
+                project_id=pid,
+                sidecar=sidecar,
+                trace_log=sidecar.log_path,
+                inject_bad_first_report=inject_bad_first_report,
+                ignore_sessions=seen,
+            )
+            return result, manifest, plat
 
-    with sidecar as client:
-        manifest = sidecar.build_run_manifest()
-        plat = "macos" if sidecar.provenance.platform == "darwin" else "linux"
-        pid = client.create_project(workspace)["id"]
-        trace_log = sidecar.log_path
-
-        seen: set[str] = set()
-        charged = _run_worker_job(client, project_id=pid, sidecar=sidecar, trace_log=trace_log, inject_bad_first_report=True, ignore_sessions=seen)
-        zero = _run_worker_job(client, project_id=pid, sidecar=sidecar, trace_log=trace_log, inject_bad_first_report=False, ignore_sessions=seen)
+    charged, manifest, plat = _run_isolated("charged", inject_bad_first_report=True)
+    zero, _zero_manifest, _zero_plat = _run_isolated("zero_charge", inject_bad_first_report=False)
 
     charged_ok = (
         charged["worker_report_refusals"]["worker_report_refusals"] == 1
@@ -211,7 +220,7 @@ def run_worker_refusals_validation(
         "run_id": run_id,
         "platform": plat,
         "passed": charged_ok and zero_ok,
-        "run_manifest": manifest.to_dict(),
+        "run_manifest": manifest,
         "charged_case": charged,
         "zero_charge_case": zero,
     }
