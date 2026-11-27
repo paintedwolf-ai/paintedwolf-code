@@ -85,6 +85,215 @@ let data = try JSONSerialization.data(withJSONObject: matched, options: [.pretty
 print(String(data: data, encoding: .utf8) ?? "[]")
 """
 
+WKWEBVIEW_DRIVER_JS = r"""
+// Dev-only PY09 qualification driver injected ONLY via disposable Vite config
+// into the genuine macOS Tauri WKWebView (zero production source edits).
+(async () => {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const startedAt = new Date().toISOString();
+  const report = async (obj) => {
+    try {
+      await fetch("/__py09_report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(obj, null, 2),
+      });
+    } catch (_) {}
+  };
+
+  const findByExactText = (text) => {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const el = /** @type {HTMLElement} */ (node);
+      if (el.offsetParent === null) continue;
+      if ((el.innerText || "").trim() === text) return el;
+    }
+    return null;
+  };
+
+  const findClickableMatching = (re) => {
+    const els = Array.from(document.querySelectorAll("button, a, [role='button'], [role='treeitem'], [role='radio'], label, li"));
+    for (const el of els) {
+      if (el.offsetParent === null) continue;
+      const t = (el.innerText || "").trim();
+      if (re.test(t)) return el;
+    }
+    return null;
+  };
+
+  try {
+    // 1. Wait for SolidJS UI mount
+    for (let i = 0; i < 60; i += 1) {
+      if ((document.body?.innerText || "").trim().length > 20) break;
+      await sleep(500);
+    }
+
+    // 2. Step past welcome wizard if shown, selecting "Files and chat", and wait for project "py09-native-tauri-reopen"
+    let projEl = null;
+    for (let i = 0; i < 45; i += 1) {
+      projEl = findByExactText("py09-native-tauri-reopen");
+      if (projEl) break;
+      const bodyTxt = document.body?.innerText || "";
+      if (bodyTxt.includes("How do you want to work?")) {
+        const fc = findClickableMatching(/Files and chat/i);
+        if (fc) { fc.click(); await sleep(300); }
+        const cont = findClickableMatching(/^Continue$/i);
+        if (cont) { cont.click(); await sleep(1000); continue; }
+      } else if (bodyTxt.includes("2 / 2") || bodyTxt.includes("1 / 2") || bodyTxt.includes("Local model")) {
+        const skip = findClickableMatching(/^(Skip|Skip for now|Not now|Continue|Done|Finish|Get started|Start working|Open workspace)$/i);
+        if (skip) { skip.click(); await sleep(1000); continue; }
+      }
+      await sleep(800);
+    }
+
+    // 3. Click project "py09-native-tauri-reopen" if not already inside its Chats view
+    if (projEl && !(document.body?.innerText || "").includes("All chats")) {
+      projEl.click();
+      await sleep(2500);
+    }
+
+    // 4. Click the reopened "Finished" chat in the Chats list
+    for (let i = 0; i < 15; i += 1) {
+      const fin = findClickableMatching(/Finished/i);
+      if (fin) {
+        fin.click();
+        await sleep(2500);
+        break;
+      }
+      await sleep(500);
+    }
+
+    // 5. Wait for reopened Python activity in Den DOM
+    let denDom = "";
+    for (let i = 0; i < 20; i += 1) {
+      denDom = document.body?.innerText || "";
+      if (
+        denDom.includes("PY09 native desktop witness completed") ||
+        denDom.includes("py09_witness.py") ||
+        denDom.includes("PY09_RETAINED_STDOUT_BEGIN")
+      ) {
+        break;
+      }
+      await sleep(600);
+    }
+    const denHasSession =
+      denDom.includes("PY09 native desktop witness completed") ||
+      denDom.includes("py09_witness.py") ||
+      denDom.includes("PY09_RETAINED_STDOUT_BEGIN");
+
+    // 6. Switch to Files surface via data-testid="project-files-entry" and click py09-den-witness.txt
+    const filesEntry = document.querySelector('[data-testid="project-files-entry"]');
+    if (filesEntry) {
+      filesEntry.click();
+      await sleep(2000);
+    } else {
+      const fBtn = findClickableMatching(/^Files$/i);
+      if (fBtn) { fBtn.click(); await sleep(2000); }
+    }
+
+    let witnessEl = null;
+    for (let i = 0; i < 20; i += 1) {
+      witnessEl =
+        document.querySelector('[data-testid="files-tree-file"][data-path="py09-den-witness.txt"]') ||
+        findByExactText("py09-den-witness.txt");
+      if (witnessEl) {
+        witnessEl.click();
+        await sleep(2500);
+        break;
+      }
+      await sleep(500);
+    }
+
+    let filesDom = "";
+    for (let i = 0; i < 15; i += 1) {
+      filesDom = document.body?.innerText || "";
+      if (filesDom.includes("PY09_DEN_WITNESS_OK_NATIVE_AOT")) break;
+      await sleep(500);
+    }
+
+    const isTauri =
+      typeof window.__TAURI_INTERNALS__ !== "undefined" ||
+      typeof window.__TAURI__ !== "undefined";
+
+    await report({
+      status: denHasSession && filesDom.includes("py09-den-witness.txt") && filesDom.includes("PY09_DEN_WITNESS_OK_NATIVE_AOT") ? "PASS" : "FAIL",
+      started_at: startedAt,
+      completed_at: new Date().toISOString(),
+      url: window.location.href,
+      user_agent: navigator.userAgent,
+      is_tauri_wkwebview: isTauri,
+      has_tauri_internals: typeof window.__TAURI_INTERNALS__ !== "undefined",
+      project_name: "py09-native-tauri-reopen",
+      den_reopened_has_session: denHasSession,
+      den_dom_excerpt: denDom.slice(0, 2500),
+      files_reopened_has_artifact_name: filesDom.includes("py09-den-witness.txt"),
+      files_reopened_has_marker: filesDom.includes("PY09_DEN_WITNESS_OK_NATIVE_AOT"),
+      files_dom_excerpt: filesDom.slice(0, 2500),
+    });
+  } catch (err) {
+    await report({
+      status: "ERROR",
+      error: String(err),
+      url: window.location.href,
+      user_agent: navigator.userAgent,
+      is_tauri_wkwebview: typeof window.__TAURI_INTERNALS__ !== "undefined",
+      dom_head: (document.body?.innerText || "").slice(0, 1500),
+    });
+  }
+})();
+"""
+
+
+def write_disposable_vite_config(den_dir: Path, scratch: Path, obs_out_path: Path) -> Path:
+    """Create a disposable Vite config in scratch that wraps lycaon-den/vite.config.ts
+    with a dev-only plugin serving /__py09_driver.js and /__py09_report."""
+    driver_js_path = scratch / "py09-wkwebview-driver.js"
+    driver_js_path.write_text(WKWEBVIEW_DRIVER_JS, encoding="utf-8")
+    cfg_path = scratch / "vite.py09-driver.config.ts"
+    base_cfg = (den_dir / "vite.config.ts").as_posix()
+    cfg_src = f"""import fs from "node:fs";
+import baseConfigFn from {json.dumps(base_cfg)};
+
+const DRIVER_JS_PATH = {json.dumps(str(driver_js_path))};
+const OBS_OUT_PATH = {json.dumps(str(obs_out_path))};
+
+export default (env: any) => {{
+  const cfg: any = typeof baseConfigFn === "function" ? baseConfigFn(env) : baseConfigFn;
+  cfg.plugins = [
+    ...(cfg.plugins || []),
+    {{
+      name: "py09-dev-wkwebview-driver",
+      transformIndexHtml(html: string) {{
+        return html.replace(
+          "</body>",
+          `<script type="module" src="/__py09_driver.js"></script></body>`,
+        );
+      }},
+      configureServer(server: any) {{
+        server.middlewares.use("/__py09_driver.js", (_req: any, res: any) => {{
+          res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+          res.end(fs.readFileSync(DRIVER_JS_PATH, "utf-8"));
+        }});
+        server.middlewares.use("/__py09_report", (req: any, res: any) => {{
+          let body = "";
+          req.on("data", (chunk: any) => {{ body += chunk.toString(); }});
+          req.on("end", () => {{
+            fs.writeFileSync(OBS_OUT_PATH, body, "utf-8");
+            res.statusCode = 200;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({{ ok: true }}));
+          }});
+        }});
+      }},
+    }},
+  ];
+  return cfg;
+}};
+"""
+    cfg_path.write_text(cfg_src, encoding="utf-8")
+    return cfg_path
+
 
 def sha256_file(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
@@ -429,8 +638,10 @@ def main():
             (out_dir / "api-reopen-messages.json").write_text(json.dumps(api_msgs, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             (out_dir / "api-reopen-export.md").write_text(api_export, encoding="utf-8")
 
-            # Start Vite on port 1420 (the debug Tauri binary's devUrl) proxied to reopened pw Run #2
+            # Start Vite on port 1420 with disposable dev-only WKWebView driver config (zero repo edits)
             den_dir = repo_root / "lycaon-den"
+            obs_path = out_dir / "wkwebview-dom-observation.json"
+            vite_cfg_path = write_disposable_vite_config(den_dir, scratch, obs_path)
             vite_env = os.environ.copy()
             vite_env.pop("PW_PORTABLE_PYTHON_IMAGE_DIR", None)
             vite_env.pop("PW_PORTABLE_PYTHON_ENGINE_DIR", None)
@@ -441,7 +652,7 @@ def main():
             vite_env["LYCAON_E2E_FROZEN"] = "1"
             vite_fh = (out_dir / "lycaon-den-vite.log").open("w", encoding="utf-8")
             vite_proc = subprocess.Popen(
-                ["npx", "vite", "--port", "1420", "--host", "127.0.0.1", "--strictPort"],
+                ["npx", "vite", "--config", str(vite_cfg_path), "--port", "1420", "--host", "127.0.0.1", "--strictPort"],
                 cwd=str(den_dir),
                 env=vite_env,
                 stdout=vite_fh,
@@ -469,8 +680,12 @@ def main():
                 stderr=subprocess.STDOUT,
             )
 
-            # Give native Tauri WKWebView time to create window & fetch reopened /v1/projects from pw2
-            time.sleep(10)
+            # Wait up to 75s for the in-WKWebView dev driver to complete Den + Files UI assertions & report
+            obs_deadline = time.time() + 75.0
+            while time.time() < obs_deadline:
+                if obs_path.is_file() and obs_path.stat().st_size > 10:
+                    break
+                time.sleep(1.0)
 
             # Capture live process tree proving native Tauri + WKWebView (zero Chromium)
             ps_out = subprocess.run(["ps", "-ef"], capture_output=True, text=True).stdout
@@ -520,6 +735,24 @@ def main():
             stop_proc(vite_proc, vite_fh)
             stop_proc(pw2, pw2_fh)
 
+        # Load in-WKWebView DOM observation reported by the dev-only driver
+        wkwebview_obs = None
+        obs_path = out_dir / "wkwebview-dom-observation.json"
+        if obs_path.is_file():
+            try:
+                wkwebview_obs = json.loads(obs_path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                wkwebview_obs = {"parse_error": str(exc)}
+
+        wk_ok = (
+            isinstance(wkwebview_obs, dict)
+            and wkwebview_obs.get("status") == "PASS"
+            and wkwebview_obs.get("is_tauri_wkwebview") is True
+            and wkwebview_obs.get("den_reopened_has_session") is True
+            and wkwebview_obs.get("files_reopened_has_artifact_name") is True
+            and wkwebview_obs.get("files_reopened_has_marker") is True
+        )
+
         # Inspect Run #2 pw-server log for live requests from the native Tauri WKWebView
         pw2_log = (out_dir / "run2-reopened-pw-server.log").read_text(encoding="utf-8", errors="ignore")
         webview_hit_projects = "/v1/projects" in pw2_log
@@ -528,7 +761,7 @@ def main():
         file_info = subprocess.run(["file", str(tauri_bin)], capture_output=True, text=True).stdout.strip()
 
         summary = {
-            "status": "PASS" if (native_windows and webview_hit_projects) else "PARTIAL",
+            "status": "PASS" if (native_windows and webview_hit_projects and wk_ok) else "PARTIAL",
             "platform": f"{platform.system().lower()}-{platform.machine().lower()}",
             "pw_portable_python_image_dir": "UNSET",
             "pw_portable_python_engine_dir": "UNSET",
@@ -556,6 +789,16 @@ def main():
                     "v1_projects": webview_hit_projects,
                     "v1_events": webview_hit_events,
                 },
+                "wkwebview_dom_observation_file": "wkwebview-dom-observation.json",
+                "wkwebview_dom_observation_summary": {
+                    "status": (wkwebview_obs or {}).get("status"),
+                    "is_tauri_wkwebview": (wkwebview_obs or {}).get("is_tauri_wkwebview"),
+                    "has_tauri_internals": (wkwebview_obs or {}).get("has_tauri_internals"),
+                    "user_agent": (wkwebview_obs or {}).get("user_agent"),
+                    "den_reopened_has_session": (wkwebview_obs or {}).get("den_reopened_has_session"),
+                    "files_reopened_has_artifact_name": (wkwebview_obs or {}).get("files_reopened_has_artifact_name"),
+                    "files_reopened_has_marker": (wkwebview_obs or {}).get("files_reopened_has_marker"),
+                },
                 "screencapture": screencapture_result,
                 "process_snapshot": "native-tauri-processes.txt",
                 "window_metadata_file": "native-tauri-windows.json",
@@ -572,7 +815,9 @@ def main():
             ],
         }
         (out_dir / "native-reopen-summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        print(f"DONE [PY09 native macOS Tauri reopen]: status={summary['status']} windows={len(native_windows)} webview_projects={webview_hit_projects} screencapture={screencapture_result['succeeded']}")
+        print(f"DONE [PY09 native macOS Tauri reopen]: status={summary['status']} windows={len(native_windows)} webview_projects={webview_hit_projects} wkwebview_dom_ok={wk_ok}")
+        if not wk_ok:
+            raise SystemExit(1)
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
 
