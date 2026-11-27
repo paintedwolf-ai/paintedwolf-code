@@ -102,8 +102,29 @@ func (e *Metadata) enrichToolMeta(ctx context.Context, meta tools.ToolMeta, filt
 			}
 		}
 		meta = ProjectCommandMeta(meta, e.commandEffectsForFilter(ctx, filter), e.externalHidden)
+		if !e.toolVisibleForFilter(ctx, filter, "update_progress") {
+			meta.ArgsSchema = tools.PruneCommandProgressSchema(meta.ArgsSchema)
+		}
 	}
 	return meta
+}
+
+func (e *Metadata) toolVisibleForFilter(ctx context.Context, filter platform.ToolFilter, tool string) bool {
+	if filter.SurfaceID != "" {
+		surfaceTools, err := surfaceCommandFormTools(filter.SurfaceID)
+		if err != nil || (surfaceTools != nil && !surfaceTools[tool]) {
+			return false
+		}
+	}
+	if e == nil || e.policy == nil {
+		return true
+	}
+	decision, err := tools.EvaluateListVisible(ctx, e.policy, platform.PolicyContext{
+		ProfileID:  filter.ProfileID,
+		ToolAccess: filter.ToolAccess,
+		ToolName:   tool,
+	})
+	return err == nil && decision != nil && decision.Allowed
 }
 
 func pruneWaitConditionSchema(schema map[string]any, allowed []string) map[string]any {

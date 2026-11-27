@@ -2,6 +2,7 @@ package invocation
 
 import (
 	"encoding/json"
+	"slices"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -10,21 +11,33 @@ type executionSelection struct {
 	ids string
 }
 
+func findActivity(activities []api.CommandActivity, id string) *api.CommandActivity {
+	for i := range activities {
+		if activities[i].ID == id {
+			return &activities[i]
+		}
+	}
+	for i := range activities {
+		if slices.Contains(activities[i].ExecutionIDs, id) {
+			return &activities[i]
+		}
+	}
+	return nil
+}
+
 func selectActivityExecutions(activities []api.CommandActivity, id string) (executionSelection, error) {
 	if id == "" {
 		return executionSelection{}, nil
 	}
-	for _, activity := range activities {
-		if activity.ID != id {
-			continue
-		}
-		if len(activity.ExecutionIDs) == 0 {
-			return executionSelection{}, nil
-		}
-		ids, err := json.Marshal(activity.ExecutionIDs)
-		return executionSelection{ids: string(ids)}, err
+	activity := findActivity(activities, id)
+	if activity == nil {
+		return executionSelection{}, ErrProgramNotFound
 	}
-	return executionSelection{}, ErrProgramNotFound
+	if len(activity.ExecutionIDs) == 0 {
+		return executionSelection{}, nil
+	}
+	ids, err := json.Marshal(activity.ExecutionIDs)
+	return executionSelection{ids: string(ids)}, err
 }
 
 const activityExecutionFilter = `AND (?='' OR EXISTS (

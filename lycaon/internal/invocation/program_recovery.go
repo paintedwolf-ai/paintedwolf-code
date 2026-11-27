@@ -33,6 +33,38 @@ func (r *SQLRecorder) InterruptPrograms(ctx context.Context, sessionID, detailRe
 	return count, nil
 }
 
+// InterruptProgram reconciles one open program and any unsettled progress row
+// after a settlement failure without affecting other programs in the session.
+func (r *SQLRecorder) InterruptProgram(ctx context.Context, sessionID, programID, detailReference string) error {
+	if r == nil || r.database == nil {
+		return fmt.Errorf("invocation recorder is not configured")
+	}
+	if sessionID == "" || programID == "" || detailReference == "" {
+		return fmt.Errorf("program interruption requires session, program and retained recovery detail")
+	}
+	tx, err := r.database.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	at := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := tx.ExecContext(ctx, `UPDATE invocation_program_progress SET state='unknown',detail_ref=?,settled_at=? WHERE program_id=? AND session_id=? AND state='running'`, detailReference, at, programID, sessionID); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE invocation_programs SET state='interrupted',status_code=NULL,stop_code='TOOL_OWNER_INTERRUPTED',detail_ref=?,settled_at=? WHERE id=? AND state IN ('running','waiting') AND parent_receipt_id IN (SELECT id FROM invocation_receipts WHERE session_id=?)`, detailReference, at, programID, sessionID)
+	if err != nil {
+		return err
+	}
+	if err := oneProgramTransition(result); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	notifySettled(ctx, programID)
+	return nil
+}
+
 // interruptProgramRows shares the parent's writer transaction. A parent receipt
 // is itself durable recovery detail when boot has no separate output body.
 func interruptProgramRows(ctx context.Context, tx db.DBTX, sessionID, detailReference, at string) (int64, error) {

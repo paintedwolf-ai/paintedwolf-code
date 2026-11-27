@@ -141,10 +141,11 @@ type programRun struct {
 	baseEnv         []string
 
 	// envelope carries the call's launch capability requests to each launch.
-	envelope   map[string]any
-	window     *programWindow
-	custody    programCustodyReader
-	provenance programProvenanceState
+	envelope        map[string]any
+	progressOutcome *ProgramProgressOutcome
+	window          *programWindow
+	custody         programCustodyReader
+	provenance      programProvenanceState
 }
 
 // Run parses and validates the whole submitted program before any effect,
@@ -197,6 +198,10 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 		}
 	}()
 
+	progressUpdate, err := extractProgramProgressUpdate(tool, args)
+	if err != nil {
+		return "", err
+	}
 	run := &programRun{tool: tool, catalog: catalog, commands: commands, envelope: launchEnvelope(args), tc: tc, memory: memory, source: source, parentReceipt: tc.Invocation.ID, window: newProgramWindow(tc, CanonicalCommandKey(tc, args), r.clock())}
 	paths, err := r.bindProgramFrame(ctx, run, args, snapshot.Plan.CatalogDigest)
 	if err != nil {
@@ -204,6 +209,13 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	}
 	releasePlan := release
 	release = func() { run.frame.Close(); releasePlan() }
+	preparedProgress, progressStore, progressReconciler, err := prepareProgramProgress(ctx, r, run, parsed, progressUpdate)
+	if err != nil {
+		return "", err
+	}
+	if preparedProgress != nil {
+		defer preparedProgress.Close()
+	}
 	if strings.TrimSpace(tc.Host.SessionOutputDir) == "" {
 		return "", toolrejection.RejectInvalidArguments(tools.SessionOutputUnavailableCode, map[string]any{"path": "@output"})
 	}
@@ -250,6 +262,9 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	}
 
 	if err := r.beginProgram(ctx, run, outputs, snapshot.Plan, scope, screening); err != nil {
+		return "", err
+	}
+	if run.progressOutcome, err = applyProgramProgress(ctx, r, run, preparedProgress, progressStore, progressReconciler); err != nil {
 		return "", err
 	}
 	ctx = observeProgramActivities(ctx, r.Recorder, tc)

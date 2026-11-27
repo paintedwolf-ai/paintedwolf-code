@@ -188,7 +188,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		}
 		for _, name := range literalOwners.Commands() {
 			tool, _ := literalOwners.Operation(name)
-			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+			owners.Natives[name] = command.NativeOperation{Tool: tool, ClosedForms: literalOwners.ClosedForms(name), Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 				prepared, err := literalOwners.Prepare(frame, request)
 				if err != nil {
 					return command.NativePrepared{}, err
