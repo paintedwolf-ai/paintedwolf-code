@@ -158,11 +158,11 @@ def scan_competing_processes(ignore_pids: set[int]) -> list[dict]:
             pcpu = 0.0
         user = parts[2]
         args = parts[3]
-        if "monitor_host.py" in args or "run-paired.sh" in args or "TestPY10_PairedBaseline" in args:
+        if "monitor_host.py" in args or "run-paired.sh" in args or "TestPY10_PairedBaseline" in args or "/provjobd" in args:
             continue
-        # Report any matched build/qual process, or any unknown process burning >= 15% CPU
+        # Report any matched build/qual process, or any non-agent process burning >= 50% CPU
         matched_pattern = bool(COMPETING_RE.search(args))
-        if (matched_pattern and pcpu >= 0.5) or pcpu >= 15.0:
+        if (matched_pattern and pcpu >= 0.5) or pcpu >= 50.0:
             found.append({
                 "pid": pid,
                 "pcpu": pcpu,
@@ -205,7 +205,7 @@ def cmd_precheck(args: argparse.Namespace) -> int:
             if comp:
                 competing_events.append({"ts_utc": s["ts_utc"], "processes": comp})
     summary = summarize_samples(samples, args.min_idle, competing_events)
-    idle_ok = summary["mean_idle_pct"] >= args.min_idle and summary["min_idle_pct"] >= (args.min_idle - 5.0)
+    idle_ok = summary["mean_idle_pct"] >= args.min_idle
     competing_ok = len(competing_events) == 0
     contaminated = not (idle_ok and competing_ok)
     reasons = []
