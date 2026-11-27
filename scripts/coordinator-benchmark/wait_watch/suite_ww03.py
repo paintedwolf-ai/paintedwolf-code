@@ -709,7 +709,7 @@ class LiveRefusalBarrier(ProcessBarrier):
     def _ensure_script(self) -> pathlib.Path:
         script_path = self.root_dir / "run_live_refusal_barrier.py"
         body = (
-            "import json, os, pathlib, socket, sys, time\n"
+            "import json, os, pathlib, socket, subprocess, sys, time\n"
             "root = pathlib.Path(__file__).resolve().parent\n"
             "reached = root / 'reached'\n"
             "reached_tmp = root / 'reached.tmp'\n"
@@ -757,6 +757,12 @@ class LiveRefusalBarrier(ProcessBarrier):
             "        with open(tgt, 'a', encoding='utf-8') as fh:\n"
             "            fh.write('unexpected-write\\n')\n"
             "        attempts[label] = 'wrote'\n"
+            "    except OSError as exc:\n"
+            "        attempts[label] = f'{type(exc).__name__}:{exc.errno}:{exc}'\n"
+            "for label, tgt in (('touch_outside', outside_target), ('touch_floor', floor_target)):\n"
+            "    try:\n"
+            "        tp = subprocess.run(['/usr/bin/touch', str(tgt)], capture_output=True, text=True, check=False)\n"
+            "        attempts[label] = {'rc': tp.returncode, 'stderr': (tp.stderr or '').strip()}\n"
             "    except OSError as exc:\n"
             "        attempts[label] = f'{type(exc).__name__}:{exc.errno}:{exc}'\n"
             "attempted_tmp.write_text(json.dumps({'attempts': attempts, 'pid': os.getpid(), 'ts_ns': time.time_ns()}), encoding='utf-8')\n"
