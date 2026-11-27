@@ -314,5 +314,120 @@ class TestTB08_A09_UnavailableBoundary(unittest.TestCase):
             self.assertIn("a09_socket_changed_code_mismatch", bad["failed_rule_ids"])
 
 
+class _FakeSidecarApp:
+    def __init__(self, directory: pathlib.Path) -> None:
+        self.directory = directory
+        self.directory.mkdir(parents=True, exist_ok=True)
+        self.closed = False
+        self.requests: list[tuple[str, dict]] = []
+
+    def ready(self) -> None:
+        pass
+
+    def request(self, path: str, body: dict | None = None) -> dict:
+        self.requests.append((path, body or {}))
+        return {"ok": True}
+
+    def close(self, cleanup: bool = False) -> None:
+        self.closed = True
+
+
+class TestTB08SidecarRunner(unittest.TestCase):
+    def test_all_42_slots_emit_receipts_and_manifest_on_warmed_sidecar(self) -> None:
+        import json
+        import re
+        from wea.tb08_sidecar_runner import run_tb08_sidecar_slots
+
+        created_apps: list[_FakeSidecarApp] = []
+
+        def fake_app_factory(app_dir: pathlib.Path, **_kwargs):
+            app = _FakeSidecarApp(app_dir)
+            created_apps.append(app)
+            return app
+
+        def fake_open_session(_app, _project_dir, **_kwargs):
+            return (f"sess-{len(_app.requests)}", "proj-1", "root-1")
+
+        def fake_send_tool_call(_app, _sid, name, args, checkpoint_policy=None):
+            call_id = f"call-{name}"
+            if name == "fetch_url":
+                url = str(args.get("url") or "")
+                if "127.0.0.1" in url:
+                    return call_id, {"outcome": "rejected", "codes": ["FETCH_URL_BLOCKED"]}, {}
+                return call_id, {"outcome": "rejected", "codes": ["WEB_SEARCH_HOST_DENIED"]}, {}
+
+            cmd = str(args.get("command") or "")
+            if checkpoint_policy is None:
+                # Positive controls & A07 clean/daemon/env probes.
+                if "a05_08_permitted.txt" in cmd:
+                    (created_apps[0].directory.parent / "project" / "a05_08_permitted.txt").write_text(
+                        "tb08-a05-08-permitted\n", encoding="utf-8"
+                    )
+                return call_id, {"outcome": "completed", "left_running": 0}, {}
+
+            if checkpoint_policy == "approve_once":
+                m = re.search(r"http://127\.0\.0\.1:(\d+)/ping", cmd)
+                if m:
+                    port = int(m.group(1))
+                    with urllib.request.urlopen(f"http://127.0.0.1:{port}/ping", timeout=3) as resp:
+                        resp.read()
+                    return call_id, {
+                        "outcome": "completed",
+                        "external_access": {
+                            "endpoints": [
+                                {
+                                    "host": "127.0.0.1",
+                                    "port": port,
+                                    "visibility": "observed",
+                                    "decision": "allow",
+                                    "allowed_count": 1,
+                                }
+                            ]
+                        },
+                    }, {}
+                return call_id, {"outcome": "completed"}, {}
+
+            return call_id, {"outcome": "rejected", "codes": ["SANDBOX_TRY_WRITE_ROOT"]}, {}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = pathlib.Path(tmp) / "tb08-out"
+            manifest = run_tb08_sidecar_slots(
+                out_dir,
+                platform_key="linux",
+                app_factory=fake_app_factory,
+                session_opener=fake_open_session,
+                tool_caller=fake_send_tool_call,
+            )
+            # Single warmed sidecar reused across all 42 slots.
+            self.assertEqual(len(created_apps), 1)
+            self.assertTrue(created_apps[0].closed)
+            self.assertEqual(manifest["total_slots"], 42)
+            self.assertEqual(
+                manifest["counts_by_family"],
+                {"A05": 8, "A06": 10, "A07": 3, "A08": 12, "A09": 9},
+            )
+            self.assertTrue(manifest["all_passed"], f"manifest failures: {manifest}")
+
+            # Verify one structured JSON receipt per scheduled variant.
+            receipt_files = sorted((out_dir / "receipts").glob("*.json"))
+            self.assertEqual(len(receipt_files), 42)
+            sample = json.loads((out_dir / "receipts" / "A06-10.json").read_text(encoding="utf-8"))
+            for key in (
+                "run_id",
+                "slot_id",
+                "family",
+                "lane",
+                "host",
+                "product_source",
+                "harness_source",
+                "typed_result",
+                "independent_observation",
+                "verdict",
+            ):
+                self.assertIn(key, sample)
+            self.assertEqual(sample["lane"], "sidecar")
+            self.assertEqual(sample["typed_result"]["refusal_code"], "FETCH_URL_BLOCKED")
+
+
 if __name__ == "__main__":
     unittest.main()
