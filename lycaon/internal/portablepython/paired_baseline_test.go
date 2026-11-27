@@ -42,6 +42,7 @@ type pairedModeResult struct {
 	Mode                        string         `json:"mode"`
 	SampleCount                 int            `json:"sample_count"`
 	InitServiceConstructionMS   float64        `json:"init_service_construction_ms,omitempty"`
+	PrimingSample               *pairedSample  `json:"priming_sample_excluded,omitempty"`
 	Samples                     []pairedSample `json:"samples"`
 	MedianServiceConstructionMS float64        `json:"median_service_construction_ms"`
 	MedianToolLatencyMS         float64        `json:"median_tool_latency_ms"`
@@ -428,6 +429,8 @@ func TestPY10_PairedBaseline(t *testing.T) {
 
 		if wantMode["warm"] {
 			svc, initMS := newServiceTimed(t, fmt.Sprintf("%s-warm", def.name))
+			// Execute 1 excluded priming call on the initialized service before measuring 5 subsequent fresh guests.
+			priming := runGuest(t, svc, def, "warm-priming", 0, 0)
 			warmSamples := make([]pairedSample, 0, samplesCount)
 			for i := 1; i <= samplesCount; i++ {
 				s := runGuest(t, svc, def, "warm", i, 0)
@@ -435,8 +438,9 @@ func TestPY10_PairedBaseline(t *testing.T) {
 			}
 			_ = svc.Close(ctx)
 			wr.Warm = pairedSummarizeMode("warm", initMS, warmSamples)
-			t.Logf("PAIRED %s [warm n=%d]: init=%.1fms median_tool=%.1fms p95_tool=%.1fms fuel=%d peak_pages=%d",
-				def.name, samplesCount, initMS,
+			wr.Warm.PrimingSample = &priming
+			t.Logf("PAIRED %s [warm n=%d, priming=%.1fms excluded]: init=%.1fms median_tool=%.1fms p95_tool=%.1fms fuel=%d peak_pages=%d",
+				def.name, samplesCount, priming.ToolLatencyMS, initMS,
 				wr.Warm.MedianToolLatencyMS, wr.Warm.P95ToolLatencyMS,
 				wr.Warm.MedianFuel, wr.Warm.MedianPeakMemoryPages)
 			if def.name == "frozen_workbook" && wr.Warm.MedianToolLatencyMS > 5000.0 {
