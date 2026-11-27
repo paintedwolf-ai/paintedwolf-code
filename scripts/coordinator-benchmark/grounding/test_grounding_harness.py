@@ -778,11 +778,11 @@ class TestSelectorsManifest(unittest.TestCase):
     def test_manifest_counts_and_coverage(self) -> None:
         summary = validate_manifest()
         self.assertEqual(summary["total_families"], 30)
-        self.assertEqual(summary["fixed_sidecar_slots"], 173)
+        self.assertEqual(summary["fixed_sidecar_slots"], 174)
         self.assertEqual(summary["fixed_in_process_slots"], 30)
-        self.assertEqual(summary["fixed_base_slots"], 203)
-        self.assertEqual(summary["fixed_tripled_per_platform"], 435)
-        self.assertEqual(summary["fixed_both_platforms"], 870)
+        self.assertEqual(summary["fixed_base_slots"], 204)
+        self.assertEqual(summary["fixed_tripled_per_platform"], 438)
+        self.assertEqual(summary["fixed_both_platforms"], 876)
         self.assertEqual(summary["generated_per_platform_per_seed"], 23700)
         self.assertEqual(len(PREFLIGHT_COVERAGE_ROWS), 7)
         self.assertEqual({f.finding_id for f in GB01_FINDINGS}, {"F1", "F2", "F3"})
@@ -2275,6 +2275,79 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
         ev4 = evaluate_three_ledger_controls(valid_sup, missing_adj, supported_citation=c_sup, unsupported_citation=c_unsup, adjacent_supported_citation=c_sup)
         self.assertFalse(ev4["control_2_unsupported"]["passed"])
         self.assertFalse(ev4["control_2_unsupported"]["adjacent_supported_passed"])
+
+    def test_d012_exact_binary_friction_attribution_and_cross_store_sse_dedup(self) -> None:
+        """Decision 012/033: GDB/LLDB trace parsing, owner/root attribution, zero-charge control, and store+SSE dedup."""
+        from grounding.friction_probe import (
+            count_attributed_friction_hits,
+            parse_friction_trace_log,
+            probe_store_db,
+        )
+
+        sid_a = "11111111-1111-4111-8111-111111111111"
+        root_a = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        sid_b = "22222222-2222-4222-8222-222222222222"
+        root_b = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+
+        # macOS LLDB format with overlapping sessions/roots
+        lldb_log = (
+            "PW_GND_OWNED_PID=4242\n"
+            "PW_GND_FRICTION_HIT\n"
+            f"PW_GND_ARG sessionID {sid_a}\n"
+            f"PW_GND_ARG rootID {root_a}\n"
+            "PW_GND_FRICTION_HIT\n"
+            f"PW_GND_ARG sessionID {sid_b}\n"
+            f"PW_GND_ARG rootID {root_b}\n"
+            "PW_GND_FRICTION_HIT\n"
+            f"PW_GND_ARG sessionID {sid_a}\n"
+            f"PW_GND_ARG rootID {root_a}\n"
+        )
+        pid, hits = parse_friction_trace_log(lldb_log)
+        self.assertEqual(pid, 4242)
+        self.assertEqual(len(hits), 3)
+        self.assertEqual(count_attributed_friction_hits(hits, session_id=sid_a, root_id=root_a), 2)
+        self.assertEqual(count_attributed_friction_hits(hits, session_id=sid_b, root_id=root_b), 1)
+        self.assertEqual(count_attributed_friction_hits(hits, session_id="33333333-3333-4333-8333-333333333333"), 0)
+
+        # Linux GDB format
+        gdb_log = (
+            "PW_GND_OWNED_PID=9001\n"
+            "PW_GND_FRICTION_HIT\n"
+            f'sessionID = "{sid_b}"\n'
+            f'rootID = "{root_b}"\n'
+        )
+        gpid, ghits = parse_friction_trace_log(gdb_log)
+        self.assertEqual(gpid, 9001)
+        self.assertEqual(count_attributed_friction_hits(ghits, session_id=sid_b, root_id=root_b), 1)
+        self.assertEqual(count_attributed_friction_hits(ghits, session_id=sid_a), 0)
+
+        # Cross-store.db event_outbox + SSE deduplication for one typed event ID
+        import sqlite3
+        with tempfile.TemporaryDirectory(prefix="gnd-d12-dedup-") as tmp:
+            db = pathlib.Path(tmp) / "store.db"
+            trace = pathlib.Path(tmp) / "sidecar.log"
+            trace.write_text(lldb_log, encoding="utf-8")
+            conn = sqlite3.connect(str(db))
+            conn.execute("CREATE TABLE messages (id TEXT, session_id TEXT, grounding_json TEXT)")
+            conn.execute("CREATE TABLE event_outbox (id TEXT, session_id TEXT, payload_json TEXT)")
+            conn.execute(
+                "INSERT INTO event_outbox VALUES (?, ?, ?)",
+                ("ev-77", sid_a, json.dumps({"code": "MID_TURN_NOTE_HANDLE_UNGROUND"})),
+            )
+            conn.commit()
+            conn.close()
+
+            snap = probe_store_db(
+                db,
+                sid_a,
+                sse_events=[{"id": "ev-77", "session_id": sid_a, "code": "MID_TURN_NOTE_HANDLE_UNGROUND"}],
+                trace_log_path=trace,
+                root_id=root_a,
+            )
+            self.assertEqual(snap.withheld_notes.value, 1)  # deduplicated across outbox + SSE
+            self.assertEqual(snap.friction_units.status, "observed")
+            self.assertEqual(snap.friction_units.value, 2)
+            self.assertTrue(snap.is_complete())
 
 
 if __name__ == "__main__":

@@ -40,11 +40,160 @@ import contextlib
 from dataclasses import dataclass
 import json
 import pathlib
+import platform
+import re
 import sqlite3
 from typing import Any, Iterable, Mapping
 
 from .checker import VALID_MID_TURN_NOTE_CODES
 from .delivery_log import FrictionCounters
+
+_UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+
+@dataclass(frozen=True)
+class FrictionHit:
+    """One exact-binary `recordFrictionLocked` charge attributed to (session_id, root_id)."""
+
+    index: int
+    session_id: str = ""
+    root_id: str = ""
+
+
+def build_exact_binary_debugger_prefix(
+    work_dir: str | pathlib.Path,
+    *,
+    platform_system: str | None = None,
+) -> list[str]:
+    """Generate Decision 012 GDB (Linux) or LLDB (macOS) breakpoint wrapper for `recordFrictionLocked`."""
+    root = pathlib.Path(work_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    os_name = platform_system or platform.system()
+    if os_name == "Darwin":
+        setup = root / "trace.lldb"
+        callback = root / "trace_callback.py"
+        callback.write_text(
+            'import re\n'
+            'import lldb\n\n'
+            'def hit(frame, bp_loc, internal_dict):\n'
+            '    print("PW_GND_FRICTION_HIT", flush=True)\n'
+            '    process = frame.GetThread().GetProcess()\n'
+            '    for key, addr_register, len_register in (("sessionID", "x1", "x2"), ("rootID", "x3", "x4")):\n'
+            '        address = frame.FindRegister(addr_register).GetValueAsUnsigned()\n'
+            '        size = frame.FindRegister(len_register).GetValueAsUnsigned()\n'
+            '        if size != 36 or not address:\n'
+            '            continue\n'
+            '        error = lldb.SBError()\n'
+            '        raw = process.ReadMemory(address, size, error)\n'
+            '        if error.Success() and re.fullmatch(rb"[0-9a-f-]{36}", raw):\n'
+            '            print("PW_GND_ARG " + key + " " + raw.decode("ascii"), flush=True)\n'
+            '    return False\n',
+            encoding="utf-8",
+        )
+        setup.write_text(
+            "settings set target.disable-aslr false\n"
+            "breakpoint set --func-regex recordFrictionLocked\n"
+            f"command script import {callback}\n"
+            "breakpoint command add -F trace_callback.hit 1\n"
+            "breakpoint modify --auto-continue true 1\n"
+            "process launch --stop-at-entry\n"
+            'script print("PW_GND_OWNED_PID="+str(lldb.debugger.GetSelectedTarget().GetProcess().GetProcessID()),flush=True)\n'
+            "continue\n",
+            encoding="utf-8",
+        )
+        return ["/usr/bin/lldb", "--batch", "-s", str(setup), "--"]
+
+    setup = root / "trace.gdb"
+    setup.write_text(
+        "set pagination off\n"
+        "set confirm off\n"
+        "set disable-randomization off\n"
+        "set auto-load libthread-db off\n"
+        "set libthread-db-search-path /nonexistent\n"
+        "set detach-on-fork on\n"
+        "set follow-fork-mode parent\n"
+        "starti\n"
+        'python print("PW_GND_OWNED_PID="+str(gdb.selected_inferior().pid),flush=True)\n'
+        "python\n"
+        '_, locs = gdb.decode_line("github.com/lycaon/lycaon/internal/session/closeouts.(*Service).recordFrictionLocked")\n'
+        "sal = locs[0]\n"
+        'bp = gdb.Breakpoint(f"{sal.symtab.filename}:{sal.line + 2}")\n'
+        "bp.silent = True\n"
+        'bp.commands = \'printf "PW_GND_FRICTION_HIT\\\\n"\\ninfo args\\ncontinue\\n\'\n'
+        "end\n"
+        "continue\n",
+        encoding="utf-8",
+    )
+    return ["/usr/bin/gdb", "-nh", "-nx", "-batch", "-iex", "set auto-load off", "-x", str(setup), "--args"]
+
+
+def parse_friction_trace_log(log_text: str) -> tuple[int | None, tuple[FrictionHit, ...]]:
+    """Parse `PW_GND_OWNED_PID` and attributed `PW_GND_FRICTION_HIT` entries from GDB/LLDB output."""
+    owned_pid: int | None = None
+    pid_match = re.search(r"^PW_GND_OWNED_PID=(\d+)$", log_text, re.MULTILINE)
+    if pid_match:
+        owned_pid = int(pid_match.group(1))
+
+    hits: list[FrictionHit] = []
+    cur_idx = -1
+    cur_session = ""
+    cur_root = ""
+
+    def _flush() -> None:
+        nonlocal cur_idx, cur_session, cur_root
+        if cur_idx >= 0:
+            hits.append(FrictionHit(index=cur_idx, session_id=cur_session, root_id=cur_root))
+            cur_idx = -1
+            cur_session = ""
+            cur_root = ""
+
+    for raw_line in log_text.splitlines():
+        line = raw_line.strip()
+        if line == "PW_GND_FRICTION_HIT":
+            _flush()
+            cur_idx = len(hits)
+            continue
+        if cur_idx < 0:
+            continue
+        if line.startswith("PW_GND_ARG sessionID "):
+            m = _UUID_RE.search(line)
+            if m:
+                cur_session = m.group(0)
+        elif line.startswith("PW_GND_ARG rootID "):
+            m = _UUID_RE.search(line)
+            if m:
+                cur_root = m.group(0)
+        elif line.startswith("sessionID ="):
+            m = _UUID_RE.search(line)
+            if m:
+                cur_session = m.group(0)
+        elif line.startswith("rootID ="):
+            m = _UUID_RE.search(line)
+            if m:
+                cur_root = m.group(0)
+    _flush()
+    return owned_pid, tuple(hits)
+
+
+def count_attributed_friction_hits(
+    hits: Iterable[FrictionHit],
+    *,
+    session_id: str = "",
+    root_id: str = "",
+) -> int:
+    """Count exact-binary friction hits attributed to `session_id` and/or `root_id`."""
+    total = 0
+    for h in hits:
+        if session_id and h.session_id and h.session_id != session_id:
+            continue
+        if root_id and h.root_id and h.root_id != root_id:
+            continue
+        if session_id and not h.session_id and root_id and not h.root_id:
+            continue
+        if session_id and not h.session_id and not root_id:
+            continue
+        total += 1
+    return total
 
 
 BREAKER_ADVISORY_CODES: frozenset[str] = frozenset(
@@ -55,6 +204,140 @@ BREAKER_ADVISORY_CODES: frozenset[str] = frozenset(
         "AMBIENT_UNGROUNDED_COMPLETION",
     }
 )
+
+_WORKER_GROUNDING_CODE_PREFIXES: tuple[str, ...] = (
+    "WORKER_",
+    "GROUNDING_",
+    "CITATION_",
+)
+_STRUCTURED_CODE_LINE_RE = re.compile(r"^Code:\s*([A-Z][A-Z0-9_]+)\s*$", re.MULTILINE)
+
+
+@dataclass(frozen=True)
+class WorkerReportRefusalSummary:
+    """Decision 040 worker-surface friction measure derived strictly from transcript structure + typed rejection Code."""
+
+    session_id: str
+    worker_report_refusals: int
+    refusal_codes: tuple[str, ...]
+    finally_accepted: bool
+    total_submissions: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "session_id": self.session_id,
+            "worker_report_refusals": self.worker_report_refusals,
+            "refusal_codes": list(self.refusal_codes),
+            "finally_accepted": self.finally_accepted,
+            "total_submissions": self.total_submissions,
+        }
+
+
+def probe_worker_report_refusals(
+    db_path: str | pathlib.Path,
+    session_id: str,
+) -> WorkerReportRefusalSummary:
+    """Count `complete_leg` report submissions refused with a typed grounding code in `store.db`.
+
+    Uses transcript structure (`tool_calls_json` / `tool_result_json`) and persisted structured
+    rejection `Code` only (never prose). Separate from `friction_units`, which stays 0 for worker
+    children on D1 per Decision 040.
+    """
+    db_file = pathlib.Path(db_path)
+    if not db_file.is_file():
+        return WorkerReportRefusalSummary(session_id, 0, (), False, 0)
+
+    complete_leg_call_ids: set[str] = set()
+    refusal_codes: list[str] = []
+    total_submissions = 0
+    finally_accepted = False
+
+    with contextlib.closing(sqlite3.connect(f"file:{db_file}?mode=ro", uri=True)) as conn:
+        conn.row_factory = sqlite3.Row
+        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        if "messages" not in tables:
+            return WorkerReportRefusalSummary(session_id, 0, (), False, 0)
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(messages)").fetchall()}
+        select_cols = ["id", "role"]
+        for opt in ("tool_calls_json", "tool_result_json", "content_parts_json", "workflow_feedback_json", "grounding_json", "content"):
+            if opt in cols:
+                select_cols.append(opt)
+        order_col = "ord, id" if "ord" in cols else "rowid"
+        rows = conn.execute(
+            f"SELECT {', '.join(select_cols)} FROM messages WHERE session_id = ? ORDER BY {order_col}",
+            (session_id,),
+        ).fetchall()
+
+        for row in rows:
+            tc_raw = row["tool_calls_json"] if "tool_calls_json" in cols else ""
+            if tc_raw:
+                try:
+                    tcs = json.loads(tc_raw)
+                except (TypeError, ValueError):
+                    tcs = []
+                if isinstance(tcs, list):
+                    for tc in tcs:
+                        if isinstance(tc, Mapping) and str(tc.get("name") or "") == "complete_leg":
+                            cid = str(tc.get("id") or "")
+                            if cid:
+                                complete_leg_call_ids.add(cid)
+
+        for row in rows:
+            tr_raw = row["tool_result_json"] if "tool_result_json" in cols else ""
+            if not tr_raw:
+                continue
+            try:
+                tr = json.loads(tr_raw)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(tr, Mapping):
+                continue
+            call_id = str(tr.get("tool_call_id") or "")
+            tool_name = str(tr.get("tool_name") or tr.get("tool") or "")
+            if tool_name != "complete_leg" and call_id not in complete_leg_call_ids:
+                continue
+
+            total_submissions += 1
+            outcome = str(tr.get("outcome") or "").lower()
+            if outcome == "completed":
+                finally_accepted = True
+                continue
+
+            # Extract typed rejection Code from structured fields only (never prose)
+            codes: set[str] = set()
+            codes |= _extract_codes_from_json(tr_raw)
+            if "workflow_feedback_json" in cols:
+                codes |= _extract_codes_from_json(row["workflow_feedback_json"])
+            if "grounding_json" in cols:
+                codes |= _extract_codes_from_json(row["grounding_json"])
+            if "content_parts_json" in cols and row["content_parts_json"]:
+                try:
+                    parts = json.loads(row["content_parts_json"])
+                except (TypeError, ValueError):
+                    parts = []
+                if isinstance(parts, list):
+                    for part in parts:
+                        if isinstance(part, Mapping):
+                            pcontent = str(part.get("content") or "")
+                            if part.get("source") == "policy_feedback":
+                                codes |= _extract_codes_from_json(pcontent)
+                            for m in _STRUCTURED_CODE_LINE_RE.finditer(pcontent):
+                                codes.add(m.group(1))
+            if "content" in cols and row["content"]:
+                for m in _STRUCTURED_CODE_LINE_RE.finditer(str(row["content"])):
+                    codes.add(m.group(1))
+
+            typed = sorted(c for c in codes if c.startswith(_WORKER_GROUNDING_CODE_PREFIXES))
+            if typed:
+                refusal_codes.append(typed[0])
+
+    return WorkerReportRefusalSummary(
+        session_id=session_id,
+        worker_report_refusals=len(refusal_codes),
+        refusal_codes=tuple(refusal_codes),
+        finally_accepted=finally_accepted,
+        total_submissions=total_submissions,
+    )
 
 
 @dataclass(frozen=True)
@@ -166,11 +449,14 @@ def probe_store_db(
     session_id: str,
     *,
     sse_events: Iterable[Mapping[str, Any]] = (),
+    trace_log_path: str | pathlib.Path | None = None,
+    root_id: str = "",
 ) -> FrictionSnapshot:
-    """Extract all D1-observable D10 counters from `store.db` and SSE events.
+    """Extract all D1-observable D10 counters from `store.db`, SSE events, and optional Decision 012 trace.
 
-    Marks `friction_units` explicitly `unknown` because D1 stores shared cycle
-    and prompt friction strictly in memory (`closeout_lifecycle.go`).
+    De-duplicates typed events across `event_outbox` and SSE by canonical `(event_id, code)`.
+    When `trace_log_path` is provided, extracts exact `friction_units` attributed to `(session_id, root_id)`
+    from Decision 012's `recordFrictionLocked` GDB/LLDB trace; otherwise marks `friction_units` `unknown`.
     """
     db_file = pathlib.Path(db_path)
     if not db_file.is_file():
@@ -200,7 +486,7 @@ def probe_store_db(
                 for row in conn.execute("PRAGMA table_info(messages)").fetchall()
             }
             select_cols = ["id"]
-            for opt in ("grounding_json", "workflow_feedback_json", "host_signal_id", "kind"):
+            for opt in ("grounding_json", "workflow_feedback_json", "host_signal_id", "kind", "content"):
                 if opt in cols:
                     select_cols.append(opt)
             query = f"SELECT {', '.join(select_cols)} FROM messages WHERE session_id = ?"
@@ -226,6 +512,11 @@ def probe_store_db(
                     codes |= _extract_codes_from_json(row["workflow_feedback_json"])
                 if "host_signal_id" in cols and row["host_signal_id"]:
                     codes.add(str(row["host_signal_id"]).strip())
+                if "content" in cols and row["content"]:
+                    c_text = str(row["content"])
+                    for known_code in VALID_MID_TURN_NOTE_CODES | BREAKER_ADVISORY_CODES:
+                        if known_code in c_text:
+                            codes.add(known_code)
 
                 for code in codes:
                     if code in VALID_MID_TURN_NOTE_CODES:
@@ -238,29 +529,71 @@ def probe_store_db(
                 row[1]
                 for row in conn.execute("PRAGMA table_info(event_outbox)").fetchall()
             }
-            payload_col = next((c for c in ("payload_json", "payload", "data") if c in cols), None)
-            id_col = "id" if "id" in cols else "rowid"
+            payload_col = next((c for c in ("data_json", "payload_json", "payload", "data") if c in cols), None)
+            id_col = "event_id" if "event_id" in cols else ("id" if "id" in cols else "rowid")
+            has_sess_col = "session_id" in cols
             if payload_col:
-                for row in conn.execute(f"SELECT {id_col} AS eid, {payload_col} AS payload FROM event_outbox").fetchall():
+                sel = f"SELECT {id_col} AS eid, {payload_col} AS payload" + (", session_id AS sid" if has_sess_col else "") + " FROM event_outbox"
+                for row in conn.execute(sel).fetchall():
                     payload = str(row["payload"] or "")
-                    if session_id and session_id not in payload:
+                    row_sid = str(row["sid"] or "") if has_sess_col else ""
+                    if session_id and row_sid != session_id and session_id not in payload:
                         continue
                     for code in _extract_codes_from_json(payload):
                         if code in VALID_MID_TURN_NOTE_CODES:
-                            withheld_keys.add(f"outbox:{row['eid']}:{code}")
+                            withheld_keys.add(f"event:{row['eid']}:{code}")
                         if code in BREAKER_ADVISORY_CODES:
-                            breaker_keys.add(f"outbox:{row['eid']}:{code}")
+                            breaker_keys.add(f"event:{row['eid']}:{code}")
 
     for idx, ev in enumerate(sse_events):
-        ev_session = str(ev.get("session_id") or "")
+        data_obj = ev.get("data") if isinstance(ev.get("data"), Mapping) else {}
+        msg_obj = data_obj.get("message") if isinstance(data_obj.get("message"), Mapping) else {}
+        ev_session = str(
+            ev.get("session_id")
+            or data_obj.get("session_id")
+            or msg_obj.get("session_id")
+            or ""
+        )
         if ev_session and ev_session != session_id:
             continue
-        ev_id = str(ev.get("id") or f"sse-{idx}")
-        for code in _extract_codes_from_json(json.dumps(ev)):
+        ev_msg_id = str(
+            ev.get("message_id")
+            or data_obj.get("message_id")
+            or msg_obj.get("id")
+            or ""
+        )
+        ev_id = str(ev.get("event_id") or ev.get("id") or f"sse-{idx}")
+        key_prefix = f"msg:{ev_msg_id}" if ev_msg_id else f"event:{ev_id}"
+        ev_blob = json.dumps(ev)
+        ev_codes = _extract_codes_from_json(ev_blob)
+        for known_code in VALID_MID_TURN_NOTE_CODES | BREAKER_ADVISORY_CODES:
+            if known_code in ev_blob:
+                ev_codes.add(known_code)
+        for code in ev_codes:
             if code in VALID_MID_TURN_NOTE_CODES:
-                withheld_keys.add(f"sse:{ev_id}:{code}")
+                withheld_keys.add(f"{key_prefix}:{code}")
             if code in BREAKER_ADVISORY_CODES:
-                breaker_keys.add(f"sse:{ev_id}:{code}")
+                breaker_keys.add(f"{key_prefix}:{code}")
+
+    if trace_log_path is not None and pathlib.Path(trace_log_path).is_file():
+        trace_text = pathlib.Path(trace_log_path).read_text(encoding="utf-8", errors="replace")
+        _, hits = parse_friction_trace_log(trace_text)
+        attributed_units = count_attributed_friction_hits(hits, session_id=session_id, root_id=root_id)
+        friction_obs = CounterObservation(
+            name="friction_units",
+            value=attributed_units,
+            status="observed",
+            source="debugger:recordFrictionLocked(sessionID,rootID)",
+            note=f"Exact-binary Decision 012 trace ({len(hits)} total process hits; {attributed_units} attributed).",
+        )
+    else:
+        friction_obs = CounterObservation(
+            name="friction_units",
+            value=None,
+            status="unknown",
+            source="in_memory_only:closeout_lifecycle.go",
+            note="Shared prompt/cycle groundingRejects live in scopedstore.LRU in memory on D1.",
+        )
 
     return FrictionSnapshot(
         repair_attempts=CounterObservation(
@@ -270,13 +603,7 @@ def probe_store_db(
             source="store.db:messages.grounding_json.retry_count",
             note="Committed closeout retry_count; in-flight documentAttempt split is in-memory only.",
         ),
-        friction_units=CounterObservation(
-            name="friction_units",
-            value=None,
-            status="unknown",
-            source="in_memory_only:closeout_lifecycle.go",
-            note="Shared prompt/cycle groundingRejects live in scopedstore.LRU in memory on D1.",
-        ),
+        friction_units=friction_obs,
         host_assembled_closeouts=CounterObservation(
             name="host_assembled_closeouts",
             value=host_assembled,
