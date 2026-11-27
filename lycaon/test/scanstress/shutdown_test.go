@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	lycaonexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
@@ -27,26 +28,12 @@ const envVictim = "SCANSTRESS_VICTIM"
 // envVictimHandler makes the victim install the sidecar's signal handler.
 const envVictimHandler = "SCANSTRESS_VICTIM_HANDLER"
 
-// envVictimReaper marks the victim's reaper companion.
-const envVictimReaper = "SCANSTRESS_VICTIM_REAPER"
-
-// TestShutdownVictimReaper plays the role the sidecar binary takes under
-// exec.ReaperCommand. It runs only as a victim's companion.
-func TestShutdownVictimReaper(t *testing.T) {
-	if os.Getenv(envVictimReaper) == "" {
-		t.Skip("reaper runs only as a shutdown victim's companion")
-	}
-	os.Exit(lycaonexec.RunReaper(os.Stdin))
-}
-
 // startVictimReaper starts the companion as the sidecar does before serving.
 func startVictimReaper(t *testing.T) {
 	t.Helper()
 	self, err := os.Executable()
 	testutil.FailErr(t, "locate test binary", err)
-	// The companion inherits this environment and so takes the reaper role.
-	t.Setenv(envVictimReaper, "1")
-	testutil.FailErr(t, "start reaper", lycaonexec.StartReaper(self, "-test.run=^TestShutdownVictimReaper$", "-test.v=false"))
+	testutil.FailErr(t, "start reaper", lycaonexec.StartReaper(self, lycaonexec.ReaperCommand))
 }
 
 // TestShutdownVictimScan is the host under test in the shutdown cases. It runs
@@ -140,6 +127,11 @@ func runShutdownCase(t *testing.T, sig syscall.Signal, handler bool) {
 		enginePIDs = append(enginePIDs, row.PID)
 	}
 
+	unrelatedAction, err := confine.NewActionWorkspace()
+	testutil.FailErr(t, "create unrelated sibling action workspace", err)
+	t.Cleanup(func() { _ = os.RemoveAll(unrelatedAction.Path()) })
+	unrelatedDir := t.TempDir()
+
 	killAt := time.Now()
 	if err := syscall.Kill(victim, sig); err != nil {
 		t.Fatalf("signal victim %d: %v", victim, err)
@@ -164,6 +156,14 @@ func runShutdownCase(t *testing.T, sig syscall.Signal, handler bool) {
 		}
 		return len(survivingDirs(runDirs)) == 0
 	})
+	for label, path := range map[string]string{
+		"unrelated sibling action workspace": unrelatedAction.Path(),
+		"unrelated directory":                unrelatedDir,
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("%s (%s) did not survive %s: %v", label, path, sig, err)
+		}
+	}
 	drain := time.Since(killAt) - hostGone
 	reportf(t, "signal=%s handler=%t victim=%d engine_pids=%v host_exit=%s engine_drain=%s",
 		sig, handler, victim, enginePIDs, hostGone.Round(time.Millisecond), drain.Round(time.Millisecond))
