@@ -26,6 +26,7 @@ func TestBundledScannerConfinementProtectsEngineRuntimeAndAppCaches(t *testing.T
 	admissiontest.Enable(t)
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
+	t.Setenv(configdir.EnvConfigDir, filepath.Join(t.TempDir(), "config"))
 
 	python, err := exec.LookPath("python3")
 	testutil.FailErr(t, "locate python3 fixture runtime", err)
@@ -35,7 +36,7 @@ func TestBundledScannerConfinementProtectsEngineRuntimeAndAppCaches(t *testing.T
 
 	runtimeStore := enginepaths.OpengrepRuntimeRootUnder(cfgDir)
 	testutil.FailErr(t, "create runtime store", os.MkdirAll(runtimeStore, 0o700))
-	runtimeRoot := filepath.Join(runtimeStore, "v1-test-runtime-"+filepath.Base(t.TempDir()))
+	runtimeRoot := filepath.Join(runtimeStore, "v1-test-runtime")
 	runtimeCache := filepath.Join(runtimeRoot, "xdg-cache")
 	testutil.FailErr(t, "create runtime xdg-cache", os.MkdirAll(runtimeCache, 0o700))
 	engineHelper := filepath.Join(runtimeCache, "helper.sh")
@@ -49,9 +50,8 @@ func TestBundledScannerConfinementProtectsEngineRuntimeAndAppCaches(t *testing.T
 		_ = os.RemoveAll(runtimeRoot)
 	})
 
-	unrelatedCache := filepath.Join(enginepaths.SourceCatalogCacheRootUnder(cfgDir), "nr12-unrelated-test")
+	unrelatedCache := filepath.Join(enginepaths.SourceCatalogCacheRootUnder(cfgDir), "unrelated-cache")
 	testutil.FailErr(t, "create unrelated app cache", os.MkdirAll(unrelatedCache, 0o700))
-	t.Cleanup(func() { _ = os.RemoveAll(unrelatedCache) })
 
 	workspace, err := confine.NewActionWorkspace()
 	testutil.FailErr(t, "create scanner workspace", err)

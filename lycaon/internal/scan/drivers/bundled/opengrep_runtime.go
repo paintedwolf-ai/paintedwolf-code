@@ -642,11 +642,22 @@ func sealTreeReadOnly(root string) error {
 	if !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("cannot seal non-directory runtime root: %s", root)
 	}
+	if err := sealRootEntries(root); err != nil {
+		return err
+	}
+	return os.Chmod(root, 0o500) //nolint:gosec // G302: sealed directory requires owner r-x (0500) for traversal
+}
+
+func sealRootEntries(root string) (retErr error) {
 	dirRoot, err := os.OpenRoot(root)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = dirRoot.Close() }()
+	defer func() {
+		if closeErr := dirRoot.Close(); closeErr != nil && retErr == nil {
+			retErr = closeErr
+		}
+	}()
 	var dirs []string
 	err = fs.WalkDir(dirRoot.FS(), ".", func(rel string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -689,10 +700,7 @@ func sealTreeReadOnly(root string) error {
 			return err
 		}
 	}
-	if err := dirRoot.Close(); err != nil {
-		return err
-	}
-	return os.Chmod(root, 0o500) //nolint:gosec // G302: sealed directory requires owner r-x (0500) for traversal
+	return nil
 }
 
 func removeReadOnlyTree(root string) error {
