@@ -115,6 +115,7 @@ func TestToolCommandOperationRecoveryFollowsCommandReach(t *testing.T) {
 
 	var callableMutating, deferredNoLoader *hoststate.TurnAuthority
 	var forbiddenReadOnly []*hoststate.TurnAuthority
+	seenReadOnlyDigest := map[string]bool{}
 	for _, st := range states {
 		if st.Excluded {
 			continue
@@ -130,8 +131,13 @@ func TestToolCommandOperationRecoveryFollowsCommandReach(t *testing.T) {
 			copied := auth
 			deferredNoLoader = &copied
 		case status == toolreach.Callable && !auth.Reach.Program("edit") && auth.Reach.Program("cat"):
-			copied := auth
-			forbiddenReadOnly = append(forbiddenReadOnly, &copied)
+			if auth.Digest == "" || !seenReadOnlyDigest[auth.Digest] {
+				if auth.Digest != "" {
+					seenReadOnlyDigest[auth.Digest] = true
+				}
+				copied := auth
+				forbiddenReadOnly = append(forbiddenReadOnly, &copied)
+			}
 		}
 	}
 	if callableMutating == nil || deferredNoLoader == nil || len(forbiddenReadOnly) == 0 {

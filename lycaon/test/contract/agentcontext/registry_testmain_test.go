@@ -5,9 +5,13 @@ import (
 	"testing"
 
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 )
 
 func TestMain(m *testing.M) {
 	contractcheck.Setup()
-	os.Exit(m.Run())
+	release := hoststate.HoldAuthorityMemos()
+	code := m.Run()
+	release()
+	os.Exit(code)
 }

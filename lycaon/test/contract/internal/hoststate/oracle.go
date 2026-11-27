@@ -100,6 +100,8 @@ var (
 	cachedSandboxConf = sync.OnceValues(sandbox.LoadConfig)
 	projTurnMu        sync.Mutex
 	projTurnCache     = map[string]projectedTurnToolsEntry{}
+	frozenTurnMu      sync.RWMutex
+	frozenTurnCache   = map[string]TurnAuthority{}
 
 	authorityMemoMu    sync.Mutex
 	authorityMemoHolds int
@@ -128,6 +130,9 @@ func HoldAuthorityMemos() (release func()) {
 		projTurnMu.Lock()
 		projTurnCache = map[string]projectedTurnToolsEntry{}
 		projTurnMu.Unlock()
+		frozenTurnMu.Lock()
+		frozenTurnCache = map[string]TurnAuthority{}
+		frozenTurnMu.Unlock()
 	})
 }
 
@@ -418,6 +423,7 @@ func FreezeTurnAuthorityWithResources(
 
 	var proj projectedTurnToolsEntry
 	cacheKey := ""
+	fullKey := ""
 	if len(state.History) == 0 {
 		cacheKey = fmt.Sprintf(
 			"c|%s|%s|%s|%t|%t|%s|%d|%s|%t|%s|%s|%s|%s|%s|%t|%t|%s|%+v|%s|jobs=%t|held=%t",
@@ -430,6 +436,18 @@ func FreezeTurnAuthorityWithResources(
 			strings.Join(state.SpawnAllowlist, ","), state.ImplementState, sortedBoolKeys(state.Loaded),
 			resources.CommandJobs, resources.HeldCalls,
 		)
+		fullKey = fmt.Sprintf(
+			"%s|git=%t/%t|appr=%s|scratch=%s|temp=%+v|vision=%t|allowed=%s|roots=%+v",
+			cacheKey, state.HasGit, state.HasAnyGitRoot, state.ApprovalPosture,
+			state.SessionScratchDir, state.SharedTempLocations, state.Vision,
+			strings.Join(state.RunContext.AllowedAgents, ","), state.Roots,
+		)
+		frozenTurnMu.RLock()
+		if cachedAuth, ok := frozenTurnCache[fullKey]; ok {
+			frozenTurnMu.RUnlock()
+			return cachedAuth, nil
+		}
+		frozenTurnMu.RUnlock()
 		projTurnMu.Lock()
 		cached, hit := projTurnCache[cacheKey]
 		projTurnMu.Unlock()
@@ -503,7 +521,13 @@ func FreezeTurnAuthorityWithResources(
 	}
 	reader = reader.WithVision(state.Vision)
 
-	return assembleTurnAuthorityFromEntry(proj, reader), nil
+	assembled := assembleTurnAuthorityFromEntry(proj, reader)
+	if fullKey != "" {
+		frozenTurnMu.Lock()
+		frozenTurnCache[fullKey] = assembled
+		frozenTurnMu.Unlock()
+	}
+	return assembled, nil
 }
 
 func buildCoordinatorTurnInputs(

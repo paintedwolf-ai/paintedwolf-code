@@ -2,12 +2,40 @@ package sandbox
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/extpacks"
 )
 
 const toolProfileUnitPrefix = "tools/profiles/"
+
+var (
+	toolProfilesCacheMu sync.RWMutex
+	toolProfilesCache   = map[*extpacks.EffectiveCatalog][]ToolProfile{}
+)
+
+func cloneToolProfiles(in []ToolProfile) []ToolProfile {
+	out := make([]ToolProfile, len(in))
+	for i, p := range in {
+		out[i] = ToolProfile{
+			ID:             p.ID,
+			Description:    p.Description,
+			Tools:          maps.Clone(p.Tools),
+			StickyTools:    maps.Clone(p.StickyTools),
+			DeferredTools:  maps.Clone(p.DeferredTools),
+			DenyTools:      slices.Clone(p.DenyTools),
+			MCPDeny:        slices.Clone(p.MCPDeny),
+			ReadGlobs:      slices.Clone(p.ReadGlobs),
+			WriteGlobs:     slices.Clone(p.WriteGlobs),
+			WaitConditions: slices.Clone(p.WaitConditions),
+			CommandEffects: p.CommandEffects,
+		}
+	}
+	return out
+}
 
 // LoadToolProfiles loads path-scopes.yaml and tool profile units from every
 // contributing pack — stock and installed — through the process catalog
@@ -26,6 +54,13 @@ func LoadToolProfilesWithCatalog(catalog *extpacks.EffectiveCatalog) ([]ToolProf
 	if catalog == nil {
 		return nil, fmt.Errorf("tool profiles: effective catalog required")
 	}
+	toolProfilesCacheMu.RLock()
+	if cached, ok := toolProfilesCache[catalog]; ok {
+		toolProfilesCacheMu.RUnlock()
+		return cloneToolProfiles(cached), nil
+	}
+	toolProfilesCacheMu.RUnlock()
+
 	// Path scopes stay a fixed platform file: they are pack content, not a
 	// provide unit, and a pack cannot widen the scopes its own profiles bind to.
 	scopes, err := LoadPathScopes()
@@ -62,5 +97,11 @@ func LoadToolProfilesWithCatalog(catalog *extpacks.EffectiveCatalog) ([]ToolProf
 		seen[id] = at.String()
 		profiles = append(profiles, p)
 	}
-	return profiles, nil
+	toolProfilesCacheMu.Lock()
+	if len(toolProfilesCache) >= 64 {
+		toolProfilesCache = make(map[*extpacks.EffectiveCatalog][]ToolProfile, 16)
+	}
+	toolProfilesCache[catalog] = profiles
+	toolProfilesCacheMu.Unlock()
+	return cloneToolProfiles(profiles), nil
 }
