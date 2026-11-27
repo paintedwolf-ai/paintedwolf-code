@@ -99,12 +99,11 @@ def main():
             body["workspace_root_id"] = workspace_root_id
         sid = app.request("/v1/sessions", body)["id"]
         app.request("/harness/model-limit", {"session_id": sid, "limit": 24})
-        app.wait_for(
-            lambda: len(app.request("/harness/llm/pending").get("requests") or ()) == 0,
-            timeout=15.0,
-            label="drain prior pending llm requests",
+        app.wait_for(lambda: app.request(f"/v1/sessions/{sid}")["status"] == "idle", "session ready", sid)
+        app.request(f"/v1/sessions/{sid}/prompts", {"operation_id": str(uuid.uuid4()), "text": prompt_text})
+        send_tool_calls(
+            app, sid, [{"name": "update_progress", "args": {"content": "- [ ] Execute Q13/Q14 check"}}], surface={}
         )
-        app.request(f"/v1/sessions/{sid}/messages", {"content": prompt_text})
         return sid
 
     def abort_session(sid):
@@ -114,21 +113,23 @@ def main():
             pass
         app.wait_for(
             lambda: len(app.request("/harness/llm/pending").get("requests") or ()) == 0,
-            timeout=15.0,
-            label="drain pending llm requests after abort",
+            "drain pending llm requests after abort",
+            sid,
         )
 
     def pick_approve_option(cp):
-        opts = cp.get("options") or cp.get("approval_options") or []
-        for o in opts:
-            if isinstance(o, dict) and (o.get("id") or o.get("option_id")):
-                return o.get("id") or o.get("option_id")
+        for key in ("options", "approval_options"):
+            for o in (cp.get(key) or ()):
+                if isinstance(o, dict) and (o.get("id") or o.get("option_id")):
+                    return o.get("id") or o.get("option_id")
         return "allow_once"
 
     try:
+        app.ready()
+
         # Case 1: stale-approval (Q13)
         # AGENTS.md triggers real FileChangeReview approval gate via AgentPolicyClassifier.
-        ws1 = work_dir / "ws_q13"
+        ws1 = (work_dir / "ws_q13").resolve()
         ws1.mkdir()
         target_q13 = ws1 / "AGENTS.md"
         target_q13.write_text("alpha\n", encoding="utf-8")
@@ -136,24 +137,22 @@ def main():
         pid1 = proj1["id"]
         rid1 = resolve_root_id(proj1, ws1)
         doc1 = open_doc(pid1, rid1, "AGENTS.md")
-        sid1 = start_session(pid1, rid1, "Q13 stale-approval")
+        sid1 = start_session(pid1, rid1, "Exercise Q13 stale-approval.")
 
-        # Run sed -i in a worker thread because it blocks on real FileChangeReview approval.
         call_res = {}
 
         def run_sed():
             try:
-                call_res["msg"] = send_tool_calls(
-                    app, sid1, [{"name": "command", "arguments": {"command": "sed -i 's/alpha/beta/' ./AGENTS.md"}}],
-                    timeout=30.0,
-                )[0]
+                [(cid, res)] = send_tool_calls(
+                    app, sid1, [{"name": "command", "args": {"command": "sed -i 's/alpha/beta/' ./AGENTS.md"}}], surface={}
+                )
+                call_res["call_id"], call_res["result"] = cid, res
             except Exception as exc:
                 call_res["error"] = repr(exc)
 
         t = threading.Thread(target=run_sed, daemon=True)
         t.start()
 
-        # Poll for the real pending tool_approval checkpoint.
         pending_cp = {}
         deadline = time.time() + 20.0
         while time.time() < deadline:
@@ -163,29 +162,27 @@ def main():
                 if isinstance(cp, dict) and cp.get("status") in ("pending", "open", None) and not cp.get("resolved_at"):
                     pending_cp = cp
                     break
-            if pending_cp:
-                break
-            if not t.is_alive():
+            if pending_cp or not t.is_alive():
                 break
             time.sleep(0.15)
 
         human_doc = None
         if pending_cp:
             human_doc = replace_doc(pid1, doc1["id"], doc1["revision"], "human\n")
-            opt_id = pick_approve_option(pending_cp)
             http_json("POST", f"/v1/sessions/{sid1}/checkpoints/{pending_cp['id']}", {
                 "kind": pending_cp.get("kind") or "tool_approval",
                 "action": "approve",
-                "option_id": opt_id,
+                "option_id": pick_approve_option(pending_cp),
             })
 
         t.join(timeout=25.0)
-        msg1 = call_res.get("msg")
-        parsed1 = parse_tool_result(msg1) if msg1 else {}
-        rej1 = structured_rejection(msg1) if msg1 else None
+        res1 = call_res.get("result") or {}
+        _, payload1 = parse_tool_result({"tool_result_json": json.dumps(res1)}) if res1 else (None, {})
+        code1, details1 = structured_rejection(res1, payload1) if res1 else (None, None)
+        refusal1 = (payload1 or {}).get("refusal") or {}
+        stop_code1 = code1 or refusal1.get("code") or (payload1 or {}).get("stop_code") or ""
         after_doc1 = open_doc(pid1, rid1, "AGENTS.md", client_id="verify-client")
         disk1 = target_q13.read_text(encoding="utf-8")
-        stop_code1 = (rej1 or {}).get("code") or (parsed1.get("payload") or {}).get("stop_code") or ""
         q13_passed = (
             bool(pending_cp)
             and call_res.get("error") is None
@@ -198,8 +195,8 @@ def main():
             "passed": q13_passed,
             "checkpoint_id": pending_cp.get("id") if pending_cp else None,
             "stop_code": stop_code1,
-            "rejection": rej1,
-            "payload": parsed1.get("payload"),
+            "details": details1,
+            "payload": payload1,
             "human_revision": human_doc.get("revision") if human_doc else None,
             "after_revision": after_doc1.get("revision"),
             "disk_after": disk1,
@@ -208,7 +205,7 @@ def main():
         abort_session(sid1)
 
         # Case 2: publication-barrier (Q14)
-        ws2 = work_dir / "ws_q14"
+        ws2 = (work_dir / "ws_q14").resolve()
         sub = ws2 / "dir"
         sub.mkdir(parents=True)
         inp = sub / "input.txt"
@@ -224,17 +221,16 @@ def main():
         doc_unrel = open_doc(pid2, rid2, "unrelated.txt")
         doc_unrel_draft = replace_doc(pid2, doc_unrel["id"], doc_unrel["revision"], "human draft\n")
 
-        # Make dir/ read-only so editor document acceptance succeeds but disk publication fails.
         os.chmod(sub, 0o555)
         try:
-            sid2 = start_session(pid2, rid2, "Q14 publication-barrier")
-            msg2 = send_tool_calls(
+            sid2 = start_session(pid2, rid2, "Exercise Q14 publication-barrier.")
+            [(cid2, res2)] = send_tool_calls(
                 app, sid2,
-                [{"name": "command", "arguments": {"command": "printf 'next\\n' > ./dir/input.txt && printf 'RAN\\n' > ./marker.txt"}}],
-                timeout=25.0,
-            )[0]
-            parsed2 = parse_tool_result(msg2)
-            rej2 = structured_rejection(msg2)
+                [{"name": "command", "args": {"command": "printf 'next\\n' > ./dir/input.txt && printf 'RAN\\n' > ./marker.txt"}}],
+                surface={},
+            )
+            _, payload2 = parse_tool_result({"tool_result_json": json.dumps(res2)})
+            code2, details2 = structured_rejection(res2, payload2)
             after_in = open_doc(pid2, rid2, "dir/input.txt", client_id="verify-client")
             after_unrel = open_doc(pid2, rid2, "unrelated.txt", client_id="verify-client")
             disk_in = inp.read_text(encoding="utf-8")
@@ -256,8 +252,9 @@ def main():
         )
         report["cases"]["publication-barrier"] = {
             "passed": q14_passed,
-            "rejection": rej2,
-            "payload": parsed2.get("payload"),
+            "code": code2,
+            "details": details2,
+            "payload": payload2,
             "input_disk_after": disk_in,
             "input_doc_before_rev": doc_in.get("revision"),
             "input_doc_after_rev": after_in.get("revision"),
