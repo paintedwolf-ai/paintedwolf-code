@@ -261,9 +261,23 @@ func NewService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
 	if defaultMemPages == 0 {
 		defaultMemPages = DefaultMaxMemoryPages
 	}
+	engineDir := strings.TrimSpace(cfg.EngineDir)
+	if engineDir == "" && (cfg.Backend == "" || cfg.Backend == pythonruntime.BackendNativeAOT) {
+		if root := strings.TrimSpace(configlayout.EngineRoot()); root != "" {
+			if found, dErr := pythonruntime.DiscoverEngineDir(root); dErr == nil {
+				engineDir = found
+			}
+		}
+		if engineDir == "" {
+			sibling := filepath.Join(filepath.Dir(absImageDir), "engine")
+			if info, sErr := os.Stat(filepath.Join(sibling, "artifact-manifest.json")); sErr == nil && !info.IsDir() {
+				engineDir = sibling
+			}
+		}
+	}
 	rt, err := pythonruntime.NewConfiguredRuntime(ctx, pythonruntime.RuntimeConfig{
 		Backend:                 cfg.Backend,
-		EngineDir:               cfg.EngineDir,
+		EngineDir:               engineDir,
 		EngineManifestPath:      cfg.EngineManifestPath,
 		EngineManifest:          cfg.EngineManifest,
 		WasmBytes:               wasmBytes,
