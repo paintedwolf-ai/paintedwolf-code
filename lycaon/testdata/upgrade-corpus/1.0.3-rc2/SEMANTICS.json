@@ -1,60 +1,60 @@
 {
   "artifact": {
-    "id": "5ae0a1aa-a5dc-4bd5-98e4-2baf42b38643",
+    "id": "499f4ca0-af42-4040-968d-ade3fe760e48",
     "mime": "image/png",
     "sha256": "cd08723e6cfd3f359d7994f4e64d439e7f75ec22080e760be1bb993b40fbe900"
   },
   "grant": {
     "category": "host",
     "expires_at": "2099-01-01T00:00:00Z",
-    "granted_at": "2026-11-27T07:15:55.292008255Z",
+    "granted_at": "2026-11-27T13:54:21.485870054Z",
     "id": "grant_vZryNRplPGGrAtV-Z93HbKuK3SxTPEYb3EnTg_rEkU0",
     "pattern": "*.example.com",
     "scope": "device"
   },
   "messages": [
     {
+      "content": "Corpus seed turn complete.",
+      "id": "19b88fa5-b688-46f7-b980-31ede84e4825",
+      "role": "assistant"
+    },
+    {
+      "content": ">>> Tool feedback\nThe report has no citations although recorded tool observations are available.\n\n\nCause: The report cited none of the tool evidence observed this turn.\n\nWhy: Observed sample: README.md\nFix: The host preserves the report and attaches a bounded sample of observed paths, handles, or URLs when available, without requesting another model turn.\nNext: The preserved report remains untraced and marked host_assembled. Attached observations do not establish that they support its claims.\nCode: INVEST_CITATIONS_REQUIRED\n\n{\"anchor\":\"coordinator.closeout_check\",\"rule\":\"INVEST_CITATIONS_REQUIRED\",\"effect\":\"warn\",\"code\":\"INVEST_CITATIONS_REQUIRED\",\"details\":{\"document_citation_targets\":null,\"observed_handles_count\":2,\"observed_handles_omitted\":0,\"observed_handles_sample\":\"command#1, read#1\",\"observed_paths_count\":1,\"observed_paths_omitted\":0,\"observed_paths_sample\":\"README.md\",\"observed_urls_count\":0,\"observed_urls_omitted\":0,\"observed_urls_sample\":\"\",\"offender_count\":0,\"offenders_omitted\":0,\"offenders_sample\":\"\",\"profile\":\"coordinator\",\"repair_observations\":\"[]\",\"repair_targets\":null,\"retained_document\":\"\",\"worker_leg\":false},\"subject\":{\"kind\":\"session\",\"id\":\"74aa661d-09e1-40fd-a51e-94a23af2ec65\"}}",
+      "id": "52fb95b6-bf61-4568-8286-b7be52403601",
+      "role": "user"
+    },
+    {
       "content": "",
-      "id": "2ba6200f-c178-5ed4-860f-d41967425702",
+      "id": "6b7ed980-b6ad-5cae-8692-6df9fe58c978",
       "role": "system"
     },
     {
-      "content": "",
-      "id": "5dcf3d15-82aa-4bdb-977e-8b081b8f23f9",
-      "role": "assistant"
-    },
-    {
-      "content": "[read#1 README.md:1]\n[command#1]\n{\"program_id\":\"5634411e-b059-4797-bab6-c19b48dde5af\",\"detail_ref\":\"output:program-source:5634411e-b059-4797-bab6-c19b48dde5af\",\"state\":\"completed\",\"status\":0,\"stdout\":\"# corpus seed\\n\",\"stderr\":\"\",\"stdout_ref\":\"output:program:5634411e-b059-4797-bab6-c19b48dde5af:stdout\",\"outputs\":[{\"stream\":\"stdout\",\"ref\":\"output:program:5634411e-b059-4797-bab6-c19b48dde5af:stdout\",\"output_path\":\"@output/5634411e-b059-4797-bab6-c19b48dde5af.stdout\",\"total_bytes\":14,\"total_lines\":1,\"complete\":true,\"truncated\":false,\"head_end_byte\":0,\"head_end_line\":0,\"tail_start_byte\":0,\"tail_start_line\":0,\"omitted_bytes\":0,\"omitted_lines\":0,\"inline_budget_bytes\":32768}],\"executed_children\":1,\"completed_effects\":0,\"uncertain_effects\":0,\"replay_available\":false}",
-      "id": "81324d35-1a6b-4950-93ae-a27b188b8054",
+      "content": "[read#1 README.md:1]\n[command#1]\n{\"program_id\":\"857a04fe-7eec-4ba6-b440-a7aebdaec40c\",\"detail_ref\":\"output:program-source:857a04fe-7eec-4ba6-b440-a7aebdaec40c\",\"state\":\"completed\",\"status\":0,\"stdout\":\"# corpus seed\\n\",\"stderr\":\"\",\"stdout_ref\":\"output:program:857a04fe-7eec-4ba6-b440-a7aebdaec40c:stdout\",\"outputs\":[{\"stream\":\"stdout\",\"ref\":\"output:program:857a04fe-7eec-4ba6-b440-a7aebdaec40c:stdout\",\"output_path\":\"@output/857a04fe-7eec-4ba6-b440-a7aebdaec40c.stdout\",\"total_bytes\":14,\"total_lines\":1,\"complete\":true,\"truncated\":false,\"head_end_byte\":0,\"head_end_line\":0,\"tail_start_byte\":0,\"tail_start_line\":0,\"omitted_bytes\":0,\"omitted_lines\":0,\"inline_budget_bytes\":32768}],\"executed_children\":1,\"completed_effects\":0,\"uncertain_effects\":0,\"replay_available\":false}",
+      "id": "88bfd5cc-bb1c-432c-a9ab-2fc85ea202d2",
       "role": "tool"
     },
     {
-      "content": ">>> Tool feedback\nThe report has no citations although recorded tool observations are available.\n\n\nCause: The report cited none of the tool evidence observed this turn.\n\nWhy: Observed sample: README.md\nFix: The host preserves the report and attaches a bounded sample of observed paths, handles, or URLs when available, without requesting another model turn.\nNext: The preserved report remains untraced and marked host_assembled. Attached observations do not establish that they support its claims.\nCode: INVEST_CITATIONS_REQUIRED\n\n{\"anchor\":\"coordinator.closeout_check\",\"rule\":\"INVEST_CITATIONS_REQUIRED\",\"effect\":\"warn\",\"code\":\"INVEST_CITATIONS_REQUIRED\",\"details\":{\"document_citation_targets\":null,\"observed_handles_count\":2,\"observed_handles_omitted\":0,\"observed_handles_sample\":\"command#1, read#1\",\"observed_paths_count\":1,\"observed_paths_omitted\":0,\"observed_paths_sample\":\"README.md\",\"observed_urls_count\":0,\"observed_urls_omitted\":0,\"observed_urls_sample\":\"\",\"offender_count\":0,\"offenders_omitted\":0,\"offenders_sample\":\"\",\"profile\":\"coordinator\",\"repair_observations\":\"[]\",\"repair_targets\":null,\"retained_document\":\"\",\"worker_leg\":false},\"subject\":{\"kind\":\"session\",\"id\":\"db5d7fda-40e9-4edc-b88e-cba3d571ba20\"}}",
-      "id": "d94a1695-502d-45c3-9465-c257913f8753",
-      "role": "user"
-    },
-    {
       "content": "corpus seed",
-      "id": "ef802122-3e83-4401-aaeb-dfd452f16edd",
+      "id": "a365214e-8fe5-432d-82a0-754e18c8c3e5",
       "role": "user"
     },
     {
-      "content": "Corpus seed turn complete.",
-      "id": "efa7cd16-8a09-4334-8f59-b52d461d27ad",
+      "content": "",
+      "id": "ab690ef4-7d03-4e35-a798-a1d613de3b66",
       "role": "assistant"
     }
   ],
-  "project_id": "cea24a9d-2823-497d-a617-c1728ba22f49",
+  "project_id": "37aecaff-eee5-4c85-b101-98715fcfc387",
   "trust_read": {
     "review": {
       "changes": [
         {
           "after": "# Retained configuration change.\nformat: 1\ndisabled: []\n",
           "before": "format: 1\ndisabled: []\n",
-          "id": "e63e9688-38ed-52b2-8a00-bec3c08c71ce",
+          "id": "aa7ba230-f83f-5f10-907e-8a3c94948e38",
           "kind": "modified",
           "path": ".paintedwolf/extensions.yaml",
-          "root_id": "c998c64d-f7b1-4eca-8c58-b35be12cdae8",
+          "root_id": "2c95d96f-df1a-4f26-85f9-1f99b7f68341",
           "root_label": "seed-project",
           "surface_ids": [
             "extension_config",
@@ -62,8 +62,8 @@
           ]
         }
       ],
-      "id": "3463afaa-14e1-5f54-a157-b63b76db925f",
-      "project_id": "cea24a9d-2823-497d-a617-c1728ba22f49"
+      "id": "58037081-9b26-5110-93ba-707a2d063fc8",
+      "project_id": "37aecaff-eee5-4c85-b101-98715fcfc387"
     },
     "surfaces": {
       "agents_md": true,
