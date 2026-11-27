@@ -43,44 +43,25 @@ phases:
 
 
 def create_declared_profile_session(application, project_dir, case, *, create_base_session):
-    """Compose & persist a disposable workflow binding coordinator_profile under build posture."""
+    """Compose a session-scoped workflow binding coordinator_profile under build posture without polluting project_dir."""
     profile = case.get('profile') or ''
     wf_id = f"pc-{case['id']}"[:48]
-    author_sid, project_id, root_id, _ = create_base_session(application, project_dir, {'profile': 'implement', 'turns': []})
+    sid, project_id, root_id, base_surface = create_base_session(application, project_dir, {'profile': 'implement', 'turns': case.get('turns') or []})
     req = urllib.request.Request(
-        application.url + f'/v1/sessions/{author_sid}/workflows/compose',
+        application.url + f'/v1/sessions/{sid}/workflows/compose',
         method='POST',
         data=_workflow_yaml(wf_id, profile).encode('utf-8'),
         headers={'Content-Type': 'application/yaml', 'Authorization': 'Bearer ' + application.token},
     )
     with open_request(req) as resp:
         json.load(resp)
-    application.request(
-        f'/v1/sessions/{author_sid}/workflows/{wf_id}/persist',
-        {'version': '1.0.0', 'confirm': True, 'trigger': '/' + wf_id},
-    )
-    session = application.request('/v1/sessions', {'project_id': project_id, 'posture': 'build'})
-    sid = session['id']
-    turn_budget = max(20, 4 + len(case.get('turns') or ()) * 16)
-    application.request('/harness/model-limit', {'session_id': sid, 'limit': turn_budget})
-    observed_state = {}
-    def ready():
-        state = application.request('/v1/sessions/' + sid)
-        if state['status'] == 'preparing':
-            return False
-        if state['status'] != 'idle':
-            raise RuntimeError('declared-profile session preparation ended in ' + state['status'])
-        observed_state.update(state)
-        return True
-    application.wait_for(ready, 'declared-profile session ready', sid)
     run = application.request(f'/v1/sessions/{sid}/workflow-runs', {
         'operation_id': str(uuid.uuid4()), 'workflow_id': wf_id, 'workflow_version': '1.0.0',
         'request': f"Execute portable-command fixture {case['id']}.",
     })
     surface = {
-        'requested_profile': profile, 'requested_posture': 'build',
-        'effective_posture': observed_state.get('posture') or session.get('posture') or 'build',
-        'offered_tools': [], 'session_turn_budget': turn_budget,
+        **base_surface, 'requested_profile': profile, 'requested_posture': 'build',
+        'effective_posture': base_surface.get('effective_posture') or 'build',
         'declared_profile_bound': True, 'workflow_id': wf_id, 'workflow_run_id': run.get('id'),
     }
     return sid, project_id, root_id, surface

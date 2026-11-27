@@ -140,3 +140,13 @@ class PortableCommandReadonlyAuthorityTests(unittest.TestCase):
                 self.assertTrue(obs_o['facts'][fact], fact)
             self.assertFalse(profile_session.has_no_mutating_remedy('Please use edit instead.'))
             self.assertFalse(profile_session.has_refusal_source_span({'source_line': 0}))
+            # Refused sed/awk map to rejected while touch stays refused (preserving progress-then-denial).
+            rows, _, _ = observe._receipt_rows({
+                'invocation_program_executions': [
+                    {'id': 'e1', 'program_id': 'p1', 'operation_id': 'sed', 'native_command': 'sed', 'owner': 'filesystem', 'state': 'refused', 'effect_certainty': 'none'},
+                    {'id': 'e2', 'program_id': 'p1', 'operation_id': 'awk', 'native_command': 'awk', 'owner': 'processes', 'state': 'refused', 'effect_certainty': 'none'},
+                    {'id': 'e3', 'program_id': 'p1', 'operation_id': 'touch', 'native_command': 'touch', 'owner': 'filesystem', 'state': 'refused', 'effect_certainty': 'none'},
+                ],
+                'invocation_program_publications': [], 'invocation_program_revision_pins': [],
+            }, [])
+            self.assertEqual([(r['operation'], r['outcome']) for r in rows], [('sed', 'rejected'), ('awk', 'rejected'), ('touch', 'refused')])

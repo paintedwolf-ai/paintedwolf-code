@@ -95,7 +95,7 @@ def receipt_rows(audit, progress_receipts, draft_bindings=None):
             })
             continue
         op = _canonical_op(ex)
-        outcome = 'rejected' if op in {'source', 'unzip', 'delete'} and ex.get('state') == 'refused' else ex['state']
+        outcome = 'rejected' if op in {'source', 'unzip', 'delete', 'sed', 'awk', 'http_request'} and ex.get('state') == 'refused' else ex['state']
         row = {'execution_id': ex['id'], 'operation': op, 'outcome': outcome}
         effect = {'operation': op, 'outcome': outcome}
         if isinstance(ex.get('status_code'), int):
