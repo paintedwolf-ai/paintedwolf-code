@@ -1,4 +1,4 @@
-"""Unit controls for real-shaped chunked command_output awaiting, cursor continuity, and gaps."""
+"""Unit controls for real-shaped chunked command_output awaiting, raw byte cursors, and gaps."""
 import json
 import pathlib
 import sqlite3
@@ -13,7 +13,7 @@ CASES = {c['id']: c for c in load_suite()['cases']}
 
 
 class ChunkedOutputFakeApp(FakeApp):
-    """Fake app emitting real commandOutput JSON shape (string cursors + chunks array)."""
+    """Fake app emitting real commandOutput JSON shape (raw byte cursors + chunks array)."""
     def __init__(self, directory, *, pages, reject_output=False):
         super().__init__(directory, mode='publish')
         self.pages = pages
@@ -57,42 +57,59 @@ class ChunkedOutputFakeApp(FakeApp):
 
 
 class PortableCommandHandleAwaitTests(unittest.TestCase):
-    def test_multipage_command_output_assembles_stdout_stderr_in_cursor_order(self):
-        pages = [
+    def test_multibyte_screened_and_empty_terminal_command_output_controls(self):
+        # 1) Multi-byte raw byte offsets across pages (6 bytes + 5 bytes = cursor 11, then 3 bytes = cursor 14).
+        multibyte_pages = [
             {
-                'handle': 'command-1', 'cursor': '0', 'next_cursor': '2', 'running': True,
-                'chunks': [{'cursor': 0, 'stream': 'stdout', 'text': '100'}, {'cursor': 1, 'stream': 'stderr', 'text': 'warn\n'}],
+                'handle': 'command-1', 'cursor': '0', 'next_cursor': '11', 'running': True,
+                'chunks': [{'cursor': 0, 'stream': 'stdout', 'text': '10000\n'}, {'cursor': 6, 'stream': 'stderr', 'text': 'warn\n'}],
             },
             {
-                'handle': 'command-1', 'cursor': '2', 'next_cursor': '3', 'running': False, 'exit_code': 0,
-                'chunks': [{'cursor': 2, 'stream': 'stdout', 'text': '00\n'}],
+                'handle': 'command-1', 'cursor': '11', 'next_cursor': '14', 'running': False, 'exit_code': 0,
+                'chunks': [{'cursor': 11, 'stream': 'stdout', 'text': 'ok\n'}],
             },
-            {
-                'handle': 'command-1', 'cursor': '3', 'next_cursor': '3', 'running': False, 'exit_code': 0,
-                'chunks': [],
-            },
+            {'handle': 'command-1', 'cursor': '14', 'next_cursor': '14', 'running': False, 'exit_code': 0, 'chunks': []},
         ]
+        # 2) Screened/length-changed chunks: raw offset jumps 0 -> 24 (24 raw bytes) while visible redacted text is 10 chars.
+        screened_pages = [
+            {
+                'handle': 'command-1', 'cursor': '0', 'next_cursor': '30', 'running': False, 'exit_code': 0,
+                'chunks': [{'cursor': 0, 'stream': 'stdout', 'text': '[REDACTED]'}, {'cursor': 24, 'stream': 'stdout', 'text': ' done\n'}],
+            },
+            {'handle': 'command-1', 'cursor': '30', 'next_cursor': '30', 'running': False, 'exit_code': 0, 'chunks': []},
+        ]
+        # 3) Empty-terminal output: running=False, chunks=[], cursor == next_cursor == "0".
+        empty_pages = [{'handle': 'command-1', 'cursor': '0', 'next_cursor': '0', 'running': False, 'exit_code': 0, 'chunks': []}]
+
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
-            app_holder = []
-            def factory(d):
-                a = ChunkedOutputFakeApp(d, pages=pages)
-                app_holder.append(a)
-                return a
             with patch.object(harness, 'checkpoint_closed_store', return_value={}):
-                res = harness.run_case(CASES['literal-null-sink'], root / 'run', app_factory=factory, sse_factory=FakeSSE)
-            self.assertEqual(app_holder[0].requested_cursors, [0, 2, 3])
-            self.assertEqual(res['observation']['program']['stdout'], '10000\n')
-            self.assertEqual(res['observation']['program']['stderr'], 'warn\n')
-            self.assertEqual(res['observation']['program']['status'], 0)
-            self.assertTrue(res['observation']['program']['complete'])
-            self.assertEqual(res['audit']['observation_gaps'], [])
+                app_mb = []
+                def mb_factory(d):
+                    a = ChunkedOutputFakeApp(d, pages=multibyte_pages)
+                    app_mb.append(a)
+                    return a
+                r_mb = harness.run_case(CASES['literal-null-sink'], root / 'mb', app_factory=mb_factory, sse_factory=FakeSSE)
+                r_sc = harness.run_case(CASES['literal-null-sink'], root / 'sc', app_factory=lambda d: ChunkedOutputFakeApp(d, pages=screened_pages), sse_factory=FakeSSE)
+                r_em = harness.run_case(CASES['literal-null-sink'], root / 'em', app_factory=lambda d: ChunkedOutputFakeApp(d, pages=empty_pages), sse_factory=FakeSSE)
+            self.assertEqual(app_mb[0].requested_cursors, [0, 11, 14])
+            self.assertEqual(r_mb['observation']['program']['stdout'], '10000\nok\n')
+            self.assertEqual(r_mb['observation']['program']['stderr'], 'warn\n')
+            self.assertEqual(r_mb['audit']['observation_gaps'], [])
+            self.assertEqual(r_sc['observation']['program']['stdout'], '[REDACTED] done\n')
+            self.assertEqual(r_sc['audit']['observation_gaps'], [])
+            self.assertEqual(r_em['observation']['program']['stdout'], '')
+            self.assertTrue(r_em['observation']['program']['complete'])
+            self.assertEqual(r_em['audit']['observation_gaps'], [])
 
-    def test_truncation_cursor_gap_and_read_rejection_surface_explicit_gaps(self):
+    def test_truncation_combined_unavailable_cursor_gap_and_missing_fields(self):
         cases = [
             ('truncated', [{'handle': 'command-1', 'cursor': '0', 'next_cursor': '1', 'running': False, 'exit_code': 0, 'truncated': True, 'chunks': [{'cursor': 0, 'stream': 'stdout', 'text': 'x'}]}], False, 'command_output_truncated'),
-            ('cursor_gap', [{'handle': 'command-1', 'cursor': '0', 'next_cursor': '5', 'running': False, 'exit_code': 0, 'chunks': [{'cursor': 2, 'stream': 'stdout', 'text': 'skip'}]}], False, 'command_output_cursor_gap'),
+            ('combined_unavailable', [{'handle': 'command-1', 'cursor': '0', 'next_cursor': '12', 'running': False, 'exit_code': 0, 'chunks': [{'cursor': 0, 'stream': 'combined', 'text': '[unavailable]'}]}], False, 'command_output_unavailable'),
+            ('out_of_range_cursor', [{'handle': 'command-1', 'cursor': '0', 'next_cursor': '5', 'running': False, 'exit_code': 0, 'chunks': [{'cursor': 5, 'stream': 'stdout', 'text': 'oob'}]}], False, 'command_output_cursor_gap'),
+            ('non_monotonic_cursor', [{'handle': 'command-1', 'cursor': '0', 'next_cursor': '10', 'running': False, 'exit_code': 0, 'chunks': [{'cursor': 4, 'stream': 'stdout', 'text': 'a'}, {'cursor': 4, 'stream': 'stdout', 'text': 'b'}]}], False, 'command_output_cursor_gap'),
             ('handle_mismatch', [{'handle': 'other-9', 'cursor': '0', 'next_cursor': '0', 'running': False, 'exit_code': 0, 'chunks': []}], False, 'command_output_cursor_gap'),
+            ('missing_fields', [{'stdout': 'legacy-without-handle'}], False, 'command_output_missing'),
             ('read_rejected', [], True, 'command_output_rejected'),
         ]
         with tempfile.TemporaryDirectory() as tmp:
