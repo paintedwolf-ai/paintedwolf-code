@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,8 +50,18 @@ type Outbox struct {
 	cancel      context.CancelFunc
 	stopped     chan struct{}
 	wg          sync.WaitGroup
+	epoch       atomic.Uint64
 	// OnDelivered runs after a row reaches the hub.
 	OnDelivered func(context.Context, DeliveredEvent)
+}
+
+// Epoch increases whenever a row is enqueued or processed by the outbox, so a
+// fixed-point drain can tell whether a pass produced or delivered outbox work.
+func (o *Outbox) Epoch() uint64 {
+	if o == nil {
+		return 0
+	}
+	return o.epoch.Load()
 }
 
 // idleSweep is the delivery sweep every host runs without a wake.
@@ -90,6 +101,9 @@ func (o *Outbox) EnqueueTx(ctx context.Context, tx *sql.Tx, topic api.EventTopic
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO event_outbox(event_id, topic, project_id, session_id, facet, entity_revision, data_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		eventID, string(topic), key.Project, key.Session, key.Facet, key.EntityRevision, string(raw), time.Now().UTC().Format(time.RFC3339Nano))
+	if err == nil {
+		o.epoch.Add(1)
+	}
 	return err
 }
 
@@ -135,6 +149,7 @@ func (o *Outbox) Notify() {
 	if o == nil {
 		return
 	}
+	o.epoch.Add(1)
 	select {
 	case o.wake <- struct{}{}:
 	default:
@@ -223,6 +238,7 @@ func (o *Outbox) drain(ctx context.Context) error {
 		if err != nil || !ok {
 			return err
 		}
+		o.epoch.Add(1)
 		key := events.PublishKey{Project: entry.projectID, Session: entry.sessionID, Facet: entry.facet, EventID: entry.eventID, EntityRevision: entry.revision}
 		if entry.topic == "" || !json.Valid(entry.data) || events.ValidatePublishScope(entry.topic, key) != nil {
 			if err := o.remove(ctx, entry.id); err != nil {

@@ -94,6 +94,17 @@ func (p *Publisher) SettleAttention(ctx context.Context) {
 	p.waitAttentionIdle()
 }
 
+// AttentionEpoch reports the number of attention rebuilds started so far,
+// allowing a fixed-point drain to detect whether attention work ran during a pass.
+func (p *Publisher) AttentionEpoch() uint64 {
+	if p == nil {
+		return 0
+	}
+	p.attentionMu.Lock()
+	defer p.attentionMu.Unlock()
+	return p.attentionRevision
+}
+
 // attentionRebuildDone retires one scheduled or running rebuild.
 func (p *Publisher) attentionRebuildDone() {
 	p.attentionMu.Lock()

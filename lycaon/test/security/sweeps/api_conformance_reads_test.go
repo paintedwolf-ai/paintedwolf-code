@@ -217,7 +217,7 @@ type hostEffects struct {
 	hub    *events.MemoryHub
 	events <-chan wire.EventEnvelope
 	pump   *eventPump
-	settle func(context.Context)
+	settle func(context.Context) error
 	// projectDir is the watched fixture tree whose change pipeline must drain.
 	projectDir string
 	// quietGrace is how long the tree's changes must stay idle before the host
@@ -354,7 +354,9 @@ func (e *hostEffects) mark(ctx context.Context) (int64, error) {
 		e.silent = err
 		return 0, err
 	}
-	e.quiesce(ctx)
+	if err := e.quiesce(ctx); err != nil {
+		return 0, err
+	}
 	e.drain()
 	return e.dataVersion(ctx)
 }
@@ -371,7 +373,9 @@ func (e *hostEffects) awaitWatcherBarrier(ctx context.Context) error {
 		if err != nil || !rewrote {
 			return err
 		}
-		e.quiesce(ctx)
+		if err := e.quiesce(ctx); err != nil {
+			return err
+		}
 		e.drain()
 		patience *= 2
 	}
@@ -432,7 +436,9 @@ func (e *hostEffects) placeBarrier() error {
 }
 
 func (e *hostEffects) since(ctx context.Context, mark int64) ([]string, error) {
-	e.quiesce(ctx)
+	if err := e.quiesce(ctx); err != nil {
+		return nil, err
+	}
 	changes := e.drain()
 	version, err := e.dataVersion(ctx)
 	if err != nil {
@@ -451,11 +457,13 @@ func (e *hostEffects) since(ctx context.Context, mark int64) ([]string, error) {
 // only the last legs are joined by WaitForBackground, so one pass can finish
 // while a change is still in flight; a second pass that moves nothing proves
 // the pipeline is empty.
-func (e *hostEffects) quiesce(ctx context.Context) {
+func (e *hostEffects) quiesce(ctx context.Context) error {
 	version, _ := e.dataVersion(ctx)
 	for pass := 0; pass < settlePasses; pass++ {
 		repochange.WaitQuiet(ctx, e.projectDir, e.quietGrace, watcherQuietBound)
-		e.settle(ctx)
+		if err := e.settle(ctx); err != nil {
+			return err
+		}
 		var pending int64
 		if err := e.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM event_outbox").Scan(&pending); err == nil && pending > 0 {
 			continue
@@ -467,6 +475,7 @@ func (e *hostEffects) quiesce(ctx context.Context) {
 		version = next
 	}
 	e.hub.FlushDebounced()
+	return nil
 }
 
 // tables digests every table's rows.
@@ -546,9 +555,9 @@ func (e *hostEffects) drain() []string {
 
 // settleSourceWatcher waits until the project's watcher has delivered every
 // filesystem change the fixtures made, so reads start with none in flight.
-func settleSourceWatcher(t *testing.T, settle func(context.Context), hub *events.MemoryHub, projectDir string) {
+func settleSourceWatcher(t *testing.T, settle func(context.Context) error, hub *events.MemoryHub, projectDir string) {
 	t.Helper()
-	settle(t.Context())
+	testutil.FailErr(t, "settle background work", settle(t.Context()))
 	ch, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe to source changes", err)
 	defer unsubscribe()
@@ -732,7 +741,9 @@ func sourceChangeNamed(published <-chan wire.EventEnvelope, path string) bool {
 // keyRows counts, per table, the rows any text column of which equals key,
 // once the work earlier requests started has settled.
 func (e *hostEffects) keyRows(ctx context.Context, key string) (map[string]int, error) {
-	e.quiesce(ctx)
+	if err := e.quiesce(ctx); err != nil {
+		return nil, err
+	}
 	if e.textColumns == nil {
 		columns, err := storeTextColumns(ctx, e.conn)
 		if err != nil {
@@ -784,12 +795,15 @@ func storeTextColumns(ctx context.Context, conn *sql.Conn) (map[string][]string,
 
 // hostSettle waits for the server's detached work and for briefing
 // generations, which run on their own scheduler.
-func hostSettle(h *wiring.Harness) func(context.Context) {
-	return func(ctx context.Context) {
-		h.Server.WaitForBackground(ctx)
+func hostSettle(h *wiring.Harness) func(context.Context) error {
+	return func(ctx context.Context) error {
+		if err := h.Server.WaitForBackground(ctx); err != nil {
+			return err
+		}
 		if briefings := h.Server.Sources.Briefings; briefings != nil && briefings.Engine != nil && briefings.Engine.Host() != nil {
 			briefings.Engine.Host().Scheduler.Wait(ctx)
 		}
+		return ctx.Err()
 	}
 }
 

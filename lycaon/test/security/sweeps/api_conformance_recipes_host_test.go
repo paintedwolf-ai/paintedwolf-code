@@ -1123,7 +1123,9 @@ func hostRecipeGetProjectRemoval(ctx context.Context, s *conformanceSweep, _ *co
 		}); err != nil {
 			return "", err
 		}
-		s.host.Server.WaitForBackground(ctx)
+		if err := s.host.Server.WaitForBackground(ctx); err != nil {
+			return "", err
+		}
 		return projectID + "\x00" + in.fields["operation_id"].(string), nil
 	})
 	if err != nil {

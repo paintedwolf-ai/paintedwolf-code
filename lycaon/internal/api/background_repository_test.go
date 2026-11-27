@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/repoinfo"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 type backgroundRepo struct {
@@ -44,8 +45,8 @@ func TestBackgroundDrainIncludesRepositorySettlement(t *testing.T) {
 	finish := sync.OnceFunc(func() { close(p.release) })
 	s := newTestServer(t, func(deps *Dependencies) { deps.Source.RepoProvider = p })
 	t.Cleanup(finish)
-	drained := make(chan struct{})
-	go func() { s.WaitForBackground(t.Context()); close(drained) }()
+	drained := make(chan error, 1)
+	go func() { drained <- s.WaitForBackground(t.Context()) }()
 	select {
 	case <-p.entered:
 	case <-drained:
@@ -55,7 +56,9 @@ func TestBackgroundDrainIncludesRepositorySettlement(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	s.WaitForBackground(ctx)
+	if err := s.WaitForBackground(ctx); err == nil {
+		t.Fatal("canceled WaitForBackground returned nil")
+	}
 	select {
 	case <-drained:
 		t.Fatal("server drain returned during repository settlement")
@@ -63,7 +66,8 @@ func TestBackgroundDrainIncludesRepositorySettlement(t *testing.T) {
 	}
 	finish()
 	select {
-	case <-drained:
+	case err := <-drained:
+		testutil.FailErr(t, "server drain after repository settlement", err)
 	case <-t.Context().Done():
 		t.Fatal("server drain did not finish after repository settlement")
 	}
@@ -79,5 +83,5 @@ func TestBackgroundStopCancelsRepositoryBeforeDrain(t *testing.T) {
 	default:
 		t.Fatal("shutdown did not cancel repository analysis before its join")
 	}
-	s.WaitForBackground(t.Context())
+	testutil.FailErr(t, "wait for background after stop", s.WaitForBackground(t.Context()))
 }

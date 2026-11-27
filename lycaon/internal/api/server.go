@@ -91,9 +91,12 @@ type Server struct {
 	repoProvider   repoinfo.Provider
 	events         events.ReplayHub
 	eventPublisher *events.Publisher
-	eventOutbox    interface{ Wait(context.Context) error }
-	presence       *events.Presence
-	harness        harnessServices
+	eventOutbox    interface {
+		Wait(context.Context) error
+		Epoch() uint64
+	}
+	presence *events.Presence
+	harness  harnessServices
 	storagePaths
 	health
 }

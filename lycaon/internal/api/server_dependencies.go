@@ -105,15 +105,18 @@ type HostDependencies struct {
 	Events                 events.ReplayHub
 	EventHeartbeatInterval time.Duration
 	EventPublisher         *events.Publisher
-	EventOutbox            interface{ Wait(context.Context) error }
-	Presence               *events.Presence
-	HostIdentity           hostidentity.Identity
-	HostResources          *hostresources.Service
-	HostPower              *hostpower.Controller
-	Pricing                *settings.PricingHost
-	Preview                *preview.Controller
-	PreflightEnv           preflight.Env
-	Attention              *attention.Source
+	EventOutbox            interface {
+		Wait(context.Context) error
+		Epoch() uint64
+	}
+	Presence      *events.Presence
+	HostIdentity  hostidentity.Identity
+	HostResources *hostresources.Service
+	HostPower     *hostpower.Controller
+	Pricing       *settings.PricingHost
+	Preview       *preview.Controller
+	PreflightEnv  preflight.Env
+	Attention     *attention.Source
 }
 
 type StorageDependencies struct {
