@@ -10,10 +10,10 @@ import (
 
 var egressWEADiagSeq atomic.Int64
 
-// observeEgressDecisionWEA emits a bounded WEA egress observation for an
-// attributed egress gate decision. Uses a monotonic sequence number so
-// legitimate revalidation and later admissions superseding earlier refusals
-// are cleanly ordered and never emit false-positive warnings.
+// observeEgressDecisionWEA emits ONLY the real owning policy/decision record
+// (EgressDecisions) for an attributed egress gate decision. It deliberately
+// does NOT fabricate ObservedConnections: actual connection observations must
+// come independently from the transport or broker observer.
 // When diagnostics are disabled, this returns immediately with zero allocations.
 func observeEgressDecisionWEA(cmd confine.EgressCommand, destination string, allowed bool) bool {
 	if !cmddiag.Enabled() {
@@ -52,28 +52,12 @@ func observeEgressDecisionWEA(cmd confine.EgressCommand, destination string, all
 		dec.RefusalCode = "HOST_DENIED"
 	}
 
-	obs := cmddiag.WEAObservation{
+	return cmddiag.ObserveWEA(cmddiag.WEAObservation{
 		SessionID:       sess,
 		ProjectID:       strings.TrimSpace(cmd.ProjectID),
 		InvocationID:    inv,
 		ScopeKey:        decID,
 		Settled:         true,
 		EgressDecisions: []cmddiag.WEAEgressDecisionFact{dec},
-	}
-	if allowed {
-		connSeq := egressWEADiagSeq.Add(1)
-		obs.ObservedConnections = []cmddiag.WEAEgressConnectionFact{
-			{
-				ConnectionID:   cmddiag.DigestReference("egress_conn", sess, inv, dest),
-				SessionID:      sess,
-				ProjectID:      strings.TrimSpace(cmd.ProjectID),
-				InvocationID:   inv,
-				DestinationRef: dest,
-				ObservedSeq:    connSeq,
-				Settled:        true,
-				SourceRef:      destDigest,
-			},
-		}
-	}
-	return cmddiag.ObserveWEA(obs)
+	})
 }

@@ -9,19 +9,20 @@ import (
 
 const weaMaxEditDiagItems = 64
 
-// observeAcceptedAgentEditsWEA emits a bounded WEA edit read-basis and author
-// attribution observation after ApplyAgentEdits commits. Legitimate CRDT
-// rebases (ExpectedRevision != previous after planAgentEdit succeeded) are
-// marked RebasedCleanly so clean rebases never emit false-positive warnings.
-// When diagnostics are disabled, this returns immediately with zero allocations.
-func observeAcceptedAgentEditsWEA(batch []*agentAcceptance, results []*AgentEditResult) bool {
-	if !cmddiag.Enabled() || len(batch) == 0 {
+// observeAcceptedAgentEditsWEA emits a bounded WEA edit observation after
+// ApplyAgentEdits commits. It reads actual owning read-basis records from
+// a.agentReads without fabricating qualifying reads or companion version rows.
+// Where an independent owner witness (read record or persisted version row) is
+// unavailable at this seam, it marks the observation incomplete instead of
+// self-confirming. Zero overhead when diagnostics are disabled.
+func (a *AgentService) observeAcceptedAgentEditsWEA(batch []*agentAcceptance, results []*AgentEditResult) bool {
+	if !cmddiag.Enabled() || a == nil || len(batch) == 0 {
 		return false
 	}
 	limit := min(len(batch), weaMaxEditDiagItems)
 	readBases := make([]cmddiag.WEAReadBasisFact, 0, limit)
 	editEffects := make([]cmddiag.WEAEditEffectFact, 0, limit)
-	fileVersions := make([]cmddiag.WEAFileVersionFact, 0, limit)
+	missingReadWitness := false
 
 	var sessionID, projectID, invocationID string
 	for i := 0; i < limit; i++ {
@@ -48,34 +49,35 @@ func observeAcceptedAgentEditsWEA(batch []*agentAcceptance, results []*AgentEdit
 
 		basisRev := strconv.FormatInt(in.ExpectedRevision, 10)
 		prevRev := strconv.FormatInt(item.previous, 10)
-		resultRev := strconv.FormatInt(d.Revision, 10)
 		rebased := in.ExpectedRevision != item.previous
 
-		versionID := ""
-		if i < len(results) && results[i] != nil && strings.TrimSpace(results[i].HeldVersionID) != "" {
-			versionID = strings.TrimSpace(results[i].HeldVersionID)
+		// Read the actual owning agent read-basis record from a.agentReads.
+		if basis, ok := a.lookupOwnedReadBasis(in.ProjectID, sess, d.ID); ok {
+			readBases = append(readBases, cmddiag.WEAReadBasisFact{
+				ReadID:       "read:" + d.ID + ":" + strconv.FormatInt(basis.revision, 10),
+				SessionID:    sess,
+				InvocationID: inv,
+				Path:         d.Path,
+				Revision:     strconv.FormatInt(basis.revision, 10),
+				Qualifying:   basis.whole,
+				Active:       true,
+				SourceRef:    cmddiag.DigestReference("agent_read_cache", d.ID),
+			})
 		} else {
-			versionID = d.ID + ":rev:" + resultRev
+			missingReadWitness = true
 		}
 
-		authorID := strings.TrimSpace(in.ToolCallID)
-		if authorID == "" {
-			authorID = sess
+		versionID := ""
+		if i < len(results) && results[i] != nil {
+			versionID = strings.TrimSpace(results[i].HeldVersionID)
 		}
+		// Record only persisted effect authorship; never hardcode author kind
+		// or fabricate a companion FileVersions row from the same input.
+		authorID := strings.TrimSpace(d.authorship.toolCallID)
 		if authorID == "" {
-			authorID = "agent"
+			authorID = strings.TrimSpace(d.authorship.sessionID)
 		}
 
-		readBases = append(readBases, cmddiag.WEAReadBasisFact{
-			ReadID:       "pin:" + d.ID + ":" + basisRev,
-			SessionID:    sess,
-			InvocationID: inv,
-			Path:         d.Path,
-			Revision:     basisRev,
-			Qualifying:   true,
-			Active:       true,
-			SourceRef:    cmddiag.DigestReference("read_basis", d.ID, basisRev),
-		})
 		editEffects = append(editEffects, cmddiag.WEAEditEffectFact{
 			EffectID:            strings.TrimSpace(in.OperationID),
 			VersionID:           versionID,
@@ -88,19 +90,7 @@ func observeAcceptedAgentEditsWEA(batch []*agentAcceptance, results []*AgentEdit
 			RebasedCleanly:      rebased,
 			RebasedFromRevision: basisRev,
 			AuthorID:            authorID,
-			AuthorKind:          "agent",
 			SourceRef:           cmddiag.DigestReference("edit_effect", in.OperationID),
-		})
-		fileVersions = append(fileVersions, cmddiag.WEAFileVersionFact{
-			VersionID:      versionID,
-			EffectID:       strings.TrimSpace(in.OperationID),
-			SessionID:      sess,
-			Path:           d.Path,
-			AuthorID:       authorID,
-			AuthorKind:     "agent",
-			BaseRevision:   prevRev,
-			ResultRevision: resultRev,
-			SourceRef:      cmddiag.DigestReference("file_version", versionID),
 		})
 	}
 
@@ -108,13 +98,28 @@ func observeAcceptedAgentEditsWEA(batch []*agentAcceptance, results []*AgentEdit
 		return false
 	}
 	return cmddiag.ObserveWEA(cmddiag.WEAObservation{
-		SessionID:    sessionID,
-		ProjectID:    projectID,
-		InvocationID: invocationID,
-		ScopeKey:     editEffects[0].EffectID,
-		Settled:      true,
-		ReadBases:    readBases,
-		EditEffects:  editEffects,
-		FileVersions: fileVersions,
+		SessionID:                 sessionID,
+		ProjectID:                 projectID,
+		InvocationID:              invocationID,
+		ScopeKey:                  editEffects[0].EffectID,
+		Settled:                   true,
+		Truncated:                 len(batch) > limit,
+		ReadWitnessUnavailable:    missingReadWitness,
+		VersionWitnessUnavailable: true, // Persisted version row is owned by sourceledger, not fabricated here.
+		ReadBases:                 readBases,
+		EditEffects:               editEffects,
 	})
+}
+
+func (a *AgentService) lookupOwnedReadBasis(projectID, sessionID, documentID string) (agentReadBasis, bool) {
+	if a == nil || sessionID == "" || documentID == "" {
+		return agentReadBasis{}, false
+	}
+	a.agentReads.mu.Lock()
+	defer a.agentReads.mu.Unlock()
+	if a.agentReads.bases == nil {
+		return agentReadBasis{}, false
+	}
+	basis, ok := a.agentReads.bases[agentReadKey{project: projectID, session: sessionID, document: documentID}]
+	return basis, ok
 }

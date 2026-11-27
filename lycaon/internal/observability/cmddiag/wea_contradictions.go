@@ -28,9 +28,12 @@ type WEAObservation struct {
 	JobID           string `json:"job_id,omitempty"`
 	ResultHandle    string `json:"result_handle,omitempty"`
 	InvocationID    string `json:"invocation_id,omitempty"`
-	ScopeKey        string `json:"scope_key,omitempty"`
-	Settled         bool   `json:"settled"`
-	RetentionGapped bool   `json:"retention_gapped,omitempty"`
+	ScopeKey                  string `json:"scope_key,omitempty"`
+	Settled                   bool   `json:"settled"`
+	RetentionGapped           bool   `json:"retention_gapped,omitempty"`
+	Truncated                 bool   `json:"truncated,omitempty"`
+	ReadWitnessUnavailable    bool   `json:"read_witness_unavailable,omitempty"`
+	VersionWitnessUnavailable bool   `json:"version_witness_unavailable,omitempty"`
 
 	// Workers track durable facts.
 	WorkerResults []WEAWorkerResultFact `json:"worker_results,omitempty"`
@@ -60,6 +63,8 @@ type WEAWorkerResultFact struct {
 	JobID        string   `json:"job_id,omitempty"`
 	SessionID    string   `json:"session_id,omitempty"`
 	Settled      bool     `json:"settled"`
+	Incomplete   bool     `json:"incomplete,omitempty"`
+	Truncated    bool     `json:"truncated,omitempty"`
 	ChangedPaths []string `json:"changed_paths,omitempty"`
 	SourceRef    string   `json:"source_ref,omitempty"`
 }
@@ -452,6 +457,7 @@ func checkWEALandedPathMismatch(obs WEAObservation, now time.Time) (Finding, boo
 	}
 
 	var reasons, handles, workerIDs, jobIDs, pathDigests, sourceRefs []string
+	var incompleteReasons, incompleteHandles, incompleteSources []string
 	for _, lp := range obs.LandedPaths {
 		if lp.RetentionPruned || (!obs.Settled && !lp.Settled) {
 			continue
@@ -486,7 +492,19 @@ func checkWEALandedPathMismatch(obs WEAObservation, now time.Time) (Finding, boo
 			// Healthy lag while worker result is not yet settled.
 			continue
 		}
+		if res.Incomplete {
+			incompleteReasons = append(incompleteReasons, "worker_result_changed_paths_unavailable")
+			incompleteHandles = append(incompleteHandles, lp.ResultHandle)
+			incompleteSources = append(incompleteSources, DigestReference(res.SourceRef), pathDigest)
+			continue
+		}
 		if _, found := changedSets[lp.ResultHandle][normPath]; !found {
+			if res.Truncated || obs.Truncated {
+				incompleteReasons = append(incompleteReasons, "truncated_worker_result_paths")
+				incompleteHandles = append(incompleteHandles, lp.ResultHandle)
+				incompleteSources = append(incompleteSources, DigestReference(res.SourceRef), pathDigest)
+				continue
+			}
 			reasons = append(reasons, "landed_path_absent_from_worker_result")
 			handles = append(handles, lp.ResultHandle)
 			workerIDs = append(workerIDs, lp.WorkerID, res.WorkerID)
@@ -495,33 +513,69 @@ func checkWEALandedPathMismatch(obs WEAObservation, now time.Time) (Finding, boo
 			sourceRefs = append(sourceRefs, DigestReference(lp.SourceRef), DigestReference(res.SourceRef), pathDigest)
 		}
 	}
-	if len(reasons) == 0 {
-		return Finding{}, false
+	if len(reasons) > 0 {
+		slices.Sort(reasons)
+		reasons = slices.Compact(reasons)
+		f := baseWEAFinding(obs, now, RuleWEALandedPathMismatch, DispositionContradiction)
+		f.OperationIDs = handles
+		f.SourceIDs = sourceRefs
+		f.Reason = reasons[0]
+		f.Expected = map[string]any{
+			"landed_paths_in_committed_result": true,
+			"landed_paths_present_on_disk":     true,
+		}
+		f.Observed = map[string]any{
+			"mismatches":     reasons,
+			"result_handles": handles,
+			"worker_ids":     workerIDs,
+			"job_ids":        jobIDs,
+			"path_digests":   pathDigests,
+		}
+		return f, true
 	}
-	slices.Sort(reasons)
-	reasons = slices.Compact(reasons)
-	f := baseWEAFinding(obs, now, RuleWEALandedPathMismatch, DispositionContradiction)
-	f.OperationIDs = handles
-	f.SourceIDs = sourceRefs
-	f.Reason = reasons[0]
-	f.Expected = map[string]any{
-		"landed_paths_in_committed_result": true,
-		"landed_paths_present_on_disk":     true,
+	if len(incompleteReasons) > 0 {
+		slices.Sort(incompleteReasons)
+		incompleteReasons = slices.Compact(incompleteReasons)
+		f := baseWEAFinding(obs, now, RuleWEALandedPathMismatch, DispositionIncomplete)
+		f.OperationIDs = incompleteHandles
+		f.SourceIDs = incompleteSources
+		f.Reason = incompleteReasons[0]
+		f.Expected = map[string]any{
+			"complete_worker_result_changed_paths": true,
+		}
+		f.Observed = map[string]any{
+			"incomplete_reasons": incompleteReasons,
+			"result_handles":     incompleteHandles,
+		}
+		return f, true
 	}
-	f.Observed = map[string]any{
-		"mismatches":     reasons,
-		"result_handles": handles,
-		"worker_ids":     workerIDs,
-		"job_ids":        jobIDs,
-		"path_digests":   pathDigests,
-	}
-	return f, true
+	return Finding{}, false
 }
 
 // 2. Edit read-basis: accepted write with stale or missing qualifying read basis.
 func checkWEAEditStaleReadBasis(obs WEAObservation, now time.Time) (Finding, bool) {
 	if len(obs.EditEffects) == 0 || obs.RetentionGapped {
 		return Finding{}, false
+	}
+	if len(obs.ReadBases) == 0 && obs.ReadWitnessUnavailable {
+		var effectIDs, sourceRefs []string
+		for _, ed := range obs.EditEffects {
+			if ed.RetentionPruned || !ed.Accepted || ed.Refused {
+				continue
+			}
+			effectIDs = append(effectIDs, ed.EffectID)
+			sourceRefs = append(sourceRefs, DigestReference(ed.SourceRef), DigestReference(normalizePathKey(ed.Path)))
+		}
+		if len(effectIDs) == 0 {
+			return Finding{}, false
+		}
+		f := baseWEAFinding(obs, now, RuleWEAEditStaleReadBasis, DispositionIncomplete)
+		f.ExecutionIDs = effectIDs
+		f.SourceIDs = sourceRefs
+		f.Reason = "read_basis_owner_witness_unavailable"
+		f.Expected = map[string]any{"read_basis_owner_witness_present": true}
+		f.Observed = map[string]any{"read_basis_owner_witness_present": false, "effect_ids": effectIDs}
+		return f, true
 	}
 
 	hasQualifyingRead := func(sessionID, path, rev string) bool {
@@ -608,8 +662,31 @@ func checkWEAEditStaleReadBasis(obs WEAObservation, now time.Time) (Finding, boo
 
 // 3. Edit author: durable file version whose recorded author disagrees with its effect.
 func checkWEAEditWrongAuthor(obs WEAObservation, now time.Time) (Finding, bool) {
-	if len(obs.EditEffects) == 0 || len(obs.FileVersions) == 0 || obs.RetentionGapped {
+	if len(obs.EditEffects) == 0 || obs.RetentionGapped {
 		return Finding{}, false
+	}
+	if len(obs.FileVersions) == 0 {
+		if !obs.VersionWitnessUnavailable {
+			return Finding{}, false
+		}
+		var effectIDs, sourceRefs []string
+		for _, ed := range obs.EditEffects {
+			if ed.RetentionPruned || !ed.Accepted || ed.Refused {
+				continue
+			}
+			effectIDs = append(effectIDs, ed.EffectID)
+			sourceRefs = append(sourceRefs, DigestReference(ed.SourceRef), DigestReference(normalizePathKey(ed.Path)))
+		}
+		if len(effectIDs) == 0 {
+			return Finding{}, false
+		}
+		f := baseWEAFinding(obs, now, RuleWEAEditWrongAuthor, DispositionIncomplete)
+		f.ExecutionIDs = effectIDs
+		f.SourceIDs = sourceRefs
+		f.Reason = "version_author_owner_witness_unavailable"
+		f.Expected = map[string]any{"version_author_owner_witness_present": true}
+		f.Observed = map[string]any{"version_author_owner_witness_present": false, "effect_ids": effectIDs}
+		return f, true
 	}
 
 	versionByID := make(map[string]WEAFileVersionFact, len(obs.FileVersions))

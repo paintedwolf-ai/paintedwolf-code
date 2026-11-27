@@ -25,7 +25,7 @@ func TestObserveCommittedPromotionWEAParityAndBounds(t *testing.T) {
 		landed: []string{"internal/a.go", "internal/b.go"},
 	}
 
-	// Disabled: zero allocations, returns false.
+	// 1. Disabled: zero allocations, returns false.
 	restoreOff := cmddiag.SetObserver(cmddiag.NewObserver(cmddiag.Config{Enabled: false}))
 	if observeCommittedPromotionWEA(in) {
 		restoreOff()
@@ -39,7 +39,7 @@ func TestObserveCommittedPromotionWEAParityAndBounds(t *testing.T) {
 		t.Fatalf("disabled observeCommittedPromotionWEA allocated %v allocs/op, want 0", allocs)
 	}
 
-	// Enabled clean promotion (including > weaMaxDiagPaths bounded collection): zero findings.
+	// 2. Enabled: collect findings across clean, missing-proof, truncated, and contradiction cases.
 	var mu sync.Mutex
 	var findings []cmddiag.Finding
 	obs := cmddiag.NewObserver(cmddiag.Config{
@@ -55,21 +55,37 @@ func TestObserveCommittedPromotionWEAParityAndBounds(t *testing.T) {
 	restoreOn := cmddiag.SetObserver(obs)
 	defer restoreOn()
 
-	large := in
-	largeTask := *in.task
-	largeTask.TouchedPaths = make([]string, 150)
-	large.landed = make([]string, 150)
-	for i := 0; i < 150; i++ {
-		p := fmt.Sprintf("pkg/file_%03d.go", i)
-		largeTask.TouchedPaths[i] = p
-		large.landed[i] = p
-	}
-	large.task = &largeTask
-	if !observeCommittedPromotionWEA(large) {
+	// 2a. Clean promotion within bounds -> 0 findings.
+	if !observeCommittedPromotionWEA(in) {
 		t.Fatal("expected clean promotion to enqueue")
 	}
 
-	// Seeded contradiction: landed path absent from committed worker TouchedPaths.
+	// 2b. Missing settled changed-path proof (must NOT fall back to in.landed) -> incomplete.
+	noProof := in
+	noProofTask := *in.task
+	noProofTask.ResultHandle = "res-prom-no-proof"
+	noProofTask.TouchedPaths = nil
+	noProofTask.Files = nil
+	noProof.task = &noProofTask
+	if !observeCommittedPromotionWEA(noProof) {
+		t.Fatal("expected missing-proof promotion to enqueue")
+	}
+
+	// 2c. Truncated changed-path proof (> weaMaxDiagPaths) with landed path beyond cap -> incomplete (not contradiction).
+	trunc := in
+	truncTask := *in.task
+	truncTask.ResultHandle = "res-prom-trunc"
+	truncTask.TouchedPaths = make([]string, 150)
+	for i := 0; i < 150; i++ {
+		truncTask.TouchedPaths[i] = fmt.Sprintf("pkg/file_%03d.go", i)
+	}
+	trunc.task = &truncTask
+	trunc.landed = []string{"pkg/file_149.go"}
+	if !observeCommittedPromotionWEA(trunc) {
+		t.Fatal("expected truncated promotion to enqueue")
+	}
+
+	// 2d. Seeded contradiction: landed path absent from complete settled TouchedPaths -> contradiction.
 	bad := in
 	badTask := *in.task
 	badTask.ResultHandle = "res-prom-bad"
@@ -82,10 +98,20 @@ func TestObserveCommittedPromotionWEAParityAndBounds(t *testing.T) {
 
 	mu.Lock()
 	defer mu.Unlock()
-	if len(findings) != 1 {
-		t.Fatalf("expected exactly 1 finding (for unlisted landed path), got %+v", findings)
+	byHandle := map[string]cmddiag.Finding{}
+	for _, f := range findings {
+		byHandle[f.ProgramID] = f
 	}
-	if findings[0].RuleID != cmddiag.RuleWEALandedPathMismatch || findings[0].Disposition != cmddiag.DispositionContradiction {
-		t.Fatalf("unexpected finding: %+v", findings[0])
+	if _, ok := byHandle["res-prom-1"]; ok {
+		t.Fatalf("clean promotion emitted unexpected finding: %+v", byHandle["res-prom-1"])
+	}
+	if f, ok := byHandle["res-prom-no-proof"]; !ok || f.RuleID != cmddiag.RuleWEALandedPathMismatch || f.Disposition != cmddiag.DispositionIncomplete {
+		t.Fatalf("missing proof must emit incomplete, got %+v (all=%+v)", f, findings)
+	}
+	if f, ok := byHandle["res-prom-trunc"]; !ok || f.RuleID != cmddiag.RuleWEALandedPathMismatch || f.Disposition != cmddiag.DispositionIncomplete {
+		t.Fatalf("truncated proof must emit incomplete (never false contradiction), got %+v (all=%+v)", f, findings)
+	}
+	if f, ok := byHandle["res-prom-bad"]; !ok || f.RuleID != cmddiag.RuleWEALandedPathMismatch || f.Disposition != cmddiag.DispositionContradiction {
+		t.Fatalf("unlisted landed path must emit contradiction, got %+v (all=%+v)", f, findings)
 	}
 }

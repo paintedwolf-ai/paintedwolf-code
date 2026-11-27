@@ -9,8 +9,11 @@ import (
 const weaMaxDiagPaths = 64
 
 // observeCommittedPromotionWEA emits a bounded WEA worker-landing observation
-// after CommitPromotion succeeds. When diagnostics are disabled, it returns
-// immediately with zero allocations.
+// after CommitPromotion succeeds. It reads the settled changed-path proof from
+// the owning task record without falling back to landed paths. If the proof is
+// absent or exceeds the bounded capture limit, it marks Incomplete/Truncated
+// explicitly so missing matches are reported as incomplete rather than false
+// contradictions. Zero overhead when diagnostics are disabled.
 func observeCommittedPromotionWEA(in promoteFinishInput) bool {
 	if !cmddiag.Enabled() || in.task == nil {
 		return false
@@ -29,17 +32,15 @@ func observeCommittedPromotionWEA(in promoteFinishInput) bool {
 		sessionID = strings.TrimSpace(task.ParentSessionID)
 	}
 
-	// Collect bounded committed result changed paths.
-	// If the worker task recorded explicit TouchedPaths, use those as the
-	// authoritative committed path set; otherwise fall back to Files or in.landed
-	// so partial/stub tasks do not emit false-positive warnings.
+	// Read settled changed-path proof from the owning worker record ONLY.
+	// Never fall back to in.landed (which would self-confirm).
 	rawChanged := task.TouchedPaths
 	if len(rawChanged) == 0 {
 		rawChanged = task.Files
 	}
-	if len(rawChanged) == 0 {
-		rawChanged = in.landed
-	}
+	proofIncomplete := len(rawChanged) == 0
+	truncated := len(rawChanged) > weaMaxDiagPaths || len(in.landed) > weaMaxDiagPaths
+
 	changedLimit := min(len(rawChanged), weaMaxDiagPaths)
 	changedPaths := make([]string, 0, changedLimit)
 	for i := 0; i < changedLimit; i++ {
@@ -72,6 +73,7 @@ func observeCommittedPromotionWEA(in promoteFinishInput) bool {
 		JobID:        in.jobID,
 		ResultHandle: handle,
 		Settled:      true,
+		Truncated:    truncated,
 		WorkerResults: []cmddiag.WEAWorkerResultFact{
 			{
 				ResultHandle: handle,
@@ -79,6 +81,8 @@ func observeCommittedPromotionWEA(in promoteFinishInput) bool {
 				JobID:        in.jobID,
 				SessionID:    sessionID,
 				Settled:      true,
+				Incomplete:   proofIncomplete,
+				Truncated:    truncated,
 				ChangedPaths: changedPaths,
 				SourceRef:    cmddiag.DigestReference("worker_result", handle),
 			},
