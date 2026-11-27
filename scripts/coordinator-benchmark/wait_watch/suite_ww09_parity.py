@@ -192,7 +192,8 @@ def run_watch_boundary_case(
 
         db_path = app_dir / "store.db"
         if delivery_mode == "collect":
-            # Release barrier so match is recorded before the next model request reserves & commits the collect batch.
+            # Release barrier so match is recorded, then issue a tool call so the engine builds
+            # a fresh model request AFTER watch_matches >= 1 (triggering ReserveCollectBatch -> CommitCollectBatch).
             barrier.release()
             _poll_storage_predicate(
                 db_path,
@@ -202,13 +203,26 @@ def run_watch_boundary_case(
                 lambda s: int((s.get("counts") or {}).get("watch_matches", 0)) >= 1,
                 driver._dump_state,
             )
+            driver.call_watch_control({"operation": "list"})
             next_req = driver.await_pending("ww09.collect.model_turn")
             driver.finish_turn(next_req, "Observed collected watch batch.")
         else:
-            # Finish current turn so session is idle, then release barrier to trigger ambient wake turn.
+            # Finish current turn and wait for prompt_submissions to reach completed (idle session),
+            # then release barrier to trigger ambient wake turn (commitAmbientWakeAdmission).
             idle_req = driver.await_pending("ww09.wake.finish_registration_turn")
             driver.finish_turn(idle_req, "Waiting for ambient watch wake.")
-            application.wait_for(lambda: application.submission_settled(session_id, submission_id), "ww09.wake.idle", session=session_id, timeout=timeout_s)
+            _poll_storage_predicate(
+                db_path,
+                session_id,
+                timeout_s,
+                "ww09.wake.idle",
+                lambda s: bool((s.get("tables") or {}).get("prompt_submissions"))
+                and all(
+                    isinstance(row, dict) and row.get("status") == "completed"
+                    for row in ((s.get("tables") or {}).get("prompt_submissions") or [])
+                ),
+                driver._dump_state,
+            )
             barrier.release()
             wake_req = driver.await_pending("ww09.wake.ambient_turn")
             driver.finish_turn(wake_req, "Observed ambient wake watch batch.")
