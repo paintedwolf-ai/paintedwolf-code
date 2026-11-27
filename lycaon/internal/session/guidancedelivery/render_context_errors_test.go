@@ -71,9 +71,7 @@ func newRenderContextErrorHarness(t *testing.T, sessions Sessions, transcripts T
 	svc.Emit(t.Context(), "sess-1", anchor.ProcessFinished, anchor.Envelope{
 		Subject: "job-1", CommandCompletionDigest: "handle=job-1",
 	})
-	svc.Emit(t.Context(), "sess-1", anchor.PhaseEntered, anchor.Envelope{
-		Subject: "review",
-	})
+	kicks.QueueDeferredLatest("sess-1", anchor.PhaseEntered.String(), "coordinator-phase-advanced")
 	return svc, &signals
 }
 
