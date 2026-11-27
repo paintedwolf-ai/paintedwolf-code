@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
@@ -253,22 +254,49 @@ func (s *recordingWorkflowView) RecordReviewToolResult(context.Context, string, 
 func TestKickGateObligationsFollowTheRunArchive(t *testing.T) {
 	gateFeedback, err := feedback.LoadGateFeedbackCatalog()
 	testutil.FailErr(t, "load gate feedback", err)
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load tool profiles", err)
+	reader, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Declared:  true,
+	})
+	testutil.FailErr(t, "build coordinator reader", err)
+	readerVars, err := prompts.Vars(reader, nil)
+	testutil.FailErr(t, "build coordinator reader vars", err)
 	frame := inject.CoordinatorTurnFrame{}
 	frame.RunContext.FailedLeaves = []string{"evidence_passed:survey_challenged"}
 	satisfy := func(archive string) string {
 		mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Limits: settings.DefaultSessionLimits()}, nil)
 		mgr.SetWorkflowHints(nil, gateFeedback)
 		mgr.SetWorkflowDomains(workflowDomainFixture(&recordingWorkflowView{archive: archive}))
-		rows := mgr.Coordinator.Guidance.GateObligations(t.Context(), "session", frame, prompts.Reader{})
+		rows, err := mgr.Coordinator.Guidance.GateObligations(t.Context(), "session", frame, reader)
+		testutil.FailErr(t, "project gate obligations", err)
 		if len(rows) != 1 {
 			t.Fatalf("obligations = %+v", rows)
 		}
 		return strings.Join(rows[0].Satisfy, "\n")
 	}
 	sealed, live := satisfy("security-survey/1.0.0"), satisfy("")
-	want := gateFeedback.WithWorkflowArchive("security-survey/1.0.0").ProjectObligations(t.Context(), frame.RunContext.FailedLeaves, "", nil)
+	want := gateFeedback.WithWorkflowArchive("security-survey/1.0.0").ProjectObligations(t.Context(), frame.RunContext.FailedLeaves, "", feedback.WithReaderFacts(nil, readerVars))
 	if sealed == live || sealed != strings.Join(want[0].Satisfy, "\n") {
 		t.Fatalf("sealed run obligations = %q, live = %q", sealed, live)
+	}
+}
+
+func TestKickGateObligationsRejectsInvalidReader(t *testing.T) {
+	gateFeedback, err := feedback.LoadGateFeedbackCatalog()
+	testutil.FailErr(t, "load gate feedback", err)
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Limits: settings.DefaultSessionLimits()}, nil)
+	mgr.SetWorkflowHints(nil, gateFeedback)
+	frame := inject.CoordinatorTurnFrame{}
+	frame.RunContext.FailedLeaves = []string{"evidence_passed:survey_challenged"}
+	rows, err := mgr.Coordinator.Guidance.GateObligations(t.Context(), "session", frame, prompts.Reader{})
+	if err == nil {
+		t.Fatalf("expected error for invalid reader, got obligations = %+v", rows)
 	}
 }
 
