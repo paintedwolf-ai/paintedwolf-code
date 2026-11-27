@@ -434,7 +434,7 @@ def run_linux_native_den(
             if session_id:
                 api_readback["session"] = _api_readback(api_url, token, f"/v1/sessions/{session_id}")
             else:
-                api_readback["sessions"] = _api_readback(api_url, token, "/v1/sessions")
+                api_readback["projects"] = _api_readback(api_url, token, "/v1/projects")
 
         passed = bool(
             focus_changed
@@ -588,7 +588,7 @@ def run_linux_tauri_native(
         api_readback: dict[str, Any] = {}
         if api_url and token:
             api_readback["health"] = _api_readback(api_url, token, "/health")
-            api_readback["sessions"] = _api_readback(api_url, token, "/v1/sessions")
+            api_readback["projects"] = _api_readback(api_url, token, "/v1/projects")
 
         atspi_ok = bool(atspi_after.get("observed")) if atspi_after.get("available") else True
         passed = bool(

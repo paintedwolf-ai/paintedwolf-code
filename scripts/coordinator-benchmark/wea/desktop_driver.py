@@ -121,7 +121,7 @@ def run_macos_wkwebview_native(
         if sid:
             live_api["session"] = _api_readback(api_url, token, f"/v1/sessions/{sid}")
         else:
-            live_api["sessions"] = _api_readback(api_url, token, "/v1/sessions")
+            live_api["projects"] = _api_readback(api_url, token, "/v1/projects")
 
     passed = bool(
         proc.returncode == 0
