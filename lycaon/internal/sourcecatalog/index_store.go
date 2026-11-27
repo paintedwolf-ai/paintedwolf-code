@@ -93,6 +93,7 @@ type indexStore struct {
 	// holders counts open views that keep this root resident between reads;
 	// guarded by mu. Eviction passes over a held store.
 	holders int
+	work    atomicWorkCounters
 }
 
 func (s *indexStore) schema() string { return indexSchema }
@@ -356,6 +357,9 @@ func (r *IndexReader) FilePage(ctx context.Context, scope FileScope, after strin
 		e.RootID = r.store.root.ID
 		entries = append(entries, e)
 		r.RowsRead++
+		if r.store != nil {
+			r.store.work.rowsRead.Add(1)
+		}
 	}
 	return entries, rows.Err()
 }
@@ -480,6 +484,9 @@ func (r *IndexReader) filePaths(ctx context.Context, scope FileScope, index, cla
 		}
 		paths = append(paths, path)
 		r.RowsRead++
+		if r.store != nil {
+			r.store.work.rowsRead.Add(1)
+		}
 	}
 	return paths, rows.Err()
 }
@@ -490,5 +497,8 @@ func (r *IndexReader) FileCount(ctx context.Context, scope FileScope) (int, erro
 	var count int
 	err := r.tx.QueryRowContext(ctx, "SELECT "+scope.countColumn()+" FROM totals WHERE id=1").Scan(&count)
 	r.RowsRead++
+	if r.store != nil {
+		r.store.work.rowsRead.Add(1)
+	}
 	return count, err
 }

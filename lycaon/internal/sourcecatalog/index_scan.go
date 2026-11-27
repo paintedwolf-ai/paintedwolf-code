@@ -105,6 +105,7 @@ func (w *indexWalk) commit(ctx context.Context) (TreeStatus, bool, error) {
 		return TreeStatus{}, false, err
 	}
 	w.pending, w.lastPublish = 0, time.Now()
+	w.store.work.publishedBatches.Add(1)
 	return status, true, nil
 }
 

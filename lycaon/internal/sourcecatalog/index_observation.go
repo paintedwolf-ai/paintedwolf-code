@@ -183,6 +183,7 @@ func (w *indexWalk) readObservedIndexNodes(ctx context.Context, dir string, sequ
 	observed := nodes[:0]
 	for _, structural := range nodes {
 		info, err := directory.Lstat(path.Base(structural.path))
+		w.store.work.metadataReads.Add(1)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
