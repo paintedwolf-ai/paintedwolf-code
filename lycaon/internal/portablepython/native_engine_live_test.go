@@ -102,8 +102,8 @@ print(f"OK:{sys.version_info.major}.{sys.version_info.minor}:rows={ws2.max_row}"
 			t.Fatalf("%s workbook execution error: %v", label, err)
 		}
 		if !res.CleanCompletion || res.ExitCode != 0 {
-			t.Fatalf("%s workbook failed: exit=%d clean=%v stop=%+v stderr=%q",
-				label, res.ExitCode, res.CleanCompletion, res.Stop, res.Stderr)
+			t.Fatalf("%s workbook failed: exit=%d clean=%v stop=%+v stdout=%q stderr=%q diag=%v settlement=%+v",
+				label, res.ExitCode, res.CleanCompletion, res.Stop, res.Stdout, res.Stderr, res.RuntimeDiagnostics, res.Settlement)
 		}
 		if !strings.Contains(res.Stdout, "OK:3.12:rows=3") {
 			t.Fatalf("%s unexpected stdout: %q", label, res.Stdout)

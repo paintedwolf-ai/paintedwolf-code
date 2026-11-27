@@ -44,8 +44,9 @@ func (h *nativeWASIHost) handlePathOpen(mem []byte, args []uint64) uint32 {
 	}
 
 	var sysOflag experimentalsys.Oflag
+	isDirOpen := oflags&wasiOflagDirectory != 0
 	wantRead := rightsBase&wasiRightFdRead != 0
-	wantWrite := rightsBase&wasiRightFdWrite != 0 || oflags&(wasiOflagCreat|wasiOflagTrunc) != 0 || fdflags&wasiFdflagAppend != 0
+	wantWrite := !isDirOpen && (rightsBase&wasiRightFdWrite != 0 || oflags&(wasiOflagCreat|wasiOflagTrunc) != 0 || fdflags&wasiFdflagAppend != 0)
 	switch {
 	case wantRead && wantWrite:
 		sysOflag = experimentalsys.O_RDWR

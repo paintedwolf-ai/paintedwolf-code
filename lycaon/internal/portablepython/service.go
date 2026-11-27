@@ -514,6 +514,7 @@ type ToolResponse struct {
 	Settlement               *pythonruntime.SettlementReport          `json:"settlement,omitempty"`
 	PreviewRecord            *pythonadmission.PreviewListenerRecord   `json:"preview,omitempty"`
 	Diagnostic               *pythoncatalog.Diagnostic                `json:"diagnostic,omitempty"`
+	RuntimeDiagnostics       []string                                 `json:"runtime_diagnostics,omitempty"`
 	Usage                    pythonruntime.ResourceUsage              `json:"usage"`
 	EvidenceSummary          *pythonevidence.PythonActivityProjection `json:"evidence_summary,omitempty"`
 	Preview                  *pythonadmission.PreviewListener         `json:"-"`
@@ -746,9 +747,10 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 		CleanCompletion:   res.CleanCompletion,
 		Stdout:            stdoutBuf.String(),
 		Stderr:            stderrOut,
-		Stop:              res.Stop,
-		Settlement:        res.Settlement,
-		Usage:             res.Usage,
+		Stop:               res.Stop,
+		Settlement:         res.Settlement,
+		RuntimeDiagnostics: res.Diagnostics,
+		Usage:              res.Usage,
 		AdmissionEvidence: memAdm,
 		DocumentEvidence:  memDoc,
 	}
