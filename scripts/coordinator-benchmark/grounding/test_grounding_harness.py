@@ -60,6 +60,8 @@ from grounding.sidecar_driver import (
     IsolatedSidecarProcess,
     ScriptedTurn,
     SidecarSessionClient,
+    evaluate_three_ledger_controls,
+    extract_tool_messages_from_pending,
     inspect_engine_binary,
     run_scripted_session,
 )
@@ -1420,6 +1422,12 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
                 inspect_engine_binary(fake_bin, expected_sha256="0" * 64)
 
             # Seed a temporary SQLite store.db with product evidence + closeout grounding_json
+            workspace = tmp_path / "workspace"
+            workspace.mkdir()
+            (workspace / "sample.go").write_text("package sample\n\nfunc Hello() {}\n", encoding="utf-8")
+            delivered_body = "[read#1 sample.go:1-3]\n1: package sample\n2: \n3: func Hello() {}\n"
+            body_sha = hashlib.sha256(delivered_body.encode("utf-8")).hexdigest()
+
             db_path = tmp_path / "store.db"
             with contextlib.closing(sqlite3.connect(db_path)) as conn:
                 conn.execute(
@@ -1430,17 +1438,16 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
                     "CREATE TABLE messages (id TEXT PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, "
                     "grounding_json TEXT, workflow_feedback_json TEXT, host_signal_id TEXT, kind TEXT)"
                 )
-                body_sha = hashlib.sha256(b"1: package sample\n").hexdigest()
                 conn.execute(
                     "INSERT INTO evidence_records VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         "sess-mock",
                         "read#1",
                         "read",
-                        "file_region",
+                        "",
                         "sample.go",
                         "",
-                        json.dumps({"v": 1, "ranges": [{"start": 1, "end": 1}]}),
+                        json.dumps({"v": 1, "ranges": [{"start": 1, "end": 3}]}),
                         body_sha,
                         0,
                         None,
@@ -1452,8 +1459,21 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
                         "m-close",
                         "sess-mock",
                         "assistant",
-                        "Verified [read#1:1].",
+                        "Verified [read#1:3].",
                         json.dumps({"traced": True, "retry_count": 0, "host_assembled": False}),
+                        "",
+                        "",
+                        "",
+                    ),
+                )
+                conn.execute(
+                    "INSERT INTO messages VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        "m-unsup",
+                        "sess-unsup",
+                        "assistant",
+                        "Claimed [read#1:99].",
+                        json.dumps({"traced": False, "hint_code": "SYNTH_CITATION_UNVERIFIABLE", "retry_count": 1}),
                         "",
                         "",
                         "",
@@ -1461,8 +1481,8 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
                 )
                 conn.commit()
 
-            # Spin up a local mock HTTP server simulating /harness/llm/pending & /respond
-            state: dict[str, object] = {"turn": 0, "responses": []}
+            # Spin up a local mock HTTP server simulating D1's exact nested tool_result shape
+            state: dict[str, object] = {"turns": {}, "responses": []}
 
             class MockHandler(BaseHTTPRequestHandler):
                 def log_message(self, _fmt: str, *_args: object) -> None:
@@ -1470,16 +1490,34 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
 
                 def do_GET(self) -> None:  # noqa: N802
                     parsed = urllib.parse.urlparse(self.path)
+                    if parsed.path == "/health":
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.end_headers()
+                        self.wfile.write(b'{"status":"ok"}')
+                        return
                     if parsed.path == "/harness/llm/pending":
-                        turn_num = int(state["turn"])  # type: ignore[arg-type]
+                        qs = urllib.parse.parse_qs(parsed.query)
+                        sid = (qs.get("session_id") or [""])[0]
+                        turns_map = state["turns"]  # type: ignore[assignment]
+                        turn_num = int(turns_map.get(sid, 0))  # type: ignore[union-attr]
                         if turn_num == 0:
-                            payload = {"id": "req-1", "messages": [{"role": "user", "content": "Read sample.go"}]}
+                            payload = {"id": f"req-{sid}-1", "messages": [{"role": "user", "content": "Read sample.go"}]}
                         else:
+                            # Exact D1 nested Message.tool_result.tool_call_id & Message.evidence_handles shape
                             payload = {
-                                "id": "req-2",
+                                "id": f"req-{sid}-2",
                                 "messages": [
                                     {"role": "user", "content": "Read sample.go"},
-                                    {"role": "tool", "tool_call_id": "call-read-1", "name": "read_file", "content": "1: package sample\n"},
+                                    {
+                                        "role": "tool",
+                                        "content": delivered_body,
+                                        "evidence_handles": ["read#1"],
+                                        "tool_result": {
+                                            "tool_call_id": f"call-{sid}-1",
+                                            "tool_name": "read_file",
+                                        },
+                                    },
                                 ],
                             }
                         body = json.dumps(payload).encode("utf-8")
@@ -1488,6 +1526,12 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
                         self.end_headers()
                         self.wfile.write(body)
                         return
+                    if parsed.path.startswith("/harness/execution/"):
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.end_headers()
+                        self.wfile.write(b'{"settled":true}')
+                        return
                     self.send_response(404)
                     self.end_headers()
 
@@ -1495,8 +1539,14 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
                     length = int(self.headers.get("Content-Length", "0"))
                     raw = self.rfile.read(length).decode("utf-8")
                     if self.path == "/harness/llm/respond":
-                        state["responses"].append(json.loads(raw))  # type: ignore[union-attr]
-                        state["turn"] = int(state["turn"]) + 1  # type: ignore[arg-type]
+                        req_obj = json.loads(raw)
+                        state["responses"].append(req_obj)  # type: ignore[union-attr]
+                        # Increment turn for the session encoded in req-<sid>-<n>
+                        rid = str(req_obj.get("id", ""))
+                        parts = rid.split("-")
+                        sid = "-".join(parts[1:-1]) if len(parts) >= 3 else ""
+                        turns_map = state["turns"]  # type: ignore[assignment]
+                        turns_map[sid] = int(turns_map.get(sid, 0)) + 1  # type: ignore[index,union-attr]
                         self.send_response(200)
                         self.send_header("Content-Type", "application/json")
                         self.end_headers()
@@ -1511,34 +1561,90 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
             try:
                 base_url = f"http://127.0.0.1:{server.server_address[1]}"
                 client = SidecarSessionClient(base_url, token="test-token")
-                artifact = run_scripted_session(
+                # Intentionally request lines 1-999 in args to prove delivery range (1-3) comes
+                # strictly from actual delivered text/tags + fixture bytes, NEVER requested args!
+                sup_artifact = run_scripted_session(
                     client,
                     session_id="sess-mock",
                     turns=(
                         ScriptedTurn(
-                            tool_calls=({"id": "call-read-1", "name": "read_file", "args": {"path": "sample.go", "start_line": 1, "end_line": 1}},),
+                            tool_calls=({"id": "call-sess-mock-1", "name": "read_file", "args": {"path": "sample.go", "start_line": 1, "end_line": 999}},),
                         ),
-                        ScriptedTurn(content="Verified [read#1:1]."),
+                        ScriptedTurn(content="Verified [read#1:3]."),
                     ),
                     db_path=db_path,
+                    workspace_dir=workspace,
+                    submission_id="sub-1",
+                    wait_for_settlement=True,
+                    source_revision="",
+                    engine_provenance=prov,
+                )
+                unsup_artifact = run_scripted_session(
+                    client,
+                    session_id="sess-unsup",
+                    turns=(
+                        ScriptedTurn(
+                            tool_calls=({"id": "call-sess-unsup-1", "name": "read_file", "args": {"path": "sample.go", "start_line": 1, "end_line": 999}},),
+                        ),
+                        ScriptedTurn(content="Claimed [read#1:99]."),
+                    ),
+                    db_path=db_path,
+                    workspace_dir=workspace,
+                    submission_id="sub-2",
+                    wait_for_settlement=True,
+                    source_revision="",
                     engine_provenance=prov,
                 )
             finally:
                 server.shutdown()
                 server.server_close()
 
-            self.assertEqual(len(artifact.raw_pending_requests), 2)
-            self.assertEqual(len(artifact.scripted_responses), 2)
-            self.assertEqual(len(artifact.delivered_tool_messages), 1)
-            self.assertEqual(artifact.delivered_tool_messages[0]["call_id"], "call-read-1")
-            self.assertEqual(len(artifact.delivery_log.records), 1)
-            self.assertEqual(artifact.delivery_log.records[0].handle, "read#1")
-            self.assertEqual(len(artifact.product_records), 1)
-            self.assertEqual(artifact.product_records[0].handle, "read#1")
-            self.assertEqual(len(artifact.product_closeouts), 1)
-            self.assertIsNotNone(artifact.engine_provenance)
-            assert artifact.friction_after is not None
-            self.assertEqual(artifact.friction_after.friction_units.status, "unknown")
+            self.assertEqual(len(sup_artifact.raw_pending_requests), 2)
+            self.assertEqual(len(sup_artifact.delivered_tool_messages), 1)
+            self.assertEqual(sup_artifact.delivered_tool_messages[0]["call_id"], "call-sess-mock-1")
+            self.assertEqual(sup_artifact.delivered_tool_messages[0]["evidence_handles"], ["read#1"])
+            self.assertEqual(sup_artifact.delivered_tool_messages[0]["delivery_tags"], ["[read#1 sample.go:1-3]"])
+            # Actual delivered range is 1-3, NOT requested 1-999!
+            self.assertEqual(sup_artifact.delivery_log.records[0].delivered_ranges, (LineRange(1, 3),))
+            self.assertEqual(sup_artifact.delivery_log.records[0].handle, "read#1")
+
+            # All 3 ledger controls PASS on matching supported + unsupported + minted records
+            eval_ok = evaluate_three_ledger_controls(
+                sup_artifact,
+                unsup_artifact,
+                supported_citation=Citation(citation_type="handle", raw="[read#1:3]", handle="read#1", start_line=3, citation_id="c1"),
+                unsupported_citation=Citation(citation_type="handle", raw="[read#1:99]", handle="read#1", start_line=99, citation_id="c2"),
+            )
+            self.assertTrue(eval_ok["passed"], eval_ok)
+
+            # Forced mismatch (swapping supported artifact into unsupported slot) MUST FAIL!
+            eval_fail = evaluate_three_ledger_controls(
+                sup_artifact,
+                sup_artifact,
+                supported_citation=Citation(citation_type="handle", raw="[read#1:3]", handle="read#1", start_line=3, citation_id="c1"),
+                unsupported_citation=Citation(citation_type="handle", raw="[read#1:99]", handle="read#1", start_line=99, citation_id="c2"),
+            )
+            self.assertFalse(eval_fail["passed"])
+            self.assertFalse(eval_fail["control_2_unsupported"]["passed"])
+
+            # Verify extractor never fabricates handles when evidence_handles is empty
+            no_handle_msgs = extract_tool_messages_from_pending(
+                {
+                    "id": "req-empty",
+                    "messages": [
+                        {
+                            "role": "tool",
+                            "content": "Permission denied",
+                            "tool_result": {"tool_call_id": "call-denied", "tool_name": "read_file"},
+                        }
+                    ],
+                },
+                set(),
+                {"call-denied": {"name": "read_file", "args": {"path": "secret.txt"}}},
+            )
+            self.assertEqual(len(no_handle_msgs), 1)
+            self.assertEqual(no_handle_msgs[0]["evidence_handles"], [])
+            self.assertEqual(no_handle_msgs[0]["delivery_tags"], [])
 
     def test_cli_selftest_replay_controls_dry_run_inprocess_and_friction_report(self) -> None:
         buf = io.StringIO()
@@ -1626,16 +1732,32 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
                 workspace_dir=tmp_path / "ws",
                 expected_sha256=sha,
             )
+            # Decision 011: exact `serve --db <scratch_db>` invocation, NEVER `--addr`
+            cmd = proc.build_command()
+            self.assertEqual(cmd, [str(fake_bin.resolve()), "serve", "--db", str((tmp_path / "cfg" / "store.db").resolve())])
+            self.assertNotIn("--addr", cmd)
+
+            # Decision 010: exact shipped env keys, stripping ambient LYCAON_* vars, no token in manifest
             env = proc.build_process_env(port=49999)
             self.assertEqual(env["LYCAON_CONFIG_ROOT"], str((product_root / "lycaon").resolve()))
             self.assertEqual(
                 env["LYCAON_ENGINE_ROOT"],
                 str((product_root / "lycaon-den" / "src-tauri" / "engine-root").resolve()),
             )
+            self.assertEqual(env["LYCAON_ADDR"], "127.0.0.1:49999")
+            self.assertEqual(env["LYCAON_DEV"], "1")
+            self.assertEqual(env["LYCAON_HARNESS"], "1")
+            self.assertEqual(env["LYCAON_LLM_MOCK"], "1")
+            self.assertEqual(env["LYCAON_LLM_MANUAL"], "1")
+            self.assertEqual(env["LYCAON_API_TOKEN"], proc.token)
+            self.assertNotIn("LYCAON_AUTH_TOKEN", env)
+            self.assertNotIn("LYCAON_LLM_PROVIDER", env)
+            self.assertNotIn("LYCAON_LISTEN_ADDR", env)
             self.assertNotIn(str(HARNESS_ROOT), env["LYCAON_CONFIG_ROOT"])
             self.assertNotIn(str(HARNESS_ROOT), env["LYCAON_ENGINE_ROOT"])
 
             manifest = proc.build_run_manifest().to_dict()
+            self.assertNotIn(proc.token, json.dumps(manifest))
             self.assertEqual(manifest["product_root"], str(product_root.resolve()))
             self.assertEqual(manifest["resolved_config_root"], env["LYCAON_CONFIG_ROOT"])
             self.assertEqual(manifest["resolved_engine_root"], env["LYCAON_ENGINE_ROOT"])

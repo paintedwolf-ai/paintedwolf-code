@@ -1,24 +1,35 @@
 """Sidecar driver adapter for the D1 manual-model HTTP boundary (GB02).
 
-Reuses the manual-model HTTP protocol (`/harness/llm/pending?session_id=...` and
-`/harness/llm/respond`) from `portable_command/harness.py`, launches an explicit
-`--engine-bin` (never assuming D2) in an isolated scratch config dir + free port
-+ fixture workspace, and captures:
-- exact engine binary provenance (`path`, `sha256`, `go_buildid`, `platform`)
-- raw pending request JSON and scripted response JSON per turn
-- independent delivered tool-message sequence joined by `call_id` & `fixture_provenance`
-- strictly separate durable product records & closeouts from `store.db`
-- D10 friction before/after snapshots via `friction_probe.py`
+Matches the exact isolated D1 sidecar launch contract from
+`scripts/coordinator-benchmark/smoke.py` and `application_environment.py`:
+- Strips all ambient `LYCAON_*` environment variables before setting explicit D1 keys
+- Binds `LYCAON_CONFIG_ROOT`, `LYCAON_ENGINE_ROOT`, and process `cwd` strictly to
+  `--product-root` (never the D2 harness worktree; Decision 009 & 010)
+- Launches `[engine_bin, "serve", "--db", store_db_path]` (never unknown flags like `--addr`;
+  Decision 011) with `LYCAON_ADDR`, `LYCAON_API_TOKEN`, `LYCAON_DEV=1`, `LYCAON_HARNESS=1`,
+  `LYCAON_LLM_MOCK=1`, `LYCAON_LLM_MANUAL=1`
+- Verifies `/health`, disables `/harness/llm/auto`, confirms `/harness/llm/pending`,
+  and records owned address, scratch DB path, binary provenance, and run manifest
+  without ever logging credential/token values
+- Extracts the independent D3 `DeliveryLog` strictly from what was actually delivered
+  to the mock model in `/harness/llm/pending` (`Message.tool_result.tool_call_id`,
+  `Message.evidence_handles`, actual delivered body & authenticated delivery tags,
+  and true line ranges verified against fixture bytes — NEVER synthesized handles or
+  copied requested arguments)
+- Waits for turn/submission settlement (`/harness/execution/{session}/{submission}` or
+  session `idle`) before reading durable product observations from `store.db`
 """
 from __future__ import annotations
 
 import contextlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import hashlib
 import json
 import os
 import pathlib
 import platform as py_platform
+import re
+import secrets
 import socket
 import sqlite3
 import subprocess
@@ -29,11 +40,25 @@ import urllib.parse
 import urllib.request
 import uuid
 
-from .delivery_log import DeliveryLog, DeliveryRecord, LineRange, ProductRecord
+from .checker import CheckResult, check_slot, compare_records
+from .delivery_log import (
+    DeliveryLog,
+    DeliveryRecord,
+    LineRange,
+    ProductRecord,
+    ProductVerdict,
+    SurfaceOutcome,
+)
 from .friction_probe import FrictionSnapshot, probe_store_db
+from .reference_resolver import Citation, PermittedScope, resolve_citation
 
 
 HARNESS_ROOT: pathlib.Path = pathlib.Path(__file__).resolve().parents[3]
+
+_DELIVERY_TAG_RE = re.compile(
+    r"\[(?P<handle>[a-z][a-z0-9_]*#[1-9]\d*)(?:\s+(?P<path>\"[^\"]+\"|[^\s:\]]+)(?::(?P<start>\d+)(?:-(?P<end>\d+))?)?)?\]"
+)
+_NUMBERED_LINE_RE = re.compile(r"^\s*(?P<num>\d+)(?:\s*[:|]\s?|\t)(?P<rest>.*)$")
 
 
 def _git_head(repo_dir: pathlib.Path) -> str:
@@ -83,7 +108,10 @@ class EngineBinaryProvenance:
 
 @dataclass(frozen=True)
 class SidecarRunManifest:
-    """Decision 009 run manifest binding D1 executable, roots, commits, and harness head."""
+    """Decision 009/010 run manifest binding D1 executable, roots, commits, and harness head.
+
+    Never contains API tokens or credentials.
+    """
 
     product_root: str
     product_commit: str
@@ -96,8 +124,11 @@ class SidecarRunManifest:
     platform: str
     arch: str
     process_cwd: str
+    listen_addr: str = ""
+    scratch_db_path: str = ""
+    manual_boundary_verified: bool = False
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "product_root": self.product_root,
             "product_commit": self.product_commit,
@@ -110,6 +141,9 @@ class SidecarRunManifest:
             "platform": self.platform,
             "arch": self.arch,
             "process_cwd": self.process_cwd,
+            "listen_addr": self.listen_addr,
+            "scratch_db_path": self.scratch_db_path,
+            "manual_boundary_verified": self.manual_boundary_verified,
         }
 
 
@@ -118,11 +152,7 @@ def inspect_engine_binary(
     *,
     expected_sha256: str = "",
 ) -> EngineBinaryProvenance:
-    """Compute SHA-256, Go build ID (if available), and host platform for `--engine-bin`.
-
-    Decision 009: When `expected_sha256` is provided, verify the exact D1 binary
-    digest immediately and raise ValueError on mismatch.
-    """
+    """Compute SHA-256, Go build ID (if available), and host platform for `--engine-bin`."""
     bin_path = pathlib.Path(engine_bin).resolve()
     if not bin_path.is_file():
         raise FileNotFoundError(f"Engine binary not found: {bin_path}")
@@ -196,11 +226,13 @@ class SidecarRunArtifact:
     product_closeouts: tuple[dict[str, Any], ...]
     friction_before: FrictionSnapshot | None = None
     friction_after: FrictionSnapshot | None = None
+    run_manifest: SidecarRunManifest | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "version": 1,
             "session_id": self.session_id,
+            "run_manifest": self.run_manifest.to_dict() if self.run_manifest else None,
             "engine_provenance": self.engine_provenance.to_dict() if self.engine_provenance else None,
             "raw_pending_requests": list(self.raw_pending_requests),
             "scripted_responses": list(self.scripted_responses),
@@ -243,14 +275,39 @@ class SidecarSessionClient:
             headers["Authorization"] = f"Bearer {self.token}"
         return headers
 
-    def request(self, path: str, body: Mapping[str, Any] | None = None, *, method: str | None = None) -> Any:
+    def request(
+        self,
+        path: str,
+        body: Mapping[str, Any] | None = None,
+        *,
+        method: str | None = None,
+        missing: bool = False,
+    ) -> Any:
         url = f"{self.base_url}{path}"
         data = json.dumps(body).encode("utf-8") if body is not None else None
         req_method = method or ("POST" if data is not None else "GET")
         req = urllib.request.Request(url, data=data, headers=self._headers(), method=req_method)
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-            raw = resp.read().decode("utf-8")
-            return json.loads(raw) if raw.strip() else {}
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                raw = resp.read().decode("utf-8")
+                return json.loads(raw) if raw.strip() else {}
+        except urllib.error.HTTPError as exc:
+            if missing and exc.code == 404:
+                return None
+            raise
+
+    def health(self) -> Any:
+        return self.request("/health")
+
+    def disable_auto_llm(self) -> Any:
+        return self.request("/harness/llm/auto", {"enabled": False}, missing=True)
+
+    def probe_manual_boundary(self) -> dict[str, Any]:
+        """Confirm `/harness/llm/pending` is reachable before submitting any prompt."""
+        payload = self.request("/harness/llm/pending")
+        if not isinstance(payload, dict):
+            raise RuntimeError(f"Unexpected /harness/llm/pending response: {payload!r}")
+        return payload
 
     def get_pending(self, session_id: str) -> dict[str, Any] | None:
         q = urllib.parse.urlencode({"session_id": session_id})
@@ -261,7 +318,9 @@ class SidecarSessionClient:
             return payload["pending"][0]
         return None
 
-    def wait_pending(self, session_id: str, *, timeout: float = 15.0, poll_interval: float = 0.05) -> dict[str, Any]:
+    def wait_pending(
+        self, session_id: str, *, timeout: float = 15.0, poll_interval: float = 0.05
+    ) -> dict[str, Any]:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             pending = self.get_pending(session_id)
@@ -289,7 +348,22 @@ class SidecarSessionClient:
         return self.request("/v1/projects", {"roots": [{"path": str(project_dir)}]})
 
     def create_session(self, project_id: str, *, posture: str = "build") -> dict[str, Any]:
-        return self.request("/v1/sessions", {"project_id": project_id, "posture": posture})
+        session = self.request("/v1/sessions", {"project_id": project_id, "posture": posture})
+        sid = session["id"]
+        self.request("/harness/model-limit", {"session_id": sid, "limit": 32}, missing=True)
+        return session
+
+    def wait_session_ready(self, session_id: str, *, timeout: float = 30.0) -> dict[str, Any]:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            state = self.request(f"/v1/sessions/{session_id}")
+            status = state.get("status")
+            if status == "idle":
+                return state
+            if status != "preparing":
+                raise RuntimeError(f"Session {session_id} preparation ended in status={status!r}")
+            time.sleep(0.1)
+        raise TimeoutError(f"Timed out waiting for session {session_id} to become idle")
 
     def send_prompt(self, session_id: str, text: str) -> dict[str, Any]:
         return self.request(
@@ -297,19 +371,48 @@ class SidecarSessionClient:
             {"operation_id": str(uuid.uuid4()), "text": text},
         )
 
+    def wait_settled(
+        self,
+        session_id: str,
+        submission_id: str = "",
+        *,
+        timeout: float = 30.0,
+        poll_interval: float = 0.05,
+    ) -> dict[str, Any]:
+        """Wait for exact turn/submission settlement before reading store.db/API."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if submission_id:
+                obs = self.request(
+                    f"/harness/execution/{session_id}/{submission_id}", missing=True
+                )
+                if isinstance(obs, dict) and obs.get("settled") is True:
+                    return obs
+            state = self.request(f"/v1/sessions/{session_id}", missing=True)
+            if isinstance(state, dict) and state.get("status") == "idle":
+                if not submission_id:
+                    return state
+            time.sleep(poll_interval)
+        raise TimeoutError(
+            f"Timed out waiting for session {session_id} (submission={submission_id!r}) to settle"
+        )
+
     def get_messages(self, session_id: str) -> Any:
         return self.request(f"/v1/sessions/{session_id}/messages")
 
 
 class IsolatedSidecarProcess:
-    """Launch an explicit D1 `--engine-bin` bound strictly to `--product-root` (Decision 009).
+    """Launch an explicit D1 `--engine-bin` bound strictly to `--product-root`.
 
-    Prevents mixing a D1 binary with D2 harness configuration or engine resources by:
-    - Requiring an explicit `product_root` outside `HARNESS_ROOT`
-    - Explicitly setting `LYCAON_CONFIG_ROOT` and `LYCAON_ENGINE_ROOT` under `product_root`
-      (or the companion D1 artifact directory)
-    - Launching the sidecar with `cwd=product_root`
-    - Recording full provenance in `SidecarRunManifest`
+    Follows `smoke.py` + `application_environment.py` (Decisions 009, 010, 011):
+    - Strips all ambient `LYCAON_*` environment variables
+    - Uses exact shipped flags `[engine_bin, "serve", "--db", store_db_path]`
+    - Sets `LYCAON_ADDR`, `LYCAON_API_TOKEN`, `LYCAON_CONFIG_DIR`, `LYCAON_CONFIG_ROOT`,
+      `LYCAON_ENGINE_ROOT`, `LYCAON_DEV=1`, `LYCAON_HARNESS=1`, `LYCAON_LLM_MOCK=1`,
+      `LYCAON_LLM_MANUAL=1`
+    - Rejects any D2 harness root leak
+    - Verifies `/health`, disables `/harness/llm/auto`, and probes `/harness/llm/pending`
+    - Never logs credential/token values
     """
 
     def __init__(
@@ -331,16 +434,16 @@ class IsolatedSidecarProcess:
         self.harness_root = pathlib.Path(harness_root).resolve()
         self.config_dir = pathlib.Path(config_dir).resolve()
         self.workspace_dir = pathlib.Path(workspace_dir).resolve()
-        self.token = token or f"gb02-{uuid.uuid4().hex}"
+        self.token = token or secrets.token_hex(24)
         self.extra_env = dict(extra_env or {})
         self.port: int = 0
         self.pid: int | None = None
         self.process: subprocess.Popen[bytes] | None = None
+        self.manual_boundary_verified: bool = False
 
         if not self.product_root.is_dir():
             raise FileNotFoundError(f"D1 product_root directory not found: {self.product_root}")
 
-        # Resolve LYCAON_CONFIG_ROOT (checkout containing `config/`) and LYCAON_ENGINE_ROOT
         self.resolved_config_root = (
             pathlib.Path(config_root).resolve()
             if config_root is not None
@@ -352,7 +455,6 @@ class IsolatedSidecarProcess:
             else (self.product_root / "lycaon-den" / "src-tauri" / "engine-root").resolve()
         )
 
-        # Decision 009 leak guard: reject any D2 harness root leak
         for label, candidate in (
             ("product_root", self.product_root),
             ("resolved_config_root", self.resolved_config_root),
@@ -390,22 +492,34 @@ class IsolatedSidecarProcess:
     def store_db_path(self) -> pathlib.Path:
         return self.config_dir / "store.db"
 
+    def build_command(self) -> list[str]:
+        """Return exact D1 `lycaon-dev serve --db <scratch_db>` invocation (Decision 011)."""
+        return [str(self.engine_bin), "serve", "--db", str(self.store_db_path)]
+
     def build_process_env(self, port: int | None = None) -> dict[str, str]:
-        """Build the isolated sidecar environment bound strictly to D1 roots."""
+        """Build clean isolated environment stripping ambient `LYCAON_*` vars (Decision 010)."""
         listen_port = port if port is not None else self.port
-        return {
-            **os.environ,
-            "LYCAON_CONFIG_DIR": str(self.config_dir),
-            "LYCAON_CONFIG_ROOT": str(self.resolved_config_root),
-            "LYCAON_ENGINE_ROOT": str(self.resolved_engine_root),
-            "LYCAON_AUTH_TOKEN": self.token,
-            "LYCAON_LLM_PROVIDER": "manual",
-            "LYCAON_LISTEN_ADDR": f"127.0.0.1:{listen_port}",
-            **self.extra_env,
-        }
+        env = {k: v for k, v in os.environ.items() if not k.startswith("LYCAON_")}
+        env.update(
+            {
+                "LYCAON_CONFIG_DIR": str(self.config_dir),
+                "LYCAON_CONFIG_ROOT": str(self.resolved_config_root),
+                "LYCAON_ENGINE_ROOT": str(self.resolved_engine_root),
+                "LYCAON_ADDR": f"127.0.0.1:{listen_port}",
+                "LYCAON_API_TOKEN": self.token,
+                "LYCAON_DEV": "1",
+                "LYCAON_HARNESS": "1",
+                "LYCAON_LOG_LEVEL": "debug",
+                "LYCAON_LLM_MOCK": "1",
+                "LYCAON_LLM_MANUAL": "1",
+                "LYCAON_COMMAND_PATH": env.get("PATH", ""),
+            }
+        )
+        env.update(self.extra_env)
+        return env
 
     def build_run_manifest(self) -> SidecarRunManifest:
-        """Build the Decision 009 run manifest with resolved roots, commits, and binary provenance."""
+        """Build the Decision 009/010 run manifest (never includes tokens)."""
         return SidecarRunManifest(
             product_root=str(self.product_root),
             product_commit=_git_head(self.product_root),
@@ -418,9 +532,12 @@ class IsolatedSidecarProcess:
             platform=self.provenance.platform,
             arch=self.provenance.arch,
             process_cwd=str(self.product_root),
+            listen_addr=f"127.0.0.1:{self.port}" if self.port else "",
+            scratch_db_path=str(self.store_db_path),
+            manual_boundary_verified=self.manual_boundary_verified,
         )
 
-    def start(self, *, ready_timeout: float = 20.0) -> SidecarSessionClient:
+    def start(self, *, ready_timeout: float = 30.0) -> SidecarSessionClient:
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
         self.port = probe_free_port()
@@ -428,13 +545,26 @@ class IsolatedSidecarProcess:
         env = self.build_process_env(self.port)
         with log_path.open("wb") as log_fh:
             self.process = subprocess.Popen(
-                [str(self.engine_bin), "serve", "--addr", f"127.0.0.1:{self.port}"],
+                self.build_command(),
                 cwd=str(self.product_root),
                 env=env,
                 stdout=log_fh,
                 stderr=subprocess.STDOUT,
             )
         self.pid = self.process.pid
+        # Persist ownership metadata without any token/credential
+        (self.config_dir / "ownership.json").write_text(
+            json.dumps(
+                {
+                    "pid": self.pid,
+                    "listen_addr": f"127.0.0.1:{self.port}",
+                    "scratch_db_path": str(self.store_db_path),
+                },
+                indent=2,
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
         client = SidecarSessionClient(self.base_url, self.token)
         deadline = time.monotonic() + ready_timeout
         while time.monotonic() < deadline:
@@ -443,12 +573,21 @@ class IsolatedSidecarProcess:
                     f"Sidecar exited prematurely with code {self.process.returncode}; see {log_path}"
                 )
             try:
-                client.request("/healthz")
+                client.health()
+                client.disable_auto_llm()
+                client.probe_manual_boundary()
+                self.manual_boundary_verified = True
                 return client
+            except urllib.error.HTTPError as exc:
+                if exc.code in {408, 429, 500, 502, 503, 504}:
+                    time.sleep(0.1)
+                    continue
+                self.stop()
+                raise
             except (urllib.error.URLError, OSError):
-                time.sleep(0.05)
+                time.sleep(0.1)
         self.stop()
-        raise TimeoutError(f"Sidecar failed to become ready on {self.base_url} within {ready_timeout}s")
+        raise TimeoutError(f"Sidecar failed to become ready on {self.base_url}/health within {ready_timeout}s")
 
     def stop(self) -> None:
         if self.process is None:
@@ -456,7 +595,7 @@ class IsolatedSidecarProcess:
         if self.process.poll() is None:
             self.process.terminate()
             try:
-                self.process.wait(timeout=5)
+                self.process.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 self.process.kill()
                 self.process.wait(timeout=5)
@@ -506,6 +645,12 @@ def extract_product_observations(
                         for rng in lr_obj.get("ranges", ()):
                             if isinstance(rng, Mapping) and "start" in rng and "end" in rng:
                                 ranges.append(LineRange(int(rng["start"]), int(rng["end"])))
+                        sd = lr_obj.get("source_delivery")
+                        if not ranges and isinstance(sd, Mapping):
+                            sl = sd.get("start_line")
+                            el = sd.get("end_line")
+                            if isinstance(sl, int) and isinstance(el, int) and sl >= 1 and el >= sl:
+                                ranges.append(LineRange(sl, el))
                     except (TypeError, ValueError):
                         pass
                 marks_untrusted = int(row["marks_untrusted"]) if "marks_untrusted" in cols else 0
@@ -549,29 +694,135 @@ def extract_product_observations(
     return (tuple(records), tuple(closeouts))
 
 
-def _extract_tool_messages_from_pending(
+def _parse_delivery_tags(text: str, authenticated_handles: Sequence[str]) -> tuple[str, ...]:
+    """Extract authenticated host-issued delivery tags from the delivered tool envelope."""
+    auth_set = set(authenticated_handles)
+    tags: list[str] = []
+    for m in _DELIVERY_TAG_RE.finditer(text):
+        handle = m.group("handle")
+        if auth_set and handle not in auth_set:
+            continue
+        tags.append(m.group(0))
+    return tuple(tags)
+
+
+def _derive_actual_range_and_numbering(
+    delivered_text: str,
+    *,
+    delivery_tags: Sequence[str],
+    fixture_file: pathlib.Path | None = None,
+) -> tuple[tuple[LineRange, ...], bool, bool]:
+    """Determine actual delivered line range and numbering strictly from delivered text + fixture bytes.
+
+    NEVER copies requested tool arguments as delivered ranges (Decision 010).
+    """
+    # 1. Check authenticated delivery tags for host-declared true coverage
+    tag_ranges: list[LineRange] = []
+    for tag in delivery_tags:
+        m = _DELIVERY_TAG_RE.match(tag)
+        if m and m.group("start"):
+            s = int(m.group("start"))
+            e = int(m.group("end") or s)
+            if s >= 1 and e >= s:
+                tag_ranges.append(LineRange(s, e))
+
+    # 2. Inspect actual delivered lines for printed line numbers
+    body_lines = [ln for ln in delivered_text.splitlines() if ln.strip() and not _DELIVERY_TAG_RE.fullmatch(ln.strip())]
+    printed_nums: list[int] = []
+    stripped_lines: list[str] = []
+    for ln in body_lines:
+        nm = _NUMBERED_LINE_RE.match(ln)
+        if nm:
+            printed_nums.append(int(nm.group("num")))
+            stripped_lines.append(nm.group("rest"))
+
+    has_printed_nums = bool(body_lines) and len(printed_nums) == len(body_lines)
+
+    # 3. Verify against fixture file bytes when available
+    if fixture_file is not None and fixture_file.is_file() and body_lines:
+        fixture_lines = fixture_file.read_text(encoding="utf-8", errors="replace").splitlines()
+        probe_lines = stripped_lines if has_printed_nums else body_lines
+        n = len(probe_lines)
+        for idx in range(0, len(fixture_lines) - n + 1):
+            if fixture_lines[idx : idx + n] == probe_lines:
+                true_start = idx + 1
+                true_end = idx + n
+                true_range = (LineRange(true_start, true_end),)
+                if has_printed_nums:
+                    expected_nums = list(range(true_start, true_end + 1))
+                    if printed_nums == expected_nums:
+                        return (true_range, True, False)
+                    return (true_range, False, True)
+                return (true_range, False, False)
+
+    if tag_ranges:
+        if has_printed_nums and len(tag_ranges) == 1:
+            expected_nums = list(range(tag_ranges[0].start, tag_ranges[0].end + 1))
+            if printed_nums == expected_nums:
+                return (tuple(tag_ranges), True, False)
+            return (tuple(tag_ranges), False, True)
+        return (tuple(tag_ranges), has_printed_nums, False)
+
+    if has_printed_nums and printed_nums == list(range(printed_nums[0], printed_nums[0] + len(printed_nums))):
+        return ((LineRange(printed_nums[0], printed_nums[-1]),), True, False)
+
+    return ((), False, False)
+
+
+def extract_tool_messages_from_pending(
     pending: Mapping[str, Any],
     seen_call_ids: set[str],
     call_meta: Mapping[str, Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Extract newly delivered tool messages from a raw pending LLM request."""
+    """Extract newly delivered tool messages from a raw D1 `/harness/llm/pending` payload.
+
+    Handles D1's real nested `Message.tool_result.tool_call_id` and
+    `Message.evidence_handles` shape (Decision 010 para 9) as well as flat
+    mock/test shapes.
+    """
     new_msgs: list[dict[str, Any]] = []
     for msg in pending.get("messages") or ():
         if not isinstance(msg, Mapping):
             continue
         if msg.get("role") != "tool":
             continue
-        call_id = str(msg.get("tool_call_id") or msg.get("call_id") or "")
+        tool_result = msg.get("tool_result")
+        tr_map = tool_result if isinstance(tool_result, Mapping) else {}
+        call_id = str(
+            tr_map.get("tool_call_id")
+            or msg.get("tool_call_id")
+            or msg.get("call_id")
+            or ""
+        )
         if not call_id or call_id in seen_call_ids:
             continue
         seen_call_ids.add(call_id)
         meta = call_meta.get(call_id, {})
+
+        # Retain actual delivered body verbatim from the model-facing message
+        content = msg.get("content")
+        if not content and tr_map:
+            content = tr_map.get("output") or tr_map.get("content") or ""
+        delivered_text = str(content or "")
+
+        raw_handles = msg.get("evidence_handles")
+        if not raw_handles and tr_map:
+            raw_handles = tr_map.get("evidence_handles")
+        evidence_handles = (
+            tuple(str(h) for h in raw_handles if isinstance(h, str) and h.strip())
+            if isinstance(raw_handles, Sequence) and not isinstance(raw_handles, (str, bytes))
+            else ()
+        )
+        delivery_tags = _parse_delivery_tags(delivered_text, evidence_handles)
+
         new_msgs.append(
             {
                 "call_id": call_id,
-                "tool": str(meta.get("name") or msg.get("name") or ""),
+                "tool": str(meta.get("name") or tr_map.get("tool_name") or msg.get("name") or ""),
                 "arguments": dict(meta.get("args") or {}),
-                "content": str(msg.get("content") or ""),
+                "delivered_body": delivered_text,
+                "evidence_handles": list(evidence_handles),
+                "delivery_tags": list(delivery_tags),
                 "request_id": str(pending.get("id") or ""),
             }
         )
@@ -584,19 +835,24 @@ def run_scripted_session(
     session_id: str,
     turns: Sequence[ScriptedTurn],
     db_path: str | pathlib.Path | None = None,
+    workspace_dir: str | pathlib.Path | None = None,
+    submission_id: str = "",
+    wait_for_settlement: bool = False,
     fixture_provenance: str = "host",
     source_revision: str = "rev-1",
     round_id: str = "round-1",
     intent_window: str = "intent-1",
     engine_provenance: EngineBinaryProvenance | None = None,
+    run_manifest: SidecarRunManifest | None = None,
     sse_events: Sequence[Mapping[str, Any]] = (),
     poll_timeout: float = 15.0,
 ) -> SidecarRunArtifact:
     """Drive scripted multi-turn completions against `/harness/llm/pending` & `/respond`.
 
-    Captures raw pending requests, scripted responses, and delivered tool messages
-    joined by `call_id` & `fixture_provenance`, then reads durable product records
-    and D10 friction snapshots separately from `store.db`.
+    Builds the independent D3 `DeliveryLog` strictly from the actual tool messages
+    delivered to the mock model (real `evidence_handles`, authenticated `delivery_tags`,
+    actual delivered bytes, and fixture-verified line ranges — NEVER synthesized
+    handles or copied requested arguments).
     """
     friction_before = probe_store_db(db_path, session_id) if db_path else None
     raw_pending: list[dict[str, Any]] = []
@@ -606,52 +862,75 @@ def run_scripted_session(
 
     seen_call_ids: set[str] = set()
     call_meta: dict[str, dict[str, Any]] = {}
-    ordinal_by_kind: dict[str, int] = {}
+    ws_path = pathlib.Path(workspace_dir).resolve() if workspace_dir else None
 
     for turn in turns:
         pending = client.wait_pending(session_id, timeout=poll_timeout)
         raw_pending.append(dict(pending))
 
-        # Capture any tool messages delivered to the model in this pending request
-        newly_delivered = _extract_tool_messages_from_pending(pending, seen_call_ids, call_meta)
+        # Auto-load tools via `request_tools` if a scripted tool is not yet offered
+        offered = set(pending.get("tools") or ())
+        if offered and turn.tool_calls:
+            missing_tools = sorted({tc["name"] for tc in turn.tool_calls if tc["name"] not in offered})
+            if missing_tools and "request_tools" in offered:
+                load_id = f"load-{uuid.uuid4().hex[:8]}"
+                client.respond(
+                    str(pending["id"]),
+                    tool_calls=({"id": load_id, "name": "request_tools", "args": {"need": ", ".join(missing_tools)}},),
+                )
+                pending = client.wait_pending(session_id, timeout=poll_timeout)
+                raw_pending.append(dict(pending))
+
+        newly_delivered = extract_tool_messages_from_pending(pending, seen_call_ids, call_meta)
         for item in newly_delivered:
             delivered_tools.append(item)
-            tool_name = item["tool"] or "tool"
-            kind = "read" if "read" in tool_name else ("web" if "web" in tool_name else tool_name)
-            ordinal_by_kind[kind] = ordinal_by_kind.get(kind, 0) + 1
-            handle = f"{kind}#{ordinal_by_kind[kind]}"
-            raw_content = item["content"].encode("utf-8")
+            handles = item["evidence_handles"]
+            tags = tuple(item["delivery_tags"])
+            delivered_text = item["delivered_body"]
             args = item["arguments"]
             path = str(args.get("path") or "")
             url = str(args.get("url") or "")
-            ranges: tuple[LineRange, ...] = ()
-            if "start_line" in args and "end_line" in args:
-                ranges = (LineRange(int(args["start_line"]), int(args["end_line"])),)
-            delivery_records.append(
-                DeliveryRecord(
-                    tool=tool_name,
-                    arguments=args,
-                    raw_bytes=raw_content,
-                    delivered_ranges=ranges,
-                    delivery_tags=(),
-                    line_numbered=False,
-                    printed_other_numbers=False,
-                    session_id=session_id,
-                    worker_leg="",
-                    round_id=round_id,
-                    intent_window=intent_window,
-                    source_revision=source_revision,
-                    handle=handle,
-                    kind=kind,
-                    path=path,
-                    url=url,
-                    artifact_id="",
-                    call_id=item["call_id"],
-                    fixture_provenance=fixture_provenance,
-                )
+
+            # Also extract path from authenticated delivery tag if present
+            if not path and tags:
+                m = _DELIVERY_TAG_RE.match(tags[0])
+                if m and m.group("path"):
+                    path = m.group("path").strip('"')
+
+            fixture_file = (ws_path / path) if (ws_path and path) else None
+            ranges, line_numbered, printed_other = _derive_actual_range_and_numbering(
+                delivered_text,
+                delivery_tags=tags,
+                fixture_file=fixture_file,
             )
 
-        # Assign deterministic/explicit call_ids for scripted tool calls
+            # Only record handles actually authenticated in the delivered envelope
+            for handle in handles:
+                kind = handle.split("#", 1)[0] if "#" in handle else ""
+                delivery_records.append(
+                    DeliveryRecord(
+                        tool=item["tool"],
+                        arguments=args,
+                        raw_bytes=delivered_text.encode("utf-8"),
+                        delivered_ranges=ranges,
+                        delivery_tags=tags,
+                        line_numbered=line_numbered,
+                        printed_other_numbers=printed_other,
+                        session_id=session_id,
+                        worker_leg="",
+                        round_id=round_id,
+                        intent_window=intent_window,
+                        source_revision=source_revision,
+                        handle=handle,
+                        kind=kind,
+                        path=path,
+                        url=url,
+                        artifact_id="",
+                        call_id=item["call_id"],
+                        fixture_provenance=fixture_provenance,
+                    )
+                )
+
         outgoing_calls: list[dict[str, Any]] = []
         for idx, tc in enumerate(turn.tool_calls):
             cid = str(tc.get("id") or f"call-{len(scripted_resps) + 1}-{idx + 1}")
@@ -665,6 +944,9 @@ def run_scripted_session(
             tool_calls=outgoing_calls,
         )
         scripted_resps.append(resp_payload)
+
+    if wait_for_settlement:
+        client.wait_settled(session_id, submission_id, timeout=poll_timeout)
 
     product_records, product_closeouts = (
         extract_product_observations(db_path, session_id) if db_path else ((), ())
@@ -682,4 +964,85 @@ def run_scripted_session(
         product_closeouts=product_closeouts,
         friction_before=friction_before,
         friction_after=friction_after,
+        run_manifest=run_manifest,
     )
+
+
+def evaluate_three_ledger_controls(
+    supported_artifact: SidecarRunArtifact,
+    unsupported_artifact: SidecarRunArtifact,
+    *,
+    supported_citation: Citation,
+    unsupported_citation: Citation,
+    platform: str = "linux",
+) -> dict[str, Any]:
+    """Assert all 3 ledger controls (supported, unsupported/negative, minting parity).
+
+    Returns a structured verdict dict with `passed: bool` and per-control details.
+    Any control mismatch or missing required product closeout/record fails `passed`.
+    """
+    # Control 1: Supported citation grounded by BOTH reference resolver and product
+    sup_scope = PermittedScope(
+        session_id=supported_artifact.session_id,
+        round_id="round-1",
+        intent_window="intent-1",
+        platform=platform,
+    )
+    ref_sup = resolve_citation(supported_artifact.delivery_log, supported_citation, sup_scope)
+    sup_closeout = supported_artifact.product_closeouts[-1] if supported_artifact.product_closeouts else None
+    sup_grounding = (sup_closeout or {}).get("grounding") or {}
+    prod_sup_grounded = bool(sup_closeout is not None and sup_grounding.get("traced") is True and not sup_grounding.get("host_assembled"))
+    c1_passed = ref_sup.verdict_class == "grounded" and prod_sup_grounded
+
+    # Control 2: Unsupported citation refused by BOTH reference resolver and product
+    unsup_scope = PermittedScope(
+        session_id=unsupported_artifact.session_id,
+        round_id="round-1",
+        intent_window="intent-1",
+        platform=platform,
+    )
+    ref_unsup = resolve_citation(unsupported_artifact.delivery_log, unsupported_citation, unsup_scope)
+    unsup_closeout = unsupported_artifact.product_closeouts[-1] if unsupported_artifact.product_closeouts else None
+    unsup_grounding = (unsup_closeout or {}).get("grounding") or {}
+    # Product refused/did not ground: traced is False, or hint_code / retry_count > 0
+    prod_unsup_refused = bool(
+        unsup_closeout is not None
+        and (
+            unsup_grounding.get("traced") is False
+            or bool(unsup_grounding.get("hint_code"))
+            or int(unsup_grounding.get("retry_count") or 0) > 0
+        )
+    )
+    c2_passed = ref_unsup.verdict_class == "ungrounded" and prod_unsup_refused
+
+    # Control 3: Minted evidence record equals independent delivery log
+    mint_defects = compare_records(
+        supported_artifact.delivery_log,
+        supported_artifact.product_records,
+    )
+    c3_passed = bool(supported_artifact.delivery_log.records) and len(mint_defects) == 0
+
+    all_passed = c1_passed and c2_passed and c3_passed
+    return {
+        "passed": all_passed,
+        "control_1_supported": {
+            "passed": c1_passed,
+            "reference_verdict": ref_sup.verdict_class,
+            "reference_handles": list(ref_sup.supporting_handles),
+            "product_grounded": prod_sup_grounded,
+            "product_grounding": sup_grounding,
+        },
+        "control_2_unsupported": {
+            "passed": c2_passed,
+            "reference_verdict": ref_unsup.verdict_class,
+            "reference_reason": ref_unsup.reason,
+            "product_refused": prod_unsup_refused,
+            "product_grounding": unsup_grounding,
+        },
+        "control_3_minting_parity": {
+            "passed": c3_passed,
+            "delivery_log_count": len(supported_artifact.delivery_log.records),
+            "product_record_count": len(supported_artifact.product_records),
+            "defects": [{"kind": d.kind, "handle": d.handle, "detail": d.detail} for d in mint_defects],
+        },
+    }

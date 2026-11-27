@@ -11,13 +11,13 @@ from typing import Sequence
 from .friction_probe import friction_observability_report
 from .generators import generate_r06, generate_r07
 from .inprocess_driver import InProcessPlan, run_inprocess_plan
-from .reference_resolver import resolve_citation
+from .reference_resolver import Citation, resolve_citation
 from .selectors import validate_manifest
 from .shrinker import ShrunkArtifact
 from .sidecar_driver import (
     IsolatedSidecarProcess,
     ScriptedTurn,
-    inspect_engine_binary,
+    evaluate_three_ledger_controls,
     run_scripted_session,
 )
 
@@ -62,7 +62,11 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
 
 def _cmd_controls(args: argparse.Namespace) -> int:
-    out_dir = pathlib.Path(args.out_dir) if args.out_dir else pathlib.Path(tempfile.mkdtemp(prefix="gb02-controls-"))
+    out_dir = (
+        pathlib.Path(args.out_dir)
+        if args.out_dir
+        else pathlib.Path(tempfile.mkdtemp(prefix="gb02-controls-"))
+    )
     workspace = out_dir / "workspace"
     config_dir = out_dir / "config"
     sidecar = IsolatedSidecarProcess(
@@ -74,12 +78,13 @@ def _cmd_controls(args: argparse.Namespace) -> int:
         config_root=args.config_root or None,
         engine_root=args.engine_root or None,
     )
-    manifest = sidecar.build_run_manifest()
     if args.dry_run:
+        manifest = sidecar.build_run_manifest()
         print(
             json.dumps(
                 {
                     "dry_run": True,
+                    "command": sidecar.build_command(),
                     "run_manifest": manifest.to_dict(),
                     "engine_provenance": sidecar.provenance.to_dict(),
                     "controls": [
@@ -95,42 +100,102 @@ def _cmd_controls(args: argparse.Namespace) -> int:
         return 0
 
     workspace.mkdir(parents=True, exist_ok=True)
-    (workspace / "sample.go").write_text("package sample\n\nfunc Hello() string { return \"ok\" }\n", encoding="utf-8")
+    (workspace / "sample.go").write_text(
+        'package sample\n\nfunc Hello() string { return "ok" }\n',
+        encoding="utf-8",
+    )
 
     with sidecar as client:
+        manifest = sidecar.build_run_manifest()
         project = client.create_project(workspace)
-        session = client.create_session(project["id"])
-        sid = session["id"]
-        client.send_prompt(sid, "Read sample.go and report line 3.")
-        artifact = run_scripted_session(
+
+        # Control 1 + Control 3: Supported citation & minting parity
+        sess_sup = client.create_session(project["id"])
+        sid_sup = sess_sup["id"]
+        client.wait_session_ready(sid_sup)
+        prompt_sup = client.send_prompt(sid_sup, "Read sample.go and report line 3.")
+        sub_sup = str(prompt_sup.get("submission_id") or prompt_sup.get("id") or "")
+        sup_artifact = run_scripted_session(
             client,
-            session_id=sid,
+            session_id=sid_sup,
             turns=(
                 ScriptedTurn(
-                    tool_calls=({"name": "read_file", "args": {"path": "sample.go", "start_line": 1, "end_line": 3}},),
+                    tool_calls=(
+                        {"name": "read_file", "args": {"path": "sample.go", "start_line": 1, "end_line": 3}},
+                    ),
                 ),
                 ScriptedTurn(content="Verified Hello() at [read#1:3]."),
             ),
-            db_path=config_dir / "store.db",
+            db_path=sidecar.store_db_path,
+            workspace_dir=workspace,
+            submission_id=sub_sup,
+            wait_for_settlement=True,
             engine_provenance=sidecar.provenance,
+            run_manifest=manifest,
         )
-    out_file = out_dir / "controls-artifact.json"
-    manifest_file = out_dir / "run-manifest.json"
-    out_file.write_text(json.dumps(artifact.to_dict(), indent=2, sort_keys=True), encoding="utf-8")
-    manifest_file.write_text(json.dumps(manifest.to_dict(), indent=2, sort_keys=True), encoding="utf-8")
+
+        # Control 2: Unsupported / negative control on the same launch path
+        sess_unsup = client.create_session(project["id"])
+        sid_unsup = sess_unsup["id"]
+        client.wait_session_ready(sid_unsup)
+        prompt_unsup = client.send_prompt(sid_unsup, "Read sample.go and report line 99.")
+        sub_unsup = str(prompt_unsup.get("submission_id") or prompt_unsup.get("id") or "")
+        unsup_artifact = run_scripted_session(
+            client,
+            session_id=sid_unsup,
+            turns=(
+                ScriptedTurn(
+                    tool_calls=(
+                        {"name": "read_file", "args": {"path": "sample.go", "start_line": 1, "end_line": 3}},
+                    ),
+                ),
+                ScriptedTurn(content="Claimed unobserved line [read#1:99]."),
+            ),
+            db_path=sidecar.store_db_path,
+            workspace_dir=workspace,
+            submission_id=sub_unsup,
+            wait_for_settlement=True,
+            engine_provenance=sidecar.provenance,
+            run_manifest=manifest,
+        )
+
+    evaluation = evaluate_three_ledger_controls(
+        sup_artifact,
+        unsup_artifact,
+        supported_citation=Citation(
+            citation_type="handle", raw="[read#1:3]", handle="read#1", start_line=3, citation_id="ctrl-1"
+        ),
+        unsupported_citation=Citation(
+            citation_type="handle", raw="[read#1:99]", handle="read#1", start_line=99, citation_id="ctrl-2"
+        ),
+        platform="macos" if sidecar.provenance.platform == "darwin" else "linux",
+    )
+
+    (out_dir / "control-supported-artifact.json").write_text(
+        json.dumps(sup_artifact.to_dict(), indent=2, sort_keys=True), encoding="utf-8"
+    )
+    (out_dir / "control-unsupported-artifact.json").write_text(
+        json.dumps(unsup_artifact.to_dict(), indent=2, sort_keys=True), encoding="utf-8"
+    )
+    (out_dir / "run-manifest.json").write_text(
+        json.dumps(manifest.to_dict(), indent=2, sort_keys=True), encoding="utf-8"
+    )
+    (out_dir / "controls-evaluation.json").write_text(
+        json.dumps(evaluation, indent=2, sort_keys=True), encoding="utf-8"
+    )
     print(
         json.dumps(
             {
-                "artifact_path": str(out_file),
-                "run_manifest_path": str(manifest_file),
-                "session_id": sid,
+                "passed": evaluation["passed"],
+                "out_dir": str(out_dir),
                 "run_manifest": manifest.to_dict(),
+                "evaluation": evaluation,
             },
             indent=2,
             sort_keys=True,
         )
     )
-    return 0
+    return 0 if evaluation["passed"] else 1
 
 
 def _cmd_inprocess(args: argparse.Namespace) -> int:
@@ -165,9 +230,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_rep.add_argument("artifact", help="Path to ShrunkArtifact JSON file")
     p_rep.set_defaults(func=_cmd_replay)
 
-    p_ctrl = sub.add_parser("controls", help="Run sidecar controls against an explicit D1 --engine-bin and --product-root")
+    p_ctrl = sub.add_parser("controls", help="Run all 3 ledger controls against an explicit D1 --engine-bin and --product-root")
     p_ctrl.add_argument("--engine-bin", required=True, help="Path to exact D1 lycaon-dev binary")
-    p_ctrl.add_argument("--product-root", required=True, help="Path to exact D1 product checkout root (Decision 009)")
+    p_ctrl.add_argument("--product-root", required=True, help="Path to exact D1 product checkout root (Decision 009/010)")
     p_ctrl.add_argument("--config-root", default="", help="Optional override for LYCAON_CONFIG_ROOT inside --product-root")
     p_ctrl.add_argument("--engine-root", default="", help="Optional override for LYCAON_ENGINE_ROOT inside --product-root or D1 artifact dir")
     p_ctrl.add_argument("--expected-engine-sha256", default="", help="Expected SHA-256 digest of the D1 binary (Decision 009)")
