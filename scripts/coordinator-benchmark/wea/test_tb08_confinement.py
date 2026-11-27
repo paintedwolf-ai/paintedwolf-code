@@ -410,6 +410,10 @@ class TestTB08SidecarRunner(unittest.TestCase):
 
             return call_id, {"outcome": "rejected", "codes": ["SANDBOX_TRY_WRITE_ROOT"]}, {}
 
+        def fake_send_hooked(_app, _sid, _name, _args, *, on_pending_checkpoint):
+            on_pending_checkpoint({"id": "cp-a09-09"})
+            return "call-a09-09", {"outcome": "rejected", "codes": ["SANDBOX_SOCKET_PATH_CHANGED"]}, {}
+
         with tempfile.TemporaryDirectory() as tmp:
             out_dir = pathlib.Path(tmp) / "tb08-out"
             manifest = run_tb08_sidecar_slots(
@@ -418,6 +422,7 @@ class TestTB08SidecarRunner(unittest.TestCase):
                 app_factory=fake_app_factory,
                 session_opener=fake_open_session,
                 tool_caller=fake_send_tool_call,
+                tool_caller_hooked=fake_send_hooked,
             )
             # Single warmed sidecar reused across all 42 slots.
             self.assertEqual(len(created_apps), 1)
@@ -427,7 +432,8 @@ class TestTB08SidecarRunner(unittest.TestCase):
                 manifest["counts_by_family"],
                 {"A05": 8, "A06": 10, "A07": 3, "A08": 12, "A09": 9},
             )
-            self.assertTrue(manifest["all_passed"], f"manifest failures: {manifest}")
+            # 41 pass + 1 honestly blocked (A09-01 on healthy host per D5).
+            self.assertEqual(manifest["counts_by_verdict"], {"blocked": 1, "pass": 41})
 
             # Verify one structured JSON receipt per scheduled variant.
             receipt_files = sorted((out_dir / "receipts").glob("*.json"))
@@ -437,6 +443,7 @@ class TestTB08SidecarRunner(unittest.TestCase):
                 "run_id",
                 "slot_id",
                 "family",
+                "family_title",
                 "lane",
                 "host",
                 "product_source",
@@ -448,6 +455,39 @@ class TestTB08SidecarRunner(unittest.TestCase):
                 self.assertIn(key, sample)
             self.assertEqual(sample["lane"], "sidecar")
             self.assertEqual(sample["typed_result"]["refusal_code"], "FETCH_URL_BLOCKED")
+
+            # Verify A09-01 is honestly blocked (never passes on SURVEY_PATH_ESCAPE).
+            a09_01 = json.loads((out_dir / "receipts" / "A09-01.json").read_text(encoding="utf-8"))
+            self.assertEqual(a09_01["verdict"], "blocked")
+            self.assertIn("blocked_reason", a09_01)
+
+            # Verify A09-09 asserts SANDBOX_SOCKET_PATH_CHANGED.
+            a09_09 = json.loads((out_dir / "receipts" / "A09-09.json").read_text(encoding="utf-8"))
+            self.assertEqual(a09_09["verdict"], "pass")
+            self.assertEqual(a09_09["typed_result"]["refusal_code"], "SANDBOX_SOCKET_PATH_CHANGED")
+
+    def test_earlier_gate_refusal_never_passes_returns_unknown(self) -> None:
+        from wea.tb08_sidecar_runner import run_tb08_sidecar_slots
+
+        def fake_app_factory(app_dir: pathlib.Path, **_kwargs):
+            return _FakeSidecarApp(app_dir)
+
+        def fake_open_session(_app, _project_dir, **_kwargs):
+            return ("sess-eg", "proj-1", "root-1")
+
+        def fake_earlier_gate(_app, _sid, _name, _args, checkpoint_policy=None):
+            return "call-eg", {"outcome": "rejected", "codes": ["SURVEY_PATH_ESCAPE"]}, {}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = run_tb08_sidecar_slots(
+                pathlib.Path(tmp) / "tb08-eg",
+                slot_ids=["A05-01", "A08-01", "A08-12"],
+                platform_key="linux",
+                app_factory=fake_app_factory,
+                session_opener=fake_open_session,
+                tool_caller=fake_earlier_gate,
+            )
+            self.assertEqual(manifest["counts_by_verdict"], {"unknown": 3})
 
 
 if __name__ == "__main__":
