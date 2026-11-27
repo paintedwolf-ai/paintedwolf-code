@@ -79,7 +79,7 @@ func TestProjectTrustCachedDiscoveryDoesNotCacheSwitches(t *testing.T) {
 	}
 
 	srv.StopBackground(t.Context())
-	srv.WaitForBackground(t.Context())
+	testutil.FailErr(t, "drain background after stop", srv.WaitForBackground(t.Context()))
 	response := httptest.NewRecorder()
 	srv.ServeHTTP(response, contractfixture.NewAuthedRequest(http.MethodGet, url, nil))
 	code := wire.ApiErrorCodeProjectInventoryUnavailable

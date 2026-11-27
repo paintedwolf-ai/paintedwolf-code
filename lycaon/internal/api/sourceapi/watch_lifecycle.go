@@ -21,3 +21,19 @@ func (s *Watch) Wait(ctx context.Context) error {
 	}
 	return s.watches.Wait(ctx)
 }
+
+// Epoch increases whenever watch installation or change-batch work is admitted.
+func (s *Watch) Epoch() uint64 {
+	if s == nil {
+		return 0
+	}
+	return s.watchWork.Epoch() + s.watches.Epoch()
+}
+
+// Busy reports whether any watch installation or change-batch work is active.
+func (s *Watch) Busy() bool {
+	if s == nil {
+		return false
+	}
+	return s.watchWork.Busy() || s.watches.Busy()
+}

@@ -46,6 +46,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 		repoProvider:   deps.Source.RepoProvider,
 		events:         deps.Host.Events,
 		eventPublisher: deps.Host.EventPublisher,
+		eventOutbox:    deps.Host.EventOutbox,
 		presence:       deps.Host.Presence,
 		storagePaths: storagePaths{
 			dataDir:          strings.TrimSpace(deps.Storage.DataDir),

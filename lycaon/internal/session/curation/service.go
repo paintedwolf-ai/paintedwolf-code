@@ -150,11 +150,28 @@ func (m *Service) Wait(ctx context.Context) {
 	}
 }
 
+// Epoch increases each time prompt curation work is admitted.
+func (m *Service) Epoch() uint64 {
+	if m == nil {
+		return 0
+	}
+	return m.work.Epoch()
+}
+
+// Busy reports whether any prompt curation work is currently running.
+func (m *Service) Busy() bool {
+	if m == nil {
+		return false
+	}
+	return m.work.Busy()
+}
+
 // promptCurations tracks in-flight prompt naming and research work per session
 // so forget and stop can cancel it and shutdown can drain it.
 type promptCurations struct {
 	mu        sync.Mutex
 	stopped   bool
+	epoch     uint64
 	bySession map[string]map[*curationWork]struct{}
 	idle      chan struct{}
 }
@@ -182,6 +199,7 @@ func (m *promptCurations) Register(sessionID string, cancel context.CancelFunc) 
 		m.bySession[sessionID] = make(map[*curationWork]struct{})
 	}
 	m.bySession[sessionID][work] = struct{}{}
+	m.epoch++
 	return work
 }
 
@@ -247,4 +265,22 @@ func (m *promptCurations) Wait(ctx context.Context) {
 		case <-ctx.Done():
 		}
 	}
+}
+
+func (m *promptCurations) Epoch() uint64 {
+	if m == nil {
+		return 0
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.epoch
+}
+
+func (m *promptCurations) Busy() bool {
+	if m == nil {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.bySession) > 0
 }

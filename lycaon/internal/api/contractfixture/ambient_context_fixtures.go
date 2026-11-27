@@ -54,3 +54,5 @@ func (*WarmTrackingRepo) KnownEmpty(context.Context, string) (bool, error) { ret
 func (*WarmTrackingRepo) Changed(context.Context, string)                  {}
 func (*WarmTrackingRepo) SetOnSettled(func(string))                        {}
 func (*WarmTrackingRepo) Wait(context.Context) error                       { return nil }
+func (*WarmTrackingRepo) Epoch() uint64                                    { return 0 }
+func (*WarmTrackingRepo) Busy() bool                                       { return false }
