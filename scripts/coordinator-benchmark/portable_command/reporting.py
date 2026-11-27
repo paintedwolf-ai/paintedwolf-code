@@ -190,6 +190,43 @@ def verified_source_binding(case, pins, execs, baseline_hashes):
     return True, source_pins
 
 
+def retained_failure_stdout(program, executions, outputs, page, expected):
+    """Bind the complete screened output view to the ineligible producer's retained row."""
+    producers = [row for row in executions
+                 if row.get('program_id') == program and row.get('native_command') == 'external'
+                 and row.get('owner') == 'processes' and row.get('state') == 'completed'
+                 and isinstance(row.get('status_code'), int) and row['status_code'] != 0
+                 and row.get('complete') == 1 and row.get('publication_eligible') == 0
+                 and row.get('owner_invoked') == 1 and row.get('settled_at')]
+    if len(producers) != 1:
+        return None
+    producer = producers[0]
+    retained = [row for row in outputs if row.get('program_id') == program
+                and row.get('execution_id') == producer['id'] and row.get('stream') == 'stdout']
+    children = [row for row in (page or {}).get('executions', []) if row.get('id') == producer['id']]
+    if len(retained) != 1 or len(children) != 1:
+        return None
+    row, child = retained[0], children[0]
+    if (child.get('program_id') != program or child.get('state') != 'completed'
+            or child.get('status_code') != producer['status_code']
+            or child.get('complete') is not True or child.get('publication_eligible') is not False):
+        return None
+    matching = [value for value in child.get('outputs') or [] if value.get('ref') == row.get('reference')]
+    if (len(matching) != 1 or not row.get('reference') or not row.get('blob_id')
+            or row.get('complete') != 1 or row.get('preview_truncated') != 0
+            or row.get('redacted') != 0):
+        return None
+    view = matching[0]
+    preview = view.get('preview')
+    if (view.get('stream') != 'stdout' or view.get('complete') is not True
+            or view.get('preview_truncated') is not False or view.get('redacted') is not False
+            or not isinstance(preview, str) or preview != row.get('preview')
+            or view.get('size_bytes') != len(expected) or preview.encode('utf-8') != expected):
+        return None
+    return {'execution_id': producer['id'], 'reference': row['reference'],
+            'blob_id': row['blob_id'], 'sha256': digest(preview.encode('utf-8'))}
+
+
 def slice_sidecar_log(log_path, session_id=None, max_edge=40):
     """Retain opening, session/launch-relevant, and closing/shutdown lines for durable audit."""
     path = pathlib.Path(log_path)

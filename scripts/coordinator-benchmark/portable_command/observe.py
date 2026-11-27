@@ -1,11 +1,13 @@
 """Independent observation and audit builder for native Portable Command runs."""
 import json
 from portable_command.artifacts import project_hashes
+from portable_command.contracts import bytes_value
 from portable_command.db_audit import ELIGIBLE_WRAPPER_OPS, query_db_audit, receipt_rows as _receipt_rows
 from portable_command.reporting import (
     FACT_OWNERS,
     extract_recovery as _extract_recovery,
     file_sha256,
+    retained_failure_stdout,
     scan_sidecar_launches,
     source_identity,
     structured_rejection as _structured_rejection,
@@ -43,7 +45,7 @@ def normalize_outcome(raw_result, program_row, payload):
     return state, stop, code
 
 
-def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=(), baseline_hashes=None, session_surface=None, draft_bindings=None, host_scope_binding=None):
+def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=(), baseline_hashes=None, session_surface=None, draft_bindings=None, host_scope_binding=None, program_receipt_pages=None):
     """Construct a version-1 native-runtime observation from the whole isolated session."""
     prelude_calls = {r['call_id'] for r in prelude_records if r.get('call_id')}
     expected_calls = {cid for rec in turn_records for cid in (list(rec['call_ids']) + list(rec.get('await_call_ids') or ()))}
@@ -236,6 +238,12 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         facts['no_outside_effect'] = bool(recovery['zero_program_effects'] and (baseline_hashes is None or final_hashes == baseline_hashes))
         if any(tok in recovery['owner_code'].lower() for tok in ('zip', 'traversal', 'escape', 'archive')):
             facts['zip_slip_refused'] = True
+    failure_output = None
+    if case['id'] == 'failed-producer':
+        expected = bytes_value(case['setup']['helpers']['fixture-producer']['stdout'])
+        failure_output = retained_failure_stdout(last_pid, execs, outputs,
+                                                 (program_receipt_pages or {}).get(last_pid), expected)
+        facts['screened_retained_failure_output'] = bool(failure_output)
     if case['id'] == 'progress-then-denial':
         facts['denied_path_bound'] = (
             bool(host_scope_binding) and last_code == 'WRITE_SCOPE_DENIED'
@@ -273,6 +281,7 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         'prelude': prelude_records, 'turn_batches': turn_records,
         'unexpected_receipt_ids': [r['id'] for r in unexpected_receipts], 'observation_gaps': gaps,
         'refusal_stderr': raw_stderr if pre_exec_refusal else '',
+        'retained_failure_output': failure_output,
         'external_launch_audit': {
             'sidecar': sidecar, 'source_command_windows': len(audit['source_command_windows']),
             'external_executions': len(external_execs), 'source_window_field': last_payload.get('source_window'),
