@@ -20,65 +20,60 @@ import (
 )
 
 func TestBarePunctuationParsesAndMatchesBothLegs(t *testing.T) {
-	// 1. Bare punctuation operators must parse as literal text terms, standalone or with filters.
-	bareCases := []struct {
-		query string
-		want  string
-	}{
-		{"==", "=="},
-		{"!=", "!="},
-		{"<=", "<="},
-		{">=", ">="},
-		{"::", "::"},
-		{"&&", "&&"},
-		{"||", "||"},
-		{"=>", "=>"},
-		{"project:current kind:code ==", "=="},
-		{"kind:code !=", "!="},
+	// 1. Every advertised bare operator in isBareOperatorToken must parse cleanly
+	// as a single literal text token, both standalone and alongside filters.
+	advertisedOps := []string{
+		"==", "===", "!=", "!==", "<=", ">=", "::", ":=", "=>",
+		"&&", "||", "??", "<<", ">>", "+=", "%=", "...",
 	}
-	for _, tc := range bareCases {
-		node, err := ParseQuery(tc.query)
-		if err != nil {
-			t.Fatalf("ParseQuery(%q) failed: %v", tc.query, err)
-		}
-		got := textTerms(node)
-		if len(got) != 1 || got[0] != tc.want {
-			t.Fatalf("ParseQuery(%q) terms = %v, want [%q]", tc.query, got, tc.want)
+	for _, op := range advertisedOps {
+		for _, q := range []string{op, "project:current kind:code " + op} {
+			node, err := ParseQuery(q)
+			if err != nil {
+				t.Fatalf("ParseQuery(%q) failed: %v", q, err)
+			}
+			got := textTerms(node)
+			if len(got) != 1 || got[0] != op {
+				t.Fatalf("ParseQuery(%q) terms = %v, want [%q]", q, got, op)
+			}
 		}
 	}
 
-	// 2. Positive literal match + negative control on the CODE leg.
+	// 2. Positive literal match + negative control on the CODE leg for every advertised operator.
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	catalog := sourcecatalog.New()
 	t.Cleanup(func() { _ = catalog.Drain(context.Background()) })
 
 	root := t.TempDir()
-	testutil.FailErr(t, "write positive file", os.WriteFile(filepath.Join(root, "positive.go"), []byte("package p\n\nfunc eq(a, b int) bool { return a == b }\n"), 0o644))
-	testutil.FailErr(t, "write negative file", os.WriteFile(filepath.Join(root, "negative.go"), []byte("package p\n\nfunc assign(a int) int { x := a; return x }\n"), 0o644))
+	posBody := "package p\n// ops: == === != !== <= >= :: := => && || ?? << >> += %= ...\n"
+	testutil.FailErr(t, "write positive file", os.WriteFile(filepath.Join(root, "positive.go"), []byte(posBody), 0o644))
+	testutil.FailErr(t, "write negative file", os.WriteFile(filepath.Join(root, "negative.go"), []byte("package p\n\nfunc plainWordsOnly(a int) int { return a }\n"), 0o644))
 	testutil.FailErr(t, "await catalog", catalogtest.AwaitIndex(t.Context(), catalog, "p-punct", sourcecatalog.Root{ID: "r-punct", Path: root}))
 
 	roots := []CodeRoot{{ProjectID: "p-punct", RootID: "r-punct", Path: root}}
-	planCode, err := CompileQuery("project:current kind:code ==", CompileContext{
-		OriginProjectID: "p-punct",
-		RootsForProject: func(string) ([]CodeRoot, error) { return roots, nil },
-		Budget:          BudgetComplete,
-	})
-	testutil.FailErr(t, "compile code ==", err)
-	if planCode.Code == nil {
-		t.Fatal("expected code leg for bare '==' query")
-	}
-	repCode, err := (&CodeExecutor{catalog: catalog, rerank: decide.Reranker{}}).Run(context.Background(), PlanLeg{
-		Executor: ExecutorCode,
-		Cap:      100,
-		Code:     planCode.Code,
-	})
-	testutil.FailErr(t, "run code ==", err)
-	codePaths := hitPathsOfKind(repCode.Hits, HitKindCode)
-	if len(codePaths) != 1 || codePaths[0] != "positive.go" {
-		t.Fatalf("code leg '==' hits = %v, want only [positive.go]", codePaths)
+	for _, op := range advertisedOps {
+		planCode, err := CompileQuery("project:current kind:code "+op, CompileContext{
+			OriginProjectID: "p-punct",
+			RootsForProject: func(string) ([]CodeRoot, error) { return roots, nil },
+			Budget:          BudgetComplete,
+		})
+		testutil.FailErr(t, "compile code "+op, err)
+		if planCode.Code == nil {
+			t.Fatalf("expected code leg for bare %q query", op)
+		}
+		repCode, err := (&CodeExecutor{catalog: catalog, rerank: decide.Reranker{}}).Run(context.Background(), PlanLeg{
+			Executor: ExecutorCode,
+			Cap:      100,
+			Code:     planCode.Code,
+		})
+		testutil.FailErr(t, "run code "+op, err)
+		codePaths := hitPathsOfKind(repCode.Hits, HitKindCode)
+		if len(codePaths) != 1 || codePaths[0] != "positive.go" {
+			t.Fatalf("code leg %q hits = %v, want only [positive.go]", op, codePaths)
+		}
 	}
 
-	// 3. Positive literal match + negative control on the STORE leg.
+	// 3. Positive literal match + negative control on the STORE leg for every advertised operator.
 	dbDir := t.TempDir()
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dbDir, "punct.db"))
 	projID := testdbseed.DefaultProjectID
@@ -99,25 +94,27 @@ func TestBarePunctuationParsesAndMatchesBothLegs(t *testing.T) {
 		}))
 		testutil.FailErr(t, "commit", tx.Commit())
 	}
-	insertMsg("msg-pos", 1, "check if status == 200 before returning")
-	insertMsg("msg-neg", 2, "check if status is ok before returning")
+	insertMsg("msg-pos", 1, "ops == === != !== <= >= :: := => && || ?? << >> += %= ...")
+	insertMsg("msg-neg", 2, "plain words only without operators")
 
-	planStore, err := CompileQuery("project:current kind:message ==", CompileContext{
-		OriginProjectID: projID,
-		StoreOnly:       true,
-	})
-	testutil.FailErr(t, "compile store ==", err)
-	if planStore.Store == nil {
-		t.Fatal("expected store leg for bare '==' query")
-	}
-	repStore, err := NewStoreExecutor(sqlDB).Run(t.Context(), PlanLeg{
-		Executor: ExecutorStore,
-		Cap:      50,
-		Store:    planStore.Store,
-	})
-	testutil.FailErr(t, "run store ==", err)
-	if len(repStore.Hits) != 1 || repStore.Hits[0].SourceRef != "msg-pos" {
-		t.Fatalf("store leg '==' hits = %+v, want only msg-pos", repStore.Hits)
+	for _, op := range advertisedOps {
+		planStore, err := CompileQuery("project:current kind:message "+op, CompileContext{
+			OriginProjectID: projID,
+			StoreOnly:       true,
+		})
+		testutil.FailErr(t, "compile store "+op, err)
+		if planStore.Store == nil {
+			t.Fatalf("expected store leg for bare %q query", op)
+		}
+		repStore, err := NewStoreExecutor(sqlDB).Run(t.Context(), PlanLeg{
+			Executor: ExecutorStore,
+			Cap:      50,
+			Store:    planStore.Store,
+		})
+		testutil.FailErr(t, "run store "+op, err)
+		if len(repStore.Hits) != 1 || repStore.Hits[0].SourceRef != "msg-pos" {
+			t.Fatalf("store leg %q hits = %+v, want only msg-pos", op, repStore.Hits)
+		}
 	}
 }
 

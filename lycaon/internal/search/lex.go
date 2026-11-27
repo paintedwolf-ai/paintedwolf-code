@@ -160,11 +160,12 @@ func readPunctRun(s string, i int) (punct string, next int) {
 }
 
 // isBareOperatorToken reports whether s is a recognized source-code punctuation
-// operator that should remain searchable when pasted without word terms, while
-// keeping arbitrary stray delimiters (such as "[", "{}", "!?+") rejected.
+// operator (composed of non-word punctuation runes) that should remain
+// searchable when pasted without word terms, while keeping arbitrary stray
+// delimiters (such as "[", "{}", "!?+") rejected.
 func isBareOperatorToken(s string) bool {
 	switch s {
-	case "==", "===", "!=", "!==", "<=", ">=", "::", ":=", "=>", "&&", "||", "??", "<<", ">>", "+=", "-=", "*=", "/=", "%=", "...":
+	case "==", "===", "!=", "!==", "<=", ">=", "::", ":=", "=>", "&&", "||", "??", "<<", ">>", "+=", "%=", "...":
 		return true
 	default:
 		return false
