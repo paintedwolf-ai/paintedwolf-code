@@ -99,7 +99,7 @@ if [[ "${OS_NAME}" == "Darwin" ]]; then
   TARGET_TRIPLE="aarch64-apple-darwin"
 fi
 
-HARNESS_REV="$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)"
+HARNESS_REV="${PW_PAIRED_HARNESS_REV:-$(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo unknown)}"
 if [[ -z "${PRODUCT_REV}" ]]; then
   PRODUCT_REV="${HARNESS_REV}"
 fi
