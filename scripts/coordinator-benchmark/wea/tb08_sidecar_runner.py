@@ -547,7 +547,6 @@ def run_tb08_sidecar_slots(
                 fam = slot["family"]
                 if fam not in session_by_family:
                     sid, _, _ = open_sess(app, project_dir)
-                    app.request("/harness/model-limit", {"session_id": sid, "limit": 120})
                     app.request(
                         f"/v1/sessions/{sid}/prompts",
                         {"operation_id": str(uuid.uuid4()), "text": f"TB08 sidecar family {fam} verification."},
