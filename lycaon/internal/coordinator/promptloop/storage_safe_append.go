@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -25,7 +26,21 @@ func (l *turnProjection) persistStorageSafeMessages(ctx context.Context, session
 	if l == nil || l.Deps.AppendMessages == nil {
 		return fmt.Errorf("append messages not configured")
 	}
-	return l.Deps.AppendMessages(ctx, sessionID, stored...)
+	if err := l.Deps.AppendMessages(ctx, sessionID, stored...); err != nil {
+		return err
+	}
+	for _, m := range stored {
+		if m.ToolResult != nil {
+			awaitstore.EmitPhaseRecord(ctx, awaitstore.PhaseRecord{
+				SessionID:  sessionID,
+				ToolCallID: m.ToolResult.ToolCallID,
+				Tool:       m.ToolResult.Tool,
+				Phase:      "transcript_result_commit",
+				Outcome:    string(m.ToolResult.Outcome),
+			})
+		}
+	}
+	return nil
 }
 
 func (l *turnProjection) appendMessage(ctx context.Context, sessionID string, msg api.Message) (api.Message, error) {

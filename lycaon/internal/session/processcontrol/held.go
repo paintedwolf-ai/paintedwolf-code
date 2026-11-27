@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -27,10 +29,20 @@ func (m *Service) HandleHeldCallSettled(sessionID, handle string) {
 		"held_call_outcome": string(status.Settled.Outcome),
 	}}
 	occID := "held_done:" + strings.TrimSpace(status.Handle)
+	publishedAt := time.Now().UTC()
 	m.processReports.publish(sessionID, handle, processReport{
 		occurrenceID: occID,
 		outcome:      string(status.Settled.Outcome),
 		digest:       digest,
+		publishedAt:  publishedAt,
+	})
+	awaitstore.EmitPhaseRecord(context.Background(), awaitstore.PhaseRecord{
+		SessionID:  sessionID,
+		Handle:     strings.TrimSpace(handle),
+		Tool:       status.Tool,
+		Phase:      "process_report_published",
+		Outcome:    string(status.Settled.Outcome),
+		RecordedAt: publishedAt,
 	})
 	if m.watches != nil {
 		_, _ = m.watches.RecordProcessDone(context.Background(), sessionID, watch.ProcessCompletionFact{
@@ -101,12 +113,20 @@ func (m *Service) HandleSubject(sessionID, handle string) string {
 	return ""
 }
 
-// HandlesRunning reports whether a listed handle of either kind still runs.
+// HandlesRunning reports whether a listed handle still runs or awaits report publication.
 func (m *Service) HandlesRunning(sessionID string, handles []string) bool {
 	if m == nil {
 		return false
 	}
-	return m.Background.HasRunningHandles(sessionID, handles) || m.Held.HasRunningHandles(sessionID, handles)
+	if m.Background.HasRunningHandles(sessionID, handles) || m.Held.HasRunningHandles(sessionID, handles) {
+		return true
+	}
+	for _, h := range bgprocess.DeliverableFinishedHandles(m.Background, sessionID, handles) {
+		if _, published := m.processReports.lookup(sessionID, h); !published {
+			return true
+		}
+	}
+	return false
 }
 
 // heldCallOutput describes a held call for a client that asks for its output.

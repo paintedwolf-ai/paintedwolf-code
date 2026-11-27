@@ -40,6 +40,7 @@ type WaitToolDeps struct {
 	ProfileConditions map[string]map[string]bool
 	SecretMatcher     *secretmatch.Matcher
 	RuntimeContext    context.Context
+	Clock             awaitstore.Clock
 	// WorkerKnown reports whether handle names a worker of the session, or a
 	// job of it that runs no worker round.
 	WorkerKnown func(ctx context.Context, sessionID, handle string) bool
@@ -73,10 +74,36 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 	if deps.Watches != nil {
 		loop.SetWatchStore(deps.Watches)
 	}
-	return reg.Register("wait", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
+	if deps.Clock.NowFunc != nil || deps.Clock.NewTimerFunc != nil {
+		loop.SetClock(deps.Clock)
+	}
+	return reg.Register("wait", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (outStr string, retErr error) {
+		startedAt := loop.clock().Now()
+		var retStatus, retLeaseID, retHandle string
+		defer func() {
+			now := loop.clock().Now()
+			if retStatus == "" && retErr != nil {
+				retStatus = "rejected"
+			}
+			awaitstore.EmitPhaseRecord(ctx, awaitstore.PhaseRecord{
+				SessionID:  tctx.Identity.SessionID,
+				ToolCallID: tctx.Identity.ToolCallID,
+				LeaseID:    retLeaseID,
+				Handle:     retHandle,
+				Tool:       "wait",
+				Phase:      "wait_handler_return",
+				Status:     retStatus,
+				DurationMS: now.Sub(startedAt).Milliseconds(),
+				RecordedAt: now,
+				Failed:     retErr != nil,
+			})
+		}()
 		request, err := prepareWaitRequest(ctx, loop, deps, args, tctx)
 		if err != nil {
 			return "", err
+		}
+		if len(request.ProcessHandles) == 1 {
+			retHandle = request.ProcessHandles[0]
 		}
 		if subject := processDisplaySubject(loop, tctx.Identity.SessionID, request.ProcessHandles); subject != "" {
 			tctx.SetDisplaySubject(subject)
@@ -89,6 +116,10 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 				Kind: "process_done", Handles: request.ProcessHandles,
 			})
 			if ready {
+				retStatus = "process_done"
+				if len(winner.Handles) > 0 {
+					retHandle = winner.Handles[0]
+				}
 				out, err := surveyjson.Marshal(WaitToolResult{Status: "process_done", Conditions: []awaitstore.Condition{winner}})
 				if err == nil {
 					ObserveProcessWait(tctx.Identity.SessionID, winner, loop.loopDeps().ObserveProcess)
@@ -114,6 +145,7 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 		pendingUserInput := loop.Facts.sessionHasPendingUserInput(ctx, tctx.Identity.SessionID)
 		if !batchClosed && !pendingUserInput && batchPhase != batch.PhasePreDispatch &&
 			waitSubscribesNextWorkerDone(triggers) && loop.Cycles.WorkerCycleIsIdle(ctx, tctx.Identity.SessionID) {
+			retStatus = "next_worker_done"
 			return waitAlreadySatisfied(
 				"next_worker_done",
 				"The dispatched workers have finished.",
@@ -121,6 +153,7 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 			)
 		}
 		if !batchClosed && !soloDurationWait && !pendingUserInput && waitSubscribesAllWorkersIdle(triggers) && loop.Cycles.WorkerCycleIsIdle(ctx, tctx.Identity.SessionID) {
+			retStatus = "all_workers_idle"
 			return waitAlreadySatisfied(
 				"all_workers_idle",
 				"No workers are pending or running.",
@@ -128,6 +161,7 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 			)
 		}
 		if !batchClosed && !pendingUserInput && waitSubscribesScanDone(triggers) && !loop.scanCycleOpen(ctx, tctx.Identity.SessionID) {
+			retStatus = "scan_done"
 			return waitAlreadySatisfied(
 				"scan_done",
 				"No security scans are pending or running for this project.",
@@ -135,6 +169,7 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 			)
 		}
 		if len(processHandles) == 0 && !batchClosed && !pendingUserInput && waitSubscribesProcessDone(triggers) && !loop.processCycleOpen(tctx.Identity.SessionID, processHandles) {
+			retStatus = "process_done"
 			return waitAlreadySatisfied(
 				"process_done",
 				"No selected commands are running for this session.",
@@ -142,7 +177,7 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 			)
 		}
 		until, resumed := loop.Waits.ResolveWaitUntil(ctx, tctx.Identity.SessionID, resume && !request.ExplicitMode, time.Duration(timeoutMS)*time.Millisecond)
-		if request.ResumeDeadline.After(time.Now().UTC()) {
+		if request.ResumeDeadline.After(loop.clock().Now()) {
 			until, resumed = request.ResumeDeadline, true
 		}
 		if pendingUserInput && args["timeout_ms"] == nil {
@@ -160,6 +195,8 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 			return "", err
 		}
 		leaseID := lease.ID
+		retStatus = "parked"
+		retLeaseID = leaseID
 		if deps.Store != nil {
 			monitorCtx := deps.RuntimeContext
 			if monitorCtx == nil {

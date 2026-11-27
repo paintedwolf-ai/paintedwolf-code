@@ -152,6 +152,33 @@ func (r *Registry) HasRunningHandles(sessionID string, handles []string) bool {
 	return false
 }
 
+// DeliverableFinishedHandles returns ended handles whose completion delivers to the session.
+func DeliverableFinishedHandles(r *Registry, sessionID string, handles []string) []string {
+	if r == nil {
+		return nil
+	}
+	wanted := make(map[string]struct{}, len(handles))
+	for _, handle := range handles {
+		if handle = strings.TrimSpace(handle); handle != "" {
+			wanted[handle] = struct{}{}
+		}
+	}
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
+	var out []string
+	for handle, proc := range r.jobs.ownedProcessesLocked(strings.TrimSpace(sessionID)) {
+		if len(wanted) > 0 {
+			if _, ok := wanted[handle]; !ok {
+				continue
+			}
+		}
+		if !proc.running && !proc.discarded && proc.hasExit && proc.reason.DeliversToSession() {
+			out = append(out, handle)
+		}
+	}
+	return out
+}
+
 // RawOutput is unscreened retained output read from a byte offset.
 type RawOutput struct {
 	Handle string
