@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import pathlib
 import re
 import sqlite3
@@ -59,17 +60,68 @@ def _init_git_repo(project_dir: pathlib.Path) -> None:
     subprocess.run(["git", "commit", "-q", "-m", "initial fixture"], cwd=str(project_dir), check=True)
 
 
-def _create_application(app_dir: pathlib.Path, engine_bin: str | pathlib.Path | None = None):
+def _resolve_engine_root(
+    *,
+    engine_manifest: str | pathlib.Path | None = None,
+    engine_root: str | pathlib.Path | None = None,
+) -> pathlib.Path | None:
+    """Resolve a staged LYCAON_ENGINE_ROOT from CLI arg, env, or TB01 build-manifest worktree."""
+    if engine_root:
+        p = pathlib.Path(engine_root).resolve()
+        if p.is_dir():
+            return p
+    env_root = os.environ.get("LYCAON_ENGINE_ROOT", "").strip()
+    if env_root:
+        p = pathlib.Path(env_root).resolve()
+        if p.is_dir():
+            return p
+    if engine_manifest:
+        mp = pathlib.Path(engine_manifest).resolve()
+        if mp.is_file():
+            try:
+                data = json.loads(mp.read_text(encoding="utf-8"))
+                builds = data.get("builds") if isinstance(data, dict) else None
+                if isinstance(builds, dict):
+                    pb = builds.get("product_baseline") or next(iter(builds.values()), None)
+                    wt = pb.get("worktree") if isinstance(pb, dict) else None
+                    if wt:
+                        cand = pathlib.Path(wt) / "lycaon-den" / "src-tauri" / "engine-root"
+                        if cand.is_dir():
+                            return cand.resolve()
+            except (OSError, ValueError):
+                pass
+    default_root = REPO_ROOT / "lycaon-den" / "src-tauri" / "engine-root"
+    return default_root.resolve() if default_root.is_dir() else None
+
+
+def _create_application(
+    app_dir: pathlib.Path,
+    engine_bin: str | pathlib.Path | None = None,
+    *,
+    engine_manifest: str | pathlib.Path | None = None,
+    engine_root: str | pathlib.Path | None = None,
+):
     """Instantiate smoke.Application strictly in isolated manual mode (source_config=None)."""
     import smoke
 
     binary, _ = resolve_engine_binary(REPO_ROOT, engine_bin)
-    orig = smoke.engine_path
+    resolved_engine_root = _resolve_engine_root(engine_manifest=engine_manifest, engine_root=engine_root)
+    orig_engine = smoke.engine_path
+    orig_env_fn = smoke.application_environment
     smoke.engine_path = lambda _root: binary
+
+    def _wrapped_env(overrides):
+        merged = dict(overrides)
+        if resolved_engine_root is not None:
+            merged["LYCAON_ENGINE_ROOT"] = str(resolved_engine_root)
+        return orig_env_fn(merged)
+
+    smoke.application_environment = _wrapped_env
     try:
         return smoke.Application(app_dir, source_config=None)
     finally:
-        smoke.engine_path = orig
+        smoke.engine_path = orig_engine
+        smoke.application_environment = orig_env_fn
 
 
 def _open_session(app: Any, project_dir: pathlib.Path, *, posture: str = "build") -> tuple[str, str, str]:
@@ -488,15 +540,16 @@ def _ctrl_workers(
     *,
     engine_bin: str | pathlib.Path | None = None,
     engine_manifest: str | pathlib.Path | None = None,
+    engine_root: str | pathlib.Path | None = None,
     project_dir: pathlib.Path | None = None,
     export_dir: pathlib.Path | None = None,
 ) -> dict[str, Any]:
-    """Per-track control 1: update_progress -> task dispatch -> child worker edit -> promote_overlay."""
+    """Per-track control 1: update_progress -> task dispatch -> child worker native edit -> promote_overlay."""
     run_id = f"ctrl-workers-{uuid.uuid4().hex[:8]}"
     canaries = CanaryGenerator(run_id)
     canary_val = canaries.mint("workers")
     fixture_files = {"worker_target.txt": "baseline line\n"}
-    expected_content = "baseline line\nworker landed line\n"
+    expected_content = "worker landed line\n"
     expected_post_hashes = {"worker_target.txt": sha256_bytes(expected_content.encode("utf-8"))}
 
     proj = project_dir or (out_dir / "project")
@@ -513,7 +566,7 @@ def _ctrl_workers(
     app_dir = out_dir / "app"
     canaries.materialize_env_file(out_dir / "isolated-canaries", {"WEA_CTRL_CANARY": canary_val})
     prov = collect_provenance(REPO_ROOT, engine_bin=engine_bin, engine_manifest=engine_manifest, lane="sidecar")
-    app = _create_application(app_dir, engine_bin=engine_bin)
+    app = _create_application(app_dir, engine_bin=engine_bin, engine_manifest=engine_manifest, engine_root=engine_root)
     session_id = ""
     next_input: dict[str, Any] = {}
     job_id = ""
@@ -556,24 +609,33 @@ def _ctrl_workers(
         if not job_id:
             raise RuntimeError(f"task did not return a job_id: {task_res}")
 
-        # 2. Drive the real child worker session's model turns until the worker job settles.
+        # 2. Drive the real child worker session's model turns until the worker job settles (fail-fast on error).
         def _child_session_id() -> str | None:
             with contextlib.closing(sqlite3.connect((app_dir / "store.db").resolve().as_uri() + "?mode=ro", uri=True)) as db:
-                row = db.execute("SELECT child_session_id FROM worker_jobs WHERE id=?", (job_id,)).fetchone()
-            return str(row[0]) if row and row[0] else None
+                row = db.execute(
+                    "SELECT child_session_id, status, error, failure_json FROM worker_jobs WHERE id=?",
+                    (job_id,),
+                ).fetchone()
+            if not row:
+                return None
+            if row[1] in {"failed", "canceled", "aborted"}:
+                raise RuntimeError(f"worker job {job_id} ended in {row[1]}: error={row[2]!r} failure={row[3]!r}")
+            return str(row[0]) if row[0] else None
 
         child_sid = app.wait_for(_child_session_id, "worker child session id", session_id)
-        child_req = _wait_pending(app, child_sid)
-        child_tools = set(child_req.get("tools") or ())
-        if "write" in child_tools:
-            _send_tool_call(app, child_sid, "write", {"path": "worker_target.txt", "content": expected_content})
-        else:
-            _send_tool_call(
-                app,
-                child_sid,
-                "command",
-                {"command": "python3 -B -c \"from pathlib import Path; Path('worker_target.txt').write_text('baseline line\\nworker landed line\\n')\""},
-            )
+        # Native command `edit` operation (D14) — records genuine agent/worker attribution.
+        _send_tool_call(
+            app,
+            child_sid,
+            "command",
+            {"command": "cat worker_target.txt"},
+        )
+        _send_tool_call(
+            app,
+            child_sid,
+            "command",
+            {"command": 'edit --path worker_target.txt --old-string "baseline line" --new-string "worker landed line"'},
+        )
         child_done = _wait_pending(app, child_sid)
         if "complete_leg" in (child_done.get("tools") or ()):
             _send_tool_call(
@@ -587,8 +649,15 @@ def _ctrl_workers(
 
         def _worker_settled() -> bool:
             with contextlib.closing(sqlite3.connect((app_dir / "store.db").resolve().as_uri() + "?mode=ro", uri=True)) as db:
-                row = db.execute("SELECT status, merge_status FROM worker_jobs WHERE id=?", (job_id,)).fetchone()
-            return bool(row and row[0] == "complete")
+                row = db.execute(
+                    "SELECT status, merge_status, error, failure_json FROM worker_jobs WHERE id=?",
+                    (job_id,),
+                ).fetchone()
+            if not row:
+                return False
+            if row[0] in {"failed", "canceled", "aborted"}:
+                raise RuntimeError(f"worker job {job_id} ended in {row[0]}: error={row[2]!r} failure={row[3]!r}")
+            return row[0] == "complete"
 
         app.wait_for(_worker_settled, "worker job settled", session_id)
 
@@ -652,15 +721,16 @@ def _ctrl_edits(
     *,
     engine_bin: str | pathlib.Path | None = None,
     engine_manifest: str | pathlib.Path | None = None,
+    engine_root: str | pathlib.Path | None = None,
     project_dir: pathlib.Path | None = None,
     export_dir: pathlib.Path | None = None,
 ) -> dict[str, Any]:
-    """Per-track control 2: read via active route + independent pre-write disk hash + edit + DB verification."""
+    """Per-track control 2: read + native command `edit` + independent pre-write disk hash + DB verification."""
     run_id = f"ctrl-edits-{uuid.uuid4().hex[:8]}"
     canaries = CanaryGenerator(run_id)
     canary_val = canaries.mint("edits")
     fixture_files = {"notes.txt": "alpha\nbeta\n"}
-    expected_after = "alpha\nbeta\ngamma\n"
+    expected_after = "alpha\nBETA\n"
     expected_after_sha = sha256_bytes(expected_after.encode("utf-8"))
 
     proj = project_dir or (out_dir / "project")
@@ -673,7 +743,7 @@ def _ctrl_edits(
     app_dir = out_dir / "app"
     canaries.materialize_env_file(out_dir / "isolated-canaries", {"WEA_CTRL_CANARY": canary_val})
     prov = collect_provenance(REPO_ROOT, engine_bin=engine_bin, engine_manifest=engine_manifest, lane="sidecar")
-    app = _create_application(app_dir, engine_bin=engine_bin)
+    app = _create_application(app_dir, engine_bin=engine_bin, engine_manifest=engine_manifest, engine_root=engine_root)
     session_id = ""
     open_docs: dict[str, Any] = {}
     read_result: dict[str, Any] = {}
@@ -687,28 +757,26 @@ def _ctrl_edits(
 
         app.request(
             f"/v1/sessions/{session_id}/prompts",
-            {"operation_id": str(uuid.uuid4()), "text": "Read notes.txt and append gamma."},
+            {"operation_id": str(uuid.uuid4()), "text": "Read notes.txt and replace beta with BETA."},
         )
-        first_req = _wait_pending(app, session_id)
-        offered = set(first_req.get("tools") or ())
-        if "read" in offered:
-            _, read_result, _ = _send_tool_call(app, session_id, "read", {"path": "notes.txt"})
-        else:
-            _, read_result, _ = _send_tool_call(app, session_id, "command", {"command": "cat notes.txt"})
+        # Establish progress checklist, read via native command `cat`, then mutate via native command `edit` (D14).
+        _send_tool_call(
+            app,
+            session_id,
+            "update_progress",
+            {"content": "## Progress\n- [ ] Read and edit notes.txt\n"},
+        )
+        _, read_result, _ = _send_tool_call(app, session_id, "command", {"command": "cat notes.txt"})
 
-        # Independently capture the host-side disk hash immediately before the write.
+        # Independently capture the host-side disk hash immediately before the native edit.
         disk_sha_before_write = str(hash_file(proj / "notes.txt").get("sha256") or "")
 
-        next_req = _wait_pending(app, session_id)
-        if "write" in (next_req.get("tools") or ()):
-            _, write_result, _ = _send_tool_call(app, session_id, "write", {"path": "notes.txt", "content": expected_after})
-        else:
-            _, write_result, _ = _send_tool_call(
-                app,
-                session_id,
-                "command",
-                {"command": "python3 -B -c \"from pathlib import Path; Path('notes.txt').write_text('alpha\\nbeta\\ngamma\\n')\""},
-            )
+        _, write_result, _ = _send_tool_call(
+            app,
+            session_id,
+            "command",
+            {"command": "edit --path notes.txt --old-string beta --new-string BETA"},
+        )
 
         with contextlib.suppress(Exception):
             open_docs["notes.txt"] = app.request(
@@ -778,6 +846,7 @@ def _ctrl_authority(
     *,
     engine_bin: str | pathlib.Path | None = None,
     engine_manifest: str | pathlib.Path | None = None,
+    engine_root: str | pathlib.Path | None = None,
     project_dir: pathlib.Path | None = None,
     export_dir: pathlib.Path | None = None,
 ) -> dict[str, Any]:
@@ -819,7 +888,7 @@ def _ctrl_authority(
         RecordingHTTPFixture(fixture_id="allowed-endpoint", redact_tokens=tuple(canaries.tokens)) as allowed_ep,
         RecordingHTTPFixture(fixture_id="refused-endpoint", redact_tokens=tuple(canaries.tokens)) as refused_ep,
     ):
-        app = _create_application(app_dir, engine_bin=engine_bin)
+        app = _create_application(app_dir, engine_bin=engine_bin, engine_manifest=engine_manifest, engine_root=engine_root)
         engine_pid = app.process.pid
         try:
             app.ready()
@@ -967,6 +1036,7 @@ def run_track_control(
     *,
     engine_bin: str | pathlib.Path | None = None,
     engine_manifest: str | pathlib.Path | None = None,
+    engine_root: str | pathlib.Path | None = None,
     project_dir: pathlib.Path | None = None,
     export_dir: pathlib.Path | None = None,
     replay_bundle: dict[str, Any] | None = None,  # noqa: ARG001
@@ -974,9 +1044,9 @@ def run_track_control(
     out = pathlib.Path(out_dir).resolve()
     out.mkdir(parents=True, exist_ok=True)
     if track == "workers":
-        return _ctrl_workers(out, engine_bin=engine_bin, engine_manifest=engine_manifest, project_dir=project_dir, export_dir=export_dir)
+        return _ctrl_workers(out, engine_bin=engine_bin, engine_manifest=engine_manifest, engine_root=engine_root, project_dir=project_dir, export_dir=export_dir)
     if track == "edits":
-        return _ctrl_edits(out, engine_bin=engine_bin, engine_manifest=engine_manifest, project_dir=project_dir, export_dir=export_dir)
+        return _ctrl_edits(out, engine_bin=engine_bin, engine_manifest=engine_manifest, engine_root=engine_root, project_dir=project_dir, export_dir=export_dir)
     if track == "authority":
-        return _ctrl_authority(out, engine_bin=engine_bin, engine_manifest=engine_manifest, project_dir=project_dir, export_dir=export_dir)
+        return _ctrl_authority(out, engine_bin=engine_bin, engine_manifest=engine_manifest, engine_root=engine_root, project_dir=project_dir, export_dir=export_dir)
     raise ValueError(f"unknown track: {track}")

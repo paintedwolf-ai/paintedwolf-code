@@ -27,6 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--engine", type=pathlib.Path, default=None, help="Path to pinned product lycaon-dev binary.")
     parser.add_argument("--engine-manifest", type=pathlib.Path, default=None, help="Path to engine build manifest JSON.")
+    parser.add_argument("--engine-root", type=pathlib.Path, default=None, help="Path to staged LYCAON_ENGINE_ROOT directory.")
 
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -84,6 +85,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.out / tr,
                 engine_bin=args.engine,
                 engine_manifest=args.engine_manifest,
+                engine_root=args.engine_root,
                 export_dir=export_sub,
             )
             results[tr] = res["checker"]
