@@ -198,6 +198,36 @@ func TestLoadDoesNotFollowSymlinkedFiles(t *testing.T) {
 	}
 }
 
+func TestGoCorpusSubReusesParsedASTs(t *testing.T) {
+	root := fixtureTree(t)
+	full, err := testcorpus.LoadGo(root, testcorpus.Options{}, parser.ParseComments|parser.SkipObjectResolution)
+	testutil.FailErr(t, "load full Go corpus", err)
+
+	same, err := full.Sub(root)
+	testutil.FailErr(t, "sub self", err)
+	if same != full {
+		t.Fatal("Sub(root) did not return the original corpus")
+	}
+
+	nestedDir := filepath.Join(root, "nested")
+	sub, err := full.Sub(nestedDir)
+	testutil.FailErr(t, "sub nested", err)
+	if sub.Fset != full.Fset {
+		t.Fatal("Sub did not reuse parent FileSet")
+	}
+	files := sub.Files()
+	if len(files) != 1 || files[0].Rel != "b_test.go" {
+		t.Fatalf("Sub files = %+v, want [b_test.go]", files)
+	}
+	if files[0].AST != full.Under("nested")[0].AST {
+		t.Fatal("Sub did not reuse parent AST pointer")
+	}
+
+	if _, err := full.Sub(t.TempDir()); err == nil {
+		t.Fatal("Sub accepted directory outside corpus root")
+	}
+}
+
 func fixtureTree(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
