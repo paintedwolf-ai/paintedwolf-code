@@ -24,7 +24,6 @@ func wireWatchProducers(b *serveBuilder, watchStore *watch.Store) {
 		return lookupCoordinatorWatchState(b, ctx, sessionID)
 	})
 
-	wireProcessOutputWatchProducer(b, watchStore)
 	unsubRepo := repochange.RegisterObserver(func(ctx context.Context, ev repochange.Event) {
 		if ev.Kind == repochange.HeadMoved || ev.Kind == repochange.WorktreeChanged {
 			_ = watchStore.NotifyWorkspaceChange(ctx, "", ev.ProjectDir)
