@@ -365,9 +365,11 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
         '[data-testid="files-tree-pane"] [role="status"], [data-testid="source-watch-notice"], [data-testid="files-tree-coverage-note"], [data-testid="review-inventory-status"]',
       )
       .first();
-    const treeNoticeText = (await treeNoticeLocator.textContent().catch(() => ""))?.trim() ?? "";
-    const treeNoticeVisible =
-      (await treeNoticeLocator.isVisible().catch(() => false)) && treeNoticeText.length > 0;
+    const treeNoticePresent = await treeNoticeLocator.isVisible({ timeout: 1000 }).catch(() => false);
+    const treeNoticeText = treeNoticePresent
+      ? ((await treeNoticeLocator.textContent({ timeout: 1000 }).catch(() => ""))?.trim() ?? "")
+      : "";
+    const treeNoticeVisible = treeNoticePresent && treeNoticeText.length > 0;
     const treeFilterEmpty = await page.getByTestId("files-tree-filter-empty").isVisible().catch(() => false);
     const filesShot = path.join(outDir, `macos_files_tree_${state}.png`);
     await page.screenshot({ path: filesShot });
