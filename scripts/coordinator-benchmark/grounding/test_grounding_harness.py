@@ -778,11 +778,11 @@ class TestSelectorsManifest(unittest.TestCase):
     def test_manifest_counts_and_coverage(self) -> None:
         summary = validate_manifest()
         self.assertEqual(summary["total_families"], 30)
-        self.assertEqual(summary["fixed_sidecar_slots"], 171)
+        self.assertEqual(summary["fixed_sidecar_slots"], 173)
         self.assertEqual(summary["fixed_in_process_slots"], 30)
-        self.assertEqual(summary["fixed_base_slots"], 201)
-        self.assertEqual(summary["fixed_tripled_per_platform"], 431)
-        self.assertEqual(summary["fixed_both_platforms"], 862)
+        self.assertEqual(summary["fixed_base_slots"], 203)
+        self.assertEqual(summary["fixed_tripled_per_platform"], 435)
+        self.assertEqual(summary["fixed_both_platforms"], 870)
         self.assertEqual(summary["generated_per_platform_per_seed"], 23700)
         self.assertEqual(len(PREFLIGHT_COVERAGE_ROWS), 7)
         self.assertEqual({f.finding_id for f in GB01_FINDINGS}, {"F1", "F2", "F3"})
@@ -1433,8 +1433,7 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
             (workspace / "sample.go").write_text(sample_source, encoding="utf-8")
             sample_source_sha = hashlib.sha256(sample_source.encode("utf-8")).hexdigest()
             delivered_body = "[read#1 sample.go:1-3]\n1: package sample\n2: \n3: func Hello() {}\n"
-            read_numbered_body = "1\tpackage sample\n2\t\n3\tfunc Hello() {}\n"
-            body_sha = hashlib.sha256(read_numbered_body.encode("utf-8")).hexdigest()
+            body_sha = sample_source_sha
 
             db_path = tmp_path / "store.db"
             with contextlib.closing(sqlite3.connect(db_path)) as conn:

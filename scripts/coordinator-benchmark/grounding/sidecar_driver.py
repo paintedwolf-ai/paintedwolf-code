@@ -630,32 +630,78 @@ def _decompress_zstd(data: bytes) -> bytes | None:
     return None
 
 
-def _read_content_blob_plaintext(db_file: pathlib.Path, sha: str) -> bytes | None:
-    """Locate and decompress a D1 `model-content/<sha[:2]>/<sha[2:]>` blob if present."""
+def _read_content_blob_plaintext(
+    db_file: pathlib.Path, sha: str, *, project_id: str = ""
+) -> bytes | None:
+    """Locate and decompress a D1 `projects/<project_id>/model-content/<sha[:2]>/<sha[2:]>` blob."""
     if len(sha) != 64:
         return None
     base_dir = db_file.parent
-    matches = list(base_dir.glob(f"**/model-content/{sha[:2]}/{sha[2:]}"))
-    if not matches:
+    candidates: list[pathlib.Path] = []
+    if project_id:
+        direct = base_dir / "projects" / project_id / "model-content" / sha[:2] / sha[2:]
+        if direct.is_file():
+            candidates.append(direct)
+    if not candidates:
+        candidates = list(base_dir.glob(f"projects/*/model-content/{sha[:2]}/{sha[2:]}"))
+    if not candidates:
+        candidates = list(base_dir.glob(f"**/model-content/{sha[:2]}/{sha[2:]}"))
+    if not candidates:
         return None
-    raw = matches[0].read_bytes()
+    raw = candidates[0].read_bytes()
     decompressed = _decompress_zstd(raw)
     return decompressed if decompressed is not None else raw
 
 
 def _decode_evidence_body_bytes(blob_plaintext: bytes) -> bytes:
-    """Convert D1 `json.Marshal(rec.Body)` (`[]string` or JSON string) to newline-delimited bytes."""
+    """Convert D1 `json.Marshal(rec.Body)` (`[]string` or JSON string) to raw bytes."""
     try:
         parsed = json.loads(blob_plaintext.decode("utf-8"))
         if isinstance(parsed, list) and all(isinstance(x, str) for x in parsed):
             if not parsed:
                 return b""
+            if len(parsed) == 1:
+                return parsed[0].encode("utf-8")
             return ("\n".join(parsed) + "\n").encode("utf-8")
         if isinstance(parsed, str):
             return parsed.encode("utf-8")
     except (UnicodeDecodeError, ValueError):
         pass
     return blob_plaintext
+
+
+def _strip_leading_delivery_tags(text: str) -> str:
+    """Strip leading host-issued delivery tag lines (e.g. `[read#1 ...]`, `[command#1]`)."""
+    lines = text.splitlines(keepends=True)
+    idx = 0
+    while idx < len(lines) and _DELIVERY_TAG_RE.fullmatch(lines[idx].strip()):
+        idx += 1
+    return "".join(lines[idx:])
+
+
+def _format_independent_command_body(delivered_text: str) -> bytes:
+    """Derive independent command#1 body from delivered tool_result.content.
+
+    Strips leading delivery tags to obtain the JSON envelope and formats the
+    canonical program observation body (`program_id`, `state`, optional
+    `status_code`, blank line, JSON body).
+    """
+    stripped = _strip_leading_delivery_tags(delivered_text)
+    try:
+        envelope = json.loads(stripped)
+    except (TypeError, ValueError):
+        return delivered_text.encode("utf-8")
+    if not isinstance(envelope, Mapping) or not envelope.get("program_id"):
+        return delivered_text.encode("utf-8")
+    prog_id = str(envelope["program_id"])
+    state = str(envelope.get("state") or "")
+    header = f"program_id: {prog_id}\nstate: {state}"
+    status_code = envelope.get("status_code")
+    if status_code is None:
+        status_code = envelope.get("status")
+    if isinstance(status_code, int) and not isinstance(status_code, bool):
+        header += f"\nstatus_code: {status_code}"
+    return f"{header}\n\n{stripped}".encode("utf-8")
 
 
 def extract_product_observations(
@@ -709,13 +755,25 @@ def extract_product_observations(
                     except (TypeError, ValueError):
                         pass
                 marks_untrusted = int(row["marks_untrusted"]) if "marks_untrusted" in cols else 0
+                project_id = str(row["project_id"]) if "project_id" in cols else ""
                 blob_sha = str(row["content_blob_sha256"]) if "content_blob_sha256" in cols else ""
                 decoded_raw: bytes | None = None
                 effective_sha = blob_sha
                 if blob_sha:
-                    blob_plain = _read_content_blob_plaintext(db_file, blob_sha)
+                    blob_plain = _read_content_blob_plaintext(db_file, blob_sha, project_id=project_id)
                     if blob_plain is not None:
                         decoded_raw = _decode_evidence_body_bytes(blob_plain)
+                        # For file_region `read` records whose blob stores numbered lines,
+                        # verify unnumbered source lines match `source_delivery.source.SHA256`.
+                        if str(row["kind"]) == "read" and source_rev:
+                            raw_lines = decoded_raw.decode("utf-8", errors="replace").splitlines()
+                            unnumbered = [
+                                _NUMBERED_LINE_RE.match(ln).group("rest") if _NUMBERED_LINE_RE.match(ln) else ln  # type: ignore[union-attr]
+                                for ln in raw_lines
+                            ]
+                            unnum_bytes = ("\n".join(unnumbered) + "\n").encode("utf-8")
+                            if hashlib.sha256(unnum_bytes).hexdigest() == source_rev:
+                                decoded_raw = unnum_bytes
                         effective_sha = hashlib.sha256(decoded_raw).hexdigest()
                 records.append(
                     ProductRecord(
@@ -996,7 +1054,7 @@ def run_scripted_session(
                 if kind == "command":
                     rec_shape = "command"
                     ranges, line_numbered, printed_other = ((), False, False)
-                    rec_bytes = delivered_text.encode("utf-8")
+                    rec_bytes = _format_independent_command_body(delivered_text)
                     rec_source_rev = source_revision
                 else:
                     rec_shape = "file_region" if handle_path else ""
@@ -1006,19 +1064,20 @@ def run_scripted_session(
                         delivery_tags=handle_tags,
                         fixture_file=fixture_file,
                     )
-                    # Attribute source_revision from fixture bytes if available
+                    # Attribute exact fixture file bytes covered by the delivered range
                     if fixture_file is not None and fixture_file.is_file():
-                        rec_source_rev = hashlib.sha256(fixture_file.read_bytes()).hexdigest()
+                        file_bytes = fixture_file.read_bytes()
+                        rec_source_rev = hashlib.sha256(file_bytes).hexdigest()
                         if ranges:
-                            f_lines = fixture_file.read_text(encoding="utf-8", errors="replace").splitlines()
-                            numbered_lines = [
-                                f"{ln_no}\t{f_lines[ln_no - 1]}"
+                            f_lines = file_bytes.decode("utf-8", errors="replace").splitlines(keepends=True)
+                            selected = [
+                                f_lines[ln_no - 1]
                                 for rng in ranges
                                 for ln_no in range(rng.start, min(rng.end, len(f_lines)) + 1)
                             ]
-                            rec_bytes = ("\n".join(numbered_lines) + "\n").encode("utf-8")
+                            rec_bytes = "".join(selected).encode("utf-8")
                         else:
-                            rec_bytes = delivered_text.encode("utf-8")
+                            rec_bytes = file_bytes
                     else:
                         rec_source_rev = source_revision
                         rec_bytes = delivered_text.encode("utf-8")

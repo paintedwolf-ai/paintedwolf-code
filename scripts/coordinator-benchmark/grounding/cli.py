@@ -10,7 +10,13 @@ from typing import Sequence
 
 from .friction_probe import friction_observability_report
 from .generators import generate_r06, generate_r07
-from .inprocess_driver import D1_EXPECTED_COMMIT, D1_EXPECTED_TREE, InProcessPlan, run_inprocess_plan
+from .inprocess_driver import (
+    D1_EXPECTED_COMMIT,
+    D1_EXPECTED_TREE,
+    InProcessPlan,
+    run_inprocess_plan,
+    write_test_overlay,
+)
 from .reference_resolver import Citation, resolve_citation
 from .selectors import validate_manifest
 from .shrinker import ShrunkArtifact
@@ -206,11 +212,29 @@ def _cmd_controls(args: argparse.Namespace) -> int:
 
 def _cmd_inprocess(args: argparse.Namespace) -> int:
     product_root = pathlib.Path(args.product_root).resolve()
+    overlay_path = pathlib.Path(args.overlay).resolve() if args.overlay else None
+    packages = tuple(args.packages) if args.packages else InProcessPlan(product_root).packages
+    run_pattern = args.run_pattern or ""
+
+    if args.controls_overlay:
+        template = pathlib.Path(__file__).resolve().parent / "overlays" / "gb02_controls_test.go"
+        tmp_dir = pathlib.Path(tempfile.mkdtemp(prefix="gb02-inprocess-overlay-"))
+        target_virtual = str(product_root / "lycaon" / "internal" / "grounding" / "gb02_controls_test.go")
+        overlay_path = write_test_overlay(
+            tmp_dir / "overlay.json",
+            {target_virtual: str(template)},
+            product_root=product_root,
+        )
+        if not args.packages:
+            packages = ("./internal/grounding/...",)
+        if not run_pattern:
+            run_pattern = "TestGB02InProcessControls"
+
     plan = InProcessPlan(
         product_root=product_root,
-        packages=tuple(args.packages) if args.packages else InProcessPlan(product_root).packages,
-        run_pattern=args.run_pattern or "",
-        overlay_path=pathlib.Path(args.overlay).resolve() if args.overlay else None,
+        packages=packages,
+        run_pattern=run_pattern,
+        overlay_path=overlay_path,
         expected_commit=args.expected_commit,
         expected_tree=args.expected_tree,
     )
@@ -254,6 +278,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_inp.add_argument("--expected-tree", default=D1_EXPECTED_TREE, help="Expected D1 tree OID")
     p_inp.add_argument("--run-pattern", default="", help="Optional go test -run regex")
     p_inp.add_argument("--overlay", default="", help="Optional test-only (*_test.go) Go -overlay JSON path")
+    p_inp.add_argument("--controls-overlay", action="store_true", help="Attach the built-in test-only GB02 in-process controls overlay")
     p_inp.add_argument("--packages", nargs="*", default=[], help="Go package patterns to test")
     p_inp.add_argument("--dry-run", action="store_true", help="Verify D1 identity and print command without executing")
     p_inp.set_defaults(func=_cmd_inprocess)
