@@ -14,6 +14,8 @@ import (
 	"github.com/lycaon/lycaon/internal/pythonadmission"
 	"github.com/lycaon/lycaon/internal/pythondocuments"
 	"github.com/lycaon/lycaon/internal/pythonruntime"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
 func requireLiveNativeEngineEnv(t *testing.T) (imageDir, engineDir string) {
@@ -66,6 +68,7 @@ func TestNativeEngineLiveExecutionPolicyFuelAndCancel(t *testing.T) {
 		t.Fatal(err)
 	}
 	roots := []pythondocuments.HostRootConfig{{ID: "ws", Dir: ws}}
+	door := native.NewPythonMutationDoor(tools.ToolContext{}, roots)
 	allowAll := func(_ context.Context, _ pythonruntime.ReachedOperation) pythonadmission.PolicyDecision {
 		return pythonadmission.PolicyDecision{Kind: pythonruntime.DecisionAllow}
 	}
@@ -91,11 +94,12 @@ print(f"OK:{sys.version_info.major}.{sys.version_info.minor}:rows={ws2.max_row}"
 	for _, label := range []string{"cold", "warm"} {
 		t0 := time.Now()
 		res, err := svc.ExecuteTool(ctx, portablepython.ToolRequest{
-			ExecutionID: "native-wb-" + label,
-			Mode:        pythonruntime.ModeCode,
-			Code:        workbookCode,
-			Roots:       roots,
-			Policy:      allowAll,
+			ExecutionID:  "native-wb-" + label,
+			Mode:         pythonruntime.ModeCode,
+			Code:         workbookCode,
+			Roots:        roots,
+			MutationDoor: door,
+			Policy:       allowAll,
 		})
 		elapsed := time.Since(t0)
 		if err != nil {
