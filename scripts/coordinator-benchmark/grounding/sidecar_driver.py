@@ -608,6 +608,56 @@ class IsolatedSidecarProcess:
         self.stop()
 
 
+def _decompress_zstd(data: bytes) -> bytes | None:
+    """Decompress zstd content blob using Python 3.14+ stdlib or `zstd` CLI if available."""
+    try:
+        from compression import zstd as _std_zstd  # type: ignore[import-not-found]
+        return _std_zstd.decompress(data)
+    except Exception:
+        pass
+    try:
+        proc = subprocess.run(
+            ["zstd", "-dc"],
+            input=data,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        if proc.returncode == 0:
+            return proc.stdout
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return None
+
+
+def _read_content_blob_plaintext(db_file: pathlib.Path, sha: str) -> bytes | None:
+    """Locate and decompress a D1 `model-content/<sha[:2]>/<sha[2:]>` blob if present."""
+    if len(sha) != 64:
+        return None
+    base_dir = db_file.parent
+    matches = list(base_dir.glob(f"**/model-content/{sha[:2]}/{sha[2:]}"))
+    if not matches:
+        return None
+    raw = matches[0].read_bytes()
+    decompressed = _decompress_zstd(raw)
+    return decompressed if decompressed is not None else raw
+
+
+def _decode_evidence_body_bytes(blob_plaintext: bytes) -> bytes:
+    """Convert D1 `json.Marshal(rec.Body)` (`[]string` or JSON string) to newline-delimited bytes."""
+    try:
+        parsed = json.loads(blob_plaintext.decode("utf-8"))
+        if isinstance(parsed, list) and all(isinstance(x, str) for x in parsed):
+            if not parsed:
+                return b""
+            return ("\n".join(parsed) + "\n").encode("utf-8")
+        if isinstance(parsed, str):
+            return parsed.encode("utf-8")
+    except (UnicodeDecodeError, ValueError):
+        pass
+    return blob_plaintext
+
+
 def extract_product_observations(
     db_path: str | pathlib.Path,
     session_id: str,
@@ -638,6 +688,7 @@ def extract_product_observations(
             ).fetchall()
             for row in rows:
                 ranges: list[LineRange] = []
+                source_rev = str(row["source_revision"]) if "source_revision" in cols else ""
                 lr_raw = row["line_ranges"] if "line_ranges" in cols else ""
                 if lr_raw:
                     try:
@@ -646,23 +697,36 @@ def extract_product_observations(
                             if isinstance(rng, Mapping) and "start" in rng and "end" in rng:
                                 ranges.append(LineRange(int(rng["start"]), int(rng["end"])))
                         sd = lr_obj.get("source_delivery")
-                        if not ranges and isinstance(sd, Mapping):
-                            sl = sd.get("start_line")
-                            el = sd.get("end_line")
-                            if isinstance(sl, int) and isinstance(el, int) and sl >= 1 and el >= sl:
-                                ranges.append(LineRange(sl, el))
+                        if isinstance(sd, Mapping):
+                            if not ranges:
+                                sl = sd.get("start_line")
+                                el = sd.get("end_line")
+                                if isinstance(sl, int) and isinstance(el, int) and sl >= 1 and el >= sl:
+                                    ranges.append(LineRange(sl, el))
+                            src = sd.get("source")
+                            if not source_rev and isinstance(src, Mapping) and src.get("SHA256"):
+                                source_rev = str(src["SHA256"])
                     except (TypeError, ValueError):
                         pass
                 marks_untrusted = int(row["marks_untrusted"]) if "marks_untrusted" in cols else 0
+                blob_sha = str(row["content_blob_sha256"]) if "content_blob_sha256" in cols else ""
+                decoded_raw: bytes | None = None
+                effective_sha = blob_sha
+                if blob_sha:
+                    blob_plain = _read_content_blob_plaintext(db_file, blob_sha)
+                    if blob_plain is not None:
+                        decoded_raw = _decode_evidence_body_bytes(blob_plain)
+                        effective_sha = hashlib.sha256(decoded_raw).hexdigest()
                 records.append(
                     ProductRecord(
                         handle=str(row["handle"]),
                         kind=str(row["kind"]),
                         session_id=str(row["session_id"]),
                         worker_leg=str(row["worker_leg"]) if "worker_leg" in cols else "",
-                        source_revision=str(row["source_revision"]) if "source_revision" in cols else "",
+                        source_revision=source_rev,
                         delivered_ranges=tuple(ranges),
-                        body_sha256=str(row["content_blob_sha256"]) if "content_blob_sha256" in cols else "",
+                        body_sha256=effective_sha,
+                        raw_bytes=decoded_raw,
                         path=str(row["path"]) if "path" in cols else "",
                         url=str(row["url"]) if "url" in cols else "",
                         shape=str(row["shape"]) if "shape" in cols else "",
@@ -695,12 +759,18 @@ def extract_product_observations(
 
 
 def _parse_delivery_tags(text: str, authenticated_handles: Sequence[str]) -> tuple[str, ...]:
-    """Extract authenticated host-issued delivery tags from the delivered tool envelope."""
-    auth_set = set(authenticated_handles)
+    """Extract authenticated host-issued delivery tags from the delivered tool envelope.
+
+    Decision 012 para 7: When `authenticated_handles` is empty, NEVER accept
+    tag-shaped text from tool output as a host-issued delivery tag.
+    """
+    auth_set = {h.strip() for h in authenticated_handles if h and h.strip()}
+    if not auth_set:
+        return ()
     tags: list[str] = []
     for m in _DELIVERY_TAG_RE.finditer(text):
         handle = m.group("handle")
-        if auth_set and handle not in auth_set:
+        if handle not in auth_set:
             continue
         tags.append(m.group(0))
     return tuple(tags)
@@ -712,11 +782,13 @@ def _derive_actual_range_and_numbering(
     delivery_tags: Sequence[str],
     fixture_file: pathlib.Path | None = None,
 ) -> tuple[tuple[LineRange, ...], bool, bool]:
-    """Determine actual delivered line range and numbering strictly from delivered text + fixture bytes.
+    """Determine actual delivered line range and numbering strictly from authenticated tags + fixture bytes.
 
-    NEVER copies requested tool arguments as delivered ranges (Decision 010).
+    Decision 010 & Decision 012 para 7:
+    - NEVER copies requested tool arguments as delivered ranges.
+    - NEVER promotes bare printed-looking lines into a range without an
+      independently verified fixture mapping or an authenticated delivery tag.
     """
-    # 1. Check authenticated delivery tags for host-declared true coverage
     tag_ranges: list[LineRange] = []
     for tag in delivery_tags:
         m = _DELIVERY_TAG_RE.match(tag)
@@ -726,8 +798,12 @@ def _derive_actual_range_and_numbering(
             if s >= 1 and e >= s:
                 tag_ranges.append(LineRange(s, e))
 
-    # 2. Inspect actual delivered lines for printed line numbers
-    body_lines = [ln for ln in delivered_text.splitlines() if ln.strip() and not _DELIVERY_TAG_RE.fullmatch(ln.strip())]
+    # Extract candidate source lines (excluding standalone delivery tag lines)
+    body_lines = [
+        ln
+        for ln in delivered_text.splitlines()
+        if ln.strip() and not _DELIVERY_TAG_RE.fullmatch(ln.strip())
+    ]
     printed_nums: list[int] = []
     stripped_lines: list[str] = []
     for ln in body_lines:
@@ -738,7 +814,7 @@ def _derive_actual_range_and_numbering(
 
     has_printed_nums = bool(body_lines) and len(printed_nums) == len(body_lines)
 
-    # 3. Verify against fixture file bytes when available
+    # 1. Independently verify delivered lines against fixture file bytes when available
     if fixture_file is not None and fixture_file.is_file() and body_lines:
         fixture_lines = fixture_file.read_text(encoding="utf-8", errors="replace").splitlines()
         probe_lines = stripped_lines if has_printed_nums else body_lines
@@ -755,6 +831,7 @@ def _derive_actual_range_and_numbering(
                     return (true_range, False, True)
                 return (true_range, False, False)
 
+    # 2. Otherwise require an authenticated host-issued delivery tag carrying a range
     if tag_ranges:
         if has_printed_nums and len(tag_ranges) == 1:
             expected_nums = list(range(tag_ranges[0].start, tag_ranges[0].end + 1))
@@ -763,9 +840,7 @@ def _derive_actual_range_and_numbering(
             return (tuple(tag_ranges), False, True)
         return (tuple(tag_ranges), has_printed_nums, False)
 
-    if has_printed_nums and printed_nums == list(range(printed_nums[0], printed_nums[0] + len(printed_nums))):
-        return ((LineRange(printed_nums[0], printed_nums[-1]),), True, False)
-
+    # 3. No authenticated tag and no verified fixture mapping -> do NOT promote bare printed numbers
     return ((), False, False)
 
 
@@ -902,7 +977,8 @@ def run_scripted_session(
             arg_path = str(args.get("path") or "")
             url = str(args.get("url") or "")
 
-            # Associate each authenticated handle with its own delivery tag & coverage
+            # Decision 012 para 7: Preserve raw message once, then derive a separately
+            # attributed DeliveryRecord for each authenticated host-issued handle.
             for handle in handles:
                 kind = handle.split("#", 1)[0] if "#" in handle else ""
                 handle_tags = tuple(
@@ -918,20 +994,40 @@ def run_scripted_session(
                     handle_path = arg_path
 
                 if kind == "command":
+                    rec_shape = "command"
                     ranges, line_numbered, printed_other = ((), False, False)
+                    rec_bytes = delivered_text.encode("utf-8")
+                    rec_source_rev = source_revision
                 else:
+                    rec_shape = "file_region" if handle_path else ""
                     fixture_file = (ws_path / handle_path) if (ws_path and handle_path) else None
                     ranges, line_numbered, printed_other = _derive_actual_range_and_numbering(
                         delivered_text,
-                        delivery_tags=handle_tags or all_tags,
+                        delivery_tags=handle_tags,
                         fixture_file=fixture_file,
                     )
+                    # Attribute source_revision from fixture bytes if available
+                    if fixture_file is not None and fixture_file.is_file():
+                        rec_source_rev = hashlib.sha256(fixture_file.read_bytes()).hexdigest()
+                        if ranges:
+                            f_lines = fixture_file.read_text(encoding="utf-8", errors="replace").splitlines()
+                            numbered_lines = [
+                                f"{ln_no}\t{f_lines[ln_no - 1]}"
+                                for rng in ranges
+                                for ln_no in range(rng.start, min(rng.end, len(f_lines)) + 1)
+                            ]
+                            rec_bytes = ("\n".join(numbered_lines) + "\n").encode("utf-8")
+                        else:
+                            rec_bytes = delivered_text.encode("utf-8")
+                    else:
+                        rec_source_rev = source_revision
+                        rec_bytes = delivered_text.encode("utf-8")
 
                 delivery_records.append(
                     DeliveryRecord(
                         tool=item["tool"],
                         arguments=args,
-                        raw_bytes=delivered_text.encode("utf-8"),
+                        raw_bytes=rec_bytes,
                         delivered_ranges=ranges,
                         delivery_tags=handle_tags,
                         line_numbered=line_numbered,
@@ -940,7 +1036,7 @@ def run_scripted_session(
                         worker_leg="",
                         round_id=round_id,
                         intent_window=intent_window,
-                        source_revision=source_revision,
+                        source_revision=rec_source_rev,
                         handle=handle,
                         kind=kind,
                         path=handle_path,
@@ -948,6 +1044,7 @@ def run_scripted_session(
                         artifact_id="",
                         call_id=item["call_id"],
                         fixture_provenance=fixture_provenance,
+                        shape=rec_shape,
                     )
                 )
 
