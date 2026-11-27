@@ -1,4 +1,4 @@
-"""CF04 · K05 OS-level strace operation-trace observer & small-fixture controls (Decision 053, D6-compliant)."""
+"""CF04 · K05 OS-level operation-trace observer & small-fixture controls (Decisions 053 & 055, D6-compliant)."""
 
 from __future__ import annotations
 
@@ -26,11 +26,34 @@ from .cf04_k05 import write_scalefixture_tree
 # Examples with `strace -f -y`:
 # 12345 getdents64(14</tmp/fix/g000/d000>, 0x..., 8192) = 1600
 # 12345 newfstatat(14</tmp/fix/g000/d000>, "f000.go", {...}, AT_SYMLINK_NOFOLLOW) = 0
-# 12345 newfstatat(AT_FDCWD, "/tmp/fix/g000/d000/f000.go", {...}, 0) = 0
-# 12345 statx(14</tmp/fix/g000/d000>, "f000.go", ...) = 0
+# 12345 newfstatat(AT_FDCWD</cwd>, "/tmp/fix/g000/d000/f000.go", {...}, 0) = 0
+# 12345 statx(14</tmp/fix/g000/d000>, "f000.go", ...) = -1 ENOENT (No such file or directory)
+_UNFINISHED_RE = re.compile(r"^(\d+)\s+(.+)\s+<unfinished \.\.\.>$")
+_RESUMED_RE = re.compile(r"^(\d+)\s+<\.\.\.\s+\S+\s+resumed>(.*)$")
 _GETDENTS_RE = re.compile(r"getdents64\(\d+<([^>]+)>,.*=\s*(-?\d+)")
-_FSTATAT_FD_RE = re.compile(r"(?:newfstatat|fstatat64|statx)\(\d+<([^>]+)>,\s*\"([^\"]*)\"")
-_FSTATAT_CWD_RE = re.compile(r"(?:newfstatat|fstatat64|statx)\(AT_FDCWD(?:<[^>]*>)?,\s*\"([^\"]+)\"")
+_FSTATAT_FD_RE = re.compile(r"(?:newfstatat|fstatat64|statx)\(\d+<([^>]+)>,\s*\"([^\"]*)\".*=\s*(-?\d+)")
+_FSTATAT_CWD_RE = re.compile(r"(?:newfstatat|fstatat64|statx)\(AT_FDCWD(?:<[^>]*>)?,\s*\"([^\"]+)\".*=\s*(-?\d+)")
+
+
+def _reassemble_strace_lines(strace_text: str) -> list[str]:
+    """Reassemble concurrent `<unfinished ...>` / `<... syscall resumed>` pairs per TID."""
+    pending: dict[str, str] = {}
+    out: list[str] = []
+    for raw in strace_text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        mu = _UNFINISHED_RE.match(line)
+        if mu:
+            pending[mu.group(1)] = f"{mu.group(1)} {mu.group(2)}"
+            continue
+        mr = _RESUMED_RE.match(line)
+        if mr and mr.group(1) in pending:
+            combined = pending.pop(mr.group(1)) + mr.group(2)
+            out.append(combined)
+            continue
+        out.append(line)
+    return out
 
 
 def _under_root(path_str: str, root_str: str) -> str | None:
@@ -49,84 +72,130 @@ def parse_strace_fixture_ops(
     fixture_root: Path,
     *,
     known_dir_rels: set[str] | None = None,
+    known_file_rels: set[str] | None = None,
 ) -> dict[str, object]:
-    """Parse `strace -f -y` output scoped strictly to fixture_root.
+    """Parse `strace -f -y` output scoped strictly to fixture_root (Decisions 053 & 055).
 
-    Returns `status="unknown"` if the trace text is empty or contains zero syscall lines,
-    preventing missing instrumentation from masquerading as zero reads.
+    - Reassembles `<unfinished ...>` / `<... resumed>` concurrent syscalls per TID.
+    - Separates productive `getdents64` (`ret > 0`), EOF (`ret == 0`), and failed (`ret < 0`).
+    - Matches successful stat calls (`ret == 0`) against `known_file_rels` and `known_dir_rels`,
+      accounting unsuccessful (`ret < 0`) or unknown-path lookups (e.g. `.git` marker probes) separately.
+    - Returns `status="unknown"` if the trace is empty OR contains zero fixture-scoped syscalls
+      (preventing unrelated or missing traces from masquerading as zero reads).
     """
-    lines = [ln for ln in strace_text.splitlines() if ln.strip()]
+    lines = _reassemble_strace_lines(strace_text)
     if not lines:
         return {
             "status": "unknown",
             "reason": "empty strace output",
-            "directory_read_calls": "unknown",
+            "productive_dir_read_calls": "unknown",
+            "eof_dir_read_calls": "unknown",
+            "failed_dir_read_calls": "unknown",
             "distinct_directories_read": "unknown",
             "per_file_metadata_reads": "unknown",
-            "directory_metadata_reads": "unknown",
+            "distinct_known_files_statted": "unknown",
+            "known_directory_metadata_reads": "unknown",
+            "unsuccessful_or_unknown_lookups": "unknown",
         }
 
     root_path = Path(fixture_root)
     root_str = str(root_path.resolve()) if root_path.exists() else os.path.normpath(str(root_path))
     dirs_known = set(known_dir_rels) if known_dir_rels is not None else set()
     dirs_known.add(".")
+    files_known = set(known_file_rels) if known_file_rels is not None else None
 
-    dir_read_calls = 0
+    fixture_scoped_events = 0
+    productive_dir_reads = 0
+    eof_dir_reads = 0
+    failed_dir_reads = 0
     distinct_dirs: set[str] = set()
-    file_stat_calls = 0
-    distinct_file_stats: set[str] = set()
-    dir_stat_calls = 0
+
+    known_file_stats = 0
+    distinct_known_files: set[str] = set()
+    known_dir_stats = 0
+    unsuccessful_or_unknown = 0
 
     for line in lines:
         mg = _GETDENTS_RE.search(line)
         if mg:
-            dir_path, ret_str = mg.group(1), mg.group(2)
+            dir_path, ret_val = mg.group(1), int(mg.group(2))
             rel = _under_root(dir_path, root_str)
-            if rel is not None and int(ret_str) > 0:
-                dir_read_calls += 1
-                distinct_dirs.add(rel)
+            if rel is not None:
+                fixture_scoped_events += 1
+                if ret_val > 0:
+                    productive_dir_reads += 1
+                    distinct_dirs.add(rel)
+                elif ret_val == 0:
+                    eof_dir_reads += 1
+                else:
+                    failed_dir_reads += 1
             continue
 
+        rel_stat: str | None = None
+        ret_stat: int | None = None
         mf = _FSTATAT_FD_RE.search(line)
         if mf:
-            base_dir, name = mf.group(1), mf.group(2)
+            base_dir, name, ret_stat = mf.group(1), mf.group(2), int(mf.group(3))
             full = base_dir if name in ("", ".") else os.path.join(base_dir, name)
-            rel = _under_root(full, root_str)
-            if rel is not None:
-                if rel in dirs_known:
-                    dir_stat_calls += 1
-                else:
-                    file_stat_calls += 1
-                    distinct_file_stats.add(rel)
-            continue
+            rel_stat = _under_root(full, root_str)
+        else:
+            mc = _FSTATAT_CWD_RE.search(line)
+            if mc:
+                rel_stat = _under_root(mc.group(1), root_str)
+                ret_stat = int(mc.group(2))
 
-        mc = _FSTATAT_CWD_RE.search(line)
-        if mc:
-            rel = _under_root(mc.group(1), root_str)
-            if rel is not None:
-                if rel in dirs_known:
-                    dir_stat_calls += 1
-                else:
-                    file_stat_calls += 1
-                    distinct_file_stats.add(rel)
+        if rel_stat is not None and ret_stat is not None:
+            fixture_scoped_events += 1
+            if ret_stat < 0:
+                unsuccessful_or_unknown += 1
+            elif rel_stat in dirs_known:
+                known_dir_stats += 1
+            elif files_known is None or rel_stat in files_known:
+                known_file_stats += 1
+                distinct_known_files.add(rel_stat)
+            else:
+                unsuccessful_or_unknown += 1
+
+    if fixture_scoped_events == 0:
+        return {
+            "status": "unknown",
+            "reason": "no fixture-scoped syscalls observed in trace",
+            "trace_lines": len(lines),
+            "productive_dir_read_calls": "unknown",
+            "eof_dir_read_calls": "unknown",
+            "failed_dir_read_calls": "unknown",
+            "distinct_directories_read": "unknown",
+            "per_file_metadata_reads": "unknown",
+            "distinct_known_files_statted": "unknown",
+            "known_directory_metadata_reads": "unknown",
+            "unsuccessful_or_unknown_lookups": "unknown",
+        }
 
     return {
         "status": "ok",
         "trace_lines": len(lines),
-        "directory_read_calls": dir_read_calls,
+        "fixture_scoped_events": fixture_scoped_events,
+        "productive_dir_read_calls": productive_dir_reads,
+        "eof_dir_read_calls": eof_dir_reads,
+        "failed_dir_read_calls": failed_dir_reads,
         "distinct_directories_read": len(distinct_dirs),
-        "per_file_metadata_reads": file_stat_calls,
-        "distinct_files_statted": len(distinct_file_stats),
-        "directory_metadata_reads": dir_stat_calls,
+        "per_file_metadata_reads": known_file_stats,
+        "distinct_known_files_statted": len(distinct_known_files),
+        "known_directory_metadata_reads": known_dir_stats,
+        "unsuccessful_or_unknown_lookups": unsuccessful_or_unknown,
     }
 
 
-def _collect_dir_rels(root: Path) -> set[str]:
-    rels: set[str] = {"."}
+def _collect_inventory_rels(root: Path) -> tuple[set[str], set[str]]:
+    dirs: set[str] = {"."}
+    files: set[str] = set()
     for p in root.rglob("*"):
+        rel = p.relative_to(root).as_posix()
         if p.is_dir():
-            rels.add(p.relative_to(root).as_posix())
-    return rels
+            dirs.add(rel)
+        elif p.is_file():
+            files.add(rel)
+    return dirs, files
 
 
 def run_small_fixture_strace_controls(
@@ -139,7 +208,7 @@ def run_small_fixture_strace_controls(
     rg_bin: str = "rg",
     repo_root: Path | None = None,
 ) -> dict[str, object]:
-    """Run Decision-053 positive/negative controls + real D1 sidecar small-fixture strace proof on Linux."""
+    """Run Decision-053/055 positive/negative controls + real D1 sidecar small-fixture strace proof on Linux."""
     out = Path(out_dir).resolve()
     out.mkdir(parents=True, exist_ok=True)
     harness_root = Path(repo_root).resolve() if repo_root else Path(__file__).resolve().parents[4]
@@ -147,8 +216,8 @@ def run_small_fixture_strace_controls(
     if platform.system().lower() != "linux":
         res = {
             "platform": platform.system(),
-            "status": "unsupported_unprivileged",
-            "reason": "macOS fs_usage requires root; unprivileged operation tracing is unavailable without altering host/SIP settings",
+            "status": "unknown",
+            "reason": "Linux strace observer is Linux-only; use macOS fs_usage control on Darwin",
         }
         res_path = out / "k05_trace_controls.json"
         res_path.write_text(json.dumps(res, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -156,10 +225,9 @@ def run_small_fixture_strace_controls(
 
     with tempfile.TemporaryDirectory(prefix="cf04-k05-trace-") as tmp_s:
         tmp = Path(tmp_s)
-        # 1. Construct small synthetic scalefixture AFTER which strace starts (20 files, 3 dirs: ., g000, g000/d000)
         ctrl_tree = tmp / "ctrl-tree"
         ctrl_shape = write_scalefixture_tree(ctrl_tree, 20)
-        ctrl_dirs = _collect_dir_rels(ctrl_tree)
+        ctrl_dirs, ctrl_files = _collect_inventory_rels(ctrl_tree)
 
         # Control A: scandir-only (directory reads, 0 per-file stats)
         trace_a = tmp / "ctrl_a.strace"
@@ -176,7 +244,12 @@ def run_small_fixture_strace_controls(
             check=True,
             capture_output=True,
         )
-        obs_a = parse_strace_fixture_ops(trace_a.read_text(encoding="utf-8", errors="replace"), ctrl_tree, known_dir_rels=ctrl_dirs)
+        obs_a = parse_strace_fixture_ops(
+            trace_a.read_text(encoding="utf-8", errors="replace"),
+            ctrl_tree,
+            known_dir_rels=ctrl_dirs,
+            known_file_rels=ctrl_files,
+        )
         ctrl_a_pass = (
             obs_a["status"] == "ok"
             and obs_a["distinct_directories_read"] == ctrl_shape.total_directories
@@ -199,21 +272,36 @@ def run_small_fixture_strace_controls(
             check=True,
             capture_output=True,
         )
-        obs_b = parse_strace_fixture_ops(trace_b.read_text(encoding="utf-8", errors="replace"), ctrl_tree, known_dir_rels=ctrl_dirs)
+        obs_b = parse_strace_fixture_ops(
+            trace_b.read_text(encoding="utf-8", errors="replace"),
+            ctrl_tree,
+            known_dir_rels=ctrl_dirs,
+            known_file_rels=ctrl_files,
+        )
         ctrl_b_pass = (
             obs_b["status"] == "ok"
             and obs_b["distinct_directories_read"] == ctrl_shape.total_directories
             and obs_b["per_file_metadata_reads"] == 20
+            and obs_b["distinct_known_files_statted"] == 20
         )
 
-        # Control C: negative control (empty/missing trace -> unknown)
-        obs_c = parse_strace_fixture_ops("", ctrl_tree, known_dir_rels=ctrl_dirs)
+        # Control C: negative control — empty trace -> unknown
+        obs_c = parse_strace_fixture_ops("", ctrl_tree, known_dir_rels=ctrl_dirs, known_file_rels=ctrl_files)
         ctrl_c_pass = obs_c["status"] == "unknown"
+
+        # Control D: negative control — trace with ONLY unrelated lines -> unknown (Decision 055)
+        obs_d = parse_strace_fixture_ops(
+            '101 getdents64(5</etc>, 0x1, 8192) = 128\n101 newfstatat(AT_FDCWD</>, "/etc/hosts", {}, 0) = 0\n',
+            ctrl_tree,
+            known_dir_rels=ctrl_dirs,
+            known_file_rels=ctrl_files,
+        )
+        ctrl_d_pass = obs_d["status"] == "unknown"
 
         # 2. Real D1 sidecar under strace on a 50-file scalefixture (fixture built BEFORE strace starts!)
         sidecar_tree = tmp / "sidecar-tree"
         sidecar_shape = write_scalefixture_tree(sidecar_tree, 50)
-        sidecar_dirs = _collect_dir_rels(sidecar_tree)
+        sidecar_dirs, sidecar_files = _collect_inventory_rels(sidecar_tree)
         trace_d1 = tmp / "d1_sidecar.strace"
 
         config_dir = tmp / "sidecar-cfg"
@@ -277,7 +365,7 @@ def run_small_fixture_strace_controls(
             proj = client.create_project([{"path": str(sidecar_tree.resolve()), "label": "k05-trace", "is_primary": True}])
             pid = str(proj["id"])
             rid = str(proj["roots"][0]["id"])  # type: ignore[index]
-            settled, _, summary = wait_catalog_settled(client.driver, pid, rid, max_wait_s=20.0, poll_interval_s=0.1)
+            _, _, summary = wait_catalog_settled(client.driver, pid, rid, max_wait_s=20.0, poll_interval_s=0.1)
             settled_file_count = int(summary.get("file_count", -1))
         finally:
             with contextlib.suppress(OSError):
@@ -298,6 +386,7 @@ def run_small_fixture_strace_controls(
             trace_d1.read_text(encoding="utf-8", errors="replace") if trace_d1.is_file() else "",
             sidecar_tree,
             known_dir_rels=sidecar_dirs,
+            known_file_rels=sidecar_files,
         )
 
         report = {
@@ -307,7 +396,8 @@ def run_small_fixture_strace_controls(
                 "control_a_dir_reads_only": {"passed": ctrl_a_pass, "expected_dirs": ctrl_shape.total_directories, "expected_file_stats": 0, "observed": obs_a},
                 "control_b_dir_plus_file_stats": {"passed": ctrl_b_pass, "expected_dirs": ctrl_shape.total_directories, "expected_file_stats": 20, "observed": obs_b},
                 "control_c_empty_trace_unknown": {"passed": ctrl_c_pass, "observed": obs_c},
-                "all_controls_passed": ctrl_a_pass and ctrl_b_pass and ctrl_c_pass,
+                "control_d_unrelated_trace_unknown": {"passed": ctrl_d_pass, "observed": obs_d},
+                "all_controls_passed": ctrl_a_pass and ctrl_b_pass and ctrl_c_pass and ctrl_d_pass,
             },
             "d1_small_fixture_trace": {
                 "files_target": sidecar_shape.files,
@@ -333,7 +423,7 @@ def run_small_fixture_strace_controls(
             {"k05_trace_controls": res_path},
             {
                 "family": "K05-trace-controls",
-                "all_controls_passed": ctrl_a_pass and ctrl_b_pass and ctrl_c_pass,
+                "all_controls_passed": ctrl_a_pass and ctrl_b_pass and ctrl_c_pass and ctrl_d_pass,
                 "d1_observed": obs_d1,
             },
             replay_command=["python3", "-m", "catalog_feed_search.families.cf04_k05_trace", "--out-dir", "."],
@@ -342,7 +432,7 @@ def run_small_fixture_strace_controls(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run Decision-053 K05 strace operation-trace controls")
+    parser = argparse.ArgumentParser(description="Run Decision-053/055 K05 strace operation-trace controls")
     parser.add_argument("--engine-bin", required=True)
     parser.add_argument("--d1-worktree", required=True)
     parser.add_argument("--d1-commit", default="3bb1464d22dd0a38a149d37610810e7a0324e8cf")

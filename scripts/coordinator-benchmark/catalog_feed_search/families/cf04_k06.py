@@ -61,24 +61,37 @@ def generate_k06_spec(base_seed: str, instance_index: int) -> K06InstanceSpec:
     )
 
 
+DOCUMENTED_RETIRED_WORKER_UNAVAILABLE_CODES = frozenset(
+    {
+        "worker_workspace_unavailable",
+        "worker_branch_unavailable",
+        "source_unavailable",
+        "worker_not_found",
+    }
+)
+
+
 def classify_retired_worker_response(
     *,
     retired_worker_id: str,
     expected_root_id: str,
+    expected_path: str,
+    expected_workspace_id: str,
     expected_trunk_sha256: str,
     status: int,
     json_body: dict[str, object] | list[object] | None,
     body_text: str,
 ) -> tuple[str, dict[str, object]]:
-    """Positively classify GET /v1/projects/{id}/source?worker_id=<retired> (Decision 052).
+    """Positively classify GET /v1/projects/{id}/source?worker_id=<retired> (Decisions 052 & 055).
 
     Returns ("observation", record) ONLY for documented conforming responses:
       1. Raw D1 OpenAPI project-root fallback: HTTP 200 JSON dict with workspace_kind=='project',
-         matching root_id, and matching trunk sha256 + content digest.
-      2. Explicit documented terminal unavailable response: HTTP 404/409/410/503 JSON dict with a
-         non-empty typed error code.
-    Returns ("defect", record) for malformed bodies, mismatched root_id/digest/bytes, false
-    workspace_kind=='worker' claims, or unexpected HTTP errors (e.g. 500).
+         exact path match, corroborated primary identity (root_id==expected_root_id if emitted,
+         else workspace_id==expected_workspace_id), and exact trunk sha256 + content digest.
+      2. Explicit documented terminal unavailable response: HTTP 404/409/410/503 JSON dict whose
+         error code is in DOCUMENTED_RETIRED_WORKER_UNAVAILABLE_CODES.
+    Returns ("defect", record) for malformed bodies, mismatched identity/digest/bytes, false
+    workspace_kind=='worker' claims, or arbitrary/unexpected HTTP errors.
     """
     if not isinstance(json_body, dict):
         return (
@@ -94,12 +107,21 @@ def classify_retired_worker_response(
     if status == 200:
         r_kind = str(json_body.get("workspace_kind") or "")
         r_root = str(json_body.get("root_id") or "")
+        r_ws = str(json_body.get("workspace_id") or "")
+        r_path = str(json_body.get("path") or "").removeprefix("./")
         r_sha = str(json_body.get("sha256") or "")
         content_val = json_body.get("content")
         content_sha = sha256_bytes(content_val.encode("utf-8")) if isinstance(content_val, str) else ""
+
+        if r_root:
+            identity_ok = r_root == expected_root_id
+        else:
+            identity_ok = bool(expected_workspace_id) and (r_ws == expected_workspace_id)
+
         if (
             r_kind == "project"
-            and (not r_root or r_root == expected_root_id)
+            and identity_ok
+            and r_path == expected_path.removeprefix("./")
             and r_sha == expected_trunk_sha256
             and content_sha == expected_trunk_sha256
         ):
@@ -107,10 +129,12 @@ def classify_retired_worker_response(
                 "observation",
                 {
                     "code": "retired_worker_raw_api_project_fallback",
-                    "detail": "Raw GET /v1/projects/{id}/source?worker_id=<retired> returned HTTP 200 with workspace_kind='project' and verified trunk digest per D1 OpenAPI fallback (Decision 036/051/052)",
+                    "detail": "Raw GET /v1/projects/{id}/source?worker_id=<retired> returned HTTP 200 with workspace_kind='project', corroborated primary identity, and verified trunk digest per D1 OpenAPI fallback (Decisions 036/051/052/055)",
                     "retired_worker_id": retired_worker_id,
                     "workspace_kind": r_kind,
+                    "workspace_id": r_ws,
                     "root_id": r_root or expected_root_id,
+                    "path": r_path,
                     "returned_sha256": r_sha,
                     "trunk_sha256": expected_trunk_sha256,
                 },
@@ -122,22 +146,27 @@ def classify_retired_worker_response(
                 "retired_worker_id": retired_worker_id,
                 "status": status,
                 "workspace_kind": r_kind,
+                "expected_workspace_id": expected_workspace_id,
+                "actual_workspace_id": r_ws,
                 "expected_root_id": expected_root_id,
                 "actual_root_id": r_root,
+                "expected_path": expected_path,
+                "actual_path": r_path,
                 "expected_trunk_sha256": expected_trunk_sha256,
                 "returned_sha256": r_sha,
                 "content_sha256": content_sha,
             },
         )
 
-    if status in (404, 409, 410, 503) and str(json_body.get("code") or "").strip():
+    err_code = str(json_body.get("code") or "").strip()
+    if status in (404, 409, 410, 503) and err_code in DOCUMENTED_RETIRED_WORKER_UNAVAILABLE_CODES:
         return (
             "observation",
             {
                 "code": "retired_worker_explicit_unavailable",
                 "retired_worker_id": retired_worker_id,
                 "status": status,
-                "error_code": str(json_body.get("code") or ""),
+                "error_code": err_code,
             },
         )
 
@@ -147,6 +176,7 @@ def classify_retired_worker_response(
             "code": "retired_worker_unexpected_http_error",
             "retired_worker_id": retired_worker_id,
             "status": status,
+            "error_code": err_code,
             "body_snippet": body_text[:300],
         },
     )
@@ -481,6 +511,13 @@ def _verify_k06_scenario(
             merge_status="merged",
             retired=True,
         )
+        # Independently corroborate the primary workspace_id before testing retired worker_id
+        corroborate = client.get_source_file(project_id, primary_rid, "target.txt")
+        expected_ws_id = (
+            str(corroborate.json_body.get("workspace_id") or "")
+            if corroborate.status == 200 and isinstance(corroborate.json_body, dict)
+            else ""
+        )
         r_resp = client.get_source_file(project_id, primary_rid, "target.txt", worker_id=retired_id)
         r_kind = str(r_resp.json_body.get("workspace_kind") or "") if isinstance(r_resp.json_body, dict) else ""
         r_sha = str(r_resp.json_body.get("sha256") or "") if isinstance(r_resp.json_body, dict) else ""
@@ -496,6 +533,8 @@ def _verify_k06_scenario(
         kind, record = classify_retired_worker_response(
             retired_worker_id=retired_id,
             expected_root_id=primary_rid,
+            expected_path="target.txt",
+            expected_workspace_id=expected_ws_id,
             expected_trunk_sha256=want_trunk_sha,
             status=r_resp.status,
             json_body=r_resp.json_body,

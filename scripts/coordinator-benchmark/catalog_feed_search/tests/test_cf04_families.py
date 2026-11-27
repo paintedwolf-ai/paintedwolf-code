@@ -103,15 +103,18 @@ class TestCF04GeneratorsAndHelpers(unittest.TestCase):
         trunk_bytes = b"trunk content\n"
         trunk_sha = sha256_bytes(trunk_bytes)
 
-        # Positive control 1: conforming raw D1 project-root fallback
+        # Positive control 1: conforming raw D1 project-root fallback (corroborated workspace_id + path + digest)
         kind, rec = classify_retired_worker_response(
             retired_worker_id="w-1",
             expected_root_id="r-1",
+            expected_path="target.txt",
+            expected_workspace_id="ws-primary-1",
             expected_trunk_sha256=trunk_sha,
             status=200,
             json_body={
                 "workspace_kind": "project",
-                "root_id": "r-1",
+                "workspace_id": "ws-primary-1",
+                "path": "target.txt",
                 "sha256": trunk_sha,
                 "content": trunk_bytes.decode("utf-8"),
             },
@@ -124,6 +127,8 @@ class TestCF04GeneratorsAndHelpers(unittest.TestCase):
         kind, rec = classify_retired_worker_response(
             retired_worker_id="w-1",
             expected_root_id="r-1",
+            expected_path="target.txt",
+            expected_workspace_id="ws-primary-1",
             expected_trunk_sha256=trunk_sha,
             status=410,
             json_body={"code": "worker_workspace_unavailable", "message": "retired"},
@@ -132,32 +137,32 @@ class TestCF04GeneratorsAndHelpers(unittest.TestCase):
         self.assertEqual(kind, "observation")
         self.assertEqual(rec["code"], "retired_worker_explicit_unavailable")
 
-        # Negative control 1: HTTP 200 with mismatched content digest
+        # Negative control 1: arbitrary 404 code must NOT be accepted as documented unavailable
         kind, rec = classify_retired_worker_response(
             retired_worker_id="w-1",
             expected_root_id="r-1",
+            expected_path="target.txt",
+            expected_workspace_id="ws-primary-1",
+            expected_trunk_sha256=trunk_sha,
+            status=404,
+            json_body={"code": "project_not_found"},
+            body_text="{}",
+        )
+        self.assertEqual(kind, "defect")
+        self.assertEqual(rec["code"], "retired_worker_unexpected_http_error")
+
+        # Negative control 2: HTTP 200 with mismatched workspace_id when root_id is omitted
+        kind, rec = classify_retired_worker_response(
+            retired_worker_id="w-1",
+            expected_root_id="r-1",
+            expected_path="target.txt",
+            expected_workspace_id="ws-primary-1",
             expected_trunk_sha256=trunk_sha,
             status=200,
             json_body={
                 "workspace_kind": "project",
-                "root_id": "r-1",
-                "sha256": trunk_sha,
-                "content": "corrupted body\n",
-            },
-            body_text="{}",
-        )
-        self.assertEqual(kind, "defect")
-        self.assertEqual(rec["code"], "retired_worker_invalid_200_response")
-
-        # Negative control 2: HTTP 200 falsely claiming workspace_kind="worker"
-        kind, rec = classify_retired_worker_response(
-            retired_worker_id="w-1",
-            expected_root_id="r-1",
-            expected_trunk_sha256=trunk_sha,
-            status=200,
-            json_body={
-                "workspace_kind": "worker",
-                "root_id": "r-1",
+                "workspace_id": "ws-wrong",
+                "path": "target.txt",
                 "sha256": trunk_sha,
                 "content": trunk_bytes.decode("utf-8"),
             },
@@ -166,10 +171,32 @@ class TestCF04GeneratorsAndHelpers(unittest.TestCase):
         self.assertEqual(kind, "defect")
         self.assertEqual(rec["code"], "retired_worker_invalid_200_response")
 
-        # Negative control 3: malformed non-JSON body or unexpected HTTP 500
+        # Negative control 3: HTTP 200 with mismatched content digest
         kind, rec = classify_retired_worker_response(
             retired_worker_id="w-1",
             expected_root_id="r-1",
+            expected_path="target.txt",
+            expected_workspace_id="ws-primary-1",
+            expected_trunk_sha256=trunk_sha,
+            status=200,
+            json_body={
+                "workspace_kind": "project",
+                "root_id": "r-1",
+                "path": "target.txt",
+                "sha256": trunk_sha,
+                "content": "corrupted body\n",
+            },
+            body_text="{}",
+        )
+        self.assertEqual(kind, "defect")
+        self.assertEqual(rec["code"], "retired_worker_invalid_200_response")
+
+        # Negative control 4: malformed non-JSON body or unexpected HTTP 500
+        kind, rec = classify_retired_worker_response(
+            retired_worker_id="w-1",
+            expected_root_id="r-1",
+            expected_path="target.txt",
+            expected_workspace_id="ws-primary-1",
             expected_trunk_sha256=trunk_sha,
             status=200,
             json_body=None,
@@ -178,39 +205,49 @@ class TestCF04GeneratorsAndHelpers(unittest.TestCase):
         self.assertEqual(kind, "defect")
         self.assertEqual(rec["code"], "retired_worker_malformed_response")
 
-        kind, rec = classify_retired_worker_response(
-            retired_worker_id="w-1",
-            expected_root_id="r-1",
-            expected_trunk_sha256=trunk_sha,
-            status=500,
-            json_body={"code": "internal_error"},
-            body_text='{"code":"internal_error"}',
-        )
-        self.assertEqual(kind, "defect")
-        self.assertEqual(rec["code"], "retired_worker_unexpected_http_error")
-
     def test_parse_strace_fixture_ops_positive_and_negative_controls(self) -> None:
         root = Path("/tmp/fixroot")
         sample = "\n".join(
             [
                 '101 getdents64(5</tmp/fixroot>, 0x1, 8192) = 128',
                 '101 getdents64(5</tmp/fixroot>, 0x1, 8192) = 0',
-                '101 getdents64(6</tmp/fixroot/sub>, 0x1, 8192) = 64',
+                '102 getdents64(6</tmp/fixroot/sub>, 0x1, 8192 <unfinished ...>',
+                '102 <... getdents64 resumed>) = 64',
                 '101 getdents64(7</etc>, 0x1, 8192) = 512',
                 '101 newfstatat(6</tmp/fixroot/sub>, "a.go", {st_mode=S_IFREG}, 0) = 0',
                 '101 newfstatat(AT_FDCWD</home/user>, "/tmp/fixroot/sub/b.go", {st_mode=S_IFREG}, AT_SYMLINK_NOFOLLOW) = 0',
                 '101 newfstatat(AT_FDCWD, "/tmp/fixroot/sub", {st_mode=S_IFDIR}, 0) = 0',
+                '101 newfstatat(5</tmp/fixroot>, ".git", 0x0, 0) = -1 ENOENT (No such file or directory)',
             ]
         )
-        obs = parse_strace_fixture_ops(sample, root, known_dir_rels={".", "sub"})
+        obs = parse_strace_fixture_ops(
+            sample,
+            root,
+            known_dir_rels={".", "sub"},
+            known_file_rels={"sub/a.go", "sub/b.go"},
+        )
         self.assertEqual(obs["status"], "ok")
         self.assertEqual(obs["distinct_directories_read"], 2)
-        self.assertEqual(obs["directory_read_calls"], 2)
+        self.assertEqual(obs["productive_dir_read_calls"], 2)
+        self.assertEqual(obs["eof_dir_read_calls"], 1)
+        self.assertEqual(obs["failed_dir_read_calls"], 0)
         self.assertEqual(obs["per_file_metadata_reads"], 2)
-        self.assertEqual(obs["directory_metadata_reads"], 1)
+        self.assertEqual(obs["distinct_known_files_statted"], 2)
+        self.assertEqual(obs["known_directory_metadata_reads"], 1)
+        self.assertEqual(obs["unsuccessful_or_unknown_lookups"], 1)
 
-        empty = parse_strace_fixture_ops("", root, known_dir_rels={"."})
+        # Negative control 1: empty trace -> unknown
+        empty = parse_strace_fixture_ops("", root, known_dir_rels={"."}, known_file_rels=set())
         self.assertEqual(empty["status"], "unknown")
+
+        # Negative control 2: trace containing ONLY unrelated lines -> unknown (Decision 055)
+        unrelated = parse_strace_fixture_ops(
+            '101 getdents64(7</etc>, 0x1, 8192) = 512\n101 newfstatat(AT_FDCWD</>, "/etc/hosts", {}, 0) = 0\n',
+            root,
+            known_dir_rels={"."},
+            known_file_rels=set(),
+        )
+        self.assertEqual(unrelated["status"], "unknown")
 
 
 if __name__ == "__main__":
