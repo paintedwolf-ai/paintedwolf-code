@@ -44,6 +44,10 @@ webE2e("browser-obligation: build receipt leaves browser obligation open until c
     expect(prompt.ok(), await prompt.text()).toBe(true);
 
     const driver = manualHarnessTools(request, sessionId);
+    await driver.loadTools("update_progress");
+    await driver.completed(await driver.invoke("update_progress", {
+      content: "## Progress\n- [ ] Build index.html and verify via capture_page\n",
+    }));
 
     // Phase 1: build index.html via portable command (external_exec / completed receipt).
     const buildHtml = [
