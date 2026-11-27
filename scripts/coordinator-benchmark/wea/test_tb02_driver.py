@@ -112,6 +112,52 @@ class TestTB02DesktopDrivers(unittest.TestCase):
             self.assertEqual(got, expected)
             m.assert_called_once()
 
+    def test_linux_tauri_native_dispatch_and_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            fake_app = root / "painted-wolf-code"
+            fake_app.write_bytes(b"#!/bin/sh\nsleep 30\n")
+            fake_app.chmod(0o755)
+            out_dir = root / "tauri-out"
+
+            def fake_capture(xid, dest):
+                dest.write_bytes(_minimal_png_bytes(1280, 800))
+                return {"tool": "import", **native_den_linux.parse_png_info(dest)}
+
+            atspi_seq = [
+                {"available": True, "observed": True, "app_name": "painted-wolf-code", "focused_key": "entry|Composer"},
+                {"available": True, "observed": True, "app_name": "painted-wolf-code", "focused_key": "push button|Send"},
+            ]
+            with (
+                mock.patch.object(native_den_linux, "_find_x11_window_for_pid", return_value=77777),
+                mock.patch.object(native_den_linux, "_probe_atspi", side_effect=atspi_seq),
+                mock.patch.object(native_den_linux, "_send_x11_key", return_value={"sent": True, "key": "Tab", "window_id": 77777}),
+                mock.patch.object(native_den_linux, "_capture_x11_window_png", side_effect=fake_capture),
+                mock.patch.object(native_den_linux.time, "sleep", return_value=None),
+            ):
+                rec = desktop_driver.run_desktop_driver(
+                    "linux-tauri-native",
+                    "",
+                    out_dir,
+                    app_bin=fake_app,
+                )
+            self.assertTrue(rec["passed"])
+            self.assertEqual(rec["tier"], "native-den-tauri-app")
+            self.assertEqual(rec["owned_window_id"], 77777)
+            self.assertTrue(rec["atspi_focus_changed"])
+            self.assertEqual(rec["screenshot_dimensions"], [1280, 800])
+            self.assertTrue((out_dir / "native-den-linux-tauri-receipt.json").is_file())
+
+            # Missing binary fails closed with status=blocked.
+            rec_missing = desktop_driver.run_desktop_driver(
+                "linux-tauri-native",
+                "",
+                root / "tauri-missing",
+                app_bin=root / "does-not-exist",
+            )
+            self.assertFalse(rec_missing["passed"])
+            self.assertEqual(rec_missing["status"], "blocked")
+
 
 if __name__ == "__main__":
     unittest.main()

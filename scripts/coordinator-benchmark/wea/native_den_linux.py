@@ -115,7 +115,7 @@ def _api_readback(api_url: str, token: str, path: str) -> Any:
 
 
 def _probe_atspi(target_pid: int) -> dict[str, Any]:
-    """Observe the owned PID's AT-SPI accessibility application/focused object if bus is available."""
+    """Observe the owned PID's AT-SPI accessibility application and focused object if bus is available."""
     try:
         import gi
 
@@ -131,14 +131,64 @@ def _probe_atspi(target_pid: int) -> dict[str, Any]:
                 break
         if app_node is None:
             return {"available": True, "observed": False, "reason": "pid_not_in_atspi_desktop"}
+
+        focused_role = ""
+        focused_name = ""
+        stack = [(app_node, 0)]
+        visited = 0
+        while stack and visited < 512:
+            node, depth = stack.pop()
+            visited += 1
+            try:
+                ss = node.get_state_set()
+                if ss is not None and ss.contains(Atspi.StateType.FOCUSED):
+                    focused_role = node.get_role_name() or ""
+                    focused_name = node.get_name() or ""
+                    break
+                if depth < 24:
+                    cnt = min(node.get_child_count(), 64)
+                    for i in range(cnt):
+                        c = node.get_child_at_index(i)
+                        if c is not None:
+                            stack.append((c, depth + 1))
+            except Exception:  # noqa: BLE001
+                continue
+
         return {
             "available": True,
             "observed": True,
             "app_name": app_node.get_name() or "",
             "child_count": int(app_node.get_child_count()),
+            "focused_role": focused_role,
+            "focused_name": focused_name,
+            "focused_key": f"{focused_role}|{focused_name}",
         }
     except Exception as exc:  # noqa: BLE001
         return {"available": False, "observed": False, "reason": str(exc)}
+
+
+def _find_x11_window_for_pid(pid: int, *, timeout_s: float = 45.0, proc: subprocess.Popen[Any] | None = None) -> int:
+    """Poll `xdotool search` until an X11 window owned by `pid` appears, or return 0 on timeout."""
+    if not shutil.which("xdotool"):
+        raise RuntimeError("xdotool_not_found")
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if proc is not None and proc.poll() is not None:
+            raise RuntimeError(f"tauri_app_exited_early (rc={proc.returncode})")
+        for extra in (["--onlyvisible", "--pid", str(pid)], ["--pid", str(pid)]):
+            res = subprocess.run(
+                ["xdotool", "search", *extra],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+            if res.returncode == 0:
+                wids = [int(tok) for tok in res.stdout.split() if tok.isdigit() and int(tok) > 0]
+                if wids:
+                    return wids[-1]
+        time.sleep(0.4)
+    return 0
 
 
 def _capture_x11_window_png(xid: int, dest: pathlib.Path) -> dict[str, Any]:
@@ -439,6 +489,163 @@ def run_linux_native_den(
                     page.wait()
 
     (out / "native-den-linux-webkitgtk-receipt.json").write_text(
+        json.dumps(receipt, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return receipt
+
+
+def run_linux_tauri_native(
+    app_bin: str | pathlib.Path,
+    out_dir: str | pathlib.Path,
+    *,
+    api_url: str | None = None,
+    token: str | None = None,
+    profile_dir: str | pathlib.Path | None = None,
+    engine_bin: str | pathlib.Path | None = None,
+    engine_manifest: str | pathlib.Path | None = None,
+    startup_timeout_s: float = 45.0,
+) -> dict[str, Any]:
+    """Launch the actual Linux Tauri desktop binary under Xvfb+AT-SPI, drive xdotool Tab, and capture its owned window."""
+    out = pathlib.Path(out_dir).resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    app_path = pathlib.Path(app_bin).resolve()
+    profile = pathlib.Path(profile_dir).resolve() if profile_dir else (out / "tauri-profile")
+    profile.mkdir(parents=True, exist_ok=True)
+
+    prov = collect_provenance(
+        REPO_ROOT,
+        engine_bin=engine_bin,
+        engine_manifest=engine_manifest,
+        lane="sidecar-native-den",
+    )
+    if not app_path.is_file():
+        receipt: dict[str, Any] = {
+            "schema": "wea-native-den-linux-tauri-v1",
+            "tier": "native-den-tauri-app",
+            "status": "blocked",
+            "blocked_reason": f"app_bin_not_found:{app_path}",
+            "app_bin": str(app_path),
+            "provenance": prov,
+            "passed": False,
+        }
+        (out / "native-den-linux-tauri-receipt.json").write_text(
+            json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        return receipt
+
+    app_sha = hashlib.sha256(app_path.read_bytes()).hexdigest()
+    env = dict(os.environ)
+    env["GTK_MODULES"] = "gail:atk-bridge"
+    env["NO_AT_BRIDGE"] = "0"
+    env["WEBKIT_DISABLE_COMPOSITING_MODE"] = "1"
+    env["LYCAON_CONFIG_DIR"] = str(profile / "config")
+    env["XDG_CONFIG_HOME"] = str(profile / "xdg-config")
+    env["XDG_DATA_HOME"] = str(profile / "xdg-data")
+    if api_url:
+        env["LYCAON_E2E_API_URL"] = api_url
+    if token:
+        env["LYCAON_E2E_TOKEN"] = token
+        env["LYCAON_API_TOKEN"] = token
+
+    log_path = out / "tauri-app.log"
+    log_fh = log_path.open("w", encoding="utf-8")
+    proc = subprocess.Popen(
+        [str(app_path)],
+        cwd=str(REPO_ROOT),
+        env=env,
+        stdout=log_fh,
+        stderr=subprocess.STDOUT,
+    )
+    try:
+        xid = _find_x11_window_for_pid(proc.pid, timeout_s=startup_timeout_s, proc=proc)
+        if xid <= 0:
+            raise RuntimeError(f"no_x11_window_found_for_tauri_pid_{proc.pid}")
+        time.sleep(2.0)
+
+        atspi_before = _probe_atspi(proc.pid)
+        key_ev = _send_x11_key(xid, "Tab")
+        time.sleep(0.4)
+        atspi_after = _probe_atspi(proc.pid)
+        if (
+            atspi_before.get("observed")
+            and atspi_after.get("observed")
+            and atspi_after.get("focused_key") == atspi_before.get("focused_key")
+        ):
+            key_ev = _send_x11_key(xid, "Tab")
+            time.sleep(0.4)
+            atspi_after = _probe_atspi(proc.pid)
+
+        atspi_focus_changed = bool(
+            atspi_before.get("focused_key")
+            and atspi_after.get("focused_key")
+            and atspi_after.get("focused_key") != atspi_before.get("focused_key")
+        )
+        screenshot_path = out / "linux-native-den-tauri.png"
+        shot = _capture_x11_window_png(xid, screenshot_path)
+        app_alive_after = proc.poll() is None
+
+        api_readback: dict[str, Any] = {}
+        if api_url and token:
+            api_readback["health"] = _api_readback(api_url, token, "/health")
+            api_readback["sessions"] = _api_readback(api_url, token, "/v1/sessions")
+
+        atspi_ok = bool(atspi_after.get("observed")) if atspi_after.get("available") else True
+        passed = bool(
+            xid > 0
+            and key_ev.get("sent") is True
+            and shot.get("valid_png") is True
+            and int(shot.get("bytes") or 0) > 0
+            and app_alive_after
+            and atspi_ok
+        )
+        receipt = {
+            "schema": "wea-native-den-linux-tauri-v1",
+            "tier": "native-den-tauri-app",
+            "app_bin": str(app_path),
+            "app_bin_sha256": app_sha,
+            "app_pid": proc.pid,
+            "owned_window_id": xid,
+            "isolated_profile_dir": str(profile),
+            "app_alive_after": app_alive_after,
+            "keyboard_event": key_ev,
+            "atspi_before": atspi_before,
+            "atspi_after": atspi_after,
+            "atspi_observed": atspi_after,
+            "atspi_focus_changed": atspi_focus_changed,
+            "screenshot_path": str(screenshot_path),
+            "screenshot_sha256": shot.get("sha256", ""),
+            "screenshot_bytes": int(shot.get("bytes") or 0),
+            "screenshot_dimensions": [shot.get("width", 0), shot.get("height", 0)],
+            "screenshot_tool": shot.get("tool", ""),
+            "api_readback": api_readback,
+            "provenance": prov,
+            "passed": passed,
+        }
+    except Exception as exc:  # noqa: BLE001
+        receipt = {
+            "schema": "wea-native-den-linux-tauri-v1",
+            "tier": "native-den-tauri-app",
+            "status": "blocked",
+            "blocked_reason": str(exc),
+            "app_bin": str(app_path),
+            "app_bin_sha256": app_sha,
+            "app_pid": proc.pid,
+            "isolated_profile_dir": str(profile),
+            "provenance": prov,
+            "passed": False,
+        }
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+        log_fh.close()
+
+    (out / "native-den-linux-tauri-receipt.json").write_text(
         json.dumps(receipt, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )

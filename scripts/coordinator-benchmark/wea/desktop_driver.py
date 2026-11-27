@@ -20,7 +20,7 @@ BENCHMARK_DIR = pathlib.Path(__file__).resolve().parent.parent
 if str(BENCHMARK_DIR) not in sys.path:
     sys.path.insert(0, str(BENCHMARK_DIR))
 
-from wea.native_den_linux import parse_png_info, run_linux_native_den
+from wea.native_den_linux import parse_png_info, run_linux_native_den, run_linux_tauri_native
 from wea.provenance import REPO_ROOT, collect_provenance
 
 
@@ -157,6 +157,8 @@ def run_desktop_driver(
     engine_bin: str | pathlib.Path | None = None,
     engine_manifest: str | pathlib.Path | None = None,
     webkit_harness_bin: str | pathlib.Path | None = None,
+    app_bin: str | pathlib.Path | None = None,
+    profile_dir: str | pathlib.Path | None = None,
 ) -> dict[str, Any]:
     if mode == "linux-webkitgtk-native":
         return run_linux_native_den(
@@ -164,6 +166,18 @@ def run_desktop_driver(
             out_dir,
             api_url=api_url,
             token=token,
+            engine_bin=engine_bin,
+            engine_manifest=engine_manifest,
+        )
+    if mode == "linux-tauri-native":
+        if not app_bin:
+            raise ValueError("--app-bin is required for linux-tauri-native")
+        return run_linux_tauri_native(
+            app_bin,
+            out_dir,
+            api_url=api_url,
+            token=token,
+            profile_dir=profile_dir,
             engine_bin=engine_bin,
             engine_manifest=engine_manifest,
         )
@@ -184,10 +198,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="TB02 D12 owned-window native Den desktop driver.")
     parser.add_argument(
         "--mode",
-        choices=("linux-webkitgtk-native", "macos-wkwebview-native"),
+        choices=("linux-webkitgtk-native", "linux-tauri-native", "macos-wkwebview-native"),
         required=True,
     )
     parser.add_argument("--url", default=os.environ.get("LYCAON_E2E_BASE_URL", ""))
+    parser.add_argument("--app-bin", type=pathlib.Path, default=None, help="Path to built Linux Tauri desktop binary.")
+    parser.add_argument("--profile-dir", type=pathlib.Path, default=None, help="Isolated profile dir for Tauri app.")
     parser.add_argument("--out", type=pathlib.Path, required=True)
     parser.add_argument("--api-url", default=os.environ.get("LYCAON_E2E_API_URL"))
     parser.add_argument("--token", default=os.environ.get("LYCAON_E2E_TOKEN"))
@@ -195,8 +211,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--engine-manifest", type=pathlib.Path, default=None)
     parser.add_argument("--webkit-harness-bin", type=pathlib.Path, default=None)
     args = parser.parse_args(argv)
-    if not args.url:
+    if args.mode != "linux-tauri-native" and not args.url:
         parser.error("--url (or LYCAON_E2E_BASE_URL) is required")
+    if args.mode == "linux-tauri-native" and args.app_bin is None:
+        parser.error("--app-bin is required for --mode linux-tauri-native")
 
     receipt = run_desktop_driver(
         args.mode,
@@ -207,6 +225,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         engine_bin=args.engine,
         engine_manifest=args.engine_manifest,
         webkit_harness_bin=args.webkit_harness_bin,
+        app_bin=args.app_bin,
+        profile_dir=args.profile_dir,
     )
     print(json.dumps(receipt, indent=2, sort_keys=True))
     return 0 if receipt.get("passed") else 1
