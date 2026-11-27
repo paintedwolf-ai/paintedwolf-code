@@ -152,11 +152,12 @@ type RevisionConflict struct {
 // SettlementReport summarizes clean-success publication or failure discard of
 // the per-program workspace overlay.
 type SettlementReport struct {
-	CleanCompletion bool               `json:"clean_completion"`
-	Published       []PublishedChange  `json:"published,omitempty"`
-	Discarded       []CanonicalTarget  `json:"discarded,omitempty"`
-	Conflicts       []RevisionConflict `json:"conflicts,omitempty"`
-	PartialFailure  error              `json:"-"`
+	CleanCompletion     bool               `json:"clean_completion"`
+	Published           []PublishedChange  `json:"published,omitempty"`
+	Discarded           []CanonicalTarget  `json:"discarded,omitempty"`
+	Conflicts           []RevisionConflict `json:"conflicts,omitempty"`
+	PartialFailure      error              `json:"-"`
+	PartialFailureError string             `json:"partial_failure_error,omitempty"`
 }
 
 // GuestFile is the byte-oriented open descriptor handle returned by

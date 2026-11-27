@@ -105,7 +105,9 @@ func (a *OverlayAdapter) Settle(ctx context.Context, cleanCompletion bool) (*pyt
 			if conflict != nil {
 				report.Conflicts = append(report.Conflicts, *conflict)
 			}
+			report.CleanCompletion = false
 			report.PartialFailure = err
+			report.PartialFailureError = err.Error()
 			a.recordPublication(parentOpID, m, baseRev, nil, 0, conflict, len(report.Published) > 0)
 			return report, err
 		}
@@ -123,7 +125,9 @@ func (a *OverlayAdapter) Settle(ctx context.Context, cleanCompletion bool) (*pyt
 		a.recordPublication(parentOpID, m, baseRev, &committed, res.BytesWritten, nil, false)
 
 		if err := a.pins.AdvanceAfterCommit(m.target, committed); err != nil {
+			report.CleanCompletion = false
 			report.PartialFailure = err
+			report.PartialFailureError = err.Error()
 			return report, err
 		}
 		if m.source != nil {

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/pythondocuments"
 	"github.com/lycaon/lycaon/internal/pythonruntime"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
@@ -89,6 +90,7 @@ func (b *editorDocumentsBridge) PublishDraft(
 		DocumentID:       doc.ID,
 		ExpectedRevision: expectedRev,
 		Content:          string(data),
+		OperationID:      uuid.NewString(),
 		SessionID:        b.sessionID,
 		Turn:             b.turn,
 		ToolCallID:       b.callID,
@@ -96,11 +98,13 @@ func (b *editorDocumentsBridge) PublishDraft(
 		Pin: &tools.EditorDocumentPin{
 			Revision:   expectedRev,
 			BaseSHA256: baseRev.DiskSHA256,
+			Absent:     baseRev.Absent,
 		},
 	}
 	res, err := b.docs.ApplyAgentEdit(ctx, b.projectID, edit)
 	if err != nil {
-		if errors.Is(err, tools.ErrEditorDocumentMoved) || errors.Is(err, tools.ErrEditorExecutionConflict) {
+		var fileChanged *tools.EditorFileChanged
+		if errors.Is(err, tools.ErrEditorDocumentMoved) || errors.Is(err, tools.ErrEditorExecutionConflict) || errors.As(err, &fileChanged) {
 			return pythondocuments.DocumentRevision{}, true, &pythondocuments.RevisionConflictError{
 				Conflict: pythonruntime.RevisionConflict{
 					Target: pythonruntime.CanonicalTarget{
@@ -116,6 +120,9 @@ func (b *editorDocumentsBridge) PublishDraft(
 			}
 		}
 		return pythondocuments.DocumentRevision{}, true, err
+	}
+	if strings.TrimSpace(res.PublicationError) != "" {
+		return pythondocuments.DocumentRevision{}, true, errors.New(res.PublicationError)
 	}
 
 	return pythondocuments.DocumentRevision{

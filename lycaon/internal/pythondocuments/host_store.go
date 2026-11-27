@@ -109,6 +109,41 @@ func (s *HostDocumentStore) ReadDocument(ctx context.Context, target pythonrunti
 		return DocumentSnapshot{Target: target}, errno
 	}
 	rel := cleanRelPath(target.RelPath)
+	abs := filepath.Join(root.Dir, filepath.FromSlash(rel))
+	linfo, lstatErr := os.Lstat(abs)
+	if lstatErr == nil {
+		if linfo.IsDir() {
+			return DocumentSnapshot{
+				Target:  target,
+				Mode:    linfo.Mode(),
+				ModTime: linfo.ModTime().UTC(),
+				IsDir:   true,
+				Revision: DocumentRevision{
+					RootID: target.RootID,
+					Branch: target.Branch,
+				},
+			}, pythonruntime.ErrnoSuccess
+		}
+		if linfo.Mode()&os.ModeSymlink != 0 {
+			linkTarget, lerr := os.Readlink(abs)
+			if lerr != nil {
+				return DocumentSnapshot{Target: target}, mapOSErrno(lerr)
+			}
+			return DocumentSnapshot{
+				Target:     target,
+				Mode:       linfo.Mode(),
+				ModTime:    linfo.ModTime().UTC(),
+				IsSymlink:  true,
+				LinkTarget: linkTarget,
+				Revision: DocumentRevision{
+					RootID:     target.RootID,
+					Branch:     target.Branch,
+					DiskSHA256: SHA256Hex([]byte(linkTarget)),
+				},
+			}, pythonruntime.ErrnoSuccess
+		}
+	}
+
 	if s.editor != nil && rel != "" {
 		draft, ok, err := s.editor.CaptureDraft(ctx, target.RootID, target.Branch, rel)
 		if err != nil {
@@ -117,7 +152,10 @@ func (s *HostDocumentStore) ReadDocument(ctx context.Context, target pythonrunti
 			return DocumentSnapshot{Target: target}, mapOSErrno(err)
 		}
 		if ok {
-			sha := SHA256Hex(draft.Bytes)
+			diskSHA := draft.BaseSHA256
+			if diskSHA == "" {
+				diskSHA = SHA256Hex(draft.Bytes)
+			}
 			resolved := target
 			resolved.DocumentID = draft.DocumentID
 			rev := DocumentRevision{
@@ -125,12 +163,13 @@ func (s *HostDocumentStore) ReadDocument(ctx context.Context, target pythonrunti
 				Branch:           target.Branch,
 				DocumentID:       draft.DocumentID,
 				DocumentRevision: draft.Revision,
-				DiskSHA256:       sha,
+				DiskSHA256:       diskSHA,
 				UnsavedDraft:     draft.Dirty,
+				Absent:           draft.Absent,
 			}
 			var mode fs.FileMode = 0o644
-			if info, statErr := os.Stat(filepath.Join(root.Dir, filepath.FromSlash(rel))); statErr == nil {
-				mode = info.Mode()
+			if lstatErr == nil {
+				mode = linfo.Mode()
 			}
 			return DocumentSnapshot{
 				Target:   resolved,
@@ -141,46 +180,14 @@ func (s *HostDocumentStore) ReadDocument(ctx context.Context, target pythonrunti
 		}
 	}
 
-	abs := filepath.Join(root.Dir, filepath.FromSlash(rel))
-	linfo, err := os.Lstat(abs)
-	if err != nil {
-		if os.IsNotExist(err) {
+	if lstatErr != nil {
+		if os.IsNotExist(lstatErr) {
 			return DocumentSnapshot{
 				Target:   target,
 				Revision: DocumentRevision{RootID: target.RootID, Branch: target.Branch, Absent: true},
 			}, pythonruntime.ErrnoENOENT
 		}
-		return DocumentSnapshot{Target: target}, mapOSErrno(err)
-	}
-	if linfo.IsDir() {
-		return DocumentSnapshot{
-			Target:  target,
-			Mode:    linfo.Mode(),
-			ModTime: linfo.ModTime().UTC(),
-			IsDir:   true,
-			Revision: DocumentRevision{
-				RootID: target.RootID,
-				Branch: target.Branch,
-			},
-		}, pythonruntime.ErrnoSuccess
-	}
-	if linfo.Mode()&os.ModeSymlink != 0 {
-		linkTarget, lerr := os.Readlink(abs)
-		if lerr != nil {
-			return DocumentSnapshot{Target: target}, mapOSErrno(lerr)
-		}
-		return DocumentSnapshot{
-			Target:     target,
-			Mode:       linfo.Mode(),
-			ModTime:    linfo.ModTime().UTC(),
-			IsSymlink:  true,
-			LinkTarget: linkTarget,
-			Revision: DocumentRevision{
-				RootID:     target.RootID,
-				Branch:     target.Branch,
-				DiskSHA256: SHA256Hex([]byte(linkTarget)),
-			},
-		}, pythonruntime.ErrnoSuccess
+		return DocumentSnapshot{Target: target}, mapOSErrno(lstatErr)
 	}
 
 	f, err := fseffect.OpenRead(fseffect.Location{Root: root.Dir, Rel: filepath.FromSlash(rel)})
