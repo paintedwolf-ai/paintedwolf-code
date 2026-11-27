@@ -36,7 +36,7 @@ type stageResult struct {
 	cause       error
 	err         error
 	external    bool
-	redirects   *descriptorScope
+	redirects   []*descriptorScope
 }
 
 // pipeline runs every stage concurrently in an isolated frame joined by metered
@@ -135,7 +135,7 @@ func (f *frame) pipeline(ctx context.Context, s commandsurface.Statement, c comm
 }
 
 func (f *frame) settlePipeline(ctx context.Context, run *childRun, pipes []*BytePipe, results []stageResult) error {
-	outcomes := make([]PipelineStageOutcome, len(stages))
+	outcomes := make([]PipelineStageOutcome, len(results))
 	var stageErr error
 	for i, r := range results {
 		outcomes[i] = PipelineStageOutcome{ExecutionID: r.executionID, Result: r.result, RequiredInputComplete: true}
@@ -160,7 +160,11 @@ func (f *frame) settlePipeline(ctx context.Context, run *childRun, pipes []*Byte
 		stageErr = f.interrupt(ctxErr)
 	}
 	allowPublication := out.PublicationEligible && stageErr == nil && settleErr == nil
-	if changed, publicationErr := finishPipelineRedirects(ctx, outcomes, results, allowPublication); changed {
+	if allowPublication && f.pipelineRedirects != nil {
+		for _, stage := range results {
+			*f.pipelineRedirects = append(*f.pipelineRedirects, stage.redirects...)
+		}
+	} else if changed, publicationErr := finishPipelineRedirects(ctx, outcomes, results, allowPublication); changed {
 		out, settleErr = SettlePipeline(run.inv.Identity.ExecutionID, outcomes, f.state.latch)
 		stageErr = errors.Join(stageErr, publicationErr)
 	}
@@ -200,19 +204,24 @@ func finishPipelineRedirects(ctx context.Context, outcomes []PipelineStageOutcom
 	var failed bool
 	var publicationErr error
 	for i, stage := range results {
-		scope := stage.redirects
-		if scope == nil {
-			continue
+		for _, scope := range stage.redirects {
+			if scope == nil {
+				continue
+			}
+			finishCtx := ctx
+			if !publish {
+				finishCtx = context.WithoutCancel(ctx)
+			}
+			err := scope.finish(finishCtx, publish)
+			if !publish || (err == nil && scope.frame.publish.eligible()) {
+				continue
+			}
+			failed, publish = true, false
+			publicationErr = errors.Join(publicationErr, err)
+			outcomes[i].Result = ordinaryResult(scope.frame.state.control.Status())
+			outcomes[i].Result.PublicationEligible = false
+			outcomes[i].Closure = ConsumerClosure{}
 		}
-		err := scope.finish(ctx, publish)
-		if !publish || (err == nil && scope.frame.publish.eligible()) {
-			continue
-		}
-		failed, publish = true, false
-		publicationErr = err
-		outcomes[i].Result = ordinaryResult(scope.frame.state.control.Status())
-		outcomes[i].Result.PublicationEligible = false
-		outcomes[i].Closure = ConsumerClosure{}
 	}
 	return failed, publicationErr
 }
@@ -221,8 +230,9 @@ func finishPipelineRedirects(ctx context.Context, outcomes []PipelineStageOutcom
 // settled execution when it carries the stage's final status, otherwise an
 // aggregation-only record of that status (exit, negation, bookkeeping).
 func (g *frame) stage(ctx context.Context, s commandsurface.Statement) stageResult {
-	var redirects *descriptorScope
-	_, err := g.statementWithDeferredRedirects(ctx, s, &redirects)
+	var redirects []*descriptorScope
+	g.pipelineRedirects = &redirects
+	_, err := g.statement(ctx, s)
 	if errors.Is(err, ErrConsumerClosed) && g.producerPipe != nil && g.producerPipe.Completion().Termination == StreamConsumerClosed {
 		err = nil
 	}
