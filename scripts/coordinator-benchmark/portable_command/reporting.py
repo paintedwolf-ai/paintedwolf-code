@@ -17,6 +17,7 @@ SETUP_GAPS = {'profile_binding_approximate', 'profile_binding_mismatch', 'uninje
 OBSERVATION_GAPS = {
     'missing_sidecar_log', 'incomplete_sidecar_log', 'missing_program_status_code',
     'unresolved_command_handle', 'command_wait_timeout', 'command_wait_rejected', 'running_command_without_handle',
+    'command_output_truncated', 'command_output_cursor_gap', 'command_output_missing', 'command_output_rejected',
 }
 OPENING_MARKERS = ('server listening', 'listening', 'server started', 'startup')
 CLOSING_MARKERS = (
