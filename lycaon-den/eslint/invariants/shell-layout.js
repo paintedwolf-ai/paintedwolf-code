@@ -134,6 +134,19 @@ export default [
     seed: { code: `import { NoticeRail } from "../NoticeRail.tsx"; export { NoticeRail };` },
   },
   {
+    name: "custom-scrollbars-declare-extent-tracking",
+    message: "Supply an extent element, vertical model, or measurement scheduler to attachThemedViewportScrollbar.",
+    files: [SRC],
+    ignores: ["src/test/**", "src/**/test/**"],
+    syntax: [
+      ":matches(CallExpression[callee.name='attachThemedViewportScrollbar'], CallExpression[callee.property.name='attachThemedViewportScrollbar']):not(:has(ObjectExpression.arguments:nth-child(3) Property:matches([key.name=/^(extent|vertical|schedule)$/], [key.value=/^(extent|vertical|schedule)$/])))",
+    ],
+    seed: {
+      file: "src/components/shell/ShellNavRail.tsx",
+      code: `export const attach = (extent: HTMLElement, frame: HTMLElement) => attachThemedViewportScrollbar(frame, extent, { axis: "y" });`,
+    },
+  },
+  {
     name: "height-toggles-share-one-motion",
     message: "Animate a measured height through ui/height-toggle-motion.ts.",
     files: [SRC],
