@@ -1,6 +1,6 @@
 # Page evidence reference
 
-Source of truth for host rules: `docs/den.md` (visual evidence) and `docs/tools.md` (page tools). This file is a task recipe, not a second contract.
+Host rules: `docs/den.md` (visual evidence), `docs/tools.md` (page tools).
 
 ## Capture binding
 
