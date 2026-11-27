@@ -75,12 +75,12 @@ def extract_receipt_path(stdout: str, stderr: str = "") -> str:
 
 
 def resolve_last_run_go_json(repo_root: Path) -> Path | None:
-    """Resolve `<artifact_root>/last-run/go-test.json` via `scripts/artifact_paths.py root`."""
+    """Resolve `<artifact_root>/last-run/go-test.json` via `scripts/artifact_paths.py artifacts`."""
     script = Path(repo_root) / "scripts" / "artifact_paths.py"
     if not script.is_file():
         return None
     proc = subprocess.run(
-        [sys.executable, str(script), "root"],
+        [sys.executable, str(script), "artifacts"],
         cwd=str(repo_root),
         capture_output=True,
         text=True,

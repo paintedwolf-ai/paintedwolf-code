@@ -26,9 +26,15 @@ from catalog_feed_search.driver_inprocess import (
     build_task_digest_argv,
     extract_receipt_path,
     parse_receipt_and_go_json,
+    resolve_last_run_go_json,
     run_inprocess_suite,
 )
-from catalog_feed_search.driver_provenance import collect_run_provenance, file_sha256, parse_proc_mounts_fs
+from catalog_feed_search.driver_provenance import (
+    collect_run_provenance,
+    file_sha256,
+    parse_darwin_mount_fs,
+    parse_proc_mounts_fs,
+)
 from catalog_feed_search.driver_sidecar import SidecarDriver
 from catalog_feed_search.driver_sse import LiveSSESubscriber
 from catalog_feed_search.live_controls import (
@@ -718,6 +724,15 @@ class SidecarLiveSSESubscriberAndControlsTests(unittest.TestCase):
         )
         self.assertEqual(parse_proc_mounts_fs(Path("/home/user/work/repo"), sample), "ext4")
         self.assertEqual(parse_proc_mounts_fs(Path("/tmp/cfs_pilot"), sample), "tmpfs")
+
+        darwin_sample = (
+            "/dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)\n"
+            "/dev/disk3s5 on /System/Volumes/Data (apfs, local, journaled, nobrowse)\n"
+        )
+        self.assertEqual(parse_darwin_mount_fs(Path("/Users/test/work"), darwin_sample), "apfs")
+        resolved = resolve_last_run_go_json(REPO_ROOT)
+        self.assertIsNotNone(resolved)
+        self.assertTrue(str(resolved).endswith("last-run/go-test.json"))
 
     def test_baseline_slicing_post_sentinel_slicing_and_resync_reconciliation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

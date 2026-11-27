@@ -55,17 +55,33 @@ def parse_proc_mounts_fs(target: Path, mounts_text: str) -> str:
     return best_fs
 
 
+def parse_darwin_mount_fs(target: Path, mount_text: str) -> str:
+    """Return filesystem type for the longest matching mountpoint in macOS `mount` output."""
+    resolved = str(target)
+    best_mount = ""
+    best_fs = ""
+    for line in mount_text.splitlines():
+        if " on " not in line or " (" not in line:
+            continue
+        _, rest = line.split(" on ", 1)
+        mount_point, paren = rest.rsplit(" (", 1)
+        fs_type = paren.split(",", 1)[0].split(")", 1)[0].strip()
+        if resolved == mount_point or resolved.startswith(mount_point.rstrip("/") + "/"):
+            if len(mount_point) > len(best_mount):
+                best_mount = mount_point
+                best_fs = fs_type
+    return best_fs
+
+
 def detect_filesystem_type(directory: Path) -> str:
-    """Best-effort filesystem type label for host evidence (APFS, ext4, etc.)."""
+    """Best-effort filesystem type label for host evidence (apfs, ext4, etc.)."""
     sys_name = platform.system().lower()
     if sys_name == "darwin":
-        out = _run_text(["df", "-T", "apfs,hfs,tmpfs", str(directory)])
+        out = _run_text(["mount"])
         if out:
-            lines = out.splitlines()
-            if len(lines) >= 2:
-                parts = lines[1].split()
-                if len(parts) >= 2:
-                    return parts[1]
+            fs = parse_darwin_mount_fs(Path(directory).resolve(), out)
+            if fs:
+                return fs
         return "apfs_or_darwin"
     if sys_name == "linux":
         proc_mounts = Path("/proc/mounts")
