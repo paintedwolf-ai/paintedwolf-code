@@ -27,7 +27,7 @@ usage: run-paired.sh --mode <baseline|compare> --repo-root <dir> --out-dir <dir>
        [--baseline-product-rev <sha>] [--candidate-product-rev <sha>]
        [--baseline-image-archive <tar.gz>] [--baseline-engine-archive <tar.gz>]
        [--candidate-image-archive <tar.gz>] [--candidate-engine-archive <tar.gz>]
-       [--test-bin <path>]
+       [--test-bin <path>] [--swap-warm-order]
        [--allow-same-image] [--check-identities-only]
        [--samples <N>] [--min-idle <pct>] [--precheck-seconds <S>]
        [--max-attempts <K>] [--retry-wait <S>] [--stage-now]
@@ -54,6 +54,7 @@ BASELINE_ENGINE_ARCHIVE=""
 CANDIDATE_IMAGE_ARCHIVE=""
 CANDIDATE_ENGINE_ARCHIVE=""
 ALLOW_SAME_IMAGE=0
+SWAP_WARM_ORDER=0
 CHECK_IDENTITIES_ONLY=0
 SAMPLES=5
 MIN_IDLE=90
@@ -83,6 +84,7 @@ while [[ $# -gt 0 ]]; do
     --candidate-image-archive) CANDIDATE_IMAGE_ARCHIVE="$2"; shift 2 ;;
     --candidate-engine-archive) CANDIDATE_ENGINE_ARCHIVE="$2"; shift 2 ;;
     --allow-same-image) ALLOW_SAME_IMAGE=1; shift 1 ;;
+    --swap-warm-order) SWAP_WARM_ORDER=1; shift 1 ;;
     --check-identities-only) CHECK_IDENTITIES_ONLY=1; shift 1 ;;
     --samples) SAMPLES="$2"; shift 2 ;;
     --min-idle) MIN_IDLE="$2"; shift 2 ;;
@@ -439,24 +441,32 @@ run_one_compare_attempt() {
   done
 
   # Phase 2: Reused-service warm series (1 initialized service + 1 excluded priming call + N subsequent fresh guests
-  # on that SAME service), alternating which side runs first across workloads.
-  run_side baseline "pass_noop" "warm" "${SAMPLES}" "${attempt_dir}/warm-series/pass_noop-baseline.json" "baseline-warm-pass_noop"
-  run_side candidate "pass_noop" "warm" "${SAMPLES}" "${attempt_dir}/warm-series/pass_noop-candidate.json" "candidate-warm-pass_noop"
-  run_side candidate "frozen_workbook" "warm" "${SAMPLES}" "${attempt_dir}/warm-series/frozen_workbook-candidate.json" "candidate-warm-frozen_workbook"
-  run_side baseline "frozen_workbook" "warm" "${SAMPLES}" "${attempt_dir}/warm-series/frozen_workbook-baseline.json" "baseline-warm-frozen_workbook"
+  # on that SAME service), alternating which side runs first across workloads (and swappable via --swap-warm-order).
+  if [[ "${SWAP_WARM_ORDER}" == "1" ]]; then
+    run_side candidate "pass_noop" "warm" "${SAMPLES}" "${attempt_dir}/warm-series/pass_noop-candidate.json" "candidate-warm-pass_noop"
+    run_side baseline "pass_noop" "warm" "${SAMPLES}" "${attempt_dir}/warm-series/pass_noop-baseline.json" "baseline-warm-pass_noop"
+    run_side baseline "frozen_workbook" "warm" "${SAMPLES}" "${attempt_dir}/warm-series/frozen_workbook-baseline.json" "baseline-warm-frozen_workbook"
+    run_side candidate "frozen_workbook" "warm" "${SAMPLES}" "${attempt_dir}/warm-series/frozen_workbook-candidate.json" "candidate-warm-frozen_workbook"
+  else
+    run_side baseline "pass_noop" "warm" "${SAMPLES}" "${attempt_dir}/warm-series/pass_noop-baseline.json" "baseline-warm-pass_noop"
+    run_side candidate "pass_noop" "warm" "${SAMPLES}" "${attempt_dir}/warm-series/pass_noop-candidate.json" "candidate-warm-pass_noop"
+    run_side candidate "frozen_workbook" "warm" "${SAMPLES}" "${attempt_dir}/warm-series/frozen_workbook-candidate.json" "candidate-warm-frozen_workbook"
+    run_side baseline "frozen_workbook" "warm" "${SAMPLES}" "${attempt_dir}/warm-series/frozen_workbook-baseline.json" "baseline-warm-frozen_workbook"
+  fi
 
   touch "${stop_file}"
   wait "${watch_pid}" || true
   rm -f "${stop_file}"
 
   local cmp_rc=0
-  python3 - "${attempt_dir}" "${SAMPLES}" "${pre_rc}" <<'PY' || cmp_rc=$?
+  python3 - "${attempt_dir}" "${SAMPLES}" "${pre_rc}" "${SWAP_WARM_ORDER}" <<'PY' || cmp_rc=$?
 import json, statistics, sys
 from pathlib import Path
 
 out_dir = Path(sys.argv[1])
 samples = int(sys.argv[2])
 pre_rc = int(sys.argv[3])
+swap_warm_order = sys.argv[4] == "1"
 pre = json.loads((out_dir / "host-precheck.json").read_text())
 dur = json.loads((out_dir / "host-during.json").read_text())
 idents = json.loads((out_dir / "compare-identities.json").read_text())
@@ -528,7 +538,12 @@ for key in sorted(agg["baseline"].keys()):
 report = {
     "schema_version": "paintedwolf.portable-python.paired-compare/v2",
     "cold_order": "alternating-ABAB-fresh-service",
-    "warm_protocol": "reused-service-1-excluded-priming-plus-5-fresh-guests-alternating-workload-order",
+    "warm_protocol": (
+        "reused-service-1-excluded-priming-plus-5-fresh-guests-counterbalanced-swapped-order"
+        if swap_warm_order
+        else "reused-service-1-excluded-priming-plus-5-fresh-guests-alternating-workload-order"
+    ),
+    "warm_order_swapped": swap_warm_order,
     "samples": samples,
     "contaminated": contaminated,
     "contamination_reasons": reasons,

@@ -227,6 +227,8 @@ jobs:
                   "--max-attempts", "6",
                   "--retry-wait", "20",
               ]
+              if cmp.get("swap_warm_order"):
+                  cmd.append("--swap-warm-order")
               print(f"=== Running comparison {cname}: {cmp['baseline']} vs {cmp['candidate']} ===", flush=True)
               res = subprocess.run(cmd)
               if res.returncode != 0:
