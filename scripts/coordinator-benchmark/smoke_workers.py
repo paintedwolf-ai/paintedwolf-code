@@ -86,6 +86,8 @@ def _progress_snapshot_from_request(request):
                         start = text.rfind('{', 0, start)
                         continue
                     if isinstance(obj, dict) and obj.get('revision') and ('content' in obj or 'item_ids' in obj):
+                        if obj.get('initialization_required') or not (obj.get('content') or '').strip():
+                            return None
                         return obj
                     break
                 pos = text.rfind(marker, 0, pos)
