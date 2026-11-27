@@ -102,6 +102,9 @@ func (s *Handler) HandleApplySearchReplacement(w http.ResponseWriter, r *http.Re
 		return
 	}
 	compileCtx := s.searchCompileContext(r.Context(), origin)
+	compileCtx.AttachedProjectIDs = func() ([]string, error) {
+		return []string{origin}, nil
+	}
 	compileCtx.Flags = matchFlagsFromReplaceApply(req)
 	plan, err := search.CompileQuery(query, compileCtx)
 	if err != nil {

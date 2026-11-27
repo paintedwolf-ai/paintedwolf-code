@@ -43,7 +43,7 @@ func (o *Owner) replay(ctx context.Context, row record) (wire.ProjectRemovalResu
 	if row.Settled {
 		return row.Result, nil
 	}
-	_, err := o.Projects.Get(ctx, row.ProjectID)
+	_, err := project.GetForRemoval(ctx, o.Projects, row.ProjectID)
 	switch {
 	case errors.Is(err, project.ErrNotFound):
 		row.Result.ProjectState = "deleted"

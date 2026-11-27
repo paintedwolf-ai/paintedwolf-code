@@ -150,6 +150,14 @@ func parseOptionalActivityAt(raw interface{}) (*time.Time, error) {
 }
 
 func loadProject(ctx context.Context, q *db.Queries, id string) (*Project, error) {
+	return loadProjectRecord(ctx, q, id, false)
+}
+
+func loadProjectForRemoval(ctx context.Context, q *db.Queries, id string) (*Project, error) {
+	return loadProjectRecord(ctx, q, id, true)
+}
+
+func loadProjectRecord(ctx context.Context, q *db.Queries, id string, allowPartialRemoval bool) (*Project, error) {
 	row, err := q.GetProjectWithStats(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -168,9 +176,13 @@ func loadProject(ctx context.Context, q *db.Queries, id string) (*Project, error
 	outsideID, err := q.GetProjectOutsideRootID(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
+			if !allowPartialRemoval {
+				return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
+			}
+			outsideID = ""
+		} else {
+			return nil, fmt.Errorf("project outside namespace: %w", err)
 		}
-		return nil, fmt.Errorf("project outside namespace: %w", err)
 	}
 	p.Outside = outsideRoot(p.ID, outsideID, p.CreatedAt)
 	if promotionRow, promotionErr := q.GetProjectPromotion(ctx, id); promotionErr == nil {

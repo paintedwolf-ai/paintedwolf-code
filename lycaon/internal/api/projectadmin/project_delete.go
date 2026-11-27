@@ -26,7 +26,7 @@ func (s *Removal) deleteProject(ctx context.Context, id string, force bool, repo
 			s.sourceWatch.ScheduleSourceWatch(context.WithoutCancel(ctx), id)
 		}
 	}()
-	p, err := s.Registry.Get(ctx, id)
+	p, err := project.GetForRemoval(ctx, s.Registry, id)
 	if err != nil {
 		return err
 	}

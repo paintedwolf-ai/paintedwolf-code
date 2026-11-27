@@ -98,6 +98,20 @@ func (r *SQLRegistry) Create(ctx context.Context, params CreateParams) (*Project
 	return p, nil
 }
 
+// GetForRemoval loads a project for lifecycle removal/recovery even when an
+// interrupted deletion already removed child rows (such as the outside root).
+func GetForRemoval(ctx context.Context, reg interface {
+	Get(context.Context, string) (*Project, error)
+}, id string) (*Project, error) {
+	type removalGetter interface {
+		GetForRemoval(context.Context, string) (*Project, error)
+	}
+	if rg, ok := reg.(removalGetter); ok {
+		return rg.GetForRemoval(ctx, id)
+	}
+	return reg.Get(ctx, id)
+}
+
 func (r *SQLRegistry) Get(ctx context.Context, id string) (*Project, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -105,36 +119,67 @@ func (r *SQLRegistry) Get(ctx context.Context, id string) (*Project, error) {
 	return loadProject(ctx, r.queries, id)
 }
 
+func (r *SQLRegistry) GetForRemoval(ctx context.Context, id string) (*Project, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return loadProjectForRemoval(ctx, r.queries, id)
+}
+
+func fetchListProjectRows(ctx context.Context, q *db.Queries) (
+	[]db.ListProjectsRow,
+	[]db.ProjectRoots,
+	[]db.ListProjectOutsideRootsRow,
+	[]db.ProjectPromotions,
+	error,
+) {
+	rows, err := q.ListProjects(ctx)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	allRoots, err := q.ListAllProjectRoots(ctx)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	outsideRows, err := q.ListProjectOutsideRoots(ctx)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	promotionRows, err := q.ListProjectPromotions(ctx)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	return rows, allRoots, outsideRows, promotionRows, nil
+}
+
 func (r *SQLRegistry) List(ctx context.Context) ([]Project, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return nil, err
+	var (
+		rows          []db.ListProjectsRow
+		allRoots      []db.ProjectRoots
+		outsideRows   []db.ListProjectOutsideRootsRow
+		promotionRows []db.ProjectPromotions
+		err           error
+	)
+	if reader, ok := r.db.(db.ReadHandle); ok {
+		tx, beginErr := reader.BeginReadTx(ctx)
+		if beginErr != nil {
+			return nil, beginErr
+		}
+		rows, allRoots, outsideRows, promotionRows, err = fetchListProjectRows(ctx, r.queries.WithTx(tx))
+		_ = tx.Rollback()
+	} else {
+		rows, allRoots, outsideRows, promotionRows, err = fetchListProjectRows(ctx, r.queries)
 	}
-	defer func() { _ = tx.Rollback() }()
-	q := r.queries.WithTx(tx)
-	rows, err := q.ListProjects(ctx)
-	if err != nil {
-		return nil, err
-	}
-	allRoots, err := q.ListAllProjectRoots(ctx)
 	if err != nil {
 		return nil, err
 	}
 	rootsByProject := projectRootsByProjectID(allRoots)
-	outsideRows, err := q.ListProjectOutsideRoots(ctx)
-	if err != nil {
-		return nil, err
-	}
 	outside := make(map[string]string, len(outsideRows))
 	for _, row := range outsideRows {
 		outside[row.ProjectID] = row.ID
-	}
-	promotionRows, err := q.ListProjectPromotions(ctx)
-	if err != nil {
-		return nil, err
 	}
 	promotions := make(map[string]*Promotion, len(promotionRows))
 	for _, row := range promotionRows {

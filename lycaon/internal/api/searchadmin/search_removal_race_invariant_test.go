@@ -67,8 +67,10 @@ func mountWithRegistry(t *testing.T, f *searchFixture, reg project.Registry) htt
 
 func TestSearchExportReplaceSurviveUnrelatedProjectMidRemoval(t *testing.T) {
 	f := newSearchFixture(t)
+	const origBody = "package main\n\nconst Token = \"needle_old\"\n"
+	const wantBody = "package main\n\nconst Token = \"needle_new\"\n"
 	healthy := f.addProject(t, "Healthy", "healthy-root", map[string]string{
-		"main.go": "package main\n\nconst Token = \"needle_old\"\n",
+		"main.go": origBody,
 	})
 	removing := f.addProject(t, "Removing", "removing-root", map[string]string{
 		"gone.go": "package gone\n\nconst Token = \"needle_old\"\n",
@@ -79,55 +81,64 @@ func TestSearchExportReplaceSurviveUnrelatedProjectMidRemoval(t *testing.T) {
 	// projects row still exists.
 	testutil.FailErr(t, "delete removing project rows", db.DeleteProjectRows(t.Context(), f.database, removing.ID))
 
-	// 1. Search (origin-scoped and global) succeeds for healthy project.
-	scopedSearch := decodeOK[wire.SearchResponse](t, f.post(t, "/v1/search", jsonBody(t, wire.SearchRequest{
-		Query: "needle_old", OriginProjectID: healthy.ID,
-	})))
-	if len(scopedSearch.Hits) == 0 {
-		t.Fatalf("scoped search returned no hits during unrelated mid-removal: %+v", scopedSearch)
-	}
-	globalSearch := decodeOK[wire.SearchResponse](t, f.post(t, "/v1/search", jsonBody(t, wire.SearchRequest{
-		Query: "needle_old",
-	})))
-	if len(globalSearch.Hits) == 0 {
-		t.Fatalf("global search returned no hits during unrelated mid-removal: %+v", globalSearch)
+	// 1. Origin-scoped, explicit healthy-slug, and global search return exact
+	// healthy project/root/path hits and zero results belonging to `removing`.
+	for name, req := range map[string]wire.SearchRequest{
+		"origin_scoped": {Query: "needle_old", OriginProjectID: healthy.ID},
+		"healthy_slug":  {Query: "project:healthy needle_old", OriginProjectID: healthy.ID},
+		"global":        {Query: "needle_old"},
+	} {
+		resp := decodeOK[wire.SearchResponse](t, f.post(t, "/v1/search", jsonBody(t, req)))
+		if len(resp.Hits) != 1 {
+			t.Fatalf("%s search hits = %+v, want exactly 1 healthy hit", name, resp.Hits)
+		}
+		h := resp.Hits[0]
+		if h.ProjectID != healthy.ID || h.RootID != healthy.Roots[0].ID || h.Path != "main.go" {
+			t.Fatalf("%s hit = %+v, want project=%s root=%s path=main.go", name, h, healthy.ID, healthy.Roots[0].ID)
+		}
 	}
 
-	// 2. Export succeeds for healthy project.
+	// 2. Export succeeds with healthy project's exact hit and zero hits from `removing`.
 	exportRec := f.post(t, "/v1/search/export", jsonBody(t, wire.SearchExportRequest{
 		Query: "needle_old", Format: wire.SearchExportFormatJSONL, OriginProjectID: healthy.ID,
 	}))
-	if exportRec.Code != http.StatusOK || !strings.Contains(exportRec.Body.String(), "main.go") {
+	if exportRec.Code != http.StatusOK {
 		t.Fatalf("export status=%d body=%s", exportRec.Code, exportRec.Body.String())
 	}
+	exportBody := exportRec.Body.String()
+	if !strings.Contains(exportBody, `"path":"main.go"`) || !strings.Contains(exportBody, healthy.ID) || strings.Contains(exportBody, removing.ID) {
+		t.Fatalf("unexpected export body=%s", exportBody)
+	}
 
-	// 3. Replace preview (origin-scoped and global) succeeds for healthy project.
+	// 3. Replace preview (origin-scoped and global) returns exact healthy file and zero `removing` files.
 	preview := decodeOK[wire.SearchReplacePreviewResponse](t, f.post(t, "/v1/search/replace/preview", jsonBody(t, wire.SearchReplacePreviewRequest{
 		Query: "needle_old", Replacement: "needle_new", OriginProjectID: healthy.ID,
 	})))
-	if preview.State != wire.SearchReplacePreviewState(search.ReplacePreviewReady) || len(preview.Files) != 1 || preview.Files[0].Path != "main.go" {
+	if preview.State != wire.SearchReplacePreviewState(search.ReplacePreviewReady) || len(preview.Files) != 1 ||
+		preview.Files[0].RootID != healthy.Roots[0].ID || preview.Files[0].Path != "main.go" {
 		t.Fatalf("origin preview = %+v", preview)
 	}
 	globalPreview := decodeOK[wire.SearchReplacePreviewResponse](t, f.post(t, "/v1/search/replace/preview", jsonBody(t, wire.SearchReplacePreviewRequest{
 		Query: "needle_old", Replacement: "needle_new",
 	})))
-	if globalPreview.State != wire.SearchReplacePreviewState(search.ReplacePreviewReady) || len(globalPreview.Files) != 1 {
+	if globalPreview.State != wire.SearchReplacePreviewState(search.ReplacePreviewReady) || len(globalPreview.Files) != 1 ||
+		globalPreview.Files[0].RootID != healthy.Roots[0].ID || globalPreview.Files[0].Path != "main.go" {
 		t.Fatalf("global preview = %+v", globalPreview)
 	}
 
-	// 4. Replace apply succeeds and writes healthy project's file.
+	// 4. Replace apply writes verbatim expected bytes to healthy project's file.
 	pf := preview.Files[0]
 	applyResp := decodeOK[wire.SearchReplaceApplyResponse](t, f.post(t, "/v1/search/replace/apply", jsonBody(t, wire.SearchReplaceApplyRequest{
 		OperationID: uuid.NewString(), Query: "needle_old", Replacement: "needle_new", OriginProjectID: healthy.ID,
 		Files: []wire.SearchReplaceApplyFile{{RootID: pf.RootID, Path: pf.Path, SHA256: pf.SHA256, Hunks: []int{0}}},
 	})))
-	if len(applyResp.Files) != 1 || !applyResp.Files[0].Applied {
+	if len(applyResp.Files) != 1 || !applyResp.Files[0].Applied || applyResp.Files[0].RootID != healthy.Roots[0].ID || applyResp.Files[0].Path != "main.go" {
 		t.Fatalf("apply response = %+v", applyResp)
 	}
 	written, err := os.ReadFile(filepath.Join(healthy.Roots[0].Path, "main.go"))
 	testutil.FailErr(t, "read applied file", err)
-	if !strings.Contains(string(written), "needle_new") {
-		t.Fatalf("applied file = %q", written)
+	if string(written) != wantBody {
+		t.Fatalf("applied file = %q, want verbatim %q", written, wantBody)
 	}
 
 	// 5. Explicit slug for the mid-removal project fails cleanly as query invalid (400), not 500.
@@ -152,21 +163,23 @@ func TestSearchExportReplaceTolerateTOCTOUVanishedProjectBetweenListAndGet(t *te
 	searchResp := decodeOK[wire.SearchResponse](t, postTo(t, router, "/v1/search", jsonBody(t, wire.SearchRequest{
 		Query: "toctou_hit",
 	})))
-	if len(searchResp.Hits) != 1 || searchResp.Hits[0].ProjectID != healthy.ID {
+	if len(searchResp.Hits) != 1 || searchResp.Hits[0].ProjectID != healthy.ID ||
+		searchResp.Hits[0].RootID != healthy.Roots[0].ID || searchResp.Hits[0].Path != "app.go" {
 		t.Fatalf("global search with TOCTOU vanished project = %+v", searchResp)
 	}
 
 	exportRec := postTo(t, router, "/v1/search/export", jsonBody(t, wire.SearchExportRequest{
 		Query: "toctou_hit", Format: wire.SearchExportFormatJSONL,
 	}))
-	if exportRec.Code != http.StatusOK || !strings.Contains(exportRec.Body.String(), "app.go") {
+	if exportRec.Code != http.StatusOK || !strings.Contains(exportRec.Body.String(), `"path":"app.go"`) || strings.Contains(exportRec.Body.String(), vanishedID) {
 		t.Fatalf("export with TOCTOU vanished project status=%d body=%s", exportRec.Code, exportRec.Body.String())
 	}
 
 	preview := decodeOK[wire.SearchReplacePreviewResponse](t, postTo(t, router, "/v1/search/replace/preview", jsonBody(t, wire.SearchReplacePreviewRequest{
 		Query: "toctou_hit", Replacement: "toctou_done",
 	})))
-	if preview.State != wire.SearchReplacePreviewState(search.ReplacePreviewReady) || len(preview.Files) != 1 {
+	if preview.State != wire.SearchReplacePreviewState(search.ReplacePreviewReady) || len(preview.Files) != 1 ||
+		preview.Files[0].RootID != healthy.Roots[0].ID || preview.Files[0].Path != "app.go" {
 		t.Fatalf("global replace preview with TOCTOU vanished project = %+v", preview)
 	}
 }
@@ -183,32 +196,70 @@ func TestSearchPreservesGlobalSearchSlugResolutionOriginSkipAndGenuineErrors(t *
 	spy := &spyProjectRegistry{Registry: f.projects}
 	router := mountWithRegistry(t, f, spy)
 
-	// Global search returns hits from both projects.
+	// Global search, global export, and global replace preview enumerate all active projects.
 	global := decodeOK[wire.SearchResponse](t, postTo(t, router, "/v1/search", jsonBody(t, wire.SearchRequest{
 		Query: "shared_tok",
 	})))
 	if len(global.Hits) != 2 {
 		t.Fatalf("global search hits = %d, want 2", len(global.Hits))
 	}
+	globalPrev := decodeOK[wire.SearchReplacePreviewResponse](t, postTo(t, router, "/v1/search/replace/preview", jsonBody(t, wire.SearchReplacePreviewRequest{
+		Query: "shared_tok", Replacement: "next_tok",
+	})))
+	if len(globalPrev.Files) != 2 {
+		t.Fatalf("global replace preview files = %d, want 2", len(globalPrev.Files))
+	}
 
 	// Explicit slug resolves beta.
 	slugged := decodeOK[wire.SearchResponse](t, postTo(t, router, "/v1/search", jsonBody(t, wire.SearchRequest{
 		Query: "project:beta shared_tok", OriginProjectID: alpha.ID,
 	})))
-	if len(slugged.Hits) != 1 || slugged.Hits[0].ProjectID != beta.ID {
-		t.Fatalf("slugged search = %+v, want only beta", slugged.Hits)
+	if len(slugged.Hits) != 1 || slugged.Hits[0].ProjectID != beta.ID || slugged.Hits[0].Path != "b.go" {
+		t.Fatalf("slugged search = %+v, want only beta/b.go", slugged.Hits)
 	}
 
-	// Single-project replace preview avoids enumerating unrelated projects via List().
+	// Origin-scoped replace preview AND apply avoid enumerating unrelated projects via List()
+	// while still honoring explicit project:<slug> filters.
 	spy.listCalls.Store(0)
 	originPrev := decodeOK[wire.SearchReplacePreviewResponse](t, postTo(t, router, "/v1/search/replace/preview", jsonBody(t, wire.SearchReplacePreviewRequest{
 		Query: "shared_tok", Replacement: "next_tok", OriginProjectID: alpha.ID,
 	})))
-	if len(originPrev.Files) != 1 || originPrev.Files[0].Path != "a.go" {
+	if len(originPrev.Files) != 1 || originPrev.Files[0].RootID != alpha.Roots[0].ID || originPrev.Files[0].Path != "a.go" {
 		t.Fatalf("origin replace preview = %+v", originPrev)
 	}
 	if got := spy.listCalls.Load(); got != 0 {
 		t.Fatalf("origin-scoped replace preview called List() %d times, want 0", got)
+	}
+
+	// Explicit project:beta on origin=alpha preview returns empty (confined to origin) and apply refuses with 400.
+	crossPrev := decodeOK[wire.SearchReplacePreviewResponse](t, postTo(t, router, "/v1/search/replace/preview", jsonBody(t, wire.SearchReplacePreviewRequest{
+		Query: "project:beta shared_tok", Replacement: "next_tok", OriginProjectID: alpha.ID,
+	})))
+	if len(crossPrev.Files) != 0 {
+		t.Fatalf("cross-project explicit slug preview = %+v, want 0 files", crossPrev.Files)
+	}
+	requireErrorCode(t, postTo(t, router, "/v1/search/replace/apply", jsonBody(t, wire.SearchReplaceApplyRequest{
+		OperationID: uuid.NewString(), Query: "project:beta shared_tok", Replacement: "next_tok", OriginProjectID: alpha.ID,
+		Files: []wire.SearchReplaceApplyFile{},
+	})), wire.ApiErrorCodeInvalidRequest)
+
+	// Origin-scoped apply without project:<slug> makes 0 List() calls and writes verbatim bytes.
+	spy.listCalls.Store(0)
+	pf := originPrev.Files[0]
+	applyResp := decodeOK[wire.SearchReplaceApplyResponse](t, postTo(t, router, "/v1/search/replace/apply", jsonBody(t, wire.SearchReplaceApplyRequest{
+		OperationID: uuid.NewString(), Query: "shared_tok", Replacement: "next_tok", OriginProjectID: alpha.ID,
+		Files: []wire.SearchReplaceApplyFile{{RootID: pf.RootID, Path: pf.Path, SHA256: pf.SHA256, Hunks: []int{0}}},
+	})))
+	if len(applyResp.Files) != 1 || !applyResp.Files[0].Applied {
+		t.Fatalf("origin apply = %+v", applyResp)
+	}
+	if got := spy.listCalls.Load(); got != 0 {
+		t.Fatalf("origin-scoped replace apply called List() %d times, want 0", got)
+	}
+	gotAlpha, err := os.ReadFile(filepath.Join(alpha.Roots[0].Path, "a.go"))
+	testutil.FailErr(t, "read alpha a.go", err)
+	if string(gotAlpha) != "package a\n\nconst V = \"next_tok\"\n" {
+		t.Fatalf("alpha a.go = %q", gotAlpha)
 	}
 
 	// Genuine registry errors (not ErrNotFound) must still propagate as 500.
