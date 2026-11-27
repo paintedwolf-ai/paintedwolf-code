@@ -153,9 +153,12 @@ type Mutations struct {
 	SourceLedger    *sourceledger.Store
 	SourceMutations *projectsource.SourceMutationService
 	Workspace       *Workspace
-	background      *taskgroup.Group
-	operations      Operations
-	responses       *httpio.Responder
+	// SyncWindow replaces the one-second synchronous response window for newly
+	// admitted source requests when non-nil; nil uses time.NewTimer(time.Second).
+	SyncWindow func(ctx context.Context) <-chan struct{}
+	background *taskgroup.Group
+	operations Operations
+	responses  *httpio.Responder
 }
 
 type Presentation struct {

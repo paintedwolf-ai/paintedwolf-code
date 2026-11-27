@@ -1825,6 +1825,7 @@ type SourceFileRequests struct {
 	CreatedAt        string         `json:"created_at"`
 	UpdatedAt        string         `json:"updated_at"`
 	CompletedAt      sql.NullString `json:"completed_at"`
+	FirstAnswerKind  string         `json:"first_answer_kind"`
 }
 
 type SourceFiles struct {
