@@ -162,7 +162,7 @@ func buildAndPublishRuntime(ctx context.Context, bin, binarySHA256, storeRoot, t
 	if err != nil {
 		return "", nil, fmt.Errorf("lock runtime replacement: %w", err)
 	}
-	if err := removeReadOnlyTree(targetDir); err != nil {
+	if err := RemoveOfflineRuntimeTree(targetDir); err != nil {
 		releaseTargetLease()
 		return "", nil, fmt.Errorf("clear stale runtime: %w", err)
 	}
@@ -176,7 +176,7 @@ func buildAndPublishRuntime(ctx context.Context, bin, binarySHA256, storeRoot, t
 	published := false
 	defer func() {
 		if !published {
-			_ = removeReadOnlyTree(stagingDir)
+			_ = RemoveOfflineRuntimeTree(stagingDir)
 		}
 	}()
 
@@ -243,7 +243,7 @@ func buildAndPublishRuntime(ctx context.Context, bin, binarySHA256, storeRoot, t
 
 	verified, err := verifyPreparedRuntime(targetDir, binarySHA256, false)
 	if err != nil {
-		_ = removeReadOnlyTree(targetDir)
+		_ = RemoveOfflineRuntimeTree(targetDir)
 		return "", nil, fmt.Errorf("verify published runtime: %w", err)
 	}
 	cacheDir, releaseLease, err := leaseVerifiedRuntime(ctx, targetDir, binarySHA256, leasePath, verified)
@@ -703,7 +703,9 @@ func sealRootEntries(root string) (retErr error) {
 	return nil
 }
 
-func removeReadOnlyTree(root string) error {
+// RemoveOfflineRuntimeTree removes a private or exclusively held runtime tree.
+// The caller must ensure that no worker is using the tree.
+func RemoveOfflineRuntimeTree(root string) error {
 	info, err := os.Lstat(root)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -751,7 +753,7 @@ func pruneStaleRuntimeDirs(storeRoot, keepBase string) {
 			continue
 		}
 		if strings.HasPrefix(name, opengrepRuntimeStagePrefix) {
-			_ = removeReadOnlyTree(filepath.Join(storeRoot, name))
+			_ = RemoveOfflineRuntimeTree(filepath.Join(storeRoot, name))
 			continue
 		}
 		if !strings.HasPrefix(name, opengrepRuntimeDirPrefix) || strings.HasSuffix(name, opengrepRuntimeLeaseSuffix) {
@@ -768,7 +770,7 @@ func pruneStaleRuntimeDirs(storeRoot, keepBase string) {
 			continue
 		}
 		target := filepath.Join(storeRoot, name)
-		_ = removeReadOnlyTree(target)
+		_ = RemoveOfflineRuntimeTree(target)
 		forgetVerifiedInProcess(target)
 		_ = filelock.Unlock(f)
 		_ = f.Close()

@@ -58,7 +58,7 @@ func TestPrepareOpengrepRuntimeColdWarmAndConcurrent(t *testing.T) {
 	root := t.TempDir()
 	store := filepath.Join(root, "runtime-store")
 	bin := writeFakeOnefileBinary(t, root, "opengrep", "1.30.0")
-	t.Cleanup(func() { _ = removeReadOnlyTree(store) })
+	t.Cleanup(func() { _ = RemoveOfflineRuntimeTree(store) })
 
 	const workers = 6
 	results := make([]string, workers)
@@ -132,7 +132,7 @@ func TestPrepareOpengrepRuntimeDetectsTamperingAndRebuilds(t *testing.T) {
 	root := t.TempDir()
 	store := filepath.Join(root, "runtime-store")
 	bin := writeFakeOnefileBinary(t, root, "opengrep", "1.30.0")
-	t.Cleanup(func() { _ = removeReadOnlyTree(store) })
+	t.Cleanup(func() { _ = RemoveOfflineRuntimeTree(store) })
 
 	cacheDir, release1, err := prepareOpengrepRuntimeInStore(t.Context(), bin, "", store)
 	testutil.FailErr(t, "initial prepare", err)
@@ -193,7 +193,7 @@ func TestPrepareOpengrepRuntimeLeaseProtectsOverlappingVersion(t *testing.T) {
 	binV1 := writeFakeOnefileBinary(t, root, "opengrep-v1", "1.30.0")
 	binV2 := writeFakeOnefileBinary(t, root, "opengrep-v2", "1.31.0")
 	binV3 := writeFakeOnefileBinary(t, root, "opengrep-v3", "1.32.0")
-	t.Cleanup(func() { _ = removeReadOnlyTree(store) })
+	t.Cleanup(func() { _ = RemoveOfflineRuntimeTree(store) })
 
 	cacheV1, releaseV1, err := prepareOpengrepRuntimeInStore(t.Context(), binV1, "", store)
 	testutil.FailErr(t, "prepare v1", err)
@@ -238,7 +238,7 @@ func TestPrepareOpengrepRuntimePlainBinarySkipsRepeatedProbes(t *testing.T) {
 	root := t.TempDir()
 	store := filepath.Join(root, "runtime-store")
 	bin := writeFakePlainBinary(t, root, "opengrep-plain", "1.30.0")
-	t.Cleanup(func() { _ = removeReadOnlyTree(store) })
+	t.Cleanup(func() { _ = RemoveOfflineRuntimeTree(store) })
 
 	for i := range 3 {
 		cacheDir, release, err := prepareOpengrepRuntimeInStore(t.Context(), bin, "", store)
@@ -284,7 +284,7 @@ func TestRemoveReadOnlyTreePreservesExternalSentinels(t *testing.T) {
 	testutil.FailErr(t, "seal nested dir", os.Chmod(nested, 0o555))
 	testutil.FailErr(t, "seal damaged root", os.Chmod(damaged, 0o555))
 
-	testutil.FailErr(t, "removeReadOnlyTree", removeReadOnlyTree(damaged))
+	testutil.FailErr(t, "removeReadOnlyTree", RemoveOfflineRuntimeTree(damaged))
 
 	if _, err := os.Lstat(damaged); !os.IsNotExist(err) {
 		t.Fatalf("damaged tree still exists: err=%v", err)
@@ -324,7 +324,7 @@ func TestPrepareOpengrepRuntimeRejectsSymlinksAndHardlinks(t *testing.T) {
 	badBin := filepath.Join(root, "opengrep-symlink")
 	badScript := fmt.Sprintf("#!/bin/sh\nset -e\nmkdir -p \"$XDG_CACHE_HOME/opengrep\"\nln -s %q \"$XDG_CACHE_HOME/opengrep/escape\"\nprintf '1.30.0\\n'\n", sentinel)
 	testutil.FailErr(t, "write bad symlink binary", os.WriteFile(badBin, []byte(badScript), 0o700))
-	t.Cleanup(func() { _ = removeReadOnlyTree(store) })
+	t.Cleanup(func() { _ = RemoveOfflineRuntimeTree(store) })
 
 	if _, _, err := prepareOpengrepRuntimeInStore(t.Context(), badBin, "", store); err == nil {
 		t.Fatal("preparation unexpectedly accepted a symlink in unpacked runtime")
@@ -362,7 +362,7 @@ func TestPrepareOpengrepRuntimeRejectsNonzeroExitAndRecovers(t *testing.T) {
 	invocations := installPrepCounter(t)
 	root := t.TempDir()
 	store := filepath.Join(root, "runtime-store")
-	t.Cleanup(func() { _ = removeReadOnlyTree(store) })
+	t.Cleanup(func() { _ = RemoveOfflineRuntimeTree(store) })
 
 	bin := filepath.Join(root, "opengrep-flaky")
 	script := `#!/bin/sh
