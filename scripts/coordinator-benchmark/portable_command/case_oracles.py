@@ -6,6 +6,7 @@ import zipfile
 from portable_command.contracts import bytes_value, fixture_path
 from portable_command.delivery_oracles import extract_deliveries, inspect_edit_and_bounds
 from portable_command.live import MODEL_FIELDS, SOURCE_FIELDS, freeze_plan, load_live_manifest, summarize_slots
+from portable_command.profile_session import inspect_readonly_authority
 
 
 def _run_git(project_dir, *args):
@@ -183,7 +184,7 @@ def verify_paired_manifest_contract(case, identity):
     }
 
 
-def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, receipts, effects, audit, recovery, last_payload, final_hashes, baseline_hashes, sidecar=None):
+def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, receipts, effects, audit, recovery, last_payload, final_hashes, baseline_hashes, sidecar=None, session_surface=None, last_raw=None, no_external_launch=False):
     """Collect Q05, Q06, Q11, Q18, Q19, Q20, Q21, and Q22 facts from SQLite audit rows, sidecar log, and repo state."""
     execs = audit['invocation_program_executions']
     pins = audit['invocation_program_revision_pins']
@@ -223,6 +224,12 @@ def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, rece
     if temp_pins:
         facts['temp_path_owned'] = True
         facts['same_physical_identity'] = len(set(temp_pins)) == 1
+    ro_facts, recovery = inspect_readonly_authority(
+        case, session_surface=session_surface, project_dir=project_dir, audit=audit, recovery=recovery,
+        last_payload=last_payload, last_raw=last_raw, baseline_hashes=baseline_hashes,
+        final_hashes=final_hashes, no_external_launch=no_external_launch,
+    )
+    facts.update(ro_facts)
     facts.update(inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar, baseline_hashes, final_hashes))
     facts.update(inspect_git_facts(case, project_dir, git_setup, effects))
     facts.update(verify_paired_manifest_contract(case, identity))

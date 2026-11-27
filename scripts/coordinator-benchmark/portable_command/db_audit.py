@@ -74,6 +74,8 @@ def _canonical_op(ex):
         return 'git_add'
     if owner == 'git' and (op_id in {'git commit', 'git_commit'} or native_cmd == 'git commit'):
         return 'git_commit'
+    if owner == 'filesystem' and (op_id == 'delete' or native_cmd == 'rm'):
+        return 'delete'
     return native_cmd or op_id
 
 
@@ -93,7 +95,7 @@ def receipt_rows(audit, progress_receipts, draft_bindings=None):
             })
             continue
         op = _canonical_op(ex)
-        outcome = 'rejected' if op in {'source', 'unzip'} and ex.get('state') == 'refused' else ex['state']
+        outcome = 'rejected' if op in {'source', 'unzip', 'delete'} and ex.get('state') == 'refused' else ex['state']
         row = {'execution_id': ex['id'], 'operation': op, 'outcome': outcome}
         effect = {'operation': op, 'outcome': outcome}
         if isinstance(ex.get('status_code'), int):

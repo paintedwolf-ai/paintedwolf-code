@@ -18,6 +18,7 @@ from portable_command.contracts import DIRECTORY, ROOT, load_suite, materialize
 from portable_command.grading import grade_case
 from portable_command.handle_await import await_running_handle
 from portable_command.observe import build_observation, file_sha256, source_identity
+from portable_command.profile_session import DECLARED_READONLY_PROFILES, create_declared_profile_session
 from portable_command.provenance import materialize_denied_progress_scope, materialize_helpers
 from portable_command.reporting import inject_drafts, make_app_factory
 from progress import save
@@ -147,18 +148,11 @@ def case_digest(case):
 def sanitized_fixture(case, baseline_hashes):
     """Build a pinned, sanitized replay fixture free of session IDs, tokens, and host paths."""
     return {
-        'schema': 'portable-command-replay-v1',
-        'version': 1,
-        'case_id': case['id'],
-        'suite_sha256': file_sha256(DIRECTORY / 'suite.json'),
-        'case_sha256': case_digest(case),
-        'profile': case['profile'],
-        'qualification_cases': list(case['qualification_cases']),
-        'setup': case['setup'],
-        'turns': case['turns'],
-        'expected': case['expected'],
-        'allowed_partial': case['allowed_partial'],
-        'required_evidence': case['required_evidence'],
+        'schema': 'portable-command-replay-v1', 'version': 1, 'case_id': case['id'],
+        'suite_sha256': file_sha256(DIRECTORY / 'suite.json'), 'case_sha256': case_digest(case),
+        'profile': case['profile'], 'qualification_cases': list(case['qualification_cases']),
+        'setup': case['setup'], 'turns': case['turns'], 'expected': case['expected'],
+        'allowed_partial': case['allowed_partial'], 'required_evidence': case['required_evidence'],
         'baseline_hashes': baseline_hashes,
     }
 
@@ -230,14 +224,19 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
         application.ready()
         sse = sse_factory(application.url, application.token, raw_dir / 'events.jsonl')
         sse.start()
-        session_id, project_id, root_id, session_surface = create_isolated_session(application, project_dir, case)
+        session_id, project_id, root_id, session_surface = (
+            create_declared_profile_session(application, project_dir, case, create_base_session=create_isolated_session)
+            if case.get('profile') in DECLARED_READONLY_PROFILES and app_factory is smoke.Application
+            else create_isolated_session(application, project_dir, case)
+        )
         if case['setup'].get('drafts'):
             drafts_ok, draft_bindings = inject_drafts(application, project_id, root_id, case['setup']['drafts'])
         pre_prompt_lines = log_line_count(sidecar_path)
-        application.request(f'/v1/sessions/{session_id}/prompts', {'operation_id': str(uuid.uuid4()), 'text': f"Execute portable-command fixture {case['id']}."})
-        if case['setup'].get('progress') == 'valid':
-            p_calls = send_tool_calls(application, session_id, [{'name': 'update_progress', 'args': {'content': f"- [ ] Run fixture {case['id']}"}}], surface=session_surface)
-            prelude_records.append({'kind': 'valid_progress', 'call_id': p_calls[0][0], 'outcome': p_calls[0][1].get('outcome')})
+        if not session_surface.get('declared_profile_bound'):
+            application.request(f'/v1/sessions/{session_id}/prompts', {'operation_id': str(uuid.uuid4()), 'text': f"Execute portable-command fixture {case['id']}."})
+            if case['setup'].get('progress') == 'valid':
+                p_calls = send_tool_calls(application, session_id, [{'name': 'update_progress', 'args': {'content': f"- [ ] Run fixture {case['id']}"}}], surface=session_surface)
+                prelude_records.append({'kind': 'valid_progress', 'call_id': p_calls[0][0], 'outcome': p_calls[0][1].get('outcome')})
         for turn in case['turns']:
             if 'structured_tool' in turn:
                 batch, envelope_mode = [{'name': turn['structured_tool'], 'args': dict(turn.get('arguments') or {})}], 'structured_tool'
@@ -272,7 +271,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
     save(raw_dir / 'window.json', window)
     eff_posture = session_surface.get('effective_posture', '')
     extra_gaps = [g for g, cond in (
-        ('profile_binding_approximate', case.get('profile', 'implement') != 'implement'),
+        ('profile_binding_approximate', case.get('profile', 'implement') != 'implement' and not session_surface.get('declared_profile_bound')),
         ('profile_binding_mismatch', bool(eff_posture) and eff_posture != session_surface['requested_posture']),
         ('uninjected_drafts', bool(case['setup'].get('drafts')) and not drafts_ok),
         ('uninjected_host_facts', bool(case['setup'].get('host_facts')) and not (host_binding or host_facts_ok)),
