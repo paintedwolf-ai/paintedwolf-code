@@ -42,6 +42,7 @@ import uuid
 
 from .checker import CheckResult, check_slot, compare_records
 from .delivery_log import (
+    GROUNDED_VERDICTS,
     DeliveryLog,
     DeliveryRecord,
     LineRange,
@@ -1301,20 +1302,89 @@ def run_scripted_session(
     )
 
 
+CITATION_REFUSAL_CODES: frozenset[str] = frozenset(
+    {
+        "INVEST_HANDLE_NOT_OBSERVED",
+        "INVEST_CITATION_UNVERIFIABLE",
+        "INVEST_URL_NOT_OBSERVED",
+        "SYNTH_HANDLE_NOT_IN_LEGS",
+        "SYNTH_CITATION_UNVERIFIABLE",
+        "SYNTH_URL_NOT_OBSERVED",
+    }
+)
+
+
+def _match_cited_evidence(
+    cited_evidence: Sequence[Mapping[str, Any]],
+    *,
+    allowed_handles: set[str],
+    expected_path: str = "",
+    expected_line: int | None = None,
+) -> Mapping[str, Any] | None:
+    """Find a grounded `cited_evidence` readback matching the exact handle, path, and line."""
+    for entry in cited_evidence:
+        if not isinstance(entry, Mapping):
+            continue
+        handle = str(entry.get("handle") or "")
+        verdict = str(entry.get("verdict") or "")
+        if handle not in allowed_handles or verdict not in GROUNDED_VERDICTS:
+            continue
+        if expected_line is not None and entry.get("line") != expected_line:
+            continue
+        if expected_path and str(entry.get("path") or "") != expected_path:
+            continue
+        return entry
+    return None
+
+
+def _refusal_names_rejected_occurrence(
+    artifact: SidecarRunArtifact,
+    grounding: Mapping[str, Any],
+    unsupported_citation: Citation,
+) -> bool:
+    """Verify the refusal before recovery or grounding payload names the rejected occurrence."""
+    needles = [
+        n
+        for n in (
+            unsupported_citation.handle,
+            unsupported_citation.raw.strip("[]"),
+            f":{unsupported_citation.start_line}" if unsupported_citation.start_line is not None else "",
+        )
+        if n
+    ]
+    if not needles:
+        return False
+    # Check retained raw pending repair prompts (after initial turn) and durable grounding payload
+    blobs: list[str] = [json.dumps(grounding)]
+    for req in artifact.raw_pending_requests[2:]:
+        blobs.append(json.dumps(req))
+    combined = "\n".join(blobs)
+    return any(needle in combined for needle in needles)
+
+
 def evaluate_three_ledger_controls(
     supported_artifact: SidecarRunArtifact,
     unsupported_artifact: SidecarRunArtifact,
     *,
     supported_citation: Citation,
     unsupported_citation: Citation,
+    adjacent_supported_citation: Citation | None = None,
     platform: str = "linux",
 ) -> dict[str, Any]:
-    """Assert all 3 ledger controls (supported, unsupported/negative, minting parity).
+    """Assert all 3 ledger controls with strict typed readback verification (Decision 017).
 
-    Returns a structured verdict dict with `passed: bool` and per-control details.
-    Any control mismatch or missing required product closeout/record fails `passed`.
+    - Control 1 (Supported): joins `cited_evidence` to the exact supporting handle, path,
+      line, and grounded verdict; rejects exempt prose (`evidence_optional: true`) or
+      empty `cited_evidence`.
+    - Control 2 (Unsupported / Negative): requires a typed citation refusal code
+      (`CITATION_REFUSAL_CODES`), verifies the rejected occurrence was named before
+      recovery, verifies the invalid reference never became grounded in `cited_evidence`,
+      and (when `adjacent_supported_citation` is supplied) verifies the adjacent supported
+      citation in the same reply passed.
+    - Control 3 (Minting parity): exact `compare_records` parity between independent
+      `DeliveryLog` and durable `evidence_records`.
     """
-    # Control 1: Supported citation grounded by BOTH reference resolver and product
+    # Control 1: Supported citation grounded by BOTH reference resolver and product readback
     sup_scope = PermittedScope(
         session_id=supported_artifact.session_id,
         round_id="round-1",
@@ -1324,10 +1394,36 @@ def evaluate_three_ledger_controls(
     ref_sup = resolve_citation(supported_artifact.delivery_log, supported_citation, sup_scope)
     sup_closeout = supported_artifact.product_closeouts[-1] if supported_artifact.product_closeouts else None
     sup_grounding = (sup_closeout or {}).get("grounding") or {}
-    prod_sup_grounded = bool(sup_closeout is not None and sup_grounding.get("traced") is True and not sup_grounding.get("host_assembled"))
+    sup_cited = sup_grounding.get("cited_evidence") or []
+
+    expected_sup_path = supported_citation.path
+    if not expected_sup_path and ref_sup.supporting_handles:
+        for rec in supported_artifact.delivery_log.records:
+            if rec.handle in ref_sup.supporting_handles and rec.path:
+                expected_sup_path = rec.path
+                break
+
+    matched_sup_entry = (
+        _match_cited_evidence(
+            sup_cited,
+            allowed_handles=set(ref_sup.supporting_handles),
+            expected_path=expected_sup_path,
+            expected_line=supported_citation.start_line,
+        )
+        if isinstance(sup_cited, Sequence)
+        else None
+    )
+    prod_sup_grounded = bool(
+        sup_closeout is not None
+        and sup_grounding.get("traced") is True
+        and sup_grounding.get("evidence_optional") is not True
+        and sup_grounding.get("host_assembled") is not True
+        and matched_sup_entry is not None
+    )
     c1_passed = ref_sup.verdict_class == "grounded" and prod_sup_grounded
 
-    # Control 2: Unsupported citation refused by BOTH reference resolver and product
+    # Control 2: Unsupported citation refused with typed citation code, never grounded,
+    # and adjacent supported citation passes
     unsup_scope = PermittedScope(
         session_id=unsupported_artifact.session_id,
         round_id="round-1",
@@ -1337,14 +1433,54 @@ def evaluate_three_ledger_controls(
     ref_unsup = resolve_citation(unsupported_artifact.delivery_log, unsupported_citation, unsup_scope)
     unsup_closeout = unsupported_artifact.product_closeouts[-1] if unsupported_artifact.product_closeouts else None
     unsup_grounding = (unsup_closeout or {}).get("grounding") or {}
-    # Product refused/did not ground: traced is False, or hint_code / retry_count > 0
+    unsup_cited = unsup_grounding.get("cited_evidence") or []
+    hint_code = str(unsup_grounding.get("hint_code") or "")
+
+    typed_citation_refusal = hint_code in CITATION_REFUSAL_CODES
+    named_rejected = _refusal_names_rejected_occurrence(
+        unsupported_artifact, unsup_grounding, unsupported_citation
+    )
+    invalid_became_grounded = bool(
+        isinstance(unsup_cited, Sequence)
+        and unsupported_citation.handle
+        and any(
+            isinstance(e, Mapping)
+            and str(e.get("handle") or "") == unsupported_citation.handle
+            and str(e.get("verdict") or "") in GROUNDED_VERDICTS
+            for e in unsup_cited
+        )
+    )
+
+    adjacent_ok = True
+    adjacent_entry: Mapping[str, Any] | None = None
+    if adjacent_supported_citation is not None:
+        ref_adj = resolve_citation(
+            unsupported_artifact.delivery_log, adjacent_supported_citation, unsup_scope
+        )
+        adj_path = adjacent_supported_citation.path
+        if not adj_path and ref_adj.supporting_handles:
+            for rec in unsupported_artifact.delivery_log.records:
+                if rec.handle in ref_adj.supporting_handles and rec.path:
+                    adj_path = rec.path
+                    break
+        adjacent_entry = (
+            _match_cited_evidence(
+                unsup_cited,
+                allowed_handles=set(ref_adj.supporting_handles),
+                expected_path=adj_path,
+                expected_line=adjacent_supported_citation.start_line,
+            )
+            if isinstance(unsup_cited, Sequence)
+            else None
+        )
+        adjacent_ok = ref_adj.verdict_class == "grounded" and adjacent_entry is not None
+
     prod_unsup_refused = bool(
         unsup_closeout is not None
-        and (
-            unsup_grounding.get("traced") is False
-            or bool(unsup_grounding.get("hint_code"))
-            or int(unsup_grounding.get("retry_count") or 0) > 0
-        )
+        and typed_citation_refusal
+        and named_rejected
+        and not invalid_became_grounded
+        and adjacent_ok
     )
     c2_passed = ref_unsup.verdict_class == "ungrounded" and prod_unsup_refused
 
@@ -1362,6 +1498,7 @@ def evaluate_three_ledger_controls(
             "passed": c1_passed,
             "reference_verdict": ref_sup.verdict_class,
             "reference_handles": list(ref_sup.supporting_handles),
+            "matched_cited_evidence": dict(matched_sup_entry) if matched_sup_entry else None,
             "product_grounded": prod_sup_grounded,
             "product_grounding": sup_grounding,
         },
@@ -1369,6 +1506,12 @@ def evaluate_three_ledger_controls(
             "passed": c2_passed,
             "reference_verdict": ref_unsup.verdict_class,
             "reference_reason": ref_unsup.reason,
+            "hint_code": hint_code,
+            "typed_citation_refusal": typed_citation_refusal,
+            "named_rejected_occurrence": named_rejected,
+            "invalid_became_grounded": invalid_became_grounded,
+            "adjacent_supported_passed": adjacent_ok,
+            "adjacent_cited_evidence": dict(adjacent_entry) if adjacent_entry else None,
             "product_refused": prod_unsup_refused,
             "product_grounding": unsup_grounding,
         },

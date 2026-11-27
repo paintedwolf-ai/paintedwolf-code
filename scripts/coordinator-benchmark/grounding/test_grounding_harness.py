@@ -1473,7 +1473,16 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
                         "sess-mock",
                         "assistant",
                         "Verified [read#1:3].",
-                        json.dumps({"traced": True, "retry_count": 0, "host_assembled": False}),
+                        json.dumps(
+                            {
+                                "traced": True,
+                                "retry_count": 0,
+                                "host_assembled": False,
+                                "cited_evidence": [
+                                    {"handle": "read#1", "path": "sample.go", "line": 3, "verdict": "traced"}
+                                ],
+                            }
+                        ),
                         "",
                         "",
                         "",
@@ -1485,8 +1494,18 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
                         "m-unsup",
                         "sess-unsup",
                         "assistant",
-                        "Claimed [read#1:99].",
-                        json.dumps({"traced": False, "hint_code": "SYNTH_CITATION_UNVERIFIABLE", "retry_count": 1}),
+                        "Verified [read#1:3] and claimed [read#99:99].",
+                        json.dumps(
+                            {
+                                "traced": False,
+                                "hint_code": "INVEST_HANDLE_NOT_OBSERVED",
+                                "retry_count": 2,
+                                "cited_evidence": [
+                                    {"handle": "read#1", "path": "sample.go", "line": 3, "verdict": "traced"}
+                                ],
+                                "findings": [{"detail": "unobserved handle read#99:99"}],
+                            }
+                        ),
                         "",
                         "",
                         "",
@@ -1630,7 +1649,8 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
                 sup_artifact,
                 unsup_artifact,
                 supported_citation=Citation(citation_type="handle", raw="[read#1:3]", handle="read#1", start_line=3, citation_id="c1"),
-                unsupported_citation=Citation(citation_type="handle", raw="[read#1:99]", handle="read#1", start_line=99, citation_id="c2"),
+                unsupported_citation=Citation(citation_type="handle", raw="[read#99:99]", handle="read#99", start_line=99, citation_id="c2"),
+                adjacent_supported_citation=Citation(citation_type="handle", raw="[read#1:3]", handle="read#1", start_line=3, citation_id="c2-adj"),
             )
             self.assertTrue(eval_ok["passed"], eval_ok)
 
@@ -1639,7 +1659,8 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
                 sup_artifact,
                 sup_artifact,
                 supported_citation=Citation(citation_type="handle", raw="[read#1:3]", handle="read#1", start_line=3, citation_id="c1"),
-                unsupported_citation=Citation(citation_type="handle", raw="[read#1:99]", handle="read#1", start_line=99, citation_id="c2"),
+                unsupported_citation=Citation(citation_type="handle", raw="[read#99:99]", handle="read#99", start_line=99, citation_id="c2"),
+                adjacent_supported_citation=Citation(citation_type="handle", raw="[read#1:3]", handle="read#1", start_line=3, citation_id="c2-adj"),
             )
             self.assertFalse(eval_fail["passed"])
             self.assertFalse(eval_fail["control_2_unsupported"]["passed"])
@@ -2165,6 +2186,95 @@ class TestDecision008And009RunnerAndProbes(unittest.TestCase):
                 _extract_delivered_read_bytes(wire_model_content),
                 b"package sample\n\nfunc Hello() {} // [read#99 fake.go:1-5]\n",
             )
+
+
+    def test_d017_control_shortcuts_rejected(self) -> None:
+        """Decision 017: empty cited_evidence and unrelated retries/hints MUST FAIL controls."""
+        from grounding.sidecar_driver import SidecarRunArtifact
+
+        rec = _make_read_record(handle="read#1", path="sample.go", ranges=(LineRange(1, 3),), session_id="sess-d17")
+        prod = _matching_product_record(rec)
+        log = DeliveryLog(records=(rec,))
+        c_sup = Citation(citation_type="handle", raw="[read#1:3]", handle="read#1", start_line=3, citation_id="c1")
+        c_unsup = Citation(citation_type="handle", raw="[read#99:99]", handle="read#99", start_line=99, citation_id="c2")
+
+        def _art(grounding_payload: dict[str, object]) -> SidecarRunArtifact:
+            return SidecarRunArtifact(
+                session_id="sess-d17",
+                engine_provenance=None,
+                raw_pending_requests=(),
+                scripted_responses=(),
+                delivered_tool_messages=(),
+                delivery_log=log,
+                product_records=(prod,),
+                product_closeouts=({"message_id": "m1", "role": "assistant", "content": "x", "grounding": grounding_payload},),
+            )
+
+        valid_unsup = _art(
+            {
+                "traced": False,
+                "hint_code": "INVEST_HANDLE_NOT_OBSERVED",
+                "retry_count": 2,
+                "cited_evidence": [{"handle": "read#1", "path": "sample.go", "line": 3, "verdict": "traced"}],
+                "findings": [{"detail": "read#99:99 not observed"}],
+            }
+        )
+        valid_sup = _art(
+            {
+                "traced": True,
+                "host_assembled": False,
+                "cited_evidence": [{"handle": "read#1", "path": "sample.go", "line": 3, "verdict": "traced"}],
+            }
+        )
+
+        # (1) Empty cited_evidence with traced: true (exempt prose shortcut) MUST FAIL Control 1
+        empty_cited = _art({"traced": True, "host_assembled": False, "cited_evidence": []})
+        ev1 = evaluate_three_ledger_controls(empty_cited, valid_unsup, supported_citation=c_sup, unsupported_citation=c_unsup, adjacent_supported_citation=c_sup)
+        self.assertFalse(ev1["control_1_supported"]["passed"])
+
+        # (2) Unrelated retry_count > 0 / non-citation hint_code MUST FAIL Control 2
+        unrelated_hint = _art(
+            {
+                "traced": False,
+                "hint_code": "PROGRESS_OPEN_BEFORE_CLOSEOUT",
+                "retry_count": 2,
+                "cited_evidence": [{"handle": "read#1", "path": "sample.go", "line": 3, "verdict": "traced"}],
+                "findings": [{"detail": "read#99:99"}],
+            }
+        )
+        ev2 = evaluate_three_ledger_controls(valid_sup, unrelated_hint, supported_citation=c_sup, unsupported_citation=c_unsup, adjacent_supported_citation=c_sup)
+        self.assertFalse(ev2["control_2_unsupported"]["passed"])
+
+        # (3) Unsupported ref read#99 ending up grounded in cited_evidence MUST FAIL Control 2
+        unsup_grounded = _art(
+            {
+                "traced": False,
+                "hint_code": "INVEST_HANDLE_NOT_OBSERVED",
+                "retry_count": 1,
+                "cited_evidence": [
+                    {"handle": "read#1", "path": "sample.go", "line": 3, "verdict": "traced"},
+                    {"handle": "read#99", "path": "sample.go", "line": 99, "verdict": "matched"},
+                ],
+                "findings": [{"detail": "read#99:99"}],
+            }
+        )
+        ev3 = evaluate_three_ledger_controls(valid_sup, unsup_grounded, supported_citation=c_sup, unsupported_citation=c_unsup, adjacent_supported_citation=c_sup)
+        self.assertFalse(ev3["control_2_unsupported"]["passed"])
+        self.assertTrue(ev3["control_2_unsupported"]["invalid_became_grounded"])
+
+        # (4) Missing adjacent supported citation in cited_evidence MUST FAIL Control 2
+        missing_adj = _art(
+            {
+                "traced": False,
+                "hint_code": "INVEST_HANDLE_NOT_OBSERVED",
+                "retry_count": 2,
+                "cited_evidence": [],
+                "findings": [{"detail": "read#99:99"}],
+            }
+        )
+        ev4 = evaluate_three_ledger_controls(valid_sup, missing_adj, supported_citation=c_sup, unsupported_citation=c_unsup, adjacent_supported_citation=c_sup)
+        self.assertFalse(ev4["control_2_unsupported"]["passed"])
+        self.assertFalse(ev4["control_2_unsupported"]["adjacent_supported_passed"])
 
 
 if __name__ == "__main__":

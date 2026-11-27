@@ -140,15 +140,18 @@ def _cmd_controls(args: argparse.Namespace) -> int:
             source_revision="",
             engine_provenance=sidecar.provenance,
             run_manifest=manifest,
+            poll_timeout=60.0,
         )
 
-        # Control 2: Unsupported / negative control on the same launch path
-        # Handles D1's citation-repair loop cleanly until exhaustion/settlement.
+        # Control 2: Unsupported / negative control on the same launch path (Decision 017)
+        # Includes BOTH an adjacent supported citation ([read#1:3]) AND the unsupported
+        # citation ([read#99:99]) in the same reply, and handles D1's citation-repair loop.
         sess_unsup = client.create_session(project["id"])
         sid_unsup = sess_unsup["id"]
         client.wait_session_ready(sid_unsup)
-        prompt_unsup = client.send_prompt(sid_unsup, "Read sample.go and report line 99.")
+        prompt_unsup = client.send_prompt(sid_unsup, "Read sample.go and report line 3 and line 99.")
         sub_unsup = str(prompt_unsup.get("submission_id") or prompt_unsup.get("id") or "")
+        unsup_reply = "Verified Hello() at [read#1:3] and claimed unobserved line [read#99:99]."
         unsup_artifact = run_scripted_session(
             client,
             session_id=sid_unsup,
@@ -158,17 +161,18 @@ def _cmd_controls(args: argparse.Namespace) -> int:
                         {"name": "command", "args": {"command": "cat -n sample.go"}},
                     ),
                 ),
-                ScriptedTurn(content="Claimed unobserved line [read#99:99]."),
+                ScriptedTurn(content=unsup_reply),
             ),
             db_path=sidecar.store_db_path,
             workspace_dir=workspace,
             submission_id=sub_unsup,
             wait_for_settlement=True,
             max_repair_replies=5,
-            repair_reply_content="Claimed unobserved line [read#99:99].",
+            repair_reply_content=unsup_reply,
             source_revision="",
             engine_provenance=sidecar.provenance,
             run_manifest=manifest,
+            poll_timeout=60.0,
         )
 
     evaluation = evaluate_three_ledger_controls(
@@ -179,6 +183,9 @@ def _cmd_controls(args: argparse.Namespace) -> int:
         ),
         unsupported_citation=Citation(
             citation_type="handle", raw="[read#99:99]", handle="read#99", start_line=99, citation_id="ctrl-2"
+        ),
+        adjacent_supported_citation=Citation(
+            citation_type="handle", raw="[read#1:3]", handle="read#1", start_line=3, citation_id="ctrl-2-adj"
         ),
         platform="macos" if sidecar.provenance.platform == "darwin" else "linux",
     )
