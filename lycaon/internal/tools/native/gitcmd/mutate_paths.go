@@ -230,6 +230,16 @@ func withRepoRoot(tc tools.ToolContext, repoRoot string) tools.ToolContext {
 	if filepath.Clean(tc.ActiveRootPath()) == filepath.Clean(repoRoot) {
 		return tc
 	}
+	// An attached repository already has a workspace identity. Keep that
+	// identity when the Git owner binds its paths to the delivered policy.
+	if tc.Source.WorkerBranchRoot == "" {
+		for _, root := range tc.Source.Roots {
+			if !root.External && !root.Outside && filepath.Clean(root.Path) == filepath.Clean(repoRoot) {
+				tc.Source.ActiveRootID = root.ID
+				return tc
+			}
+		}
+	}
 	roots := append([]projectroot.RootRef(nil), tc.Source.Roots...)
 	updated := false
 	for i := range roots {
