@@ -182,6 +182,7 @@ func (r *ProcessLifecycle) killProcess(proc *Process, reason TerminationReason) 
 	cancel := proc.cancel
 	cancelCause := proc.cancelCause
 	onStop := proc.onStop
+	proc.onStop = nil
 	var stopClosed chan struct{}
 	if onStop != nil {
 		stopClosed = make(chan struct{})
