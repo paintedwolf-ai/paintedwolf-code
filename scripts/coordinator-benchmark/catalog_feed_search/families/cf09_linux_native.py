@@ -165,8 +165,8 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
       await page.waitForTimeout(800);
     }
     const searchApi = await apiPost("/v1/search", {
-      query: needle,
-      project_id: proj.id,
+      query: `project:current ${needle}`,
+      origin_project_id: proj.id,
       budget: "interactive",
     });
     const searchIssueVisible = await page.getByTestId("search-issue-note").isVisible().catch(() => false);
@@ -193,9 +193,9 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
       await page.waitForTimeout(800);
     }
     const replaceApi = await apiPost("/v1/search/replace/preview", {
-      query: needle,
+      query: `project:current ${needle}`,
       replacement: "CF09_REPLACED",
-      project_id: proj.id,
+      origin_project_id: proj.id,
     });
     const replaceCovVisible =
       (await page.getByTestId("search-replace-coverage").isVisible().catch(() => false)) ||

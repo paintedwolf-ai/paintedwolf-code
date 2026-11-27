@@ -278,7 +278,7 @@ def run_macos_native(
                     token,
                     "/v1/search",
                     method="POST",
-                    payload={"query": NEEDLE_TOKEN, "project_id": proj["id"], "budget": "interactive"},
+                    payload={"query": f"project:current {NEEDLE_TOKEN}", "origin_project_id": proj["id"], "budget": "interactive"},
                 )
                 search_shot = out_dir / f"macos_search_stage_{state}.png"
                 _capture_screen(search_shot)
@@ -306,9 +306,9 @@ def run_macos_native(
                     "/v1/search/replace/preview",
                     method="POST",
                     payload={
-                        "query": NEEDLE_TOKEN,
+                        "query": f"project:current {NEEDLE_TOKEN}",
                         "replacement": "CF09_REPLACED",
-                        "project_id": proj["id"],
+                        "origin_project_id": proj["id"],
                     },
                 )
                 replace_shot = out_dir / f"macos_replace_review_{state}.png"
