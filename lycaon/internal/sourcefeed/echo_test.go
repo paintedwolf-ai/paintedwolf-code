@@ -49,22 +49,30 @@ func TestPublishedDigestDoesNotAdoptAnOutsideWriteBeforeDelivery(t *testing.T) {
 	}
 }
 
-// D10 invariant test for CF05-DEF-01 (F04-EDGE-02):
+// D10 invariant test for CF05-DEF-01 (F04-EDGE-02, Decision 043):
 // A host rename without foreground content hashing suppresses both its destination
-// write echo and source delete echo, while still delivering any subsequent genuine
-// external edit, atomic replace, chmod, delete, or source recreation.
+// write echo and source delete echo using owner-captured stat + ctime proof, while
+// still delivering any subsequent genuine external edit (including preserved mtime+size),
+// atomic replace, chmod, delete, or source recreation.
 func TestHostRenameSuppressesEchoWithoutBlockingSubsequentExternalEdits(t *testing.T) {
-	for _, followUp := range []string{"outside_write", "atomic_replace", "chmod", "delete", "recreate_source"} {
+	for _, followUp := range []string{"outside_write", "same_size_and_mtime", "atomic_replace", "chmod", "delete", "recreate_source"} {
 		t.Run(followUp, func(t *testing.T) {
 			dir := t.TempDir()
 			src := filepath.Join(dir, "seed.txt")
 			dst := filepath.Join(dir, "renamed.txt")
 			testutil.FailErr(t, "seed", os.WriteFile(src, []byte("seed content\n"), 0o644))
 			testutil.FailErr(t, "rename", os.Rename(src, dst))
+			infoBefore, err := os.Stat(dst)
+			testutil.FailErr(t, "stat renamed", err)
 
+			receipt, ok := CaptureMetadataReceipt(dst)
+			if !ok || receipt == nil {
+				t.Fatal("CaptureMetadataReceipt did not capture rename metadata")
+			}
+			absent := hostWriteState{absent: true}
 			noteHostWritePaths([]hostWriteTarget{
-				{path: dst, metadataOnly: true},
-				{path: src, metadataOnly: true},
+				{path: dst, preCaptured: &receipt.state},
+				{path: src, preCaptured: &absent},
 			})
 
 			if !isRecentHostWrite(dst) {
@@ -79,6 +87,13 @@ func TestHostRenameSuppressesEchoWithoutBlockingSubsequentExternalEdits(t *testi
 				testutil.FailErr(t, "outside write", os.WriteFile(dst, []byte("external edit after rename\n"), 0o644))
 				if isRecentHostWrite(dst) {
 					t.Fatal("subsequent external write to renamed file was falsely suppressed")
+				}
+			case "same_size_and_mtime":
+				// Same byte length as "seed content\n" (13 bytes) and restored mtime; ctime still advances.
+				testutil.FailErr(t, "same-size write", os.WriteFile(dst, []byte("USER CONTENT\n"), 0o644))
+				testutil.FailErr(t, "preserve mtime", os.Chtimes(dst, infoBefore.ModTime(), infoBefore.ModTime()))
+				if isRecentHostWrite(dst) {
+					t.Fatal("subsequent external write with preserved size and mtime was falsely suppressed")
 				}
 			case "atomic_replace":
 				tmp := filepath.Join(dir, ".tmp.renamed.txt")
@@ -104,5 +119,58 @@ func TestHostRenameSuppressesEchoWithoutBlockingSubsequentExternalEdits(t *testi
 				}
 			}
 		})
+	}
+}
+
+// Decision 043 barrier test: a concurrent external write to dst or recreation of src
+// occurring AFTER the rename owner captured its receipt and BEFORE DeliverCommitted()
+// publishes echo suppression must NEVER be adopted as the host mutation's state.
+func TestHostRenameReceiptBarrierDoesNotAdoptConcurrentOutsideChange(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "seed.txt")
+	dst := filepath.Join(dir, "renamed.txt")
+	testutil.FailErr(t, "seed", os.WriteFile(src, []byte("seed content\n"), 0o644))
+	testutil.FailErr(t, "rename", os.Rename(src, dst))
+
+	receipt, ok := CaptureMetadataReceipt(dst)
+	if !ok || receipt == nil {
+		t.Fatal("CaptureMetadataReceipt failed")
+	}
+
+	// Stage delivery with the committed rename owner's receipt, pausing before DeliverCommitted().
+	prepared, err := prepareChanges([]Change{{
+		ProjectID: "proj-barrier", WorkspaceID: "ws-barrier", WorkspaceKind: "project",
+		RootID: "r1", Path: "renamed.txt", FromPath: "seed.txt",
+		AbsPath: dst, FromAbsPath: src, MetadataReceipt: receipt,
+		Op: "rename", Origin: "user",
+	}}, false)
+	testutil.FailErr(t, "prepareChanges", err)
+
+	// Barrier: concurrent outside writer mutates dst AND recreates src BEFORE receipt publication!
+	testutil.FailErr(t, "concurrent outside dst write", os.WriteFile(dst, []byte("concurrent outside edit\n"), 0o644))
+	testutil.FailErr(t, "concurrent outside src recreate", os.WriteFile(src, []byte("recreated outside\n"), 0o644))
+
+	// Now publish the staged receipt (simulating DeliverCommitted after the barrier).
+	noteHostWritePaths(prepared.writePaths)
+
+	if isRecentHostWrite(dst) {
+		t.Fatal("receipt publication adopted concurrent outside write on destination path")
+	}
+	if isRecentHostWrite(src) {
+		t.Fatal("receipt publication adopted concurrent outside recreation on source path")
+	}
+
+	// Also verify fail-open when MetadataReceipt is nil (no owner proof).
+	noProof, err := prepareChanges([]Change{{
+		ProjectID: "proj-barrier", WorkspaceID: "ws-barrier", WorkspaceKind: "project",
+		RootID: "r1", Path: "renamed.txt", FromPath: "seed.txt",
+		AbsPath: dst, FromAbsPath: src,
+		Op: "rename", Origin: "user",
+	}}, false)
+	testutil.FailErr(t, "prepareChanges nil receipt", err)
+	for _, wp := range noProof.writePaths {
+		if wp.path == dst {
+			t.Fatal("rename without owner MetadataReceipt must fail open for destination")
+		}
 	}
 }

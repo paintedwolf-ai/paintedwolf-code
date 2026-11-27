@@ -120,6 +120,7 @@ func (p sourceMutationPlan) sourceChanges() []sourcefeed.Change {
 	case "rename":
 		change.Op, change.FromPath = api.SourceChangeOpRename, p.FromPath
 		change.AbsPath, change.FromAbsPath = p.ToAbs, p.FromAbs
+		change.MetadataReceipt = p.RenameReceipt
 	case "delete":
 		change.Op = api.SourceChangeOpDelete
 	}

@@ -41,7 +41,9 @@ type Change struct {
 	// AbsPath and FromAbsPath suppress watcher echoes.
 	AbsPath     string    `json:",omitempty"`
 	FromAbsPath string    `json:",omitempty"`
-	TS          time.Time `json:",omitempty"`
+	// MetadataReceipt carries stat-only proof captured by the committed rename owner.
+	MetadataReceipt *MetadataReceipt `json:"-"`
+	TS              time.Time        `json:",omitempty"`
 }
 
 // Sink delivers source events durably.
@@ -298,14 +300,24 @@ func prepareChanges(changes []Change, resync bool) (preparedChanges, error) {
 		if writePaths == nil {
 			writePaths = make([]hostWriteTarget, 0, len(changes))
 		}
-		// Metadata-only rename echoes are suppressed via stat identity/size/mode/mtime
-		// without reading or hashing moved file bytes on the foreground path.
-		metadataOnly := change.Op == api.SourceChangeOpRename && change.AfterSHA256 == ""
+		// Metadata-only rename echoes are suppressed only from owner-captured stat proof
+		// (never reconstructed from live disk after the fact) and direct source absence.
+		if change.Op == api.SourceChangeOpRename && change.AfterSHA256 == "" {
+			if change.AbsPath != "" && change.MetadataReceipt != nil {
+				state := change.MetadataReceipt.state
+				writePaths = append(writePaths, hostWriteTarget{path: change.AbsPath, preCaptured: &state})
+			}
+			if change.FromAbsPath != "" {
+				absent := hostWriteState{absent: true}
+				writePaths = append(writePaths, hostWriteTarget{path: change.FromAbsPath, preCaptured: &absent})
+			}
+			continue
+		}
 		if change.AbsPath != "" {
-			writePaths = append(writePaths, hostWriteTarget{path: change.AbsPath, digest: change.AfterSHA256, metadataOnly: metadataOnly})
+			writePaths = append(writePaths, hostWriteTarget{path: change.AbsPath, digest: change.AfterSHA256})
 		}
 		if change.FromAbsPath != "" {
-			writePaths = append(writePaths, hostWriteTarget{path: change.FromAbsPath, metadataOnly: metadataOnly})
+			writePaths = append(writePaths, hostWriteTarget{path: change.FromAbsPath})
 		}
 	}
 	out := api.SourceChangesEvent{

@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
 )
 
 func (s *SourceEffects) applySourceMove(ctx context.Context, row *sourceMutationRow) error {
@@ -130,6 +131,7 @@ func (s *SourceEffects) publishSourceMove(ctx context.Context, row *sourceMutati
 	if err := requireSourceIdentity(plan.ToAbs, plan.DestinationIdentity); err != nil {
 		return err
 	}
+	plan.RenameReceipt, _ = sourcefeed.CaptureMetadataReceipt(plan.ToAbs)
 	if heldExists {
 		if !plan.MoveCleanupStarted {
 			plan.MoveCleanupStarted = true

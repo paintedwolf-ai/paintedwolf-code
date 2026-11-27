@@ -10,9 +10,33 @@ import (
 	"time"
 )
 
+// MetadataReceipt captures stat-only file identity and change-time proof
+// at the committed rename owner without reading or hashing file contents.
+type MetadataReceipt struct {
+	state hostWriteState
+}
+
+// CaptureMetadataReceipt records stat-only identity, mode, size, mtime, and ctime
+// for absPath without opening or hashing the file. Returns (nil, false) when the
+// platform cannot supply change-time proof so echo suppression fails open.
+func CaptureMetadataReceipt(absPath string) (*MetadataReceipt, bool) {
+	if absPath == "" {
+		return nil, false
+	}
+	key, err := filepath.Abs(absPath)
+	if err != nil {
+		return nil, false
+	}
+	state, ok := readHostWriteState(key, "", true)
+	if !ok || state.absent {
+		return nil, false
+	}
+	return &MetadataReceipt{state: state}, true
+}
+
 type hostWriteTarget struct {
 	path, digest string
-	metadataOnly bool
+	preCaptured  *hostWriteState
 }
 
 type hostWriteState struct {
@@ -22,6 +46,7 @@ type hostWriteState struct {
 	metadataOnly bool
 	size         int64
 	modTimeNano  int64
+	changeTime   [2]int64
 	info         os.FileInfo
 }
 
@@ -34,6 +59,7 @@ func (s hostWriteState) matches(other hostWriteState) bool {
 			s.mode == other.mode &&
 			s.size == other.size &&
 			s.modTimeNano == other.modTimeNano &&
+			s.changeTime == other.changeTime &&
 			s.info != nil && other.info != nil && os.SameFile(s.info, other.info)
 	}
 	return !other.metadataOnly && s.digest == other.digest && s.mode == other.mode
@@ -82,7 +108,11 @@ func noteHostWritePaths(paths []hostWriteTarget) {
 		if err != nil {
 			continue
 		}
-		if state, ok := readHostWriteState(key, target.digest, target.metadataOnly); ok {
+		if target.preCaptured != nil {
+			observed[key] = hostWriteReceipt{at: time.Now(), hostWriteState: *target.preCaptured}
+			continue
+		}
+		if state, ok := readHostWriteState(key, target.digest, false); ok {
 			observed[key] = hostWriteReceipt{at: time.Now(), hostWriteState: state}
 		}
 	}
@@ -119,11 +149,16 @@ func readHostWriteState(path, digest string, metadataOnly bool) (hostWriteState,
 		if !info.Mode().IsRegular() && !info.IsDir() {
 			return hostWriteState{}, false
 		}
+		ctime, ok := statChangeTime(info)
+		if !ok {
+			return hostWriteState{}, false
+		}
 		return hostWriteState{
 			mode:         info.Mode(),
 			metadataOnly: true,
 			size:         info.Size(),
 			modTimeNano:  info.ModTime().UnixNano(),
+			changeTime:   ctime,
 			info:         info,
 		}, true
 	}

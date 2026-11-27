@@ -93,14 +93,19 @@ func TestSourceMetadataRenameDoesNotReadMovedContents(t *testing.T) {
 	testutil.FailErr(t, "chmod 000", os.Chmod(path, 0o000))
 	t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
 
-	prepared, err := prepareChanges([]Change{{ProjectID: "project", WorkspaceID: "workspace", WorkspaceKind: api.SourceWorkspaceKindProject, RootID: "root", Path: "large", FromPath: "old", AbsPath: path, FromAbsPath: filepath.Join(root, "old"), Op: api.SourceChangeOpRename, Origin: api.SourceChangeOriginUser}}, false)
+	receipt, ok := CaptureMetadataReceipt(path)
+	if !ok || receipt == nil {
+		t.Fatal("CaptureMetadataReceipt failed on 0o000 sparse file")
+	}
+
+	prepared, err := prepareChanges([]Change{{ProjectID: "project", WorkspaceID: "workspace", WorkspaceKind: api.SourceWorkspaceKindProject, RootID: "root", Path: "large", FromPath: "old", AbsPath: path, FromAbsPath: filepath.Join(root, "old"), MetadataReceipt: receipt, Op: api.SourceChangeOpRename, Origin: api.SourceChangeOriginUser}}, false)
 	testutil.FailErr(t, "prepare rename event", err)
 	if len(prepared.event.Changes) != 1 || len(prepared.writePaths) != 2 {
 		t.Fatalf("metadata move prepared unexpected paths: %+v", prepared)
 	}
 	for _, wp := range prepared.writePaths {
-		if !wp.metadataOnly {
-			t.Fatalf("metadata move scheduled content hashing for %+v", wp)
+		if wp.preCaptured == nil {
+			t.Fatalf("metadata move scheduled live-FS read/hash for %+v", wp)
 		}
 	}
 	noteHostWritePaths(prepared.writePaths)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/textfile"
 )
 
@@ -204,7 +205,13 @@ func applySourceRename(plan *sourceMutationPlan) error {
 	if err := requireSourceIdentity(plan.FromAbs, plan.EntryIdentity); err != nil {
 		return err
 	}
-	return fseffect.RenameGuarded(plan.RootPath, filepath.FromSlash(plan.FromPath), filepath.FromSlash(plan.ToPath), plan.EntryIdentity)
+	if err := fseffect.RenameGuarded(plan.RootPath, filepath.FromSlash(plan.FromPath), filepath.FromSlash(plan.ToPath), plan.EntryIdentity); err != nil {
+		return err
+	}
+	if err := requireSourceIdentity(plan.ToAbs, plan.EntryIdentity); err == nil {
+		plan.RenameReceipt, _ = sourcefeed.CaptureMetadataReceipt(plan.ToAbs)
+	}
+	return nil
 }
 
 func requireSourceIdentity(path, want string) error {
