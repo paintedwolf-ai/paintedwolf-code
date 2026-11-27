@@ -430,6 +430,7 @@ def shortcut_dispatches(application, session, project, dispatches, operation):
             prefix = f'mkdir -p {shlex.quote(parent)} && ' if parent not in ('', '.') else ''
             invoke(application, session, 'command', {'command': f"{prefix}printf '%s' {shlex.quote(body)} > {quoted}"})
     off_plan = job_id(invoke(application, session, 'task', dispatch_call({'label': 'off-plan', 'mode': 'write', 'paths': ['unplanned-shortcut.py']})['args']), application, session=session)
+    invoke(application, session, 'wait', {'timeout_ms': 30000, 'conditions': [{'kind': 'next_worker_done'}]})
     row = settled(application, session, off_plan, {'failed'})
     receipt = outcome(application, off_plan) or {}
     if receipt.get('code') != 'HARNESS_DISPATCH_UNPLANNED' or 'HARNESS' in (row['error'] or ''):
