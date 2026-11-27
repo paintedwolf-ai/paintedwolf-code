@@ -10,7 +10,6 @@ import {
   liveChatStage,
   openSessionRow,
   settledChatSessionId,
-  waitForSessionReady,
   waitHarnessConnected,
   webE2e,
 } from "./helpers.ts";
@@ -86,13 +85,21 @@ webE2e("browser-obligation: build receipt leaves browser obligation open until c
     const captureOutput = await driver.completed(captureCallId);
     expect(captureOutput).toBeTruthy();
 
+    // Mark the progress item complete so closeout is unblocked after browser verification.
+    await driver.completed(await driver.invoke("update_progress", {
+      content: "## Progress\n- [x] Build index.html and verify via capture_page\n",
+    }));
+
     const pending = await apiJson<PendingTurn>(request, "GET", `/harness/llm/pending?wait=30000&session_id=${sessionId}`);
     expect(pending.pending).toBe(true);
     await apiJson(request, "POST", "/harness/llm/respond", {
       id: pending.id,
       content: "Built index.html and verified the Ping interaction via capture_page.",
     });
-    await waitForSessionReady(request, sessionId);
+    await expect.poll(
+      async () => (await apiJson<{ status: string }>(request, "GET", `/v1/sessions/${sessionId}`)).status,
+      { timeout: 30_000 },
+    ).toBe("idle");
     const backToChat = page.getByRole("button", { name: "Back to chat" });
     if (await backToChat.isVisible().catch(() => false)) {
       await backToChat.click();
