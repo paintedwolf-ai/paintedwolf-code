@@ -97,6 +97,7 @@ def _run_k05_tree_instance(
     name: str,
     selector: dict[str, object],
     shape: ScaleTreeShape,
+    config_dir: Path | None = None,
     settle_timeout_s: float = 600.0,
 ) -> dict[str, object]:
     """Attach a scale tree, observe traversal progress, foreground browse, and other-project responsiveness."""
@@ -271,6 +272,13 @@ def _run_k05_tree_instance(
     if sample_matches == 0:
         defects.append({"code": "settled_scale_lookup_empty", "sample_lookup": sample_lookup})
 
+    if config_dir is not None:
+        from .cf04_k05_trace import _read_sidecar_index_db_counters
+
+        index_db_counters = _read_sidecar_index_db_counters(config_dir, shape.files)
+    else:
+        index_db_counters = {"status": "unknown", "reason": "config_dir not provided"}
+
     client.delete_project_async(project_id, operation_id=str(uuid.uuid4()))
 
     # Honest work-counter reporting per Decision 027 (no polling proxies substituted for unexported counters)
@@ -307,6 +315,7 @@ def _run_k05_tree_instance(
         "observed_revision_transitions_diagnostic": len(revisions_seen),
         "file_count_progression_diagnostic": file_count_progression,
         "work_counters": work_counters,
+        "index_db_counters": index_db_counters,
         "foreground_browse": foreground_browse_during_walk,
         "other_project_probe": other_project_during_walk,
         "sample_lookup_matches": sample_matches,
@@ -383,6 +392,7 @@ def run_k05_suite(
                     name=f"K05-inst-{idx:02d}-{sz}",
                     selector=sel.to_dict(),
                     shape=shape,
+                    config_dir=sidecar.config_dir,
                 )
                 generated_results.append(res)
 
