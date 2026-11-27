@@ -43,7 +43,7 @@ class PortableCommandQSliceTests(unittest.TestCase):
                 'program_id': 'p1', 'detail_ref': 'output:program-source:p1', 'state': 'rejected', 'status': 2, 'executed_children': 0,
                 'stderr': 'touch: PROGRESS_MISSING [PROGRESS_MISSING]\n', 'stop_code': 'PROGRESS_MISSING',
                 'completed_effects': 0, 'uncertain_effects': 0, 'replay_available': False,
-                'refusal': {'code': 'PROGRESS_MISSING', 'feedback': 'Call update_progress before mutating.', 'details': {}},
+                'refusal': {'code': 'PROGRESS_MISSING', 'feedback': 'Cause: Edits and delegated work start only after the deliverables are recorded in the progress checklist. Next: Record the checklist, then retry the same rejected call.\nCode: PROGRESS_MISSING', 'details': {}},
             }
             payload3 = {'program_id': 'p2', 'state': 'completed', 'status': 0, 'stdout': '', 'stderr': ''}
             db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?), ('m2','sess1234',2,'tool','c2',?), ('m3','sess1234',3,'tool','c3',?)", (
@@ -67,6 +67,13 @@ class PortableCommandQSliceTests(unittest.TestCase):
             db.commit(); db.close()
             obs_bad, _ = observe.build_observation(case, session_id='sess1234', identity=ident, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=turns, prelude_records=[])
             self.assertFalse(obs_bad['facts']['validated_resubmission_reference'])
+            # Negative control: unrelated refusal feedback MUST NOT fabricate remedy='update_progress'.
+            db = sqlite3.connect(db_path)
+            p_unrel = {**payload1, 'refusal': {'code': 'PROGRESS_MISSING', 'feedback': 'Command failed.', 'details': {}}}
+            db.execute("UPDATE messages SET tool_result_json=? WHERE id='m1'", (json.dumps({'outcome': 'rejected', 'codes': ['PROGRESS_MISSING'], 'content': '[command#1]\n' + json.dumps(p_unrel)}),))
+            db.commit(); db.close()
+            obs_unrel, _ = observe.build_observation(case, session_id='sess1234', identity=ident, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=turns, prelude_records=[])
+            self.assertNotEqual(obs_unrel['recovery']['remedy'], 'update_progress')
 
     def test_q21_external_argv_disk_provenance_and_confined_launch_gap(self):
         case = CASES['external-argv']

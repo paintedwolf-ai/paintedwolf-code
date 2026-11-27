@@ -201,7 +201,9 @@ def extra_case_facts(case, *, session_id, identity, project_dir, git_setup, rece
         ref_obj = (rej_payload or {}).get('refusal') if isinstance((rej_payload or {}).get('refusal'), dict) else {}
         ref_details = ref_obj.get('details') if isinstance(ref_obj.get('details'), dict) else {}
         ref_text = ' '.join(str(x or '') for x in (ref_details.get('expected_form'), ref_obj.get('feedback'), (first_rejected[1] if first_rejected else last_raw or {}).get('message'))).lower()
-        remedy = 'update_progress' if ('update_progress' in ref_text or 'progress' in str(ref_details.get('expected_form') or '').lower()) else recovery.get('remedy', '')
+        has_prog_remedy = any(tok in ref_text for tok in ('update_progress', 'progress checklist', 'record the checklist')) or 'progress' in str(ref_details.get('expected_form') or '').lower()
+        prog_applied = any(r.get('operation') == 'update_progress' and r.get('outcome') == 'completed' for r in receipts)
+        remedy = 'update_progress' if (has_prog_remedy and (prog_applied or len(turn_records or ()) == 1)) else recovery.get('remedy', '')
         turn0_prog = (turn_records[0].get('program') if turn_records else '') or ''
         prog_sha = hashlib.sha256(turn0_prog.encode('utf-8')).hexdigest() if turn0_prog else ''
         sources = audit.get('invocation_program_sources') or []
