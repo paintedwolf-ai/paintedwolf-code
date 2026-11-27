@@ -387,6 +387,37 @@ class MemoryBudgetTests(unittest.TestCase):
             self.assertEqual(len(recovered_report["operations"]), 1)
             self.assertEqual(recovered_report["operations"][0]["action"], "resolve")
 
+    def test_stale_source_guard_holds_memory_rows_on_package_or_policy_changes(self):
+        from ci_policy import budget_history as history
+        api_row = {"category": "package_memory_ordinary", "id": "lycaon/internal/api", "sources": ["lycaon/internal/api"]}
+        other_row = {"category": "package_memory_race", "id": "lycaon/internal/other", "sources": ["lycaon/internal/other"]}
+        file_row = {"category": "source_files", "id": "scripts/budgets.py", "sources": ["scripts/budgets.py"]}
+        self.assertEqual(history.measured_scope(api_row), ("directory", "lycaon/internal/api"))
+
+        def changes_for(paths):
+            mc = object.__new__(history.MainChanges)
+            mc.main = "a" * 40
+            mc.paths = frozenset(paths)
+            mc.records = set()
+            return mc
+
+        # Package file change holds that package's memory row without affecting unrelated rows.
+        pkg_changes = changes_for(["lycaon/internal/api/api.go"])
+        self.assertTrue(pkg_changes.changed(api_row))
+        self.assertFalse(pkg_changes.changed(other_row))
+        self.assertFalse(pkg_changes.changed(file_row))
+
+        # Policy or memory-review changes hold memory rows without affecting non-memory rows.
+        for policy_path in ("scripts/ci_policy/resources.json", "scripts/ci_policy/memory-reviews/api.json"):
+            with self.subTest(path=policy_path):
+                pol_changes = changes_for([policy_path])
+                self.assertTrue(pol_changes.changed(api_row))
+                self.assertTrue(pol_changes.changed(other_row))
+                self.assertFalse(pol_changes.changed(file_row))
+
+        # Unrelated change leaves memory rows unheld.
+        self.assertFalse(changes_for(["docs/README.md"]).changed(api_row))
+
     def test_empty_receipts_returns_no_findings_and_budgets_main_never_blocks_on_memory_warning(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
