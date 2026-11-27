@@ -256,20 +256,32 @@ class TestTB08_A08_LegibleDenialsAndH3(unittest.TestCase):
         self.assertEqual(bad_stderr["verdict"], "fail")
         self.assertIn("a08_refusal_code_varied_with_stderr", bad_stderr["failed_rule_ids"])
 
-        # H3 triage: unstructured owner failure flagged; typed refusal passes.
-        h3_fail = triage_h3_unstructured_owner_failure({
+        # H3 triage: missing-identity vs bounded-work kept distinct.
+        h3_identity = triage_h3_unstructured_owner_failure({
             "code": "TOOL_OWNER_FAILED",
             "class": "owner_error",
             "reason": "child program identity: sql: no rows in result set",
         })
-        self.assertEqual(h3_fail["verdict"], "fail")
-        self.assertFalse(h3_fail["structured_typed_refusal"])
+        self.assertEqual(h3_identity["verdict"], "fail")
+        self.assertEqual(h3_identity["symptom"], "missing_retained_identity")
+        self.assertFalse(h3_identity["structured_typed_refusal"])
+
+        h3_work_raw = triage_h3_unstructured_owner_failure({
+            "code": "TOOL_OWNER_FAILED",
+            "class": "owner_error",
+            "reason": "work: requested > 1073741824",
+        })
+        self.assertEqual(h3_work_raw["verdict"], "fail")
+        self.assertEqual(h3_work_raw["symptom"], "bounded_work_limit")
+        self.assertNotEqual(h3_identity["owner"], h3_work_raw["owner"])
 
         h3_typed = triage_h3_unstructured_owner_failure({
             "code": "COMMAND_LIMIT_EXCEEDED",
-            "class": "policy_rejection",
+            "class": "host_rejection",
+            "reason": "screen_work_units exceeded",
         })
         self.assertEqual(h3_typed["verdict"], "pass")
+        self.assertEqual(h3_typed["symptom"], "bounded_work_limit")
         self.assertTrue(h3_typed["structured_typed_refusal"])
 
 

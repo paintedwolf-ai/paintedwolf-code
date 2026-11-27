@@ -482,15 +482,34 @@ def verify_a08_legible_denials(
 def triage_h3_unstructured_owner_failure(failure_record: dict[str, Any]) -> dict[str, Any]:
     """Triage H3 (`component=tool_owner` unstructured failures) against the typed refusal contract.
 
-    A compliant typed refusal carries a specific typed code (not TOOL_OWNER_FAILED) and
-    `failure_class != 'owner_error'`. An unstructured owner error falls back to
-    `TOOL_OWNER_FAILED` with `failure_class == 'owner_error'`.
+    Keeps missing-identity symptoms (`child program identity: sql: no rows in result set`,
+    owned by `internal/invocation/program_start.go:249` as a host/ledger retention fault)
+    distinct from bounded-work symptoms (`work: requested > 1073741824` / `screen_work_units`,
+    owned by `internal/secretmatch` / command resource-limit contract `COMMAND_LIMIT_EXCEEDED`).
     """
     code = str(failure_record.get("code") or "")
     failure_class = str(failure_record.get("class") or "")
+    reason = str(failure_record.get("reason") or "")
     is_unstructured_fallback = (code == "TOOL_OWNER_FAILED" or failure_class == "owner_error" or not code)
+
+    if "child program identity" in reason or "no rows in result set" in reason:
+        symptom = "missing_retained_identity"
+        owner = "internal/invocation (program_start.go:249)"
+        expected_contract = "docs/tools.md#tool-lifecycle (host/ledger integrity fault; non-retryable)"
+    elif "work:" in reason or "screen_work_units" in reason or code == "COMMAND_LIMIT_EXCEEDED":
+        symptom = "bounded_work_limit"
+        owner = "internal/secretmatch + command-language-v1 resource limits"
+        expected_contract = "docs/tools.md (typed COMMAND_LIMIT_EXCEEDED refusal; caller-actionable)"
+    else:
+        symptom = "other"
+        owner = "unknown"
+        expected_contract = "docs/tools.md#tool-lifecycle"
+
     return {
         "incident_id": "H3",
+        "symptom": symptom,
+        "owner": owner,
+        "expected_contract": expected_contract,
         "code": code,
         "class": failure_class,
         "structured_typed_refusal": not is_unstructured_fallback,
