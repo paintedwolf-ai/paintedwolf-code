@@ -123,7 +123,7 @@ func TestManagedTempDeclaredAtLaunchPin(t *testing.T) {
 			name   string
 			mutate string
 		}{
-			{"replaced_with_identical_bytes", `rm -f "$1" && printf "same\n" > "$1"`},
+			{"replaced_with_identical_bytes", `tmp="${1}.new"; printf "same\n" > "$tmp" && mv -f "$tmp" "$1"`},
 			{"swapped_with_symlink_to_identical_bytes", `target="${1}.target"; printf "same\n" > "$target" && rm -f "$1" && ln -s "$target" "$1"`},
 			{"swapped_with_dangling_symlink", `rm -f "$1" && ln -s "${1}.missing" "$1"`},
 			{"replaced_with_directory", `rm -f "$1" && mkdir "$1"`},
