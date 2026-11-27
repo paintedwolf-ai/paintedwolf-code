@@ -8,7 +8,7 @@ when: paintedwolf.path_is_worker_branch
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:path_is_worker_branch
-message: 'Coordinator cannot access worker views — use `preview_overlay` by result handle (`path={{ paintedwolf.path }}`)'
+message: 'Coordinator cannot access private worker workspace paths (`path={{ paintedwolf.path }}`)'
 what: 'The coordinator request names a private worker workspace path: {{ paintedwolf.path }}.'
 cause: Private worker workspace paths are not coordinator filesystem inputs.
 why: Result previews carry the worker intent and structured merge/conflict state without bypassing workspace ownership.

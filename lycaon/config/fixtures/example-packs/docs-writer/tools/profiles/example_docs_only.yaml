@@ -6,6 +6,7 @@ description: Docs writer — reads the tree and writes prose with native command
 command_effects: [read_only, mutation]
 tools:
   command: sticky
+  complete_leg: sticky
   summarize: sticky
   survey_repo: sticky
   update_progress: true

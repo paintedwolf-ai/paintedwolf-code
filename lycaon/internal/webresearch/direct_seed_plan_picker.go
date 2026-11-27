@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"strings"
 	"sync"
 	"time"
@@ -154,7 +155,7 @@ type seedWarmAdmission func(context.Context) (bool, error)
 const seedHedgeDelay = 8 * time.Second
 
 func pickSeedsSystemPrompt(ctx context.Context) (string, error) {
-	return guidance.RenderCatalog(ctx, guidance.UtilityPickSeedsSystemRef, nil)
+	return prompts.RenderUtilityPrompt(ctx, guidance.UtilityPickSeedsSystemRef, nil)
 }
 
 // pickSeedsCached returns the seed plan for a query, reusing a recent plan for

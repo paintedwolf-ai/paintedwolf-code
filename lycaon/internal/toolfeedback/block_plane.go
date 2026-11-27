@@ -67,7 +67,7 @@ func (bp *BlockPlane) Evaluate(ctx context.Context, anchor, tool, profile string
 		return rerr
 	}
 	if rd, ok := oar.FirstBlock(rendered); ok && rd.Text != "" {
-		return guidance.NewRefusal(rd.Decision.Code, rd.Text).WithPolicyCopy(rd.Decision.Copy).WithDetails(oar.NextCallsDetails(nil, rd.Decision.Data), nil)
+		return guidance.NewRefusal(rd.Decision.Code, rd.Text).WithPolicyCopy(rd.Decision.Copy).WithDetails(oar.PolicyDecisionDetails(anchor, rd.Decision.Rule, nil, rd.Decision.Data), nil)
 	}
 	if d := strings.TrimSpace(decision.Code); d != "" {
 		return toolrejection.FormatDecisionReject(d, nil, nil)
@@ -126,6 +126,7 @@ func (bp *BlockPlane) rejectFromObservation(ctx context.Context, anchor, tool, p
 	fillOccurrenceIdentity(ctx, gc)
 	gc.Session.PermissionProfile = profile
 	gc.Progress.VerifyHasCommand = commandsurface.HasCommandInput(args)
+	gc.DeriveToolClassFacts()
 	if bp.MCPCatalog != nil {
 		oar.ObserveMCPStructuralPre(gc, tool, bp.MCPCatalog)
 	}
@@ -165,7 +166,7 @@ func (bp *BlockPlane) rejectFromObservation(ctx context.Context, anchor, tool, p
 		return toolrejection.RenderRejectBlock(gc.ObservedRejectCode, tr.Data, tr, nil)
 	}
 	if rd, ok := oar.FirstBlock(rendered); ok && rd.Text != "" {
-		return guidance.NewRefusal(rd.Decision.Code, rd.Text).WithPolicyCopy(rd.Decision.Copy).WithDetails(oar.NextCallsDetails(tr.Data, rd.Decision.Data), nil).WithCause(tr)
+		return guidance.NewRefusal(rd.Decision.Code, rd.Text).WithPolicyCopy(rd.Decision.Copy).WithDetails(oar.PolicyDecisionDetails(anchor, rd.Decision.Rule, tr.Data, rd.Decision.Data), nil).WithCause(tr)
 	}
 	if d := strings.TrimSpace(res.Decision.Code); d != "" {
 		return toolrejection.RenderRejectBlock(d, tr.Data, tr, nil)
@@ -192,6 +193,9 @@ func ApplyToolRejectObservations(gc *oar.GuardContext, tr *toolrejection.ToolRej
 	}
 	if code != "" {
 		gc.PutRejectData(code, tr.Data)
+		if code == "TOOL_COMMAND_OPERATION" {
+			gc.ObserveCommandOperationReach()
+		}
 	}
 	// MCP rules branch on the structured machine code.
 	if strings.HasPrefix(strings.TrimSpace(gc.Invocation.Tool), "mcp_") {

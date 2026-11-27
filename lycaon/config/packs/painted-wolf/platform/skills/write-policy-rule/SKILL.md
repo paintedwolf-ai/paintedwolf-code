@@ -1,6 +1,8 @@
 ---
 name: write-policy-rule
 description: Author and test Open Agent Rules over supported machine-state anchors and facts without new host behavior.
+metadata:
+  authoring_reference: "true"
 ---
 
 # Write a policy rule

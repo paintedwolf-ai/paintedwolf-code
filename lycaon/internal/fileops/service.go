@@ -40,13 +40,15 @@ func (s *Service) notify(request Request) {
 }
 
 type Run struct {
-	service    *Service
-	mu         sync.Mutex
-	request    Request
-	done       chan struct{}
-	canceled   chan struct{}
-	cancelOnce sync.Once
-	lastSaved  time.Time
+	service          *Service
+	mu               sync.Mutex
+	request          Request
+	done             chan struct{}
+	canceled         chan struct{}
+	cancelOnce       sync.Once
+	firstAnswer      FirstAnswerKind
+	firstAnswerReady chan struct{}
+	lastSaved        time.Time
 }
 
 type Outcome struct {
@@ -55,7 +57,11 @@ type Outcome struct {
 }
 
 func NewService(store *Store) *Service {
-	return &Service{store: store, active: make(map[string]*Run), workers: make(chan struct{}, 4)}
+	return &Service{
+		store:   store,
+		active:  make(map[string]*Run),
+		workers: make(chan struct{}, 4),
+	}
 }
 
 // HoldBeforeWorkForTest runs hold before each run's work, while it is still
@@ -128,10 +134,54 @@ func (s *Service) admit(ctx context.Context, request Request, retry bool) (*Run,
 }
 
 func newRun(s *Service, r Request) *Run {
-	return &Run{service: s, request: r, done: make(chan struct{}), canceled: make(chan struct{})}
+	run := &Run{
+		service:          s,
+		request:          r,
+		done:             make(chan struct{}),
+		canceled:         make(chan struct{}),
+		firstAnswer:      r.FirstAnswerKind,
+		firstAnswerReady: make(chan struct{}),
+	}
+	if r.FirstAnswerKind != FirstAnswerPending {
+		close(run.firstAnswerReady)
+	}
+	return run
 }
-func (r *Run) Done() <-chan struct{} { return r.done }
-func (r *Run) Snapshot() Request     { r.mu.Lock(); defer r.mu.Unlock(); return r.request }
+func (r *Run) Done() <-chan struct{}             { return r.done }
+func (r *Run) FirstAnswerReady() <-chan struct{} { return r.firstAnswerReady }
+func (r *Run) FirstAnswer() FirstAnswerKind      { r.mu.Lock(); defer r.mu.Unlock(); return r.firstAnswer }
+func (r *Run) Snapshot() Request                 { r.mu.Lock(); defer r.mu.Unlock(); return r.request }
+
+// RecordFirstAnswer persists the first transport response kind emitted for r
+// once and returns the stored value so concurrent waiters and future restarts
+// agree on one kind.
+func (r *Run) RecordFirstAnswer(ctx context.Context, kind FirstAnswerKind) (FirstAnswerKind, error) {
+	r.mu.Lock()
+	if r.firstAnswer != FirstAnswerPending {
+		got := r.firstAnswer
+		r.mu.Unlock()
+		return got, nil
+	}
+	id := r.request.ID
+	r.mu.Unlock()
+	if kind == FirstAnswerPending {
+		return FirstAnswerPending, nil
+	}
+	recorded, err := r.service.store.RecordFirstAnswer(context.WithoutCancel(ctx), id, kind)
+	if err != nil {
+		return FirstAnswerPending, err
+	}
+	r.mu.Lock()
+	if r.firstAnswer == FirstAnswerPending {
+		r.firstAnswer = recorded
+		r.request.FirstAnswerKind = recorded
+		close(r.firstAnswerReady)
+	} else {
+		recorded = r.firstAnswer
+	}
+	r.mu.Unlock()
+	return recorded, nil
+}
 
 func (s *Service) Get(ctx context.Context, id string) (Request, error) {
 	s.mu.Lock()

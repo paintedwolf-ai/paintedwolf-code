@@ -4,9 +4,6 @@ package blueprint
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/blueprintfile"
@@ -14,11 +11,10 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// Manager handles blueprint CRUD, approval, and critic evidence hooks.
+// Manager handles blueprint CRUD and approval.
 type Manager struct {
 	Store     Store
 	Projects  project.Registry
-	DataDir   string
 	Approvals *ApprovalStore
 	// ActiveRun avoids a workflow import cycle.
 	ActiveRun func(ctx context.Context, projectID, path string) (string, bool, error)
@@ -37,13 +33,6 @@ func NewManager(store Store) *Manager {
 func (m *Manager) SetProjects(reg project.Registry) {
 	if m != nil {
 		m.Projects = reg
-	}
-}
-
-// SetDataDir wires the sidecar data root for plan-critic JSONL.
-func (m *Manager) SetDataDir(dir string) {
-	if m != nil {
-		m.DataDir = strings.TrimSpace(dir)
 	}
 }
 
@@ -187,34 +176,7 @@ func (m *Manager) Delete(ctx context.Context, projectID, path string) error {
 	if err := m.Store.Delete(ctx, projectID, path); err != nil {
 		return err
 	}
-	// Keyed by path, so a blueprint later minted at this path would inherit the
-	// critique history. Advisory output, so removal failure does not fail Delete.
-	m.dropCriticEvidence(projectID, path)
 	return nil
-}
-
-// criticEvidencePath is the advisory-critique file for one blueprint path.
-func (m *Manager) criticEvidencePath(projectID, path string) (string, error) {
-	dataDir := ""
-	if m != nil {
-		dataDir = m.DataDir
-	}
-	dir, err := project.HostSubdir(dataDir, projectID, project.HostPlanCriticDir)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, strings.ReplaceAll(filepath.ToSlash(path), "/", "__")+".jsonl"), nil
-}
-
-func (m *Manager) dropCriticEvidence(projectID, path string) {
-	outPath, err := m.criticEvidencePath(projectID, path)
-	if err != nil {
-		return
-	}
-	if err := os.Remove(outPath); err != nil && !os.IsNotExist(err) {
-		slog.Warn("plan critique evidence outlived its blueprint",
-			"project_id", projectID, "path", path, "error", err)
-	}
 }
 
 // IsApproved reports whether a blueprint path refers to an approved file.
@@ -248,29 +210,6 @@ func (m *Manager) List(ctx context.Context, projectID string) ([]api.BlueprintSu
 		items[i].Status = bp.Status
 	}
 	return items, truncated, nil
-}
-
-// AppendCriticEvidence stores advisory critic output (does not satisfy gates).
-func (m *Manager) AppendCriticEvidence(ctx context.Context, projectID, path string, evidence []byte) error {
-	bp, err := m.Store.Get(ctx, projectID, path)
-	if err != nil {
-		return err
-	}
-	outPath, err := m.criticEvidencePath(bp.ProjectID, path)
-	if err != nil {
-		return err
-	}
-	f, err := os.OpenFile(outPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
-	line := strings.TrimSpace(string(evidence))
-	if line == "" {
-		return nil
-	}
-	_, err = f.WriteString(line + "\n")
-	return err
 }
 
 // Tasks extracts decomposable tasks from blueprint content.

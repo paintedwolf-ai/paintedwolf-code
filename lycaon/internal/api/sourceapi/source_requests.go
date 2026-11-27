@@ -79,22 +79,81 @@ func (s *Mutations) startSourceRequest(w http.ResponseWriter, r *http.Request, o
 	} else {
 		release()
 	}
-	timer := time.NewTimer(time.Second)
-	defer timer.Stop()
-	select {
-	case <-run.Done():
-		state := run.Snapshot()
-		if retry || state.State == "interrupted" || state.State == "canceled" {
-			httpio.WriteJSON(w, http.StatusAccepted, SourceOperationDTO(state))
+	var syncCh <-chan struct{}
+	var timerC <-chan time.Time
+	if created || retry {
+		if s.SyncWindow != nil {
+			syncCh = s.SyncWindow(r.Context())
+		} else {
+			timer := time.NewTimer(time.Second)
+			defer timer.Stop()
+			timerC = timer.C
+		}
+	}
+	if retry {
+		select {
+		case <-run.Done():
+			httpio.WriteJSON(w, http.StatusAccepted, SourceOperationDTO(run.Snapshot()))
+		case <-syncCh:
+			httpio.WriteJSON(w, http.StatusAccepted, SourceOperationDTO(run.Snapshot()))
+		case <-timerC:
+			httpio.WriteJSON(w, http.StatusAccepted, SourceOperationDTO(run.Snapshot()))
+		case <-r.Context().Done():
+		}
+		return
+	}
+	kind := run.FirstAnswer()
+	var recordErr error
+	if created {
+		select {
+		case <-run.Done():
+			kind, recordErr = recordTerminalFirstAnswer(r.Context(), run)
+		case <-syncCh:
+			kind, recordErr = run.RecordFirstAnswer(r.Context(), fileops.FirstAnswerAccepted)
+		case <-timerC:
+			kind, recordErr = run.RecordFirstAnswer(r.Context(), fileops.FirstAnswerAccepted)
+		case <-r.Context().Done():
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(state.ResponseStatus)
-		_, _ = io.WriteString(w, state.ResponseBody)
-	case <-timer.C:
-		httpio.WriteJSON(w, http.StatusAccepted, SourceOperationDTO(run.Snapshot()))
-	case <-r.Context().Done():
+	} else if kind == fileops.FirstAnswerPending {
+		select {
+		case <-run.FirstAnswerReady():
+			kind = run.FirstAnswer()
+		case <-run.Done():
+			kind, recordErr = recordTerminalFirstAnswer(r.Context(), run)
+		case <-r.Context().Done():
+			return
+		}
 	}
+	if recordErr != nil {
+		s.responses.InternalError(w, r, recordErr)
+		return
+	}
+	if kind == fileops.FirstAnswerAccepted {
+		httpio.WriteJSON(w, http.StatusAccepted, SourceOperationDTO(run.Snapshot()))
+		return
+	}
+	select {
+	case <-run.Done():
+	case <-r.Context().Done():
+		return
+	}
+	state := run.Snapshot()
+	if state.State == "interrupted" || state.State == "canceled" {
+		httpio.WriteJSON(w, http.StatusAccepted, SourceOperationDTO(state))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(state.ResponseStatus)
+	_, _ = io.WriteString(w, state.ResponseBody)
+}
+
+func recordTerminalFirstAnswer(ctx context.Context, run *fileops.Run) (fileops.FirstAnswerKind, error) {
+	state := run.Snapshot()
+	if state.State == "interrupted" || state.State == "canceled" {
+		return run.RecordFirstAnswer(ctx, fileops.FirstAnswerAccepted)
+	}
+	return run.RecordFirstAnswer(ctx, fileops.FirstAnswerResult)
 }
 
 // sourceRequestBody is the request body a journaled operation carries, for

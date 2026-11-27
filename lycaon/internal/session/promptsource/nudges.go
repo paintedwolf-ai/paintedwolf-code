@@ -3,11 +3,12 @@ package promptsource
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/coordinator/kick"
-	"github.com/lycaon/lycaon/internal/cost"
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/coordinator/kick"
+	"github.com/lycaon/lycaon/internal/cost"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/guidance"

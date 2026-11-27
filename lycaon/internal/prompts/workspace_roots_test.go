@@ -18,8 +18,10 @@ func renderRootsChanged(t *testing.T, before, after []projectroot.RootRef, activ
 	if change.Empty() {
 		t.Fatal("fixture describes no root change")
 	}
+	reader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
+	testutil.FailErr(t, "DeclaredReader coordinator", err)
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	out, err := engine.RenderKick(context.Background(), "coordinator-roots-changed", prompts.RootsChangedKickData(change, after, active))
+	out, err := engine.RenderKick(context.Background(), reader, "coordinator-roots-changed", prompts.RootsChangedKickData(change, after, active))
 	testutil.FailErr(t, "render roots-changed notice", err)
 	return out
 }

@@ -1,3 +1,4 @@
 steps:
   - program: ["sed", "-n", "A,Bp", "FILE"]
-    say: "For files, inspect text with {{ call }} or a plain text search."
+    probe: ["sed", "-n", "1,2p", "FILE"]
+    say: "For files, inspect text with {% if load %}{{ load }}, then {% endif %}{{ call }} or a plain text search."

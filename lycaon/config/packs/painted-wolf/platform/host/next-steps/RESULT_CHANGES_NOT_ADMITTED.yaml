@@ -6,15 +6,15 @@ steps:
         - kind: "next_worker_done"
           handles: ["{{ paintedwolf.worker }}"]
     complete: true
-    say: "Wait for the worker to deliver with {{ call }}, then try again."
+    say: "Wait for the worker to deliver with {% if load %}{{ load }}, then {% endif %}{{ call }}, then try again."
     otherwise: "Try again once the worker delivers."
   - when: "paintedwolf.state == 'asking' && paintedwolf.worker != ''"
     tool: "answer_decision"
     args:
       worker: "{{ paintedwolf.worker }}"
-    say: "The worker is waiting on its question; answer it with {{ call }}."
+    say: "The worker is waiting on its question; answer it with {% if load %}{{ load }}, then {% endif %}{{ call }}."
     otherwise: "The worker is waiting on its question; answer it first."
   - when: "paintedwolf.state != 'working' && paintedwolf.state != 'asking'"
     tool: "pack_board"
-    say: "Check the worker's state and its latest result on the roster with {{ call }}; only a delivered result with changes can be previewed, landed, rejected or shelved."
+    say: "Check the worker's state and its latest result on the roster with {% if load %}{{ load }}, then {% endif %}{{ call }}; only a delivered result with changes can be previewed, landed, rejected or shelved."
     otherwise: "Only a delivered result with changes can be previewed, landed, rejected or shelved."

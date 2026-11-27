@@ -5,7 +5,7 @@ on: tool.rejected
 selector:
   tools:
     - render_view
-requires_facts: [paintedwolf.content_height, paintedwolf.max_height, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.can_render_view, paintedwolf.content_height, paintedwolf.max_height, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "RENDER_CANVAS_OVERFLOW"
 effect: block
 x-paintedwolf-category: recoverable
@@ -15,7 +15,7 @@ what: The laid-out document is {{ paintedwolf.content_height }} CSS pixels tall;
 cause: The measured document exceeds the bounded content-fit canvas.
 why: A complete but illegible image and a quietly cropped one are both unusable as design evidence. The host refuses rather than returning either.
 fix: Split the document into sections, tighten intended spacing, or use a suitable wider layout. If a partial viewport is the intended deliverable, set viewport.fit to viewport with an explicit height and report the crop; do not present it as full-document evidence.
-instead: Branch on Code RENDER_CANVAS_OVERFLOW; split or shorten the document, then retry render_view
+instead: '{% if paintedwolf.can_render_view %}Branch on Code RENDER_CANVAS_OVERFLOW; split or shorten the document, then retry render_view{% else %}Branch on Code RENDER_CANVAS_OVERFLOW; split or shorten the document{% endif %}'
 x-paintedwolf-scenarios:
   - id: default
     vars:

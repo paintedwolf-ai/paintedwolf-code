@@ -1,0 +1,12 @@
+id: fixture-promote-on-investigate
+version: 1.0.0
+name: Fixture promote on investigate
+trigger: /fixture-promote-on-investigate
+request:
+  question: What should this phase work on?
+phases:
+  - id: bound
+    activity_label: Working
+    coordinator_surface: implement_investigate
+    surface_template: agents/coordinator-surface-orchestrate.md
+    mode_refs: [implement-overlay-promote]

@@ -51,6 +51,15 @@ func (p *ProfilePolicyEngine) CommandOperationAllowed(ctx context.Context, profi
 	if denied, _ := p.runtimeDenied(identity); denied {
 		return false, nil
 	}
+	if command != "" {
+		if ids, err := toolcontract.CommandPolicyIdentities(command); err == nil {
+			for _, candidate := range ids {
+				if denied, _ := p.runtimeDenied(candidate); denied {
+					return false, nil
+				}
+			}
+		}
+	}
 	boundary, ok := p.boundary.(interface {
 		CommandOperationAllowed(context.Context, string, string, string) (bool, error)
 	})

@@ -2,6 +2,7 @@ package loading
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"time"
 
@@ -43,7 +44,12 @@ func (m *Service) readSkillForTool(ctx context.Context, sess *api.Session, tctx 
 		return
 	}
 	roster, _ := m.skills(ctx, sess, tctx.Identity.Agent, roots)
-	roster = eligibleSkillsForOfferedTools(roster, m.toolEventOfferedTools(ctx, sess, tctx, tool, len(roots)))
+	if reader := tctx.Turn.Reader; reader.Valid() {
+		roster = eligibleSkillsForReader(roster, reader)
+	} else {
+		turnLoadLog.Warn("tool event has no request reader; skills withheld", "session_id", sess.ID, "tool", tool)
+		roster = nil
+	}
 	card := turnload.ToolCard{Name: tool, Description: m.toolDescription(ctx, sess, tctx.Identity.Agent, tctx.Turn.TurnSurfaceID, tool)}
 	finishDeciding := m.beginDeciding(ctx, sess, sess.ID, api.TurnLoadTriggerToolEvent, tctx.Identity.ToolCallID)
 	outcome := turnload.RankToolEvent(ctx, m.Decider(), catalog.ToolEvent, request, card, roster)
@@ -81,38 +87,16 @@ func (m *Service) readSkillForTool(ctx context.Context, sess *api.Session, tctx 
 		"elapsed_ms", time.Since(started).Milliseconds())
 }
 
-func (m *Service) toolEventOfferedTools(ctx context.Context, sess *api.Session, tctx tools.ToolContext, tool string, rootCount int) map[string]bool {
-	floor, loadable, _ := m.turnToolSets(ctx, sess, tctx.Identity.Agent, tctx.Turn.TurnSurfaceID, rootCount)
-	offered := nameSet(floor)
-	for _, name := range loadable {
-		if name = strings.TrimSpace(name); name != "" {
-			offered[name] = true
-		}
+func sortedToolSet(set map[string]bool) []string {
+	if len(set) == 0 {
+		return nil
 	}
-	for _, name := range tctx.Turn.TurnOfferedToolNames {
-		if name = strings.TrimSpace(name); name != "" {
-			offered[name] = true
-		}
+	out := make([]string, 0, len(set))
+	for name := range set {
+		out = append(out, name)
 	}
-	for _, name := range tctx.Turn.TurnToolPlan.ImmediateNames() {
-		if name = strings.TrimSpace(name); name != "" {
-			offered[name] = true
-		}
-	}
-	for _, name := range tctx.Turn.TurnToolPlan.DeferredNames() {
-		if name = strings.TrimSpace(name); name != "" {
-			offered[name] = true
-		}
-	}
-	if m != nil && m.Ledger != nil && sess != nil {
-		for name := range m.Ledger.Active(sess.ID) {
-			offered[name] = true
-		}
-	}
-	if tool = strings.TrimSpace(tool); tool != "" {
-		offered[tool] = true
-	}
-	return offered
+	sort.Strings(out)
+	return out
 }
 
 // renderToolEventSkill renders the selected skill's body into the turn ledger.

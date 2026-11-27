@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"sync/atomic"
 	"testing"
@@ -275,4 +276,66 @@ func TestFileOperationHoldKeepsTheRunCancelable(t *testing.T) {
 	if got := run.Snapshot().State; got != "canceled" {
 		t.Fatalf("state=%s want=canceled", got)
 	}
+}
+
+func TestServiceRecordsFirstAnswerAcrossCompletionAndStoreReopen(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "operations.db")
+	request := requestFixture()
+
+	t.Run("record and complete", func(t *testing.T) {
+		database := testdbfixture.OpenPath(t, dbPath)
+		testdbseed.InsertProject(t, database, "project")
+		testutil.FailErr(t, "read host owner", database.QueryRowContext(t.Context(), `SELECT id FROM people WHERE role='owner'`).Scan(&request.PersonID))
+
+		service := NewService(NewStore(database))
+		run, created, err := service.Admit(t.Context(), request, false)
+		testutil.FailErr(t, "admit", err)
+		if !created {
+			t.Fatal("expected new run")
+		}
+		got, err := run.RecordFirstAnswer(t.Context(), FirstAnswerAccepted)
+		testutil.FailErr(t, "record accepted first answer", err)
+		if got != FirstAnswerAccepted {
+			t.Fatalf("recorded first answer = %q, want %q", got, FirstAnswerAccepted)
+		}
+		// A second caller attempting to record a different kind sees the persisted latch.
+		got, err = run.RecordFirstAnswer(t.Context(), FirstAnswerResult)
+		testutil.FailErr(t, "re-record first answer", err)
+		if got != FirstAnswerAccepted {
+			t.Fatalf("subsequent RecordFirstAnswer = %q, want %q", got, FirstAnswerAccepted)
+		}
+		run.Execute(t.Context(), func(context.Context) Outcome {
+			return Outcome{Status: 201, Body: `{"path":"a.txt"}`}
+		})
+		<-run.Done()
+
+		// After completion removes the run from active, an exact replay still sees FirstAnswerAccepted.
+		replay, created, err := service.Admit(t.Context(), request, false)
+		testutil.FailErr(t, "replay admit", err)
+		if created {
+			t.Fatal("replay created a new run")
+		}
+		if got := replay.FirstAnswer(); got != FirstAnswerAccepted {
+			t.Fatalf("post-completion replay FirstAnswer = %q, want %q", got, FirstAnswerAccepted)
+		}
+	})
+
+	// Reopen the SQLite store from disk after the first subtest's cleanup closed it.
+	t.Run("reopen and replay", func(t *testing.T) {
+		reopened := testdbfixture.OpenPath(t, dbPath)
+		restarted := NewService(NewStore(reopened))
+		stored, err := restarted.Get(t.Context(), request.ID)
+		testutil.FailErr(t, "get after reopen", err)
+		if stored.FirstAnswerKind != FirstAnswerAccepted {
+			t.Fatalf("reopened FirstAnswerKind = %q, want %q", stored.FirstAnswerKind, FirstAnswerAccepted)
+		}
+		reopenedReplay, created, err := restarted.Admit(t.Context(), request, false)
+		testutil.FailErr(t, "reopened replay admit", err)
+		if created {
+			t.Fatal("reopened replay created a new run")
+		}
+		if got := reopenedReplay.FirstAnswer(); got != FirstAnswerAccepted {
+			t.Fatalf("reopened replay FirstAnswer = %q, want %q", got, FirstAnswerAccepted)
+		}
+	})
 }

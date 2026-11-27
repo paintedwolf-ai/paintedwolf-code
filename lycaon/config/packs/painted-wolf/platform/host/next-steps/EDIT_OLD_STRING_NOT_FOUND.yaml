@@ -2,4 +2,4 @@ steps:
   - tool: "source_history"
     args:
       path: "{{ paintedwolf.path }}"
-    say: "Only when attribution is needed, inspect {{ call }}, or the same call without a path for everything changed this session."
+    say: "Only when attribution is needed, {% if load %}call {{ load }}, then {% endif %}inspect {{ call }}, or the same call without a path for everything changed this session."

@@ -4,14 +4,10 @@ import (
 	"context"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -19,63 +15,50 @@ func (e *promptSurface) repoKnownEmpty(ctx context.Context, workspacePath string
 	fn := e.deps.RepoKnownEmpty
 	return fn != nil && fn(ctx, workspacePath)
 }
-func (e *promptSurface) mergeVisibleTools(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, vars map[string]any) {
-	if e == nil || vars == nil || sess == nil || e.deps.PromptToolLister == nil {
-		return
-	}
-	profileID := strings.TrimSpace(frame.Machine.ProfileID)
-	if agents := e.agentsForSession(ctx, sess); profileID == "" && agents != nil {
-		if profile, err := agents.Get(sess.AgentType); err == nil {
-			profileID = profile.ToolProfile
-		}
-	}
-	if profileID == "" {
-		fe, ok := e.deps.Prompts.(*prompts.FileTemplateEngine)
-		if !ok || fe == nil {
-			return
-		}
-		var err error
-		profileID, err = prompts.ToolProfileForAgent(sess.AgentType)
-		if err != nil {
-			return
-		}
-	}
-	metas, err := e.deps.PromptToolLister(ctx, sess, profileID)
-	if err != nil || len(metas) == 0 {
-		return
-	}
-	if frame.Machine.Compiled() {
-		metas = tools.HideSkillsReadWhenEmpty(metas, frame.Machine.SkillCount)
-	}
-	names := make([]string, 0, len(metas))
-	for _, meta := range metas {
-		if sess.Mode == api.SessionModeAsk && !tools.AllowedInAsk(meta) {
-			continue
-		}
-		if strings.TrimSpace(meta.Name) != "" {
-			names = append(names, meta.Name)
-		}
-	}
-	vars["visible_tools"] = names
-	// A persona renders the units and loaded tools of its own session.
-	vars["loaded_tools"] = e.loadedTools(sess)
-}
-func (e *promptSurface) mergeEffectivePromptSurface(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, vars map[string]any) {
-	if e == nil || sess == nil || vars == nil {
-		return
+func (e *promptSurface) effectivePromptSurface(
+	ctx context.Context,
+	sess *api.Session,
+	frame inject.CoordinatorTurnFrame,
+	turn *TurnAssemblyScratch,
+) (prompts.AgentPromptSurface, bool) {
+	if e == nil || sess == nil {
+		return prompts.AgentPromptSurface{}, false
 	}
 	var surface prompts.AgentPromptSurface
 	switch {
 	case frame.Machine.Compiled():
 		surface = frame.Machine.Surface
+	case turn != nil && turn.PromptSurfaceLoaded:
+		surface = turn.PromptSurface
 	case e.deps.EffectivePromptSurface != nil:
 		surface = e.deps.EffectivePromptSurface(ctx, sess)
+		if turn != nil {
+			turn.PromptSurface = surface
+			turn.PromptSurfaceLoaded = true
+		}
 	default:
-		return
+		return prompts.AgentPromptSurface{}, false
 	}
 	if e.deps.Selection != nil {
 		surface.FullCatalog = e.deps.Selection.FullCatalog(sess.ID)
 		surface.Fingerprint = surface.CacheFingerprint()
+	}
+	return surface, true
+}
+
+func (e *promptSurface) mergeEffectivePromptSurfaceWithTurn(
+	ctx context.Context,
+	sess *api.Session,
+	frame inject.CoordinatorTurnFrame,
+	turn *TurnAssemblyScratch,
+	vars map[string]any,
+) {
+	if vars == nil {
+		return
+	}
+	surface, ok := e.effectivePromptSurface(ctx, sess, frame, turn)
+	if !ok {
+		return
 	}
 	for key, value := range prompts.AgentPromptSurfaceTemplateVars(surface) {
 		switch value := value.(type) {
@@ -99,24 +82,7 @@ func (e *promptSurface) mergeEffectivePromptSurface(ctx context.Context, sess *a
 		}
 	}
 }
-func (e *promptSurface) mergeVisibleToolCapabilityVars(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch, vars map[string]any) {
-	if vars == nil {
-		return
-	}
-	_, rootCount, _, _, _ := e.workspaceRootsForTurn(ctx, sess, turn)
-	var visible []string
-	switch v := vars["visible_tools"].(type) {
-	case []string:
-		visible = v
-	case []any:
-		for _, item := range v {
-			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
-				visible = append(visible, s)
-			}
-		}
-	}
-	capability.MergeVars(vars, capability.Derive(rootCount, visible, nil))
-}
+
 func (e *promptSurface) workspaceRootsForTurn(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch) ([]map[string]any, int, string, int, bool) {
 	if turn != nil && turn.WorkspaceRootsLoaded {
 		return turn.WorkspaceRoots, turn.WorkspaceRootCount, turn.WorkspaceActivePath, turn.WorkspaceRootsOmittedCount, true
@@ -204,13 +170,14 @@ func (e *promptSurface) taskOffered(sess *api.Session, surfaceID string, rootCou
 	return plan.Deferred("task") && e.loadedTools(sess)["task"]
 }
 
+// turnReader is the Reader of the coordinator request this assembly precedes,
+// projected through the live turn pipeline.
 func (e *promptSurface) turnReader(
 	ctx context.Context,
 	sess *api.Session,
 	frame inject.CoordinatorTurnFrame,
 	history []api.Message,
 	turn *TurnAssemblyScratch,
-	fallbackRootCount int,
 ) (prompts.Reader, error) {
 	profile, _ := e.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
 	if frame.Roster != nil && strings.TrimSpace(frame.Roster.Facts.SurfaceID) != "" {
@@ -221,60 +188,24 @@ func (e *promptSurface) turnReader(
 	if turn != nil && turn.Reader.Valid() && turn.Reader.SurfaceID() == profile.SurfaceID {
 		return turn.Reader, nil
 	}
-	_, rootCount, _, _, ok := e.workspaceRootsForTurn(ctx, sess, turn)
-	if !ok {
-		switch {
-		case fallbackRootCount > 0:
-			rootCount = fallbackRootCount
-		case frame.Roster != nil && frame.Roster.Facts.RootCount > 0:
-			rootCount = frame.Roster.Facts.RootCount
-		case sess != nil && strings.TrimSpace(sess.WorkspacePath) != "":
-			rootCount = 1
-		}
-	}
-	plan, err := surface.CompileToolPlan(profile, rootCount)
+	reader, err := e.requestReader(ctx, sess, history, frame)
 	if err != nil {
 		return prompts.Reader{}, err
 	}
-	webSearchEnabled := true
-	if frame.Roster != nil {
-		webSearchEnabled = frame.Roster.Facts.WebSearchEnabled
-	} else if fn := e.deps.WebSearchEnabled; fn != nil {
-		webSearchEnabled = fn()
-	}
-	var (
-		profiles []sandbox.ToolProfile
-		schemas  *toolschema.Config
-	)
-	if view := e.sessionCatalogView(ctx, sess); view != nil {
-		profiles = view.ToolProfiles
-		schemas = view.ToolSchemas
-	}
-	if len(profiles) == 0 {
-		loaded, err := sandbox.LoadToolProfiles()
-		if err != nil {
-			return prompts.Reader{}, err
-		}
-		profiles = loaded
-	}
-	visionEnabled := e.deps.ModelVision != nil && e.deps.ModelVision(ctx, sess)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: profile.SurfaceID,
-		Mode:      surface.ExecutionModeFamily(profile.SurfaceID),
-		Profiles:  profiles,
-		Plan:      plan,
-		Loaded:    e.loadedTools(sess),
-		Schemas:   schemas,
-		RootCount: rootCount,
-		WebSearch: webSearchEnabled,
-	})
-	if err != nil {
-		return prompts.Reader{}, err
-	}
-	reader = reader.WithVision(visionEnabled)
 	if turn != nil {
 		turn.Reader = reader
 	}
 	return reader, nil
+}
+
+// requestReader projects sess's request through the deps' turn pipeline.
+func (e *promptSurface) requestReader(ctx context.Context, sess *api.Session, history []api.Message, frame inject.CoordinatorTurnFrame) (prompts.Reader, error) {
+	if e == nil || e.deps.TurnReader == nil {
+		return prompts.Reader{}, errTurnReaderNotConfigured
+	}
+	reader, err := e.deps.TurnReader(ctx, sess, history, frame)
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	return reader.WithVision(e.deps.ModelVision != nil && e.deps.ModelVision(ctx, sess)), nil
 }

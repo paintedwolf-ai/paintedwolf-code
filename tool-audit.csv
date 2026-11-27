@@ -32,8 +32,6 @@ git_stash,retain-structured-and-command,git,git stash,retained,lycaon/config/pac
 git_stash_list,replace-routine-schema,git,git stash list,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/git_stash_list.yaml
 git_status,replace-routine-schema,git,git status,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/git_status.yaml
 grep,replace-routine-schema,filesystem,grep | rg,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/grep.yaml
-handoff_health,retain-domain-structured,handoff,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/handoff_health.yaml
-handoff_init,retain-domain-structured,handoff,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/handoff_init.yaml
 handoff_release,retain-domain-structured,handoff,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/handoff_release.yaml
 handoff_release_all,retain-domain-structured,handoff,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/handoff_release_all.yaml
 handoff_reserve,retain-domain-structured,handoff,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/handoff_reserve.yaml
@@ -51,10 +49,6 @@ page_act,retain-domain-structured,browser,,retained,lycaon/config/packs/painted-
 page_close,retain-domain-structured,browser,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/page_close.yaml
 page_open,retain-domain-structured,browser,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/page_open.yaml
 page_snapshot,retain-domain-structured,browser,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/page_snapshot.yaml
-parse_evaluation,retain-domain-structured,parsing,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/parse_evaluation.yaml
-parse_extract_json,retain-domain-structured,parsing,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/parse_extract_json.yaml
-parse_validate,retain-domain-structured,parsing,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/parse_validate.yaml
-plan_append_review_evidence,retain-domain-structured,blueprints,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/plan_append_review_evidence.yaml
 preview_overlay,retain-domain-structured,worker_merge,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/preview_overlay.yaml
 process_list,retain-structured-and-command,processes,ps | pgrep | lsof,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/process_list.yaml
 process_signal,retain-structured-and-command,processes,kill | pkill,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/process_signal.yaml
@@ -79,10 +73,7 @@ secret_revoke,retain-domain-structured,secrets,,retained,lycaon/config/packs/pai
 skills_read,retain-domain-structured,skills,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/skills_read.yaml
 source_history,retain-domain-structured,source_ledger,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/source_history.yaml
 stat,replace-routine-schema,filesystem,stat,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/stat.yaml
-state_close,retain-domain-structured,workflow_state,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/state_close.yaml
-state_query,retain-domain-structured,workflow_state,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/state_query.yaml
 state_start,retain-domain-structured,workflow_state,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/state_start.yaml
-state_update,retain-domain-structured,workflow_state,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/state_update.yaml
 submit_verdict,retain-domain-structured,workflow_verdicts,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/submit_verdict.yaml
 summarize,retain-structured-and-command,summarization,summarize,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/summarize.yaml
 survey_repo,retain-structured-and-command,survey,repo-map,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/survey_repo.yaml
@@ -106,5 +97,4 @@ workflow_compose,retain-domain-structured,workflows,,retained,lycaon/config/pack
 workflow_compose_from_template,retain-domain-structured,workflows,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/workflow_compose_from_template.yaml
 workflow_persist,retain-domain-structured,workflows,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/workflow_persist.yaml
 workflow_transition,retain-domain-structured,workflows,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/workflow_transition.yaml
-workflow_user_feedback,retain-domain-structured,workflows,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/workflow_user_feedback.yaml
 write,replace-routine-schema,filesystem,tee | ln,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/write.yaml

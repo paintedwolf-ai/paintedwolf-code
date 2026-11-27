@@ -38,7 +38,7 @@ func TestLoadAgentToolSurfaceExploreReadonly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadHintCodeRows: %v", err)
 	}
-	data, err := prompts.LoadAgentToolSurface("explore_readonly", nil, hints, prompts.ReaderInput{Schemas: schemas}, toolProfiles(t))
+	data, err := prompts.LoadAgentToolSurface("explore_readonly", nil, hints, nil, schemas, toolProfiles(t))
 	if err != nil {
 		t.Fatalf("LoadAgentToolSurface: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestLoadAgentToolSurfacePreventiveRejectCodesOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadHintCodeRows: %v", err)
 	}
-	data, err := prompts.LoadAgentToolSurface("implement", nil, hints, prompts.ReaderInput{Schemas: schemas}, toolProfiles(t))
+	data, err := prompts.LoadAgentToolSurface("implement", nil, hints, nil, schemas, toolProfiles(t))
 	if err != nil {
 		t.Fatalf("LoadAgentToolSurface: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestRejectTableInvariantsAcrossProfiles(t *testing.T) {
 
 	seen := make(map[string]bool)
 	for _, p := range profiles {
-		data, err := prompts.LoadAgentToolSurface(p.ID, nil, hints, prompts.ReaderInput{Schemas: schemas}, toolProfiles(t))
+		data, err := prompts.LoadAgentToolSurface(p.ID, nil, hints, nil, schemas, toolProfiles(t))
 		if err != nil {
 			t.Fatalf("LoadAgentToolSurface(%q): %v", p.ID, err)
 		}
@@ -196,12 +196,14 @@ func TestRenderAgentToolSurfacePartial(t *testing.T) {
 	root := configlayout.FindModuleRoot()
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	testutil.FailErr(t, "LoadSchemaDir", err)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "implement",
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  toolProfiles(t),
 		Schemas:   schemas,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "implement",
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader", err)
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
@@ -229,7 +231,7 @@ func TestLoadAgentToolSurfaceWildcardDeferredMCP(t *testing.T) {
 	stageMCPWorkerProfile(t)
 
 	visible := []string{"read", "request_tools", "mcp_github_create_pr", "mcp_github_list_issues", "future_tool"}
-	data, err := prompts.LoadAgentToolSurface("mcp_worker", visible, nil, prompts.ReaderInput{}, toolProfiles(t))
+	data, err := prompts.LoadAgentToolSurface("mcp_worker", visible, nil, nil, nil, toolProfiles(t))
 	if err != nil {
 		t.Fatalf("LoadAgentToolSurface: %v", err)
 	}
@@ -248,7 +250,7 @@ func TestLoadAgentToolSurfaceWildcardDeferredMCP(t *testing.T) {
 	}
 
 	// A deferred tool the session ledger loaded is offered like a sticky one.
-	loaded, err := prompts.LoadAgentToolSurface("mcp_worker", visible, nil, prompts.ReaderInput{Loaded: map[string]bool{"mcp_github_create_pr": true}}, toolProfiles(t))
+	loaded, err := prompts.LoadAgentToolSurface("mcp_worker", visible, nil, map[string]bool{"mcp_github_create_pr": true}, nil, toolProfiles(t))
 	if err != nil {
 		t.Fatalf("LoadAgentToolSurface loaded: %v", err)
 	}
@@ -263,7 +265,7 @@ func TestLoadAgentToolSurfaceWildcardDeferredMCP(t *testing.T) {
 
 func TestLoadAgentToolSurfaceStaticFallbackSkipsPatterns(t *testing.T) {
 	stageMCPWorkerProfile(t)
-	data, err := prompts.LoadAgentToolSurface("mcp_worker", nil, nil, prompts.ReaderInput{}, toolProfiles(t))
+	data, err := prompts.LoadAgentToolSurface("mcp_worker", nil, nil, nil, nil, toolProfiles(t))
 	if err != nil {
 		t.Fatalf("LoadAgentToolSurface: %v", err)
 	}
@@ -285,7 +287,7 @@ func TestRequestableToolsCarryTheEngineOptionText(t *testing.T) {
 	testutil.FailErr(t, "LoadSchemaDir", err)
 	catalog, err := turnload.LoadCatalog()
 	testutil.FailErr(t, "LoadCatalog", err)
-	data, err := prompts.LoadAgentToolSurface("implement", nil, nil, prompts.ReaderInput{Schemas: schemas}, toolProfiles(t))
+	data, err := prompts.LoadAgentToolSurface("implement", nil, nil, nil, schemas, toolProfiles(t))
 	testutil.FailErr(t, "LoadAgentToolSurface", err)
 	if len(data.Requestable) == 0 {
 		t.Fatal("the implement profile defers tools, so the roster must list them")
@@ -300,19 +302,21 @@ func TestRequestableToolsCarryTheEngineOptionText(t *testing.T) {
 			t.Fatalf("%s summary = %q want the engine's option text %q", row.Name, row.Summary, want)
 		}
 	}
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "implement",
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  toolProfiles(t),
 		Schemas:   schemas,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "implement",
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader", err)
 	vars := reader.Facts()
 	if vars["more_tools_loadable"] != true {
 		t.Fatalf("more_tools_loadable = %+v", vars["more_tools_loadable"])
 	}
-	bare, err := prompts.LoadAgentToolSurface("implement", nil, nil, prompts.ReaderInput{}, toolProfiles(t))
+	bare, err := prompts.LoadAgentToolSurface("implement", nil, nil, nil, nil, toolProfiles(t))
 	testutil.FailErr(t, "LoadAgentToolSurface without schemas", err)
 	if len(bare.Requestable) != len(data.Requestable) || bare.Requestable[0].Summary != "" {
 		t.Fatalf("without schemas the roster lists bare names: %+v", bare.Requestable)

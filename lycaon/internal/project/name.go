@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -69,7 +70,7 @@ func NameProject(ctx context.Context, namer llm.UtilityNamer, firstUserMessage s
 	if namer == nil {
 		return ""
 	}
-	system, err := guidance.RenderCatalog(ctx, guidance.UtilityProjectNameSystemRef, nil)
+	system, err := prompts.RenderUtilityPrompt(ctx, guidance.UtilityProjectNameSystemRef, nil)
 	if err != nil {
 		return ""
 	}

@@ -191,7 +191,9 @@ func renderWorkflowFrame(t *testing.T, ctx context.Context, loader *workflowrunt
 	frame, err := loader.BuildCoordinatorTurnFrame(ctx, sessionID, nil)
 	testutil.FailErr(t, "BuildCoordinatorTurnFrame", err)
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
-	block, err := inject.RenderActiveWorkflowInject(ctx, prompts.NewInjectRenderer(engine), "sess-inject-test", frame, hints, codes, gateFeedback)
+	reader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
+	testutil.FailErr(t, "DeclaredReader coordinator", err)
+	block, err := inject.RenderActiveWorkflowInject(ctx, prompts.NewInjectRenderer(engine), reader, "sess-inject-test", frame, hints, codes, gateFeedback)
 	testutil.FailErr(t, "RenderActiveWorkflowInject", err)
 	return frame, block
 }

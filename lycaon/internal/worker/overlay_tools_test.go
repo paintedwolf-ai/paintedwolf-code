@@ -6,7 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -56,5 +59,41 @@ func TestFormatOverlayPromoteHostContentEmptyPayloadOnBareReject(t *testing.T) {
 	}
 	if content != "" {
 		t.Fatalf("content = %q want empty", content)
+	}
+}
+
+func TestFormatOverlayPromoteHostContentRecipientAuthority(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	t.Cleanup(func() { guidance.SetGuidanceRenderer(nil) })
+
+	out := api.WorkerMergeResult{
+		JobID:        "job-a",
+		ResultHandle: "result-a",
+		Status:       api.WorkerMergeStatusMerged,
+		Rebased: []api.OverlayRebaseOutcome{{
+			OverlayID: "result-b",
+			Status:    api.WorkerMergeStatusRebasing,
+			Conflicts: []string{"pkg/main.go"},
+		}},
+	}
+
+	withoutReach, err := formatOverlayPromoteHostContent(context.Background(), "result-a", out, nil)
+	if err != nil {
+		t.Fatalf("formatOverlayPromoteHostContent without reach: %v", err)
+	}
+	if !strings.Contains(withoutReach, "Code: OVERLAY_REBASE_CONFLICT") || !strings.Contains(withoutReach, "`pkg/main.go`") {
+		t.Fatalf("missing conflict occurrence details:\n%s", withoutReach)
+	}
+	if strings.Contains(withoutReach, "`preview_overlay`") || strings.Contains(withoutReach, "`promote_overlay`") || strings.Contains(withoutReach, "`instruct_worker`") {
+		t.Fatalf("unestablished context leaked stock tool instructions:\n%s", withoutReach)
+	}
+
+	admittedCtx := toolreach.WithRequest(t.Context(), promptstest.StockToolReach(t, "preview_overlay"))
+	withPreview, err := formatOverlayPromoteHostContent(admittedCtx, "result-a", out, nil)
+	if err != nil {
+		t.Fatalf("formatOverlayPromoteHostContent with preview reach: %v", err)
+	}
+	if !strings.Contains(withPreview, "`preview_overlay`") || strings.Contains(withPreview, "`promote_overlay`") {
+		t.Fatalf("admitted reach did not match rendered instructions:\n%s", withPreview)
 	}
 }

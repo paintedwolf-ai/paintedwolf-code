@@ -3,31 +3,75 @@ id: EXTRACT_FORMAT_UNSUPPORTED
 kind: schema
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.can_command, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.unsupported]
+requires_facts: [paintedwolf.admitted_archive_forms, paintedwolf.archive_forms_loadable_without_schema, paintedwolf.archive_tar_extract_call, paintedwolf.archive_tar_list_call, paintedwolf.archive_unzip_stream_call, paintedwolf.command_loader_call, paintedwolf.extract_allowed, paintedwolf.extract_format_cause, paintedwolf.extract_invalid_format, paintedwolf.extract_rejected_value, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.uncompressed_reader_call, paintedwolf.unsupported]
 when: paintedwolf.operation == "extract_archive" && paintedwolf.rejection_code == "EXTRACT_FORMAT_UNSUPPORTED"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:extract_archive
 message: extract_archive format not supported
-what: path {{ paintedwolf.path }} is not a supported archive extension.
-cause: This extractor accepts archive formats identified by the .zip and .tar.gz suffixes.
+what: '{% if paintedwolf.extract_invalid_format %}archive format {{ paintedwolf.extract_rejected_value }} is not supported for {{ paintedwolf.path }}.{% else %}path {{ paintedwolf.path }} ({{ paintedwolf.extract_rejected_value }}) does not have a supported archive suffix.{% endif %}'
+cause: '{% if paintedwolf.extract_invalid_format %}Explicit archive format ({{ paintedwolf.extract_format_cause }}) must be one of: {{ paintedwolf.extract_allowed }}.{% else %}Archive path suffix ({{ paintedwolf.extract_format_cause }}) must be one of: {{ paintedwolf.extract_allowed }}.{% endif %}'
 why: Narrow format set keeps parser and zip-slip defenses auditable.
 fix: >-
-  Use an actual supported archive containing the intended data. Renaming an unsupported file does not convert its contents. {% if paintedwolf.can_command %}Inspect a single zip member with `unzip -p`, or extract a tar member with `tar -x -f`, inside command when that is the intended task.{% else %}Inspect a single uncompressed file with an offered reader when that is the intended task.{% endif %}
+  {% if paintedwolf.extract_invalid_format %}Omit the explicit format to select from the archive suffix, or pass one of the supported formats ({{ paintedwolf.extract_allowed }}).{% else %}Use an actual supported archive ({{ paintedwolf.extract_allowed }}) containing the intended data. Renaming an unsupported file does not convert its contents.{% endif %}{% if paintedwolf.admitted_archive_forms %} Inside command{% if paintedwolf.command_loader_call %} after loading it with {{ paintedwolf.command_loader_call }}{% endif %} when that is the intended task:{% if paintedwolf.archive_unzip_stream_call %} Inspect a single zip member with `{{ paintedwolf.archive_unzip_stream_call }}`.{% endif %}{% if paintedwolf.archive_tar_list_call %} List tar members with `{{ paintedwolf.archive_tar_list_call }}`.{% endif %}{% if paintedwolf.archive_tar_extract_call %} Extract tar members with `{{ paintedwolf.archive_tar_extract_call }}`.{% endif %}{% else %}{% if paintedwolf.archive_forms_loadable_without_schema %} Call {{ paintedwolf.command_loader_call }} to inspect its projected schema when archive inspection or extraction is the intended task.{% else %}{% if paintedwolf.uncompressed_reader_call %} Inspect a single uncompressed file with {{ paintedwolf.uncompressed_reader_call }} when that is the intended task.{% endif %}{% endif %}{% endif %}
 instead: Branch on Code
 x-paintedwolf-scenarios:
-  - id: default
+  - id: unsupported-suffix
     vars:
-      allowed: .zip, .tar.gz
-      path: vendor/sdk.tar
-      profile: implement
-      tool: extract_archive
-  - id: command-leg
-    vars:
-      allowed: .zip, .tar.gz
-      can_command: true
-      path: vendor/sdk.tar
+      extract_allowed: [.zip, .tar, .tar.gz, .tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .tar.zst, .tzst]
+      extract_format_cause: unsupported_suffix
+      extract_invalid_format: false
+      extract_rejected_value: .7z
+      path: vendor/sdk.7z
       profile: implement
       tool: extract_archive
     expect_contains:
-      - '`unzip -p`'
+      - vendor/sdk.7z
+      - .7z
+      - .tar, .tar.gz
+      - .tzst
+  - id: invalid-explicit-format
+    vars:
+      extract_allowed: [zip, tar, tar.gz, tar.bz2, tar.xz, tar.zst]
+      extract_format_cause: invalid_format
+      extract_invalid_format: true
+      extract_rejected_value: 7z
+      format: 7z
+      path: vendor/sdk.tar
+      profile: implement
+      tool: extract_archive
+      uncompressed_reader_call: "`read(…)`"
+    expect_contains:
+      - vendor/sdk.tar
+      - 7z
+      - zip, tar, tar.gz
+      - tar.zst
+      - "`read(…)`"
+  - id: command-leg
+    vars:
+      admitted_archive_forms: [unzip -p ARCHIVE.zip MEMBER, tar -t -f ARCHIVE.tar, tar -x -f ARCHIVE.tar]
+      archive_tar_extract_call: tar -x -f ARCHIVE.tar
+      archive_tar_list_call: tar -t -f ARCHIVE.tar
+      archive_unzip_stream_call: unzip -p ARCHIVE.zip MEMBER
+      extract_allowed: [.zip, .tar, .tar.gz, .tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .tar.zst, .tzst]
+      extract_format_cause: unsupported_suffix
+      extract_invalid_format: false
+      extract_rejected_value: .7z
+      path: vendor/sdk.7z
+      profile: implement
+      tool: extract_archive
+    expect_contains:
+      - '`unzip -p ARCHIVE.zip MEMBER`'
+  - id: loader-only
+    vars:
+      archive_forms_loadable_without_schema: true
+      command_loader_call: '`request_tools(need="command")`'
+      extract_allowed: [.zip, .tar, .tar.gz, .tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .tar.zst, .tzst]
+      extract_format_cause: unsupported_suffix
+      extract_invalid_format: false
+      extract_rejected_value: .7z
+      path: vendor/sdk.7z
+      profile: implement
+      tool: extract_archive
+    expect_contains:
+      - '`request_tools(need="command")`'

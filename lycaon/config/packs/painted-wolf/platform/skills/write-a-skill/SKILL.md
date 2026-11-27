@@ -5,6 +5,7 @@ license: Apache-2.0
 compatibility: Requires a project with a skills directory the host scans
 metadata:
   author: painted-wolf
+  authoring_reference: "true"
 ---
 
 # Write a skill
