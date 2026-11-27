@@ -191,6 +191,8 @@ type ActivityEvent struct {
 	WaitTriggers []string `json:"wait_triggers,omitempty"`
 	// What asked the local decision engine. Present only on deciding, which the host opens only while an available engine is answering; the answer arrives as a turn_load event.
 	DecisionTrigger TurnLoadTrigger `json:"decision_trigger,omitempty"`
+	// Present only on indexing_credentials.
+	Indexing *CredentialIndexingProgress `json:"indexing,omitempty"`
 }
 
 // AddSecretIgnoreRequest
@@ -2801,6 +2803,14 @@ type CreateStandingWatchRequest struct {
 	AllowUnpriced        bool                 `json:"allow_unpriced,omitempty"`
 	DailyRunCap          int                  `json:"daily_run_cap,omitempty"`
 	TimeZone             string               `json:"time_zone,omitempty"`
+}
+
+// CredentialIndexingProgress One attached root's credential-file pass that a session waits on. Counts cover the current pass and are observations, not a completion estimate.
+type CredentialIndexingProgress struct {
+	RootID              string `json:"root_id"`
+	RootLabel           string `json:"root_label"`
+	DirectoriesVisited  int    `json:"directories_visited"`
+	CredentialFilesRead int    `json:"credential_files_read"`
 }
 
 // CurrentComparisonSource A read-only, immutable snapshot of the current on-disk file. Frames and search remain bounded for files above the editing limit.

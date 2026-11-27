@@ -11,6 +11,7 @@ var longRunningSet = map[string]struct{}{
 	"summarize":       {},
 	"survey_repo":     {},
 	"verify":          {},
+	"wait":            {},
 }
 
 // IsLongRunning reports whether tool activity is visible before its result.

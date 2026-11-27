@@ -27,7 +27,7 @@ type credentialFiles struct {
 	exposure func(ctx context.Context, sessionID, path string) error
 }
 
-func newCredentialFiles(harvest *secretharvest.Runtime, fp *secretmatch.Fingerprinter, database *db.Store, capabilities *secretcap.Service, evidence store.EvidenceRepository) *credentialFiles {
+func newCredentialFiles(harvest *secretharvest.Runtime, fp *secretmatch.Fingerprinter, database *db.Store, capabilities *secretcap.Service, evidence store.EvidenceRepository, events activityPublisher) *credentialFiles {
 	files := &credentialFiles{
 		harvest: harvest, fp: fp, queries: db.New(database),
 		managed: func(projectID string) []secretmatch.Remembered {
@@ -38,7 +38,7 @@ func newCredentialFiles(harvest *secretharvest.Runtime, fp *secretmatch.Fingerpr
 		},
 		exposure: evidence.MarkSecretExposureOnRead,
 	}
-	files.index = newCredentialIndex(files)
+	files.index = newCredentialIndex(files, events)
 	return files
 }
 

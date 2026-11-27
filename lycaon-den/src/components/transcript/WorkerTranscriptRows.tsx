@@ -12,6 +12,7 @@ import { pendingWorkerApprovalByJob } from "../../chat/worker/worker-approval-mo
 import { workerRowStatus, type OpenWorkerOptions } from "../../chat/worker/workers-model.ts";
 import { lastWorkerToolActivity } from "../../chat/worker/worker-activity.ts";
 import { workerTranscriptRows, type WorkerTranscriptCache } from "../../chat/worker/worker-transcript.ts";
+import { sessionActivityFor } from "../../chat/session/session-activity.ts";
 import { boardWorkerForTask } from "../../store/workers-board-sync.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import { MarkdownBody } from "./MarkdownBody.tsx";
@@ -168,6 +169,10 @@ export function ActivityToolEntry(props: {
     if (!workerId) return undefined;
     return () => cb(workerId, { scrollTo: "evidence" });
   };
+  const sessionActivities = () =>
+    props.appStore && props.sessionId
+      ? Object.values(sessionActivityFor(props.appStore, props.sessionId).activities ?? {})
+      : undefined;
   const toolCard = () => (
     <Show
       when={collaborationNotice()}
@@ -180,6 +185,8 @@ export function ActivityToolEntry(props: {
           projectId={props.projectId}
           client={props.client}
           rootRefs={props.rootRefs}
+          messages={props.messages}
+          activities={sessionActivities()}
           taskWorker={matched}
           taskBoardWorker={boardWorker}
           taskPendingApproval={pendingApproval}
@@ -228,6 +235,10 @@ export function ActivitySpanRow(props: {
   rootRefs?: readonly import("../../api/project-path.ts").ResolveProjectRoot[];
   client?: import("../../api/client.ts").LycaonClient | null;
 }) {
+  const sessionActivities = () =>
+    props.appStore && props.sessionId
+      ? Object.values(sessionActivityFor(props.appStore, props.sessionId).activities ?? {})
+      : undefined;
   const card = (
     <CommandActivitySpan
       label={props.item.label}
@@ -235,6 +246,8 @@ export function ActivitySpanRow(props: {
       layout={props.layout}
       sessionId={props.sessionId ?? undefined}
       entryKey={props.item.key}
+      messages={props.messages}
+      activities={sessionActivities()}
       renderToolEntry={(part) => (
         <ActivityToolEntry
           part={part()}

@@ -63,6 +63,9 @@ func (s *Watch) EnsureSourceWatch(ctx context.Context, projectID string) (int, b
 		return 0, false
 	}
 	s.ensureWorkspaceWatch(ctx, p)
+	if s.StartCredentialIndex != nil {
+		s.StartCredentialIndex(projectID)
+	}
 	return p.RootsGeneration, true
 }
 

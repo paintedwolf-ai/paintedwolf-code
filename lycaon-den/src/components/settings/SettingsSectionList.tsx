@@ -26,17 +26,19 @@ export function SettingsSectionList(props: Props) {
           <For each={props.items}>
             {(item, index) => (
               <li {...navRow(index())}>
-                <button
-                  type="button"
-                  class="den-shell-nav-sub-link"
-                  classList={{
-                    "den-shell-nav-sub-link-active": props.active === item.id,
-                  }}
-                  data-testid={`${props.testidPrefix}-${item.id}`}
-                  onClick={() => props.onSelect(item.id)}
-                >
-                  <span class="den-shell-nav-sub-link-label">{item.label}</span>
-                </button>
+                <div class="den-settings-sidebar-row">
+                  <button
+                    type="button"
+                    class="den-shell-nav-sub-link"
+                    classList={{
+                      "den-shell-nav-sub-link-active": props.active === item.id,
+                    }}
+                    data-testid={`${props.testidPrefix}-${item.id}`}
+                    onClick={() => props.onSelect(item.id)}
+                  >
+                    <span class="den-shell-nav-sub-link-label">{item.label}</span>
+                  </button>
+                </div>
               </li>
             )}
           </For>

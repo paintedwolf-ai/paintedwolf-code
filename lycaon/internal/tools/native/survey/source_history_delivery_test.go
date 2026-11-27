@@ -153,7 +153,8 @@ type deliveredRecorder struct {
 	err   error
 }
 
-func (*deliveredRecorder) EnsureProject(context.Context, string) error { return nil }
+func (*deliveredRecorder) Start(string)                                      {}
+func (*deliveredRecorder) Await(context.Context, tools.CredentialWait) error { return nil }
 
 func (r *deliveredRecorder) Delivered(_ context.Context, read tools.CredentialFileRead) error {
 	r.reads = append(r.reads, read)
