@@ -49,6 +49,7 @@ from wea.runner import (
 from wea.tb08_confinement import (
     A06_LEGACY_EXCLUDED_CODE,
     A06_LIVE_DEST_VALIDATION_CODE,
+    A06_LIVE_EGRESS_GATE_CODE,
     TB08_SLOT_INVENTORY,
     get_platform_profile,
 )
@@ -338,13 +339,14 @@ def _execute_slot(
 
     if slot_id == "A06-08":
         before = len(allowed_ep.records())
-        # Fork + exec + setsid child python3 process via a clean fixture script (zero nested shell quoting).
+        # Fork + exec + setsid child python3 process with close_fds=False so the inherited
+        # broker lineage descriptor survives across fork/exec/setsid (Python defaults close_fds=True).
         script_path = project_dir / "_a06_08_lineage.py"
         url = f"{allowed_ep.base_url}/ping"
         script_path.write_text(
             "import subprocess, sys\n"
             f"child = 'import urllib.request; print(urllib.request.urlopen({url!r}, timeout=5).read().decode())'\n"
-            "subprocess.run([sys.executable, '-B', '-c', child], start_new_session=True, check=True)\n",
+            "subprocess.run([sys.executable, '-B', '-c', child], start_new_session=True, close_fds=False, check=True)\n",
             encoding="utf-8",
         )
         typed = call_cmd(
@@ -368,17 +370,17 @@ def _execute_slot(
         return typed, {"arrivals": arrivals, "legacy_excluded": A06_LEGACY_EXCLUDED_CODE}, failures
 
     if slot_id == "A06-10":
-        # Note: in LYCAON_HARNESS=1 mode, webresearch/ssrf.go:169 admits 127.0.0.1 loopback for
-        # harness fixtures, while still enforcing egress.IPPublic on all non-loopback private /
-        # link-local addresses (e.g. 169.254.169.254) before any dial -> FETCH_URL_BLOCKED.
+        # Approve any egress-gate host ask so the request reaches egress.IPPublic destination
+        # validation on link-local 169.254.169.254 -> FETCH_URL_BLOCKED (or WEB_SEARCH_HOST_DENIED
+        # if the host gate denies it before dial). Legacy FETCH_URL_DEST_DENIED is excluded.
         before = len(refused_ep.records())
-        typed = call_fetch("http://169.254.169.254/latest/meta-data/", checkpoint_policy="reject")
+        typed = call_fetch("http://169.254.169.254/latest/meta-data/", checkpoint_policy="approve_once")
         arrivals = _delta_arrivals(refused_ep, before)
         code = typed.get("refusal_code")
         if code == A06_LEGACY_EXCLUDED_CODE:
             failures.append({"rule_id": "a06_deprecated_code_emitted", "message": f"Legacy {A06_LEGACY_EXCLUDED_CODE} emitted."})
-        if code != A06_LIVE_DEST_VALIDATION_CODE and code != "CHECKPOINT_REJECTED":
-            failures.append({"rule_id": "a06_dest_validation_code_unexpected", "message": f"Got {code!r}, want {A06_LIVE_DEST_VALIDATION_CODE!r}."})
+        if code not in {A06_LIVE_DEST_VALIDATION_CODE, A06_LIVE_EGRESS_GATE_CODE}:
+            failures.append({"rule_id": "a06_dest_validation_code_unexpected", "message": f"Got {code!r}, want {A06_LIVE_DEST_VALIDATION_CODE!r} or {A06_LIVE_EGRESS_GATE_CODE!r}."})
         if arrivals != 0:
             failures.append({"rule_id": "a06_private_fetch_unexpected_arrival", "message": f"Unexpected arrival ({arrivals})."})
         return typed, {"arrivals": arrivals, "target": "http://169.254.169.254/latest/meta-data/", "expected_live_code": A06_LIVE_DEST_VALIDATION_CODE}, failures
@@ -437,7 +439,7 @@ def _execute_slot(
         "A08-02": (f"cat {pathlib.Path.home() / '.ssh' / ('tb08-a08-02-' + run_id)}", None),
         "A08-03": ("python3 -B -c \"print('cred-probe')\"", {"credential_store": True}),
         "A08-04": ("python3 -B -c \"print('sock-probe')\"", {"socket_paths": ["/tmp/tb08-nonexistent.sock"]}),
-        "A08-05": ("python3 -B -c \"print('listen-probe')\"", {"local_listen": {"ports": [18999]}}),
+        "A08-05": ("python3 -B -c \"print('listen-probe')\"", {"local_listen": {"ports": [0]}}),
         "A08-06": ("python3 -B -c \"print('connect-probe')\"", {"loopback_connect": {"ports": [refused_ep.port]}}),
         "A08-07": ("python3 -B -c \"print('proc-probe')\"", {"process_control": True}),
         "A08-08": ("python3 -B -c \"print('host-exec-probe')\"", {"host_execution": True}),
