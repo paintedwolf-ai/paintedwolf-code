@@ -1,0 +1,12 @@
+id: editor-implementer
+name: Editor implementer
+description: Implementer persona on the editor file profile
+tool_profile: editor_file
+exec_mode: none
+topology_roles:
+  - worker
+dispatch_lanes:
+  - write
+spawn:
+  misconfigure_code: SUBAGENT_MISCONFIGURED
+system_prompt_template: agents/implementer.md

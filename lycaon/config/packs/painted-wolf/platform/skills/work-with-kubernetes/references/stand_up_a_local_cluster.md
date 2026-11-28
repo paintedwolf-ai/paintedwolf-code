@@ -1,6 +1,6 @@
 # Stand up a local cluster
 
-Use this workflow to give Kubernetes work a cluster it can safely break. On a process start that uses kind or the resulting cluster, declare `kind` and the engine id (`docker` or `podman`) in `capability_request.host_resources`. kubectl and helm calls to the kind API server on 127.0.0.1 also need `loopback_connect` (`{}` for kind's random port, or pin `apiServerPort`).
+Use this workflow to give Kubernetes work a cluster it can safely break. On a process start that uses kind or the resulting cluster, declare `kind` and the engine id (`docker` or `podman`) in `capability_request.host_resources`.{% if runner_loopback_connect_tools %} kubectl and helm calls to the kind API server on 127.0.0.1 also need `loopback_connect` (`{}` for kind's random port, or pin `apiServerPort`).{% endif %}
 
 ## Workflow
 

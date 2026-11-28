@@ -1,15 +1,20 @@
 package toolvocab_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
 
+	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
+
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 )
 
@@ -23,7 +28,7 @@ func TestSkillProcedureToolsMustBeReachable(t *testing.T) {
 	}
 	// acme_narrow lacks the tool, so the skill is not offered to that reader
 	// at all and validation stays silent — the runtime never renders it there.
-	if toolvocab.SkillToolsOffered(sk, map[string]bool{"recall": true}) {
+	if skillOffered(t, sk, map[string]bool{"recall": true}) {
 		t.Fatal("skill naming an unheld tool escaped the offered-tools gate")
 	}
 	if err := toolvocab.ValidateSkills(catalog, []toolvocab.AgentSurface{{AgentID: "reader", ProfileID: "acme_narrow", Skills: skills.Selector{All: true}}}, []skills.Skill{sk}); err != nil {
@@ -37,12 +42,12 @@ func TestSkillProcedureRejectsRetiredOperationNames(t *testing.T) {
 			sk := skills.Skill{Name: "retired-" + retired, Body: "Run `" + retired + "` to inspect the tree."}
 			// A reader without command cannot reach the replacing forms, so
 			// the retired name gates the skill off that reader.
-			if toolvocab.SkillToolsOffered(sk, map[string]bool{"recall": true, "source_history": true}) {
+			if skillOffered(t, sk, map[string]bool{"recall": true, "source_history": true}) {
 				t.Fatalf("retired operation %q escaped the offered-tools gate", retired)
 			}
 			// Retired names resolve through the forms that replaced them, so
 			// a mutating command reader is offered the skill.
-			if !toolvocab.SkillToolsOffered(sk, map[string]bool{"command": true, toolcontract.ReachCommandMutation: true}) {
+			if !skillOffered(t, sk, map[string]bool{"command": true, toolcontract.ReachCommandMutation: true}) {
 				t.Fatalf("retired operation %q did not resolve through its replacing forms", retired)
 			}
 		})
@@ -54,25 +59,25 @@ func TestSkillToolsOfferedGatesStockSkillsByRenderedBody(t *testing.T) {
 		Name: "review-accessibility",
 		Body: "Use `measure_page` and `page_open` to inspect the page, and optionally {% if profile_has_capture_page %}`capture_page`{% endif %}.",
 	}
-	if toolvocab.SkillToolsOffered(stock, map[string]bool{"measure_page": true}) {
+	if skillOffered(t, stock, map[string]bool{"measure_page": true}) {
 		t.Fatal("stock skill with missing required tool was accepted")
 	}
-	if !toolvocab.SkillToolsOffered(stock, map[string]bool{"measure_page": true, "page_open": true}) {
+	if !skillOffered(t, stock, map[string]bool{"measure_page": true, "page_open": true}) {
 		t.Fatal("stock skill with all required tools offered was rejected")
 	}
-	if !toolvocab.SkillToolsOffered(stock, map[string]bool{"measure_page": true, "page_open": true, "capture_page": true}) {
+	if !skillOffered(t, stock, map[string]bool{"measure_page": true, "page_open": true, "capture_page": true}) {
 		t.Fatal("stock skill with the guarded tool offered was rejected")
 	}
 	// Without the guard the mention is a hard requirement: the retired
 	// optional-tool escape hatch is gone, so an unguarded name must gate the skill.
 	unguarded := stock
 	unguarded.Body = "Use `measure_page` and `page_open` to inspect the page, and optionally `capture_page`."
-	if toolvocab.SkillToolsOffered(unguarded, map[string]bool{"measure_page": true, "page_open": true}) {
+	if skillOffered(t, unguarded, map[string]bool{"measure_page": true, "page_open": true}) {
 		t.Fatal("unguarded tool mention escaped the offered-tools gate")
 	}
 	userSkill := stock
 	userSkill.UserProvided = true
-	if !toolvocab.SkillToolsOffered(userSkill, nil) {
+	if !skillOffered(t, userSkill, nil) {
 		t.Fatal("user-provided skill was restricted by offered tools")
 	}
 }
@@ -82,16 +87,16 @@ func TestSkillToolsOfferedResolvesCoordinatorBranches(t *testing.T) {
 		Name: "split-audit",
 		Body: "{% if is_coordinator %}Call `measure_page` for the audit.{% else %}Call `capture_page` to snapshot.{% endif %}",
 	}
-	if !toolvocab.SkillToolsOffered(stock, map[string]bool{"task": true, "measure_page": true}) {
+	if !skillOffered(t, stock, map[string]bool{"task": true, "measure_page": true}) {
 		t.Fatal("coordinator branch with offered tools was rejected")
 	}
-	if toolvocab.SkillToolsOffered(stock, map[string]bool{"task": true}) {
+	if skillOffered(t, stock, map[string]bool{"task": true}) {
 		t.Fatal("coordinator branch naming an unoffered tool was accepted")
 	}
-	if !toolvocab.SkillToolsOffered(stock, map[string]bool{"capture_page": true}) {
+	if !skillOffered(t, stock, map[string]bool{"capture_page": true}) {
 		t.Fatal("worker branch with offered tools was rejected")
 	}
-	if toolvocab.SkillToolsOffered(stock, map[string]bool{}) {
+	if skillOffered(t, stock, map[string]bool{}) {
 		t.Fatal("worker branch naming an unoffered tool was accepted")
 	}
 }
@@ -104,20 +109,20 @@ func TestSkillToolsOfferedAnyOfToolsDisjunction(t *testing.T) {
 			"paintedwolf.any_of_tools": "code_rewrite, jq_edit",
 		},
 	}
-	if toolvocab.SkillToolsOffered(stock, map[string]bool{"command": true}) {
+	if skillOffered(t, stock, map[string]bool{"command": true}) {
 		t.Fatal("disjunctive skill with no any_of member offered was accepted")
 	}
-	if !toolvocab.SkillToolsOffered(stock, map[string]bool{"command": true, "jq_edit": true}) {
+	if !skillOffered(t, stock, map[string]bool{"command": true, "jq_edit": true}) {
 		t.Fatal("disjunctive skill with one any_of member offered was rejected")
 	}
 	// any_of members are individually optional in the body scan: one offered
 	// member admits the skill even though the other is absent.
-	if !toolvocab.SkillToolsOffered(stock, map[string]bool{"code_rewrite": true}) {
+	if !skillOffered(t, stock, map[string]bool{"code_rewrite": true}) {
 		t.Fatal("disjunctive skill admitted by its only offered member was rejected")
 	}
 	empty := stock
 	empty.Metadata = nil
-	if toolvocab.SkillToolsOffered(empty, map[string]bool{"command": true}) {
+	if skillOffered(t, empty, map[string]bool{"command": true}) {
 		t.Fatal("skill without any_of metadata escaped the body-scan requirement")
 	}
 	// The disjunction applies even when the body does not name the members.
@@ -128,10 +133,10 @@ func TestSkillToolsOfferedAnyOfToolsDisjunction(t *testing.T) {
 			"paintedwolf.any_of_tools": "task, wait",
 		},
 	}
-	if toolvocab.SkillToolsOffered(unmentioned, map[string]bool{"command": true}) {
+	if skillOffered(t, unmentioned, map[string]bool{"command": true}) {
 		t.Fatal("disjunctive requirement was ignored for unmentioned members")
 	}
-	if !toolvocab.SkillToolsOffered(unmentioned, map[string]bool{"command": true, "wait": true}) {
+	if !skillOffered(t, unmentioned, map[string]bool{"command": true, "wait": true}) {
 		t.Fatal("offered any_of member was not honored for unmentioned members")
 	}
 }
@@ -207,7 +212,7 @@ func TestSkillGuardedMentionsResolvePerReader(t *testing.T) {
 	// An unguarded mention is a hard requirement, so the skill is not offered
 	// to a reader without the tool at all — validation stays silent because
 	// the runtime never renders it for that reader.
-	if toolvocab.SkillToolsOffered(unguarded, map[string]bool{"recall": true, "source_history": true}) {
+	if skillOffered(t, unguarded, map[string]bool{"recall": true, "source_history": true}) {
 		t.Fatal("unguarded tool mention escaped the offered-tools gate")
 	}
 	if err := validateWith(t, catalog, "explore_readonly", unguarded); err != nil {
@@ -232,7 +237,7 @@ func TestSkillMutatingCommandFormsNeedCommandMutation(t *testing.T) {
 	for _, form := range []string{"edit", "replace-lines", "jq-edit"} {
 		t.Run("unguarded/"+form, func(t *testing.T) {
 			sk := skills.Skill{Name: "fixer", Body: "Run `" + form + "` to apply the change."}
-			if toolvocab.SkillToolsOffered(sk, map[string]bool{"command": true}) {
+			if skillOffered(t, sk, map[string]bool{"command": true}) {
 				t.Fatalf("form %s escaped the offered-tools gate", form)
 			}
 			if err := validateWith(t, catalog, "readonly", sk); err != nil {
@@ -392,5 +397,193 @@ func TestSkillRejectsUnknownAnyOfToolsMember(t *testing.T) {
 	real.Metadata = map[string]string{"paintedwolf.any_of_tools": "capture_page"}
 	if err := validateWith(t, catalog, "explore_readonly", real); err != nil {
 		t.Fatalf("registered any_of_tools member was rejected: %v", err)
+	}
+}
+
+// Identical offered names with different projected schemas must not collide in either order.
+func TestSkillToolsOfferedForReaderDistinguishesProjectedSchemasBothOrders(t *testing.T) {
+	profiles := []sandbox.ToolProfile{{
+		ID:    "worker",
+		Tools: map[string]bool{"ask_user": true, "verify": true},
+	}}
+	makeAskSchema := func(enumVals []any) map[string]any {
+		return map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"response_type": map[string]any{"type": "string", "enum": enumVals},
+				"secret":        map[string]any{"type": "object"},
+			},
+		}
+	}
+	wideAsk, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "worker",
+		Offered:   readerDeclaredOffer(profiles, "worker", []string{"ask_user"}, map[string]bool{"ask_user": true}),
+		ProjectedSchemas: map[string]map[string]any{
+			"ask_user": makeAskSchema([]any{"text", "secret"}),
+		},
+		Declared: true,
+	})
+	testutil.FailErr(t, "wideAsk reader", err)
+	narrowAsk, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "worker",
+		Offered:   readerDeclaredOffer(profiles, "worker", []string{"ask_user"}, map[string]bool{"ask_user": true}),
+		ProjectedSchemas: map[string]map[string]any{
+			"ask_user": makeAskSchema([]any{"text", "single_choice"}),
+		},
+		Declared: true,
+	})
+	testutil.FailErr(t, "narrowAsk reader", err)
+
+	wideVerify, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "worker",
+		Offered:   readerDeclaredOffer(profiles, "worker", []string{"verify"}, map[string]bool{"verify": true}),
+		ProjectedSchemas: map[string]map[string]any{
+			"verify": {
+				"type": "object",
+				"properties": map[string]any{
+					"capability_request": map[string]any{
+						"type":       "object",
+						"properties": map[string]any{"host_resources": map[string]any{"type": "array"}},
+					},
+				},
+			},
+		},
+		Declared: true,
+	})
+	testutil.FailErr(t, "wideVerify reader", err)
+	narrowVerify, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "worker",
+		Offered:   readerDeclaredOffer(profiles, "worker", []string{"verify"}, map[string]bool{"verify": true}),
+		ProjectedSchemas: map[string]map[string]any{
+			"verify": {"type": "object", "properties": map[string]any{"socks_proxy": map[string]any{"type": "boolean"}}},
+		},
+		Declared: true,
+	})
+	testutil.FailErr(t, "narrowVerify reader", err)
+
+	for _, order := range []struct {
+		name      string
+		wideFirst bool
+	}{
+		{"wide_then_narrow", true},
+		{"narrow_then_wide", false},
+	} {
+		t.Run(order.name, func(t *testing.T) {
+			branched := skills.Skill{
+				Name: "secret-branch-" + order.name,
+				Body: "{% if can_ask_user_secret %}Collect it via `ask_user`.{% else %}Load support via `request_tools`.{% endif %}",
+			}
+			hostRes := skills.Skill{
+				Name:     "host-res-" + order.name,
+				Body:     "Run `verify`.",
+				Metadata: map[string]string{"host_resources": "cloud-cli"},
+			}
+			check := func(wide bool) {
+				askReader, verifyReader := narrowAsk, narrowVerify
+				if wide {
+					askReader, verifyReader = wideAsk, wideVerify
+				}
+				if got := toolvocab.SkillToolsOfferedForReader(branched, askReader); got != wide {
+					t.Fatalf("branched offered(wide=%t) = %t, want %t", wide, got, wide)
+				}
+				if got := toolvocab.SkillToolsOfferedForReader(hostRes, verifyReader); got != wide {
+					t.Fatalf("hostRes offered(wide=%t) = %t, want %t", wide, got, wide)
+				}
+			}
+			check(order.wideFirst)
+			check(!order.wideFirst)
+		})
+	}
+}
+
+// skillOffered reports whether a declared Reader holding held admits sk.
+func skillOffered(t *testing.T, sk skills.Skill, held map[string]bool) bool {
+	t.Helper()
+	reader, err := toolvocabtest.ReaderHolding(held)
+	testutil.FailErr(t, "reader holding tools", err)
+	return toolvocab.SkillToolsOfferedForReader(sk, reader)
+}
+
+func TestSkillToolsOfferedCommandSpansWhenCommandDeferred(t *testing.T) {
+	allEffects := toolcontract.AllCommandEffects()
+	profiles := []sandbox.ToolProfile{
+		{
+			ID:             "worker",
+			Tools:          map[string]bool{"request_tools": true, "command": true},
+			StickyTools:    map[string]bool{"request_tools": true},
+			CommandEffects: allEffects,
+		},
+	}
+	deferredReader, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "worker",
+		Plan:      toolsurface.Compile([]string{"request_tools"}, []string{"command"}),
+		Offered:   []string{"request_tools"},
+	})
+	testutil.FailErr(t, "deferred command reader", err)
+	if !slices.Contains(deferredReader.Requestable(), "command") || deferredReader.Held()["command"] {
+		t.Fatalf("deferredReader precondition failed: held=%v requestable=%v", deferredReader.Held()["command"], deferredReader.Requestable())
+	}
+	heldReader, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "worker",
+		Plan:      toolsurface.Compile([]string{"request_tools", "command"}, nil),
+		Offered:   []string{"request_tools", "command"},
+	})
+	testutil.FailErr(t, "held command reader", err)
+
+	unsequenced := skills.Skill{
+		Name: "third-party-unsequenced-cmd",
+		Body: "Check the repository state with `git status` before editing.",
+	}
+	if toolvocab.SkillToolsOfferedForReader(unsequenced, deferredReader) {
+		t.Fatal("skill with unloaded inline command span was admitted when command is deferred")
+	}
+	if !toolvocab.SkillToolsOfferedForReader(unsequenced, heldReader) {
+		t.Fatal("skill with inline command span was rejected when command is held")
+	}
+
+	sequenced := skills.Skill{
+		Name: "third-party-sequenced-cmd",
+		Body: "Call `request_tools(need=\"command\")` first, then run `git status` before editing.",
+	}
+	if !toolvocab.SkillToolsOfferedForReader(sequenced, deferredReader) {
+		t.Fatal("skill loading command before inline command span was rejected when command is deferred")
+	}
+
+	crossBlock := skills.Skill{
+		Name: "third-party-cross-block-cmd",
+		Body: "Load `request_tools(need=\"command\")` upfront.\n\nThen run `git status` to inspect the tree.",
+	}
+	if toolvocab.SkillToolsOfferedForReader(crossBlock, deferredReader) {
+		t.Fatal("skill with request_tools in a different block than its command span was admitted when command is deferred")
 	}
 }

@@ -1,9 +1,10 @@
-// Package toolreach is the one authority on what a reader can call on a frozen
-// model request. Recovery copy, prompts and native replacements all ask it, so
-// none of them can name a call the request cannot reach.
+// Package toolreach reports what a reader can call on a frozen model request.
 package toolreach
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"slices"
@@ -11,8 +12,29 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 )
+
+type requestContextKey struct{}
+
+// WithRequest attaches the frozen model request to ctx.
+func WithRequest(ctx context.Context, request Request) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, requestContextKey{}, request)
+}
+
+// FromContext reads the frozen model request from ctx; an absent value reaches nothing.
+func FromContext(ctx context.Context) Request {
+	if ctx == nil {
+		return Request{}
+	}
+	request, _ := ctx.Value(requestContextKey{}).(Request)
+	return request
+}
 
 // LoaderTool loads a deferred schema onto the next model request.
 const LoaderTool = "request_tools"
@@ -20,31 +42,34 @@ const LoaderTool = "request_tools"
 // ProgramTool runs native programs.
 const ProgramTool = "command"
 
-// Status is how a tool can enter the reader's next call.
+// Status classifies how a tool can enter the reader's next call.
 type Status uint8
 
 const (
 	Absent Status = iota
-	// Callable means the tool's schema is on this request.
+	// Callable means the tool's schema is offered on this request.
 	Callable
-	// Loadable means the plan defers the tool and the loader is on this request.
+	// Loadable means the plan defers the tool and the loader is offered on this request.
 	Loadable
 )
 
-// Request is one frozen model request. The zero value reaches nothing, because a
-// missing request is no evidence that any tool is available.
+// Request is one frozen model request; the zero value reaches nothing.
 type Request struct {
-	offered  []string
-	plan     toolsurface.Plan
-	programs Programs
-	known    bool
+	offered      []string
+	plan         toolsurface.Plan
+	programs     Programs
+	programModes ProgramModes
+	schemas      map[string]map[string]any
+	known        bool
 }
 
-// Programs answers whether a request's profile and surface can run a native
-// program. Path grants and approval are still checked when the program runs.
+// Programs reports whether a request's profile and surface admit a native command.
 type Programs func(name string) bool
 
-// Freeze captures the schemas offered on a request and its compiled plan.
+// ProgramModes reports whether a request's profile and surface admit a catalog command mode.
+type ProgramModes func(name, mode string) bool
+
+// Freeze captures the tool names offered on a request and its availability plan.
 func Freeze(offered []string, plan toolsurface.Plan) Request {
 	return Request{offered: slices.Clone(offered), plan: plan, known: true}
 }
@@ -52,11 +77,76 @@ func Freeze(offered []string, plan toolsurface.Plan) Request {
 // Offered freezes a request that defers nothing.
 func Offered(names []string) Request { return Freeze(names, toolsurface.Plan{}) }
 
-// WithPrograms adds the request's frozen program answer. Without one, no program
-// is reachable.
+// WithPrograms attaches a frozen program predicate to the request.
 func (r Request) WithPrograms(programs Programs) Request {
 	r.programs = programs
 	return r
+}
+
+// WithProgramTable attaches a frozen program and effect-mode admission table to the request.
+func (r Request) WithProgramTable(table *ProgramTable) Request {
+	if table == nil {
+		r.programs = nil
+		r.programModes = nil
+		return r
+	}
+	r.programs = table.Program
+	r.programModes = table.Mode
+	return r
+}
+
+// WithSchemas attaches projected argument schemas for callable or loadable tools.
+func (r Request) WithSchemas(schemas map[string]map[string]any) Request {
+	r.schemas = schemas
+	return r
+}
+
+// ToolSchema returns the projected argument schema recorded for tool.
+func (r Request) ToolSchema(tool string) (map[string]any, bool) {
+	if r.schemas == nil {
+		return nil, false
+	}
+	s, ok := r.schemas[tool]
+	return s, ok && s != nil
+}
+
+// AcceptsField reports whether tool is reachable and its projected schema admits dottedPath.
+func (r Request) AcceptsField(tool, dottedPath string) bool {
+	if r.Status(tool) == Absent {
+		return false
+	}
+	schema, ok := r.ToolSchema(tool)
+	return ok && toolschema.SchemaAcceptsField(schema, dottedPath)
+}
+
+// AcceptsStringValue reports whether tool's projected schema admits dottedPath
+// with value; a string field without enum or const admits any value.
+func (r Request) AcceptsStringValue(tool, dottedPath, value string) bool {
+	if r.Status(tool) == Absent {
+		return false
+	}
+	schema, ok := r.ToolSchema(tool)
+	return ok && toolschema.SchemaAdmitsStringValue(schema, dottedPath, value)
+}
+
+// AcceptsEnumValue reports whether tool's projected schema declares dottedPath
+// with an enum or const that admits value.
+func (r Request) AcceptsEnumValue(tool, dottedPath, value string) bool {
+	if r.Status(tool) == Absent {
+		return false
+	}
+	schema, ok := r.ToolSchema(tool)
+	return ok && toolschema.SchemaAcceptsEnumValue(schema, dottedPath, value)
+}
+
+// AskUserAcceptsSecret reports whether ask_user is reachable and its projected
+// schema can request a secret response.
+func (r Request) AskUserAcceptsSecret() bool {
+	if r.Status("ask_user") == Absent {
+		return false
+	}
+	schema, ok := r.ToolSchema("ask_user")
+	return ok && toolschema.AskUserAcceptsSecret(schema)
 }
 
 // Program reports whether a native program can enter the reader's next call.
@@ -87,8 +177,7 @@ func (r Request) Status(tool string) Status {
 	return Absent
 }
 
-// Call is one call a reader can make. It is offered for submission and never
-// executes itself.
+// Call is one call offered for submission.
 type Call struct {
 	Tool string         `json:"tool"`
 	Args map[string]any `json:"args,omitempty"`
@@ -96,11 +185,25 @@ type Call struct {
 	Partial bool `json:"partial,omitempty"`
 	// Program names the native program a command call runs.
 	Program string `json:"program,omitempty"`
+	words   []string
+	probe   []string
 }
 
-// ProgramCall is the exact command call that runs one native program.
+// WithProbe sets the invocation reach checks in place of the shown words, for a
+// call whose words carry placeholders the reader replaces.
+func (c Call) WithProbe(words ...string) Call {
+	c.probe = slices.Clone(words)
+	return c
+}
+
+// ProgramCall builds a command call that runs one native program invocation.
 func ProgramCall(words ...string) Call {
-	return Call{Tool: ProgramTool, Program: words[0], Args: map[string]any{ProgramTool: QuoteProgram(words)}}
+	return Call{
+		Tool:    ProgramTool,
+		Program: words[0],
+		Args:    map[string]any{ProgramTool: QuoteProgram(words)},
+		words:   slices.Clone(words),
+	}
 }
 
 var plainWord = regexp.MustCompile(`^[A-Za-z0-9_./:=@%+,-]+$`)
@@ -109,23 +212,36 @@ var plainWord = regexp.MustCompile(`^[A-Za-z0-9_./:=@%+,-]+$`)
 func QuoteProgram(words []string) string {
 	quoted := make([]string, len(words))
 	for i, word := range words {
-		if plainWord.MatchString(word) {
-			quoted[i] = word
-			continue
-		}
-		quoted[i] = "'" + strings.ReplaceAll(word, "'", `'\''`) + "'"
+		quoted[i] = quoteWord(word)
 	}
 	return strings.Join(quoted, " ")
 }
 
+// quoteWord keeps a session address's @label/ prefix unquoted so it still
+// resolves, and quotes any other @-word so it cannot be read as one.
+func quoteWord(word string) string {
+	if area, rel, ok := projectroot.SessionAddress(word); ok {
+		if rel == "" {
+			return "@" + area
+		}
+		return "@" + area + "/" + quoteWord(rel)
+	}
+	if plainWord.MatchString(word) && !strings.HasPrefix(word, "@") {
+		return word
+	}
+	return "'" + strings.ReplaceAll(word, "'", `'\''`) + "'"
+}
+
 // Text renders the call the way copy shows it.
 func (c Call) Text() string {
-	parts := flattenArgs("", c.Args)
+	parts := flattenArgs("", canonicalMap(c.Args))
 	if c.Partial && c.Program == "" {
 		parts = append(parts, "…")
 	}
 	return "`" + c.Tool + "(" + strings.Join(parts, ", ") + ")`"
 }
+
+var argKeyIdentRe = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
 
 func flattenArgs(prefix string, args map[string]any) []string {
 	keys := make([]string, 0, len(args))
@@ -140,39 +256,174 @@ func flattenArgs(prefix string, args map[string]any) []string {
 			path = prefix + "." + key
 		}
 		if nested, ok := args[key].(map[string]any); ok {
-			out = append(out, flattenArgs(path, nested)...)
-			continue
+			if len(nested) == 0 {
+				out = append(out, path+"={}")
+				continue
+			}
+			if argKeyIdentRe.MatchString(key) && canFlattenDottedKeys(nested) {
+				out = append(out, flattenArgs(path, nested)...)
+				continue
+			}
 		}
 		out = append(out, path+"="+argText(args[key]))
 	}
 	return out
 }
 
-func argText(value any) string {
-	if text, ok := value.(string); ok {
-		return strconv.Quote(text)
+func canFlattenDottedKeys(m map[string]any) bool {
+	for k := range m {
+		if !argKeyIdentRe.MatchString(k) {
+			return false
+		}
 	}
-	return fmt.Sprintf("%v", value)
+	return true
 }
 
-// Load is the exact call that loads a deferred tool.
+func quoteCallString(s string) string {
+	return strings.ReplaceAll(strconv.Quote(s), "`", `\u0060`)
+}
+
+func canonicalMap(in map[string]any) map[string]any {
+	if len(in) == 0 {
+		return in
+	}
+	if raw, err := json.Marshal(in); err == nil {
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.UseNumber()
+		var out map[string]any
+		if dec.Decode(&out) == nil {
+			return out
+		}
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		if raw, err := json.Marshal(v); err == nil {
+			dec := json.NewDecoder(bytes.NewReader(raw))
+			dec.UseNumber()
+			var decoded any
+			if dec.Decode(&decoded) == nil {
+				out[k] = decoded
+				continue
+			}
+		}
+		out[k] = fmt.Sprint(v)
+	}
+	return out
+}
+
+func argText(value any) string {
+	switch v := value.(type) {
+	case nil:
+		return "null"
+	case string:
+		return quoteCallString(v)
+	case bool:
+		return strconv.FormatBool(v)
+	case json.Number:
+		return v.String()
+	case []any:
+		items := make([]string, len(v))
+		for i, elem := range v {
+			items[i] = argText(elem)
+		}
+		return "[" + strings.Join(items, ", ") + "]"
+	case map[string]any:
+		keys := make([]string, 0, len(v))
+		for k := range v {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		entries := make([]string, len(keys))
+		for i, k := range keys {
+			entries[i] = quoteCallString(k) + ": " + argText(v[k])
+		}
+		return "{" + strings.Join(entries, ", ") + "}"
+	default:
+		return quoteCallString(fmt.Sprint(v))
+	}
+}
+
+// Load builds the call that loads a deferred tool.
 func Load(tool string) Call {
 	return Call{Tool: LoaderTool, Args: map[string]any{"need": tool}}
 }
 
-// Sequence returns the calls that reach call on this request, in order, and
-// false when nothing can. A deferred target adds its loader first; loading is
-// separate from the target because the schema arrives on the next request.
-func (r Request) Sequence(call Call) ([]Call, bool) {
-	if call.Program != "" && !r.Program(call.Program) {
-		return nil, false
+// Sequence returns the calls that reach call on this request, or false when unreachable.
+func (r Request) Sequence(ctx context.Context, call Call) ([]Call, bool) {
+	if call.Program != "" {
+		var admitted bool
+		if len(call.words) > 0 {
+			admitted = r.ProgramInvocation(ctx, probeWords(call)...)
+		} else {
+			admitted = r.Program(call.Program)
+		}
+		if !admitted {
+			return nil, false
+		}
 	}
+	_, hasSchema := r.ToolSchema(call.Tool)
 	switch r.Status(call.Tool) {
 	case Callable:
+		if hasSchema && call.Program == "" && !callArgsAdmitted(r, "", call.Tool, canonicalMap(call.Args)) {
+			return nil, false
+		}
 		return []Call{call}, true
 	case Loadable:
+		if call.Program != "" {
+			return []Call{Load(call.Tool), call}, true
+		}
+		if hasSchema {
+			if !callArgsAdmitted(r, "", call.Tool, canonicalMap(call.Args)) {
+				return nil, false
+			}
+			return []Call{Load(call.Tool), call}, true
+		}
+		if len(call.Args) > 0 {
+			return []Call{Load(call.Tool)}, true
+		}
 		return []Call{Load(call.Tool), call}, true
 	default:
 		return nil, false
 	}
+}
+
+func callArgsAdmitted(r Request, prefix, tool string, args map[string]any) bool {
+	for key, val := range args {
+		path := key
+		if prefix != "" {
+			path = prefix + "." + key
+		}
+		if nested, ok := val.(map[string]any); ok {
+			if !r.AcceptsField(tool, path) {
+				return false
+			}
+			if !callArgsAdmitted(r, path, tool, nested) {
+				return false
+			}
+			continue
+		}
+		if list, ok := val.([]any); ok {
+			if !r.AcceptsField(tool, path) {
+				return false
+			}
+			for _, elem := range list {
+				if em, isMap := elem.(map[string]any); isMap {
+					if !callArgsAdmitted(r, path, tool, em) {
+						return false
+					}
+				} else if es, isStr := elem.(string); isStr && !r.AcceptsStringValue(tool, path, es) {
+					return false
+				}
+			}
+			continue
+		}
+		if s, ok := val.(string); ok {
+			if !r.AcceptsStringValue(tool, path, s) {
+				return false
+			}
+		} else if !r.AcceptsField(tool, path) {
+			return false
+		}
+	}
+	return true
 }

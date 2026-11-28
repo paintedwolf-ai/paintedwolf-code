@@ -213,7 +213,7 @@ func decideWorkerSummary(
 	gc.Session.SessionID = in.ChildSessionID
 	gc.Session.Role = "worker"
 	gc.Session.WorkerLeg = true
-	tools.RegisterRecoveryFacts(tools.WithCallReach(ctx, in.Reach), gc)
+	tools.RegisterRecoveryFacts(toolreach.WithRequest(ctx, in.Reach), gc)
 	publishWorkerSummaryFacts(gc, in.AgentType, obs)
 	putWorkerRejectData(gc, obs, data)
 	var code string
@@ -249,9 +249,6 @@ func publishWorkerSummaryFacts(gc *oar.GuardContext, agentType string, obs worke
 		return
 	}
 	gc.Workers.AgentIsScout = prompts.AgentIsReadScout(agentType)
-	if fetches, ok := prompts.AgentFetchesURLs(agentType); ok {
-		gc.Grounding.ProfileFetchesURLs = fetches
-	}
 	gc.Workers.AgentIsImplementer = isImplementerAgent(agentType)
 	gc.Grounding.WorkerSummaryPresent = !obs.NoProse && !obs.MissingReport && !obs.SpendLimitReached
 	if obs.MissingReport {

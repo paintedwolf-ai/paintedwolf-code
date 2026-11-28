@@ -7,8 +7,10 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/loading"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -24,7 +26,7 @@ func TestPromptSurfaceNamesEachToolsSourceAndTheUnitsItAttached(t *testing.T) {
 		Loading: &loading.Service{Ledger: ledger},
 	}
 	offered := []string{"read", "edit", "update_progress"}
-	surface, err := m.PromptSurface(t.Context(), &api.Session{ID: "session"}, prompts.CoordinatorProfileID, offered)
+	surface, err := m.PromptSurface(t.Context(), &api.Session{ID: "session"}, coordinatorRequestReader(t, offered, nil), offered)
 	testutil.FailErr(t, "build prompt surface", err)
 	want := []trainingcapture.OfferedTool{{Tool: "read", Source: "standing"}, {Tool: "edit", Source: "predicted"}, {Tool: "update_progress", Source: "companion", With: "edit"}}
 	if !slices.Equal(surface.Tools, want) {
@@ -48,4 +50,19 @@ func TestPromptSurfaceNamesEachToolsSourceAndTheUnitsItAttached(t *testing.T) {
 	if !attached {
 		t.Fatal("no unit names the offered tool that attached it")
 	}
+}
+
+// coordinatorRequestReader is a coordinator request offering names.
+func coordinatorRequestReader(t *testing.T, offered []string, schemas map[string]map[string]any) prompts.Reader {
+	t.Helper()
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load tool profiles", err)
+	reader, err := prompts.NewReader(prompts.HostFacts{Profiles: profiles, RootCount: 1, WebSearch: true}, prompts.TurnProjection{
+		ProfileID:        prompts.CoordinatorProfileID,
+		Plan:             toolsurface.Compile(offered, nil),
+		Offered:          offered,
+		ProjectedSchemas: schemas,
+	})
+	testutil.FailErr(t, "request reader", err)
+	return reader
 }

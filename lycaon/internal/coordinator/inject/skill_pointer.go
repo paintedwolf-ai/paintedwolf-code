@@ -12,13 +12,13 @@ import (
 // RenderSkillPointerBlock renders the one-line note naming the skill a
 // turn's first loadable tool call fitted, when the fit was not confident
 // enough to read the body unasked.
-func RenderSkillPointerBlock(ctx context.Context, renderer *prompts.InjectRenderer, sessionID, profileID string, pointer turnload.SkillRank) (string, error) {
+func RenderSkillPointerBlock(ctx context.Context, renderer *prompts.InjectRenderer, reader prompts.Reader, sessionID, profileID string, pointer turnload.SkillRank) (string, error) {
 	surface := "worker"
 	if profileID == prompts.CoordinatorProfileID {
 		surface = "coordinator"
 	}
-	block, err := anchor.RenderInform(ctx, anchor.InjectSkillPointer,
-		anchor.MatchContext{Surface: surface, Profile: profileID, SessionID: sessionID}, renderer,
+	block, err := anchor.RenderInformWithReader(ctx, anchor.InjectSkillPointer,
+		anchor.MatchContext{Surface: surface, Profile: profileID, SessionID: sessionID}, renderer, reader,
 		map[string]any{"skill_name": pointer.Name})
 	return strings.TrimSpace(block), err
 }

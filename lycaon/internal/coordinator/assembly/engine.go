@@ -19,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -48,14 +47,11 @@ type ScanGuidanceHook interface {
 }
 
 type BoardPrependHook interface {
-	PrependBoardIfChanged(ctx context.Context, sess *api.Session, run api.CoordinatorRunContext) (block string, ok bool)
-	WorkerBoard(ctx context.Context, sess *api.Session) (block string, ok bool)
+	PrependBoardIfChanged(ctx context.Context, sess *api.Session, reader prompts.Reader, run api.CoordinatorRunContext) (block string, ok bool)
+	WorkerBoard(ctx context.Context, sess *api.Session, reader prompts.Reader) (block string, ok bool)
 	BoardInjectHash(sessionID string) string
 	InvalidateOrientation(sessionID string)
 }
-
-// PromptToolLister returns prompt-visible tool metas for this session turn.
-type PromptToolLister func(ctx context.Context, sess *api.Session, profileID string) ([]tools.ToolMeta, error)
 
 // BoardOrientReadyRecorder marks recon_or_board_ready after pack-board inject.
 type BoardOrientReadyRecorder interface {
@@ -101,7 +97,12 @@ type WorkerRosterSource func(ctx context.Context, sessionID string) (rows []map[
 type Workers struct {
 	Leg    WorkerContextBuilder
 	Roster WorkerRosterSource
+	// Branch reports the isolated branch root for a worker child session.
+	Branch func(ctx context.Context, sess *api.Session) (string, bool)
 }
+
+// TurnReaderSource derives the Reader of the request a frame projects.
+type TurnReaderSource func(ctx context.Context, sess *api.Session, history []api.Message, frame inject.CoordinatorTurnFrame) (prompts.Reader, error)
 
 type AssemblyDeps struct {
 	Prompts                 prompts.PromptTemplateEngine
@@ -127,7 +128,9 @@ type AssemblyDeps struct {
 	Board            BoardPrependHook
 	BoardOrientReady BoardOrientReadyRecorder
 	EnrichHistory    func(sessionID string, history []api.Message) []api.Message
-	PromptToolLister PromptToolLister
+	// TurnReader projects a request through the live turn pipeline; the
+	// runtime binds it.
+	TurnReader TurnReaderSource
 	// ReadMessageWindow reads canonical rows for projections that must not vary
 	// with compaction. Unwired, they read the supplied history.
 	ReadMessageWindow     inject.MessageWindowReader
@@ -241,7 +244,7 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 	coordinatorSurface := coordinator && (!frame.Machine.Compiled() || frame.Machine.ProfileID == orchestration.ProfileCoordinator)
 	boardBlock := ""
 	if coordinator && !sess.IsWorkerChild() {
-		frame, boardBlock, err = contextAssembler.prepareCoordinatorBoard(ctx, sess, frame, turn)
+		frame, boardBlock, err = contextAssembler.prepareCoordinatorBoard(ctx, sess, frame, history, turn)
 		if err != nil {
 			return nil, err
 		}
@@ -281,7 +284,7 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, frame, history, turn, messages)
 		messages = contextAssembler.interleaveViewContexts(ctx, sess, frame, history, turn, messages)
 	}
-	messages = contextAssembler.interleaveSkillGuidance(ctx, sess, frame.Machine.ProfileID, messages)
+	messages = contextAssembler.interleaveSkillGuidance(ctx, sess, frame.Machine.ProfileID, frame, history, turn, messages)
 	if deps.ScanGuidance != nil {
 		out = append(out, deps.ScanGuidance.PrependGuidance(ctx, sess.ID, messages)...)
 	} else {

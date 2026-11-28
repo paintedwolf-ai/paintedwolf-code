@@ -1,6 +1,6 @@
 steps:
   - tool: "command_output"
-    say: "Use {{ call }} with the existing handle to inspect progress and observe exit."
+    say: "Use {% if load %}{{ load }}, then {% endif %}{{ call }} with the existing handle to inspect progress and observe exit."
     otherwise: "Wait for the existing job's observed exit."
   - tool: "command_stop"
-    say: "If it cannot continue, request {{ call }} once."
+    say: "If it cannot continue, request {% if load %}{{ load }}, then {% endif %}{{ call }} once."

@@ -2,7 +2,7 @@
 
 Read-heavy coordinator path policy for specify-mode chat.
 
-- **Read paths:** {% for g in read_globs %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
-- **Write paths:** {% for g in write_globs %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
+- **Read paths:** `{{ read_globs|join:"`, `" }}`
+- **Write paths:** `{{ write_globs|join:"`, `" }}`
 
 Spec posture blocks delegation and state tools until plan workflow gates allow — branch on `SPEC_POSTURE_*` codes.

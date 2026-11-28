@@ -1,0 +1,103 @@
+{
+  "schema": "wea-inproc-manifest-v1",
+  "card": "TB07",
+  "title": "Approvals, grants and decision records",
+  "lane": "in-process",
+  "product_baseline": {
+    "git_head": "bbeb46e72ce3d1cfc052259cadcce29185bb40bd",
+    "git_tree": "1830e4d60ed640d4ecf386653377498788fa9320",
+    "go_owner_packages": [
+      "github.com/lycaon/lycaon/internal/hitl",
+      "github.com/lycaon/lycaon/internal/settings",
+      "github.com/lycaon/lycaon/internal/gate",
+      "github.com/lycaon/lycaon/internal/grantedpath",
+      "github.com/lycaon/lycaon/internal/authzcontext",
+      "github.com/lycaon/lycaon/internal/authzledger",
+      "github.com/lycaon/lycaon/internal/toolcontract"
+    ]
+  },
+  "test_only_overlays": [
+    "lycaon/test/wea/tb07_approvals_test.go",
+    "lycaon/internal/hitl/wea_tb07_expiry_test.go"
+  ],
+  "expected_counts_by_family": {
+    "A02": 2,
+    "A04": 4,
+    "A12": 3
+  },
+  "total_inproc_slots": 9,
+  "slots": [
+    {
+      "slot_id": "A02-inproc-01-manual-clock-chat-grant-expiry-prune",
+      "family": "A02",
+      "lane": "in-process",
+      "go_package": "./internal/hitl",
+      "go_test_selector": "^TestWEATB07_A02_ManualClockChatGrantRebaseAndExpiryPrune$",
+      "variant": "Manual-clock chat grant rebase before 24h deadline and expiry prune past deadline in chat_grants"
+    },
+    {
+      "slot_id": "A02-inproc-02-manual-clock-project-grant-expiry-and-ceiling",
+      "family": "A02",
+      "lane": "in-process",
+      "go_package": "./test/wea",
+      "go_test_selector": "^TestWEATB07_A02_GrantScopesBoundariesAndManualClockExpiry$",
+      "variant": "Manual-clock ResolveExpiry TTL + scope ceiling cap + expired durable project grant rejection"
+    },
+    {
+      "slot_id": "A04-inproc-01-unrecordable-approve-fails-closed",
+      "family": "A04",
+      "lane": "in-process",
+      "go_package": "./test/wea",
+      "go_test_selector": "^TestWEATB07_A04_UnrecordableDecisionFailsClosedAndH1CapacityLimit/unrecordable_ledger_fails_closed$",
+      "variant": "Unrecordable approve decision returns ErrSealFailed, rolls back installed authority, keeps checkpoint pending"
+    },
+    {
+      "slot_id": "A04-inproc-02-missing-caller-identity-fails-closed",
+      "family": "A04",
+      "lane": "in-process",
+      "go_package": "./test/wea",
+      "go_test_selector": "^TestWEATB07_A04_UnrecordableDecisionFailsClosedAndH1CapacityLimit/unrecordable_ledger_fails_closed$",
+      "variant": "Approval resolution without authenticated people.Deciding caller fails closed with 0 authority installed"
+    },
+    {
+      "slot_id": "A04-inproc-03-unrecordable-reject-fails-closed",
+      "family": "A04",
+      "lane": "in-process",
+      "go_package": "./test/wea",
+      "go_test_selector": "^TestWEATB07_A04_UnrecordableDecisionFailsClosedAndH1CapacityLimit/unrecordable_ledger_fails_closed$",
+      "variant": "Unrecordable human rejection returns ErrSealFailed and keeps checkpoint pending"
+    },
+    {
+      "slot_id": "A04-inproc-04-h1-64mib-program-state-capacity-fails-closed",
+      "family": "A04",
+      "lane": "in-process",
+      "go_package": "./test/wea",
+      "go_test_selector": "^TestWEATB07_A04_UnrecordableDecisionFailsClosedAndH1CapacityLimit/h1_program_state_memory_64mib_limit_fails_closed$",
+      "variant": "H1 historical lead: 64 MiB (67108864 B) program-state memory limit fails closed with ProgramMemoryLimitError, 0 authority installed, reject still available"
+    },
+    {
+      "slot_id": "A12-inproc-01-restart-half-recorded-operation-rollback",
+      "family": "A12",
+      "lane": "in-process",
+      "go_package": "./test/wea",
+      "go_test_selector": "^TestWEATB07_A12_RestartRecoveryPendingAndGrants$",
+      "variant": "Uncommitted prepared approval_operations row rolls back on restart without disturbing committed grants"
+    },
+    {
+      "slot_id": "A12-inproc-02-restart-pending-plan-id-and-single-commit",
+      "family": "A12",
+      "lane": "in-process",
+      "go_package": "./test/wea",
+      "go_test_selector": "^TestWEATB07_A12_RestartRecoveryPendingAndGrants$",
+      "variant": "Pending approval survives restart bound to identical plan ID; resolving commits once and repeat resolve is idempotent"
+    },
+    {
+      "slot_id": "A12-inproc-03-restart-corrupt-chat-grant-fails-closed",
+      "family": "A12",
+      "lane": "in-process",
+      "go_package": "./test/wea",
+      "go_test_selector": "^TestWEATB07_A12_RestartRecoveryPendingAndGrants$",
+      "variant": "Corrupted stored chat_grants row fails closed on boot replay with 0 grants installed"
+    }
+  ]
+}

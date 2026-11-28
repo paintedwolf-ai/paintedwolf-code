@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
@@ -18,7 +19,7 @@ import (
 const SurveyStreakBatches = 6
 
 // SurveyStreakNudge renders the inform for a read-only batch streak.
-type SurveyStreakNudge func(ctx context.Context, sess *api.Session, batches int, tools []string) HostNudge
+type SurveyStreakNudge func(ctx context.Context, sess *api.Session, reader prompts.Reader, batches int, tools []string) HostNudge
 
 type batchSurvey int
 
@@ -177,7 +178,7 @@ func (l *turnNudges) maybeSurveyStreakNudge(
 	if l == nil || l.Deps.SurveyStreakNudge == nil || sess == nil || !st.surveyStreakFires() {
 		return history, nil
 	}
-	nudge := l.Deps.SurveyStreakNudge(ctx, sess, st.readOnlyBatches, st.readOnlyStreakTools)
+	nudge := l.Deps.SurveyStreakNudge(ctx, sess, turnReader(st), st.readOnlyBatches, st.readOnlyStreakTools)
 	st.surveyStreakNudged = st.readOnlyBatches
 	if nudge.Empty() {
 		return history, nil

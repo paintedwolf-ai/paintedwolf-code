@@ -99,7 +99,7 @@ func TestTruncateToolResultForSessionGenericSpillsInHostData(t *testing.T) {
 	testutil.FailErr(t, "create loader", err)
 	rules, err := loader.LoadEffectivePolicy()
 	testutil.FailErr(t, "load policy", err)
-	ctx := tools.WithCallReach(t.Context(), toolreach.Offered([]string{"command"}).WithPrograms(func(string) bool { return true }))
+	ctx := toolreach.WithRequest(t.Context(), toolreach.Offered([]string{"command"}).WithPrograms(func(string) bool { return true }))
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Closeout: CloseoutDeps{
 			HintConfig:    loadCoordinatorTestHintConfig(t),

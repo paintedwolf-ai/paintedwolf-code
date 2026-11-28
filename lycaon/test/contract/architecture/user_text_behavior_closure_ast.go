@@ -36,14 +36,9 @@ var coordinatorOccurrenceGates = map[string]bool{
 	"observed_handles_omitted": true,
 	"observed_paths_omitted":   true,
 	"observed_urls_omitted":    true,
-	"document_issues":          true,
 	"agent_skills":             true,
 	"rating_questions":         true,
 	"agent_host_resources":     true,
-	"has_file_tools":           true,
-	"can_orient":               true,
-	"can_spawn_web_research":   true,
-	"can_spawn_workers":        true,
 	// Kick counts of results awaiting landing and of partial workers.
 	"pending_overlays": true,
 	"partial_workers":  true,
@@ -53,52 +48,47 @@ var coordinatorOccurrenceGates = map[string]bool{
 	"worker_result":          true,
 	"leg_id":                 true,
 	"progress_closure_armed": true,
-	"card_label":             true,
-	"card_rule":              true,
 	"promoted_paths":         true,
 	"drafted_synthesis":      true,
 	// JSON projections of typed citation evaluation in guidance.CloseoutRepairHintData.
-	"repair_observations":          true,
-	"repair_targets":               true, // citation repair: rejected occurrences by repair ID
-	"document_citation_targets":    true, // citation repair: rejected finding where entries
-	"resume_work_allowed":          true,
-	"can_recall":                   true, // recall in the closed turn's offered tools (promptloop rejectCloseoutGrounding)
-	"offenders_sample":             true, // report-document repair: guidance.OffenderHintData
-	"offenders_omitted":            true, // report-document repair: guidance.OffenderHintData
-	"offending_keys":               true, // report-document repair: unread key names
-	"allowed_top_level_keys":       true, // report-document repair: allowed top-level report fence keys
-	"pinned_body_chars":            true, // report-document repair: char count of pinned body
-	"retained_document":            true, // report-document repair: guidance.ReportDocumentFence
-	"run_report":                   true, // report-document repair: the draft delivers its run's report
-	"llm_timeout":                  true,
-	"reason_text":                  true,
-	"guidance":                     true,
-	"options_criterion":            true,
-	"topology_output":              true,
-	"fanout_plan":                  true,
-	"gate_obligations":             true,
-	"completed_ago":                true,
-	"worker_digest":                true,
-	"primary_changed":              true,
-	"changes":                      true, // projectroot.DiffRoots rows in RootsChangedKickData
-	"active_root":                  true, // projectroot.ActiveRoot in RootsChangedKickData
-	"session_folder_changed":       true, // session folder change in EnqueueRootsChangedKick
-	"label":                        true, // detached root label in enqueueRootDetachCanceledKick
-	"evidence_digest":              true,
-	"command_completion":           true,
-	"command_refusal":              true,
-	"held_call_handle":             true, // host-supplied handle of a settled held call
-	"scan_categories":              true,
-	"scan_findings_count":          true,
-	"scan_id":                      true,
-	"scanner_id":                   true,
-	"obligations":                  true,
-	"last_worker_decision_request": true,
-	"review_verdict":               true,
-	"spawnable_reviewers":          true,
-	"review_followup_attempts":     true,
-	"command_external_changed":     true,
-	"command_external_hidden":      true,
+	"repair_observations":              true,
+	"repair_targets":                   true, // citation repair: rejected occurrences by repair ID
+	"document_citation_targets":        true, // citation repair: rejected finding where entries
+	"resume_work_allowed":              true,
+	"can_recall":                       true, // recall in the closed turn's offered tools (promptloop rejectCloseoutGrounding)
+	"offenders_omitted":                true, // report-document repair: guidance.OffenderHintData
+	"offending_keys":                   true, // report-document repair: unread key names
+	"allowed_top_level_keys":           true, // report-document repair: allowed top-level report fence keys
+	"pinned_body_chars":                true, // report-document repair: char count of pinned body
+	"retained_document":                true, // report-document repair: guidance.ReportDocumentFence
+	"run_report":                       true, // report-document repair: the draft delivers its run's report
+	"llm_timeout":                      true,
+	"session_command_mutation_capable": true,
+	"guidance":                         true,
+	"options_criterion":                true,
+	"topology_output":                  true,
+	"fanout_plan":                      true,
+	"gate_obligations":                 true,
+	"completed_ago":                    true,
+	"worker_digest":                    true,
+	"primary_changed":                  true,
+	"changes":                          true, // projectroot.DiffRoots rows in RootsChangedKickData
+	"active_root":                      true, // projectroot.ActiveRoot in RootsChangedKickData
+	"session_folder_changed":           true, // session folder change in EnqueueRootsChangedKick
+	"label":                            true, // detached root label in enqueueRootDetachCanceledKick
+	"evidence_digest":                  true,
+	"command_refusal":                  true,
+	"held_call_handle":                 true, // host-supplied handle of a settled held call
+	"scan_categories":                  true,
+	"scan_findings_count":              true,
+	"scan_id":                          true,
+	"scanner_id":                       true,
+	"obligations":                      true,
+	"last_worker_decision_request":     true,
+	"review_verdict":                   true,
+	"spawnable_reviewers":              true,
+	"review_followup_attempts":         true,
+	"command_external_changed":         true,
 }
 
 type coordinatorGateSite struct {

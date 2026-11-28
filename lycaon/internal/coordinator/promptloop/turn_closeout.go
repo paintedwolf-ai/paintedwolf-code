@@ -4,14 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/citationmd"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/citationmd"
+	"github.com/lycaon/lycaon/internal/prompts"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -76,14 +78,16 @@ type TurnCloseoutCause struct {
 	BlockedCount int
 }
 
-// Text states the cause in the clause the closeout nudge opens with.
+// Text states the cause in the clause the closeout nudge opens with. The
+// closeout turn offers no tools, so the blocked tool is named outside
+// backticks, which would claim it is callable.
 func (c TurnCloseoutCause) Text() string {
 	if c.Reason != TurnCloseoutBlockedLoop || c.BlockedCount <= 0 {
 		return TurnCloseoutReasonText(c.Reason)
 	}
 	subject := "the reply"
 	if c.BlockedTool != "" {
-		subject = "`" + c.BlockedTool + "`"
+		subject = "the " + c.BlockedTool + " call"
 	}
 	text := fmt.Sprintf("%s was refused %d times in a row", subject, c.BlockedCount)
 	if c.BlockedCode != "" {
@@ -103,10 +107,10 @@ type HostNudge struct {
 func (n HostNudge) Empty() bool { return strings.TrimSpace(n.Content) == "" }
 
 // TurnCloseoutNudge renders the internal user nudge for a prose-only finish turn.
-type TurnCloseoutNudge func(ctx context.Context, sess *api.Session, profileID string, cause TurnCloseoutCause) HostNudge
+type TurnCloseoutNudge func(ctx context.Context, sess *api.Session, reader prompts.Reader, cause TurnCloseoutCause) HostNudge
 
 // IterationRunwayNudge renders the one-shot heads-up when few tool iterations remain.
-type IterationRunwayNudge func(ctx context.Context, sess *api.Session, profileID string, remaining int) HostNudge
+type IterationRunwayNudge func(ctx context.Context, sess *api.Session, reader prompts.Reader, remaining int) HostNudge
 
 // IterationRunwayThreshold reserves final iterations for handoff on longer
 // coordinator turns. A worker round has no iteration cap, so no runway.
@@ -151,7 +155,7 @@ func (l *turnCloseout) maybeIterationRunwayNudge(
 	if !iterationRunwayFires(sess, iterIndex, maxIter) {
 		return history, nil
 	}
-	nudge := l.Deps.IterationRunwayNudge(ctx, sess, profileID, maxIter-iterIndex)
+	nudge := l.Deps.IterationRunwayNudge(ctx, sess, turnReader(st), maxIter-iterIndex)
 	if nudge.Empty() {
 		return history, nil
 	}
@@ -165,7 +169,7 @@ func (l *turnCloseout) applyLandingAdvisories(
 	sessionID, profileID string,
 	step, maxIter int,
 	spendRunway SpendRunway,
-	spendWindDown bool,
+	spendWindDown HostNudge,
 	st *promptLoopTurnState,
 ) (closeoutNudgeSent bool, err error) {
 	updated, err := l.maybeTurnCloseout(ctx, sess, sessionID, profileID, st.history, step, maxIter, st)
@@ -189,7 +193,7 @@ func (l *turnCloseout) applyLandingAdvisories(
 	if err != nil {
 		return closeoutNudgeSent, err
 	}
-	st.history, err = l.Nudges.maybeSpendSoftStopNudge(ctx, sess, sessionID, st.history, spendWindDown, st)
+	st.history, err = l.Nudges.appendHostNudge(ctx, sessionID, st.history, spendWindDown, "", st)
 	return closeoutNudgeSent, err
 }
 
@@ -201,7 +205,7 @@ func (l *turnCloseout) appendTurnCloseoutNudge(
 	cause TurnCloseoutCause,
 	st *promptLoopTurnState,
 ) ([]api.Message, error) {
-	nudge := l.turnCloseoutNudge(ctx, sess, profileID, cause)
+	nudge := l.turnCloseoutNudge(ctx, sess, turnReader(st), cause)
 	if nudge.Empty() {
 		return history, nil
 	}
@@ -231,13 +235,13 @@ func historyHasInternalNudge(history []api.Message, content string) bool {
 func (l *turnCloseout) turnCloseoutNudge(
 	ctx context.Context,
 	sess *api.Session,
-	profileID string,
+	reader prompts.Reader,
 	cause TurnCloseoutCause,
 ) HostNudge {
 	if l == nil || l.Deps.TurnCloseoutNudge == nil {
 		return HostNudge{}
 	}
-	nudge := l.Deps.TurnCloseoutNudge(ctx, sess, profileID, cause)
+	nudge := l.Deps.TurnCloseoutNudge(ctx, sess, reader, cause)
 	nudge.Content = strings.TrimSpace(nudge.Content)
 	return nudge
 }
@@ -363,8 +367,8 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 		)
 	}
 
-	if st != nil && !tools.CallReach(ctx).Known() {
-		ctx = tools.WithCallReach(ctx, st.requestReach())
+	if st != nil && !toolreach.FromContext(ctx).Known() {
+		ctx = toolreach.WithRequest(ctx, st.requestReach())
 	}
 	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, history, surfaceID, assistantMsg)
 	if err != nil {

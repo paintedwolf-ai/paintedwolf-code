@@ -23,7 +23,7 @@ func TestPrependTransitionInjectExplicitCause(t *testing.T) {
 		},
 	}
 	eng := &AssemblyEngine{}
-	eng.SetDeps(deps)
+	eng.SetDeps(withTestTurnReader(deps))
 	turn := &TurnAssemblyScratch{PromptTurnSeq: 1}
 	turn.ModeTransitionCauses = []surface.ModeTransitionCause{{Kind: surface.ModeTransitionCauseWorkflowDefault, Mode: surface.ExecutionModeFamilyOrchestrate}}
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild, WorkspacePath: t.TempDir()}

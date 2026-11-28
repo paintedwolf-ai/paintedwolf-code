@@ -16,13 +16,14 @@ func retrievalVar(t *testing.T, visible ...string) bool {
 	for _, name := range visible {
 		tools[name] = true
 	}
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "worker",
-		Plan:      toolsurface.Compile(visible, nil),
-		Visible:   visible,
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  []sandbox.ToolProfile{{ID: "worker", Tools: tools}},
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "worker",
+		Plan:      toolsurface.Compile(visible, nil),
+		Offered:   visible,
 	})
 	testutil.FailErr(t, "NewReader", err)
 	vars := reader.Facts()
