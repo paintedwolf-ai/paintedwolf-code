@@ -92,7 +92,12 @@ type indexStore struct {
 	projections int
 	// holders counts open views that keep this root resident between reads;
 	// guarded by mu. Eviction passes over a held store.
-	holders int
+	holders    int
+	work            atomicWorkCounters
+	diagCancel      context.CancelFunc
+	diagDone        chan struct{}
+	diagHook        func()
+	diagBeforeAdmit func()
 }
 
 func (s *indexStore) schema() string { return indexSchema }
@@ -346,6 +351,15 @@ func (r *IndexReader) FilePage(ctx context.Context, scope FileScope, after strin
 	}
 	defer func() { _ = rows.Close() }()
 	entries := make([]Entry, 0, limit)
+	rowsRead := 0
+	defer func() {
+		if rowsRead > 0 {
+			r.RowsRead += rowsRead
+			if r.store != nil {
+				r.store.work.rowsRead.Add(int64(rowsRead))
+			}
+		}
+	}()
 	for rows.Next() {
 		var e Entry
 		var modified int64
@@ -355,7 +369,7 @@ func (r *IndexReader) FilePage(ctx context.Context, scope FileScope, after strin
 		e.Modified = time.Unix(0, modified).UTC()
 		e.RootID = r.store.root.ID
 		entries = append(entries, e)
-		r.RowsRead++
+		rowsRead++
 	}
 	return entries, rows.Err()
 }
@@ -473,13 +487,22 @@ func (r *IndexReader) filePaths(ctx context.Context, scope FileScope, index, cla
 	}
 	defer func() { _ = rows.Close() }()
 	var paths []string
+	rowsRead := 0
+	defer func() {
+		if rowsRead > 0 {
+			r.RowsRead += rowsRead
+			if r.store != nil {
+				r.store.work.rowsRead.Add(int64(rowsRead))
+			}
+		}
+	}()
 	for rows.Next() {
 		var path string
 		if err := rows.Scan(&path); err != nil {
 			return nil, err
 		}
 		paths = append(paths, path)
-		r.RowsRead++
+		rowsRead++
 	}
 	return paths, rows.Err()
 }
@@ -490,5 +513,8 @@ func (r *IndexReader) FileCount(ctx context.Context, scope FileScope) (int, erro
 	var count int
 	err := r.tx.QueryRowContext(ctx, "SELECT "+scope.countColumn()+" FROM totals WHERE id=1").Scan(&count)
 	r.RowsRead++
+	if r.store != nil {
+		r.store.work.rowsRead.Add(1)
+	}
 	return count, err
 }

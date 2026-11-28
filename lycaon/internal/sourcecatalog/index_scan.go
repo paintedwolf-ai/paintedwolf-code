@@ -105,6 +105,7 @@ func (w *indexWalk) commit(ctx context.Context) (TreeStatus, bool, error) {
 		return TreeStatus{}, false, err
 	}
 	w.pending, w.lastPublish = 0, time.Now()
+	w.store.work.publishedBatches.Add(1)
 	return status, true, nil
 }
 
@@ -130,7 +131,12 @@ func (w *indexWalk) publishFinal(ctx context.Context, epoch repochange.Epoch) er
 	}
 	w.store.mu.Lock()
 	w.store.publishFinalLocked(status, epoch)
+	beforeAdmit := w.store.diagBeforeAdmit
 	w.store.mu.Unlock()
+	if beforeAdmit != nil {
+		beforeAdmit()
+	}
+	w.store.scheduleDiagnostic(status)
 	return nil
 }
 

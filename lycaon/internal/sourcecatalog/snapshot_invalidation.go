@@ -307,6 +307,9 @@ func retireTreeStore(store projectionStore) bool {
 		if index.inventory.cancel != nil {
 			index.inventory.cancel()
 		}
+		if index.diagCancel != nil {
+			index.diagCancel()
+		}
 		_ = index.observations.CancelAll()
 		_ = index.checkpoint.Drain()
 		index.pins.drained = true

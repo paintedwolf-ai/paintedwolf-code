@@ -31,6 +31,7 @@ func collectDirectoryObservation(ctx context.Context, store *indexStore, dir str
 		return cached, true, nil
 	}
 	reader := directoryBatch{file: directory.entries}
+	store.work.dirReads.Add(1)
 	for {
 		finish, err := store.stores.broker.Acquire(ctx, store.observationRequest(dir))
 		if err != nil {
