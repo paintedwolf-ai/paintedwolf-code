@@ -2,6 +2,7 @@ package blobstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +10,33 @@ import (
 
 	"github.com/lycaon/lycaon/internal/zstdcodec"
 )
+
+// createStagingTemp creates a temporary file inside stageDir, retrying
+// MkdirAll + CreateTemp once if stageDir disappeared between creation and open.
+func createStagingTemp(stageDir, pattern string) (*os.File, error) {
+	return createStagingTempWith(stageDir, pattern, os.MkdirAll, os.CreateTemp)
+}
+
+func createStagingTempWith(
+	stageDir, pattern string,
+	mkdirAll func(string, os.FileMode) error,
+	createTemp func(string, string) (*os.File, error),
+) (*os.File, error) {
+	if err := mkdirAll(stageDir, 0o700); err != nil {
+		return nil, fmt.Errorf("create staging dir: %w", err)
+	}
+	tmp, err := createTemp(stageDir, pattern)
+	if errors.Is(err, os.ErrNotExist) {
+		if mkErr := mkdirAll(stageDir, 0o700); mkErr != nil {
+			return nil, fmt.Errorf("create staging dir: %w", mkErr)
+		}
+		tmp, err = createTemp(stageDir, pattern)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("create staging file: %w", err)
+	}
+	return tmp, nil
+}
 
 // compressStagedFile rewrites unpublished plaintext as a zstd frame through the
 // existing staging boundary. Cancellation leaves cleanup with the caller.
@@ -18,7 +46,7 @@ func compressStagedFile(ctx context.Context, tmp *os.File) error {
 	}
 	// Preserve the one staging/commit boundary while avoiding an encoded body
 	// proportional to stream size in memory. Both files remain unpublished.
-	compressed, err := os.CreateTemp(filepath.Dir(tmp.Name()), ".compressed-*")
+	compressed, err := createStagingTemp(filepath.Dir(tmp.Name()), ".compressed-*")
 	if err != nil {
 		return fmt.Errorf("create compressed stage: %w", err)
 	}

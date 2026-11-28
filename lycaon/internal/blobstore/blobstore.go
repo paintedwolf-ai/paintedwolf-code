@@ -300,12 +300,9 @@ func (s Store) stage(ctx context.Context, state *storeState, r io.Reader, limit 
 		}()
 	}
 	stageDir := filepath.Join(s.dataRoot(), stagingDir)
-	if err := os.MkdirAll(stageDir, 0o700); err != nil {
-		return "", "", 0, fmt.Errorf("blobstore: create staging dir: %w", err)
-	}
-	tmp, err := os.CreateTemp(stageDir, ".blob-*")
+	tmp, err := createStagingTemp(stageDir, ".blob-*")
 	if err != nil {
-		return "", "", 0, fmt.Errorf("blobstore: create staging file: %w", err)
+		return "", "", 0, fmt.Errorf("blobstore: %w", err)
 	}
 	tmpPath = tmp.Name()
 	state.activeMu.Lock()
@@ -358,8 +355,10 @@ func (s Store) stage(ctx context.Context, state *storeState, r io.Reader, limit 
 }
 
 func (s Store) releaseStage(state *storeState, path string) {
+	// Retain .staging across writes as long-lived store infrastructure; removing
+	// it races with concurrent writers (including across processes) between
+	// MkdirAll and CreateTemp.
 	_ = os.Remove(path)
-	_ = os.Remove(filepath.Dir(path))
 	state.activeMu.Lock()
 	delete(state.active, path)
 	state.activeMu.Unlock()
@@ -895,12 +894,9 @@ func (s Store) Recompress(b Blob) (bool, error) {
 // over rel, bypassing the plaintext-in/compressed-out path stage() applies.
 func (s Store) replaceBlobBytes(state *storeState, rel string, encoded []byte) error {
 	stageDir := filepath.Join(s.dataRoot(), stagingDir)
-	if err := os.MkdirAll(stageDir, 0o700); err != nil {
-		return fmt.Errorf("blobstore: create staging dir: %w", err)
-	}
-	tmp, err := os.CreateTemp(stageDir, ".blob-*")
+	tmp, err := createStagingTemp(stageDir, ".blob-*")
 	if err != nil {
-		return fmt.Errorf("blobstore: create staging file: %w", err)
+		return fmt.Errorf("blobstore: %w", err)
 	}
 	tmpPath := tmp.Name()
 	state.activeMu.Lock()
