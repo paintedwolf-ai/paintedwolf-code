@@ -1,7 +1,6 @@
 package hoststatecoverage_test
 
 import (
-	"runtime"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -101,6 +100,5 @@ func joinProducers(sites []interactions.InstructionSite) (interactions.ProducerJ
 	if err != nil {
 		return interactions.ProducerJoin{}, err
 	}
-	defer runtime.GC()
 	return interactions.JoinInstructionProducers(sites, graph)
 }
