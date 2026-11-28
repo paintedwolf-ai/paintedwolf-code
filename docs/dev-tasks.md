@@ -15,6 +15,8 @@ Toolchain setup, local dev stacks, debug capture, and the `./task` targets with 
 - Rust with Cargo for the Tauri shell, installed through [rustup](https://rustup.rs) so `rust-toolchain.toml` selects the version
 - The matching Bialy head artifacts, restored to the shared artifact bin's `decide-heads/` directory or selected with `BIALY_HEADS_DIR`; see [decision dependencies](dependencies.md). Without them, the development engine build and managed browser provisioning cannot complete.
 
+Linux ARM64 also needs a compatible system `glslc` for the native generation runtime.
+
 `./task setup-dev` checks each of these. Current pins and upstream versions are linked from the [dependency inventory](operations/dependency-inventory.md).
 
 ## First-time setup
