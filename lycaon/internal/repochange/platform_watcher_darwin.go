@@ -3,8 +3,8 @@
 package repochange
 
 import (
-	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -38,25 +38,29 @@ type fseventsStreamPump struct {
 
 // Native streams cover roots recursively and add external metadata trees.
 type fseventsPlatformWatcher struct {
-	root   string
-	events chan fsnotify.Event
-	resync chan struct{}
-	errors chan error
-	done   chan struct{}
-	wake   chan struct{}
-	wg     sync.WaitGroup
-	once   sync.Once
-	addMu  sync.Mutex
+	root             string
+	sentinelDir      string
+	sentinelResolved string
+	events           chan fsnotify.Event
+	resync           chan struct{}
+	errors           chan error
+	done             chan struct{}
+	wake             chan struct{}
+	wg               sync.WaitGroup
+	once             sync.Once
+	addMu            sync.Mutex
 
-	mu        sync.Mutex
-	streams   []*fsevents.EventStream
-	pumps     []fseventsStreamPump
-	watched   map[string]struct{}
-	roots     []fseventsWatchRoot
-	queue     []fseventsDelivery
-	barriers  []chan struct{}
-	collapsed bool
-	closed    bool
+	mu          sync.Mutex
+	streams     []*fsevents.EventStream
+	pumps       []fseventsStreamPump
+	watched     map[string]struct{}
+	roots       []fseventsWatchRoot
+	queue       []fseventsDelivery
+	barriers    []chan struct{}
+	sentinels   map[string]chan struct{}
+	sentinelSeq uint64
+	collapsed   bool
+	closed      bool
 }
 
 func newPlatformWatcher(root string) (platformWatcher, error) {
@@ -65,13 +69,25 @@ func newPlatformWatcher(root string) (platformWatcher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve FSEvents root: %w", err)
 	}
-	w := &fseventsPlatformWatcher{
-		root:   root,
-		events: make(chan fsnotify.Event), resync: make(chan struct{}), errors: make(chan error, 1),
-		done: make(chan struct{}), wake: make(chan struct{}, 1), watched: make(map[string]struct{}),
+	sentinelDir, sentinelResolved := setupFSEventsSentinel(resolved)
+	watchPaths := []string{resolved}
+	if sentinelResolved != "" {
+		watchPaths = append(watchPaths, sentinelResolved)
 	}
-	stream, err := startFSEventStream(resolved, (*fsevents.EventStream).Start)
+	w := &fseventsPlatformWatcher{
+		root:             root,
+		sentinelDir:      sentinelDir,
+		sentinelResolved: sentinelResolved,
+		events:           make(chan fsnotify.Event), resync: make(chan struct{}), errors: make(chan error, 1),
+		done: make(chan struct{}), wake: make(chan struct{}, 1),
+		watched:   make(map[string]struct{}),
+		sentinels: make(map[string]chan struct{}),
+	}
+	stream, err := startFSEventStreamPaths(watchPaths, (*fsevents.EventStream).Start)
 	if err != nil {
+		if sentinelDir != "" {
+			_ = os.RemoveAll(sentinelDir)
+		}
 		return nil, fmt.Errorf("start FSEvents stream: %w", err)
 	}
 	sp := fseventsStreamPump{stream: stream, sync: make(chan chan struct{})}
@@ -85,8 +101,12 @@ func newPlatformWatcher(root string) (platformWatcher, error) {
 }
 
 func startFSEventStream(path string, start func(*fsevents.EventStream) error) (*fsevents.EventStream, error) {
+	return startFSEventStreamPaths([]string{path}, start)
+}
+
+func startFSEventStreamPaths(paths []string, start func(*fsevents.EventStream) error) (*fsevents.EventStream, error) {
 	stream := &fsevents.EventStream{
-		Paths: []string{path}, Events: make(chan []fsevents.Event, 128),
+		Paths: paths, Events: make(chan []fsevents.Event, 128),
 		Flags:   fsevents.FileEvents | fsevents.NoDefer | fsevents.WatchRoot,
 		Latency: fseventsLatency, Resume: true, EventID: fsevents.LatestEventID(),
 	}
@@ -183,71 +203,11 @@ func (w *fseventsPlatformWatcher) Close() error {
 		close(w.events)
 		close(w.resync)
 		close(w.errors)
+		if w.sentinelDir != "" {
+			_ = os.RemoveAll(w.sentinelDir)
+		}
 	})
 	return nil
-}
-
-// Flush synchronously flushes every FSEvents stream up to "now" and waits
-// until those events have been delivered to EventChannel/ResyncChannel.
-func (w *fseventsPlatformWatcher) Flush(ctx context.Context) bool {
-	w.mu.Lock()
-	if w.closed {
-		w.mu.Unlock()
-		return false
-	}
-	pumps := slices.Clone(w.pumps)
-	w.mu.Unlock()
-
-	for _, sp := range pumps {
-		flushed := make(chan struct{})
-		go func(s *fsevents.EventStream) {
-			s.Flush(true)
-			close(flushed)
-		}(sp.stream)
-		select {
-		case <-flushed:
-		case <-w.done:
-			return false
-		case <-ctx.Done():
-			return false
-		}
-		ack := make(chan struct{})
-		select {
-		case sp.sync <- ack:
-		case <-w.done:
-			return false
-		case <-ctx.Done():
-			return false
-		}
-		select {
-		case <-ack:
-		case <-w.done:
-			return false
-		case <-ctx.Done():
-			return false
-		}
-	}
-
-	barrier := make(chan struct{})
-	w.mu.Lock()
-	if w.closed {
-		w.mu.Unlock()
-		return false
-	}
-	w.barriers = append(w.barriers, barrier)
-	w.mu.Unlock()
-	select {
-	case w.wake <- struct{}{}:
-	default:
-	}
-	select {
-	case <-barrier:
-		return true
-	case <-w.done:
-		return false
-	case <-ctx.Done():
-		return false
-	}
 }
 
 func (w *fseventsPlatformWatcher) pump(sp fseventsStreamPump) {
@@ -267,28 +227,6 @@ func (w *fseventsPlatformWatcher) pump(sp fseventsStreamPump) {
 				return
 			}
 			close(ack)
-		}
-	}
-}
-
-func (w *fseventsPlatformWatcher) drainStream(stream *fsevents.EventStream) bool {
-	for {
-		select {
-		case batch, ok := <-stream.Events:
-			if !ok {
-				return false
-			}
-			w.enqueueBatch(batch)
-		default:
-			return true
-		}
-	}
-}
-
-func (w *fseventsPlatformWatcher) enqueueBatch(batch []fsevents.Event) {
-	for _, event := range batch {
-		if translated := w.translate(event); translated.resync || translated.event.Op != 0 {
-			w.enqueue(translated)
 		}
 	}
 }
