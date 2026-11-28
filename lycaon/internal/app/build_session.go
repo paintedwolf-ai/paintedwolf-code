@@ -29,15 +29,16 @@ func (b *serveBuilder) wireSessionManager() error {
 
 func (b *serveBuilder) wireCheckpointRuntime() error {
 	return b.sessions.WireCheckpoints(b.startup.ctx, sessions.CheckpointDependencies{
-		Database:        b.storage.Database,
-		Directory:       b.storage.Directory,
-		Sessions:        b.storage.Sessions,
-		EventsOutbox:    b.events.Outbox,
-		EventPublisher:  b.events.Publisher,
-		Security:        b.security,
-		Execution:       b.execution,
-		SettingsService: b.settings.Service,
-		Resources:       b.startup.resources,
+		Database:         b.storage.Database,
+		Directory:        b.storage.Directory,
+		Sessions:         b.storage.Sessions,
+		EventsOutbox:     b.events.Outbox,
+		EventPublisher:   b.events.Publisher,
+		Security:         b.security,
+		Execution:        b.execution,
+		SettingsService:  b.settings.Service,
+		RegisterRecovery: b.registerRecovery,
+		Resources:        b.startup.resources,
 	})
 }
 

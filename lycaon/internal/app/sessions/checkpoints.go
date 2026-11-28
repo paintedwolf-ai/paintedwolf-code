@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/security"
 	"github.com/lycaon/lycaon/internal/approvals"
 	"github.com/lycaon/lycaon/internal/authzledger"
+	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
@@ -34,15 +35,16 @@ import (
 
 // CheckpointDependencies defines inputs for wiring checkpoints and brokers.
 type CheckpointDependencies struct {
-	Database        *db.Store
-	Directory       string
-	Sessions        *store.Repositories
-	EventsOutbox    *eventoutbox.Outbox
-	EventPublisher  *events.Publisher
-	Security        *security.Runtime
-	Execution       execution.Runtime
-	SettingsService *settings.Service
-	Resources       ResourceTracker
+	Database         *db.Store
+	Directory        string
+	Sessions         *store.Repositories
+	EventsOutbox     *eventoutbox.Outbox
+	EventPublisher   *events.Publisher
+	Security         *security.Runtime
+	Execution        execution.Runtime
+	SettingsService  *settings.Service
+	RegisterRecovery func(bootrecovery.Entry) error
+	Resources        ResourceTracker
 }
 
 type unlockRecorder struct{}
@@ -174,7 +176,7 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 		sockets := deps.Security.Sockets
 		deps.Resources.Track("socket-capability-references", 26, func(context.Context) error { sockets.Close(); return nil })
 	}
-	if err := wireToolApprovalCheckpointHooks(ctx, checkpointMgr, toolApprovalRT); err != nil {
+	if err := wireToolApprovalCheckpointHooks(ctx, checkpointMgr, toolApprovalRT, r.Invocations, deps.RegisterRecovery); err != nil {
 		return err
 	}
 
@@ -194,7 +196,11 @@ func wireAskSpamGuards(r *Runtime, authority *toolhost.AuthorityServices) *appro
 	return toolApprovalRT
 }
 
-func wireToolApprovalCheckpointHooks(ctx context.Context, mgr *hitl.Checkpoints, toolApprovalRT *approvalstate.ToolApprovalCoalesce) error {
+type invocationTerminalChecker interface {
+	AllToolCallsEnded(ctx context.Context, sessionID string, toolCallIDs []string) (bool, error)
+}
+
+func wireToolApprovalCheckpointHooks(ctx context.Context, mgr *hitl.Checkpoints, toolApprovalRT *approvalstate.ToolApprovalCoalesce, invocations any, registerRecovery func(bootrecovery.Entry) error) error {
 	// Native approval authority restores against the host's aggregate state
 	// ledger, sized from the frozen command catalog.
 	limits, err := toolcontract.CatalogProgramMemoryLimits()
@@ -206,6 +212,9 @@ func wireToolApprovalCheckpointHooks(ctx context.Context, mgr *hitl.Checkpoints,
 		return err
 	}
 	mgr.Authority.SetNativeAuthorityAdmission(hostState)
+	if checker, ok := invocations.(invocationTerminalChecker); ok && checker != nil {
+		mgr.SetInvocationTerminalCheck(checker.AllToolCallsEnded)
+	}
 	mgr.Authority.SetToolApprovalTerminalHook(func(chatSessionID, grantKey string, _ hitl.DecisionStatus) {
 		toolApprovalRT.ClearPending(chatSessionID, grantKey)
 	})
@@ -232,6 +241,18 @@ func wireToolApprovalCheckpointHooks(ctx context.Context, mgr *hitl.Checkpoints,
 		}
 		toolApprovalRT.RestorePending(chat, key, row.ID, joined, ids)
 	})
+	if registerRecovery != nil {
+		if err := registerRecovery(bootrecovery.Entry{
+			Name:  "pending-checkpoints",
+			Kind:  bootrecovery.KindReconcile,
+			Phase: bootrecovery.PhaseBuild,
+			After: []string{"tool-invocations"},
+			Run:   mgr.RestorePending,
+		}); err != nil {
+			return fmt.Errorf("register pending checkpoint recovery: %w", err)
+		}
+		return nil
+	}
 	if err := mgr.RestorePending(ctx); err != nil {
 		return fmt.Errorf("restore pending checkpoints: %w", err)
 	}
