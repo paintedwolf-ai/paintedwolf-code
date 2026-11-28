@@ -112,6 +112,11 @@ echo "==> Installing Den dependencies"
 	bun install --frozen-lockfile
 )
 
+if [[ "$(uname -s)" == "Linux" ]]; then
+  echo "==> Preparing native generation dependencies"
+  bash "${ROOT}/scripts/generation/run.sh" prepare --backend native
+fi
+
 echo "==> Provisioning managed development browser"
 # The sidecar retries provisioning at launch.
 if ! "${ROOT}/task" browser:ensure; then
