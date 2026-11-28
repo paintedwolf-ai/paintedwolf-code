@@ -74,7 +74,7 @@ The batch sequence increases at each visible human intent. Host wakes, worker co
 
 ## Worker model and rounds
 
-`task` creates a new worker with an agent role (`agent_type`), an optional session-unique `name`, a structured `brief`, read or write `scope` with optional focus `paths`, optional `after_workers` or `scope.base_overlay_id` dependencies, or `review_of` to start a read-only reviewer bound to an exact result handle. Once started, an existing worker is addressed by name with `instruct_worker`, `answer_decision`, `worker_cancel`, and `worker_history`; results are addressed by result handle on `preview_overlay`, `promote_overlay`, `promote_sequence`, `reject_overlay`, `shelve_overlay`, and `task.review_of`.
+`task` creates a new worker with an agent role (`agent_type`), an optional session-unique `name`, a structured `brief`, read or write `scope` with optional focus `paths`, optional `after_workers` or `scope.base_overlay_id` dependencies, or `review_of` to start a read-only reviewer bound to an exact result handle. Once started, an existing worker is addressed by name with `instruct_worker`, `answer_decision`, `worker_cancel`, and `worker_history`; results are addressed by result handle on `preview_overlay`, `promote_overlay`, `reject_overlay`, `shelve_overlay`, and `task.review_of`.
 
 Task paths guide focus only. They do not grant, restrict, or filter reads, mutations, verification, or promotion. Worker permissions come from the tool profile and confinement; promotion uses observed workspace changes.
 
@@ -129,10 +129,12 @@ A write worker operates in a private view isolated from the primary tree and fro
 
 Each write result carries an explicit disposition:
 
-- **Landed** (`promote_overlay` / `promote_sequence`): applies the result's changes atomically to the primary tree after verification and conflict checks, advances integrated source generation, and refreshes the idle worker's workspace to the new integrated head before its next round.
+- **Landed** (`promote_overlay`): applies the result's changes atomically to the primary tree after verification and conflict checks, advances integrated source generation, and refreshes the idle worker's workspace to the new integrated head before its next round.
 - **Rejected** (`reject_overlay`): discards that result's unlanded changes and resets the worker's workspace to current integrated source while preserving the worker's conversation for a clean follow-up round.
 - **Shelved** (`shelve_overlay`): records a deliberate decision to leave a result's changes unlanded with a stated reason, accounting for the result so the batch can close without discarding the branch; starting a later round on that worker ends the shelved state.
 - **Open**: unlanded changes awaiting review, follow-up instructions, landing, rejection, or shelving.
+
+For more than one pending result, read `overlay_merge_plan.promote_sequence` from `pack_board` and call `promote_overlay` separately for each result handle in that order.
 
 Reviewer workers started with `task(review_of: "<result_id>", ...)` inspect the exact snapshot of that delivered result in read-only mode, isolated from any later rounds on the producer worker.
 
@@ -152,7 +154,7 @@ Worker orientation is refreshed for every model request from the same branch roo
 
 The coordinator reconciles progress after worker completion. A worker envelope may prove that work is done, blocked, or no longer applicable, but the root checklist remains the single human-visible execution account.
 
-Completed output latches the checklist: until the coordinator accounts for a completed result, `task`, `instruct_worker`, and source mutations are gated by `PROGRESS_RECONCILIATION_REQUIRED`, naming the unaccounted result handles. Accounting is satisfied by updating `update_progress` with the result's token, or by acting on the result through `promote_overlay`, `promote_sequence`, `reject_overlay`, `shelve_overlay`, `instruct_worker` on that worker, or `task(review_of: ...)`.
+Completed output latches the checklist: until the coordinator accounts for a completed result, `task`, `instruct_worker`, and source mutations are gated by `PROGRESS_RECONCILIATION_REQUIRED`, naming the unaccounted result handles. Accounting is satisfied by updating `update_progress` with the result's token, or by acting on the result through `promote_overlay`, `reject_overlay`, `shelve_overlay`, `instruct_worker` on that worker, or `task(review_of: ...)`.
 
 ---
 
