@@ -132,7 +132,14 @@ func runSummarize(inv *invocation) error {
 	}
 	for _, window := range windows {
 		if window.Path != "inline" {
-			tools.RecordProgramWindow(inv.ctx, tools.ProgramWindow{Path: window.Path, Body: window.Body})
+			tools.RecordProgramWindow(inv.ctx, tools.ProgramWindow{
+				Path:      window.Path,
+				RootID:    window.RootID,
+				ScopeRel:  window.ScopeRel,
+				StartLine: window.StartLine,
+				EndLine:   window.EndLine,
+				Body:      window.Body,
+			})
 		}
 	}
 	return inv.structured(resp)

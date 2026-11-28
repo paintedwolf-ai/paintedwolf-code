@@ -8,8 +8,12 @@ import (
 // ProgramWindow is a source window a host operation returned in a program's output,
 // from the operation's own result. Body holds the host's numbered rows.
 type ProgramWindow struct {
-	Path string
-	Body string
+	Path      string
+	RootID    string
+	ScopeRel  string
+	StartLine int
+	EndLine   int
+	Body      string
 }
 
 // ProgramWindows collects one program's windows until its output is delivered.
