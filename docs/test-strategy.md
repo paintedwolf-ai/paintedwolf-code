@@ -860,7 +860,14 @@ rest. `./task test:fuzz` gives each target that time in nightly verification,
 and `./task test:fuzz:smoke` in the ready tier replays seeds and committed
 corpus, then explores briefly, for targets in the packages a change touches.
 Minimized corpora live under each package's `testdata/fuzz/`, so ordinary Go
-tests replay them too. Den suites, transcript scale included, assert memory,
+tests replay them too. When nightly fuzzing writes any new crasher, the nightly
+workflow records its failure output and single-replay result (`reproduced`) and
+files both the input and `<id>.finding.json` manifest onto the `fuzz-findings`
+branch. `./task test:fuzz:findings` (required in the ready `fast` profile and
+the merge-queue `integration` profile) fails closed until a fix PR commits the
+finding's input byte-identically into the package's real `testdata/fuzz/<Target>/`
+alongside the code fix; once that lands on `main`, the clearing workflow removes
+the resolved finding from `fuzz-findings`. Den suites, transcript scale included, assert memory,
 DOM and row bounds, never elapsed time. SQL query and OpenAPI bundle generation drift are
 checked once through `db:sqlc:check` and `openapi:bundle:check` in
 `check:drift`; Go contracts inspect the generated surfaces without launching the

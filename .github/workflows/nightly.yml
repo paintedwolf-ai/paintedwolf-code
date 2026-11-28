@@ -52,3 +52,41 @@ jobs:
       source-sha: ${{ needs.source.outputs.sha }}
       source-tree: ${{ needs.source.outputs.tree }}
       suite: ${{ inputs.suite || 'all' }}
+
+  file-fuzz-findings:
+    needs: [source, verify]
+    if: ${{ !cancelled() && (inputs.suite == 'all' || inputs.suite == 'fuzz' || inputs.suite == '') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          fetch-depth: 0
+
+      - name: Download fuzz findings artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: fuzz-findings
+          path: ${{ runner.temp }}/downloaded-fuzz-findings
+
+      - name: File validated fuzz findings on fuzz-findings branch
+        env:
+          ARTIFACT_ROOT: ${{ runner.temp }}/downloaded-fuzz-findings
+          SOURCE_SHA: ${{ needs.source.outputs.sha }}
+          PYTHONPATH: scripts
+        run: |
+          if [[ -f "$ARTIFACT_ROOT/fuzz-findings/manifest.json" ]]; then
+            python3 -m fuzz_plan.findings file \
+              --artifact-dir "$ARTIFACT_ROOT/fuzz-findings" \
+              --main-ref "$SOURCE_SHA"
+          elif [[ -f "$ARTIFACT_ROOT/manifest.json" ]]; then
+            python3 -m fuzz_plan.findings file \
+              --artifact-dir "$ARTIFACT_ROOT" \
+              --main-ref "$SOURCE_SHA"
+          else
+            echo "fuzz-findings: no findings artifact uploaded in this run" >&2
+          fi

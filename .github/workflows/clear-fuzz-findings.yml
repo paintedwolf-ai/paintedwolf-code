@@ -1,0 +1,28 @@
+name: Clear fuzz findings
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-findings
+  cancel-in-progress: false
+
+jobs:
+  clear-fuzz-findings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Clear findings committed byte-identically on main
+        env:
+          PYTHONPATH: scripts
+        run: python3 -m fuzz_plan.findings clear --main-ref HEAD

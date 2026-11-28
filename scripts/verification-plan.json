@@ -18,6 +18,7 @@
       "test:integration:changes",
       "test:contract",
       "test:fuzz:smoke",
+      "test:fuzz:findings",
       "licenses:notices",
       "comments:check",
       "test:fail-messages:check",
@@ -56,6 +57,7 @@
       "den:test:rust",
       "decide:test",
       "test:lycaon-rules",
+      "test:fuzz:findings",
       "release:contracts:check"
     ],
     "check:drift": [
@@ -522,6 +524,9 @@
     ],
     "test:fuzz:smoke": [
       "test:fuzz:smoke"
+    ],
+    "test:fuzz:findings": [
+      "test:fuzz:findings"
     ],
     "release:contracts:check": [
       "release:contracts:check"
@@ -1110,6 +1115,10 @@
         "go"
       ]
     },
+    "test:fuzz:findings": {
+      "locks": [],
+      "workers": "shared"
+    },
     "release:contracts:check": {
       "locks": [
         "go"
@@ -1201,6 +1210,7 @@
         "budgets",
         "coverage:changes",
         "test:fuzz:smoke",
+        "test:fuzz:findings",
         "release:contracts:check"
       ],
       "minutes": 120,
@@ -1249,6 +1259,7 @@
         "validate:workflows",
         "oar:verify",
         "test:lycaon-rules",
+        "test:fuzz:findings",
         "release:contracts:check"
       ],
       "minutes": 120,

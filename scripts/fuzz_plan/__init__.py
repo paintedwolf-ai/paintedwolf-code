@@ -13,13 +13,16 @@ a package the change touches directly.
 """
 
 import argparse
+import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shutil
 import subprocess
 import sys
 
 import change_report
+from fuzz_plan.findings import MANIFEST_NAME, finding_rel_path
 from verification_plan import FUZZ_TARGET, GO_MODULE, catalog
 
 MODULE = GO_MODULE.name
@@ -114,7 +117,30 @@ def schedule(mode, packages, plan=None):
             for package, targets in sorted(found.items()) for target in targets]
 
 
-def explore(package, target, seconds, tags, workers):
+def _record_crashers(package, target, new_files, failure_output, flags, findings_dir, source_sha, run_id, records):
+    """Replay each newly written crasher once and stage it if findings_dir is set."""
+    for crasher in sorted(new_files):
+        if not crasher.is_file():
+            continue
+        finding_id = crasher.name
+        replay = go("test", *flags, f"-run=^{target}$/{finding_id}", package, capture=True)
+        entry = {
+            "package": package,
+            "target": target,
+            "id": finding_id,
+            "commit": source_sha,
+            "run_id": run_id,
+            "failure_output": failure_output,
+            "reproduced": replay.returncode != 0,
+        }
+        records.append(entry)
+        if findings_dir:
+            dest = Path(findings_dir) / finding_rel_path(package, target, finding_id)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(crasher, dest)
+
+
+def explore(package, target, seconds, tags, workers, *, findings_dir="", source_sha="", run_id="", records=None):
     """1 when the seeds or committed corpus fail, or exploration writes a crasher; otherwise 0."""
     flags = [f"-tags={','.join(tags)}", "-timeout=0", f"-p={workers}", f"-parallel={workers}"]
     replay = go("test", *flags, f"-run=^{target}$", package, capture=False).returncode
@@ -124,8 +150,20 @@ def explore(package, target, seconds, tags, workers):
     # baseline coverage on a slow runner; a crasher is the file Go writes for it.
     crashers = GO_MODULE / package / "testdata" / "fuzz" / target
     before = set(crashers.iterdir()) if crashers.is_dir() else set()
-    go("test", *flags, "-run=^$", f"-fuzz=^{target}$", f"-fuzztime={seconds}s", package, capture=False)
-    return 1 if crashers.is_dir() and set(crashers.iterdir()) - before else 0
+    proc = go("test", *flags, "-run=^$", f"-fuzz=^{target}$", f"-fuzztime={seconds}s", package, capture=True)
+    if proc.stdout:
+        sys.stdout.write(proc.stdout)
+        sys.stdout.flush()
+    if proc.stderr:
+        sys.stderr.write(proc.stderr)
+        sys.stderr.flush()
+    new_files = (set(crashers.iterdir()) - before) if crashers.is_dir() else set()
+    if new_files:
+        failure_output = (proc.stdout or "") + (proc.stderr or "")
+        _record_crashers(package, target, new_files, failure_output, flags, findings_dir, source_sha, run_id,
+                         records if records is not None else [])
+        return 1
+    return 0
 
 
 def summary(results):
@@ -139,6 +177,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("mode", choices=["run", "smoke"])
     parser.add_argument("packages", nargs="*", help="./relative package patterns; run only")
+    parser.add_argument("--findings-dir", default=os.environ.get("PW_FUZZ_FINDINGS_DIR", ""))
     args = parser.parse_args(argv)
     if args.mode == "smoke" and args.packages:
         parser.error("smoke selects the packages the change touches")
@@ -153,10 +192,19 @@ def main(argv=None):
         return 0
     tags = declaration()["tags"]
     workers = os.environ["PW_FUZZ_WORKERS"]
-    results = []
+    findings_dir = args.findings_dir if args.mode == "run" else ""
+    source_sha = os.environ.get("PW_FUZZ_SOURCE_SHA", os.environ.get("GITHUB_SHA", ""))
+    run_id = os.environ.get("GITHUB_RUN_ID", "")
+    results, records = [], []
     for package, target, seconds in planned:
         print(f"fuzz: {package} {target}: exploring {seconds}s with {workers} worker(s)", file=sys.stderr, flush=True)
-        results.append((package, target, seconds, explore(package, target, seconds, tags, workers)))
+        code = explore(package, target, seconds, tags, workers,
+                       findings_dir=findings_dir, source_sha=source_sha, run_id=run_id, records=records)
+        results.append((package, target, seconds, code))
+    if findings_dir and records:
+        manifest = Path(findings_dir) / MANIFEST_NAME
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text(json.dumps(records, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     report = summary(results)
     print(f"fuzz: {sum(seconds for _, _, seconds, _ in results)}s declared over {len(results)} target(s)\n{report}",
           file=sys.stderr)
