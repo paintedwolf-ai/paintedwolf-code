@@ -1,6 +1,7 @@
 package mutation
 
 import (
+	"bytes"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -11,10 +12,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/datetext"
 )
@@ -459,7 +462,26 @@ func runTee(inv *invocation) error {
 		}
 	}
 	streamWriters = nil
+	_, hasDocs := tools.ProjectDocuments(inv.tc)
+	isTextPayload := utf8.Valid(data) && !bytes.ContainsRune(data, 0)
 	for _, target := range targets {
+		if hasDocs && isTextPayload && len(streamWriters) == 0 {
+			res, err := inv.owners.Operations.Write.Apply(inv.ctx, native.WriteInput{
+				Operation: inv.owners.ops[inv.name()],
+				Path:      target.abs,
+				Content:   string(data),
+				Append:    target.append,
+				Memory:    inv.owners.Revisions.Memory,
+				Admission: native.WriteConversational,
+			}, inv.tc)
+			if err != nil {
+				return err
+			}
+			if res.Accepted || res.Saved {
+				inv.effects++
+			}
+			continue
+		}
 		if _, err := inv.owners.publish(inv.ctx, inv.tc, target, data); err != nil {
 			return err
 		}

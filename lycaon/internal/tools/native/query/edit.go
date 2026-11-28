@@ -3,7 +3,10 @@ package query
 import (
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // runJqEdit preserves document formatting and publishes at the captured revision.
@@ -49,6 +52,39 @@ func runJqEdit(inv *invocation) error {
 	}
 	if bound.Null {
 		return inv.usage(path, "a document PATH")
+	}
+	if _, hasDocs := tools.ProjectDocuments(inv.tc); hasDocs {
+		result, err := inv.owners.Write.ApplyStructuredEdit(
+			inv.ctx,
+			native.StructuredEditInput{
+				Operation: inv.publishedOperation(),
+				Path:      bound.Resolved.Abs,
+				Memory:    inv.owners.Revisions.Memory,
+			},
+			inv.tc,
+			func(resolved projectpaths.Resolved, sourceText string, _ *tools.EditorDocumentText) (string, bool, error) {
+				work := &queryWorking{inv: inv}
+				defer work.Close()
+				detectedFormat, err := nativejq.DetectFormat(resolved.DisplayPath, format)
+				if err != nil {
+					return "", false, err
+				}
+				parseBytes := int64(len(sourceText))
+				if detectedFormat == "json" {
+					parseBytes = int64(len(strings.TrimSpace(sourceText)))
+				}
+				if err := work.resize(2*parseBytes + (64 << 10)); err != nil {
+					return "", false, err
+				}
+				edited, err := nativejq.Edit(inv.ctx, nativejq.EditRequest{Path: resolved.DisplayPath, Format: format, Query: query, Text: sourceText, Vars: inv.editVars()})
+				if err != nil {
+					return "", false, err
+				}
+				return edited.Text, edited.Text != sourceText, nil
+			},
+		)
+		inv.published = inv.published || result.Accepted || result.Saved
+		return err
 	}
 	source, err := inv.capture(pathField)
 	if err != nil || source == nil {

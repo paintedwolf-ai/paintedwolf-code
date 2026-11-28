@@ -102,6 +102,20 @@ func (inv *invocation) unsupportedForm(word, reason string) error {
 		"command": inv.name(), "word": word, "expected": reason, "expected_form": inv.spec.Argv}}
 }
 
+// bindStructured resolves a write path for document-aware structured edits
+// (`edit`, `replace-lines`, `code-rewrite`) without prematurely autosaving a
+// person's unsaved draft to disk before read-basis and overlap validation.
+func (inv *invocation) bindStructured(operand string) (projectpaths.BoundPath, error) {
+	bound, err := inv.paths.Bind(inv.ctx, operand, true)
+	if err != nil {
+		return projectpaths.BoundPath{}, err
+	}
+	if bound.Null {
+		return projectpaths.BoundPath{}, inv.usage(operand, "a filesystem path, not the null device")
+	}
+	return bound, nil
+}
+
 // bind resolves one operand through the invocation cwd under mutation or
 // read scope and returns the absolute address the owner re-resolves.
 func (inv *invocation) bind(operand string, write bool) (projectpaths.BoundPath, error) {
