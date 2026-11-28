@@ -154,7 +154,7 @@ func runShutdownCase(t *testing.T, sig syscall.Signal, handler bool) {
 				return false
 			}
 		}
-		return len(survivingDirs(runDirs)) == 0
+		return len(survivingDirs(t, runDirs)) == 0
 	})
 	for label, path := range map[string]string{
 		"unrelated sibling action workspace": unrelatedAction.Path(),

@@ -104,7 +104,7 @@ func TestConcurrentScansStayBounded(t *testing.T) {
 	if len(owned) < n {
 		reportf(t, "observer attributed %d run dirs for %d scans (sampling gap, not necessarily a leak)", len(owned), n)
 	}
-	leaked := survivingDirs(owned)
+	leaked := survivingDirs(t, owned)
 	if len(leaked) > 0 {
 		t.Errorf("run directories leaked under contention: %v", leaked)
 	}

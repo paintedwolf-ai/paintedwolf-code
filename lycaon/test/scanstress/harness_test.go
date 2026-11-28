@@ -284,25 +284,32 @@ func TestRunDirsFromRows(t *testing.T) {
 
 // awaitEngineWorking waits until an engine below root has written to its log,
 // so an interrupt meets an engine at work rather than one still starting.
-func awaitEngineWorking(t *testing.T, root int) {
+func awaitEngineWorking(t *testing.T, root int) string {
 	t.Helper()
+	var workingDir string
 	testutil.WaitFor(t, "the engine writes its log", func() bool {
 		for _, dir := range runDirsFromRows(descendants(processTable(t), root)) {
 			if info, err := os.Stat(filepath.Join(dir, "semgrep.log")); err == nil && info.Size() > 0 {
+				workingDir = dir
 				return true
 			}
 		}
 		return false
 	})
+	return workingDir
 }
 
 // survivingDirs reports which of the given paths still exist.
-func survivingDirs(paths []string) []string {
+func survivingDirs(t *testing.T, paths []string) []string {
+	t.Helper()
 	var out []string
 	for _, path := range paths {
-		if _, err := os.Stat(path); err == nil {
-			out = append(out, path)
+		_, err := os.Lstat(path)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
 		}
+		testutil.FailErr(t, "inspect scanner workspace "+path, err)
+		out = append(out, path)
 	}
 	return out
 }
