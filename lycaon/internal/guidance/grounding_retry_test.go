@@ -48,8 +48,6 @@ func TestGroundingOffenderKeyCitationsRequiredCodeOnly(t *testing.T) {
 }
 
 func TestGroundingOffenderKeyPreservesHandleAcrossForms(t *testing.T) {
-	t.Parallel()
-
 	ev := CloseoutEvidence{Ledger: evidence.AssembleLedger([]evidence.Record{
 		{Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "observed.go", LineRanges: []evidence.LineRange{{Start: 1, End: 5}}},
 	})}
