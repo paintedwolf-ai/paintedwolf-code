@@ -760,15 +760,20 @@ def run_k02_sidecar(
                     ok = sorted(i.path for i in ans.items) == ["README.md", "src/a.go"] and len(ans_gaps) == 0
                     report.record_edge(ename, ok, {"items": len(ans.items), "gaps": list(ans_gaps)})
                 elif emode == "over_budget":
-                    # Decision 107: controlled case with 20 files in wide/ (> walk_entries: 12) so actual truncation
-                    # (items < truth) is guaranteed alongside the honest lower bound (items <= truth).
+                    # Decision 107 & 121: controlled case with nested subdirs inside wide/ (> directory_entries: 3
+                    # and > walk_entries: 12) so actual truncation (items < truth) is guaranteed alongside lower bound.
                     (edir / ".paintedwolf").mkdir()
                     (edir / ".paintedwolf/source-scope.yaml").write_text(OVER_BUDGET_SCOPE_YAML, encoding="utf-8")
                     (edir / "wide").mkdir()
-                    for wi in range(20):
+                    for wi in range(10):
                         (edir / f"wide/f_{wi:02d}.txt").write_text("w\n", encoding="utf-8")
+                    for si in range(6):
+                        sub = edir / f"wide/sub_{si:02d}"
+                        sub.mkdir()
+                        for fi in range(3):
+                            (sub / f"nested_{fi:02d}.txt").write_text("n\n", encoding="utf-8")
                     (edir / "keep.txt").write_text("k\n", encoding="utf-8")
-                    truth_count = 22  # 20 wide + keep.txt + .paintedwolf/source-scope.yaml
+                    truth_count = 30  # 10 wide files + 18 nested subdir files + keep.txt + .paintedwolf/source-scope.yaml
                     pid, rids = driver.attach_project([edir])
                     wait_catalog_settled(driver, pid, rids[0], max_wait_s=15.0)
                     ans = driver.walk_catalog_index(pid, rids[0])
