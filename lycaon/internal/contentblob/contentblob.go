@@ -60,7 +60,14 @@ func Write(ctx context.Context, store blobstore.Store, plaintext []byte) (sha st
 	byteSize = int64(len(plaintext))
 	abs := filepath.Join(store.Root, filepath.FromSlash(rel))
 	if info, statErr := os.Stat(abs); statErr == nil {
-		return sha, byteSize, info.Size(), nil
+		if existing, readErr := Read(store, sha); readErr == nil {
+			existingSum := sha256.Sum256(existing)
+			if hex.EncodeToString(existingSum[:]) == sha {
+				return sha, byteSize, info.Size(), nil
+			}
+		}
+		// Stored bytes at this digest failed verification; replace atomically
+		// with the new verified bytes via staged temp sibling + rename.
 	}
 	limit := bytebound.Materialization(byteSize)
 	if limit <= 0 {

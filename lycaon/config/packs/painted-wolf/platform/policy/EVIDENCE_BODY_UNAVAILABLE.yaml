@@ -1,0 +1,23 @@
+spec_version: "1.0"
+id: EVIDENCE_BODY_UNAVAILABLE
+kind: invariant
+on: coordinator.closeout_check
+selector: {}
+requires_facts: [paintedwolf.offender_count, paintedwolf.offenders_sample, paintedwolf.reject_observation]
+when: paintedwolf.reject_observation == "evidence_body_unavailable"
+effect: warn
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:grounding
+message: Stored evidence body is unavailable — re-observe the source before citing it
+what: 'The stored evidence body for {{ paintedwolf.offenders_sample }} is damaged or unreadable, so that handle cannot ground citations.'
+cause: 'The content-addressed evidence blob failed integrity or decode verification when loading the session ledger.'
+why: '{{ paintedwolf.offenders_sample }} cannot verify claims while its stored body is unavailable; healthy records in the same session remain usable.'
+fix: 'Re-observe the source (for example with `cat -n` or `grep -n`) to mint a fresh verified evidence handle, then cite the new handle.'
+instead: 'Do not keep retrying citations against an unavailable handle; re-observe the source first.'
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      offender_count: 1
+      offenders_sample: read#1
+      reject_observation: evidence_body_unavailable
+      session_role: coordinator

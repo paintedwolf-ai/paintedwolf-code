@@ -49,8 +49,13 @@ func CloseoutRepairHintData(roots evidence.CitationRoots, draft CloseoutDraft, r
 				"defect": string(outcome.Outcome), "web_link": occurrence.Kind == citationmd.KindWebLink,
 			}
 			if occurrence.Citation != nil {
-				for key, value := range citationRepairOffer(roots, ev.Ledger, *occurrence.Citation) {
-					target[key] = value
+				if citationTargetsUnavailableBody(ev.Ledger, *occurrence.Citation) {
+					target["defect"] = "body_unavailable"
+					target["body_unavailable"] = true
+				} else {
+					for key, value := range citationRepairOffer(roots, ev.Ledger, *occurrence.Citation) {
+						target[key] = value
+					}
 				}
 			}
 			targets = append(targets, target)
@@ -65,6 +70,34 @@ func CloseoutRepairHintData(roots evidence.CitationRoots, draft CloseoutDraft, r
 		data["repair_observations"] = string(raw)
 	}
 	return data
+}
+
+// citationTargetsUnavailableBody reports whether a rejected citation targets
+// a record whose stored body failed verification and is unavailable.
+func citationTargetsUnavailableBody(ev evidence.Ledger, citation citationmd.Citation) bool {
+	if h := strings.TrimSpace(citation.Handle); h != "" {
+		if rec, ok := evidence.ResolveHandle(ev, h); ok && rec.BodyUnavailable {
+			return true
+		}
+	}
+	if p := strings.TrimSpace(citation.Path); p != "" {
+		hasUnavailable := false
+		hasHealthy := false
+		for _, rec := range ev.Handles {
+			if strings.TrimSpace(rec.Path) != p || rec.IsGate() {
+				continue
+			}
+			if rec.BodyUnavailable {
+				hasUnavailable = true
+			} else if rec.SupersededBy == "" {
+				hasHealthy = true
+			}
+		}
+		if hasUnavailable && !hasHealthy {
+			return true
+		}
+	}
+	return false
 }
 
 // citationRepairOffer names a replacement the model can actually send for a refused
@@ -108,7 +141,7 @@ func citationRepairOffer(roots evidence.CitationRoots, ev evidence.Ledger, citat
 	if citation.Line > 0 && evidence.UnionObserved(active, path, citation.Line, end) {
 		return map[string]any{"use": citationmd.Citation{Path: path, Line: citation.Line, EndLine: citation.EndLine}.Token()}
 	}
-	if newest == "" && known && cited.SupersededBy == "" && !cited.IsGate() && !cited.Survey {
+	if newest == "" && known && cited.SupersededBy == "" && !cited.IsGate() && !cited.Survey && !cited.BodyUnavailable {
 		newest = citation.Handle
 	}
 	if newest == "" && len(ev.ByPath) == 0 {
