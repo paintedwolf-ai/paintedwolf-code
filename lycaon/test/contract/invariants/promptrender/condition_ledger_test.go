@@ -18,8 +18,7 @@ import (
 // decision between two observed evaluations that hold the other atoms fixed,
 // or is ruled out by the guard's logic or a recorded production constraint.
 // Observations come from the host-state matrix, the fuzz target's seeds and
-// committed corpus, and cases generated for each gap. The ledger is logged as
-// the receipt.
+// committed corpus, and cases generated for each gap.
 func TestGuardAtomsHaveIndependentWitnesses(t *testing.T) {
 	stock, err := promptrender.LoadStock(t.Context())
 	if err != nil {
@@ -33,10 +32,14 @@ func TestGuardAtomsHaveIndependentWitnesses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encode condition ledger: %v", err)
 	}
-	t.Logf("condition ledger: sites=%d compound=%d obligations=%d witnesses=%d exclusions=%d gaps=%d stale=%d generated_targets=%d generated_found=%d generated_runs=%d generated_seconds=%.0f",
+	t.Logf("condition ledger: sites=%d compound=%d obligations=%d witnesses=%d exclusions=%d gaps=%d stale=%d generated_targets=%d generated_found=%d generated_runs=%d generated_seconds=%.0f json_bytes=%d",
 		len(ledger.Sites), ledger.CompoundSites, ledger.Obligations, len(ledger.Witnesses), len(ledger.Exclusions), len(ledger.Gaps), len(ledger.StaleConstraints),
-		ledger.Generation.Targets, ledger.Generation.Found, ledger.Generation.Runs, ledger.Generation.Seconds)
-	t.Logf("condition ledger JSON:\n%s", raw)
+		ledger.Generation.Targets, ledger.Generation.Found, ledger.Generation.Runs, ledger.Generation.Seconds, len(raw))
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("condition ledger JSON:\n%s", raw)
+		}
+	})
 	sum, err := promptrender.RunCartesianMatrix(t.Context(), stock)
 	if err != nil {
 		t.Fatalf("host-state matrix: %v", err)
