@@ -33,27 +33,16 @@ func ResolveObservation(roots CitationRoots, ev Ledger, handle string, triple Tr
 		if out.Excerpt == "" {
 			out.Verdict = VerdictTraced
 		}
-	} else if out.Excerpt != "" && observationAllowsTrace(rec) {
-		// Keep the existing paraphrase verdict, but never trace text the ledger
-		// can attribute to a different observation onto this explicit handle.
-		for other := range ev.Handles {
-			if other != handle && ExcerptMatchesHandle(ev, other, out.Path, out.Line, out.Excerpt) {
-				return out
-			}
+	} else if out.Excerpt != "" && out.Line > 0 && reason != VerifyReasonSourceRange && ExcerptMeaningful(out.Excerpt) {
+		// Re-anchor within the explicit observation when the excerpt matches
+		// exactly one delivered line of this record; zero or multiple matches
+		// stay VerdictUnverifiable.
+		if anchors := ExcerptAnchors(rec, out.Path, out.Excerpt); len(anchors) == 1 {
+			out.LineCorrectedFrom = out.Line
+			out.Line = anchors[0]
+			out.Reason = ""
+			out.Verdict = VerdictMatched
 		}
-		out.Verdict = VerdictTraced
 	}
 	return out
-}
-
-func observationAllowsTrace(rec Record) bool {
-	if rec.SourceDelivery != nil {
-		return false
-	}
-	switch RecordShape(rec) {
-	case ShapeFileRegion, ShapeCommand, ShapeOpaque:
-		return true
-	default:
-		return false
-	}
 }
