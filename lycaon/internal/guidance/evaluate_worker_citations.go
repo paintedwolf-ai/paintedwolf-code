@@ -415,6 +415,7 @@ func resolveWorkerFindingCitationExact(
 	rec, ok := evidence.ResolveHandle(ev, handle)
 	if !ok {
 		return evidence.Resolution{
+			Handle:  handle,
 			Line:    line,
 			Excerpt: excerpt,
 			Verdict: evidence.VerdictUnverifiable,
@@ -504,7 +505,14 @@ func excerptMatchesOtherHandle(ev evidence.Ledger, citedHandle string, line int,
 func FormatResolutionOffender(res evidence.Resolution, finding WorkerFindingInput) string {
 	path := strings.TrimSpace(res.Path)
 	if res.EndLine > 0 {
-		return formatRangeOffender(path, res.Handle, res.Line, res.EndLine, res.Excerpt)
+		handle := strings.TrimSpace(res.Handle)
+		if handle == "" {
+			handle = strings.TrimSpace(finding.Evidence)
+		}
+		if path == "" {
+			path = strings.TrimSpace(finding.Path)
+		}
+		return formatRangeOffender(path, handle, res.Line, res.EndLine, res.Excerpt)
 	}
 	if path != "" {
 		if res.Line > 0 && strings.TrimSpace(res.Excerpt) != "" {
