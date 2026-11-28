@@ -78,18 +78,29 @@ func Resolve(
 		return out
 	}
 
-	if matchedHandle := matchedHandleForPath(ev, path, line, excerpt, handleHint); matchedHandle != "" {
+	matchedHandle, ambiguous := matchedHandleForPath(ev, path, line, excerpt, handleHint)
+	if ambiguous {
+		out.Verdict = VerdictAmbiguous
+		return out
+	}
+	if matchedHandle != "" {
 		out.Handle = matchedHandle
 		out.Verdict = VerdictMatched
 		// Only a verified excerpt is exact: without one the line was seen, not checked.
 		if excerpt == "" {
 			out.Verdict = VerdictTraced
 		}
+		if hint := strings.TrimSpace(handleHint); hint != "" && hint != matchedHandle {
+			out.Verdict = VerdictBound
+		}
 		return out
 	}
 
 	if anchor, handle, ok := reanchorExcerpt(ev, path, excerpt); ok {
 		out.LineCorrectedFrom, out.Line, out.Handle, out.Verdict = line, anchor, handle, VerdictMatched
+		if hint := strings.TrimSpace(handleHint); hint != "" && hint != handle {
+			out.Verdict = VerdictBound
+		}
 		return out
 	}
 
@@ -115,16 +126,75 @@ func NormalizeResolvePath(projectDir, raw string) string {
 	return ""
 }
 
-func matchedHandleForPath(ev Ledger, path string, line int, excerpt string, handleHint string) string {
-	if handleHint != "" && ExcerptMatchesHandle(ev, handleHint, path, line, excerpt) {
-		return handleHint
+// recordCitedLineBytes extracts the delivered content at the cited line(s) for
+// ambiguity comparison across current records (never prose), reusing the host's
+// numbered-line grammar via lineContentIndex (hostmarker.ParseNumberedLine).
+func recordCitedLineBytes(rec Record, claimPath string, line int) (string, bool) {
+	if line <= 0 {
+		if len(rec.Body) == 0 {
+			return "", false
+		}
+		return strings.Join(rec.Body, "\n"), true
 	}
-	for _, handle := range ev.ByPath[path] {
-		if ExcerptMatchesHandle(ev, handle, path, line, excerpt) {
-			return handle
+	if idx := lineContentIndex(rec, claimPath); idx != nil {
+		if text, ok := idx[line]; ok {
+			return text, true
 		}
 	}
-	return ""
+	if len(rec.LineRanges) == 1 {
+		idx := line - rec.LineRanges[0].Start
+		if idx >= 0 && idx < len(rec.Body) {
+			return rec.Body[idx], true
+		}
+	}
+	return "", false
+}
+
+func matchedHandleForPath(ev Ledger, path string, line int, excerpt string, handleHint string) (string, bool) {
+	if handleHint != "" && ExcerptMatchesHandle(ev, handleHint, path, line, excerpt) {
+		return handleHint, false
+	}
+	var matches []string
+	for _, handle := range ev.ByPath[path] {
+		if ExcerptMatchesHandle(ev, handle, path, line, excerpt) {
+			matches = append(matches, handle)
+		}
+	}
+	if len(matches) == 0 {
+		return "", false
+	}
+	if len(matches) == 1 {
+		return matches[0], false
+	}
+	// Multiple current records match every supplied field. Compare their delivered
+	// bytes at the cited coordinate: differing bytes are VerdictAmbiguous;
+	// identical delivered bytes stay grounded on the newest matching record for
+	// determinism; when fewer than two candidates carry delivered bytes at the
+	// coordinate (e.g. mutations or surveys), preserve existing ByPath order.
+	var refBytes string
+	refCount := 0
+	var newestWithBytes string
+	for _, h := range matches {
+		rec, ok := ev.Handles[h]
+		if !ok {
+			continue
+		}
+		b, ok := recordCitedLineBytes(rec, path, line)
+		if !ok {
+			continue
+		}
+		if refCount == 0 {
+			refBytes = b
+		} else if b != refBytes {
+			return "", true
+		}
+		refCount++
+		newestWithBytes = h
+	}
+	if refCount >= 2 {
+		return newestWithBytes, false
+	}
+	return matches[0], false
 }
 
 func excerptMatchesOtherPath(ev Ledger, citedPath string, line int, excerpt string) bool {
