@@ -1,5 +1,5 @@
 tags: [edit, filesystem]
-description: "Atomically replace or reindent line ranges. Use direct fields once, or operations for coupled non-overlapping seams in one snapshot. Inspect exact source ranges through command in an earlier response; concurrent edits rebase against that observation. EDITOR_DOCUMENT_READ_REQUIRED or EDITOR_DOCUMENT_CHANGING requires read and recomputation."
+description: "Atomically replace or reindent line ranges. Use direct fields once, or operations for coupled non-overlapping seams in one snapshot. Read the whole file in an earlier response (native command read or complete exact summarize window; partial windows and grep do not qualify); concurrent edits rebase against that observation. EDITOR_DOCUMENT_READ_REQUIRED or EDITOR_DOCUMENT_CHANGING requires rereading and recomputation."
 schema:
   type: object
   properties:
