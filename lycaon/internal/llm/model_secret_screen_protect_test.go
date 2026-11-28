@@ -209,3 +209,129 @@ func TestModelSecretScreenTrackAndReplaceFailsClosedWithoutUsableReference(t *te
 		})
 	}
 }
+
+func TestModelSecretScreenTrackAndReplaceMultiItemAndIdempotentRetry(t *testing.T) {
+	t.Parallel()
+
+	const secondSyntheticToken = "ghp_9xM2pL7vQ4nR8wK3zB6cT1yF5hJ0dS8uE2aN"
+	refs := []string{
+		"{{paintedwolf-secret:11111111-1111-4111-8111-111111111111}}",
+		"{{paintedwolf-secret:22222222-2222-4222-8222-222222222222}}",
+	}
+	m := modelScreenMatcher(t)
+
+	var (
+		mu         sync.Mutex
+		vaulted    []secretmatch.Remembered
+		byOpID     = map[string]string{}
+		askCalls   int
+		adoptCalls int
+	)
+
+	// Mirror production durable evidence: HarvestSource reports durable
+	// non-disclosable managed entries without reference tokens.
+	m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
+		mu.Lock()
+		defer mu.Unlock()
+		out := make([]secretmatch.HarvestedValue, 0, len(vaulted))
+		for _, v := range vaulted {
+			out = append(out, secretmatch.HarvestedValue{
+				Name:           v.Name,
+				Container:      v.Origin,
+				Secret:         v.Secret,
+				RuleID:         v.RuleID,
+				Title:          v.Title,
+				Source:         v.Source,
+				NonDisclosable: true,
+			})
+		}
+		return out
+	})
+
+	screen := NewModelSecretScreen(m, func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
+		mu.Lock()
+		askCalls++
+		mu.Unlock()
+		return secretmatch.Resolution{Decision: secretmatch.TrackAndReplace}, nil
+	})
+	screen.SetManagedSecretEvidence(func(_ context.Context, projectID, rootSessionID string) ([]secretmatch.Remembered, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if projectID != "proj-1" || rootSessionID != "sess-multi" {
+			return nil, errors.New("unexpected evidence scope")
+		}
+		out := make([]secretmatch.Remembered, len(vaulted))
+		copy(out, vaulted)
+		return out, nil
+	})
+	screen.SetManagedSecretAdopter(func(_ context.Context, req ManagedSecretAdoptRequest) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		adoptCalls++
+		if existing, ok := byOpID[req.OperationID]; ok {
+			return existing, nil
+		}
+		if len(vaulted) >= len(refs) {
+			return "", errors.New("unexpected extra vault entry")
+		}
+		ref := refs[len(vaulted)]
+		byOpID[req.OperationID] = ref
+		vaulted = append(vaulted, secretmatch.Remembered{
+			Secret:         req.Value,
+			Name:           req.Name,
+			Origin:         "managed secret",
+			RuleID:         secretmatch.ManagedRuleID,
+			Title:          "A managed secret",
+			Source:         secretmatch.SourceRememberedMatch,
+			Reference:      ref,
+			NonDisclosable: true,
+		})
+		return ref, nil
+	})
+
+	sink := &capturingRecipientProvider{}
+	wrapped := &secretScreenedProvider{
+		inner:       sink,
+		destination: ScreenDestination{ID: "provider-main", Label: "Provider Main"},
+		screen:      screen,
+	}
+
+	inbound := modelSecretRequest()
+	inbound.Debug.SessionID = "sess-multi"
+	inbound.Debug.RootSessionID = "sess-multi"
+	inbound.Messages[0].Content = "first=" + modelScreenGitHubToken + " second=" + secondSyntheticToken
+
+	// First send: one checkpoint resolution protects both distinct credentials.
+	_, err := wrapped.Complete(t.Context(), inbound)
+	testutil.FailErr(t, "first send with two credentials", err)
+
+	// Retry / second send in the same chat scope reuses both managed references idempotently.
+	_, err = wrapped.Complete(t.Context(), inbound)
+	testutil.FailErr(t, "retry send in same chat scope", err)
+
+	mu.Lock()
+	gotAsks := askCalls
+	gotAdopts := adoptCalls
+	gotVaulted := len(vaulted)
+	mu.Unlock()
+
+	if gotAsks != 1 {
+		t.Fatalf("ask calls = %d, want 1 (single checkpoint for both items, none on retry)", gotAsks)
+	}
+	if gotAdopts != 2 || gotVaulted != 2 {
+		t.Fatalf("adopter calls = %d, vaulted = %d; want 2 and 2 (idempotent without duplicates)", gotAdopts, gotVaulted)
+	}
+	if len(sink.received) != 2 {
+		t.Fatalf("captured provider requests = %d, want 2", len(sink.received))
+	}
+	for i, delivered := range sink.received {
+		for _, ref := range refs {
+			if bErr := verifyProviderRecipientBoundary(delivered, []string{modelScreenGitHubToken, secondSyntheticToken}, ref); bErr != nil {
+				t.Fatalf("request %d failed recipient-boundary check for %s: %v", i, ref, bErr)
+			}
+		}
+	}
+	if !strings.Contains(inbound.Messages[0].Content, modelScreenGitHubToken) || !strings.Contains(inbound.Messages[0].Content, secondSyntheticToken) {
+		t.Fatal("trackAndReplace mutated caller request")
+	}
+}
