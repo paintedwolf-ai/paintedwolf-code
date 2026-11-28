@@ -584,7 +584,7 @@ def build_read_call(read_form: str, target_file: str) -> tuple[str, dict[str, An
     if read_form == "outline":
         return ("command", {"command": f"outline --path {target_file}"})
     if read_form == "full_summarize":
-        return ("summarize", {"task": f"Read full contents of {target_file}", "paths": [target_file]})
+        return ("command", {"command": f"summarize --path {target_file}"})
     if read_form == "inline_input":
         return None
     raise ValueError(f"Unknown E01 read form: {read_form}")
