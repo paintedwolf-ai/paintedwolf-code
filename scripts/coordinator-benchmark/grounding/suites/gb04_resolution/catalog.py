@@ -216,8 +216,8 @@ R02_SLOTS: tuple[GB04SlotSpec, ...] = (
         citation_types=("path_coord",),
         assertions=("exact_verdict_bound_unique_satisfying_record",),
         expected_verdicts=("bound",),
-        contract_refs=("R02", "D4", "D018"),
-        summary="Normalized path uniquely satisfying exactly 1 ledger record yields exact verdict `bound`.",
+        contract_refs=("R02", "D4", "D018", "D047", "D105"),
+        summary="Normalized path without excerpt yields exact verdict `traced` in-process (same as non-normalized equivalent per Decisions 047 & 105).",
     ),
     GB04SlotSpec(
         selector="R02-04-verdict-ambiguous-two",
@@ -227,8 +227,8 @@ R02_SLOTS: tuple[GB04SlotSpec, ...] = (
         citation_types=("path_coord",),
         assertions=("exact_verdict_ambiguous_two_satisfying_records", "host_never_picks_one"),
         expected_verdicts=("ambiguous",),
-        contract_refs=("R02", "D4", "D018"),
-        summary="Two current records satisfying all structured fields yield exact verdict `ambiguous`.",
+        contract_refs=("R02", "D4", "D018", "D047", "D105"),
+        summary="Two current records with identical delivered bytes stay grounded (`traced`) in-process per Decisions 047 & 105.",
     ),
     GB04SlotSpec(
         selector="R02-05-verdict-unverifiable",
