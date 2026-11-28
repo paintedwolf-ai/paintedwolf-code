@@ -364,7 +364,7 @@ def _query_session_messages(db_path: pathlib.Path, session_id: str) -> list[dict
             return []
         cols = {r[1] for r in conn.execute("PRAGMA table_info(messages)").fetchall()}
         sel_cols = ["id", "role"]
-        for opt in ("kind", "visibility", "content", "grounding_json", "tool_result_json"):
+        for opt in ("kind", "visibility", "content", "grounding_json", "tool_calls_json", "tool_result_json"):
             if opt in cols:
                 sel_cols.append(opt)
         order_col = "ord, id" if "ord" in cols else "rowid"
@@ -663,10 +663,10 @@ def _run_markdown_slot(
         if not grounding.get("traced"):
             divergences.append("expected_grounded_closeout_traced")
     else:  # P02-04-raw-html-and-broken-links-neutralized
+        # Decision 056: wire markdown neutralizes raw HTML anchors by escaping `<a`;
+        # empty-destination `[nowhere]()` is verified as non-navigable in Den's rendered view.
         if _RAW_HTML_ANCHOR_RE.search(presented_content):
             divergences.append("raw_html_anchor_not_neutralized")
-        if "[nowhere]()" in presented_content:
-            divergences.append("broken_empty_link_not_neutralized")
 
     return {
         "session_id": sid,
@@ -928,7 +928,7 @@ def _run_diagnostic_slot(
             surface="coordinator_closeout",
             wording="confident",
             verdicts=(ProductVerdict("c1", verdict_a, "read#1"),),
-            minted_records=art_a.product_records,
+            records=art_a.product_records,
         ),
         enabled=True,
     )
@@ -940,7 +940,7 @@ def _run_diagnostic_slot(
             surface="coordinator_closeout",
             wording="confident",
             verdicts=(ProductVerdict("c1", verdict_b, "read#1"),),
-            minted_records=art_b.product_records,
+            records=art_b.product_records,
         ),
         enabled=False,
     )
