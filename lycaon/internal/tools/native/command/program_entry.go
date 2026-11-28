@@ -516,15 +516,15 @@ func (r *ProgramRuntime) beginProgram(ctx context.Context, run *programRun, outp
 	for _, location := range commandsurface.ExecutionLocations(plan.Statements) {
 		nodes = append(nodes, toolcontract.ProgramNode{ID: string(location.ID), SourceUnitID: "submitted", Span: location.Span})
 	}
-	start := toolcontract.ProgramStart{
-		Version:       toolcontract.ProgramVersion{ProgramID: run.root.Identity.ProgramID, ParentReceiptID: run.parentReceipt, RootExecutionID: run.root.Identity.ExecutionID, LanguageVersion: plan.Version, CatalogDigest: plan.CatalogDigest, SourceUnitID: "submitted", SourceDigest: plan.SourceDigest, SourceReference: sourceRef},
-		PlanReference: sourceRef, SourceExact: true, SyntaxValidated: true,
-		Sources: []toolcontract.ProgramSource{{UnitID: "submitted", Pin: toolcontract.SourcePin{SourceID: "submitted", Revision: plan.SourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: plan.SourceDigest, EndByte: int64(len(run.source))}, DetailReference: sourceRef}},
-		Nodes:   nodes,
-	}
 	spill, redacted, err := r.retainScreened(ctx, run.memory, run.root.Identity.ProgramID, []byte(run.source), scope, screening)
 	if err != nil {
 		return err
+	}
+	start := toolcontract.ProgramStart{
+		Version:       toolcontract.ProgramVersion{ProgramID: run.root.Identity.ProgramID, ParentReceiptID: run.parentReceipt, RootExecutionID: run.root.Identity.ExecutionID, LanguageVersion: plan.Version, CatalogDigest: plan.CatalogDigest, SourceUnitID: "submitted", SourceDigest: plan.SourceDigest, SourceReference: sourceRef},
+		PlanReference: sourceRef, SourceExact: !redacted && spill.EmittedSHA256 == plan.SourceDigest, SyntaxValidated: true,
+		Sources: []toolcontract.ProgramSource{{UnitID: "submitted", Pin: toolcontract.SourcePin{SourceID: "submitted", Revision: plan.SourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: plan.SourceDigest, EndByte: int64(len(run.source))}, DetailReference: sourceRef}},
+		Nodes:   nodes,
 	}
 	if err := outputs.BeginProgram(ctx, start, spill, redacted); err != nil {
 		return err
