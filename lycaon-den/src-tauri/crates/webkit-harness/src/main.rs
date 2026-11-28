@@ -8,6 +8,8 @@
 //! `./task den:webkit:scroll` runs the probe, then the invariants against the harness stack.
 
 #[cfg(target_os = "macos")]
+mod command_receipt_smoke;
+#[cfg(target_os = "macos")]
 mod driver;
 #[cfg(target_os = "macos")]
 mod probe;
@@ -16,7 +18,7 @@ mod scroll_invariants;
 #[cfg(target_os = "macos")]
 mod wheel_glide;
 
-const USAGE: &str = "usage: webkit-harness probe | scroll-invariants <harness URL> | wheel-glide";
+const USAGE: &str = "usage: webkit-harness probe | scroll-invariants <harness URL> | command-receipt-smoke <harness URL> | wheel-glide";
 
 #[cfg(target_os = "macos")]
 fn main() {
@@ -24,6 +26,7 @@ fn main() {
     let status = match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
         ["probe"] => probe::run(),
         ["scroll-invariants", url] => scroll_invariants::run(url),
+        ["command-receipt-smoke", url] => command_receipt_smoke::run(url),
         ["wheel-glide"] => wheel_glide::run(),
         _ => {
             eprintln!("{USAGE}");
