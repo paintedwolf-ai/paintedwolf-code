@@ -25,10 +25,10 @@ type Record struct {
 	// stay monotonic, but it can never ground any citation.
 	BodyUnavailable bool   `json:"-"`
 	Path            string // scope-relative when the tool touched a rooted path; normalized unrooted token otherwise
-	RootID       string // root ID of Path; empty for unrooted tokens
-	LineRanges   []LineRange
-	Body         []string // result lines for excerpt verification
-	URL          string   // primary observed URL
+	RootID          string // root ID of Path; empty for unrooted tokens
+	LineRanges      []LineRange
+	Body            []string // result lines for excerpt verification
+	URL             string   // primary observed URL
 
 	Surface          string // dom | tui | http
 	ArtifactID       string

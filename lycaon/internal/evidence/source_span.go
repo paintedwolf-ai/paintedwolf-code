@@ -3,9 +3,9 @@ package evidence
 import "strings"
 
 const (
-	VerifyReasonUnknownHandle = "unknown_handle"
-	VerifyReasonSourceWindow  = "invalid_source_window"
-	VerifyReasonSourcePath    = "source_path_mismatch"
+	VerifyReasonUnknownHandle   = "unknown_handle"
+	VerifyReasonSourceWindow    = "invalid_source_window"
+	VerifyReasonSourcePath      = "source_path_mismatch"
 	VerifyReasonSourceRange     = "outside_delivered_range"
 	VerifyReasonSourceExcerpt   = "source_excerpt_mismatch"
 	VerifyReasonBodyUnavailable = "observation_body_unavailable"

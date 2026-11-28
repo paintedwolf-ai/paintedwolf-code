@@ -48,8 +48,8 @@ type promptLoopTurnState struct {
 	// proseFinish is a forced or last-iteration closeout.
 	proseFinish             bool
 	damagedEvidenceReported bool
-	coordinatorFrame inject.CoordinatorTurnFrame
-	machine          inject.Machine
+	coordinatorFrame        inject.CoordinatorTurnFrame
+	machine                 inject.Machine
 
 	turnStreamState
 	turnBatchState
