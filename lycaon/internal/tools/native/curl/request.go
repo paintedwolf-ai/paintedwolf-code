@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 )
 
 // requestArgs builds the http_request owner's declared argument record from
@@ -167,6 +169,7 @@ func (inv *invocation) readFile(operand string) ([]byte, error) {
 	if int64(len(data)) > maximum {
 		return nil, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "resource_unit": "bytes", "maximum": maximum, "observed": int64(len(data))}}
 	}
+	sourceview.RecordOutsideRead(inv.ctx, inv.tc, bound.Resolved, textfile.SHA256(data), int64(len(data)))
 	return data, nil
 }
 
