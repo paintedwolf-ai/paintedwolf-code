@@ -47,6 +47,18 @@ WORDING_PREFIX: dict[str, str] = {
 _STRUCTURED_CODE_RE = re.compile(r"^Code:\s*([A-Z][A-Z0-9_]+)\s*$", re.MULTILINE)
 _UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 _SPOOFED_FIXTURE_UUID = "33333333-3333-4333-8333-333333333333"
+_GB06_REVIEW_WORKFLOW_ID = "gb06-review"
+_GB06_REVIEW_WORKFLOW_VERSION = "1.0.0"
+# Minimal valid 1x1 PNG (matches lycaon/internal/visual/test_producer.go).
+_PNG_1X1_BYTES = bytes(
+    [
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+        0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+        0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+        0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+        0x44, 0xAE, 0x42, 0x60, 0x82,
+    ]
+)
 
 
 @dataclass(frozen=True)
@@ -135,23 +147,23 @@ GB06_EXECUTION_SPECS: tuple[GB06ExecutionSpec, ...] = (
         family_id="W02",
         mode="verdict",
         expect_refusal=False,
-        expected_codes=("SUBMIT_VERDICT_UNAVAILABLE",),
-        notes="submit_verdict approve with grounded read#1:3 evidence (or owning state code outside review phase).",
+        expected_codes=(),
+        notes="submit_verdict APPROVED with grounded read#1:3 evidence in gb06-review review_loop phase.",
     ),
     GB06ExecutionSpec(
         selector="W02-02-verdict-changes-requested-with-finding",
         family_id="W02",
         mode="verdict",
         expect_refusal=False,
-        expected_codes=("SUBMIT_VERDICT_UNAVAILABLE",),
-        notes="submit_verdict changes_requested backed by stored grounded finding.",
+        expected_codes=(),
+        notes="submit_verdict CHANGES_REQUESTED backed by grounded evidence in gb06-review review_loop phase.",
     ),
     GB06ExecutionSpec(
         selector="W02-03-verdict-refused-wrong-phase",
         family_id="W02",
         mode="verdict",
         expect_refusal=True,
-        expected_codes=("SUBMIT_VERDICT_UNAVAILABLE",),
+        expected_codes=("SUBMIT_VERDICT_UNAVAILABLE", "TOOL_NOT_OFFERED"),
         notes="submit_verdict outside review phase returns owning refusal code.",
     ),
     GB06ExecutionSpec(
@@ -159,7 +171,7 @@ GB06_EXECUTION_SPECS: tuple[GB06ExecutionSpec, ...] = (
         family_id="W02",
         mode="verdict",
         expect_refusal=True,
-        expected_codes=("SUBMIT_VERDICT_CITATION_UNGROUNDED", "SUBMIT_VERDICT_UNAVAILABLE"),
+        expected_codes=("SUBMIT_VERDICT_CITATION_UNGROUNDED",),
         notes="submit_verdict citing unobserved handle is refused with typed code.",
     ),
     GB06ExecutionSpec(
@@ -167,15 +179,15 @@ GB06_EXECUTION_SPECS: tuple[GB06ExecutionSpec, ...] = (
         family_id="W02",
         mode="verdict",
         expect_refusal=True,
-        expected_codes=("SUBMIT_VERDICT_CITATIONS_REQUIRED", "SUBMIT_VERDICT_INVALID", "SUBMIT_VERDICT_UNAVAILABLE"),
-        notes="submit_verdict changes_requested without findings/citations returns owning refusal code.",
+        expected_codes=("SUBMIT_VERDICT_CITATIONS_REQUIRED", "SUBMIT_VERDICT_INVALID"),
+        notes="submit_verdict without required citations/findings returns owning refusal code.",
     ),
     GB06ExecutionSpec(
         selector="W02-06-verdict-refused-stale-revision",
         family_id="W02",
         mode="verdict",
         expect_refusal=True,
-        expected_codes=("SUBMIT_VERDICT_REVIEW_CONTEXT_CHANGED", "SUBMIT_VERDICT_CITATION_UNGROUNDED", "SUBMIT_VERDICT_UNAVAILABLE"),
+        expected_codes=("SUBMIT_VERDICT_REVIEW_CONTEXT_CHANGED", "SUBMIT_VERDICT_CITATION_UNGROUNDED"),
         notes="submit_verdict referencing stale revision after file mutation is refused.",
     ),
     GB06ExecutionSpec(
@@ -183,15 +195,15 @@ GB06_EXECUTION_SPECS: tuple[GB06ExecutionSpec, ...] = (
         family_id="W02",
         mode="verdict",
         expect_refusal=True,
-        expected_codes=("SUBMIT_VERDICT_UNAVAILABLE", "SUBMIT_VERDICT_ITERATION_CAP"),
-        notes="Duplicate submit_verdict returns owning refusal code.",
+        expected_codes=("SUBMIT_VERDICT_UNAVAILABLE", "SUBMIT_VERDICT_ITERATION_CAP", "TOOL_NOT_OFFERED"),
+        notes="Duplicate submit_verdict after terminal verdict returns owning refusal code.",
     ),
     GB06ExecutionSpec(
         selector="W02-08-verdict-refused-ungrounded-summary",
         family_id="W02",
         mode="verdict",
         expect_refusal=True,
-        expected_codes=("SUBMIT_VERDICT_CITATION_UNGROUNDED", "SUBMIT_VERDICT_UNAVAILABLE"),
+        expected_codes=("SUBMIT_VERDICT_CITATION_UNGROUNDED",),
         notes="submit_verdict with ungrounded summary claim is refused.",
     ),
     GB06ExecutionSpec(
@@ -428,6 +440,49 @@ def select_gb06_runs(
     return runs
 
 
+def _build_gb06_review_workflow_manifest() -> dict[str, Any]:
+    """Minimal project-local review_loop workflow exposing `submit_verdict` on `decision_adjudicate`."""
+    return {
+        "id": _GB06_REVIEW_WORKFLOW_ID,
+        "version": _GB06_REVIEW_WORKFLOW_VERSION,
+        "name": "GB06 Review Verdict Harness",
+        "description": "Minimal review_loop workflow for GB06 submit_verdict verification.",
+        "trigger": f"/{_GB06_REVIEW_WORKFLOW_ID}",
+        "request": {"question": "What should this review verify?"},
+        "initial_posture": "build",
+        "agents": [
+            {"id": "coordinator", "tools": "all"},
+            {"id": "code-reviewer", "tools": "profile"},
+        ],
+        "phases": [
+            {
+                "id": "review",
+                "activity_label": "Reviewing changes",
+                "coordinator_surface": "decision_adjudicate",
+                "surface_template": "agents/gb06_review.md",
+                "review_loop": {
+                    "evidence_key": "gb06_review",
+                    "iteration_cap": 3,
+                    "verdict_schema": {
+                        "verdict": "APPROVED|CHANGES_REQUESTED",
+                        "summary": "string",
+                    },
+                },
+                "on_enter": {"prompt_coordinator": True},
+                "complete_when": "gates_satisfied",
+                "gates": ["evidence_passed:gb06_review"],
+                "next": "done",
+            },
+            {
+                "id": "done",
+                "activity_label": "Done",
+                "terminal": True,
+                "complete_when": "orchestration_complete",
+            },
+        ],
+    }
+
+
 def _init_git_workspace(workspace: pathlib.Path) -> None:
     workspace.mkdir(parents=True, exist_ok=True)
     (workspace / "core.go").write_text(
@@ -438,6 +493,21 @@ def _init_git_workspace(workspace: pathlib.Path) -> None:
         f"func Line{i}() int {{ return {i} }}" for i in range(3, 101)
     ]
     (workspace / "long.go").write_text("\n".join(long_lines) + "\n", encoding="utf-8")
+    (workspace / "fixture.png").write_bytes(_PNG_1X1_BYTES)
+
+    wf_dir = workspace / ".paintedwolf" / "workflows" / _GB06_REVIEW_WORKFLOW_ID
+    wf_dir.mkdir(parents=True, exist_ok=True)
+    (wf_dir / "workflow.yaml").write_text(
+        json.dumps(_build_gb06_review_workflow_manifest(), indent=2) + "\n",
+        encoding="utf-8",
+    )
+    prompt_dir = workspace / ".paintedwolf" / "prompt_files" / "agents"
+    prompt_dir.mkdir(parents=True, exist_ok=True)
+    (prompt_dir / "gb06_review.md").write_text(
+        "Inspect core.go and record the review verdict with submit_verdict.\n",
+        encoding="utf-8",
+    )
+
     for cmd in (
         ["git", "init", "-q"],
         ["git", "add", "."],
@@ -580,19 +650,64 @@ def _query_visual_artifact_ids(db_path: pathlib.Path, session_id: str) -> list[s
     return ids
 
 
-def _answer_tool(client: Any, session_id: str, tool_name: str, tool_args: dict[str, Any], *, timeout: float = 120.0) -> dict[str, Any]:
+def _query_worker_jobs(db_path: pathlib.Path, parent_session_id: str) -> list[dict[str, Any]]:
+    if not db_path.is_file():
+        return []
+    with contextlib.closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as conn:
+        conn.row_factory = sqlite3.Row
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        if "worker_jobs" not in tables:
+            return []
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(worker_jobs)").fetchall()}
+        want = [c for c in ("id", "parent_session_id", "child_session_id", "agent_type", "status", "merge_status", "error") if c in cols]
+        if "parent_session_id" not in want:
+            return []
+        rows = conn.execute(
+            f"SELECT {', '.join(want)} FROM worker_jobs WHERE parent_session_id = ? ORDER BY rowid",
+            (parent_session_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def _answer_tool(
+    client: Any,
+    session_id: str,
+    tool_name: str,
+    tool_args: dict[str, Any],
+    *,
+    timeout: float = 120.0,
+) -> tuple[dict[str, Any], str]:
     req = client.wait_pending(session_id, timeout=timeout)
-    if tool_name not in (req.get("tools") or []):
+    offered = req.get("tools") or []
+    if tool_name not in offered and "request_tools" in offered:
         client.respond(
             req["id"],
             tool_calls=[{"id": str(uuid.uuid4()), "name": "request_tools", "args": {"need": tool_name}}],
         )
         req = client.wait_pending(session_id, timeout=timeout)
+    call_id = str(uuid.uuid4())
     client.respond(
         req["id"],
-        tool_calls=[{"id": str(uuid.uuid4()), "name": tool_name, "args": tool_args}],
+        tool_calls=[{"id": call_id, "name": tool_name, "args": tool_args}],
     )
-    return req
+    return req, call_id
+
+
+def _wait_tool_result(
+    db_path: pathlib.Path,
+    session_id: str,
+    tool_name: str,
+    call_id: str,
+    *,
+    timeout: float = 30.0,
+) -> dict[str, Any] | None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        for tr in _query_tool_results(db_path, session_id, tool_name):
+            if tr.get("tool_call_id") == call_id:
+                return tr
+        time.sleep(0.05)
+    return None
 
 
 def _run_finding_slot(
@@ -603,28 +718,75 @@ def _run_finding_slot(
     unit: GB06RunUnit,
     trace_log: pathlib.Path | None,
 ) -> dict[str, Any]:
+    """Run W01 on a `code-reviewer` worker where `record_finding: sticky` is offered."""
     selector = unit.spec.selector
     prefix = WORDING_PREFIX[unit.wording]
-    sid = client.create_session(project_id, posture="build")["id"]
-    client.wait_session_ready(sid)
-    before = probe_store_db(sidecar.store_db_path, sid, trace_log_path=trace_log)
-    p = client.send_prompt(sid, f"{prefix} Record a grounded finding for {selector}.")
-    submission_id = str(p.get("submission_id") or p.get("id") or "")
+    root_sid = client.create_session(project_id, posture="build")["id"]
+    client.wait_session_ready(root_sid)
+    ignore_sessions = {root_sid}
 
-    # Step 1: gather evidence according to slot
+    before_root = probe_store_db(sidecar.store_db_path, "", root_id=root_sid, trace_log_path=trace_log)
+    child_sid, child_req = _dispatch_worker_and_get_child(
+        client,
+        db_path=sidecar.store_db_path,
+        root_sid=root_sid,
+        agent_type="code-reviewer",
+        scope_mode="read",
+        scope_paths=("core.go",),
+        goal=f"Record a grounded finding for {selector}",
+        ignore_sessions=ignore_sessions,
+    )
+    before_child = probe_store_db(sidecar.store_db_path, child_sid, trace_log_path=trace_log)
+
+    def _complete_leg_call(brief: str, findings: list[dict[str, Any]], leg_status: str = "complete") -> list[dict[str, Any]]:
+        return [
+            {
+                "id": str(uuid.uuid4()),
+                "name": "complete_leg",
+                "args": {"leg_status": leg_status, "brief": brief, "findings": findings},
+            }
+        ]
+
+    # Step 1: gather evidence on the code-reviewer worker according to slot
     if selector == "W01-04-finding-from-artifact":
-        _answer_tool(client, sid, "emit_visual_fixture", {"caption": "GB06 artifact fixture", "perceive": True})
-        req = client.wait_pending(sid, timeout=120.0)
-        artifact_ids = _query_visual_artifact_ids(sidecar.store_db_path, sid)
-        ref = f"artifact:{artifact_ids[0]}" if artifact_ids else "surface#1"
-        if "record_finding" not in (req.get("tools") or []):
+        offered = child_req.get("tools") or []
+        if "emit_visual_fixture" in offered:
             client.respond(
-                req["id"],
-                tool_calls=[{"id": str(uuid.uuid4()), "name": "request_tools", "args": {"need": "record_finding"}}],
+                child_req["id"],
+                tool_calls=[
+                    {
+                        "id": str(uuid.uuid4()),
+                        "name": "emit_visual_fixture",
+                        "args": {"caption": "GB06 artifact fixture", "perceive": True},
+                    }
+                ],
             )
-            req = client.wait_pending(sid, timeout=120.0)
+            used_visual = True
+        elif "view_image" in offered:
+            client.respond(
+                child_req["id"],
+                tool_calls=[{"id": str(uuid.uuid4()), "name": "view_image", "args": {"path": "fixture.png"}}],
+            )
+            used_visual = True
+        else:
+            client.respond(
+                child_req["id"],
+                tool_calls=[{"id": str(uuid.uuid4()), "name": "command", "args": {"command": "cat -n core.go"}}],
+            )
+            used_visual = False
+
+        child_req2 = client.wait_pending(child_sid, timeout=120.0)
+        artifact_ids = _query_visual_artifact_ids(sidecar.store_db_path, child_sid) or _query_visual_artifact_ids(
+            sidecar.store_db_path, root_sid
+        )
+        if artifact_ids:
+            ref = f"artifact:{artifact_ids[0]}"
+        elif used_visual:
+            ref = "surface#1"
+        else:
+            ref = "read#1:3"
         client.respond(
-            req["id"],
+            child_req2["id"],
             tool_calls=[
                 {
                     "id": str(uuid.uuid4()),
@@ -633,8 +795,28 @@ def _run_finding_slot(
                 }
             ],
         )
+        child_req3 = client.wait_pending(child_sid, timeout=120.0)
+        if used_visual:
+            client.respond(
+                child_req3["id"],
+                tool_calls=[{"id": str(uuid.uuid4()), "name": "command", "args": {"command": "cat -n core.go"}}],
+            )
+            child_req4 = client.wait_pending(child_sid, timeout=120.0)
+        else:
+            child_req4 = child_req3
+        client.respond(
+            child_req4["id"],
+            tool_calls=_complete_leg_call(
+                f"{prefix} Visual artifact finding recorded.",
+                [{"path": "core.go", "line": 3, "evidence": "read#1", "note": "Check() observed."}],
+            ),
+        )
     else:
-        _answer_tool(client, sid, "command", {"command": "cat -n core.go"})
+        client.respond(
+            child_req["id"],
+            tool_calls=[{"id": str(uuid.uuid4()), "name": "command", "args": {"command": "cat -n core.go"}}],
+        )
+        child_req2 = client.wait_pending(child_sid, timeout=120.0)
         if selector == "W01-01-finding-from-file-read":
             ref = "read#1:3"
             summary = f"{prefix} Check() returns true."
@@ -650,22 +832,39 @@ def _run_finding_slot(
         else:  # W01-06-finding-unsupported-excerpt-never-stored
             ref = 'read#1:3 "panic()"'
             summary = f"{prefix} Fabricated excerpt claim."
-        _answer_tool(client, sid, "record_finding", {"summary": summary, "ref": ref})
+        client.respond(
+            child_req2["id"],
+            tool_calls=[{"id": str(uuid.uuid4()), "name": "record_finding", "args": {"summary": summary, "ref": ref}}],
+        )
+        child_req3 = client.wait_pending(child_sid, timeout=120.0)
+        client.respond(
+            child_req3["id"],
+            tool_calls=_complete_leg_call(
+                f"{prefix} Finding step completed.",
+                [{"path": "core.go", "line": 3, "evidence": "read#1", "note": "Check() observed."}],
+            ),
+        )
 
-    # Finish turn cleanly
-    close_req = client.wait_pending(sid, timeout=120.0)
-    client.respond(close_req["id"], content=f"{prefix} Finding step completed [read#1:3]." if selector != "W01-04-finding-from-artifact" else f"{prefix} Finding step completed.")
-    client.wait_settled(sid, submission_id=submission_id, timeout=90.0)
+    # Consume root resume turn when worker finishes
+    try:
+        root_resume = client.wait_pending(root_sid, timeout=60.0)
+        client.respond(root_resume["id"], content=f"{prefix} Finding step completed.")
+    except TimeoutError:
+        pass
 
-    after = probe_store_db(sidecar.store_db_path, sid, trace_log_path=trace_log)
-    delta = after.delta_observed(before)
-    stored = _query_stored_findings(sidecar.store_db_path, sid)
-    tool_results = _query_tool_results(sidecar.store_db_path, sid, "record_finding")
+    after_root = probe_store_db(sidecar.store_db_path, "", root_id=root_sid, trace_log_path=trace_log)
+    after_child = probe_store_db(sidecar.store_db_path, child_sid, trace_log_path=trace_log)
+    delta_root = after_root.delta_observed(before_root)
+    delta_child = after_child.delta_observed(before_child)
+    refusals: WorkerReportRefusalSummary = probe_worker_report_refusals(sidecar.store_db_path, child_sid)
+    # FindingsHandler stores findings keyed by rootSession (FindingsScopeKey).
+    stored = _query_stored_findings(sidecar.store_db_path, root_sid)
+    tool_results = _query_tool_results(sidecar.store_db_path, child_sid, "record_finding")
     observed_codes = sorted({c for tr in tool_results for c in tr["codes"]})
 
     divergences: list[str] = []
-    if not after.is_complete():
-        divergences.append(f"d10_incomplete:{after.unknown_counters()}")
+    if not after_root.is_complete() or not after_child.is_complete():
+        divergences.append(f"d10_incomplete:root={after_root.unknown_counters()},child={after_child.unknown_counters()}")
     if unit.exec_spec.expect_stored is False:
         if len(stored) != 0:
             divergences.append(f"unsupported_finding_stored:count={len(stored)}")
@@ -676,18 +875,45 @@ def _run_finding_slot(
             divergences.append(f"supported_finding_not_stored:codes={observed_codes}")
 
     return {
-        "session_id": sid,
-        "child_session_id": None,
+        "session_id": root_sid,
+        "child_session_id": child_sid,
         "passed": len(divergences) == 0,
         "divergences": divergences,
-        "d10_before": before.to_dict(),
-        "d10_after": after.to_dict(),
-        "d10_delta": delta,
-        "worker_report_refusals": None,
+        "d10_before": before_child.to_dict(),
+        "d10_after": after_child.to_dict(),
+        "d10_delta": delta_child,
+        "d10_root_delta": delta_root,
+        "worker_report_refusals": refusals.to_dict(),
         "observed_codes": observed_codes,
         "stored_findings_count": len(stored),
         "tool_results": tool_results,
     }
+
+
+def _drain_workflow_closeout(
+    client: Any,
+    *,
+    session_id: str,
+    workflow_run_id: str,
+    close_content: str,
+    timeout: float = 60.0,
+) -> None:
+    """Drain remaining coordinator turns until the workflow execution settles."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        obs = client.request(f"/harness/workflow-execution/{session_id}/{workflow_run_id}", missing=True)
+        if isinstance(obs, Mapping):
+            execution = obs.get("execution")
+            if isinstance(execution, Mapping) and execution.get("settled") is True:
+                return
+        pend = client.get_pending(session_id)
+        if pend is not None:
+            client.respond(pend["id"], content=close_content)
+        else:
+            state = client.request(f"/v1/sessions/{session_id}", missing=True)
+            if isinstance(state, Mapping) and state.get("status") == "idle":
+                return
+        time.sleep(0.1)
 
 
 def _run_verdict_slot(
@@ -699,68 +925,132 @@ def _run_verdict_slot(
     unit: GB06RunUnit,
     trace_log: pathlib.Path | None,
 ) -> dict[str, Any]:
+    """Run W02-01..W02-08 against a real `review_loop` phase (`decision_adjudicate`) except W02-03."""
     selector = unit.spec.selector
     prefix = WORDING_PREFIX[unit.wording]
+    use_review_workflow = selector != "W02-03-verdict-refused-wrong-phase"
+
+    if use_review_workflow:
+        client.request(
+            f"/v1/projects/{project_id}/trust",
+            {"enabled": {"project_settings": True, "prompt_overrides": True}, "mark_seen": True},
+            method="PATCH",
+        )
+
     sid = client.create_session(project_id, posture="build")["id"]
     client.wait_session_ready(sid)
     before = probe_store_db(sidecar.store_db_path, sid, trace_log_path=trace_log)
-    p = client.send_prompt(sid, f"{prefix} Exercise submit_verdict for {selector}.")
-    submission_id = str(p.get("submission_id") or p.get("id") or "")
 
-    if selector != "W02-03-verdict-refused-wrong-phase":
+    workflow_run_id = ""
+    submission_id = ""
+    if use_review_workflow:
+        admitted = client.request(
+            f"/v1/sessions/{sid}/workflow-runs",
+            {
+                "operation_id": str(uuid.uuid4()),
+                "workflow_id": _GB06_REVIEW_WORKFLOW_ID,
+                "workflow_version": _GB06_REVIEW_WORKFLOW_VERSION,
+                "request": f"{prefix} Exercise submit_verdict for {selector}.",
+            },
+        )
+        workflow_run_id = str(admitted.get("id") or "")
+    else:
+        p = client.send_prompt(sid, f"{prefix} Exercise submit_verdict for {selector}.")
+        submission_id = str(p.get("submission_id") or p.get("id") or "")
+
+    if use_review_workflow:
         _answer_tool(client, sid, "command", {"command": "cat -n core.go"})
 
-    if selector == "W02-02-verdict-changes-requested-with-finding":
-        _answer_tool(
-            client,
-            sid,
-            "record_finding",
-            {"summary": f"{prefix} Grounded review finding.", "ref": "read#1:3"},
-        )
-    elif selector == "W02-06-verdict-refused-stale-revision":
+    if selector == "W02-06-verdict-refused-stale-revision":
         (workspace / "core.go").write_text(
             "package core\n\nfunc Check() bool { return false }\n",
             encoding="utf-8",
         )
 
+    grounded_approved_args: dict[str, Any] = {
+        "verdict": {"verdict": "APPROVED", "summary": f"{prefix} Approved with evidence."},
+        "cited_evidence": [{"handle": "read#1", "path": "core.go", "line": 3}],
+    }
+
     if selector == "W02-04-verdict-refused-unobserved-citation":
         verdict_args: dict[str, Any] = {
-            "verdict": {"verdict": "approved", "summary": f"{prefix} Approved."},
+            "verdict": {"verdict": "APPROVED", "summary": f"{prefix} Approved."},
             "cited_evidence": [{"handle": "read#99", "path": "core.go", "line": 1}],
         }
     elif selector == "W02-05-verdict-refused-missing-findings":
         verdict_args = {
-            "verdict": {"verdict": "changes_requested", "summary": f"{prefix} Changes needed."},
+            "verdict": {"verdict": "APPROVED", "summary": f"{prefix} Missing citations."},
             "cited_evidence": [],
+        }
+    elif selector == "W02-06-verdict-refused-stale-revision":
+        verdict_args = {
+            "verdict": {"verdict": "APPROVED", "summary": f"{prefix} Stale revision check."},
+            "cited_evidence": [
+                {
+                    "handle": "read#1",
+                    "path": "core.go",
+                    "line": 3,
+                    "excerpt": "func Check() bool { return false }",
+                }
+            ],
         }
     elif selector == "W02-08-verdict-refused-ungrounded-summary":
         verdict_args = {
-            "verdict": {"verdict": "approved", "summary": f"{prefix} Ungrounded claim [read#77:9]."},
+            "verdict": {"verdict": "APPROVED", "summary": f"{prefix} Ungrounded claim [read#77:9]."},
             "cited_evidence": [{"handle": "read#77", "path": "missing.go", "line": 9}],
         }
     elif selector == "W02-02-verdict-changes-requested-with-finding":
         verdict_args = {
-            "verdict": {"verdict": "changes_requested", "summary": f"{prefix} Changes requested."},
+            "verdict": {"verdict": "CHANGES_REQUESTED", "summary": f"{prefix} Changes requested."},
             "cited_evidence": [{"handle": "read#1", "path": "core.go", "line": 3}],
         }
     else:
-        verdict_args = {
-            "verdict": {"verdict": "approved", "summary": f"{prefix} Approved with evidence."},
-            "cited_evidence": [{"handle": "read#1", "path": "core.go", "line": 3}],
-        }
+        verdict_args = grounded_approved_args
 
     _answer_tool(client, sid, "submit_verdict", verdict_args)
-    if selector == "W02-07-verdict-refused-duplicate-submission":
-        _answer_tool(client, sid, "submit_verdict", verdict_args)
 
-    close_req = client.wait_pending(sid, timeout=120.0)
+    if selector == "W02-07-verdict-refused-duplicate-submission":
+        # After terminal APPROVED auto-advances to `done`, attempt a second submit_verdict.
+        try:
+            dup_req = client.wait_pending(sid, timeout=10.0)
+        except TimeoutError:
+            client.send_prompt(sid, f"{prefix} Submit duplicate verdict.")
+            dup_req = client.wait_pending(sid, timeout=60.0)
+        client.respond(
+            dup_req["id"],
+            tool_calls=[{"id": str(uuid.uuid4()), "name": "submit_verdict", "args": verdict_args}],
+        )
+    elif use_review_workflow and selector != "W02-01-verdict-approved-with-evidence":
+        # Complete the review_loop cleanly on the next turn so the workflow settles without repair stalls.
+        try:
+            repair_req = client.wait_pending(sid, timeout=30.0)
+            if "submit_verdict" in (repair_req.get("tools") or []):
+                client.respond(
+                    repair_req["id"],
+                    tool_calls=[{"id": str(uuid.uuid4()), "name": "submit_verdict", "args": grounded_approved_args}],
+                )
+            else:
+                client.respond(repair_req["id"], content=f"{prefix} Verdict check finished [read#1:3].")
+        except TimeoutError:
+            pass
+
     close_content = (
         f"{prefix} Verdict check finished."
         if selector == "W02-03-verdict-refused-wrong-phase"
         else f"{prefix} Verdict check finished [read#1:3]."
     )
-    client.respond(close_req["id"], content=close_content)
-    client.wait_settled(sid, submission_id=submission_id, timeout=90.0)
+    if use_review_workflow and workflow_run_id:
+        _drain_workflow_closeout(
+            client,
+            session_id=sid,
+            workflow_run_id=workflow_run_id,
+            close_content=close_content,
+            timeout=60.0,
+        )
+    else:
+        close_req = client.wait_pending(sid, timeout=120.0)
+        client.respond(close_req["id"], content=close_content)
+        client.wait_settled(sid, submission_id=submission_id, timeout=90.0)
 
     after = probe_store_db(sidecar.store_db_path, sid, trace_log_path=trace_log)
     delta = after.delta_observed(before)
@@ -773,23 +1063,22 @@ def _run_verdict_slot(
     if unit.exec_spec.expect_refusal:
         if not tool_results:
             divergences.append("submit_verdict_never_executed")
+        elif selector == "W02-07-verdict-refused-duplicate-submission" and len(tool_results) < 2:
+            divergences.append(f"duplicate_submit_verdict_missing_second_call:count={len(tool_results)}")
         elif all(tr["outcome"].lower() == "completed" for tr in tool_results):
             divergences.append("submit_verdict_unexpectedly_accepted")
         elif unit.exec_spec.expected_codes and not any(c in observed_codes for c in unit.exec_spec.expected_codes):
             divergences.append(f"unexpected_verdict_code:expected={list(unit.exec_spec.expected_codes)},observed={observed_codes}")
     else:
-        # Without an active review_loop workflow phase, D1 returns SUBMIT_VERDICT_UNAVAILABLE;
-        # record cleanly whether accepted or refused from owning state.
         if not tool_results:
             divergences.append("submit_verdict_never_executed")
-        elif not any(tr["outcome"].lower() == "completed" for tr in tool_results) and not any(
-            c in observed_codes for c in unit.exec_spec.expected_codes
-        ):
+        elif not any(tr["outcome"].lower() == "completed" for tr in tool_results):
             divergences.append(f"unexpected_verdict_outcome:observed={observed_codes}")
 
     return {
         "session_id": sid,
         "child_session_id": None,
+        "workflow_run_id": workflow_run_id or None,
         "passed": len(divergences) == 0,
         "divergences": divergences,
         "d10_before": before.to_dict(),
@@ -805,6 +1094,7 @@ def _run_verdict_slot(
 def _dispatch_worker_and_get_child(
     client: Any,
     *,
+    db_path: pathlib.Path,
     root_sid: str,
     agent_type: str,
     scope_mode: str,
@@ -814,8 +1104,21 @@ def _dispatch_worker_and_get_child(
     timeout: float = 180.0,
 ) -> tuple[str, dict[str, Any]]:
     client.send_prompt(root_sid, f"Dispatch {agent_type} to {goal}.")
-    _answer_tool(client, root_sid, "update_progress", {"content": f"## Progress\n- [ ] {goal}"}, timeout=timeout)
-    _answer_tool(
+    _, progress_cid = _answer_tool(
+        client,
+        root_sid,
+        "update_progress",
+        {"content": f"## Progress\n- [ ] {goal}\n"},
+        timeout=timeout,
+    )
+    progress_tr = _wait_tool_result(db_path, root_sid, "update_progress", progress_cid, timeout=30.0)
+    if progress_tr is not None and progress_tr.get("outcome", "").lower() != "completed":
+        raise RuntimeError(
+            f"update_progress before task({agent_type}) rejected: "
+            f"codes={progress_tr.get('codes')} content={str(progress_tr.get('content') or '')[:300]}"
+        )
+
+    _, task_cid = _answer_tool(
         client,
         root_sid,
         "task",
@@ -826,28 +1129,56 @@ def _dispatch_worker_and_get_child(
         },
         timeout=timeout,
     )
+    task_tr = _wait_tool_result(db_path, root_sid, "task", task_cid, timeout=30.0)
+    if task_tr is not None and task_tr.get("outcome", "").lower() != "completed":
+        raise RuntimeError(
+            f"task({agent_type}, scope={scope_mode}) rejected: "
+            f"codes={task_tr.get('codes')} content={str(task_tr.get('content') or '')[:300]}"
+        )
 
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        # Check worker_jobs directly so failed jobs fail fast and known child_session_id is never starved by root_sid.
+        for job in _query_worker_jobs(db_path, root_sid):
+            status = str(job.get("status") or "").lower()
+            if status in {"failed", "canceled", "aborted"}:
+                raise RuntimeError(
+                    f"Worker job {job.get('id')} ({agent_type}) ended with status={status}: {job.get('error')}"
+                )
+            csid = str(job.get("child_session_id") or "")
+            if csid and csid not in ignore_sessions:
+                child_pend = client.get_pending(csid)
+                if child_pend is not None:
+                    ignore_sessions.add(csid)
+                    return csid, child_pend
+
         pend = client.request("/harness/llm/pending")
         if isinstance(pend, dict) and pend.get("pending"):
             psid = str(pend.get("session_id") or "")
             if psid == root_sid:
-                client.respond(
-                    pend["id"],
-                    tool_calls=[
-                        {
-                            "id": str(uuid.uuid4()),
-                            "name": "wait",
-                            "args": {"timeout_ms": 15000, "conditions": [{"kind": "next_worker_done"}]},
-                        }
-                    ],
-                )
+                offered = pend.get("tools") or []
+                if "wait" in offered:
+                    client.respond(
+                        pend["id"],
+                        tool_calls=[
+                            {
+                                "id": str(uuid.uuid4()),
+                                "name": "wait",
+                                "args": {"timeout_ms": 15000, "conditions": [{"kind": "next_worker_done"}]},
+                            }
+                        ],
+                    )
+                elif "request_tools" in offered:
+                    client.respond(
+                        pend["id"],
+                        tool_calls=[{"id": str(uuid.uuid4()), "name": "request_tools", "args": {"need": "wait"}}],
+                    )
             elif psid and psid not in ignore_sessions:
                 ignore_sessions.add(psid)
                 return psid, pend
         time.sleep(0.15)
-    raise TimeoutError(f"Worker child session for {agent_type} never became pending")
+    jobs = _query_worker_jobs(db_path, root_sid)
+    raise TimeoutError(f"Worker child session for {agent_type} never became pending (jobs={jobs})")
 
 
 def _run_worker_slot(
@@ -867,6 +1198,7 @@ def _run_worker_slot(
     before_root = probe_store_db(sidecar.store_db_path, "", root_id=root_sid, trace_log_path=trace_log)
     child_sid, child_req = _dispatch_worker_and_get_child(
         client,
+        db_path=sidecar.store_db_path,
         root_sid=root_sid,
         agent_type=unit.exec_spec.worker_agent_type,
         scope_mode=unit.exec_spec.worker_scope_mode,
