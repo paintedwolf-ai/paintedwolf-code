@@ -972,6 +972,7 @@ def _run_warmed_slots(
                 if marker_b.exists():
                     marker_b.unlink()
                 s_pb, pid_pb = open_prompted_session(proj_b, "Cross-project isolation probe.")
+                _call_with_checkpoint_inspect(app, s_pb, "update_progress", {"content": "- [ ] Cross-project marker probe\n"}, action=None, timeout_s=30.0)
                 c_cross = _call_with_checkpoint_inspect(
                     app, s_pb, "command",
                     {"command": proj_cmd},
@@ -1011,6 +1012,7 @@ def _run_warmed_slots(
                 if marker_main.exists():
                     marker_main.unlink()
                 s_del = open_prompted_session_in_project(pid_p1, "Fresh chat after grant clear.")
+                _call_with_checkpoint_inspect(app, s_del, "update_progress", {"content": "- [ ] Post-revoke marker probe\n"}, action=None, timeout_s=30.0)
                 c_fresh = _call_with_checkpoint_inspect(
                     app, s_del, "command",
                     {"command": proj_cmd},
