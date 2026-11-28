@@ -76,11 +76,15 @@ window.__wkReceiptSmoke = {
   },
 
   async runBeforeReload(token) {
+    this.step = "waitHarness";
     await this.waitHarness();
+    this.step = "openProject";
     const proj = await window.__harness.openProject("Harness");
     if (proj?.ok !== true) throw new Error(`openProject failed: ${JSON.stringify(proj)}`);
+    this.step = "newSession";
     const sess = await window.__harness.newSession();
     if (sess?.ok !== true) throw new Error(`newSession failed: ${JSON.stringify(sess)}`);
+    this.step = "readSessionId";
     let sessionId = "";
     for (let i = 0; i < 60 && !sessionId; i++) {
       const el = document.querySelector('[data-testid="chat-stream"][data-session-id]');
@@ -89,26 +93,31 @@ window.__wkReceiptSmoke = {
     }
     if (!sessionId) throw new Error("chat-stream session_id did not mount");
 
+    this.step = "disableAutoAndPostPrompt";
     await this.api(token, "POST", "/harness/llm/auto", { enabled: false });
     await this.api(token, "POST", `/v1/sessions/${encodeURIComponent(sessionId)}/prompts`, {
       operation_id: crypto.randomUUID(),
       text: "Run WKWebView command receipt smoke and verify reload.",
     });
 
+    this.step = "requestUpdateProgress";
     const reqId = await this.invokeTool(token, sessionId, "request_tools", { need: "update_progress" });
     await this.waitToolCompleted(token, sessionId, reqId);
+    this.step = "updateProgressOpen";
     const progCallId = await this.invokeTool(token, sessionId, "update_progress", {
       content: "## Progress\n- [ ] Verify WKWebView receipt identity and reload\n",
     });
     const progRes = await this.waitToolCompleted(token, sessionId, progCallId);
     const snap = JSON.parse(progRes.content).snapshot;
 
+    this.step = "invokeCommand";
     const cmdCallId = await this.invokeTool(token, sessionId, "command", {
       command: "printf 'wkwebview-receipt-ok\\n' > wkwebview-proof.txt && cat wkwebview-proof.txt",
     });
     const cmdRes = await this.waitToolCompleted(token, sessionId, cmdCallId);
     const programId = cmdRes?.command_program?.program_id || "";
 
+    this.step = "updateProgressClose";
     const doneProgId = await this.invokeTool(token, sessionId, "update_progress", {
       content: "## Progress\n- [x] Verify WKWebView receipt identity and reload\n",
       expected_revision: snap.revision,
@@ -116,6 +125,7 @@ window.__wkReceiptSmoke = {
     });
     await this.waitToolCompleted(token, sessionId, doneProgId);
 
+    this.step = "finalAssistantReply";
     const finalPending = await this.api(token, "GET", `/harness/llm/pending?wait=30000&session_id=${encodeURIComponent(sessionId)}`);
     await this.api(token, "POST", "/harness/llm/respond", {
       id: finalPending.id,
@@ -123,19 +133,24 @@ window.__wkReceiptSmoke = {
       tool_calls: [],
     });
 
+    this.step = "inspectRenderedBeforeReload";
     return await this.inspectRendered(token, sessionId, cmdCallId, programId);
   },
 
   async runAfterReload(token, sessionId, expectedCallId, expectedProgramId) {
+    this.step = "afterReload:waitHarness";
     await this.waitHarness();
+    this.step = "afterReload:openProject";
     const proj = await window.__harness.openProject("Harness");
     if (proj?.ok !== true) throw new Error(`openProject after reload failed: ${JSON.stringify(proj)}`);
+    this.step = "afterReload:selectSession";
     if (typeof window.__harness.openSession === "function") {
       await window.__harness.openSession(sessionId);
     } else {
       const row = document.querySelector(`[data-session-id="${CSS.escape(sessionId)}"]`);
       if (row) row.click();
     }
+    this.step = "afterReload:inspectRendered";
     return await this.inspectRendered(token, sessionId, expectedCallId, expectedProgramId);
   },
 };
