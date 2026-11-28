@@ -19,9 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
@@ -260,32 +258,26 @@ func rememberDeliveredProgramWindow(ctx context.Context, tc tools.ToolContext, w
 	if window.DocumentID == "" || window.DocumentRevision <= 0 {
 		return
 	}
-	var resolved projectpaths.Resolved
+	rootID := strings.TrimSpace(window.RootID)
 	found := false
 	for _, root := range tc.Source.Roots {
-		if root.ID == window.RootID {
-			resolved = projectpaths.Resolved{
-				Root:        root,
-				ScopeRel:    window.ScopeRel,
-				Abs:         filepath.Join(root.Path, filepath.FromSlash(window.ScopeRel)),
-				DisplayPath: window.Path,
-			}
+		if strings.TrimSpace(root.ID) == rootID {
 			found = true
 			break
 		}
 	}
-	if !found {
+	if !found || rootID == "" {
 		return
 	}
-	documents, address, ok := sourceview.DocumentsFor(tc, resolved)
+	documents, ok := tools.ProjectDocuments(tc)
 	if !ok {
 		return
 	}
-	branch, err := tc.SourceBranch(address.RootID)
+	branch, err := tc.SourceBranch(rootID)
 	if err != nil {
 		return
 	}
-	doc, open, err := documents.OpenDocument(ctx, tc.Identity.ProjectID, branch, address.RootID, address.Path)
+	doc, open, err := documents.OpenDocument(ctx, tc.Identity.ProjectID, branch, rootID, window.ScopeRel)
 	if err != nil || !open {
 		return
 	}
