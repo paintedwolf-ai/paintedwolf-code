@@ -21,6 +21,8 @@ from grounding.suites.gb05_surfaces.full_runner import (
     OVERLAY_SOURCE_REL,
     OVERLAY_TARGET_REL,
     SIDECAR_SLOT_HANDLERS,
+    _build_complete_progress_args,
+    _extract_progress_snapshot,
     select_sidecar_runs,
 )
 
@@ -125,6 +127,38 @@ class TestGB05CatalogAndFixtures(unittest.TestCase):
             select_sidecar_runs(families=("NOPE",))
         with self.assertRaises(ValueError):
             select_sidecar_runs(wordings=("invalid",))
+
+    def test_extract_progress_snapshot_and_build_args(self) -> None:
+        pending = {
+            "messages": [
+                {"role": "user", "content": "Inspect service.go"},
+                {
+                    "role": "system",
+                    "content": (
+                        "Data from host:\nCurrent progress snapshot (host data):\n"
+                        '{"content":"## Progress\\n- [ ] Check","revision":"rev-123",'
+                        '"item_ids":["id-1"],"reconciliation":{"token":"tok-456"}}'
+                    ),
+                },
+            ]
+        }
+        snap = _extract_progress_snapshot(pending)
+        self.assertEqual(snap["revision"], "rev-123")
+        self.assertEqual(snap["item_ids"], ["id-1"])
+        args = _build_complete_progress_args(pending, "## Progress\n- [x] Check")
+        self.assertEqual(
+            args,
+            {
+                "content": "## Progress\n- [x] Check",
+                "expected_revision": "rev-123",
+                "item_ids": ["id-1"],
+                "reconciliation_token": "tok-456",
+            },
+        )
+        self.assertEqual(
+            _build_complete_progress_args({"messages": []}, "## Progress\n- [x] Check"),
+            {"content": "## Progress\n- [x] Check"},
+        )
 
 
 if __name__ == "__main__":

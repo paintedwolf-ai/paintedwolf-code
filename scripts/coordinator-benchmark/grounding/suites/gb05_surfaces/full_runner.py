@@ -985,7 +985,9 @@ def _handle_s03_02(ctx: RunnerContext, spec: GB05SlotSpec, w: str) -> SlotOutcom
     def _repair(rp: dict[str, Any], idx: int, st: dict[str, Any]) -> ScriptedTurn:
         rid = _extract_first_repair_id(rp)
         if idx == 0:
-            return ScriptedTurn(content=f"[cite: {rid} => read#88:3]")
+            # Missing repair target (citations_without_targets) triggers CITATION_REPAIR_INVALID
+            # while leaving the retained draft standing.
+            return ScriptedTurn(content="[read#1:3]")
         st["post_invalid_codes"] = _extract_codes_from_blobs([json.dumps(rp)])
         return ScriptedTurn(content=f"[cite: {rid} => read#1:3]")
 
@@ -1078,8 +1080,14 @@ def _handle_s03_04(ctx: RunnerContext, spec: GB05SlotSpec, w: str) -> SlotOutcom
 def _handle_s03_05(ctx: RunnerContext, spec: GB05SlotSpec, w: str) -> SlotOutcome:
     def _repair(_rp: dict[str, Any], idx: int, _st: dict[str, Any]) -> ScriptedTurn:
         if idx == 0:
-            # Operational tool batch retires pinned draft while retaining friction budget
-            return _cmd_read("helper.go")
+            # Operational tool batch (with side effects, not a read-only observer) retires
+            # the pinned draft while retaining friction/retry budgets (COV-03).
+            return ScriptedTurn(
+                tool_calls=(
+                    {"name": "command", "args": {"command": "touch .s03-05-op-marker"}},
+                    {"name": "command", "args": {"command": "cat -n helper.go"}},
+                )
+            )
         return ScriptedTurn(
             content=render_wording("Completely new summary: Helper() is at [read#2:3].", w)
         )
@@ -1104,6 +1112,41 @@ def _handle_s03_05(ctx: RunnerContext, spec: GB05SlotSpec, w: str) -> SlotOutcom
         "budget_retained_friction_charged": _friction_ge(cap, ctx, 1),
     }
     return _build_outcome(spec, w, cap, checks)
+
+
+def _extract_progress_snapshot(pending_req: Mapping[str, Any]) -> dict[str, Any]:
+    """Extract the latest host progress snapshot JSON from a pending request."""
+    for msg in reversed(pending_req.get("messages") or []):
+        content = str(msg.get("content") or "")
+        if "Current progress snapshot" not in content:
+            continue
+        start = content.find("{")
+        end = content.rfind("}")
+        if start != -1 and end > start:
+            try:
+                parsed = json.loads(content[start : end + 1])
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+    return {}
+
+
+def _build_complete_progress_args(pending_req: Mapping[str, Any], content: str) -> dict[str, Any]:
+    """Build valid update_progress args preserving expected_revision, item_ids, and reconciliation_token."""
+    snap = _extract_progress_snapshot(pending_req)
+    args: dict[str, Any] = {"content": content}
+    if snap.get("revision"):
+        args["expected_revision"] = snap["revision"]
+    if isinstance(snap.get("item_ids"), list):
+        args["item_ids"] = snap["item_ids"]
+    rec = snap.get("reconciliation")
+    rec_token = snap.get("reconciliation_token") or (
+        rec.get("token") if isinstance(rec, Mapping) else None
+    )
+    if rec_token:
+        args["reconciliation_token"] = rec_token
+    return args
 
 
 def _handle_s03_06(ctx: RunnerContext, spec: GB05SlotSpec, w: str) -> SlotOutcome:
@@ -1173,8 +1216,7 @@ def _handle_s03_06(ctx: RunnerContext, spec: GB05SlotSpec, w: str) -> SlotOutcom
                             "name": "complete_leg",
                             "args": {
                                 "leg_status": "blocked",
-                                "brief": "Simulated worker failure.",
-                                "blocker": "Simulated failure for COV-03 retirement test.",
+                                "brief": "Simulated worker failure for COV-03 retirement test.",
                             },
                         }
                     ],
@@ -1182,13 +1224,50 @@ def _handle_s03_06(ctx: RunnerContext, spec: GB05SlotSpec, w: str) -> SlotOutcom
                 break
         time.sleep(0.1)
 
-    # Root resumes after terminal worker card -> send new narrative citing [read#1:3]
+    # Root resumes after terminal worker card -> close out progress checklist first,
+    # then send new narrative citing [read#1:3] and handle any follow-up turns cleanly.
+    raw_pending: list[dict[str, Any]] = [dict(req1), dict(req2)]
     root_resume = ctx.client.wait_pending(sid, timeout=ctx.poll_timeout)
+    raw_pending.append(dict(root_resume))
     ctx.client.respond(
         root_resume["id"],
+        tool_calls=[
+            {
+                "id": str(uuid.uuid4()),
+                "name": "update_progress",
+                "args": _build_complete_progress_args(
+                    root_resume, "## Progress\n- [x] Check service.go"
+                ),
+            }
+        ],
+    )
+    root_closeout = ctx.client.wait_pending(sid, timeout=ctx.poll_timeout)
+    raw_pending.append(dict(root_closeout))
+    ctx.client.respond(
+        root_closeout["id"],
         content=render_wording("Retired draft after worker card; verified [read#1:3].", w),
     )
-    ctx.client.wait_settled(sid, sub_id, timeout=ctx.poll_timeout)
+    settle_deadline = time.monotonic() + ctx.poll_timeout
+    extra_turns = 0
+    settled = False
+    while time.monotonic() < settle_deadline:
+        st_resp = ctx.client.request(f"/v1/sessions/{sid}", missing=True)
+        if isinstance(st_resp, dict) and st_resp.get("status") == "idle":
+            settled = True
+            break
+        if extra_turns < 3:
+            rp = ctx.client.get_pending(sid)
+            if rp is not None:
+                raw_pending.append(dict(rp))
+                ctx.client.respond(
+                    rp["id"],
+                    content=render_wording("Retired draft after worker card; verified [read#1:3].", w),
+                )
+                extra_turns += 1
+                continue
+        time.sleep(0.05)
+    if not settled:
+        raise TimeoutError(f"S03-06 timed out waiting for session {sid} to settle")
 
     d10_after = probe_store_db(ctx.sidecar.store_db_path, sid, trace_log_path=ctx.trace_log)
     d10_delta = d10_after.delta_observed(d10_before)
@@ -1196,7 +1275,7 @@ def _handle_s03_06(ctx: RunnerContext, spec: GB05SlotSpec, w: str) -> SlotOutcom
     notes, reports, db_codes = _inspect_session_db_extras(ctx.sidecar.store_db_path, sid)
     cap = DynamicSessionCapture(
         session_id=sid,
-        raw_pending_requests=[],
+        raw_pending_requests=raw_pending,
         scripted_responses=[],
         delivered_tool_messages=[],
         delivery_log=DeliveryLog(records=()),
@@ -1224,27 +1303,104 @@ def _handle_s03_06(ctx: RunnerContext, spec: GB05SlotSpec, w: str) -> SlotOutcom
 
 
 def _handle_s03_07(ctx: RunnerContext, spec: GB05SlotSpec, w: str) -> SlotOutcome:
-    def _repair(_rp: dict[str, Any], idx: int, _st: dict[str, Any]) -> ScriptedTurn:
-        if idx == 0:
-            # Typed wake / wait tool call during repair retires pinned draft
-            return ScriptedTurn(
-                tool_calls=({"name": "command", "args": {"command": "cat -n extra.go"}},)
-            )
-        return ScriptedTurn(
-            content=render_wording("Woken and re-evaluated; Extra() at [read#2:3].", w)
-        )
+    # Pin draft, then issue a `wait` tool call to trigger a typed coordinator wake
+    # (WaitResume -> PromptSubmissionOriginLoopWake -> MessageKindHostLoopWake -> ResumeWork),
+    # retiring the pinned draft cleanly (COV-03).
+    sid = ctx.new_session()
+    d10_before = probe_store_db(ctx.sidecar.store_db_path, sid, trace_log_path=ctx.trace_log)
+    ctx.client.send_prompt(sid, "Read service.go and report.")
 
-    cap = _drive_dynamic_session(
-        ctx,
-        selector=spec.selector,
-        wording=w,
-        prompt_text="Read service.go and report.",
-        initial_turns=(
-            _cmd_read("service.go"),
-            ScriptedTurn(content=render_wording("Run() returns true at [read#99:3].", w)),
-        ),
-        repair_fn=_repair,
-        max_repairs=4,
+    raw_pending: list[dict[str, Any]] = []
+    # Step 1: read service.go -> read#1
+    req1 = ctx.client.wait_pending(sid, timeout=ctx.poll_timeout)
+    raw_pending.append(dict(req1))
+    ctx.client.respond(
+        req1["id"],
+        tool_calls=[{"id": "c-s0307-1", "name": "command", "args": {"command": "cat -n service.go"}}],
+    )
+    # Step 2: send bad closeout to pin draft
+    req2 = ctx.client.wait_pending(sid, timeout=ctx.poll_timeout)
+    raw_pending.append(dict(req2))
+    ctx.client.respond(req2["id"], content=render_wording("Run() returns true at [read#99:3].", w))
+
+    # Step 3: during repair, call wait with short timer to trigger typed coordinator wake
+    req3 = ctx.client.wait_pending(sid, timeout=ctx.poll_timeout)
+    raw_pending.append(dict(req3))
+    ctx.client.respond(
+        req3["id"],
+        tool_calls=[
+            {
+                "id": "c-s0307-wait",
+                "name": "wait",
+                "args": {"timeout_ms": 200, "reason": "Await typed coordinator wake"},
+            }
+        ],
+    )
+
+    # Step 4: coordinator wakes on timer -> read extra.go (read#2)
+    req4 = ctx.client.wait_pending(sid, timeout=ctx.poll_timeout)
+    raw_pending.append(dict(req4))
+    ctx.client.respond(
+        req4["id"],
+        tool_calls=[{"id": "c-s0307-2", "name": "command", "args": {"command": "cat -n extra.go"}}],
+    )
+
+    # Step 5: emit completely new narrative citing [read#2:3]
+    req5 = ctx.client.wait_pending(sid, timeout=ctx.poll_timeout)
+    raw_pending.append(dict(req5))
+    ctx.client.respond(
+        req5["id"],
+        content=render_wording("Woken and re-evaluated; Extra() at [read#2:3].", w),
+    )
+
+    settle_deadline = time.monotonic() + ctx.poll_timeout
+    extra_turns = 0
+    settled = False
+    while time.monotonic() < settle_deadline:
+        st_resp = ctx.client.request(f"/v1/sessions/{sid}", missing=True)
+        if isinstance(st_resp, dict) and st_resp.get("status") == "idle":
+            settled = True
+            break
+        if extra_turns < 3:
+            rp = ctx.client.get_pending(sid)
+            if rp is not None:
+                raw_pending.append(dict(rp))
+                ctx.client.respond(
+                    rp["id"],
+                    content=render_wording("Woken and re-evaluated; Extra() at [read#2:3].", w),
+                )
+                extra_turns += 1
+                continue
+        time.sleep(0.05)
+    if not settled:
+        raise TimeoutError(f"S03-07 timed out waiting for session {sid} to settle")
+
+    d10_after = probe_store_db(ctx.sidecar.store_db_path, sid, trace_log_path=ctx.trace_log)
+    d10_delta = d10_after.delta_observed(d10_before)
+    prod_recs, prod_closeouts = extract_product_observations(ctx.sidecar.store_db_path, sid)
+    notes, reports, db_codes = _inspect_session_db_extras(ctx.sidecar.store_db_path, sid)
+    pending_codes = _extract_codes_from_blobs([json.dumps(r) for r in raw_pending])
+    all_codes: list[str] = []
+    for c in [*pending_codes, *db_codes]:
+        if c not in all_codes:
+            all_codes.append(c)
+    cap = DynamicSessionCapture(
+        session_id=sid,
+        raw_pending_requests=raw_pending,
+        scripted_responses=[],
+        delivered_tool_messages=[],
+        delivery_log=DeliveryLog(records=()),
+        product_records=prod_recs,
+        product_closeouts=prod_closeouts,
+        agent_notes=notes,
+        user_visible_messages=[],
+        completion_reports=reports,
+        typed_codes=all_codes,
+        mid_turn_codes=[c for c in all_codes if c.startswith("MID_TURN_NOTE_")],
+        d10_before=d10_before,
+        d10_after=d10_after,
+        d10_delta=d10_delta,
+        extra={},
     )
     g = cap.last_grounding
     checks = {
@@ -1382,12 +1538,15 @@ def _handle_s04_03(ctx: RunnerContext, spec: GB05SlotSpec, w: str) -> SlotOutcom
 
 
 def _handle_s04_04(ctx: RunnerContext, spec: GB05SlotSpec, w: str) -> SlotOutcome:
+    # A closeout containing only a citation (no answer prose) has last_assistant != ""
+    # and draft.HasAnswer() == false, triggering COORDINATOR_CLOSEOUT_NO_ANSWER.
+    # (Whitespace-only content is rejected earlier in RoutingClient as ProviderEmptyCompletionError.)
     cap = _drive_dynamic_session(
         ctx,
         selector=spec.selector,
         wording=w,
         prompt_text="Read service.go and cite line 3.",
-        initial_turns=(_cmd_read("service.go"), ScriptedTurn(content="   ")),
+        initial_turns=(_cmd_read("service.go"), ScriptedTurn(content="[read#1:3]")),
         repair_fn=lambda _rp, _idx, _st: ScriptedTurn(
             content=render_wording("Run() returns true at [read#1:3].", w)
         ),
@@ -2087,16 +2246,57 @@ def _handle_s07_02(ctx: RunnerContext, spec: GB05SlotSpec, w: str) -> SlotOutcom
         ],
     )
 
-    # Wait for root to resume and extract leg-namespaced handle (e.g. leg-1:read#1 or service.go:3)
+    # Wait for root to resume and extract leg-namespaced handle (e.g. <child_sid>:read#1)
     root_resume = ctx.client.wait_pending(sid, timeout=ctx.poll_timeout)
+    raw_pending: list[dict[str, Any]] = [dict(root_resume)]
     resume_blob = json.dumps(root_resume)
     leg_match = re.search(r"([a-zA-Z0-9_-]+:read#1)", resume_blob)
-    cite_tok = f"[{leg_match.group(1)}:3]" if leg_match else "[service.go:3]"
+    if leg_match:
+        cite_tok = f"[{leg_match.group(1)}:3]"
+    elif child_sid:
+        cite_tok = f"[{child_sid}:read#1:3]"
+    else:
+        cite_tok = "[service.go:3]"
+    # Mark progress checklist complete before closeout so ProgressDelay does not block closeout.
     ctx.client.respond(
         root_resume["id"],
+        tool_calls=[
+            {
+                "id": str(uuid.uuid4()),
+                "name": "update_progress",
+                "args": _build_complete_progress_args(
+                    root_resume, "## Progress\n- [x] Survey service.go"
+                ),
+            }
+        ],
+    )
+    root_closeout = ctx.client.wait_pending(sid, timeout=ctx.poll_timeout)
+    raw_pending.append(dict(root_closeout))
+    ctx.client.respond(
+        root_closeout["id"],
         content=render_wording(f"Worker verified Run() at {cite_tok}.", w),
     )
-    ctx.client.wait_settled(sid, sub_id, timeout=ctx.poll_timeout)
+    settle_deadline = time.monotonic() + ctx.poll_timeout
+    extra_turns = 0
+    settled = False
+    while time.monotonic() < settle_deadline:
+        st_resp = ctx.client.request(f"/v1/sessions/{sid}", missing=True)
+        if isinstance(st_resp, dict) and st_resp.get("status") == "idle":
+            settled = True
+            break
+        if extra_turns < 3:
+            rp = ctx.client.get_pending(sid)
+            if rp is not None:
+                raw_pending.append(dict(rp))
+                ctx.client.respond(
+                    rp["id"],
+                    content=render_wording(f"Worker verified Run() at {cite_tok}.", w),
+                )
+                extra_turns += 1
+                continue
+        time.sleep(0.05)
+    if not settled:
+        raise TimeoutError(f"S07-02 timed out waiting for session {sid} to settle")
 
     d10_after = probe_store_db(ctx.sidecar.store_db_path, sid, trace_log_path=ctx.trace_log)
     d10_delta = d10_after.delta_observed(d10_before)
@@ -2104,7 +2304,7 @@ def _handle_s07_02(ctx: RunnerContext, spec: GB05SlotSpec, w: str) -> SlotOutcom
     notes, reports, db_codes = _inspect_session_db_extras(ctx.sidecar.store_db_path, sid)
     cap = DynamicSessionCapture(
         session_id=sid,
-        raw_pending_requests=[dict(root_resume)],
+        raw_pending_requests=raw_pending,
         scripted_responses=[],
         delivered_tool_messages=[],
         delivery_log=DeliveryLog(records=()),
