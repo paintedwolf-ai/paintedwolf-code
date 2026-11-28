@@ -28,6 +28,8 @@ const (
 )
 
 var enumRules = []invariants.Invariant{
+	{Name: "background-termination-reasons-match-the-wire", Anchors: []invariants.Anchor{openAPI, invariants.Decl("internal/bgprocess", "TerminationReason")}, Check: backgroundTerminationReasonsMatch},
+	{Name: "held-jobs-preserve-stop-reasons-across-registration", Anchors: []invariants.Anchor{openAPI, invariants.Decl("internal/tools/native/command", "ProgramSupervisor.StartJob")}, Check: heldJobsPreserveStopReasons},
 	{Name: "enum-registries-are-exhaustive", Anchors: []invariants.Anchor{apiPkg}, Check: enumRegistriesAreExhaustive},
 	{Name: "string-enums-match-openapi-and-types", Anchors: []invariants.Anchor{openAPI, denTypes, apiPkg}, Check: stringEnumsMatch},
 	{Name: "redaction-sources-match-the-wire", Anchors: []invariants.Anchor{invariants.Decl(redactionSourceIn, "RedactionSource"), invariants.Decl("pkg/api", "RedactionSource")}, Check: redactionSourcesMatchTheWire},
