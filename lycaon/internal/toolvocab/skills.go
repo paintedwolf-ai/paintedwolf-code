@@ -185,14 +185,6 @@ var (
 	skillOfferedForReaderCache = scopedstore.New[bool](8192)
 )
 
-func renderSkillTextIn(cache map[string]skillRenderMemo, _ string, text string, vars map[string]any) (string, error) {
-	return renderSkillTextProjected(cache, text, vars)
-}
-
-func renderSkillTextCached(_ string, text string, vars map[string]any) (string, error) {
-	return renderSkillTextProjected(nil, text, vars)
-}
-
 // guardSuggestion names the profile_has_ fact that gates name for readers: the
 // tool itself, or the dual-state tool behind a command form. Empty when no
 // single fact gates it.
@@ -602,18 +594,12 @@ func evalSkillRenderedReach(
 	reachable := offered
 	if offered[toolreach.LoaderTool] && len(requestable) > 0 {
 		reachable = maps.Clone(offered)
-		loadable := make(map[string]bool, len(requestable))
 		for _, name := range requestable {
 			reachable[name] = true
-			if !offered[name] {
-				loadable[name] = true
-			}
 		}
-		for _, calls := range analysis.blockCalls {
-			for _, call := range calls {
-				if loadable[call.Tool] && !LoadedBefore(c, calls, call.Tool, call.Start) && !slices.Contains(anyOf, call.Tool) {
-					return false
-				}
+		for _, call := range UnheldCalls(c, checkText, offered, requestable) {
+			if !slices.Contains(anyOf, call.Tool) {
+				return false
 			}
 		}
 		if !offered[toolreach.ProgramTool] && slices.Contains(requestable, toolreach.ProgramTool) &&
