@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/test/contract/invariants"
 	"github.com/lycaon/lycaon/test/contract/invariants/forbiddencalls"
+	"github.com/lycaon/lycaon/test/contract/invariants/invariantstest"
 )
 
 const publicationRecoveryRuleName = "publication-recovery-never-reexecutes-or-launches"
@@ -45,20 +46,20 @@ func (r *ProgramRuntime) materializeProgramOutputs(ctx context.Context) error {
 // execution and process-launch entry points, and fails closed on drift.
 func TestPublicationRecoveryASTInvariant(t *testing.T) {
 	t.Parallel()
-	r := rule(t, forbiddencalls.Family, publicationRecoveryRuleName)
+	r := invariantstest.Rule(t, forbiddencalls.Family, publicationRecoveryRuleName)
 
 	for name, tc := range map[string]struct {
 		files          map[string]string
-		want           outcome
+		want           invariantstest.Outcome
 		wantViolations int
 		wantSubstring  string
 	}{
 		"clean retained-output recovery": {
 			files: cleanPublicationRecoveryTree,
-			want:  passes,
+			want:  invariantstest.Passes,
 		},
 		"seeded direct program execution": {
-			files: with(cleanPublicationRecoveryTree, map[string]string{
+			files: invariantstest.With(cleanPublicationRecoveryTree, map[string]string{
 				"lycaon/internal/tools/native/command/program_publication_recovery.go": `package command
 
 import "context"
@@ -79,12 +80,12 @@ func (r *ProgramRuntime) materializeProgramOutputs(ctx context.Context) error {
 }
 `,
 			}),
-			want:           violates,
+			want:           invariantstest.Violates,
 			wantViolations: 1,
 			wantSubstring:  "ProgramRuntime.Run",
 		},
 		"seeded direct evaluator field call": {
-			files: with(cleanPublicationRecoveryTree, map[string]string{
+			files: invariantstest.With(cleanPublicationRecoveryTree, map[string]string{
 				"lycaon/internal/tools/native/command/program_publication_recovery.go": `package command
 
 import "context"
@@ -105,12 +106,12 @@ func (r *ProgramRuntime) materializeProgramOutputs(ctx context.Context) error {
 }
 `,
 			}),
-			want:           violates,
+			want:           invariantstest.Violates,
 			wantViolations: 1,
 			wantSubstring:  "ProgramRuntime.Evaluate",
 		},
 		"seeded direct process launch": {
-			files: with(cleanPublicationRecoveryTree, map[string]string{
+			files: invariantstest.With(cleanPublicationRecoveryTree, map[string]string{
 				"lycaon/internal/tools/native/command/program_publication_recovery.go": `package command
 
 import (
@@ -132,12 +133,12 @@ func (r *ProgramRuntime) materializeProgramOutputs(ctx context.Context) error {
 }
 `,
 			}),
-			want:           violates,
+			want:           invariantstest.Violates,
 			wantViolations: 1,
 			wantSubstring:  "os/exec",
 		},
 		"seeded transitive execution through helper": {
-			files: with(cleanPublicationRecoveryTree, map[string]string{
+			files: invariantstest.With(cleanPublicationRecoveryTree, map[string]string{
 				"lycaon/internal/tools/native/command/runtime.go": `package command
 
 import "context"
@@ -151,12 +152,12 @@ func (r *ProgramRuntime) Run(ctx context.Context) error { return nil }
 func (r *ProgramRuntime) publishRetained(ctx context.Context) error { return r.Run(ctx) }
 `,
 			}),
-			want:           violates,
+			want:           invariantstest.Violates,
 			wantViolations: 1,
 			wantSubstring:  "ProgramRuntime.materializeProgramOutputs reaches command execution entrypoint ProgramRuntime.Run via ProgramRuntime.publishRetained",
 		},
 		"seeded transitive process launch through helper": {
-			files: with(cleanPublicationRecoveryTree, map[string]string{
+			files: invariantstest.With(cleanPublicationRecoveryTree, map[string]string{
 				"lycaon/internal/tools/native/command/runtime.go": `package command
 
 import (
@@ -176,12 +177,12 @@ func (r *ProgramRuntime) publishRetained(ctx context.Context) error {
 }
 `,
 			}),
-			want:           violates,
+			want:           invariantstest.Violates,
 			wantViolations: 1,
 			wantSubstring:  "ProgramRuntime.materializeProgramOutputs reaches os/exec process launch Command via ProgramRuntime.publishRetained",
 		},
 		"renamed anchor fails closed": {
-			files: with(cleanPublicationRecoveryTree, map[string]string{
+			files: invariantstest.With(cleanPublicationRecoveryTree, map[string]string{
 				"lycaon/internal/tools/native/command/program_publication_recovery.go": `package command
 
 import "context"
@@ -199,17 +200,17 @@ func (r *ProgramRuntime) materializeProgramOutputs(ctx context.Context) error {
 }
 `,
 			}),
-			want: missesAnchor,
+			want: invariantstest.MissesAnchor,
 		},
 		"empty corpus fails closed": {
 			files: nil,
-			want:  fails,
+			want:  invariantstest.Fails,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			res := invariants.Evaluate(fixture(t, tc.files), r)
-			expect(t, res, tc.want, tc.wantViolations)
+			res := invariants.Evaluate(invariantstest.Fixture(t, tc.files), r)
+			invariantstest.Expect(t, res, tc.want, tc.wantViolations)
 			if tc.wantSubstring != "" && (len(res.Violations) == 0 || !strings.Contains(res.Violations[0], tc.wantSubstring)) {
 				t.Fatalf("expected violation mentioning %q, got %v", tc.wantSubstring, res.Violations)
 			}
