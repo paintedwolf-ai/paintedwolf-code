@@ -12,6 +12,7 @@ import (
 var Family = invariants.Family{Name: "forbidden-calls", Invariants: slices.Concat(
 	testInfrastructure,
 	agentDoors,
+	commandSettlement,
 	approvals,
 	concurrency,
 	debugCapture,
