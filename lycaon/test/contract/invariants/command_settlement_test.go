@@ -10,6 +10,7 @@ import (
 )
 
 func TestCommandSettlementBoundaries(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		rule, path, source, boundary, bypass string
 		violations                           int
