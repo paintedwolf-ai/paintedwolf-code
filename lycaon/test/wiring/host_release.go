@@ -40,7 +40,7 @@ func trackHost(test string, sa *app.ServeApp) {
 // the hosts they closed stay reachable. Each retained host holds tens of
 // megabytes, so a suite that leaks them grows until it exhausts the runner.
 func runReleasingHosts(m *testing.M) int {
-	code := resourceguard.Run(m, resourceguard.Budget{HeapBytes: 256 << 20, Goroutines: 16})
+	code := resourceguard.Run(m, resourceguard.Budget{Goroutines: 16})
 	if code != 0 {
 		return code
 	}

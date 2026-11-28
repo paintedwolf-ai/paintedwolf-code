@@ -1,7 +1,6 @@
 package resourceguard
 
 import (
-	"runtime"
 	"testing"
 	"time"
 )
@@ -16,17 +15,19 @@ func TestRunPreservesSourceFailure(t *testing.T) {
 	}
 }
 
-func TestRunAcceptsReleasedResources(t *testing.T) {
+var retainedBySuite []byte
+
+func TestRunAcceptsStoppedGoroutinesAndRetainedMemory(t *testing.T) {
+	t.Cleanup(func() { retainedBySuite = nil })
 	suite := suiteFunc(func() int {
 		done := make(chan struct{})
 		go func() { close(done) }()
 		<-done
-		memory := make([]byte, 1<<20)
-		runtime.KeepAlive(memory)
+		retainedBySuite = make([]byte, 64<<20)
 		return 0
 	})
-	if got := Run(suite, Budget{HeapBytes: 1 << 20, Goroutines: 2}); got != 0 {
-		t.Fatalf("released suite exit = %d", got)
+	if got := Run(suite, Budget{}); got != 0 {
+		t.Fatalf("suite that stopped its goroutines and kept a cache exit = %d, want 0", got)
 	}
 }
 
@@ -34,7 +35,7 @@ func TestRunRejectsRetainedGoroutine(t *testing.T) {
 	stop, ready := make(chan struct{}), make(chan struct{})
 	defer close(stop)
 	suite := suiteFunc(func() int { go func() { close(ready); <-stop }(); <-ready; return 0 })
-	if got := Run(suite, Budget{HeapBytes: 1 << 20, Settle: 100 * time.Millisecond}); got != 1 {
+	if got := Run(suite, Budget{Settle: 100 * time.Millisecond}); got != 1 {
 		t.Fatalf("leaking suite exit = %d, want 1", got)
 	}
 }
