@@ -163,6 +163,12 @@ func (r *ProcessLifecycle) killProcess(proc *Process, reason TerminationReason) 
 		return
 	}
 	r.jobs.mu.Lock()
+	if proc.stopClosed != nil {
+		waitClosed := proc.stopClosed
+		r.jobs.mu.Unlock()
+		<-waitClosed
+		return
+	}
 	if !proc.running || proc.hasExit || proc.stopped {
 		r.jobs.mu.Unlock()
 		return
@@ -174,10 +180,24 @@ func (r *ProcessLifecycle) killProcess(proc *Process, reason TerminationReason) 
 	proc.stopped = true
 	proc.reason = reason
 	cancel := proc.cancel
+	cancelCause := proc.cancelCause
+	onStop := proc.onStop
+	proc.onStop = nil
+	var stopClosed chan struct{}
+	if onStop != nil {
+		stopClosed = make(chan struct{})
+		proc.stopClosed = stopClosed
+	}
 	async := proc.async
 	pty := proc.pty
 	screen := proc.screen
 	r.jobs.mu.Unlock()
+	if stopClosed != nil {
+		defer close(stopClosed)
+	}
+	if onStop != nil {
+		onStop(reason)
+	}
 	if async != nil {
 		async.Kill()
 	}
@@ -186,6 +206,9 @@ func (r *ProcessLifecycle) killProcess(proc *Process, reason TerminationReason) 
 	}
 	if screen != nil {
 		screen.Close()
+	}
+	if cancelCause != nil {
+		cancelCause(WithCauseReason(context.Canceled, reason))
 	}
 	if cancel != nil {
 		cancel()
