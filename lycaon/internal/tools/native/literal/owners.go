@@ -106,6 +106,19 @@ func (o *Owners) Operation(command string) (string, bool) {
 	return op, ok
 }
 
+// ClosedForms reports whether unsupported forms of command must refuse instead
+// of falling back to an installed binary. Exact-mapped literal document readers
+// own edit-base evidence and open-document authority (cat, head, tail, nl), so
+// an installed binary cannot substitute for their unsupported options.
+func (o *Owners) ClosedForms(command string) bool {
+	switch command {
+	case "cat", "head", "tail", "nl":
+		return true
+	default:
+		return false
+	}
+}
+
 // Commands lists every catalog command these owners serve.
 func (o *Owners) Commands() []string {
 	out := make([]string, 0, len(o.specs))
