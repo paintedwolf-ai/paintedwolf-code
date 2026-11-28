@@ -59,6 +59,7 @@ func TestGuardAtomsHaveIndependentWitnesses(t *testing.T) {
 // evaluations the corpus reaches join the ledger.
 func fuzzCorpusConditions(t *testing.T, stock *promptrender.Stock) []hoststate.ObservedCondition {
 	t.Helper()
+	defer hoststate.HoldAuthorityMemos()()
 	env, err := loadFuzzEnvOnce()
 	if err != nil {
 		t.Fatalf("loadFuzzEnvOnce: %v", err)

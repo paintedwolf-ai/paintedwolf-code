@@ -238,6 +238,7 @@ func (seamEvidenceLedger) WorkerLegs(context.Context, string, time.Time) ([]guid
 }
 
 func TestFreezeTurnAuthorityMatchesPromptLoopRequestSeam(t *testing.T) {
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	coordStates, err := hoststate.CoordinatorStates(t.Context())
 	contractcheck.FailErr(t, "CoordinatorStates", err)
 
