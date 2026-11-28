@@ -351,39 +351,39 @@ def run_k05_suite(
         other_dir.mkdir(parents=True, exist_ok=True)
         (other_dir / "ping.txt").write_bytes(b"K05OtherProjectPingToken responsive\n")
 
-        # Boot sidecar before 500k tree materialization so APFS/ext4 flush doesn't delay /health startup.
-        sidecar = start_sidecar(engine_bin, tmp / "sidecar", cwd=d1_worktree, ready_timeout_s=90.0)
-        try:
-            # Materialize one 50k tree and one 500k tree (reused across pairs in fresh project attaches)
-            unique_sizes = sorted(set(sizes))
-            trees: dict[int, tuple[Path, ScaleTreeShape]] = {}
-            for sz in unique_sizes:
-                tdir = tmp / f"scale-{sz}"
-                shape = write_scalefixture_tree(tdir, sz)
-                trees[sz] = (tdir, shape)
-            launch_receipt = sidecar.launch_receipt()
-            receipt_path = out / "launch_receipt.json"
-            receipt_path.write_text(json.dumps(launch_receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        # Materialize one 50k tree and one 500k tree once, then run each K05 instance against its own
+        # fresh cold sidecar (zero cross-instance SQLite/removal contention or cache reuse).
+        unique_sizes = sorted(set(sizes))
+        trees: dict[int, tuple[Path, ScaleTreeShape]] = {}
+        for sz in unique_sizes:
+            tdir = tmp / f"scale-{sz}"
+            shape = write_scalefixture_tree(tdir, sz)
+            trees[sz] = (tdir, shape)
 
-            client = CF04SidecarClient(sidecar.url, sidecar.token)
-            provenance = collect_run_provenance(
-                harness_repo=harness_root,
-                work_dir=tmp,
-                binary_path=engine_bin,
-                d1_commit=d1_commit,
-                d1_tree=d1_tree,
-                rg_bin=rg_bin,
-            )
+        provenance = collect_run_provenance(
+            harness_repo=harness_root,
+            work_dir=tmp,
+            binary_path=engine_bin,
+            d1_commit=d1_commit,
+            d1_tree=d1_tree,
+            rg_bin=rg_bin,
+        )
 
-            # Attach the small second project for concurrent responsiveness verification
-            other_proj = client.create_project([{"path": str(other_dir.resolve()), "label": "other", "is_primary": True}])
-            other_pid = str(other_proj["id"])
-            other_rid = str(other_proj["roots"][0]["id"])  # type: ignore[index]
+        generated_results: list[dict[str, object]] = []
+        launch_receipt: dict[str, object] | None = None
+        last_perf_copy: Path | None = None
+        for idx, sz in enumerate(sizes):
+            sel = ReplaySelector(base_seed, "K05", idx)
+            tdir, shape = trees[sz]
+            sidecar = start_sidecar(engine_bin, tmp / f"sidecar-{idx}", cwd=d1_worktree, ready_timeout_s=90.0)
+            try:
+                if launch_receipt is None:
+                    launch_receipt = sidecar.launch_receipt()
+                client = CF04SidecarClient(sidecar.url, sidecar.token)
+                other_proj = client.create_project([{"path": str(other_dir.resolve()), "label": "other", "is_primary": True}])
+                other_pid = str(other_proj["id"])
+                other_rid = str(other_proj["roots"][0]["id"])  # type: ignore[index]
 
-            generated_results: list[dict[str, object]] = []
-            for idx, sz in enumerate(sizes):
-                sel = ReplaySelector(base_seed, "K05", idx)
-                tdir, shape = trees[sz]
                 res = _run_k05_tree_instance(
                     client,
                     tdir,
@@ -395,102 +395,107 @@ def run_k05_suite(
                     config_dir=sidecar.config_dir,
                 )
                 generated_results.append(res)
+            finally:
+                sidecar.stop()
+                if sidecar.perf_file.is_file():
+                    perf_copy = out / "performance.jsonl"
+                    shutil.copy2(sidecar.perf_file, perf_copy)
+                    last_perf_copy = perf_copy
 
-            # 2 Hand-written edge verdicts requiring causal in-walk completion (Decision 027 §3)
-            e1_verdicts = [str(r["foreground_browse_verdict"]) for r in generated_results]
-            e2_verdicts = [str(r["other_project_verdict"]) for r in generated_results]
-            e1_verdict = "DEFECT" if "DEFECT" in e1_verdicts else ("PASS" if all(v == "PASS" for v in e1_verdicts) else "UNKNOWN")
-            e2_verdict = "DEFECT" if "DEFECT" in e2_verdicts else ("PASS" if all(v == "PASS" for v in e2_verdicts) else "UNKNOWN")
-            edge_results = [
-                {
-                    "name": "K05-E01-foreground-browse-during-walk",
-                    "verdict": e1_verdict,
-                    "probes": [r["foreground_browse"] for r in generated_results],
-                },
-                {
-                    "name": "K05-E02-other-project-responsive-during-walk",
-                    "verdict": e2_verdict,
-                    "probes": [r["other_project_probe"] for r in generated_results],
-                },
-            ]
+        receipt_path = out / "launch_receipt.json"
+        receipt_path.write_text(json.dumps(launch_receipt or {}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-            gen_passed = sum(1 for r in generated_results if r["verdict"] == "PASS")
-            gen_unknown = sum(1 for r in generated_results if r["verdict"] == "UNKNOWN")
-            gen_failed = sum(1 for r in generated_results if r["verdict"] == "DEFECT")
-            edge_passed = sum(1 for r in edge_results if r["verdict"] == "PASS")
-            edge_unknown = sum(1 for r in edge_results if r["verdict"] == "UNKNOWN")
-            edge_failed = sum(1 for r in edge_results if r["verdict"] == "DEFECT")
+        # 2 Hand-written edge verdicts requiring causal in-walk completion (Decision 027 §3)
+        e1_verdicts = [str(r["foreground_browse_verdict"]) for r in generated_results]
+        e2_verdicts = [str(r["other_project_verdict"]) for r in generated_results]
+        e1_verdict = "DEFECT" if "DEFECT" in e1_verdicts else ("PASS" if all(v == "PASS" for v in e1_verdicts) else "UNKNOWN")
+        e2_verdict = "DEFECT" if "DEFECT" in e2_verdicts else ("PASS" if all(v == "PASS" for v in e2_verdicts) else "UNKNOWN")
+        edge_results = [
+            {
+                "name": "K05-E01-foreground-browse-during-walk",
+                "verdict": e1_verdict,
+                "probes": [r["foreground_browse"] for r in generated_results],
+            },
+            {
+                "name": "K05-E02-other-project-responsive-during-walk",
+                "verdict": e2_verdict,
+                "probes": [r["other_project_probe"] for r in generated_results],
+            },
+        ]
 
-            report = {
+        gen_passed = sum(1 for r in generated_results if r["verdict"] == "PASS")
+        gen_unknown = sum(1 for r in generated_results if r["verdict"] == "UNKNOWN")
+        gen_failed = sum(1 for r in generated_results if r["verdict"] == "DEFECT")
+        edge_passed = sum(1 for r in edge_results if r["verdict"] == "PASS")
+        edge_unknown = sum(1 for r in edge_results if r["verdict"] == "UNKNOWN")
+        edge_failed = sum(1 for r in edge_results if r["verdict"] == "DEFECT")
+
+        report = {
+            "family": "K05",
+            "lane": "sidecar",
+            "base_seed": base_seed,
+            "sizes": list(sizes),
+            "generated_planned": len(sizes),
+            "generated_executed": len(generated_results),
+            "generated_passed": gen_passed,
+            "generated_unknown": gen_unknown,
+            "generated_failed": gen_failed,
+            "edges_planned": 2,
+            "edges_executed": len(edge_results),
+            "edges_passed": edge_passed,
+            "edges_unknown": edge_unknown,
+            "edges_failed": edge_failed,
+            "work_counters_verdict": "UNKNOWN",
+            "generated_results": generated_results,
+            "edge_results": edge_results,
+        }
+        report_path = out / "k05_results.json"
+        report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+        artifacts: dict[str, Path] = {
+            "launch_receipt": receipt_path,
+            "k05_results": report_path,
+        }
+        if last_perf_copy is not None and last_perf_copy.is_file():
+            artifacts["performance_jsonl"] = last_perf_copy
+
+        replay_cmd = [
+            "python3",
+            "-m",
+            "catalog_feed_search.families.cf04_k05",
+            "--engine-bin",
+            str(engine_bin),
+            "--d1-worktree",
+            str(d1_worktree),
+            "--d1-commit",
+            d1_commit,
+            "--d1-tree",
+            d1_tree,
+            "--seed",
+            base_seed,
+            "--sizes",
+            ",".join(str(s) for s in sizes),
+            "--rg-bin",
+            rg_bin,
+            "--out-dir",
+            ".",
+        ]
+        finalize_family_evidence(
+            out,
+            provenance,
+            artifacts,
+            {
                 "family": "K05",
-                "lane": "sidecar",
-                "base_seed": base_seed,
                 "sizes": list(sizes),
-                "generated_planned": len(sizes),
-                "generated_executed": len(generated_results),
                 "generated_passed": gen_passed,
-                "generated_unknown": gen_unknown,
                 "generated_failed": gen_failed,
-                "edges_planned": 2,
-                "edges_executed": len(edge_results),
                 "edges_passed": edge_passed,
-                "edges_unknown": edge_unknown,
                 "edges_failed": edge_failed,
-                "work_counters_verdict": "UNKNOWN",
-                "generated_results": generated_results,
-                "edge_results": edge_results,
-            }
-            report_path = out / "k05_results.json"
-            report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-            artifacts: dict[str, Path] = {
-                "launch_receipt": receipt_path,
-                "k05_results": report_path,
-            }
-            if sidecar.perf_file.is_file():
-                perf_copy = out / "performance.jsonl"
-                shutil.copy2(sidecar.perf_file, perf_copy)
-                artifacts["performance_jsonl"] = perf_copy
-
-            replay_cmd = [
-                "python3",
-                "-m",
-                "catalog_feed_search.families.cf04_k05",
-                "--engine-bin",
-                str(engine_bin),
-                "--d1-worktree",
-                str(d1_worktree),
-                "--d1-commit",
-                d1_commit,
-                "--d1-tree",
-                d1_tree,
-                "--seed",
-                base_seed,
-                "--sizes",
-                ",".join(str(s) for s in sizes),
-                "--rg-bin",
-                rg_bin,
-                "--out-dir",
-                ".",
-            ]
-            finalize_family_evidence(
-                out,
-                provenance,
-                artifacts,
-                {
-                    "family": "K05",
-                    "sizes": list(sizes),
-                    "generated_passed": gen_passed,
-                    "generated_failed": gen_failed,
-                    "edges_passed": edge_passed,
-                    "edges_failed": edge_failed,
-                },
-                replay_command=replay_cmd,
-                launch_receipt=launch_receipt,
-            )
-            return report
-        finally:
-            sidecar.stop()
+            },
+            replay_command=replay_cmd,
+            launch_receipt=launch_receipt,
+        )
+        return report
 
 
 def main(argv: list[str] | None = None) -> int:
