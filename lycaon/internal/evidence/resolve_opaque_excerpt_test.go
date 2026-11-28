@@ -6,9 +6,9 @@ func TestResolveObservationOpaqueAndCommandExcerptInvariant(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name  string
-		rec   Record
-		valid string
+		name   string
+		rec    Record
+		valid  string
 		absent []string
 	}{
 		{
