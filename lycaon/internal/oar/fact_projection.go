@@ -2,13 +2,27 @@ package oar
 
 import (
 	"encoding/json"
-	"maps"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/oarcopy"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolreach"
 )
+
+var publishedBareNames = func() map[string]string {
+	m := make(map[string]string, len(bareFactTiers))
+	for name, tier := range bareFactTiers {
+		m[name] = publishedName(name, tier)
+	}
+	return m
+}()
+
+func publishedKey(name string) string {
+	if k, ok := publishedBareNames[name]; ok {
+		return k
+	}
+	return publishedName(name, bareFactTiers[name])
+}
 
 // activation publishes occurrence facts under their rule-visible names.
 // occurrenceIdentityFacts are host facts the occurrence itself establishes —
@@ -21,12 +35,8 @@ var occurrenceIdentityFacts = map[string]bool{
 }
 
 func activation(gc *GuardContext) map[string]any {
-	bare := bareActivation(gc)
-	tiers := bareFactTiers
-	out := make(map[string]any, len(bare))
-	for name, value := range bare {
-		out[publishedName(name, tiers[name])] = value
-	}
+	out := make(map[string]any, 200)
+	fillBareActivation(out, gc)
 	if gc != nil {
 		for name, value := range oarcopy.FactsFromData(gc.ObservationData) {
 			// Rejection presentation metadata cannot replace canonical protocol observations.
@@ -104,244 +114,236 @@ func narrowCapabilityRecoveryByProjectedSchema(out map[string]any, reach toolrea
 	}
 }
 
-func bareActivation(gc *GuardContext) map[string]any {
+func fillBareActivation(out map[string]any, gc *GuardContext) {
 	if gc == nil {
 		gc = NewGuardContext()
 	}
-	out := map[string]any{
-		"tool":                                gc.Invocation.Tool,
-		"tool_args":                           mapOrEmpty(gc.Invocation.ToolArgs),
-		"command_operation_reachable":         false,
-		"command_external_reachable":          false,
-		"admitted_process_capability_fields":  []string{},
-		"command_loadable_without_schema":     false,
-		"admitted_command_forms":              []string{},
-		"unpublished_tool_text_pending":       gc.Session.UnpublishedToolTextPending,
-		"mid_turn_citations_required":         gc.Session.MidTurnCitationsRequired,
-		"mid_turn_citation_attempted":         gc.Session.MidTurnCitationAttempted,
-		"mid_turn_evidence_unreadable":        gc.Session.MidTurnEvidenceUnreadable,
-		"last_assistant":                      gc.Session.LastAssistant,
-		"turn_tools":                          strList(gc.Session.TurnTools),
-		"session_posture":                     gc.Session.SessionPosture,
-		"session_mode":                        gc.Session.SessionMode,
-		"ask_worker_writes":                   gc.Workers.AskWorkerWrites,
-		"surface":                             gc.Session.Surface,
-		"session_role":                        gc.Session.Role,
-		"workers_idle":                        gc.Workers.WorkersIdle,
-		"worker_spawn_blocked":                gc.Workers.WorkerSpawnBlocked,
-		"active_worker_count":                 gc.Workers.ActiveWorkerCount,
-		"pending_overlay_promote":             gc.Workers.PendingOverlayPromote,
-		"surface_may_finish":                  gc.Session.SurfaceMayFinish,
-		"is_host_cycle_turn":                  gc.Session.IsHostCycleTurn,
-		"batch_phase":                         gc.Workflow.BatchPhase,
-		"batch_closed":                        gc.Workflow.BatchClosed,
-		"progress_open_items":                 gc.Progress.ProgressOpenItems,
-		"progress_has_one_open_item":          gc.Progress.ProgressOpenItems == 1,
-		"progress_has_open_steps":             gc.Progress.ProgressHasOpenSteps,
-		"closeout_has_answer":                 gc.Progress.CloseoutHasAnswer,
-		"closeout_only_repair_directives":     gc.Progress.CloseoutOnlyRepairDirectives,
-		"task_envelope_echo":                  gc.Progress.TaskEnvelopeEcho,
-		"closeout_surface":                    gc.Session.CloseoutSurface,
-		"progress_reconcile_needed":           gc.Progress.ProgressReconcileNeeded,
-		"verify_required":                     gc.Progress.VerifyRequired,
-		"verifier_pass":                       gc.Progress.VerifierPass,
-		"synthesis_wrapup_tool_forbidden":     gc.Workflow.SynthesisWrapupToolForbidden,
-		"progress_closure_armed":              gc.Progress.ProgressClosureArmed,
-		"progress_gated_tool":                 gc.Progress.ProgressGatedTool,
-		"progress_missing":                    gc.Progress.ProgressMissing,
-		"path_is_worker_branch":               gc.Workers.PathIsWorkerBranch,
-		"verify_has_command":                  gc.Progress.VerifyHasCommand,
-		"verify_declared":                     gc.Progress.VerifyDeclared,
-		"pending_user_input":                  gc.Session.PendingUserInput,
-		"stub_valid":                          gc.Session.StubValid,
-		"pattern_parse_ok":                    gc.Invocation.PatternParseOK,
-		"arg_validation_errors":               strList(gc.Invocation.ArgValidationErrors),
-		"worker_leg":                          gc.Session.WorkerLeg,
-		"action_host_resource_denials":        strList(gc.Access.ActionHostResourceDenials),
-		"confine_applied":                     gc.Execution.ConfineApplied,
-		"network_mode":                        gc.Execution.NetworkMode,
-		"denial_subject":                      gc.Execution.DenialSubject,
-		"confine_signals":                     strList(gc.Execution.ConfineSignals),
-		"failed_stages":                       strList(gc.Execution.FailedStages),
-		"response_tools_callable":             gc.Response.ToolsCallable,
-		"response_structured_output":          gc.Response.StructuredOutput,
-		"process_running":                     gc.Execution.ProcessRunning,
-		"ordinary_write_paths":                strList(gc.Refusals.OrdinaryWritePaths),
-		"ordinary_write_grants":               strList(gc.Refusals.OrdinaryWriteGrants),
-		"refused_write_paths":                 strList(gc.Refusals.RefusedWritePaths),
-		"refused_write_grants":                strList(gc.Refusals.RefusedWriteGrants),
-		"optional_read_paths":                 strList(gc.Refusals.OptionalReadPaths),
-		"refused_read_paths":                  strList(gc.Refusals.RefusedReadPaths),
-		"refused_read_grants":                 strList(gc.Refusals.RefusedReadGrants),
-		"refused_multiple_read_grants":        len(gc.Refusals.RefusedReadGrants) > 1,
-		"refused_credential_store_paths":      strList(gc.Refusals.RefusedCredentialStorePaths),
-		"receiving_tool_summarize":            gc.Invocation.Tool == "summarize",
-		"refused_terminal_read_paths":         strList(gc.Refusals.RefusedTerminalReadPaths),
-		"refused_terminal_write_paths":        strList(gc.Refusals.RefusedTerminalWritePaths),
-		"refused_socket_paths":                strList(gc.Refusals.RefusedSocketPaths),
-		"refused_socket_host_resources":       strList(gc.Refusals.RefusedSocketHostResources),
-		"refused_connect_ports":               strList(gc.Refusals.RefusedConnectPorts),
-		"refused_listen_ports":                strList(gc.Refusals.RefusedListenPorts),
-		"refused_signals":                     strList(gc.Refusals.RefusedSignals),
-		"unsandboxed_refusals":                strList(gc.Refusals.UnsandboxedRefusals),
-		"worktree_stale_paths":                strList(gc.Source.WorktreeStalePaths),
-		"worktree_leftover_paths":             strList(gc.Source.WorktreeLeftoverPaths),
-		"worktree_conflict_paths":             strList(gc.Source.WorktreeConflictPaths),
-		"tool_is_state":                       gc.Invocation.ToolIsState,
-		"tool_is_delegation":                  gc.Invocation.ToolIsDelegation,
-		"tool_is_task":                        gc.Invocation.ToolIsTask,
-		"tool_payload_chunkable":              gc.Invocation.ToolPayloadChunkable,
-		"tool_is_handoff":                     gc.Invocation.ToolIsHandoff,
-		"unobserved_cited_paths":              strList(gc.Grounding.UnobservedCitedPaths),
-		"unobserved_cited_urls":               strList(gc.Grounding.UnobservedCitedURLs),
-		"unobserved_cited_handles":            strList(gc.Grounding.UnobservedCitedHandles),
-		"claims_completion":                   gc.Grounding.ClaimsCompletion,
-		"has_matching_ledger_job":             gc.Grounding.HasMatchingLedgerJob,
-		"worker_summary_present":              gc.Grounding.WorkerSummaryPresent,
-		"worker_artifact_present":             gc.Grounding.WorkerArtifactPresent,
-		"worker_artifact_measured":            gc.Grounding.WorkerArtifactMeasured,
-		"repeat_count":                        gc.Counters.RepeatCount,
-		"fruitless_search_run":                gc.Counters.FruitlessSearchRun,
-		"breaker_count":                       gc.Counters.BreakerCount,
-		"same_code_reject_run":                gc.Counters.SameCodeRejectRun,
-		"same_call_run":                       gc.Counters.SameCallRun,
-		"repeated_rejection_code":             gc.Counters.RepeatedRejectCode,
-		"code_reject_responses":               gc.Counters.CodeRejectResponses,
-		"deferred_unactivated":                gc.Counters.DeferredUnactivated,
-		"worker_attempted_mutation":           gc.Workers.WorkerAttemptedMutation,
-		"batch_ready_ignoring_progress":       gc.Workflow.BatchReadyIgnoringProgress,
-		"synthesis_delay_count":               gc.Workflow.SynthesisDelayCount,
-		"scope_mode":                          gc.Workers.ScopeMode,
-		"profile_mutation_capable":            gc.Workers.ProfileMutationCapable,
-		"base_overlay_id":                     gc.Workers.BaseOverlayID,
-		"base_overlay_resolves":               gc.Workers.BaseOverlayResolves,
-		"base_overlay_checked":                gc.Workers.BaseOverlayChecked,
-		"base_overlay_pending":                gc.Workers.BaseOverlayPending,
-		"active_read_count":                   gc.Workers.ActiveReadCount,
-		"active_write_count":                  gc.Workers.ActiveWriteCount,
-		"max_workers":                         gc.Workers.MaxWorkers,
-		"max_read_workers":                    gc.Workers.MaxReadWorkers,
-		"max_write_workers":                   gc.Workers.MaxWriteWorkers,
-		"citation_unverifiable":               gc.Grounding.CitationUnverifiable,
-		"scout_survey_evidence_present":       gc.Grounding.ScoutSurveyEvidencePresent,
-		"surface_claim_ungrounded":            gc.Grounding.SurfaceClaimUngrounded,
-		"page_measure_ungrounded":             gc.Grounding.PageMeasureUngrounded,
-		"agent_is_scout":                      gc.Workers.AgentIsScout,
-		"agent_is_implementer":                gc.Workers.AgentIsImplementer,
-		"profile_surveys_project_tree":        gc.Grounding.ProfileSurveysProjectTree,
-		"ask_user_secret_allowed":             false,
-		"ask_user_loadable_without_schema":    false,
-		"task_callable":                       false,
-		"surface_snapshot_handles":            []string{},
-		"repo_known_empty":                    gc.Grounding.RepoKnownEmpty,
-		"last_audit_ungrounded":               gc.Grounding.LastAuditUngrounded,
-		"grounding_escalated":                 gc.Grounding.GroundingEscalated,
-		"prompt_injection_score":              gc.Content.PromptInjectionScore,
-		"jailbreak_score":                     gc.Content.JailbreakScore,
-		"pii_entities":                        mapList(gc.Content.PIIEntities),
-		"secret_matches":                      mapList(gc.Content.SecretMatches),
-		"editorconfig_mismatch":               gc.Source.EditorConfigMismatch,
-		"syntax_check_overridden":             gc.Source.SyntaxCheckOverridden,
-		"source_analysis_unavailable":         gc.Source.SourceAnalysisUnavailable,
-		"http_request_web_page":               gc.Invocation.HTTPRequestWebPage,
-		"http_request_loopback_other_session": gc.Invocation.HTTPRequestLoopbackOtherSession,
-		"git_no_repository_on_write_leg":      gc.Source.GitNoRepositoryOnWriteLeg,
-		"reproduced_source_lines":             gc.Source.ReproducedSourceLines,
-		"reproduced_source_file_lines":        gc.Source.ReproducedSourceFileLines,
-		"reproduced_source_path":              gc.Source.ReproducedSourcePath,
-		"reproduced_source_start_line":        gc.Source.ReproducedSourceStartLine,
-		"reproduced_source_end_line":          gc.Source.ReproducedSourceEndLine,
+	set := func(name string, val any) {
+		out[publishedKey(name)] = val
 	}
-	maps.Copy(out, mcpActivation(gc))
-	maps.Copy(out, rejectObservationActivation(gc))
-	maps.Copy(out, sessionActivation(gc))
-	maps.Copy(out, workflowActivation(gc))
-	return out
+	set("tool", gc.Invocation.Tool)
+	set("tool_args", mapOrEmpty(gc.Invocation.ToolArgs))
+	set("command_operation_reachable", false)
+	set("command_external_reachable", false)
+	set("admitted_process_capability_fields", []string{})
+	set("command_loadable_without_schema", false)
+	set("admitted_command_forms", []string{})
+	set("unpublished_tool_text_pending", gc.Session.UnpublishedToolTextPending)
+	set("mid_turn_citations_required", gc.Session.MidTurnCitationsRequired)
+	set("mid_turn_citation_attempted", gc.Session.MidTurnCitationAttempted)
+	set("mid_turn_evidence_unreadable", gc.Session.MidTurnEvidenceUnreadable)
+	set("last_assistant", gc.Session.LastAssistant)
+	set("turn_tools", strList(gc.Session.TurnTools))
+	set("session_posture", gc.Session.SessionPosture)
+	set("session_mode", gc.Session.SessionMode)
+	set("ask_worker_writes", gc.Workers.AskWorkerWrites)
+	set("surface", gc.Session.Surface)
+	set("session_role", gc.Session.Role)
+	set("workers_idle", gc.Workers.WorkersIdle)
+	set("worker_spawn_blocked", gc.Workers.WorkerSpawnBlocked)
+	set("active_worker_count", gc.Workers.ActiveWorkerCount)
+	set("pending_overlay_promote", gc.Workers.PendingOverlayPromote)
+	set("surface_may_finish", gc.Session.SurfaceMayFinish)
+	set("is_host_cycle_turn", gc.Session.IsHostCycleTurn)
+	set("batch_phase", gc.Workflow.BatchPhase)
+	set("batch_closed", gc.Workflow.BatchClosed)
+	set("progress_open_items", gc.Progress.ProgressOpenItems)
+	set("progress_has_one_open_item", gc.Progress.ProgressOpenItems == 1)
+	set("progress_has_open_steps", gc.Progress.ProgressHasOpenSteps)
+	set("closeout_has_answer", gc.Progress.CloseoutHasAnswer)
+	set("closeout_only_repair_directives", gc.Progress.CloseoutOnlyRepairDirectives)
+	set("task_envelope_echo", gc.Progress.TaskEnvelopeEcho)
+	set("closeout_surface", gc.Session.CloseoutSurface)
+	set("progress_reconcile_needed", gc.Progress.ProgressReconcileNeeded)
+	set("verify_required", gc.Progress.VerifyRequired)
+	set("verifier_pass", gc.Progress.VerifierPass)
+	set("synthesis_wrapup_tool_forbidden", gc.Workflow.SynthesisWrapupToolForbidden)
+	set("progress_closure_armed", gc.Progress.ProgressClosureArmed)
+	set("progress_gated_tool", gc.Progress.ProgressGatedTool)
+	set("progress_missing", gc.Progress.ProgressMissing)
+	set("path_is_worker_branch", gc.Workers.PathIsWorkerBranch)
+	set("verify_has_command", gc.Progress.VerifyHasCommand)
+	set("verify_declared", gc.Progress.VerifyDeclared)
+	set("pending_user_input", gc.Session.PendingUserInput)
+	set("stub_valid", gc.Session.StubValid)
+	set("pattern_parse_ok", gc.Invocation.PatternParseOK)
+	set("arg_validation_errors", strList(gc.Invocation.ArgValidationErrors))
+	set("worker_leg", gc.Session.WorkerLeg)
+	set("action_host_resource_denials", strList(gc.Access.ActionHostResourceDenials))
+	set("confine_applied", gc.Execution.ConfineApplied)
+	set("network_mode", gc.Execution.NetworkMode)
+	set("denial_subject", gc.Execution.DenialSubject)
+	set("confine_signals", strList(gc.Execution.ConfineSignals))
+	set("failed_stages", strList(gc.Execution.FailedStages))
+	set("response_tools_callable", gc.Response.ToolsCallable)
+	set("response_structured_output", gc.Response.StructuredOutput)
+	set("process_running", gc.Execution.ProcessRunning)
+	set("ordinary_write_paths", strList(gc.Refusals.OrdinaryWritePaths))
+	set("ordinary_write_grants", strList(gc.Refusals.OrdinaryWriteGrants))
+	set("refused_write_paths", strList(gc.Refusals.RefusedWritePaths))
+	set("refused_write_grants", strList(gc.Refusals.RefusedWriteGrants))
+	set("optional_read_paths", strList(gc.Refusals.OptionalReadPaths))
+	set("refused_read_paths", strList(gc.Refusals.RefusedReadPaths))
+	set("refused_read_grants", strList(gc.Refusals.RefusedReadGrants))
+	set("refused_multiple_read_grants", len(gc.Refusals.RefusedReadGrants) > 1)
+	set("refused_credential_store_paths", strList(gc.Refusals.RefusedCredentialStorePaths))
+	set("receiving_tool_summarize", gc.Invocation.Tool == "summarize")
+	set("refused_terminal_read_paths", strList(gc.Refusals.RefusedTerminalReadPaths))
+	set("refused_terminal_write_paths", strList(gc.Refusals.RefusedTerminalWritePaths))
+	set("refused_socket_paths", strList(gc.Refusals.RefusedSocketPaths))
+	set("refused_socket_host_resources", strList(gc.Refusals.RefusedSocketHostResources))
+	set("refused_connect_ports", strList(gc.Refusals.RefusedConnectPorts))
+	set("refused_listen_ports", strList(gc.Refusals.RefusedListenPorts))
+	set("refused_signals", strList(gc.Refusals.RefusedSignals))
+	set("unsandboxed_refusals", strList(gc.Refusals.UnsandboxedRefusals))
+	set("worktree_stale_paths", strList(gc.Source.WorktreeStalePaths))
+	set("worktree_leftover_paths", strList(gc.Source.WorktreeLeftoverPaths))
+	set("worktree_conflict_paths", strList(gc.Source.WorktreeConflictPaths))
+	set("tool_is_state", gc.Invocation.ToolIsState)
+	set("tool_is_delegation", gc.Invocation.ToolIsDelegation)
+	set("tool_is_task", gc.Invocation.ToolIsTask)
+	set("tool_payload_chunkable", gc.Invocation.ToolPayloadChunkable)
+	set("tool_is_handoff", gc.Invocation.ToolIsHandoff)
+	set("unobserved_cited_paths", strList(gc.Grounding.UnobservedCitedPaths))
+	set("unobserved_cited_urls", strList(gc.Grounding.UnobservedCitedURLs))
+	set("unobserved_cited_handles", strList(gc.Grounding.UnobservedCitedHandles))
+	set("claims_completion", gc.Grounding.ClaimsCompletion)
+	set("has_matching_ledger_job", gc.Grounding.HasMatchingLedgerJob)
+	set("worker_summary_present", gc.Grounding.WorkerSummaryPresent)
+	set("worker_artifact_present", gc.Grounding.WorkerArtifactPresent)
+	set("worker_artifact_measured", gc.Grounding.WorkerArtifactMeasured)
+	set("repeat_count", gc.Counters.RepeatCount)
+	set("fruitless_search_run", gc.Counters.FruitlessSearchRun)
+	set("breaker_count", gc.Counters.BreakerCount)
+	set("same_code_reject_run", gc.Counters.SameCodeRejectRun)
+	set("same_call_run", gc.Counters.SameCallRun)
+	set("repeated_rejection_code", gc.Counters.RepeatedRejectCode)
+	set("code_reject_responses", gc.Counters.CodeRejectResponses)
+	set("deferred_unactivated", gc.Counters.DeferredUnactivated)
+	set("worker_attempted_mutation", gc.Workers.WorkerAttemptedMutation)
+	set("batch_ready_ignoring_progress", gc.Workflow.BatchReadyIgnoringProgress)
+	set("synthesis_delay_count", gc.Workflow.SynthesisDelayCount)
+	set("scope_mode", gc.Workers.ScopeMode)
+	set("profile_mutation_capable", gc.Workers.ProfileMutationCapable)
+	set("base_overlay_id", gc.Workers.BaseOverlayID)
+	set("base_overlay_resolves", gc.Workers.BaseOverlayResolves)
+	set("base_overlay_checked", gc.Workers.BaseOverlayChecked)
+	set("base_overlay_pending", gc.Workers.BaseOverlayPending)
+	set("active_read_count", gc.Workers.ActiveReadCount)
+	set("active_write_count", gc.Workers.ActiveWriteCount)
+	set("max_workers", gc.Workers.MaxWorkers)
+	set("max_read_workers", gc.Workers.MaxReadWorkers)
+	set("max_write_workers", gc.Workers.MaxWriteWorkers)
+	set("citation_unverifiable", gc.Grounding.CitationUnverifiable)
+	set("scout_survey_evidence_present", gc.Grounding.ScoutSurveyEvidencePresent)
+	set("surface_claim_ungrounded", gc.Grounding.SurfaceClaimUngrounded)
+	set("page_measure_ungrounded", gc.Grounding.PageMeasureUngrounded)
+	set("agent_is_scout", gc.Workers.AgentIsScout)
+	set("agent_is_implementer", gc.Workers.AgentIsImplementer)
+	set("profile_surveys_project_tree", gc.Grounding.ProfileSurveysProjectTree)
+	set("ask_user_secret_allowed", false)
+	set("ask_user_loadable_without_schema", false)
+	set("task_callable", false)
+	set("surface_snapshot_handles", []string{})
+	set("repo_known_empty", gc.Grounding.RepoKnownEmpty)
+	set("last_audit_ungrounded", gc.Grounding.LastAuditUngrounded)
+	set("grounding_escalated", gc.Grounding.GroundingEscalated)
+	set("prompt_injection_score", gc.Content.PromptInjectionScore)
+	set("jailbreak_score", gc.Content.JailbreakScore)
+	set("pii_entities", mapList(gc.Content.PIIEntities))
+	set("secret_matches", mapList(gc.Content.SecretMatches))
+	set("editorconfig_mismatch", gc.Source.EditorConfigMismatch)
+	set("syntax_check_overridden", gc.Source.SyntaxCheckOverridden)
+	set("source_analysis_unavailable", gc.Source.SourceAnalysisUnavailable)
+	set("http_request_web_page", gc.Invocation.HTTPRequestWebPage)
+	set("http_request_loopback_other_session", gc.Invocation.HTTPRequestLoopbackOtherSession)
+	set("git_no_repository_on_write_leg", gc.Source.GitNoRepositoryOnWriteLeg)
+	set("reproduced_source_lines", gc.Source.ReproducedSourceLines)
+	set("reproduced_source_file_lines", gc.Source.ReproducedSourceFileLines)
+	set("reproduced_source_path", gc.Source.ReproducedSourcePath)
+	set("reproduced_source_start_line", gc.Source.ReproducedSourceStartLine)
+	set("reproduced_source_end_line", gc.Source.ReproducedSourceEndLine)
+	fillMCPActivation(set, gc)
+	fillRejectObservationActivation(set, gc)
+	fillSessionActivation(set, gc)
+	fillWorkflowActivation(set, gc)
 }
 
-func mcpActivation(gc *GuardContext) map[string]any {
-	return map[string]any{
-		"mcp_server_id":          gc.MCP.MCPServerID,
-		"mcp_tool_name":          gc.MCP.MCPToolName,
-		"mcp_qualified_tool":     gc.MCP.MCPQualifiedTool,
-		"mcp_server_configured":  gc.MCP.MCPServerConfigured,
-		"mcp_server_enabled":     gc.MCP.MCPServerEnabled,
-		"mcp_configured_servers": gc.MCP.configuredServers(),
-		"mcp_enabled_servers":    gc.MCP.enabledServers(),
-		"mcp_result":             mapOrEmpty(gc.MCP.MCPFields),
-		"mcp_call_ok":            gc.MCP.MCPCallOK,
-		"mcp_error_code":         gc.MCP.MCPErrorCode,
-		"mcp_schema_matched":     gc.MCP.MCPSchemaMatched,
-	}
+func fillMCPActivation(set func(string, any), gc *GuardContext) {
+	set("mcp_server_id", gc.MCP.MCPServerID)
+	set("mcp_tool_name", gc.MCP.MCPToolName)
+	set("mcp_qualified_tool", gc.MCP.MCPQualifiedTool)
+	set("mcp_server_configured", gc.MCP.MCPServerConfigured)
+	set("mcp_server_enabled", gc.MCP.MCPServerEnabled)
+	set("mcp_configured_servers", gc.MCP.configuredServers())
+	set("mcp_enabled_servers", gc.MCP.enabledServers())
+	set("mcp_result", mapOrEmpty(gc.MCP.MCPFields))
+	set("mcp_call_ok", gc.MCP.MCPCallOK)
+	set("mcp_error_code", gc.MCP.MCPErrorCode)
+	set("mcp_schema_matched", gc.MCP.MCPSchemaMatched)
 }
 
-// rejectObservationActivation defines the structured tool-rejection vocabulary:
+// fillRejectObservationActivation defines the structured tool-rejection vocabulary:
 // what the host observed about a call it refused, one fact per cause.
-func rejectObservationActivation(gc *GuardContext) map[string]any {
-	return map[string]any{
-		"command_not_argv":   gc.Invocation.CommandNotArgv,
-		"is_directory":       gc.Rejection.IsDirectory,
-		"not_found":          gc.Rejection.NotFound,
-		"path_outside_scope": EvalPathOutsideScope(gc, gc.Invocation.Tool),
-		"path_denied":        gc.Rejection.PathDenied,
-		"bulk_denied":        gc.Rejection.BulkDenied,
-		"binary_denied":      gc.Rejection.BinaryDenied,
-		"mode_denied":        gc.Rejection.ModeDenied,
-		"path_escape":        gc.Rejection.PathEscape,
-		"beyond_eof":         gc.Rejection.BeyondEOF,
-		"not_running":        gc.Rejection.NotRunning,
-		"unsupported":        gc.Rejection.Unsupported,
-		"resource_limit":     gc.Rejection.ResourceLimit,
-		"conflict":           gc.Rejection.Conflict,
-		"path_required":      gc.Rejection.PathRequired,
-		"id_required":        gc.Rejection.IDRequired,
-		"policy_denied":      gc.Rejection.PolicyDenied,
-		"unknown_target":     gc.Rejection.UnknownTarget,
-		"missing":            gc.Rejection.Missing,
-		"forbidden":          gc.Rejection.Forbidden,
-		"selector_empty":     gc.Rejection.SelectorEmpty,
-		"selector_ambiguous": gc.Rejection.SelectorAmbiguous,
-		"reject_observation": gc.Rejection.RejectObservation,
-		"rejection_code":     gc.ObservedRejectCode,
-	}
+func fillRejectObservationActivation(set func(string, any), gc *GuardContext) {
+	set("command_not_argv", gc.Invocation.CommandNotArgv)
+	set("is_directory", gc.Rejection.IsDirectory)
+	set("not_found", gc.Rejection.NotFound)
+	set("path_outside_scope", EvalPathOutsideScope(gc, gc.Invocation.Tool))
+	set("path_denied", gc.Rejection.PathDenied)
+	set("bulk_denied", gc.Rejection.BulkDenied)
+	set("binary_denied", gc.Rejection.BinaryDenied)
+	set("mode_denied", gc.Rejection.ModeDenied)
+	set("path_escape", gc.Rejection.PathEscape)
+	set("beyond_eof", gc.Rejection.BeyondEOF)
+	set("not_running", gc.Rejection.NotRunning)
+	set("unsupported", gc.Rejection.Unsupported)
+	set("resource_limit", gc.Rejection.ResourceLimit)
+	set("conflict", gc.Rejection.Conflict)
+	set("path_required", gc.Rejection.PathRequired)
+	set("id_required", gc.Rejection.IDRequired)
+	set("policy_denied", gc.Rejection.PolicyDenied)
+	set("unknown_target", gc.Rejection.UnknownTarget)
+	set("missing", gc.Rejection.Missing)
+	set("forbidden", gc.Rejection.Forbidden)
+	set("selector_empty", gc.Rejection.SelectorEmpty)
+	set("selector_ambiguous", gc.Rejection.SelectorAmbiguous)
+	set("reject_observation", gc.Rejection.RejectObservation)
+	set("rejection_code", gc.ObservedRejectCode)
 }
 
-// workflowActivation defines manifest-phase and durable workflow gate observations.
-func workflowActivation(gc *GuardContext) map[string]any {
-	return map[string]any{
-		"phase":                         gc.Session.Phase,
-		"review_loop_active":            gc.Workflow.ReviewLoopActive,
-		"review_verdict_gate_open":      gc.Workflow.ReviewVerdictGateOpen,
-		"verdict_delay_count":           gc.Workflow.VerdictDelayCount,
-		"closeout_gates_open":           gc.Workflow.CloseoutGatesOpen,
-		"closeout_gate_open_leaves":     gc.Workflow.CloseoutGateOpenLeaves,
-		"workflow_report_phase_pending": gc.Workflow.WorkflowReportPhasePending,
-		"phase_obligation_pending":      gc.Workflow.PhaseObligationPending,
-		"phase_obligation_kinds":        gc.Workflow.PhaseObligationKinds,
-	}
+// fillWorkflowActivation defines manifest-phase and durable workflow gate observations.
+func fillWorkflowActivation(set func(string, any), gc *GuardContext) {
+	set("phase", gc.Session.Phase)
+	set("review_loop_active", gc.Workflow.ReviewLoopActive)
+	set("review_verdict_gate_open", gc.Workflow.ReviewVerdictGateOpen)
+	set("verdict_delay_count", gc.Workflow.VerdictDelayCount)
+	set("closeout_gates_open", gc.Workflow.CloseoutGatesOpen)
+	set("closeout_gate_open_leaves", gc.Workflow.CloseoutGateOpenLeaves)
+	set("workflow_report_phase_pending", gc.Workflow.WorkflowReportPhasePending)
+	set("phase_obligation_pending", gc.Workflow.PhaseObligationPending)
+	set("phase_obligation_kinds", gc.Workflow.PhaseObligationKinds)
 }
 
-// sessionActivation projects the core profile, counters, caller identity,
+// fillSessionActivation projects the core profile, counters, caller identity,
 // content provenance, and argument diagnostics.
-func sessionActivation(gc *GuardContext) map[string]any {
-	return map[string]any{
-		"anchor":                     gc.Anchor,
-		"fire_count":                 gc.Counters.FireCount,
-		"credential_decisions":       gc.Counters.CredentialDecisions,
-		"tool_profile":               gc.Session.PermissionProfile,
-		"principal":                  gc.Session.Principal,
-		"principal_roles":            strList(gc.Session.PrincipalRoles),
-		"content_length":             gc.Content.ContentLength,
-		"content_roles":              strList(gc.Content.ContentRoles),
-		"content_origins":            strList(gc.Content.ContentOrigins),
-		"content_authorities":        strList(gc.Content.ContentAuthorities),
-		"content_trust_tiers":        strList(gc.Content.ContentTrustTiers),
-		"content_sources":            strList(gc.Content.ContentSources),
-		"content_segment_count":      gc.Content.ContentSegmentCount,
-		"content_contains_untrusted": gc.Content.ContentContainsUntrusted,
-		"arg_validation_reason":      gc.Invocation.ArgValidationReason,
-		"arg_validation_field":       gc.Invocation.ArgValidationField,
-	}
+func fillSessionActivation(set func(string, any), gc *GuardContext) {
+	set("anchor", gc.Anchor)
+	set("fire_count", gc.Counters.FireCount)
+	set("credential_decisions", gc.Counters.CredentialDecisions)
+	set("tool_profile", gc.Session.PermissionProfile)
+	set("principal", gc.Session.Principal)
+	set("principal_roles", strList(gc.Session.PrincipalRoles))
+	set("content_length", gc.Content.ContentLength)
+	set("content_roles", strList(gc.Content.ContentRoles))
+	set("content_origins", strList(gc.Content.ContentOrigins))
+	set("content_authorities", strList(gc.Content.ContentAuthorities))
+	set("content_trust_tiers", strList(gc.Content.ContentTrustTiers))
+	set("content_sources", strList(gc.Content.ContentSources))
+	set("content_segment_count", gc.Content.ContentSegmentCount)
+	set("content_contains_untrusted", gc.Content.ContentContainsUntrusted)
+	set("arg_validation_reason", gc.Invocation.ArgValidationReason)
+	set("arg_validation_field", gc.Invocation.ArgValidationField)
 }
 
 func mapOrEmpty(m map[string]any) map[string]any {

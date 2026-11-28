@@ -135,6 +135,11 @@ func kickOccurrenceProducible(kick string, data map[string]any, reader prompts.R
 
 func isMintedHandle(s string) bool { return strings.Contains(s, "#") }
 
+type cachedKickRender struct {
+	text string
+	rKey string
+}
+
 // coordinatorKicks renders every non-phase coordinator kick: the canonical
 // fixture across every coordinator authority, and each further fixture across
 // one recipient per distinct reader.
@@ -149,8 +154,9 @@ func (k *kickSweep) coordinatorKicks(ctx context.Context, anchorReg *anchor.Regi
 			if envIdx == 0 {
 				indexes = allIndexes(len(reps))
 			}
+			renderMemo := map[string]cachedKickRender{}
 			for _, i := range indexes {
-				if err := k.coordinatorKick(ctx, kick, envBase, reps[i]); err != nil {
+				if err := k.coordinatorKick(ctx, kick, envBase, reps[i], renderMemo); err != nil {
 					return err
 				}
 			}
@@ -159,7 +165,7 @@ func (k *kickSweep) coordinatorKicks(ctx context.Context, anchorReg *anchor.Regi
 	return nil
 }
 
-func (k *kickSweep) coordinatorKick(ctx context.Context, kick string, envBase map[string]any, cr coordRep) error {
+func (k *kickSweep) coordinatorKick(ctx context.Context, kick string, envBase map[string]any, cr coordRep, renderMemo map[string]cachedKickRender) error {
 	if kick == "coordinator-closeout" && !surface.SurfaceDeliversReport(cr.state.TurnProfile.SurfaceID) {
 		return nil
 	}
@@ -178,8 +184,9 @@ func (k *kickSweep) coordinatorKick(ctx context.Context, kick string, envBase ma
 	reader := cr.auth.Reader
 	subj := toolvocabtest.SubjectSelfNow()
 	var nextTurn *toolvocabtest.ActorAuthority
-	data := maps.Clone(envBase)
-	if kick == "coordinator-turn-closeout" || kick == "session-agent-enabled" {
+	var writes, canRecall bool
+	isTurnCloseout := kick == "coordinator-turn-closeout" || kick == "session-agent-enabled"
+	if isTurnCloseout {
 		closeR, err := closeoutTurnReader(cr.state, false)
 		if err != nil {
 			return err
@@ -187,24 +194,48 @@ func (k *kickSweep) coordinatorKick(ctx context.Context, kick string, envBase ma
 		reader = closeR
 		active := cr.auth.ActorAuthority()
 		nextTurn = &active
-		writes := cr.state.SessionMode != api.SessionModeAsk && cr.auth.Reader.Held()["command_mutation"]
+		writes = cr.state.SessionMode != api.SessionModeAsk && cr.auth.Reader.Held()["command_mutation"]
 		subj = toolvocabtest.SubjectSessionNextTurn(writes)
-		data["session_command_mutation_capable"] = writes
-	}
-	if closeoutKicks[kick] && data["reason_text"] == nil {
-		// Closeout always states its cause; the default cause is the iteration cap.
-		data["reason_text"] = promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutIterationCap}.Text()
 	}
 	if kick == "coordinator-citation-grounding" {
-		// The closeout retry sets it from the request's reach.
-		data["can_recall"] = cr.auth.Reach.Status("recall") == toolreach.Callable
+		canRecall = cr.auth.Reach.Status("recall") == toolreach.Callable
 	}
-	if err := prompts.MergeCoordinatorKickVarsForTools(data, reader); err != nil {
-		return err
+	memoKey := reader.Fingerprint()
+	if memoKey != "" {
+		if isTurnCloseout {
+			memoKey += fmt.Sprintf("|w=%t", writes)
+		} else if kick == "coordinator-citation-grounding" {
+			memoKey += fmt.Sprintf("|r=%t", canRecall)
+		}
 	}
-	text, rKey, err := k.render(ctx, "kick:", kick, reader, data)
-	if err != nil {
-		return err
+	var text, rKey string
+	if cached, ok := renderMemo[memoKey]; ok && memoKey != "" {
+		text, rKey = cached.text, cached.rKey
+		k.rendered++
+	} else {
+		data := maps.Clone(envBase)
+		if isTurnCloseout {
+			data["session_command_mutation_capable"] = writes
+		}
+		if closeoutKicks[kick] && data["reason_text"] == nil {
+			// Closeout always states its cause; the default cause is the iteration cap.
+			data["reason_text"] = promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutIterationCap}.Text()
+		}
+		if kick == "coordinator-citation-grounding" {
+			// The closeout retry sets it from the request's reach.
+			data["can_recall"] = canRecall
+		}
+		if err := prompts.MergeCoordinatorKickVarsForTools(data, reader); err != nil {
+			return err
+		}
+		var err error
+		text, rKey, err = k.render(ctx, "kick:", kick, reader, data)
+		if err != nil {
+			return err
+		}
+		if memoKey != "" {
+			renderMemo[memoKey] = cachedKickRender{text: text, rKey: rKey}
+		}
 	}
 	label := fmt.Sprintf("kick %s on %s (%s)", kick, cr.state.TurnProfile.SurfaceID, cr.state.ID)
 	checkClaimsCached(k.cache, rKey, cr.auth.Digest+"|"+string(subj.Kind), k.report, func() []string {
@@ -237,8 +268,9 @@ func (k *kickSweep) workerKicks(ctx context.Context, anchorReg *anchor.Registry,
 			if envIdx == 0 {
 				indexes = allIndexes(len(reps))
 			}
+			renderMemo := map[string]cachedKickRender{}
 			for _, i := range indexes {
-				if err := k.workerKick(ctx, kick, envBase, reps[i]); err != nil {
+				if err := k.workerKick(ctx, kick, envBase, reps[i], renderMemo); err != nil {
 					return err
 				}
 			}
@@ -247,7 +279,7 @@ func (k *kickSweep) workerKicks(ctx context.Context, anchorReg *anchor.Registry,
 	return nil
 }
 
-func (k *kickSweep) workerKick(ctx context.Context, kick string, envBase map[string]any, wr workerRep) error {
+func (k *kickSweep) workerKick(ctx context.Context, kick string, envBase map[string]any, wr workerRep, renderMemo map[string]cachedKickRender) error {
 	if !kickOccurrenceProducible(kick, envBase, wr.auth.Reader, wr.auth.Offered) {
 		return nil
 	}
@@ -255,7 +287,7 @@ func (k *kickSweep) workerKick(ctx context.Context, kick string, envBase map[str
 	reader := wr.auth.Reader
 	subj := toolvocabtest.SubjectSelfNow()
 	var followup *toolvocabtest.ActorAuthority
-	data := maps.Clone(envBase)
+	var writes bool
 	if closeout {
 		closeR, err := workerCloseoutReader(wr.ws)
 		if err != nil {
@@ -265,14 +297,31 @@ func (k *kickSweep) workerKick(ctx context.Context, kick string, envBase map[str
 		if kick == "worker-closeout" {
 			active := wr.auth.ActorAuthority()
 			followup = &active
-			writes := wr.ws.ParentSessionMode != api.SessionModeAsk && wr.auth.Reader.Held()["command_mutation"]
+			writes = wr.ws.ParentSessionMode != api.SessionModeAsk && wr.auth.Reader.Held()["command_mutation"]
 			subj = toolvocabtest.SubjectFollowupLeg(writes)
-			data["leg_command_mutation_capable"] = writes
 		}
 	}
-	text, rKey, err := k.render(ctx, "wkick:", kick, reader, data)
-	if err != nil {
-		return err
+	memoKey := reader.Fingerprint()
+	if memoKey != "" && kick == "worker-closeout" {
+		memoKey += fmt.Sprintf("|w=%t", writes)
+	}
+	var text, rKey string
+	if cached, ok := renderMemo[memoKey]; ok && memoKey != "" {
+		text, rKey = cached.text, cached.rKey
+		k.rendered++
+	} else {
+		data := maps.Clone(envBase)
+		if kick == "worker-closeout" {
+			data["leg_command_mutation_capable"] = writes
+		}
+		var err error
+		text, rKey, err = k.render(ctx, "wkick:", kick, reader, data)
+		if err != nil {
+			return err
+		}
+		if memoKey != "" {
+			renderMemo[memoKey] = cachedKickRender{text: text, rKey: rKey}
+		}
 	}
 	label := fmt.Sprintf("kick %s for %s (%s)", kick, wr.ws.ToolProfile, wr.ws.ID)
 	checkClaimsCached(k.cache, rKey, wr.auth.Digest+"|"+string(subj.Kind), k.report, func() []string {
