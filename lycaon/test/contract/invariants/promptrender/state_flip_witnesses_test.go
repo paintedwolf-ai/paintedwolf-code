@@ -38,6 +38,7 @@ func pickCoordState(t *testing.T, states []hoststate.CoordinatorState, pred func
 // fact, offered tool or parsed call follows the flipped state.
 func TestGuidanceFollowsSingleHostStateFlips(t *testing.T) {
 	t.Parallel()
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	s := mustStock(t)
 	states, err := hoststate.CoordinatorStates(t.Context())
 	if err != nil {

@@ -33,6 +33,7 @@ import (
 
 func verifyOccurrenceVsRecoveryAuthority(t *testing.T, h *hookProducerHarness, cells []roleCell) {
 	t.Helper()
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	var askCell, specCell, agentCell *roleCell
 	for i := range cells {
 		if cells[i].role == "coordinator" && cells[i].posture == api.SessionPostureBuild && cells[i].mode == api.SessionModeAsk {
