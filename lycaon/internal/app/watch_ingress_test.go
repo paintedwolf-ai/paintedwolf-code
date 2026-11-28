@@ -3,18 +3,19 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -93,21 +94,28 @@ func (p watchIngressProbe) checkInventory(t *testing.T, built *ServeApp) {
 func assertBuiltWatchWorkspaceProducers(t *testing.T, probe watchIngressProbe, root string) {
 	t.Helper()
 	ctx := t.Context()
-	gittest.Init(t, root)
+	root, err := filepath.EvalSymlinks(root)
+	testutil.FailErr(t, "resolve workspace root", err)
 	roots := []projectroot.RootRef{{ID: "repo", Label: "repo", Path: root, IsPrimary: true}}
 	auth := watch.Authority{ProjectDir: root, Roots: []watch.WatchRootGrant{{Label: "repo", RootID: "repo", Path: root}}}
 
 	path := filepath.Join(root, "watch-ingress.txt")
 	testutil.FailErr(t, "seed file", os.WriteFile(path, []byte("before\n"), 0o600))
-	gittest.CommitAll(t, root, "watch producer setup")
-	branch := gittest.Run(t, root, "symbolic-ref", "HEAD")
 	file := probe.register(t, awaitstore.Condition{Kind: "file_change", Root: "repo", Path: "watch-ingress.txt"}, auth)
 	testutil.FailErr(t, "write changed content", os.WriteFile(path, []byte("after\n"), 0o600))
 	testutil.FailErr(t, "publish workspace signal", sourcefeed.EmitProjectSignal(ctx, probe.owner.ProjectID, roots))
 	probe.expectMatch(t, file, "file_change")
 
+	// The ref producer reads loose refs directly. Seed two valid object names
+	// without requiring the bundled Git executable in the short test gate.
+	const branch = "refs/heads/main"
+	gitDir := filepath.Join(root, ".git")
+	refPath := filepath.Join(gitDir, branch)
+	testutil.FailErr(t, "create loose refs directory", os.MkdirAll(filepath.Dir(refPath), 0o700))
+	testutil.FailErr(t, "seed Git HEAD", os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("ref: "+branch+"\n"), 0o600))
+	testutil.FailErr(t, "seed Git ref", os.WriteFile(refPath, []byte(strings.Repeat("a", 40)+"\n"), 0o600))
 	ref := probe.register(t, awaitstore.Condition{Kind: "git_ref", Root: "repo", Ref: branch}, auth)
-	gittest.CommitAll(t, root, "move watched ref")
+	testutil.FailErr(t, "move Git ref", os.WriteFile(refPath, []byte(strings.Repeat("b", 40)+"\n"), 0o600))
 	repochange.Notify(ctx, repochange.Event{Kind: repochange.HeadMoved, ProjectDir: root})
 	probe.expectMatch(t, ref, "git_ref")
 }
@@ -150,9 +158,10 @@ func assertBuiltWatchWorkerProducers(t *testing.T, built *ServeApp, probe watchI
 	idle := probe.register(t, awaitstore.Condition{Kind: "all_workers_idle"}, watch.Authority{})
 	overlay := probe.register(t, awaitstore.Condition{Kind: "overlay_promote_pending"}, watch.Authority{})
 	_, err = built.DB.ExecContext(ctx, `UPDATE worker_jobs
-		SET status = 'complete', merge_status = 'pending', workspace_path = ?, scope_json = '{"mode":"write"}'
-		WHERE id = ?`, t.TempDir(), job)
+		SET status = 'complete', merge_status = 'pending', workspace_relpath = ?, scope_json = '{"mode":"write"}'
+		WHERE id = ?`, enginepaths.WorkerBranchesDirName+"/"+job, job)
 	testutil.FailErr(t, "publish worker outcome state", err)
+	testutil.FailErr(t, "acknowledge worker outcome", built.Workers.Queue.MarkOutcomeDelivered(ctx, job))
 	built.Sessions.Manager.Coordinator.Workers.Terminal(ctx, probe.owner.SessionID, job)
 	probe.expectMatch(t, idle, "all_workers_idle")
 	probe.expectMatch(t, overlay, "overlay_promote_pending")
