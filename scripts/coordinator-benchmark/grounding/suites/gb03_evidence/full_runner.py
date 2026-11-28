@@ -205,6 +205,12 @@ def _cmd_turn(command: str) -> ScriptedTurn:
     return ScriptedTurn(tool_calls=({"name": "command", "args": {"command": command}},))
 
 
+def _progress_turn(label: str = "Read, update, and verify workspace file") -> ScriptedTurn:
+    return ScriptedTurn(
+        tool_calls=({"name": "update_progress", "args": {"content": f"## Progress\n- [ ] {label}\n"}},)
+    )
+
+
 def _make_report(
     *,
     selector: str,
@@ -265,7 +271,7 @@ def _run_v01_02(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
         selector=sel,
         prompt="Inspect workspace with grep, find, ls, and wc.",
         turns=(
-            _cmd_turn("grep -n Alpha internal/a.go"),
+            _cmd_turn("grep Alpha internal/a.go"),
             _cmd_turn("find internal -maxdepth 2 -type f | sort"),
             _cmd_turn("wc -l internal/a.go"),
             ScriptedTurn(content="Observed grep [command#1], find [command#2], and wc [command#3]."),
@@ -287,6 +293,7 @@ def _run_v01_03(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
         selector=sel,
         prompt="Update internal/mut03.go and read it back.",
         turns=(
+            _progress_turn("Update internal/mut03.go and read it back"),
             _cmd_turn("cat -n internal/mut03.go"),
             _cmd_turn("printf 'package app\\n\\nconst V = 2\\n' > internal/mut03.go"),
             _cmd_turn("cat -n internal/mut03.go"),
@@ -520,8 +527,9 @@ def _run_v01_14(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
 # V03 · Supersession and history (8 sidecar slots)
 # ---------------------------------------------------------------------------
 
-def _v03_setup_turns(rel_path: str) -> tuple[ScriptedTurn, ScriptedTurn, ScriptedTurn]:
+def _v03_setup_turns(rel_path: str) -> tuple[ScriptedTurn, ...]:
     return (
+        _progress_turn(f"Read, update, and re-read {rel_path}"),
         _cmd_turn(f"cat -n {rel_path}"),
         _cmd_turn(f"printf 'package app\\n\\nfunc Val() int {{ return 200 }}\\n' > {rel_path}"),
         _cmd_turn(f"cat -n {rel_path}"),
@@ -537,11 +545,11 @@ def _prepare_v03_file(ctx: _RunnerContext, name: str) -> str:
 def _run_v03_01(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | None]:
     sel = "V03-01-historical-handle-resolves-captured-body"
     rel = _prepare_v03_file(ctx, "v03_01.go")
-    t1, t2, t3 = _v03_setup_turns(rel)
+    setup = _v03_setup_turns(rel)
     art, info, b, a, d = ctx.run_session(
         selector=sel,
         prompt=f"Read {rel}, update it, read again, and cite the historical value.",
-        turns=(t1, t2, t3, ScriptedTurn(content='Original body was [read#1:3 "return 100"] before [read#2:3 "return 200"].')),
+        turns=(*setup, ScriptedTurn(content='Original body was [read#1:3 "return 100"] before [read#2:3 "return 200"].')),
     )
     r1 = next((r for r in art.product_records if r.handle == "read#1"), None)
     old_body_preserved = bool(r1 and r1.raw_bytes and b"return 100" in r1.raw_bytes)
@@ -556,11 +564,11 @@ def _run_v03_01(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
 def _run_v03_02(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | None]:
     sel = "V03-02-unqualified-path-resolves-current-only"
     rel = _prepare_v03_file(ctx, "v03_02.go")
-    t1, t2, t3 = _v03_setup_turns(rel)
+    setup = _v03_setup_turns(rel)
     _, info, b, a, d = ctx.run_session(
         selector=sel,
         prompt=f"Read {rel}, update it, read again, and cite unqualified path.",
-        turns=(t1, t2, t3, ScriptedTurn(content=f'Unqualified old excerpt [{rel}:3 "return 100"].')),
+        turns=(*setup, ScriptedTurn(content=f'Unqualified old excerpt [{rel}:3 "return 100"].')),
         max_repair_replies=2,
         repair_reply_content=f'Unqualified current excerpt [{rel}:3 "return 200"].',
     )
@@ -575,11 +583,11 @@ def _run_v03_02(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
 def _run_v03_03(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | None]:
     sel = "V03-03-historical-handle-newer-excerpt-refused"
     rel = _prepare_v03_file(ctx, "v03_03.go")
-    t1, t2, t3 = _v03_setup_turns(rel)
+    setup = _v03_setup_turns(rel)
     _, info, b, a, d = ctx.run_session(
         selector=sel,
         prompt=f"Read {rel}, update it, read again, and test cross-version citation.",
-        turns=(t1, t2, t3, ScriptedTurn(content='Mismatch: [read#1:3 "return 200"].')),
+        turns=(*setup, ScriptedTurn(content='Mismatch: [read#1:3 "return 200"].')),
         max_repair_replies=2,
         repair_reply_content='Corrected: [read#2:3 "return 200"].',
     )
@@ -594,11 +602,11 @@ def _run_v03_03(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
 def _run_v03_04(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | None]:
     sel = "V03-04-current-handle-older-excerpt-refused"
     rel = _prepare_v03_file(ctx, "v03_04.go")
-    t1, t2, t3 = _v03_setup_turns(rel)
+    setup = _v03_setup_turns(rel)
     _, info, b, a, d = ctx.run_session(
         selector=sel,
         prompt=f"Read {rel}, update it, read again, and test current handle with old excerpt.",
-        turns=(t1, t2, t3, ScriptedTurn(content='Mismatch: [read#2:3 "return 100"].')),
+        turns=(*setup, ScriptedTurn(content='Mismatch: [read#2:3 "return 100"].')),
         max_repair_replies=2,
         repair_reply_content='Corrected: [read#1:3 "return 100"].',
     )
@@ -676,11 +684,11 @@ def _run_v03_07(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
 def _run_v03_08(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | None]:
     sel = "V03-08-trust-survives-supersession"
     rel = _prepare_v03_file(ctx, "v03_08.go")
-    t1, t2, t3 = _v03_setup_turns(rel)
+    setup = _v03_setup_turns(rel)
     art, info, b, a, d = ctx.run_session(
         selector=sel,
         prompt=f"Read {rel}, update it, read again, and verify superseded record metadata survives.",
-        turns=(t1, t2, t3, ScriptedTurn(content='Verified superseded [read#1:3 "return 100"] and current [read#2:3 "return 200"].')),
+        turns=(*setup, ScriptedTurn(content='Verified superseded [read#1:3 "return 100"] and current [read#2:3 "return 200"].')),
     )
     r1 = next((r for r in art.product_records if r.handle == "read#1"), None)
     r2 = next((r for r in art.product_records if r.handle == "read#2"), None)
@@ -1193,11 +1201,11 @@ def _run_v06_09(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
 def _run_v06_10(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | None]:
     sel = "V06-10-workspace-refresh-rejection-invalidation"
     rel = _prepare_v03_file(ctx, "v06_10.go")
-    t1, t2, t3 = _v03_setup_turns(rel)
+    setup = _v03_setup_turns(rel)
     _, info, b, a, d = ctx.run_session(
         selector=sel,
         prompt=f"Read {rel}, refresh workspace with edit, re-read, and test stale excerpt.",
-        turns=(t1, t2, t3, ScriptedTurn(content=f'Stale excerpt [{rel}:3 "return 100"].')),
+        turns=(*setup, ScriptedTurn(content=f'Stale excerpt [{rel}:3 "return 100"].')),
         max_repair_replies=2,
         repair_reply_content=f'Fresh excerpt [{rel}:3 "return 200"].',
     )
