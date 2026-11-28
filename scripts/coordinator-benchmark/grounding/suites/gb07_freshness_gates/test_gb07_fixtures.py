@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import sqlite3
 import tempfile
 import unittest
 
@@ -26,7 +27,10 @@ from grounding.suites.gb07_freshness_gates.full_runner import (
     _init_plain_workspace,
     _install_verify_gate_workflow_overlay,
     _parse_workflow_advance_result,
+    _query_branch_head_state,
+    _query_head_snapshot_state,
     _unwrap_closeout_grounding,
+    _wait_for_external_edit_recapture,
     evaluate_wording_invariance,
     main,
     parse_and_validate_args,
@@ -295,6 +299,167 @@ class TestGB07CatalogAndFixtures(unittest.TestCase):
             self.assertFalse((ws / ".git" / "gb07-churn.tmp").exists())
             self.assertFalse((ws / "tmp" / "gb07-excluded-build.out").exists())
             self.assertFalse((ws / "node_modules" / "gb07-pkg" / "index.js").exists())
+
+    def test_typed_external_edit_recapture_wait_for_snapshot_and_branch_heads(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="gb07-recapture-") as td:
+            root = pathlib.Path(td) / "ws"
+            root.mkdir()
+            db_path = pathlib.Path(td) / "store.db"
+            conn = sqlite3.connect(db_path)
+            conn.executescript(
+                """
+                CREATE TABLE source_snapshot_heads (
+                    roots_key TEXT PRIMARY KEY,
+                    snapshot_id TEXT NOT NULL,
+                    published_ts TEXT NOT NULL
+                );
+                CREATE TABLE source_snapshot_roots (
+                    snapshot_id TEXT NOT NULL,
+                    root_path TEXT NOT NULL,
+                    ordinal INTEGER NOT NULL,
+                    manifest_id TEXT NOT NULL
+                );
+                CREATE TABLE source_manifest_layout (
+                    manifest_id TEXT NOT NULL,
+                    first_path TEXT NOT NULL,
+                    chunk_id TEXT NOT NULL
+                );
+                CREATE TABLE source_manifest_entries (
+                    chunk_id TEXT NOT NULL,
+                    path TEXT NOT NULL,
+                    sha256 TEXT NOT NULL
+                );
+                CREATE TABLE source_branch_heads (
+                    project_id TEXT NOT NULL,
+                    branch_id TEXT NOT NULL,
+                    path TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    content_sha256 TEXT NOT NULL,
+                    ordinal INTEGER NOT NULL
+                );
+                """
+            )
+            conn.execute(
+                "INSERT INTO source_snapshot_heads VALUES ('rk1', 'snap-1', '2026-11-28T00:00:01Z')"
+            )
+            conn.execute(
+                "INSERT INTO source_snapshot_roots VALUES ('snap-1', ?, 0, 'man-1')",
+                (str(root.resolve()),),
+            )
+            conn.execute("INSERT INTO source_manifest_layout VALUES ('man-1', 'gate.go', 'chk-1')")
+            conn.execute("INSERT INTO source_manifest_entries VALUES ('chk-1', 'gate.go', 'sha-v1')")
+            conn.execute(
+                "INSERT INTO source_branch_heads VALUES ('proj-1', '', 'gate.go', 'content', 'sha-v1', 1)"
+            )
+            conn.commit()
+
+            # Pre-edit state matches sha-v1, NOT sha-v2 (times out immediately with timeout=0.05)
+            snap_id, snap_sha = _query_head_snapshot_state(db_path, root, "gate.go")
+            self.assertEqual((snap_id, snap_sha), ("snap-1", "sha-v1"))
+            self.assertEqual(_query_branch_head_state(db_path, "proj-1", "gate.go"), ("content", "sha-v1"))
+
+            miss = _wait_for_external_edit_recapture(
+                db_path,
+                project_id="proj-1",
+                workspace=root,
+                rel_path="gate.go",
+                expected_sha256="sha-v2",
+                pre_edit_snapshot_id="snap-1",
+                timeout=0.05,
+                poll_interval=0.01,
+            )
+            self.assertFalse(miss["recaptured"])
+            self.assertEqual(miss["source"], "timeout")
+
+            # 1) Watcher ObservePaths updates source_branch_heads -> recaptured via source_branch_heads
+            conn.execute(
+                "UPDATE source_branch_heads SET content_sha256 = 'sha-v2', ordinal = 2 WHERE path = 'gate.go'"
+            )
+            conn.commit()
+            hit_branch = _wait_for_external_edit_recapture(
+                db_path,
+                project_id="proj-1",
+                workspace=root,
+                rel_path="gate.go",
+                expected_sha256="sha-v2",
+                pre_edit_snapshot_id="snap-1",
+                timeout=1.0,
+                poll_interval=0.01,
+            )
+            self.assertTrue(hit_branch["recaptured"])
+            self.assertEqual(hit_branch["source"], "source_branch_heads")
+            self.assertEqual(hit_branch["sha256"], "sha-v2")
+
+            # 2) Snapshot head updates to snap-2 with sha-v3 -> recaptured via source_snapshot_heads
+            conn.execute(
+                "UPDATE source_snapshot_heads SET snapshot_id = 'snap-2', published_ts = '2026-11-28T00:00:02Z'"
+            )
+            conn.execute(
+                "INSERT INTO source_snapshot_roots VALUES ('snap-2', ?, 0, 'man-2')",
+                (str(root.resolve()),),
+            )
+            conn.execute("INSERT INTO source_manifest_layout VALUES ('man-2', 'gate.go', 'chk-2')")
+            conn.execute("INSERT INTO source_manifest_entries VALUES ('chk-2', 'gate.go', 'sha-v3')")
+            conn.commit()
+            hit_snap = _wait_for_external_edit_recapture(
+                db_path,
+                project_id="proj-1",
+                workspace=root,
+                rel_path="gate.go",
+                expected_sha256="sha-v3",
+                pre_edit_snapshot_id="snap-1",
+                timeout=1.0,
+                poll_interval=0.01,
+            )
+            self.assertTrue(hit_snap["recaptured"])
+            self.assertEqual(hit_snap["source"], "source_snapshot_heads")
+            self.assertEqual(hit_snap["snapshot_id"], "snap-2")
+
+            # 3) Deletion: source_branch_heads marks state='absent'
+            conn.execute(
+                "UPDATE source_branch_heads SET state = 'absent', content_sha256 = '', ordinal = 3 WHERE path = 'gate.go'"
+            )
+            conn.commit()
+            hit_del_branch = _wait_for_external_edit_recapture(
+                db_path,
+                project_id="proj-1",
+                workspace=root,
+                rel_path="gate.go",
+                expected_sha256=None,
+                pre_edit_snapshot_id="snap-2",
+                timeout=1.0,
+                poll_interval=0.01,
+            )
+            self.assertTrue(hit_del_branch["recaptured"])
+            self.assertEqual(hit_del_branch["source"], "source_branch_heads")
+            self.assertEqual(hit_del_branch["state"], "absent")
+
+            # 4) Deletion via new snapshot head snap-3 omitting gate.go
+            conn.execute(
+                "UPDATE source_branch_heads SET state = 'content', content_sha256 = 'sha-v3', ordinal = 4 WHERE path = 'gate.go'"
+            )
+            conn.execute(
+                "UPDATE source_snapshot_heads SET snapshot_id = 'snap-3', published_ts = '2026-11-28T00:00:03Z'"
+            )
+            conn.execute(
+                "INSERT INTO source_snapshot_roots VALUES ('snap-3', ?, 0, 'man-3')",
+                (str(root.resolve()),),
+            )
+            conn.commit()
+            hit_del_snap = _wait_for_external_edit_recapture(
+                db_path,
+                project_id="proj-1",
+                workspace=root,
+                rel_path="gate.go",
+                expected_sha256=None,
+                pre_edit_snapshot_id="snap-2",
+                timeout=1.0,
+                poll_interval=0.01,
+            )
+            self.assertTrue(hit_del_snap["recaptured"])
+            self.assertEqual(hit_del_snap["source"], "source_snapshot_heads")
+            self.assertEqual(hit_del_snap["snapshot_id"], "snap-3")
+            conn.close()
 
 
 if __name__ == "__main__":

@@ -845,6 +845,180 @@ def _apply_g01_03_non_content_churn(workspace: pathlib.Path) -> dict[str, Any]:
     }
 
 
+def _query_head_snapshot_state(
+    db_path: pathlib.Path,
+    workspace: pathlib.Path,
+    rel_path: str,
+) -> tuple[str, str | None]:
+    """Return `(snapshot_id, entry_sha256_or_None)` from `source_snapshot_heads` + `source_manifest_entries`."""
+    if not db_path.is_file():
+        return "", None
+    candidates = tuple(dict.fromkeys((str(workspace), str(workspace.resolve()))))
+    placeholders = ", ".join("?" for _ in candidates)
+    with contextlib.closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as conn:
+        tables = {
+            r[0]
+            for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type IN ('table', 'view')"
+            ).fetchall()
+        }
+        needed = {
+            "source_snapshot_heads",
+            "source_snapshot_roots",
+            "source_manifest_layout",
+            "source_manifest_entries",
+        }
+        if not needed.issubset(tables):
+            return "", None
+        row = conn.execute(
+            f"""
+            SELECT h.snapshot_id, r.manifest_id
+            FROM source_snapshot_heads h
+            JOIN source_snapshot_roots r ON r.snapshot_id = h.snapshot_id
+            WHERE r.root_path IN ({placeholders})
+            ORDER BY h.published_ts DESC
+            LIMIT 1
+            """,
+            candidates,
+        ).fetchone()
+        if not row:
+            return "", None
+        snapshot_id, manifest_id = str(row[0] or ""), str(row[1] or "")
+        entry = conn.execute(
+            """
+            SELECT e.sha256
+            FROM source_manifest_layout l
+            JOIN source_manifest_entries e ON e.chunk_id = l.chunk_id
+            WHERE l.manifest_id = ? AND e.path = ?
+            LIMIT 1
+            """,
+            (manifest_id, rel_path),
+        ).fetchone()
+        return snapshot_id, (str(entry[0] or "") if entry else None)
+
+
+def _query_branch_head_state(
+    db_path: pathlib.Path,
+    project_id: str,
+    rel_path: str,
+) -> tuple[str, str]:
+    """Return `(state, content_sha256)` for `rel_path` in `source_branch_heads` (trunk branch)."""
+    if not db_path.is_file():
+        return "", ""
+    with contextlib.closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as conn:
+        tables = {
+            r[0]
+            for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type IN ('table', 'view')"
+            ).fetchall()
+        }
+        if "source_branch_heads" not in tables:
+            return "", ""
+        row = conn.execute(
+            """
+            SELECT state, content_sha256
+            FROM source_branch_heads
+            WHERE project_id = ? AND branch_id = '' AND path = ?
+            ORDER BY ordinal DESC
+            LIMIT 1
+            """,
+            (project_id, rel_path),
+        ).fetchone()
+        if not row:
+            return "", ""
+        return str(row[0] or ""), str(row[1] or "")
+
+
+def _wait_for_external_edit_recapture(
+    db_path: pathlib.Path,
+    *,
+    project_id: str,
+    workspace: pathlib.Path,
+    rel_path: str,
+    expected_sha256: str | None,
+    pre_edit_snapshot_id: str = "",
+    timeout: float = 15.0,
+    poll_interval: float = 0.05,
+) -> dict[str, Any]:
+    """Wait for the typed DB fact that the sidecar observed/recaptured an external file edit or delete.
+
+    Never relies on a fixed sleep timer: polls `store.db` until either:
+    - `source_snapshot_heads` / `source_manifest_entries` reflects `expected_sha256`
+      (or absence for deletion when `snapshot_id != pre_edit_snapshot_id`), or
+    - `source_branch_heads` reflects `state == 'content'` with `content_sha256 == expected_sha256`
+      (or `state == 'absent'` for deletion), which is written by the watcher observer path after
+      `repochange.Notify` has delivered the delta to `sourcesnapshot.Store`.
+    """
+    started = time.monotonic()
+    deadline = started + timeout
+    last_snap_id = ""
+    last_snap_sha: str | None = None
+    last_head_state = ""
+    last_head_sha = ""
+    while True:
+        with contextlib.suppress(sqlite3.OperationalError):
+            last_snap_id, last_snap_sha = _query_head_snapshot_state(db_path, workspace, rel_path)
+            if expected_sha256 is not None:
+                if last_snap_id and last_snap_sha == expected_sha256:
+                    return {
+                        "recaptured": True,
+                        "source": "source_snapshot_heads",
+                        "snapshot_id": last_snap_id,
+                        "sha256": last_snap_sha,
+                        "elapsed_ms": round((time.monotonic() - started) * 1000.0, 2),
+                    }
+            else:
+                if last_snap_id and last_snap_id != pre_edit_snapshot_id and last_snap_sha is None:
+                    return {
+                        "recaptured": True,
+                        "source": "source_snapshot_heads",
+                        "snapshot_id": last_snap_id,
+                        "sha256": None,
+                        "elapsed_ms": round((time.monotonic() - started) * 1000.0, 2),
+                    }
+
+            last_head_state, last_head_sha = _query_branch_head_state(db_path, project_id, rel_path)
+            if expected_sha256 is not None:
+                if last_head_state == "content" and last_head_sha == expected_sha256:
+                    return {
+                        "recaptured": True,
+                        "source": "source_branch_heads",
+                        "state": last_head_state,
+                        "sha256": last_head_sha,
+                        "elapsed_ms": round((time.monotonic() - started) * 1000.0, 2),
+                    }
+            else:
+                if last_head_state == "absent":
+                    return {
+                        "recaptured": True,
+                        "source": "source_branch_heads",
+                        "state": last_head_state,
+                        "sha256": None,
+                        "elapsed_ms": round((time.monotonic() - started) * 1000.0, 2),
+                    }
+
+        if time.monotonic() >= deadline:
+            return {
+                "recaptured": False,
+                "source": "timeout",
+                "snapshot_id": last_snap_id,
+                "snapshot_sha256": last_snap_sha,
+                "branch_head_state": last_head_state,
+                "branch_head_sha256": last_head_sha,
+                "elapsed_ms": round((time.monotonic() - started) * 1000.0, 2),
+            }
+        time.sleep(poll_interval)
+
+
+_G01_EXTERNAL_EDIT_SLOTS: frozenset[str] = frozenset(
+    {
+        "G01-02-stale-after-content-edit",
+        "G01-05-stale-after-revert-and-reedit",
+        "G01-06-stale-after-delete",
+    }
+)
+
+
 def _apply_g01_mutation_after_verify(
     selector: str,
     *,
@@ -1023,6 +1197,7 @@ def _run_freshness_slot(
     _answer_tool(client, sid_default, "command", {"command": "echo VERIFY_OK gate.go", "verification": True})
     # Wait for the verify command to finish and persist its receipt BEFORE mutating workspace files.
     req_def_after_verify = client.wait_pending(sid_default, timeout=120.0)
+    pre_edit_snap_id, _ = _query_head_snapshot_state(sidecar.store_db_path, workspace, "gate.go")
     req_def_ready, default_close_text = _apply_g01_mutation_after_verify(
         selector,
         workspace=workspace,
@@ -1031,6 +1206,23 @@ def _run_freshness_slot(
         pending_after_verify=req_def_after_verify,
         prefix=prefix,
     )
+    # Decision 098: for external-edit display slots (G01-02, G01-05, G01-06), wait for the typed
+    # fact in store.db that the watcher/snapshot recaptured the edit or deletion before reading
+    # `source_checks` (never a fixed timer).
+    display_recapture_wait: dict[str, Any] | None = None
+    if selector in _G01_EXTERNAL_EDIT_SLOTS:
+        gate_file = workspace / "gate.go"
+        expected_gate_sha = (
+            hashlib.sha256(gate_file.read_bytes()).hexdigest() if gate_file.is_file() else None
+        )
+        display_recapture_wait = _wait_for_external_edit_recapture(
+            sidecar.store_db_path,
+            project_id=project_id,
+            workspace=workspace,
+            rel_path="gate.go",
+            expected_sha256=expected_gate_sha,
+            pre_edit_snapshot_id=pre_edit_snap_id,
+        )
     # Trigger one non-verification turn step after mutation so the host re-assembles the
     # closeout turn's execution_observations against the post-mutation filesystem state.
     if selector != "G01-07-reverify-restores-freshness":
@@ -1154,7 +1346,17 @@ def _run_freshness_slot(
         _answer_tool(client, sid_cd, "command", {"command": "cat -n gate.go"})
         _answer_tool(client, sid_cd, "command", {"command": "echo VERIFY_OK gate.go", "verification": True})
         req_cd_after = client.wait_pending(sid_cd, timeout=120.0)
-        (workspace / "unrelated.go").write_text("package gate\n\nfunc Helper() int { return 99 }\n", encoding="utf-8")
+        pre_cd_snap_id, _ = _query_head_snapshot_state(sidecar.store_db_path, workspace, "unrelated.go")
+        unrelated_new = "package gate\n\nfunc Helper() int { return 99 }\n"
+        (workspace / "unrelated.go").write_text(unrelated_new, encoding="utf-8")
+        cd_recapture_wait = _wait_for_external_edit_recapture(
+            sidecar.store_db_path,
+            project_id=project_id,
+            workspace=workspace,
+            rel_path="unrelated.go",
+            expected_sha256=hashlib.sha256(unrelated_new.encode("utf-8")).hexdigest(),
+            pre_edit_snapshot_id=pre_cd_snap_id,
+        )
         client.respond(
             req_cd_after["id"],
             tool_calls=[{"id": str(uuid.uuid4()), "name": "command", "args": {"command": "true"}}],
@@ -1175,6 +1377,7 @@ def _run_freshness_slot(
             "gate_failed_leaves": cg_leaves,
             "display_session_id": sid_cd,
             "display_source_match": cd_match,
+            "display_recapture_wait": cd_recapture_wait,
         }
 
     return {
@@ -1201,6 +1404,7 @@ def _run_freshness_slot(
             "session_id": sid_default,
             "source_checks": source_checks,
             "latest_source_match": observed_match,
+            "recapture_wait": display_recapture_wait,
         },
         "conservative_admitted_unrelated_edit": conservative_unrelated,
     }
