@@ -88,6 +88,9 @@ class RecordingHTTPFixture:
                     "method": method,
                     "path": self.path,
                     "headers": _screen_headers(raw_headers, outer.redact_tokens),
+                    "header_canary_matched": any(
+                        bool(t) and t in v for v in raw_headers.values() for t in outer.redact_tokens
+                    ),
                     "body": _screen_body(body, outer.redact_tokens),
                     "response_status": status,
                 }

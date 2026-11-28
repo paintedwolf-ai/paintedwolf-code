@@ -80,12 +80,21 @@ def verify_outbound_screening_option(
 
     wire_canary_hits = 0
     redacted_placeholder_hits = 0
+    # SHA-256 prefix of "Bearer [REDACTED]" when RecordingHTTPFixture masks Authorization by header name.
+    bearer_redacted_sha_prefix = "<redacted:sha256:cae59a9ed2d6>"
     for req in requests:
         body = req.get("body") or {}
         headers = req.get("headers") or {}
-        if body.get("redacted") is True or any(
-            isinstance(v, str) and v.startswith("<redacted:sha256:") for v in headers.values()
-        ):
+        header_canary_hit = any(
+            isinstance(v, str)
+            and v.startswith("<redacted:sha256:")
+            and v != bearer_redacted_sha_prefix
+            and not (isinstance(k, str) and k.lower() == "authorization" and req.get("header_canary_matched") is False)
+            for k, v in headers.items()
+        )
+        if req.get("header_canary_matched") is True or (req.get("header_canary_matched") is None and header_canary_hit):
+            wire_canary_hits += 1
+        elif body.get("redacted") is True:
             wire_canary_hits += 1
         preview = str(body.get("preview") or "")
         if "[REDACTED]" in preview or "{{paintedwolf-secret:" in preview:
