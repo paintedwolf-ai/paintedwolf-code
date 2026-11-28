@@ -249,8 +249,8 @@ class CF04SidecarClient:
                     parsed = json.loads(text)
             return HTTPResponse(status=int(err.code), body_text=text, json_body=parsed, headers=resp_headers)
 
-    def create_project(self, roots: list[dict[str, object]]) -> dict[str, object]:
-        resp = self.raw_call("POST", "/v1/projects", {"roots": roots})
+    def create_project(self, roots: list[dict[str, object]], *, timeout_s: float = 120.0) -> dict[str, object]:
+        resp = self.raw_call("POST", "/v1/projects", {"roots": roots}, timeout_s=timeout_s)
         if resp.status not in (200, 201) or not isinstance(resp.json_body, dict):
             raise RuntimeError(f"POST /v1/projects failed: status={resp.status} body={resp.body_text}")
         return resp.json_body
