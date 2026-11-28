@@ -1022,7 +1022,14 @@ def _run_warmed_slots(
                 )
                 abort_session(s_del_src)
                 grants_before_del = (app.request(f"/v1/approval-grants?session_id={s_del_src}") or {}).get("grants") or []
-                app.request(f"/v1/sessions/{s_del_src}", method="DELETE")
+                req_del = urllib.request.Request(
+                    f"{app.url}/v1/sessions/{s_del_src}",
+                    method="DELETE",
+                    headers={"Authorization": f"Bearer {app.token}"},
+                )
+                with urllib.request.urlopen(req_del, timeout=30.0) as del_resp:
+                    del_status = del_resp.status
+                assert del_status in (200, 204), f"unexpected DELETE /v1/sessions status {del_status}"
                 grants_after_del = (app.request(f"/v1/approval-grants?session_id={s_del_src}") or {}).get("grants") or []
                 if marker_del.exists():
                     marker_del.unlink()
@@ -1494,7 +1501,16 @@ def _run_a12_restart_slots(
                 # Wait for the post-restart approved call to settle (or session idle) before aborting
                 deadline = time.monotonic() + 30.0
                 while time.monotonic() < deadline:
-                    settled = _find_tool_result(app2, session_id, pending_call_id)
+                    msgs = (app2.request(f"/v1/sessions/{session_id}/messages") or {}).get("messages") or []
+                    settled = next(
+                        (
+                            m for m in msgs
+                            if isinstance(m, dict)
+                            and m.get("role") == "tool"
+                            and m.get("tool_call_id") == pending_call_id
+                        ),
+                        None,
+                    )
                     if settled is not None:
                         post_restart_settled = settled
                         break
