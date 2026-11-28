@@ -1,6 +1,7 @@
 package textfile
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -68,7 +69,10 @@ func TestSerializePreservingMixedEOL(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, mixed := SerializePreservingMixedEOL(tc.beforeRaw, tc.draftLF, tc.fallback)
+			got, mixed, err := SerializePreservingMixedEOL(tc.beforeRaw, tc.draftLF, tc.fallback)
+			if err != nil {
+				t.Fatalf("SerializePreservingMixedEOL() unexpected error: %v", err)
+			}
 			if got != tc.want || mixed != tc.wantMixed {
 				t.Fatalf("SerializePreservingMixedEOL() = (%q, %v), want (%q, %v)", got, mixed, tc.want, tc.wantMixed)
 			}
@@ -92,17 +96,60 @@ func TestSerializePreservingMixedEOLBoundedWorkOnLargeRewrittenInterior(t *testi
 	before.WriteString("suffix_crlf\r\n")
 	draft.WriteString("suffix_crlf\n")
 
-	got, mixed, steps := serializePreservingMixedEOLWithStats(before.String(), draft.String(), "lf")
+	got, mixed, steps, err := serializePreservingMixedEOLWithStats(before.String(), draft.String(), "lf")
+	if err != nil {
+		t.Fatalf("unexpected error on all-rewritten interior: %v", err)
+	}
 	if !strings.HasPrefix(got, "prefix_crlf\r\n") || !strings.HasSuffix(got, "suffix_crlf\r\n") {
 		t.Fatalf("untouched prefix/suffix CRLF not preserved on large rewrite")
 	}
 	if !mixed {
 		t.Fatalf("expected mixed=true with preserved CRLF prefix/suffix and LF rewritten interior")
 	}
-	// Deterministic O(N) work invariant: must NOT be quadratic (4000*4000 = 16,000,000).
-	maxAllowedSteps := 8 * (interiorLines + 2)
+	// Deterministic O(N + maxD^2) work invariant including failed Myers steps:
+	// must stay far below quadratic (4000*4000 = 16,000,000).
+	maxAllowedSteps := 12*(interiorLines+2) + (maxMixedEOLMyersD+1)*(maxMixedEOLMyersD+2)
 	if steps > maxAllowedSteps {
-		t.Fatalf("alignment work %d exceeded linear bound %d (quadratic regression)", steps, maxAllowedSteps)
+		t.Fatalf("alignment work %d exceeded bounded limit %d (quadratic regression)", steps, maxAllowedSteps)
+	}
+}
+
+func TestSerializePreservingMixedEOLUnresolvedSurvivingInteriorFailsClosed(t *testing.T) {
+	// 150 replaced lines before + 260 identical alternating interior lines + 150
+	// replaced lines after: total edit distance (600) exceeds maxMixedEOLMyersD
+	// AND gap cell count (560*560 = 313,600) exceeds maxMixedEOLLCSCells, while
+	// 260 original lines survive. Must fail closed instead of silently normalizing.
+	const replacedBlock = 150
+	const repeatedLines = 260
+	var before, draft strings.Builder
+	before.WriteString("outer_prefix_crlf\r\n")
+	draft.WriteString("outer_prefix_crlf\n")
+	for i := 0; i < replacedBlock; i++ {
+		fmt.Fprintf(&before, "top_old_%03d\r\n", i)
+		fmt.Fprintf(&draft, "top_new_%03d\n", i)
+	}
+	for i := 0; i < repeatedLines; i++ {
+		if i%2 == 0 {
+			before.WriteString("repeated_body\r\n")
+		} else {
+			before.WriteString("repeated_body\n")
+		}
+		draft.WriteString("repeated_body\n")
+	}
+	for i := 0; i < replacedBlock; i++ {
+		fmt.Fprintf(&before, "bot_old_%03d\n", i)
+		fmt.Fprintf(&draft, "bot_new_%03d\n", i)
+	}
+	before.WriteString("outer_suffix_lf\n")
+	draft.WriteString("outer_suffix_lf\n")
+
+	_, _, steps, err := serializePreservingMixedEOLWithStats(before.String(), draft.String(), "lf")
+	if !errors.Is(err, ErrMixedEOLAlignmentUnresolved) {
+		t.Fatalf("expected ErrMixedEOLAlignmentUnresolved, got %v", err)
+	}
+	maxAllowedSteps := 12*(2*replacedBlock+repeatedLines+2) + (maxMixedEOLMyersD+1)*(maxMixedEOLMyersD+2)
+	if steps > maxAllowedSteps {
+		t.Fatalf("unresolved-gap alignment work %d exceeded bounded limit %d", steps, maxAllowedSteps)
 	}
 }
 
@@ -141,7 +188,10 @@ func TestSerializePreservingMixedEOLRepeatedInteriorAlternatingTerminators(t *te
 	draft.WriteString("outer_suffix_lf\n")
 	want.WriteString("outer_suffix_lf\n")
 
-	got, mixed := SerializePreservingMixedEOL(before.String(), draft.String(), "lf")
+	got, mixed, err := SerializePreservingMixedEOL(before.String(), draft.String(), "lf")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if !mixed {
 		t.Fatalf("expected mixed=true with preserved alternating interior terminators")
 	}

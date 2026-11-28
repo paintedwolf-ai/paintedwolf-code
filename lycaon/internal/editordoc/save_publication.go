@@ -151,7 +151,13 @@ func (s *Service) serializeDocumentContent(ctx context.Context, d *Document, dra
 	if err != nil {
 		return "", false, fmt.Errorf("decode mixed-eol preimage: %w", err)
 	}
-	serialized, mixed := textfile.SerializePreservingMixedEOL(doc.Text(), draft, d.EOL)
+	serialized, mixed, err := textfile.SerializePreservingMixedEOL(doc.Text(), draft, d.EOL)
+	if err != nil {
+		if errors.Is(err, textfile.ErrMixedEOLAlignmentUnresolved) {
+			return "", false, projectsource.ErrSourceWriteConflict
+		}
+		return "", false, fmt.Errorf("preserve mixed-eol terminators: %w", err)
+	}
 	return serialized, mixed, nil
 }
 
