@@ -34,7 +34,7 @@ func TestSettleRootFlushesAndFailsClosedWhenUnsettled(t *testing.T) {
 	t.Cleanup(restore)
 
 	testutil.FailErr(t, "write under held debounce", os.WriteFile(target, []byte("package p // edited\n"), 0o600))
-	if repochange.SettleRoot(ctx, root, 50*time.Millisecond, 200*time.Millisecond) {
+	if repochange.SettleRoot(ctx, root, 250*time.Millisecond, 500*time.Millisecond) {
 		t.Fatal("SettleRoot reported settled while debounce was held back past maxWait")
 	}
 
