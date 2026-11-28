@@ -84,7 +84,7 @@ _CODE_RE = re.compile(
     r"COMPLETION_REPORT_[A-Z0-9_]+"
     r")\b"
 )
-_REPAIR_ID_RE = re.compile(r"\b(c[1-9]\d*)\b")
+_REPAIR_ID_RE = re.compile(r"(?:^|\n)-\s*(c[1-9]\d*):")
 
 
 @dataclass
@@ -262,8 +262,21 @@ def _extract_codes_from_blobs(blobs: Sequence[str]) -> list[str]:
 
 
 def _extract_first_repair_id(pending: Mapping[str, Any]) -> str:
+    # Search message contents from newest to oldest so we match the actual
+    # `- c1:` bullet in the `[host:coordinator-citation-grounding]` repair
+    # prompt and never a hex fragment from a UUID in the JSON envelope.
+    messages = pending.get("messages")
+    if isinstance(messages, list):
+        for msg in reversed(messages):
+            if isinstance(msg, Mapping):
+                content = msg.get("content")
+                if isinstance(content, str):
+                    m = _REPAIR_ID_RE.search(content)
+                    if m:
+                        return m.group(1)
     text = json.dumps(pending)
-    for m in _REPAIR_ID_RE.finditer(text):
+    m = _REPAIR_ID_RE.search(text)
+    if m:
         return m.group(1)
     return "c1"
 
@@ -744,13 +757,16 @@ def _handle_s01_02(ctx: RunnerContext, spec: GB05SlotSpec, w: str) -> SlotOutcom
         max_repairs=3,
     )
     g = cap.last_grounding
-    refused = len(cap.raw_pending_requests) >= 3 or int(g.get("retry_count") or 0) >= 1
+    # Decision 049: D1 accepts an uncited closeout after a citable read by
+    # host-attaching observed citations (`host_assembled: true, retry_count: 0,
+    # host_assembled_closeouts: 1, friction_units: 0`), never setting
+    # `evidence_optional: true`.
     checks = {
-        "uncited_refused": refused,
         "not_evidence_optional": g.get("evidence_optional") is not True,
-        "settled_traced": g.get("traced") is True,
+        "host_assembled": g.get("host_assembled") is True,
+        "zero_retries": int(g.get("retry_count") or 0) == 0,
         "cited_read1": "read#1" in _cited_handles(cap),
-        "friction_charged": _friction_ge(cap, ctx, 1),
+        "zero_friction": (cap.d10_delta.get("friction_units") in (0, None)),
     }
     return _build_outcome(spec, w, cap, checks)
 
