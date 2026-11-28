@@ -1,4 +1,8 @@
-// Package resourceguard checks retained heap and goroutines after a package suite.
+// Package resourceguard checks for goroutines a package suite leaves running.
+//
+// Retained heap is not checked here: a byte threshold cannot tell a leak from a
+// bounded cache. Leaks of owned objects are caught by reachability checks on
+// those objects, and runaway memory by the per-process RSS ceiling.
 package resourceguard
 
 import (
@@ -9,20 +13,16 @@ import (
 	"time"
 )
 
-// Budget bounds retained growth after test cleanup, not transient working memory.
+// Budget bounds goroutines still running after test cleanup.
 type Budget struct {
-	HeapBytes  uint64
 	Goroutines int
-	// Settle is how long cleanup may keep releasing before growth counts as
-	// retained; zero means one minute.
+	// Settle is how long cleanup may keep stopping goroutines before the
+	// remainder counts as leaked; zero means one minute.
 	Settle time.Duration
 }
 
 // Run preserves assertion failures and checks successful suites after cleanup settles.
 func Run(m interface{ Run() int }, budget Budget) int {
-	runtime.GC()
-	var before runtime.MemStats
-	runtime.ReadMemStats(&before)
 	goroutines := runtime.NumGoroutine()
 	code := m.Run()
 	if code != 0 {
@@ -34,19 +34,12 @@ func Run(m interface{ Run() int }, budget Budget) int {
 	}
 	deadline := time.Now().Add(settle)
 	for {
-		runtime.GC()
-		var after runtime.MemStats
-		runtime.ReadMemStats(&after)
-		heapGrowth := uint64(0)
-		if after.HeapAlloc > before.HeapAlloc {
-			heapGrowth = after.HeapAlloc - before.HeapAlloc
-		}
-		goroutineGrowth := runtime.NumGoroutine() - goroutines
-		if heapGrowth <= budget.HeapBytes && goroutineGrowth <= budget.Goroutines {
+		growth := runtime.NumGoroutine() - goroutines
+		if growth <= budget.Goroutines {
 			return 0
 		}
 		if time.Now().After(deadline) {
-			fmt.Fprintf(os.Stderr, "package resource budget exceeded: retained heap %d/%d bytes; goroutines %d/%d\n", heapGrowth, budget.HeapBytes, goroutineGrowth, budget.Goroutines)
+			fmt.Fprintf(os.Stderr, "package resource budget exceeded: goroutines %d/%d\n", growth, budget.Goroutines)
 			_ = pprof.Lookup("goroutine").WriteTo(os.Stderr, 2)
 			return 1
 		}

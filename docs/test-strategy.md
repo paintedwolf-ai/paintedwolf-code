@@ -1451,9 +1451,12 @@ Unless a run sets `GOMEMLIMIT`, the test binary gets a soft limit at 80% of its
 unscaled Go heap ceiling, so the collector reclaims Go garbage before the ceiling
 instead of letting the heap expand with the detector's shadow memory, and the
 guard measures retained memory rather than collector slack.
-Failure identifies the package, measured bytes, and bound. Every executed Linux package records its ceiling, measurement source, and observed per-PID peak RSS and ratio (labelled as a lower bound, or marked unavailable with null peak and ratio if the process exits before observation) in the verification receipt regardless of outcome, and the CI step summary lists the ten packages closest to their ceiling. `./task budgets` warns without blocking admission when a package's latest qualifying receipt for the revision reaches 80% of its ordinary or race ceiling unless a valid bounded review record under `scripts/ci_policy/memory-reviews/` retains it, and nightly maintainability reconciliation tracks unretained memory warnings through the same post-merge cleanup workflow. Security and wiring suites additionally
-check retained heap and goroutine growth after cleanup through
-`internal/testutil/resourceguard`. These guards detect resource regressions;
+Failure identifies the package, measured bytes, and bound. Every executed Linux package records its ceiling, measurement source, and observed per-PID peak RSS and ratio (labelled as a lower bound, or marked unavailable with null peak and ratio if the process exits before observation) in the verification receipt regardless of outcome, and the CI step summary lists the ten packages closest to their ceiling. `./task budgets` warns without blocking admission when a package's latest qualifying receipt for the revision reaches 80% of its ordinary or race ceiling unless a valid bounded review record under `scripts/ci_policy/memory-reviews/` retains it, and nightly maintainability reconciliation tracks unretained memory warnings through the same post-merge cleanup workflow. The wiring suite additionally
+checks goroutines left running after cleanup through
+`internal/testutil/resourceguard`. Retained heap has no byte threshold, because
+a threshold can't tell a leak from a bounded cache. Leaked objects are caught by
+reachability checks on what a suite owns, and runaway memory by the RSS ceiling
+above. These guards detect resource regressions;
 they do not replace the host-release reachability guard or lifecycle repair in
 #356. Other platforms retain the end-of-package guards but do not claim Linux
 RSS enforcement.
