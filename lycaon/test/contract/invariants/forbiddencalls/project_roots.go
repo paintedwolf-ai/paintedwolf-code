@@ -20,7 +20,7 @@ var projectRoots = []invariants.Invariant{{
 	},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/tools") {
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				sel, ok := call.Fun.(*ast.SelectorExpr)
 				if !ok || sel.Sel.Name != "Join" || len(call.Args) < 2 {
 					return
@@ -76,7 +76,7 @@ var evidenceSubstrate = []invariants.Invariant{{
 			if invariants.Under(f, "internal/logoutline") || f.Rel == "internal/evidence/record.go" {
 				continue
 			}
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				if spec, ok := n.(*ast.TypeSpec); ok && RuntimeEvidenceRecord(spec) {
 					r.ReportAt(spec.Pos(), "a second runtime evidence Record; use internal/evidence")
 				}
@@ -122,7 +122,7 @@ var projectWalk = []invariants.Invariant{{
 		dirs := []string{"internal/repochange", "internal/sourcefeed", "internal/session", "internal/sandbox", "internal/workspace", "internal/project"}
 		for _, f := range r.GoFiles(invariants.Production, dirs...) {
 			subjects := ecosystemLiteralSubjects(r, f)
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				lit, ok := ecosystemLiteral(n)
 				if !ok {
 					return true
@@ -145,7 +145,7 @@ var projectWalk = []invariants.Invariant{{
 	})},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/session") {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				if assertion, ok := n.(*ast.TypeAssertExpr); ok {
 					if field, ok := assertion.X.(*ast.SelectorExpr); ok && field.Sel.Name == "workflows" {
 						r.ReportAt(assertion.Pos(), "type-asserts workflows; use the typed port")
@@ -167,7 +167,7 @@ func ecosystemLiteralSubjects(r *invariants.Run, f *invariants.GoFile) map[token
 		return f.Source(r.Go(), node)
 	}
 	out := map[token.Pos]string{}
-	ast.Inspect(f.AST, func(n ast.Node) bool {
+	ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 		switch node := n.(type) {
 		case *ast.SwitchStmt:
 			for _, stmt := range node.Body.List {
@@ -209,7 +209,7 @@ func anyProductionSelector(c *invariants.Corpus, dir, name string) error {
 			continue
 		}
 		found := false
-		ast.Inspect(f.AST, func(n ast.Node) bool {
+		ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 			sel, ok := n.(*ast.SelectorExpr)
 			found = found || ok && sel.Sel.Name == name
 			return !found

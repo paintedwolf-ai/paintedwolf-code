@@ -19,7 +19,7 @@ var persistence = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Func("internal/api/httpio", "EncodedPathID")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/api") {
-			f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 				if pkg != "github.com/go-chi/chi/v5" || name != "URLParam" || len(call.Args) != 2 {
 					return
 				}
@@ -36,7 +36,7 @@ var persistence = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Package("internal/db")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, invariants.Source...) {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				assign, ok := n.(*ast.AssignStmt)
 				if !ok || !allBlank(assign.Lhs) || len(assign.Rhs) != 1 {
 					return true
@@ -60,7 +60,7 @@ var serveWiring = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		f := r.GoFile("internal/app/boards/build.go")
 		found := 0
-		ast.Inspect(f.AST, func(n ast.Node) bool {
+		ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 			lit, ok := n.(*ast.CompositeLit)
 			if !ok {
 				return true
@@ -93,7 +93,7 @@ var projectFiles = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Package("internal/fseffect")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal") {
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				if invariants.CalleeName(call) != "WriteFile" || len(call.Args) == 0 {
 					return
 				}
@@ -171,7 +171,7 @@ var wireQueries = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Named("internal/api", "InvalidQueryParam")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/api") {
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				sel, ok := call.Fun.(*ast.SelectorExpr)
 				if !ok || sel.Sel.Name != "InvalidQueryParam" || len(call.Args) < 2 {
 					return
@@ -190,7 +190,7 @@ var wireQueries = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Package("internal/api")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/api") {
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				sel, ok := call.Fun.(*ast.SelectorExpr)
 				if !ok || sel.Sel.Name != "Get" || len(call.Args) != 1 {
 					return

@@ -478,7 +478,7 @@ func TestOptimizedSourceSelectionPreservesFindingsAndScope(t *testing.T) {
 		Check: func(r *invariants.Run) {
 			for _, pkg := range r.TypedPackages("internal/target") {
 				for _, f := range pkg.Files {
-					ast.Inspect(f.AST, func(n ast.Node) bool {
+					ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 						call, ok := n.(*ast.CallExpr)
 						if !ok {
 							return true

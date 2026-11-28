@@ -19,7 +19,7 @@ var gitDoor = []invariants.Invariant{{
 			if invariants.Under(f, "test/contract/invariants") {
 				continue
 			}
-			invariants.StringLits(f.AST, func(lit *ast.BasicLit, value string) {
+			invariants.StringLits(f.Syntax(), func(lit *ast.BasicLit, value string) {
 				if strings.Contains(value, "/usr/bin/git") {
 					r.ReportAt(lit.Pos(), "literal /usr/bin/git")
 				}
@@ -182,7 +182,7 @@ var gitArgv = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		checked := 0
 		for _, f := range r.GoFiles(func(f *invariants.GoFile) bool { return !f.IsTest && f.Dir == "internal/git" }, "internal/git") {
-			f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 				if pkg != gitexecPkg || name != "Run" || len(call.Args) < 3 {
 					return
 				}

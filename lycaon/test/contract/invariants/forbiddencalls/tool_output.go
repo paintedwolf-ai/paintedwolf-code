@@ -39,7 +39,7 @@ var toolOutput = []invariants.Invariant{{
 			if invariants.Under(f, "internal/tools/surveyjson") {
 				continue
 			}
-			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+			f.Selectors(f.Syntax(), func(sel *ast.SelectorExpr, pkg, name string) {
 				if pkg == "encoding/json" && (name == "Marshal" || name == "MarshalIndent" || name == "NewEncoder") {
 					if !r.Exempt(f.Rel) {
 						r.ReportAt(sel.Pos(), "json.%s on a path to model context; use surveyjson.Marshal", name)
@@ -59,7 +59,7 @@ var toolOutput = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		for _, rel := range toolRoutingFiles {
 			f := r.GoFile(rel)
-			f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 				if pkg != "strings" || name != "Contains" || len(call.Args) != 2 {
 					return
 				}
@@ -87,7 +87,7 @@ var toolOutput = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		producers := map[string]bool{}
 		for _, f := range r.GoFiles(invariants.Production, "internal") {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				switch node := n.(type) {
 				case *ast.AssignStmt:
 					for i, lhs := range node.Lhs {

@@ -27,7 +27,7 @@ func production(r *invariants.Run) []*invariants.GoFile {
 // A store maps sql.ErrNoRows to a typed domain error or (nil, nil).
 func doesNotReturnErrNoRows(r *invariants.Run) {
 	for _, f := range production(r) {
-		ast.Inspect(f.AST, func(n ast.Node) bool {
+		ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 			ret, ok := n.(*ast.ReturnStmt)
 			if !ok {
 				return true
@@ -46,7 +46,7 @@ func doesNotReturnErrNoRows(r *invariants.Run) {
 // db.IsNoRows.
 func errNoRowsMatchedWithErrorsIs(r *invariants.Run) {
 	for _, f := range production(r) {
-		ast.Inspect(f.AST, func(n ast.Node) bool {
+		ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 			bin, ok := n.(*ast.BinaryExpr)
 			if !ok || bin.Op != token.EQL && bin.Op != token.NEQ {
 				return true
@@ -65,7 +65,7 @@ func errNoRowsMatchedWithErrorsIs(r *invariants.Run) {
 // ExecContext, QueryContext or QueryRowContext.
 func productionSQLUsesContextAPIs(r *invariants.Run) {
 	for _, f := range production(r) {
-		f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+		f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 			sel, ok := call.Fun.(*ast.SelectorExpr)
 			if !ok || len(call.Args) == 0 || pkg == "syscall" {
 				return
@@ -89,7 +89,7 @@ var sqlInFormat = regexp.MustCompile(`(?i)(select\s|insert\s+into|update\s|delet
 // parameters.
 func noSQLStringInterpolation(r *invariants.Run) {
 	for _, f := range production(r) {
-		f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+		f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 			if pkg != "fmt" || name != "Sprintf" || len(call.Args) == 0 {
 				return
 			}
@@ -115,7 +115,7 @@ var storePackages = []string{
 // A store package passes generated query identifiers, never inline SQL.
 func storeLayerHasNoHandWrittenSQL(r *invariants.Run) {
 	for _, f := range r.GoFiles(invariants.Production, storePackages...) {
-		f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+		f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 			sel, ok := call.Fun.(*ast.SelectorExpr)
 			if !ok || len(call.Args) == 0 {
 				return

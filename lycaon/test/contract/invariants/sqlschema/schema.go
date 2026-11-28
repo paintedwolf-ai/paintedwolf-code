@@ -40,7 +40,7 @@ func sessionDeleteHasOneWritePath(r *invariants.Run) {
 	}
 	var sources []struct{ rel, text string }
 	for _, f := range r.GoFiles(invariants.Production, "internal", "pkg") {
-		sources = append(sources, struct{ rel, text string }{"lycaon/" + f.Rel, string(f.Src)})
+		sources = append(sources, struct{ rel, text string }{"lycaon/" + f.Rel, string(f.Bytes())})
 	}
 	for _, f := range r.Tree("lycaon/internal", ".sql") {
 		sources = append(sources, struct{ rel, text string }{"lycaon/internal/" + f.Rel, f.Text()})
@@ -126,7 +126,7 @@ func recordStampsAreNeverDomainTime(r *invariants.Run) {
 		}
 	}
 	for _, f := range r.GoFiles(invariants.Production, "internal") {
-		check(f.Rel, string(f.Src), orderByUpdatedAt, rangeOnUpdatedAt, modTimeCompare)
+		check(f.Rel, string(f.Bytes()), orderByUpdatedAt, rangeOnUpdatedAt, modTimeCompare)
 	}
 	for _, f := range r.Tree("lycaon/internal", ".sql") {
 		check("internal/"+f.Rel, f.Text(), orderByUpdatedAt, rangeOnUpdatedAt)
@@ -148,7 +148,7 @@ func noInlineDDLInInternalDB(r *invariants.Run) {
 		if r.Exempt(f.Rel) {
 			continue
 		}
-		ast.Inspect(f.AST, func(n ast.Node) bool {
+		ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 			lit, ok := n.(*ast.BasicLit)
 			if !ok || lit.Kind != token.STRING {
 				return true

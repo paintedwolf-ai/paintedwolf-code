@@ -153,12 +153,13 @@ func (tree outboxTree) scan(r *invariants.Run) (*outboxScan, error) {
 	byObj := map[*types.Func]*outboxFunc{}
 	direct := map[*outboxFunc]bool{}
 	for _, pkg := range prog.scanned {
-		for _, file := range pkg.Files {
+		syntax := pkg.Syntax()
+		for i, file := range pkg.Files {
 			rel := file.Rel
 			if isOutboxTestSupport(rel) {
 				continue
 			}
-			for _, decl := range file.AST.Decls {
+			for _, decl := range syntax[i].Decls {
 				fn, ok := decl.(*ast.FuncDecl)
 				if !ok || fn.Body == nil {
 					continue

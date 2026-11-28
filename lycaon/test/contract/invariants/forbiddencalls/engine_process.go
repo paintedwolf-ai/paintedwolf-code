@@ -29,8 +29,8 @@ var engineProcess = []invariants.Invariant{{
 			if invariants.Under(f, engineStdoutProtocols...) {
 				continue
 			}
-			forwarded := ChildStdoutForwarding(f.Rel, f.AST)
-			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+			forwarded := ChildStdoutForwarding(f.Rel, f.Syntax())
+			f.Selectors(f.Syntax(), func(sel *ast.SelectorExpr, pkg, name string) {
 				switch {
 				case pkg == "os" && name == "Stdout" && !forwarded[sel]:
 					r.ReportAt(sel.Pos(), "writes to os.Stdout; engine stdout belongs to the startup protocol")
@@ -140,7 +140,7 @@ var hostBounds = []invariants.Invariant{{
 			if invariants.Under(f, "internal/tsparse") || !f.Imports(gotreesitterPkg) {
 				continue
 			}
-			f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 				sel, ok := call.Fun.(*ast.SelectorExpr)
 				switch {
 				case pkg == gotreesitterPkg && name == "NewParser":
@@ -175,7 +175,7 @@ var hostBounds = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Package("internal/browser"), invariants.Package("internal/browserengine")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.AnyGo, "internal/browser", "internal/browserengine") {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				if sel, ok := n.(*ast.SelectorExpr); ok && contains([]string{"Setpgid", "Pdeathsig", "CREATE_NEW_PROCESS_GROUP"}, sel.Sel.Name) {
 					r.ReportAt(sel.Pos(), "sets %s; chrome stays in its launcher's group", sel.Sel.Name)
 				}
@@ -190,7 +190,7 @@ var hostBounds = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Package("internal/browser"), invariants.Package("internal/browserengine")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.AnyGo, "internal/browser", "internal/browserengine") {
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				if strings.HasSuffix(invariants.CalleeName(call), "LookPath") {
 					r.ReportAt(call.Pos(), "%s searches PATH", invariants.CalleeName(call))
 				}
@@ -215,7 +215,7 @@ var confineHelper = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		initDispatches := false
 		for _, f := range r.GoFiles(invariants.Production, "internal/confine") {
-			if f.Dir != "internal/confine" || onlyInHelperMainBuild(f.AST) {
+			if f.Dir != "internal/confine" || onlyInHelperMainBuild(f.Syntax()) {
 				continue
 			}
 			f.Funcs(func(fn *ast.FuncDecl) {
@@ -242,7 +242,7 @@ var confineHelper = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		production := 0
 		for _, f := range r.GoFiles(invariants.AnyGo, "internal", "cmd", "pkg", "config", "test") {
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				if invariants.CalleeName(call) != "EnableAutoConfine" {
 					return
 				}

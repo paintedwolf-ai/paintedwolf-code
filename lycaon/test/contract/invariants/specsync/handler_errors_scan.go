@@ -285,9 +285,9 @@ func ssaSyntax(pkg *invariants.TypedPackage) ([]*ast.File, *types.Info) {
 		return pkg.Syntax(), pkg.Info
 	}
 	files := make([]*ast.File, 0, len(pkg.Files))
-	for _, f := range pkg.Files {
-		file := *f.AST
-		file.Decls = slices.Clone(f.AST.Decls)
+	for _, astFile := range pkg.Syntax() {
+		file := *astFile
+		file.Decls = slices.Clone(astFile.Decls)
 		for i, decl := range file.Decls {
 			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil && reachesC(fn.Body) {
 				external := *fn

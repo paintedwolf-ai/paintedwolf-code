@@ -35,7 +35,7 @@ var guidanceEmission = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Func("internal/guidance", "EnvelopeHintMessage")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/scan", "internal/repomap") {
-			for _, decl := range f.AST.Decls {
+			for _, decl := range f.Syntax().Decls {
 				gen, ok := decl.(*ast.GenDecl)
 				if !ok || gen.Tok != token.CONST {
 					continue
@@ -75,7 +75,7 @@ var catalogCopy = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		windows := catalogCopyWindows(r)
 		for _, f := range r.GoFiles(invariants.Production, "internal") {
-			invariants.StringLits(f.AST, func(lit *ast.BasicLit, value string) {
+			invariants.StringLits(f.Syntax(), func(lit *ast.BasicLit, value string) {
 				if source, ok := matchCatalogCopy(value, windows); ok && !r.Exempt(f.Rel) {
 					r.ReportAt(lit.Pos(), "restates catalog copy from %s; render the catalog body", source)
 				}
@@ -154,7 +154,7 @@ var prose = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.GoPath("internal/mcp/call_envelope.go")},
 	Check: func(r *invariants.Run) {
 		f := r.GoFile("internal/mcp/call_envelope.go")
-		f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+		f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 			if pkg == "strings" && (name == "Contains" || name == "ContainsAny" || name == "EqualFold") {
 				r.ReportAt(call.Pos(), "strings.%s classifies error prose", name)
 			}
@@ -176,8 +176,9 @@ var userText = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		errType := types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
 		for _, pkg := range r.TypedPackages(coordinatorScanRoots...) {
-			for _, f := range pkg.Files {
-				f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			syntax := pkg.Syntax()
+			for i, f := range pkg.Files {
+				f.Calls(syntax[i], func(call *ast.CallExpr, _, _ string) {
 					name := invariants.CalleeName(call)
 					if !slices.Contains([]string{"Contains", "HasPrefix", "HasSuffix", "MatchString"}, name) {
 						return

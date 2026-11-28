@@ -128,7 +128,7 @@ func objectsHaveGoTypes(r *invariants.Run) {
 // structFields visits each named field of each struct type in pkg/api.
 func structFields(r *invariants.Run, visit func(f *invariants.GoFile, typeName string, field *ast.Field, json string)) {
 	for _, f := range r.GoFiles(invariants.Production, "pkg/api") {
-		ast.Inspect(f.AST, func(n ast.Node) bool {
+		ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 			ts, ok := n.(*ast.TypeSpec)
 			if !ok {
 				return true

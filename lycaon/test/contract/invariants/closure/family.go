@@ -243,7 +243,7 @@ func scannerAssetsLiveWhereTheHostReadsThem(r *invariants.Run) {
 		if strings.Contains(f.Rel, "/testdata/") || strings.Contains(f.Rel, "/rules/") {
 			continue
 		}
-		for _, m := range goScannerAsset.FindAllStringSubmatch(string(f.Src), -1) {
+		for _, m := range goScannerAsset.FindAllStringSubmatch(string(f.Bytes()), -1) {
 			ref, trimmed := m[1], m[1]
 			if i := strings.Index(ref, "scanners/"); i >= 0 {
 				trimmed = ref[i+len("scanners/"):]

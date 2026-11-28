@@ -21,7 +21,7 @@ var writeDoor = []invariants.Invariant{{
 				continue
 			}
 			var found []*ast.CallExpr
-			f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 				if pkg == "os" && (name == "Rename" || name == "WriteFile" || name == "Create" || name == "OpenFile" && openFileWrites(f, call)) {
 					found = append(found, call)
 				}
@@ -180,7 +180,7 @@ var runVars = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		home := false
 		for _, f := range r.GoFiles(invariants.Production, "internal") {
-			writers := runVarsWritingFuncs(f.AST)
+			writers := runVarsWritingFuncs(f.Syntax())
 			if len(writers) > 0 && r.Exempt(f.Rel) {
 				for _, offence := range runVarsFreshLoadOffences(f.Rel, writers) {
 					r.Report("%s", offence)

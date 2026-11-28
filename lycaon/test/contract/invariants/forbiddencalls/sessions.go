@@ -34,7 +34,7 @@ var sessions = []invariants.Invariant{{
 	},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal", "cmd", "pkg", "config", "test") {
-			for _, decl := range f.AST.Decls {
+			for _, decl := range f.Syntax().Decls {
 				site := f.Dir + ".<package>"
 				if fn, ok := decl.(*ast.FuncDecl); ok {
 					site = f.Dir + "." + invariants.FuncName(fn)
@@ -71,7 +71,7 @@ var sessions = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Package("internal/coordinator/loopwake")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/coordinator/loopwake") {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				bin, ok := n.(*ast.BinaryExpr)
 				if !ok || bin.Op != token.EQL && bin.Op != token.NEQ {
 					return true
@@ -97,7 +97,7 @@ var sessions = []invariants.Invariant{{
 			if !gated || strings.Contains(base, "fixture") {
 				continue
 			}
-			f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 				if pkg != "strings" || !contains([]string{"Contains", "ContainsAny", "ContainsRune", "HasPrefix", "HasSuffix", "Index", "IndexAny"}, name) {
 					return
 				}
@@ -109,7 +109,7 @@ var sessions = []invariants.Invariant{{
 			})
 			if base == "sections.go" || base == "report.go" || base == "closeout_present.go" {
 				for _, banned := range []string{"WorkflowID ==", "workflowID ==", "workflow_id =="} {
-					if strings.Contains(string(f.Src), banned) {
+					if strings.Contains(string(f.Bytes()), banned) {
 						r.Report("%s branches report sections on a workflow id (%q)", f.Rel, banned)
 					}
 				}
@@ -130,7 +130,7 @@ type proseFinding struct {
 
 func scanProseNeedles(f *invariants.GoFile) []proseFinding {
 	var out []proseFinding
-	ast.Inspect(f.AST, func(n ast.Node) bool {
+	ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 		switch node := n.(type) {
 		case *ast.CallExpr:
 			pkg, name, ok := f.Qualified(node.Fun)

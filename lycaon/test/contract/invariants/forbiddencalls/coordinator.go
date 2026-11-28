@@ -18,7 +18,7 @@ var coordinator = []invariants.Invariant{{
 	Exempt:  []invariants.Exemption{{Key: "internal/coordinator/anchor/binding.go:RunMatch", Reason: "the binding constructor itself"}},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal") {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				lit, ok := n.(*ast.CompositeLit)
 				if !ok || !isMatchContext(f, lit.Type) || !setsField(lit, "Workflow") || r.Exempt(f.Site(lit.Pos())) {
 					return true
@@ -96,7 +96,7 @@ var coordinatorWaits = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		calls := 0
 		for _, f := range r.GoFiles(invariants.Production, "internal", "cmd", "pkg", "config", "test") {
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				if invariants.CalleeName(call) != "EnterSleep" {
 					return
 				}
@@ -127,8 +127,12 @@ var coordinatorWaits = []invariants.Invariant{{
 	},
 	Check: func(r *invariants.Run) {
 		pkg := r.TypedPackage("internal/coordinator/loopwake")
-		for _, f := range pkg.Files {
-			f.Funcs(func(fn *ast.FuncDecl) {
+		for _, file := range pkg.Syntax() {
+			for _, decl := range file.Decls {
+				fn, ok := decl.(*ast.FuncDecl)
+				if !ok || fn.Body == nil {
+					continue
+				}
 				ast.Inspect(fn.Body, func(n ast.Node) bool {
 					assign, ok := n.(*ast.AssignStmt)
 					if !ok {
@@ -142,7 +146,7 @@ var coordinatorWaits = []invariants.Invariant{{
 					}
 					return true
 				})
-			})
+			}
 		}
 	},
 }}

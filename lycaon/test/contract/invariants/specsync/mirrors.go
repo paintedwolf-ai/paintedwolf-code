@@ -187,7 +187,7 @@ func contributionVocabulariesMatchDen(r *invariants.Run) {
 // the contribution vocabulary.
 func mapStringKeys(r *invariants.Run, name string) []string {
 	f := r.GoFile(contributionVocabulary)
-	for _, decl := range f.AST.Decls {
+	for _, decl := range f.Syntax().Decls {
 		gen, ok := decl.(*ast.GenDecl)
 		if !ok || gen.Tok != token.VAR {
 			continue

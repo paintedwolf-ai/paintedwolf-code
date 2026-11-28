@@ -25,7 +25,7 @@ var rejectTemplates = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		emissions := map[string][]map[string]bool{}
 		for _, f := range r.GoFiles(invariants.Production, "internal") {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				lit, ok := n.(*ast.CompositeLit)
 				if !ok || invariants.TypeName(lit.Type) != "ToolReject" {
 					return true

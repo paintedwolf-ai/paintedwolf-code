@@ -25,7 +25,7 @@ var memoryContracts = []invariants.Invariant{{
 		byPkg := map[string][]*invariants.GoFile{}
 		candidates := map[string][]*invariants.GoFile{}
 		for _, f := range r.GoFiles(invariants.AnyGo, contractMemoryDirs...) {
-			key := f.Dir + "\x00" + f.AST.Name.Name
+			key := f.Dir + "\x00" + f.PkgName
 			byPkg[key] = append(byPkg[key], f)
 			if f.Imports("runtime") || f.Imports("runtime/debug") {
 				candidates[key] = append(candidates[key], f)
@@ -81,8 +81,11 @@ func (runtimeGCImporter) Import(path string) (*types.Package, error) {
 
 func checkForcedGCPkg(r *invariants.Run, pkgFiles, candidates []*invariants.GoFile) {
 	asts := make([]*ast.File, len(pkgFiles))
+	astByFile := make(map[*invariants.GoFile]*ast.File, len(pkgFiles))
 	for i, f := range pkgFiles {
-		asts[i] = f.AST
+		syn := f.Syntax()
+		asts[i] = syn
+		astByFile[f] = syn
 	}
 	info := &types.Info{Uses: map[*ast.Ident]types.Object{}}
 	conf := types.Config{
@@ -90,9 +93,9 @@ func checkForcedGCPkg(r *invariants.Run, pkgFiles, candidates []*invariants.GoFi
 		Error:                    func(error) {},
 		DisableUnusedImportCheck: true,
 	}
-	_, _ = conf.Check(pkgFiles[0].AST.Name.Name, r.Go().Fset, asts, info)
+	_, _ = conf.Check(pkgFiles[0].PkgName, r.Go().Fset, asts, info)
 	for _, f := range candidates {
-		ast.Inspect(f.AST, func(n ast.Node) bool {
+		ast.Inspect(astByFile[f], func(n ast.Node) bool {
 			id, ok := n.(*ast.Ident)
 			if !ok {
 				return true
@@ -146,7 +149,7 @@ func indexPkgStructs(files []*invariants.GoFile) *pkgMemoIndex {
 		pkgVars: map[string]string{},
 	}
 	for _, f := range files {
-		for _, decl := range f.AST.Decls {
+		for _, decl := range f.Syntax().Decls {
 			gen, ok := decl.(*ast.GenDecl)
 			if !ok {
 				continue

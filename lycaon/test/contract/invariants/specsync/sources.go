@@ -21,7 +21,7 @@ var (
 func apiFiles(r *invariants.Run) []*ast.File {
 	var files []*ast.File
 	for _, f := range r.GoFiles(invariants.Production, "pkg/api") {
-		files = append(files, f.AST)
+		files = append(files, f.Syntax())
 	}
 	return files
 }
@@ -33,7 +33,7 @@ func serverRoutes(r *invariants.Run) []wirespec.Route {
 		var files []*ast.File
 		for _, f := range r.GoFiles(invariants.Production, "internal/api") {
 			if f.Dir == "internal/api" && wirespec.IsRouteFile(path.Base(f.Rel)) {
-				files = append(files, f.AST)
+				files = append(files, f.Syntax())
 			}
 		}
 		return wirespec.ServerRoutes(files, operationsByVariable(r)), nil
@@ -54,5 +54,5 @@ func readRepo(r *invariants.Run) wirespec.ReadFile {
 
 // operationsByVariable maps each generated operation variable to its route.
 func operationsByVariable(r *invariants.Run) map[string]wirespec.Route {
-	return wirespec.Operations(r.GoFile("internal/api/operations.generated.go").AST)
+	return wirespec.Operations(r.GoFile("internal/api/operations.generated.go").Syntax())
 }

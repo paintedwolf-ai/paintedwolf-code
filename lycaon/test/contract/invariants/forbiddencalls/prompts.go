@@ -40,7 +40,7 @@ var prompts = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Func("internal/datamark", "Frame")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal") {
-			if !invariants.Under(f, "internal/datamark") && bytes.ContainsAny(f.Src, "⟪⟫") {
+			if !invariants.Under(f, "internal/datamark") && bytes.ContainsAny(f.Bytes(), "⟪⟫") {
 				r.Report("%s writes the retrieval delimiter outside internal/datamark", f.Rel)
 			}
 		}
@@ -52,7 +52,7 @@ var prompts = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Func("internal/datamark", "Frame")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/webresearch", "internal/mcp", "internal/tools") {
-			f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 				if pkg == datamarkPkg && name == "Frame" {
 					r.ReportAt(call.Pos(), "a tool handler marks its own output; marking belongs to the message seam")
 				}
@@ -67,7 +67,7 @@ var prompts = []invariants.Invariant{{
 	Exempt:  surfaceLiteralFiles(),
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/coordinator") {
-			invariants.StringLits(f.AST, func(lit *ast.BasicLit, value string) {
+			invariants.StringLits(f.Syntax(), func(lit *ast.BasicLit, value string) {
 				if contains(coordinatorSurfaceLiterals, value) && !r.Exempt(f.Rel) {
 					r.ReportAt(lit.Pos(), "surface or mode literal %q outside the flow catalog code", value)
 				}
@@ -147,7 +147,7 @@ var promptInputs = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Package("internal/prompts")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/prompts") {
-			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+			f.Selectors(f.Syntax(), func(sel *ast.SelectorExpr, pkg, name string) {
 				if pkg == "time" && (name == "Now" || name == "Since" || name == "Until") {
 					r.ReportAt(sel.Pos(), "time.%s on the prompt render path; take the time as a parameter", name)
 				}
@@ -161,7 +161,7 @@ var promptInputs = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Package("internal/workerplan"), invariants.Package("internal/workertopology")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/workerplan", "internal/workertopology") {
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				if name := invariants.CalleeName(call); name == "SpawnChild" || name == "Prompt" {
 					r.ReportAt(call.Pos(), "calls %s on sessions directly", name)
 				}
@@ -176,7 +176,7 @@ var promptInputs = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		for _, rel := range synthesisEvidenceFiles {
 			f := r.GoFile(rel)
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				if name := invariants.CalleeName(call); name == "Summarize" || name == "Compact" {
 					r.ReportAt(call.Pos(), "%s on the worker union", name)
 				}
@@ -193,7 +193,7 @@ var workflowVersion = []invariants.Invariant{{
 			if isVersionUseExempt(f) {
 				continue
 			}
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				switch node := n.(type) {
 				case *ast.BinaryExpr:
 					if comparesWorkflowVersion(node) {

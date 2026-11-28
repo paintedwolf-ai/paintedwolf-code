@@ -50,7 +50,10 @@ func (f *GoFile) Selectors(node ast.Node, visit func(sel *ast.SelectorExpr, pkg,
 
 // Funcs visits every function declaration with a body.
 func (f *GoFile) Funcs(visit func(fn *ast.FuncDecl)) {
-	for _, decl := range f.AST.Decls {
+	if !f.hasAnyFuncBody() {
+		return
+	}
+	for _, decl := range f.Syntax().Decls {
 		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil {
 			visit(fn)
 		}
@@ -67,7 +70,21 @@ func FuncName(fn *ast.FuncDecl) string {
 
 // EnclosingFunc returns the function declaration holding pos, or nil.
 func (f *GoFile) EnclosingFunc(pos token.Pos) *ast.FuncDecl {
-	for _, decl := range f.AST.Decls {
+	file := f.Syntax()
+	if f.corpus != nil {
+		if tfPos := f.corpus.Fset.File(pos); tfPos != nil {
+			if tfFile := f.corpus.Fset.File(file.Pos()); tfFile != nil {
+				off := tfPos.Offset(pos)
+				for _, decl := range file.Decls {
+					if fn, ok := decl.(*ast.FuncDecl); ok && tfFile.Offset(fn.Pos()) <= off && off < tfFile.Offset(fn.End()) {
+						return fn
+					}
+				}
+				return nil
+			}
+		}
+	}
+	for _, decl := range file.Decls {
 		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Pos() <= pos && pos < fn.End() {
 			return fn
 		}
@@ -78,6 +95,17 @@ func (f *GoFile) EnclosingFunc(pos token.Pos) *ast.FuncDecl {
 // Site keys pos as "file:Func" by the bare name of the function holding it,
 // or "file:<package>" for a package-level declaration.
 func (f *GoFile) Site(pos token.Pos) string {
+	if f.corpus != nil {
+		if tf := f.corpus.Fset.File(pos); tf != nil {
+			off := tf.Offset(pos)
+			for _, fn := range f.funcs {
+				if fn.start <= off && off < fn.end {
+					return f.Rel + ":" + fn.name
+				}
+			}
+			return f.Rel + ":<package>"
+		}
+	}
 	if fn := f.EnclosingFunc(pos); fn != nil {
 		return f.Rel + ":" + fn.Name.Name
 	}
@@ -159,18 +187,9 @@ func (g *GoCorpus) ConstString(f *GoFile, expr ast.Expr) (string, bool) {
 	default:
 		return "", false
 	}
-	d, ok := g.Decl(pkg, name)
-	if !ok {
+	entry, ok := g.decls[pkg+"."+name]
+	if !ok || !entry.hasConstStr {
 		return "", false
 	}
-	spec, ok := d.Node.(*ast.ValueSpec)
-	if !ok {
-		return "", false
-	}
-	for i, id := range spec.Names {
-		if id.Name == name && i < len(spec.Values) {
-			return StringLit(spec.Values[i])
-		}
-	}
-	return "", false
+	return entry.constStr, true
 }

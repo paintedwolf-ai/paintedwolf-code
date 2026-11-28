@@ -55,7 +55,7 @@ func errorCodeInventory(r *invariants.Run) *errorCodes {
 			}
 		}
 		for _, f := range r.GoFiles(invariants.Production, "internal/api") {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				switch node := n.(type) {
 				case *ast.CompositeLit:
 					// View failures are resource state, not HTTP error codes.
@@ -117,7 +117,7 @@ func errorCodeInventory(r *invariants.Run) *errorCodes {
 		}
 		mappers := 0
 		for _, f := range r.GoFiles(invariants.Production, "internal") {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				switch node := n.(type) {
 				case *ast.FuncDecl:
 					if node.Body == nil {
@@ -168,7 +168,7 @@ func returns(fn *ast.FuncDecl, visit func(ast.Expr)) {
 // generatedConstants maps the string constants of a generated file.
 func generatedConstants(r *invariants.Run, rel string) map[string]string {
 	out := map[string]string{}
-	for _, decl := range r.GoFile(rel).AST.Decls {
+	for _, decl := range r.GoFile(rel).Syntax().Decls {
 		gen, ok := decl.(*ast.GenDecl)
 		if !ok || gen.Tok != token.CONST {
 			continue

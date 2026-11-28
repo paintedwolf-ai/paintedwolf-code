@@ -16,12 +16,12 @@ var processLaunch = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Func("internal/exec", "PrepareCommand"), invariants.Decl("internal/exec", "ExecOpts.Launch")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal") {
-			aliases := importAliases(f.AST)
-			prepared := preparedCommandNames(f.AST, aliases)
-			emptyErrorReturns := emptyOptionsErrorReturns(f.AST)
+			aliases := importAliases(f.Syntax())
+			prepared := preparedCommandNames(f.Syntax(), aliases)
+			emptyErrorReturns := emptyOptionsErrorReturns(f.Syntax())
 			nativeStart := invariants.Under(f, "internal/exec", "internal/confine", "internal/testutil/processfixture")
 			allowLowLevel := nativeStart || invariants.Under(f, "internal/launchguard")
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				switch node := n.(type) {
 				case *ast.CallExpr:
 					if !nativeStart && (isRawProcessStart(node.Fun, aliases) || isRawPreparedStart(node.Fun, prepared)) {
@@ -37,7 +37,7 @@ var processLaunch = []invariants.Invariant{{
 					if !allowLowLevel && isRawExecCmdLiteral(node.Type, aliases) {
 						r.ReportAt(node.Pos(), "raw os/exec.Cmd literal")
 					}
-					if isLaunchOptionsLiteral(node.Type, f.AST.Name.Name, aliases) && !hasKey(node, "Launch") && !emptyErrorReturns[node] {
+					if isLaunchOptionsLiteral(node.Type, f.Syntax().Name.Name, aliases) && !hasKey(node, "Launch") && !emptyErrorReturns[node] {
 						r.ReportAt(node.Pos(), "process options omit Launch")
 					}
 				}
@@ -57,7 +57,7 @@ var processLaunch = []invariants.Invariant{{
 		for _, rel := range []string{"internal/exec/pipeline.go", "internal/exec/supervisor_linux.go"} {
 			f := r.GoFile(rel)
 			routes := false
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				routes = routes || invariants.CalleeName(call) == "relayThroughBroker"
 			})
 			if !routes {
