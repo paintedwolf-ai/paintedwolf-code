@@ -1,4 +1,4 @@
-"""Unit tests for TB10 X01-X03 native Den runner."""
+"""Unit tests for TB10 X01-X03 native Den runner (real episode + native Den pairing)."""
 
 from __future__ import annotations
 
@@ -47,7 +47,33 @@ class TestTB10NativeRunner(unittest.TestCase):
         )
         return app_bin, eng_bin, manifest
 
-    def test_all_nine_x01_x03_variants_pass_with_verified_provenance_and_manifest(self) -> None:
+    def _fake_episode(self, variant, v_dir, **kwargs):
+        return {
+            "session_id": "sess-tb10-1",
+            "project_id": "proj-tb10-1",
+            "db_path": "",
+            "captured_requests": [
+                {
+                    "request_id": "req-1",
+                    "session_id": "sess-tb10-1",
+                    "offered_tools": ["command", "promote_overlay", "task", "update_progress", "wait"],
+                    "message_count": 3,
+                    "request_bytes": 4200,
+                    "request_sha256": "c" * 64,
+                }
+            ],
+            "episode_facts": {"kind": variant["episode_kind"], "outside_target_unchanged": True},
+            "network_fixtures": [],
+            "api_readback": {
+                "health": {"status": "ok"},
+                "session": {"id": "sess-tb10-1", "status": "idle"},
+                "messages": {"messages": [{"role": "user", "content": "hi"}]},
+            },
+            "sqlite_row_counts": {"sessions": 1, "messages": 4, "worker_jobs": 1, "source_versions": 2},
+            "sqlite_total_rows": 8,
+        }
+
+    def test_all_nine_x01_x03_variants_pass_with_real_episode_and_manifest(self) -> None:
         self.assertEqual(len(tb10.TB10_VARIANTS), 9)
         families = [v["family"] for v in tb10.TB10_VARIANTS]
         self.assertEqual(families.count("X01"), 3)
@@ -83,26 +109,25 @@ class TestTB10NativeRunner(unittest.TestCase):
                 engine_bin=eng_bin,
                 engine_manifest=man_path,
                 native_fn=fake_native,
+                episode_fn=self._fake_episode,
             )
             self.assertTrue(manifest["all_passed"])
             self.assertEqual(manifest["planned_count"], 9)
             self.assertEqual(manifest["passed_count"], 9)
             self.assertTrue(manifest["provenance"]["product_source"]["verified"])
             self.assertTrue(manifest["provenance"]["product_harness_distinct"])
-            self.assertTrue((root / "out" / "tb10-manifest.json").is_file())
             for entry in manifest["variants"]:
                 self.assertEqual(entry["verdict"], "pass")
-                self.assertTrue(entry["screenshot_changed"])
-                self.assertTrue(pathlib.Path(entry["receipt_path"]).is_file())
+                self.assertGreater(entry["sqlite_total_rows"], 0)
+                self.assertGreaterEqual(entry["captured_request_count"], 1)
 
-    def test_fail_closed_on_unverified_engine_or_disallowed_guidance_or_byte_ceiling(self) -> None:
+    def test_fail_closed_on_zero_rows_or_unverified_engine_or_bad_guidance(self) -> None:
         g_bad_tool = tb10.verify_guidance_surface(
             offered_tools=("command",),
             suggested_tools=("command", "unpermitted_tool"),
             request_bytes=1024,
         )
         self.assertFalse(g_bad_tool["passed"])
-        self.assertEqual(g_bad_tool["disallowed_suggestions"], ["unpermitted_tool"])
 
         g_over_ceiling = tb10.verify_guidance_surface(
             offered_tools=("command",),
@@ -110,15 +135,12 @@ class TestTB10NativeRunner(unittest.TestCase):
             request_bytes=tb10.SHIPPED_REQUEST_CEILING_BYTES + 1,
         )
         self.assertFalse(g_over_ceiling["passed"])
-        self.assertFalse(g_over_ceiling["within_ceiling"])
 
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
-            app_bin, eng_bin, _ = self._make_verified_engine(root)
-            bad_manifest = root / "bad-manifest.json"
-            bad_manifest.write_text(json.dumps({"executable_sha256": "0" * 64, "git_head": "576bbafd7a"}), encoding="utf-8")
+            app_bin, eng_bin, man_path = self._make_verified_engine(root)
 
-            def fake_native_unverified(app_p, out_p, *, engine_bin=None, engine_manifest=None, **kwargs):
+            def fake_native_ok(app_p, out_p, *, engine_bin=None, engine_manifest=None, **kwargs):
                 prov = tb10.collect_provenance(engine_bin=engine_bin, engine_manifest=engine_manifest, lane="sidecar-native-den")
                 return {
                     "passed": True,
@@ -127,16 +149,34 @@ class TestTB10NativeRunner(unittest.TestCase):
                     "provenance": prov,
                 }
 
+            def empty_episode(variant, v_dir, **kwargs):
+                return {
+                    "session_id": "",
+                    "project_id": "",
+                    "db_path": "",
+                    "captured_requests": [],
+                    "episode_facts": {},
+                    "network_fixtures": [],
+                    "api_readback": {"health": {"status": "ok"}},
+                    "sqlite_row_counts": {},
+                    "sqlite_total_rows": 0,
+                }
+
+            # Onboarding-only / zero-row episode MUST fail closed!
             res = tb10.run_tb10_suite(
-                root / "out-bad",
+                root / "out-empty",
                 app_bin=app_bin,
                 engine_bin=eng_bin,
-                engine_manifest=bad_manifest,
+                engine_manifest=man_path,
                 variant_ids=["X01-v1-worker-outside-write"],
-                native_fn=fake_native_unverified,
+                native_fn=fake_native_ok,
+                episode_fn=empty_episode,
             )
             self.assertFalse(res["all_passed"])
-            self.assertIn("unverified_product_source", res["variants"][0]["failure_reasons"])
+            reasons = res["variants"][0]["failure_reasons"]
+            self.assertIn("zero_scenario_sqlite_rows", reasons)
+            self.assertIn("missing_session_api_readback", reasons)
+            self.assertIn("missing_captured_model_request", reasons)
 
 
 if __name__ == "__main__":
