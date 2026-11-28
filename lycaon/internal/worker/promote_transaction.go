@@ -22,10 +22,6 @@ type promoteTransaction struct {
 	afterCommit func() error
 }
 
-func beginPromoteTransaction(dataDir, jobID string, plans []promoteMutation) (*promoteTransaction, error) {
-	return beginPromoteTransactionWith(dataDir, jobID, plans, checkpoint.TransactionConfig{})
-}
-
 func beginPromoteTransactionWith(dataDir, jobID string, plans []promoteMutation, effects checkpoint.TransactionConfig) (*promoteTransaction, error) {
 	effects.Dir, effects.ID = promoteTransactionDir(dataDir, jobID), promoteTransactionID(jobID)
 	if err := os.MkdirAll(filepath.Dir(effects.Dir), 0o700); err != nil {

@@ -99,7 +99,7 @@ func verifiedLinkedWorktreeGitDirs(rootDir string) (gitDir, commonDir string, ok
 }
 
 func readBoundedGitlink(path string, maxBytes int64) ([]byte, error) {
-	f, err := os.Open(path) //nolint:gosec // Path is <registered-root>/.git verified as a regular file via Lstat.
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}

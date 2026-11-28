@@ -173,14 +173,6 @@ func ImportAndValidateCheckpointGitRefs(
 	ctx context.Context, sources GitObjectSources, checkpointID, workerID string, git PrivateGitSnapshot,
 	targetRoots map[string]string, primaryRoot string, authorizedGitDirs ...string,
 ) (map[string]string, error) {
-	return importCheckpointGitRefsWith(ctx, sources, checkpointID, workerID, git, targetRoots, primaryRoot, authorizedGitDirs, nil)
-}
-
-func importCheckpointGitRefsWith(
-	ctx context.Context, sources GitObjectSources, checkpointID, workerID string, git PrivateGitSnapshot,
-	targetRoots map[string]string, primaryRoot string, authorizedGitDirs []string,
-	resolveGitDirs func(rootID, repoRoot string) (string, string, error),
-) (map[string]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -198,7 +190,7 @@ func importCheckpointGitRefsWith(
 	}
 	request := rootRefImport{
 		storeDir: sources.StoreDir, retained: sources.Retained, checkpointID: cleanCheckpoint, workerID: cleanWorker,
-		objectCheckpoints: git.ObjectCheckpoints, authorizedGitDirs: authorizedGitDirs, resolveGitDirs: resolveGitDirs,
+		objectCheckpoints: git.ObjectCheckpoints, authorizedGitDirs: authorizedGitDirs, resolveGitDirs: sources.resolveGitDirs,
 	}
 	imported := map[string]string{}
 	if len(git.Refs) > 0 {
@@ -282,8 +274,9 @@ func ensureMinimalGitDirLayout(gitDir, commonGitDir string) error {
 // parents exported into the store, and the engine's retained stores holding the history they build
 // on. Only objects the worker's tips reach over the destination's boundary are taken from either.
 type GitObjectSources struct {
-	StoreDir string
-	Retained []string
+	StoreDir       string
+	Retained       []string
+	resolveGitDirs func(rootID, repoRoot string) (string, string, error)
 }
 
 type rootRefImport struct {

@@ -180,15 +180,6 @@ func (txn *Transaction) verifyRecordedRootGitDirs(rootID, dir string) (string, s
 	return gitDir, common, nil
 }
 
-func (txn *Transaction) importCheckpointGitRefs(
-	ctx context.Context, sources GitObjectSources, m Manifest, targetRoots map[string]string, primaryRoot string,
-) (map[string]string, error) {
-	return importCheckpointGitRefsWith(
-		ctx, sources, m.CheckpointID, m.WorkerID, m.PrivateGit, targetRoots, primaryRoot,
-		txn.cfg.AuthorizedGitDirs, txn.verifyRecordedRootGitDirs,
-	)
-}
-
 func captureGitDirIdentity(gitDir, common string) (gitDirIdentity, error) {
 	canonGit, err := canonicalDirPath(gitDir)
 	if err != nil {
