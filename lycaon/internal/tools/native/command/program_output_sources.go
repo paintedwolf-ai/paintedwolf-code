@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
@@ -239,8 +240,55 @@ func (r *ProgramRuntime) commitProgramWindows(ctx context.Context, run *programR
 		reference, err := observer.CommitDeliveredSource(ctx, run.tc.Identity.SessionID, obs)
 		if err == nil {
 			tagDelivery(run, reference, window.Path, obs)
+			rememberDeliveredProgramWindow(ctx, run.tc, window)
 		}
 	}
+}
+
+// rememberDeliveredProgramWindow credits the conversational read basis only
+// when the exact whole shared-document window reached the model under its
+// authenticated source identity and matching document ID and revision.
+func rememberDeliveredProgramWindow(ctx context.Context, tc tools.ToolContext, window tools.ProgramWindow) {
+	if window.StartLine != 1 || window.Body == "" || window.Path == "inline" {
+		return
+	}
+	if window.RootID == "" || window.ScopeRel == "" || window.ScopeRel == "." {
+		return
+	}
+	if window.DocumentID == "" || window.DocumentRevision <= 0 {
+		return
+	}
+	rootID := strings.TrimSpace(window.RootID)
+	found := false
+	for _, root := range tc.Source.Roots {
+		if strings.TrimSpace(root.ID) == rootID {
+			found = true
+			break
+		}
+	}
+	if !found || rootID == "" {
+		return
+	}
+	documents, ok := tools.ProjectDocuments(tc)
+	if !ok {
+		return
+	}
+	branch, err := tc.SourceBranch(rootID)
+	if err != nil {
+		return
+	}
+	doc, open, err := documents.OpenDocument(ctx, tc.Identity.ProjectID, branch, rootID, window.ScopeRel)
+	if err != nil || !open {
+		return
+	}
+	if doc.ID != window.DocumentID || doc.Revision != window.DocumentRevision {
+		return
+	}
+	lines := toolkit.SplitLines(doc.Text)
+	if !tools.MatchesWholeDocumentWindow(doc, lines, window.StartLine, window.EndLine, window.Body) {
+		return
+	}
+	documents.RememberAgentRead(tc.Identity.ProjectID, tc.Identity.SessionID, doc)
 }
 
 func outputRangesContain(parts []deliveredOutputPart, encoded []byte) bool {

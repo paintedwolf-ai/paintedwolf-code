@@ -1,18 +1,25 @@
 package literal
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/summarize"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/native/survey"
+	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const domainSource = "package main\n\nimport \"fmt\"\n\nfunc main() { fmt.Println(\"a\") }\n\nfunc helper() int { return 1 }\n"
@@ -148,5 +155,93 @@ func TestRepoMapSelectsItsBundle(t *testing.T) {
 	testutil.FailErr(t, "decode repo-map", json.Unmarshal([]byte(r.stdout), &result))
 	if result.Bundle != "api_routes" {
 		t.Fatalf("bundle = %q", result.Bundle)
+	}
+}
+
+type stubDomainEditorDocs struct {
+	tools.EditorDocuments
+	doc  tools.EditorDocumentText
+	open bool
+	err  error
+}
+
+func (s *stubDomainEditorDocs) OpenDocument(context.Context, string, sourcebranch.ID, string, string) (tools.EditorDocumentText, bool, error) {
+	return s.doc, s.open, s.err
+}
+
+func TestCaptureWindowDocumentIdentity(t *testing.T) {
+	rootDir := t.TempDir()
+	docText := "alpha\nbeta\ngamma\n"
+	lines := toolkit.SplitLines(docText)
+	fullBody := hostmarker.FormatNumberedLines(lines, 1)
+
+	makeTC := func(docs tools.EditorDocuments, wsKind api.SourceWorkspaceKind) tools.ToolContext {
+		return tools.ToolContext{
+			Identity: tools.InvocationIdentity{ProjectID: "proj-1", SessionID: "sess-1"},
+			Source: tools.InvocationSource{
+				ActiveRootID:        "r1",
+				SourceWorkspaceKind: wsKind,
+				Roots:               []projectroot.RootRef{{ID: "r1", Path: rootDir}},
+				EditorDocuments:     docs,
+			},
+		}
+	}
+
+	docs := &stubDomainEditorDocs{
+		doc:  tools.EditorDocumentText{ID: "doc-1", Revision: 4, Text: docText},
+		open: true,
+	}
+	tc := makeTC(docs, api.SourceWorkspaceKindProject)
+
+	if id, rev := captureWindowDocumentIdentity(t.Context(), tc, "r1", "target.txt", "target.txt", 1, len(lines), fullBody); id != "doc-1" || rev != 4 {
+		t.Fatalf("exact whole window = (%q, %d), want (doc-1, 4)", id, rev)
+	}
+	if id, rev := captureWindowDocumentIdentity(t.Context(), tc, "missing-root", "target.txt", "target.txt", 1, len(lines), fullBody); id != "" || rev != 0 {
+		t.Fatalf("missing root = (%q, %d), want empty", id, rev)
+	}
+	if id, rev := captureWindowDocumentIdentity(t.Context(), tc, "r1", "target.txt", "target.txt", 1, len(lines)-1, fullBody); id != "" || rev != 0 {
+		t.Fatalf("partial endLine = (%q, %d), want empty", id, rev)
+	}
+	if id, rev := captureWindowDocumentIdentity(t.Context(), tc, "r1", "target.txt", "target.txt", 1, len(lines), "1\tchanged"); id != "" || rev != 0 {
+		t.Fatalf("mismatched body = (%q, %d), want empty", id, rev)
+	}
+	closedTC := makeTC(&stubDomainEditorDocs{open: false}, api.SourceWorkspaceKindProject)
+	if id, rev := captureWindowDocumentIdentity(t.Context(), closedTC, "r1", "target.txt", "target.txt", 1, len(lines), fullBody); id != "" || rev != 0 {
+		t.Fatalf("closed doc = (%q, %d), want empty", id, rev)
+	}
+	badBranchTC := makeTC(docs, api.SourceWorkspaceKind("invalid"))
+	if id, rev := captureWindowDocumentIdentity(t.Context(), badBranchTC, "r1", "target.txt", "target.txt", 1, len(lines), fullBody); id != "" || rev != 0 {
+		t.Fatalf("invalid source branch = (%q, %d), want empty", id, rev)
+	}
+
+	// CRLF + UTF-16LE BOM document: summarize preserves trailing '\r' on CRLF lines while
+	// OpenDocument stores LF-normalized Text with EOL="crlf".
+	crlfDoc := tools.EditorDocumentText{
+		ID:       "doc-utf16",
+		Revision: 2,
+		Text:     "L1\nTARGET\nL3\n",
+		Encoding: textfile.UTF16LEBOM,
+		EOL:      "crlf",
+	}
+	crlfTC := makeTC(&stubDomainEditorDocs{doc: crlfDoc, open: true}, api.SourceWorkspaceKindProject)
+	crlfBody := hostmarker.FormatNumberedLines([]string{"L1\r", "TARGET\r", "L3\r"}, 1)
+	if id, rev := captureWindowDocumentIdentity(t.Context(), crlfTC, "r1", "e08_target.txt", "e08_target.txt", 1, 3, crlfBody); id != "doc-utf16" || rev != 2 {
+		t.Fatalf("crlf utf16le whole window = (%q, %d), want (doc-utf16, 2)", id, rev)
+	}
+	// Negative control: LF document must NOT accept CRLF-suffixed window body.
+	if id, rev := captureWindowDocumentIdentity(t.Context(), tc, "r1", "target.txt", "target.txt", 1, 3, hostmarker.FormatNumberedLines([]string{"alpha\r", "beta\r", "gamma\r"}, 1)); id != "" || rev != 0 {
+		t.Fatalf("lf doc accepted crlf body = (%q, %d), want empty", id, rev)
+	}
+	// CRLF document without trailing newline: last line has no '\r'.
+	crlfNoTrailDoc := tools.EditorDocumentText{
+		ID:       "doc-crlf-notrail",
+		Revision: 3,
+		Text:     "L1\nTARGET",
+		Encoding: textfile.UTF8,
+		EOL:      "crlf",
+	}
+	crlfNoTrailTC := makeTC(&stubDomainEditorDocs{doc: crlfNoTrailDoc, open: true}, api.SourceWorkspaceKindProject)
+	if id, rev := captureWindowDocumentIdentity(t.Context(), crlfNoTrailTC, "r1", "notrail.txt", "notrail.txt", 1, 2, hostmarker.FormatNumberedLines([]string{"L1\r", "TARGET"}, 1)); id != "doc-crlf-notrail" || rev != 3 {
+		t.Fatalf("crlf no-trailing-newline window = (%q, %d), want (doc-crlf-notrail, 3)", id, rev)
 	}
 }
