@@ -94,26 +94,34 @@ func rangeAcrossRecords(finding WorkerFindingInput, ev evidence.Ledger, res evid
 	return first, first != "" && anchored && evidence.UnionObserved(records, res.Path, finding.Line, finding.EndLine)
 }
 
-// countedCoordinate settles a single line with no excerpt that rests only on output
-// showing no numbers: inside what was delivered it is traced, and outside it unverifiable.
+// countedCoordinate requires a single-line citation without an excerpt to be
+// within the selected source delivery. Output that omitted line numbers only
+// traces coordinates the reader could count from the delivery.
 func countedCoordinate(finding WorkerFindingInput, ev evidence.Ledger, res evidence.Resolution) evidence.Resolution {
 	if finding.Line <= 0 || finding.EndLine > 0 || strings.TrimSpace(finding.Excerpt) != "" || !res.Verdict.Grounded() {
 		return res
 	}
 	rec, ok := evidence.ResolveHandle(ev, res.Handle)
-	if !ok || rec.ShowedLineNumbers() {
+	// A write receipt grounds authorship separately from a source observation.
+	if !ok || evidence.ActiveBinding().IsMutationKind(rec.Kind) ||
+		(rec.SourceDelivery == nil && evidence.RecordShape(rec) != evidence.ShapeFileRegion) {
+		return res
+	}
+	support := evidence.CoordinateSupport(rec, res.Path, finding.Line, finding.Line)
+	if support == evidence.CoordinateObserved {
 		return res
 	}
 	if _, known := evidence.ResolveHandle(ev, finding.Evidence); !known {
 		for _, handle := range ev.ByPath[filepath.ToSlash(res.Path)] {
 			if other, ok := evidence.ResolveHandle(ev, handle); ok && other.SupersededBy == "" && !other.IsGate() &&
 				evidence.CoordinateSupport(other, res.Path, finding.Line, finding.Line) == evidence.CoordinateObserved {
+				res.Handle = handle
 				return res
 			}
 		}
 	}
 	res.Verdict = evidence.VerdictUnverifiable
-	if evidence.CoordinateSupport(rec, res.Path, finding.Line, finding.Line) == evidence.CoordinateDelivered ||
+	if support == evidence.CoordinateDelivered ||
 		citesFullDeliveryCoverage(finding, res.Handle, rec, res.Path) {
 		res.Verdict = evidence.VerdictTraced
 	}
