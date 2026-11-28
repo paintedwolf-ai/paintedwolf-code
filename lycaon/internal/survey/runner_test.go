@@ -99,20 +99,23 @@ func TestRunnerResolveEvidence(t *testing.T) {
 	}}
 	result, err := survey.NewRunner(cat, survey.DefaultCaps()).Run(context.Background(), "t", ".", testScope(t, dir))
 	testutil.FailErr(t, "Run", err)
-	var targetPath string
+	var targetRec evidence.Record
 	for _, rec := range result.Ledger.Handles {
 		if rec.Path != "" {
-			targetPath = rec.Path
+			targetRec = rec
 			break
 		}
 	}
-	if targetPath == "" {
+	if targetRec.Path == "" {
 		t.Fatal("no path in ledger")
 	}
+	if len(targetRec.LineRanges) == 0 {
+		t.Fatalf("record %q has no delivered line ranges", targetRec.Handle)
+	}
 	res := evidence.Resolve(evidence.CitationRoots{ProjectDir: dir}, evidence.Triple{
-		Path:    targetPath,
-		Line:    1,
-		Excerpt: "Getenv",
+		Path:    targetRec.Path,
+		Line:    targetRec.LineRanges[0].Start,
+		Excerpt: `os.Getenv("HOME")`,
 	}, result.Ledger, "")
 	if res.Verdict == evidence.VerdictUnverifiable {
 		t.Fatalf("resolve verdict = %q", res.Verdict)
