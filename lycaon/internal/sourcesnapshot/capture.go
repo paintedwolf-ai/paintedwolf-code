@@ -48,23 +48,31 @@ func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
 		}
 	}()
 	for _, root := range req.Roots {
+		rootReq := req
 		var plan deltaPlan
 		// Content verification reads every file; incremental capture waits for events.
 		if req.Verify == VerifyContent || req.Unwatched {
 			plan = deltaPlan{upTo: s.deltas.sequence()}
-		} else {
-			var settled bool
-			if req.Settle {
-				settled = repochange.SettleRoot(ctx, root.Path, deltaQuietGrace, deltaQuietWait)
-			} else {
-				settled = repochange.WaitQuiet(ctx, root.Path, deltaQuietGrace, deltaQuietWait)
+		} else if req.Settle {
+			switch repochange.SettleRootStatus(ctx, root.Path, deltaQuietGrace, deltaQuietWait) {
+			case repochange.SettleQuiet:
+				plan = s.deltas.begin(root.Path, s.scopeFor(ctx, req, root).Identity())
+			case repochange.SettleUnproven:
+				// No sentinel barrier covers every stream for this root: verify
+				// admitted content directly instead of trusting the watcher.
+				rootReq.Verify = VerifyContent
+				plan = deltaPlan{upTo: s.deltas.sequence()}
+			default:
+				unsettledWait = true
+				plan = s.deltas.begin(root.Path, s.scopeFor(ctx, req, root).Identity())
 			}
-			if !settled {
+		} else {
+			if !repochange.WaitQuiet(ctx, root.Path, deltaQuietGrace, deltaQuietWait) {
 				unsettledWait = true
 			}
 			plan = s.deltas.begin(root.Path, s.scopeFor(ctx, req, root).Identity())
 		}
-		candidate, err := s.candidate(ctx, req, root, plan)
+		candidate, err := s.candidate(ctx, rootReq, root, plan)
 		if err != nil {
 			return Snapshot{}, err
 		}

@@ -23,7 +23,7 @@ func setupFSEventsSentinel(rootResolved string) (string, string) {
 		return "", ""
 	}
 	resolved, err := resolveWatchPath(dir)
-	if err != nil || !sameFilesystemDevice(rootResolved, resolved) {
+	if err != nil || !checkSentinelDevice(rootResolved, resolved, sameFilesystemDevice) {
 		_ = os.RemoveAll(dir)
 		return "", ""
 	}
@@ -43,35 +43,31 @@ func sameFilesystemDevice(a, b string) bool {
 
 // Flush waits until macOS fseventsd has delivered all events up to "now" into
 // EventChannel/ResyncChannel. FSEventStreamFlushSync alone only flushes events
-// fseventsd has already ingested from /dev/fsevents, so we emit a filtered
-// sentinel event in our private same-volume temp dir on the same FSEventStream
-// and wait for it to pass through pump and deliver in FIFO order.
-func (w *fseventsPlatformWatcher) Flush(ctx context.Context) bool {
+// fseventsd has already ingested from /dev/fsevents, so we require a filtered
+// sentinel event in our private same-volume temp dir on the root's stream.
+// When no sentinel covers every stream (cross-volume root or additional
+// secondary streams), Flush reports SettleUnproven so authoritative callers
+// fall back to direct content verification rather than trusting an unproven flush.
+func (w *fseventsPlatformWatcher) Flush(ctx context.Context) SettleStatus {
 	w.mu.Lock()
 	if w.closed {
 		w.mu.Unlock()
-		return false
+		return SettleUnsettled
 	}
 	pumps := slices.Clone(w.pumps)
 	w.mu.Unlock()
 
-	if w.sentinelResolved != "" && len(pumps) > 0 {
-		if !w.flushViaSentinel(ctx, pumps) {
-			return false
-		}
-		if len(pumps) > 1 {
-			return w.flushStreamsDirect(ctx, pumps[1:])
-		}
-		return true
+	if w.sentinelResolved == "" || len(pumps) != 1 {
+		return SettleUnproven
 	}
-	return w.flushStreamsDirect(ctx, pumps)
+	return w.flushViaSentinel(ctx, pumps[0])
 }
 
-func (w *fseventsPlatformWatcher) flushViaSentinel(ctx context.Context, pumps []fseventsStreamPump) bool {
+func (w *fseventsPlatformWatcher) flushViaSentinel(ctx context.Context, sp fseventsStreamPump) SettleStatus {
 	w.mu.Lock()
 	if w.closed {
 		w.mu.Unlock()
-		return false
+		return SettleUnsettled
 	}
 	w.sentinelSeq++
 	token := fmt.Sprintf("s-%d", w.sentinelSeq)
@@ -82,22 +78,22 @@ func (w *fseventsPlatformWatcher) flushViaSentinel(ctx context.Context, pumps []
 	sentinelPath := filepath.Join(w.sentinelDir, token)
 	if err := os.Mkdir(sentinelPath, 0o700); err != nil {
 		w.cancelSentinel(token)
-		return false
+		return SettleUnproven
 	}
 	_ = os.Remove(sentinelPath)
 
 	// Non-blocking flush nudges fseventsd without waiting for fseventsLatency.
-	pumps[0].stream.Flush(false)
+	sp.stream.Flush(false)
 
 	select {
 	case <-barrier:
-		return true
+		return SettleQuiet
 	case <-w.done:
 		w.cancelSentinel(token)
-		return false
+		return SettleUnsettled
 	case <-ctx.Done():
 		w.cancelSentinel(token)
-		return false
+		return SettleUnsettled
 	}
 }
 
@@ -105,58 +101,6 @@ func (w *fseventsPlatformWatcher) cancelSentinel(token string) {
 	w.mu.Lock()
 	delete(w.sentinels, token)
 	w.mu.Unlock()
-}
-
-func (w *fseventsPlatformWatcher) flushStreamsDirect(ctx context.Context, pumps []fseventsStreamPump) bool {
-	for _, sp := range pumps {
-		flushed := make(chan struct{})
-		go func(s *fsevents.EventStream) {
-			s.Flush(true)
-			close(flushed)
-		}(sp.stream)
-		select {
-		case <-flushed:
-		case <-w.done:
-			return false
-		case <-ctx.Done():
-			return false
-		}
-		ack := make(chan struct{})
-		select {
-		case sp.sync <- ack:
-		case <-w.done:
-			return false
-		case <-ctx.Done():
-			return false
-		}
-		select {
-		case <-ack:
-		case <-w.done:
-			return false
-		case <-ctx.Done():
-			return false
-		}
-	}
-	barrier := make(chan struct{})
-	w.mu.Lock()
-	if w.closed {
-		w.mu.Unlock()
-		return false
-	}
-	w.barriers = append(w.barriers, barrier)
-	w.mu.Unlock()
-	select {
-	case w.wake <- struct{}{}:
-	default:
-	}
-	select {
-	case <-barrier:
-		return true
-	case <-w.done:
-		return false
-	case <-ctx.Done():
-		return false
-	}
 }
 
 func (w *fseventsPlatformWatcher) drainStream(stream *fsevents.EventStream) bool {

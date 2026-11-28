@@ -134,3 +134,150 @@ func TestGateStateWatcherLag(t *testing.T) {
 		t.Fatalf("WorkflowSourceVerifyPassed after restore = (%v, %v), want (true, nil)", wfPassed, err)
 	}
 }
+
+// TestGateStateNoSentinelFallbackVerifiesContentDirectly verifies Decision 110:
+// when no sentinel barrier is available (SettleUnproven, e.g. cross-volume root),
+// authoritative gate evaluation falls back to VerifyContent directly: passing a
+// current receipt and refusing a stale receipt even while watcher delivery is
+// held back.
+func TestGateStateNoSentinelFallbackVerifiesContentDirectly(t *testing.T) {
+	ctx := t.Context()
+	restoreDevice := repochange.UseSentinelDeviceCheck(func(string, string) bool { return false })
+	t.Cleanup(restoreDevice)
+
+	root := t.TempDir()
+	repochangetest.Watch(t, root)
+	repochangetest.Acquire(t)
+
+	if got := repochange.SettleRootStatus(ctx, root, 50*time.Millisecond, time.Second); got != repochange.SettleUnproven {
+		t.Fatalf("SettleRootStatus without sentinel = %v, want SettleUnproven", got)
+	}
+
+	initialBytes := []byte("package gate\n\nfunc Verify() bool { return true }\n")
+	gatePath := filepath.Join(root, "gate.go")
+	testutil.FailErr(t, "write initial gate.go", os.WriteFile(gatePath, initialBytes, 0o600))
+
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	sess.ProjectID = "project"
+	sess.WorkspacePath = root
+
+	sessStore := fixedVerifySessionStore{sess: sess}
+	m := New(sessStore, sessions.Transcript, scope.New(sessions.Sessions), nil)
+	m.SetDataDir(t.TempDir())
+	m.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
+	ledger := sourceledger.New(testdbfixture.Open(t, "store.db"), t.TempDir(), sourceledger.Timing{})
+	t.Cleanup(func() { _ = ledger.Snapshots.Close() })
+	m.SetSourceObservations(ledger.Inventory)
+
+	initRev, initRoot := m.SettledRevision(ctx, root)
+	if initRev == "" || initRoot == "" {
+		t.Fatalf("initial SettledRevision empty under VerifyContent fallback: rev=%q root=%q", initRev, initRoot)
+	}
+	when := time.Now().UTC()
+	m.RecordSourceRunTerminal(ctx, sess, sess.ID, ProducerVerify, tools.SourceRunCapture{
+		CheckID:          "chk-no-sentinel",
+		IsCheck:          true,
+		Command:          "echo VERIFY_OK gate.go",
+		ExitCode:         0,
+		Verdict:          api.SourceVerdictPassed,
+		SourceRevision:   initRev,
+		SourceRootDigest: initRoot,
+		Cwd:              ".",
+	}, when)
+	history := []api.Message{{Role: api.MessageRoleUser, Content: "Verify gate.go", CreatedAt: when.Add(-time.Second)}}
+
+	restoreDebounce := repochange.UseDebounce(ctx, 5*time.Second)
+	t.Cleanup(restoreDebounce)
+
+	// (b) Current receipt passes directly via VerifyContent without waiting on the held-back watcher.
+	if passed, repair, unverified := m.GateState(ctx, sess, history); !passed || repair || unverified {
+		t.Fatalf("GateState current receipt under no-sentinel fallback = (passed=%v repair=%v unverified=%v), want (true, false, false)", passed, repair, unverified)
+	}
+	if wfPassed, err := m.WorkflowSourceVerifyPassed(ctx, sess.ID); err != nil || !wfPassed {
+		t.Fatalf("WorkflowSourceVerifyPassed current receipt = (%v, %v), want (true, nil)", wfPassed, err)
+	}
+
+	// (a) External edit while watcher is held back is refused via VerifyContent (repair=true, never passed).
+	testutil.FailErr(t, "external edit gate.go", os.WriteFile(gatePath, []byte("package gate\n\nfunc Verify() bool { return false }\n"), 0o600))
+	if passed, repair, unverified := m.GateState(ctx, sess, history); passed || !repair || unverified {
+		t.Fatalf("GateState stale receipt under no-sentinel fallback = (passed=%v repair=%v unverified=%v), want (false, true, false)", passed, repair, unverified)
+	}
+	if wfPassed, err := m.WorkflowSourceVerifyPassed(ctx, sess.ID); err != nil || wfPassed {
+		t.Fatalf("WorkflowSourceVerifyPassed stale receipt = (%v, %v), want (false, nil)", wfPassed, err)
+	}
+
+	// Restoring original bytes passes again even while watcher remains held back.
+	testutil.FailErr(t, "restore initial gate.go", os.WriteFile(gatePath, initialBytes, 0o600))
+	if passed, repair, unverified := m.GateState(ctx, sess, history); !passed || repair || unverified {
+		t.Fatalf("GateState after restore under no-sentinel fallback = (passed=%v repair=%v unverified=%v), want (true, false, false)", passed, repair, unverified)
+	}
+}
+
+// TestGateStateSecondaryStreamFallbackVerifiesContentDirectly verifies that a
+// root with an external secondary stream (e.g. a worktree gitdir outside root
+// creating pumps[1:] on macOS FSEvents) never passes a stale receipt while the
+// watcher is held back and passes a current receipt cleanly.
+func TestGateStateSecondaryStreamFallbackVerifiesContentDirectly(t *testing.T) {
+	ctx := t.Context()
+	root := t.TempDir()
+	externalGitDir := t.TempDir()
+	testutil.FailErr(t, "write external HEAD", os.WriteFile(filepath.Join(externalGitDir, "HEAD"), []byte("ref: refs/heads/main\n"), 0o600))
+	testutil.FailErr(t, "write gitdir pointer", os.WriteFile(filepath.Join(root, ".git"), []byte("gitdir: "+externalGitDir+"\n"), 0o600))
+
+	initialBytes := []byte("package gate\n\nfunc Verify() bool { return true }\n")
+	gatePath := filepath.Join(root, "gate.go")
+	testutil.FailErr(t, "write initial gate.go", os.WriteFile(gatePath, initialBytes, 0o600))
+
+	repochangetest.Watch(t, root)
+	repochangetest.Acquire(t)
+
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	sess.ProjectID = "project"
+	sess.WorkspacePath = root
+
+	sessStore := fixedVerifySessionStore{sess: sess}
+	m := New(sessStore, sessions.Transcript, scope.New(sessions.Sessions), nil)
+	m.SetDataDir(t.TempDir())
+	m.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
+	ledger := sourceledger.New(testdbfixture.Open(t, "store.db"), t.TempDir(), sourceledger.Timing{})
+	t.Cleanup(func() { _ = ledger.Snapshots.Close() })
+	m.SetSourceObservations(ledger.Inventory)
+
+	initRev, initRoot := m.SettledRevision(ctx, root)
+	if initRev == "" || initRoot == "" {
+		t.Fatalf("initial SettledRevision empty: rev=%q root=%q", initRev, initRoot)
+	}
+	when := time.Now().UTC()
+	m.RecordSourceRunTerminal(ctx, sess, sess.ID, ProducerVerify, tools.SourceRunCapture{
+		CheckID:          "chk-secondary-stream",
+		IsCheck:          true,
+		Command:          "echo VERIFY_OK gate.go",
+		ExitCode:         0,
+		Verdict:          api.SourceVerdictPassed,
+		SourceRevision:   initRev,
+		SourceRootDigest: initRoot,
+		Cwd:              ".",
+	}, when)
+	history := []api.Message{{Role: api.MessageRoleUser, Content: "Verify gate.go", CreatedAt: when.Add(-time.Second)}}
+
+	restoreDebounce := repochange.UseDebounce(ctx, 5*time.Second)
+	t.Cleanup(restoreDebounce)
+
+	// Unchanged file passes cleanly.
+	if passed, repair, unverified := m.GateState(ctx, sess, history); !passed || repair || unverified {
+		t.Fatalf("GateState current receipt with external gitdir = (passed=%v repair=%v unverified=%v), want (true, false, false)", passed, repair, unverified)
+	}
+
+	// External edit while watcher is held back MUST NOT pass (repair on darwin VerifyContent fallback, unverified on linux held debounce).
+	testutil.FailErr(t, "external edit gate.go", os.WriteFile(gatePath, []byte("package gate\n\nfunc Verify() bool { return false }\n"), 0o600))
+	if passed, _, _ := m.GateState(ctx, sess, history); passed {
+		t.Fatal("GateState falsely passed stale receipt with external secondary stream")
+	}
+	if wfPassed, err := m.WorkflowSourceVerifyPassed(ctx, sess.ID); err != nil || wfPassed {
+		t.Fatalf("WorkflowSourceVerifyPassed = (%v, %v), want (false, nil)", wfPassed, err)
+	}
+}

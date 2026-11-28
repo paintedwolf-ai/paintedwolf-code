@@ -12,16 +12,19 @@ import (
 
 // Flush emits a filtered sentinel event on the shared inotify stream and waits
 // until fsnotifyMux.dispatch has routed all prior kernel events into w.events.
-func (w *fsnotifyPlatformWatcher) Flush(ctx context.Context) bool {
+// All roots on Linux share one kernel inotify fd; if the sentinel dir cannot be
+// established, Flush returns SettleUnproven so authoritative callers fall back
+// to direct content verification.
+func (w *fsnotifyPlatformWatcher) Flush(ctx context.Context) SettleStatus {
 	m := w.mux
-	dir, ok := m.ensureSentinel(w)
-	if !ok {
-		return false
+	dir, status := m.ensureSentinel(w)
+	if status != SettleQuiet {
+		return status
 	}
 	m.mu.Lock()
 	if w.closed || m.fw == nil {
 		m.mu.Unlock()
-		return false
+		return SettleUnsettled
 	}
 	if m.sentinels == nil {
 		m.sentinels = make(map[string]chan struct{})
@@ -35,42 +38,45 @@ func (w *fsnotifyPlatformWatcher) Flush(ctx context.Context) bool {
 	sentinelPath := filepath.Join(dir, token)
 	if err := os.Mkdir(sentinelPath, 0o700); err != nil {
 		m.cancelSentinel(token)
-		return false
+		return SettleUnproven
 	}
 	_ = os.Remove(sentinelPath)
 
 	select {
 	case <-barrier:
-		return true
+		return SettleQuiet
 	case <-ctx.Done():
 		m.cancelSentinel(token)
-		return false
+		return SettleUnsettled
 	}
 }
 
-func (m *fsnotifyMux) ensureSentinel(w *fsnotifyPlatformWatcher) (string, bool) {
+func (m *fsnotifyMux) ensureSentinel(w *fsnotifyPlatformWatcher) (string, SettleStatus) {
 	m.ops.Lock()
 	defer m.ops.Unlock()
 	if w.closed || m.fw == nil {
-		return "", false
+		return "", SettleUnsettled
+	}
+	if !checkSentinelDevice(m.sentinelDir, m.sentinelDir, nil) {
+		return "", SettleUnproven
 	}
 	if m.sentinelDir != "" {
-		return m.sentinelDir, true
+		return m.sentinelDir, SettleQuiet
 	}
 	dir, err := os.MkdirTemp("", "pw-inotify-barrier-*")
 	if err != nil {
-		return "", false
+		return "", SettleUnproven
 	}
 	stream := streamPath(dir)
 	if err := m.fw.Add(stream); err != nil {
 		_ = os.RemoveAll(dir)
-		return "", false
+		return "", SettleUnproven
 	}
 	m.mu.Lock()
 	m.sentinelDir = dir
 	m.sentinelStream = stream
 	m.mu.Unlock()
-	return dir, true
+	return dir, SettleQuiet
 }
 
 func (m *fsnotifyMux) cancelSentinel(token string) {

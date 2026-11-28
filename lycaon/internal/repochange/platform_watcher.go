@@ -18,8 +18,25 @@ type platformWatcher interface {
 	ErrorChannel() <-chan error
 }
 
+// SettleStatus reports the outcome of a watcher barrier and quiet wait.
+type SettleStatus int
+
+const (
+	// SettleQuiet means every watched stream proved delivery up to "now" via
+	// a sentinel barrier and the debouncer reached quiet.
+	SettleQuiet SettleStatus = iota
+	// SettleUnproven means no sentinel barrier covers every stream for the root
+	// (e.g. a cross-volume root or secondary FSEvents stream). Authoritative
+	// callers must verify admitted content directly rather than trusting the
+	// watcher.
+	SettleUnproven
+	// SettleUnsettled means the barrier or quiet wait timed out or was canceled
+	// before settling; authoritative callers must fail closed.
+	SettleUnsettled
+)
+
 // flushingPlatformWatcher is implemented by platform watchers that can flush
 // events up to "now" into EventChannel/ResyncChannel on demand.
 type flushingPlatformWatcher interface {
-	Flush(ctx context.Context) bool
+	Flush(ctx context.Context) SettleStatus
 }
