@@ -80,7 +80,7 @@ func (w *fseventsPlatformWatcher) flushViaSentinel(ctx context.Context, pumps []
 	w.mu.Unlock()
 
 	sentinelPath := filepath.Join(w.sentinelDir, token)
-	if err := os.WriteFile(sentinelPath, nil, 0o600); err != nil {
+	if err := os.Mkdir(sentinelPath, 0o700); err != nil {
 		w.cancelSentinel(token)
 		return false
 	}

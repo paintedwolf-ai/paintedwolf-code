@@ -33,7 +33,7 @@ func (w *fsnotifyPlatformWatcher) Flush(ctx context.Context) bool {
 	m.mu.Unlock()
 
 	sentinelPath := filepath.Join(dir, token)
-	if err := os.WriteFile(sentinelPath, nil, 0o600); err != nil {
+	if err := os.Mkdir(sentinelPath, 0o700); err != nil {
 		m.cancelSentinel(token)
 		return false
 	}
