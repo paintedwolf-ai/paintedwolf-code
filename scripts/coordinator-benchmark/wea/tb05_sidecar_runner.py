@@ -63,12 +63,28 @@ ROUTE_BY_ID: dict[str, EditRoute] = {r.route_id: r for r in D14_EDIT_ROUTES}
 ALL_FAMILIES: tuple[str, ...] = ("E01", "E02", "E03", "E08", "E10")
 
 
-def _fixture_for_route(route: EditRoute) -> tuple[str, bytes, bytes, bytes, int, str]:
+def _fixture_for_route(route: EditRoute, *, read_form: str = "") -> tuple[str, bytes, bytes, bytes, int, str]:
     """Return `(filename, initial_bytes, expected_after_bytes, outside_segment_bytes, target_line, patch_body)`.
 
-    All fixtures are 60+ lines with the edited target near the bottom so `partial_window`
-    (`head -n 5`) strictly covers only a small prefix and never sees the target line.
+    For `full_summarize`, returns compact representative inputs whose opening declaration/content
+    starts at line 1 so `command` `summarize --path` can emit a genuine complete exact `1..N`
+    numbered window (YAML for `jq_edit`, Python for `code_rewrite`, 3-line text for plain-text routes).
+    All other read forms use 60+ line fixtures so `partial_window` (`head -n 5`) strictly covers
+    only a small prefix and never sees the target line.
     """
+    if read_form == "full_summarize":
+        if route.route_id == "jq_edit":
+            initial = b"keep: unchanged\nvalue: beta\n"
+            after = b"keep: unchanged\nvalue: BETA\n"
+            return "target.yaml", initial, after, b"keep: unchanged\n", 2, ""
+        if route.route_id == "code_rewrite":
+            initial = b"def calc():\n    return 1 + 2\n"
+            after = b"def calc():\n    return 3\n"
+            return "target.py", initial, after, b"def calc():\n", 2, ""
+        initial = b"alpha\nbeta\ngamma\n"
+        after = b"alpha\nBETA\ngamma\n"
+        patch_body = f"--- a/{route.target_file}\n+++ b/{route.target_file}\n@@ -1,3 +1,3 @@\n alpha\n-beta\n+BETA\n gamma\n"
+        return route.target_file, initial, after, b"alpha\n", 2, patch_body
     if route.route_id == "jq_edit":
         pad = "".join(f'  "pad_{i:02d}": "v{i:02d}",\n' for i in range(1, 56))
         initial = ('{\n  "keep": "unchanged",\n' + pad + '  "value": "beta"\n}\n').encode("utf-8")
@@ -325,7 +341,7 @@ def _run_e01_slot(
     t0 = time.monotonic()
     route = ROUTE_BY_ID[slot["route_id"]]
     read_form = str(slot["read_form"])
-    rel_path, initial_bytes, expected_after, outside_seg, target_line, patch_body = _fixture_for_route(route)
+    rel_path, initial_bytes, expected_after, outside_seg, target_line, patch_body = _fixture_for_route(route, read_form=read_form)
     after_text = expected_after.decode("utf-8", errors="replace")
     proj = slot_dir / "project"
     proj.mkdir(parents=True, exist_ok=True)
@@ -434,6 +450,7 @@ def _run_e01_slot(
                 target_line=target_line,
                 after_text=after_text,
                 patch_body=patch_body,
+                target_file=rel_path,
             )
             write_tool_name = w_tool
             write_call_id, write_res, _ = _send_tool_call(app, session_id, w_tool, w_args, checkpoint_policy="approve_chat")
@@ -465,7 +482,8 @@ def _run_e01_slot(
 
     expected_json_val: Any = None
     post_json_val: Any = None
-    if route.route_id == "jq_edit":
+    is_json_target = route.route_id == "jq_edit" and rel_path.endswith(".json")
+    if is_json_target:
         expected_json_val = json.loads(expected_after.decode("utf-8"))
         with contextlib.suppress(ValueError):
             post_json_val = json.loads(post_bytes.decode("utf-8", errors="replace"))
@@ -478,7 +496,7 @@ def _run_e01_slot(
         "dispatched_operations": dispatcher_op["dispatched_operations"],
         "pre_disk_sha256": disk_sha_before_write,
         "post_disk_sha256": post_sha,
-        "expected_post_sha256": "" if route.route_id == "jq_edit" else sha256_bytes(expected_after),
+        "expected_post_sha256": "" if is_json_target else sha256_bytes(expected_after),
         "expected_json_value": expected_json_val,
         "post_json_value": post_json_val,
         "outside_segment_pre_sha256": outside_pre_sha,

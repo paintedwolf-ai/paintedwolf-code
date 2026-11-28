@@ -597,42 +597,44 @@ def build_route_write_call(
     target_line: int = 2,
     after_text: str = "alpha\nBETA\ngamma\n",
     patch_body: str = "",
+    target_file: str = "",
 ) -> tuple[str, dict[str, Any]]:
     """Build the `(tool_name, args)` call for each of the ten D14 edit routes."""
+    path = target_file or route.target_file
     if route.route_id == "write":
         # Compiled native `write` operation via `tee` heredoc (dispositions.json: tool="write",
         # command_forms=["tee", "ln"], no printf pipeline stage).
         body = after_text.rstrip("\n")
-        return ("command", {"command": f"tee {route.target_file} <<'EOF'\n{body}\nEOF"})
+        return ("command", {"command": f"tee {path} <<'EOF'\n{body}\nEOF"})
     if route.route_id == "edit":
-        return ("command", {"command": f'edit --path {route.target_file} --old-string "beta" --new-string "BETA"'})
+        return ("command", {"command": f'edit --path {path} --old-string "beta" --new-string "BETA"'})
     if route.route_id == "replace_lines":
-        return ("command", {"command": f'replace-lines --path {route.target_file} --start {target_line} --end {target_line} --content "BETA"'})
+        return ("command", {"command": f'replace-lines --path {path} --start {target_line} --end {target_line} --content "BETA"'})
     if route.route_id == "jq_edit":
-        return ("command", {"command": f'jq-edit --path {route.target_file} --query \'.value = "BETA"\''})
+        return ("command", {"command": f'jq-edit --path {path} --query \'.value = "BETA"\''})
     if route.route_id == "code_rewrite":
         return ("code_rewrite", {
-            "path": route.target_file,
+            "path": path,
             "pattern": "return 1 + 2",
             "rewrite": "return 3",
         })
     if route.route_id == "restore_version":
-        args: dict[str, Any] = {"path": route.target_file}
+        args: dict[str, Any] = {"path": path}
         if restore_version_id:
             args["version_id"] = restore_version_id
         return ("restore_version", args)
     if route.route_id == "shell_sed":
-        return ("command", {"command": f"sed -i 's/beta/BETA/' {route.target_file}"})
+        return ("command", {"command": f"sed -i 's/beta/BETA/' {path}"})
     if route.route_id == "shell_patch":
         if not patch_body:
-            patch_body = "--- a/target.txt\n+++ b/target.txt\n@@ -1,3 +1,3 @@\n alpha\n-beta\n+BETA\n gamma\n"
+            patch_body = f"--- a/{path}\n+++ b/{path}\n@@ -1,3 +1,3 @@\n alpha\n-beta\n+BETA\n gamma\n"
         return ("command", {"command": f"patch -p1 <<'EOF'\n{patch_body.rstrip()}\nEOF"})
     if route.route_id == "shell_redirect":
         body = after_text.rstrip("\n")
-        return ("command", {"command": f"cat <<'EOF' > {route.target_file}\n{body}\nEOF"})
+        return ("command", {"command": f"cat <<'EOF' > {path}\n{body}\nEOF"})
     if route.route_id == "shell_program":
         return ("command", {
-            "command": f'python3 -c \'from pathlib import Path; p = Path("{route.target_file}"); p.write_text(p.read_text().replace("beta", "BETA"))\''
+            "command": f'python3 -c \'from pathlib import Path; p = Path("{path}"); p.write_text(p.read_text().replace("beta", "BETA"))\''
         })
     raise ValueError(f"Unknown D14 route: {route.route_id}")
 
