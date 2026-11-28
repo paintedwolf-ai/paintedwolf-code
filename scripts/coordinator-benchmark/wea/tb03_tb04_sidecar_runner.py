@@ -2018,17 +2018,24 @@ def _w10_restart_helper(ctx: SlotContext, action: str) -> dict[str, Any]:
     app2, _ = ctx.restart_dedicated_app("restart-app")
     pid2 = getattr(getattr(app2, "process", None), "pid", None)
     try:
-        # Wait for the restarted sidecar to settle any interrupted pre-restart submission so session is idle.
-        app2.wait_for(
-            lambda: (app2.request(f"/v1/sessions/{sid}").get("status") == "idle"),
-            "post-restart session idle",
-            session=None,
-        )
-        sub = app2.request(
-            f"/v1/sessions/{sid}/prompts",
-            {"operation_id": str(uuid.uuid4()), "text": f"Resume after restart and {action} overlay {handle}."},
-        )
-        sub_id = str(sub.get("id") or sub.get("submission_id") or "") or None
+        # After restart, the sidecar either resumes the session directly with a pending model turn
+        # or settles the pre-restart submission to `idle` ready for a fresh prompt.
+        def post_restart_ready() -> str | None:
+            pend = app2.request(f"/harness/llm/pending?session_id={urllib.parse.quote(sid)}")
+            if pend.get("pending") and pend.get("session_id") == sid:
+                return "resumed"
+            if app2.request(f"/v1/sessions/{sid}").get("status") == "idle":
+                return "idle"
+            return None
+
+        ready_state = app2.wait_for(post_restart_ready, "post-restart session ready", session=None)
+        sub_id: str | None = None
+        if ready_state == "idle":
+            sub = app2.request(
+                f"/v1/sessions/{sid}/prompts",
+                {"operation_id": str(uuid.uuid4()), "text": f"Resume after restart and {action} overlay {handle}."},
+            )
+            sub_id = str(sub.get("id") or sub.get("submission_id") or "") or None
         if action == "promote":
             _, res, code = _call_tool_for_submission(app2, db_path, sid, sub_id, "promote_overlay", {"overlay_id": handle})
             _, dup_res, dup_code = _call_tool_for_submission(app2, db_path, sid, sub_id, "promote_overlay", {"overlay_id": handle})
