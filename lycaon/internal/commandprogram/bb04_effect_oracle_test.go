@@ -136,10 +136,9 @@ func bb04GenerateFamilyB(seed uint64) []bb04EffectStep {
 		kind := bb04EffectStepKind(rng.IntN(7))
 		target := targets[rng.IntN(len(targets))]
 		payload := payloads[rng.IntN(len(payloads))]
-		switch kind {
-		case bb04StepDeny:
+		if kind == bb04StepDeny {
 			target = "refused"
-		case bb04StepCancel:
+		} else if kind == bb04StepCancel {
 			target = "cancel-target"
 		}
 		steps = append(steps, bb04EffectStep{kind: kind, target: target, payload: payload})
@@ -193,7 +192,7 @@ func bb04ExecuteEffectSequence(t testing.TB, steps []bb04EffectStep) error {
 			src := fmt.Sprintf("echo %s > %s", quoted, step.target)
 			out, err := runProgram(src)
 			if err != nil || out.Status != 0 || out.Stop != nil {
-				return fmt.Errorf("step %d (%s): unexpected err=%v status=%d stop=%+v", idx, src, err, out.Status, out.Stop)
+				return fmt.Errorf("step %d (%s): unexpected err=%w status=%d stop=%+v", idx, src, err, out.Status, out.Stop)
 			}
 			oracle.bytes[step.target] = []byte(step.payload + "\n")
 			oracle.rev[step.target]++
@@ -203,7 +202,7 @@ func bb04ExecuteEffectSequence(t testing.TB, steps []bb04EffectStep) error {
 			src := fmt.Sprintf("echo %s >> %s", quoted, step.target)
 			out, err := runProgram(src)
 			if err != nil || out.Status != 0 || out.Stop != nil {
-				return fmt.Errorf("step %d (%s): unexpected err=%v status=%d stop=%+v", idx, src, err, out.Status, out.Stop)
+				return fmt.Errorf("step %d (%s): unexpected err=%w status=%d stop=%+v", idx, src, err, out.Status, out.Stop)
 			}
 			oracle.bytes[step.target] = append(append([]byte(nil), oracle.bytes[step.target]...), []byte(step.payload+"\n")...)
 			oracle.rev[step.target]++
@@ -215,7 +214,7 @@ func bb04ExecuteEffectSequence(t testing.TB, steps []bb04EffectStep) error {
 			src := fmt.Sprintf("{ echo %s; external -- fail 3; } > %s", quoted, step.target)
 			out, err := runProgram(src)
 			if err != nil || out.Status != 3 || out.Stop != nil {
-				return fmt.Errorf("step %d (%s): want status 3, got err=%v status=%d stop=%+v", idx, src, err, out.Status, out.Stop)
+				return fmt.Errorf("step %d (%s): want status 3, got err=%w status=%d stop=%+v", idx, src, err, out.Status, out.Stop)
 			}
 			wantWithheld++
 
@@ -225,7 +224,7 @@ func bb04ExecuteEffectSequence(t testing.TB, steps []bb04EffectStep) error {
 			out, err := runProgram(src)
 			var coded *codedError
 			if !errors.As(err, &coded) || coded.code != "COMMAND_PATH_REFUSED" || out.Stop == nil || out.Stop.Kind != StopAuthority {
-				return fmt.Errorf("step %d (%s): want COMMAND_PATH_REFUSED authority stop, got err=%v stop=%+v", idx, src, err, out.Stop)
+				return fmt.Errorf("step %d (%s): want COMMAND_PATH_REFUSED authority stop, got err=%w stop=%+v", idx, src, err, out.Stop)
 			}
 			wantRefused++
 
@@ -244,7 +243,7 @@ func bb04ExecuteEffectSequence(t testing.TB, steps []bb04EffectStep) error {
 			pub.onCancel = nil
 			pub.mu.Unlock()
 			if !errors.Is(err, context.Canceled) || out.Stop == nil || out.Stop.Kind != StopInterrupted {
-				return fmt.Errorf("step %d (%s): want context.Canceled interrupted stop, got err=%v stop=%+v", idx, src, err, out.Stop)
+				return fmt.Errorf("step %d (%s): want context.Canceled interrupted stop, got err=%w stop=%+v", idx, src, err, out.Stop)
 			}
 			wantCanceled++
 		}

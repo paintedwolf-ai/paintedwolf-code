@@ -45,9 +45,10 @@ func (s *stubDiagReader) ReadProgramPage(ctx context.Context, _, _, cursor strin
 		return api.CommandProgramReceiptPage{}, s.pageErr
 	}
 	idx := 0
-	if cursor == "p2" {
+	switch cursor {
+	case "p2":
 		idx = 1
-	} else if cursor == "p3" {
+	case "p3":
 		idx = 2
 	}
 	if idx < len(s.pages) {
@@ -87,14 +88,10 @@ func TestDiagnosticsBlockedReaderDoesNotBlockCaller(t *testing.T) {
 	reader := &stubDiagReader{blockCh: blockCh, entered: entered}
 
 	obs := cmddiag.NewObserver(cmddiag.Config{Enabled: true, QueueCapacity: 2, TaskTimeout: 5 * time.Second, CloseGrace: 50 * time.Millisecond})
-	restore := cmddiag.SetObserver(obs)
-	t.Cleanup(func() {
-		restore()
-		obs.Close()
-	})
+	t.Cleanup(obs.Close)
 
 	start := time.Now()
-	if !observeSettledProgramDiagnostics(reader, "sess-1", "call-1", "prog-blocked", nil) {
+	if !observeSettledProgramDiagnostics(obs, reader, "sess-1", "call-1", "prog-blocked", nil) {
 		t.Fatal("expected task to enqueue immediately")
 	}
 	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
@@ -124,24 +121,22 @@ func TestDiagnosticsOverflowPerformsZeroReceiptReads(t *testing.T) {
 			mu.Unlock()
 		},
 	})
-	restore := cmddiag.SetObserver(obs)
 	t.Cleanup(func() {
-		restore()
 		unblock()
 		obs.Close()
 	})
 
-	if !observeSettledProgramDiagnostics(blocker, "sess-1", "call-1", "prog-1", nil) {
+	if !observeSettledProgramDiagnostics(obs, blocker, "sess-1", "call-1", "prog-1", nil) {
 		t.Fatal("blocker task should enqueue")
 	}
 	<-entered
 	// Fill queue slot 1.
-	if !observeSettledProgramDiagnostics(blocker, "sess-1", "call-2", "prog-2", nil) {
+	if !observeSettledProgramDiagnostics(obs, blocker, "sess-1", "call-2", "prog-2", nil) {
 		t.Fatal("second task should fill queue")
 	}
 	// Overflow tasks must drop before touching overflowReader.
 	for i := 0; i < 4; i++ {
-		if observeSettledProgramDiagnostics(overflowReader, "sess-1", "call-ovf", "prog-ovf", nil) {
+		if observeSettledProgramDiagnostics(obs, overflowReader, "sess-1", "call-ovf", "prog-ovf", nil) {
 			t.Fatal("expected overflow task to be dropped")
 		}
 	}
@@ -200,12 +195,11 @@ func TestDiagnosticsWiringCatchesStaleDeliveryAndDeduplicates(t *testing.T) {
 			mu.Unlock()
 		},
 	})
-	restore := cmddiag.SetObserver(obs)
-	t.Cleanup(func() { restore(); obs.Close() })
+	t.Cleanup(obs.Close)
 
-	observeSettledProgramDiagnostics(reader, "sess-11112222", "call-1", "prog-stale", staleDelivered)
-	observeSettledProgramDiagnostics(reader, "sess-11112222", "call-1", "prog-stale", staleDelivered)
-	observeSettledProgramDiagnostics(driftReader, "sess-11112222", "call-2", "prog-drift", driftedDelivered)
+	observeSettledProgramDiagnostics(obs, reader, "sess-11112222", "call-1", "prog-stale", staleDelivered)
+	observeSettledProgramDiagnostics(obs, reader, "sess-11112222", "call-1", "prog-stale", staleDelivered)
+	observeSettledProgramDiagnostics(obs, driftReader, "sess-11112222", "call-2", "prog-drift", driftedDelivered)
 	obs.Close()
 
 	mu.Lock()
@@ -218,9 +212,6 @@ func TestDiagnosticsWiringCatchesStaleDeliveryAndDeduplicates(t *testing.T) {
 	}
 	if got[1].RuleID != cmddiag.RuleStaleTerminalPresentation || got[1].Disposition != cmddiag.DispositionIncomplete || got[1].Reason != "host_snapshot_revision_drift" {
 		t.Fatalf("unexpected drift finding: %+v", got[1])
-	}
-	if obs.Stats().Deduplicated != 1 {
-		t.Fatalf("expected 1 deduplicated repeat, got %d", obs.Stats().Deduplicated)
 	}
 }
 
@@ -340,13 +331,12 @@ func TestDiagnosticsOverflowLargeActivityListIsBounded(t *testing.T) {
 	blocker := &stubDiagReader{blockCh: blockCh, entered: entered}
 	overflowReader := &stubDiagReader{}
 	obs := cmddiag.NewObserver(cmddiag.Config{Enabled: true, QueueCapacity: 1})
-	restore := cmddiag.SetObserver(obs)
-	t.Cleanup(func() { restore(); unblock(); obs.Close() })
+	t.Cleanup(func() { unblock(); obs.Close() })
 
-	observeSettledProgramDiagnostics(blocker, "s1", "c1", "prog-b1", nil)
+	observeSettledProgramDiagnostics(obs, blocker, "s1", "c1", "prog-b1", nil)
 	<-entered
-	observeSettledProgramDiagnostics(blocker, "s1", "c2", "prog-b2", nil)
-	if observeSettledProgramDiagnostics(overflowReader, "s1", "c3", "prog-large", &largeReceipt) {
+	observeSettledProgramDiagnostics(obs, blocker, "s1", "c2", "prog-b2", nil)
+	if observeSettledProgramDiagnostics(obs, overflowReader, "s1", "c3", "prog-large", &largeReceipt) {
 		t.Fatal("expected large receipt submission to drop on full queue")
 	}
 	unblock()

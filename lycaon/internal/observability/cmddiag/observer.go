@@ -24,26 +24,13 @@ type Config struct {
 	Now           func() time.Time
 }
 
-// Stats summarizes bounded queue activity for an observer.
-type Stats struct {
-	Enqueued     int64
-	Dropped      int64
-	Emitted      int64
-	Deduplicated int64
-}
-
-type workItem struct {
-	obs  *Observation
-	task *Task
-}
-
 type dedupKey struct {
 	rule      RuleID
 	programID string
 }
 
 // Observer evaluates command-program observations asynchronously on a bounded
-// queue. Submit and SubmitTask never block callers and record drops explicitly.
+// queue. SubmitTask never blocks callers and records drops explicitly.
 type Observer struct {
 	enabled     bool
 	capacity    int
@@ -58,7 +45,7 @@ type Observer struct {
 
 	mu               sync.RWMutex
 	closed           bool
-	queue            chan workItem
+	queue            chan Task
 	wg               sync.WaitGroup
 	closeOnce        sync.Once
 	seen             map[dedupKey]int
@@ -70,7 +57,7 @@ type Observer struct {
 }
 
 // NewObserver creates a bounded async observer. When cfg.Enabled is false,
-// no background goroutine is started and Submit/SubmitTask are no-ops.
+// no background goroutine is started and SubmitTask is a no-op.
 func NewObserver(cfg Config) *Observer {
 	if !cfg.Enabled {
 		return &Observer{enabled: false}
@@ -101,7 +88,7 @@ func NewObserver(cfg Config) *Observer {
 		now:          nowFn,
 		workerCtx:    workerCtx,
 		workerCancel: workerCancel,
-		queue:        make(chan workItem, capacity),
+		queue:        make(chan Task, capacity),
 		seen:         make(map[dedupKey]int),
 	}
 	obs.wg.Add(1)
@@ -109,24 +96,10 @@ func NewObserver(cfg Config) *Observer {
 	return obs
 }
 
-// Submit enqueues an immutable observation without blocking.
-func (o *Observer) Submit(obs Observation) bool {
-	copyObs := obs
-	return o.enqueue(workItem{obs: &copyObs})
-}
-
 // SubmitTask enqueues a deferred fetch task without blocking. When the queue
 // is saturated, task.Fetch is never called.
 func (o *Observer) SubmitTask(task Task) bool {
-	if task.Fetch == nil {
-		return false
-	}
-	copyTask := task
-	return o.enqueue(workItem{task: &copyTask})
-}
-
-func (o *Observer) enqueue(item workItem) bool {
-	if o == nil || !o.enabled {
+	if o == nil || !o.enabled || task.Fetch == nil {
 		return false
 	}
 	o.mu.RLock()
@@ -135,25 +108,12 @@ func (o *Observer) enqueue(item workItem) bool {
 		return false
 	}
 	select {
-	case o.queue <- item:
+	case o.queue <- task:
 		o.enqueued.Add(1)
 		return true
 	default:
 		o.dropped.Add(1)
 		return false
-	}
-}
-
-// Stats returns the current enqueued, dropped, emitted, and deduplicated counts.
-func (o *Observer) Stats() Stats {
-	if o == nil {
-		return Stats{}
-	}
-	return Stats{
-		Enqueued:     o.enqueued.Load(),
-		Dropped:      o.dropped.Load(),
-		Emitted:      o.emitted.Load(),
-		Deduplicated: o.deduplicated.Load(),
 	}
 }
 
@@ -196,31 +156,25 @@ func (o *Observer) Close() {
 
 func (o *Observer) run() {
 	defer o.wg.Done()
-	for item := range o.queue {
+	for task := range o.queue {
 		o.emitOverflowIfNeeded()
-		var obs Observation
-		if item.task != nil {
-			taskCtx, cancel := context.WithTimeout(o.workerCtx, o.taskTimeout)
-			fetched, err := item.task.Fetch(taskCtx)
-			cancel()
-			if err != nil {
-				o.emitDedup(sanitizeFinding(Finding{
-					SchemaVersion: SchemaVersion,
-					Timestamp:     o.now().UTC(),
-					RuleID:        RuleObservationLoss,
-					Disposition:   DispositionIncomplete,
-					SessionID:     item.task.SessionID,
-					ProgramID:     item.task.ProgramID,
-					ToolCallID:    item.task.ToolCallID,
-					Expected:      map[string]any{"receipt_read_succeeded": true},
-					Observed:      map[string]any{"receipt_read_succeeded": false},
-					Reason:        "receipt_read_failed",
-				}))
-				continue
-			}
-			obs = fetched
-		} else if item.obs != nil {
-			obs = *item.obs
+		taskCtx, cancel := context.WithTimeout(o.workerCtx, o.taskTimeout)
+		obs, err := task.Fetch(taskCtx)
+		cancel()
+		if err != nil {
+			o.emitDedup(sanitizeFinding(Finding{
+				SchemaVersion: SchemaVersion,
+				Timestamp:     o.now().UTC(),
+				RuleID:        RuleObservationLoss,
+				Disposition:   DispositionIncomplete,
+				SessionID:     task.SessionID,
+				ProgramID:     task.ProgramID,
+				ToolCallID:    task.ToolCallID,
+				Expected:      map[string]any{"receipt_read_succeeded": true},
+				Observed:      map[string]any{"receipt_read_succeeded": false},
+				Reason:        "receipt_read_failed",
+			}))
+			continue
 		}
 		for _, finding := range Evaluate(obs, o.now()) {
 			o.emitDedup(finding)

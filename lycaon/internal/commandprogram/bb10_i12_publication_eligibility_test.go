@@ -152,33 +152,36 @@ func TestBB10I12PublicationFollowsProducerEligibility(t *testing.T) {
 		})
 	})
 
-	t.Run("eligible_control_matches_visible_stdout_and_status_but_differs_in_eligibility", func(t *testing.T) {
-		// Both commands exit 1 with empty visible stdout, yet the comparison
-		// pipeline (echo alpha | grep zzz) is publication-eligible while
-		// (fail 1 | cat) is ineligible: the oracle must inspect eligibility.
-		eligibleFix := newEvalFixture(t)
-		eligibleFix.publication.published = map[string]string{"out": "seed\n"}
-		eligibleOut, err := eligibleFix.run(t, t.Context(), "echo alpha | grep zzz > out")
-		if err != nil || eligibleOut.Stop != nil || eligibleOut.Status != 1 {
-			t.Fatalf("eligible control: outcome=%+v err=%v", eligibleOut, err)
-		}
+	t.Run("eligible_control_matches_visible_stdout_and_status_but_differs_in_eligibility", assertI12SameVisibleStatus)
+}
 
-		ineligibleFix := newEvalFixture(t)
-		ineligibleFix.publication.published = map[string]string{"out": "seed\n"}
-		ineligibleOut, err := ineligibleFix.run(t, t.Context(), "fail 1 | cat > out")
-		if err != nil || ineligibleOut.Stop != nil || ineligibleOut.Status != 1 {
-			t.Fatalf("ineligible case: outcome=%+v err=%v", ineligibleOut, err)
-		}
+func assertI12SameVisibleStatus(t *testing.T) {
+	t.Helper()
+	// Both commands exit 1 with empty visible stdout, yet the comparison
+	// pipeline (echo alpha | grep zzz) is publication-eligible while
+	// (fail 1 | cat) is ineligible: the oracle must inspect eligibility.
+	eligibleFix := newEvalFixture(t)
+	eligibleFix.publication.published = map[string]string{"out": "seed\n"}
+	eligibleOut, err := eligibleFix.run(t, t.Context(), "echo alpha | grep zzz > out")
+	if err != nil || eligibleOut.Stop != nil || eligibleOut.Status != 1 {
+		t.Fatalf("eligible control: outcome=%+v err=%v", eligibleOut, err)
+	}
 
-		if eligibleFix.stdout.String() != ineligibleFix.stdout.String() || eligibleOut.Status != ineligibleOut.Status {
-			t.Fatalf("control mismatch: stdout=(%q,%q) status=(%d,%d)",
-				eligibleFix.stdout.String(), ineligibleFix.stdout.String(), eligibleOut.Status, ineligibleOut.Status)
-		}
-		if eligibleFix.publication.published["out"] != "" || slices.Contains(eligibleFix.publication.abandoned, "out") {
-			t.Fatalf("eligible control did not publish empty result: pub=%v abandoned=%v", eligibleFix.publication.published, eligibleFix.publication.abandoned)
-		}
-		if ineligibleFix.publication.published["out"] != "seed\n" || !slices.Contains(ineligibleFix.publication.abandoned, "out") {
-			t.Fatalf("ineligible case did not preserve seed: pub=%v abandoned=%v", ineligibleFix.publication.published, ineligibleFix.publication.abandoned)
-		}
-	})
+	ineligibleFix := newEvalFixture(t)
+	ineligibleFix.publication.published = map[string]string{"out": "seed\n"}
+	ineligibleOut, err := ineligibleFix.run(t, t.Context(), "fail 1 | cat > out")
+	if err != nil || ineligibleOut.Stop != nil || ineligibleOut.Status != 1 {
+		t.Fatalf("ineligible case: outcome=%+v err=%v", ineligibleOut, err)
+	}
+
+	if eligibleFix.stdout.String() != ineligibleFix.stdout.String() || eligibleOut.Status != ineligibleOut.Status {
+		t.Fatalf("control mismatch: stdout=(%q,%q) status=(%d,%d)",
+			eligibleFix.stdout.String(), ineligibleFix.stdout.String(), eligibleOut.Status, ineligibleOut.Status)
+	}
+	if eligibleFix.publication.published["out"] != "" || slices.Contains(eligibleFix.publication.abandoned, "out") {
+		t.Fatalf("eligible control did not publish empty result: pub=%v abandoned=%v", eligibleFix.publication.published, eligibleFix.publication.abandoned)
+	}
+	if ineligibleFix.publication.published["out"] != "seed\n" || !slices.Contains(ineligibleFix.publication.abandoned, "out") {
+		t.Fatalf("ineligible case did not preserve seed: pub=%v abandoned=%v", ineligibleFix.publication.published, ineligibleFix.publication.abandoned)
+	}
 }

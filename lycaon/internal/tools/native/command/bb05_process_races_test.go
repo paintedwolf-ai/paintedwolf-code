@@ -266,7 +266,19 @@ func TestBB05_M08_ProcessAndWaitReadRaces(t *testing.T) {
 		t.Fatalf("capacity did not return to baseline: active=%+v", activeAfter)
 	}
 
-	// 5. Race output read with a clean exit of a short-lived helper OS process.
+	bb05RaceCleanExit(t, f, exe)
+
+	// 6. Verify subsequent session reuse succeeds cleanly.
+	reusedRaw, err := f.call(t, t.Context(), "echo session-reused-ok")
+	testutil.FailErr(t, "reuse session after job stops", err)
+	reused := decodeOutcome(t, reusedRaw)
+	if reused.State != "completed" || reused.Status != 0 || reused.Stdout != "session-reused-ok\n" {
+		t.Fatalf("session reuse outcome = %+v", reused)
+	}
+}
+
+func bb05RaceCleanExit(t *testing.T, f *programFixture, exe string) {
+	t.Helper()
 	releaseFile := filepath.Join(f.Dir, "release-clean")
 	cleanLock := filepath.Join(f.Dir, "clean-desc.lock")
 	cleanParentPID := filepath.Join(f.Dir, "clean-parent.pid")
@@ -275,7 +287,7 @@ func TestBB05_M08_ProcessAndWaitReadRaces(t *testing.T) {
 		"PW_BB05_HELPER=parent PW_BB05_LOCK=%s PW_BB05_PARENT_PID=%s PW_BB05_DESC_PID=%s PW_BB05_RELEASE=%s external -- %s '-test.run=^TestBB05HelperProcess$' &",
 		strconv.Quote(cleanLock), strconv.Quote(cleanParentPID), strconv.Quote(cleanDescPID), strconv.Quote(releaseFile), strconv.Quote(exe),
 	)
-	_, err = f.call(t, t.Context(), cleanCmd)
+	_, err := f.call(t, t.Context(), cleanCmd)
 	testutil.FailErr(t, "start clean-exit helper", err)
 	testutil.WaitFor(t, "clean-exit helper ready", func() bool {
 		_, errP := os.Stat(cleanParentPID)
@@ -318,11 +330,4 @@ func TestBB05_M08_ProcessAndWaitReadRaces(t *testing.T) {
 		return bb05LockFree(t, cleanLock)
 	})
 
-	// 6. Verify subsequent session reuse succeeds cleanly.
-	reusedRaw, err := f.call(t, t.Context(), "echo session-reused-ok")
-	testutil.FailErr(t, "reuse session after job stops", err)
-	reused := decodeOutcome(t, reusedRaw)
-	if reused.State != "completed" || reused.Status != 0 || reused.Stdout != "session-reused-ok\n" {
-		t.Fatalf("session reuse outcome = %+v", reused)
-	}
 }

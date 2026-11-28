@@ -20,18 +20,16 @@ type programDiagnosticReader interface {
 	RevisionPins(ctx context.Context, sessionID, executionID string) ([]toolcontract.ExecutionRevision, error)
 }
 
-// observeSettledProgramDiagnostics enqueues a lightweight bounded task onto
-// the async diagnostics queue WITHOUT performing any store or receipt reads on
-// the caller goroutine. When the queue is saturated, no receipt reads occur.
-func observeSettledProgramDiagnostics(reader programDiagnosticReader, sessionID, toolCallID, programID string, delivered *api.CommandProgramReceipt) bool {
-	if reader == nil || !cmddiag.Enabled() {
+// observeSettledProgramDiagnostics defers receipt reads until the diagnostics task is admitted.
+func observeSettledProgramDiagnostics(observer *cmddiag.Observer, reader programDiagnosticReader, sessionID, toolCallID, programID string, delivered *api.CommandProgramReceipt) bool {
+	if observer == nil || reader == nil {
 		return false
 	}
 	var pres *cmddiag.PresentationSnapshot
 	if delivered != nil {
 		pres, _ = boundedPresentationFromReceipt(*delivered)
 	}
-	return cmddiag.ObserveTask(cmddiag.Task{
+	return observer.SubmitTask(cmddiag.Task{
 		SessionID:  sessionID,
 		ProgramID:  programID,
 		ToolCallID: toolCallID,

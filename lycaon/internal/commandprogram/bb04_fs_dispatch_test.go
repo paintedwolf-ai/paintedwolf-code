@@ -54,10 +54,9 @@ func (d *bb04FSDispatch) InvokeEvaluator(ctx context.Context, request OperationR
 	return body(ctx, streams)
 }
 
-func (d *bb04FSDispatch) Launch(ctx context.Context, request OperationRequest, streams Streams) (toolcontract.ProducerResult, error) {
+func (d *bb04FSDispatch) Launch(ctx context.Context, request OperationRequest, _ Streams) (toolcontract.ProducerResult, error) {
 	if request.StreamPreparation != nil {
-		var err error
-		streams, err = request.StreamPreparation.PrepareStreams(ctx)
+		_, err := request.StreamPreparation.PrepareStreams(ctx)
 		if err != nil {
 			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
 		}
@@ -178,7 +177,7 @@ func (d *bb04FSDispatch) Invoke(ctx context.Context, request OperationRequest, s
 			}
 			args = args[2:]
 		}
-		var r io.ReadCloser = streams.Input
+		r := streams.Input
 		closeAfter := false
 		if len(args) >= 1 {
 			f, err := os.Open(d.resolve(args[0]))

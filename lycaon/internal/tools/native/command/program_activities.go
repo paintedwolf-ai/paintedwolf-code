@@ -57,7 +57,8 @@ func observeProgramActivities(ctx context.Context, recorder *invocation.SQLRecor
 			delivered := report(ctx, program)
 			mu.Unlock()
 			if diagEnabled && recorder != nil {
-				observeSettledProgramDiagnostics(recorder, tc.Identity.SessionID, tc.Identity.ToolCallID, program, delivered)
+				observer := cmddiag.DefaultObserver() //nolint:contextcheck // The process-wide observer outlives this command.
+				observeSettledProgramDiagnostics(observer, recorder, tc.Identity.SessionID, tc.Identity.ToolCallID, program, delivered)
 			}
 		},
 	})

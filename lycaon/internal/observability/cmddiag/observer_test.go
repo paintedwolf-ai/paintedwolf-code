@@ -28,8 +28,8 @@ func TestDisabledByDefaultHasZeroSideEffects(t *testing.T) {
 	}
 	obs := cleanSettledObservation()
 	obs.Presentation.ProgramState = "running"
-	if Observe(obs) {
-		t.Fatal("expected Observe to return false when disabled")
+	if submitObservation(DefaultObserver(), obs) {
+		t.Fatal("expected observer to return false when disabled")
 	}
 	if _, err := os.Stat(outFile); !os.IsNotExist(err) {
 		t.Fatalf("expected no diagnostics file when disabled, stat err=%v", err)
@@ -70,14 +70,14 @@ func TestBoundedQueueOverflowRecordsDropsWithoutBlocking(t *testing.T) {
 	bad := cleanSettledObservation()
 	bad.Presentation.ProgramState = "running"
 
-	if !obs.Submit(bad) {
+	if !submitObservation(obs, bad) {
 		t.Fatal("first submit should enqueue")
 	}
 	<-firstEntered
 
 	dropped := 0
 	for i := 0; i < 10; i++ {
-		if !obs.Submit(bad) {
+		if !submitObservation(obs, bad) {
 			dropped++
 		}
 	}
@@ -88,7 +88,7 @@ func TestBoundedQueueOverflowRecordsDropsWithoutBlocking(t *testing.T) {
 	closeGate()
 	obs.Close()
 
-	stats := obs.Stats()
+	stats := obs.stats()
 	if stats.Dropped != int64(dropped) {
 		t.Fatalf("stats.Dropped = %d, want %d", stats.Dropped, dropped)
 	}
@@ -135,7 +135,7 @@ func TestSubmitTaskOverflowPerformsZeroFetches(t *testing.T) {
 	<-entered
 
 	// Fill queue capacity=1.
-	if !obs.Submit(cleanSettledObservation()) {
+	if !submitObservation(obs, cleanSettledObservation()) {
 		t.Fatal("second item should fill queue")
 	}
 
@@ -157,8 +157,8 @@ func TestSubmitTaskOverflowPerformsZeroFetches(t *testing.T) {
 	if overflowFetches.Load() != 0 {
 		t.Fatalf("expected 0 fetches for dropped tasks, got %d", overflowFetches.Load())
 	}
-	if obs.Stats().Dropped != 5 {
-		t.Fatalf("stats.Dropped = %d, want 5", obs.Stats().Dropped)
+	if obs.stats().Dropped != 5 {
+		t.Fatalf("stats.Dropped = %d, want 5", obs.stats().Dropped)
 	}
 }
 
@@ -178,9 +178,9 @@ func TestDeduplicatesFindingsByRuleAndProgram(t *testing.T) {
 	bad.ProgramID = "prog-dup-check"
 	bad.Presentation.ProgramState = "running"
 
-	obs.Submit(bad)
-	obs.Submit(bad)
-	obs.Submit(bad)
+	submitObservation(obs, bad)
+	submitObservation(obs, bad)
+	submitObservation(obs, bad)
 	obs.Close()
 
 	mu.Lock()
@@ -188,8 +188,8 @@ func TestDeduplicatesFindingsByRuleAndProgram(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 deduplicated finding, got %d: %+v", len(got), got)
 	}
-	if obs.Stats().Deduplicated != 2 {
-		t.Fatalf("stats.Deduplicated = %d, want 2", obs.Stats().Deduplicated)
+	if obs.stats().Deduplicated != 2 {
+		t.Fatalf("stats.Deduplicated = %d, want 2", obs.stats().Deduplicated)
 	}
 }
 
@@ -219,9 +219,9 @@ func TestDedupPermitsStrongerDispositionAndSuppressesRepeat(t *testing.T) {
 		ExecutionID: "exec-missing", OperationID: "grep", State: "running", Admitted: true, OwnerStarted: true,
 	})
 
-	obs.Submit(incomplete)
-	obs.Submit(contradiction)
-	obs.Submit(contradiction)
+	submitObservation(obs, incomplete)
+	submitObservation(obs, contradiction)
+	submitObservation(obs, contradiction)
 	obs.Close()
 
 	mu.Lock()
@@ -235,8 +235,8 @@ func TestDedupPermitsStrongerDispositionAndSuppressesRepeat(t *testing.T) {
 	if got[1].RuleID != RuleMissingChildTerminal || got[1].Disposition != DispositionContradiction {
 		t.Fatalf("second finding = %+v, want contradiction", got[1])
 	}
-	if obs.Stats().Deduplicated != 1 {
-		t.Fatalf("stats.Deduplicated = %d, want 1", obs.Stats().Deduplicated)
+	if obs.stats().Deduplicated != 1 {
+		t.Fatalf("stats.Deduplicated = %d, want 1", obs.stats().Deduplicated)
 	}
 }
 
@@ -259,8 +259,8 @@ func TestRedactionScrubsSecretsAndDigestsPaths(t *testing.T) {
 	obs := cleanSettledObservation()
 	obs.LinkedOperations[0].SourceID = "root:file?" + bearer + "&" + apiKey
 	obs.LinkedOperations[0].ExpectedSourceID = pathCanary
-	if !Observe(obs) {
-		t.Fatal("expected Observe to accept observation when enabled")
+	if !submitObservation(DefaultObserver(), obs) {
+		t.Fatal("expected observer to accept observation when enabled")
 	}
 	Close()
 
@@ -281,4 +281,26 @@ func TestRedactionScrubsSecretsAndDigestsPaths(t *testing.T) {
 	if decoded.RuleID != RuleOperationSourceContradiction || decoded.Disposition != DispositionContradiction {
 		t.Fatalf("unexpected decoded finding: %+v", decoded)
 	}
+}
+
+type observerStats struct {
+	Enqueued     int64
+	Dropped      int64
+	Emitted      int64
+	Deduplicated int64
+}
+
+func (o *Observer) stats() observerStats {
+	return observerStats{
+		Enqueued:     o.enqueued.Load(),
+		Dropped:      o.dropped.Load(),
+		Emitted:      o.emitted.Load(),
+		Deduplicated: o.deduplicated.Load(),
+	}
+}
+
+func submitObservation(observer *Observer, obs Observation) bool {
+	return observer.SubmitTask(Task{
+		Fetch: func(context.Context) (Observation, error) { return obs, nil },
+	})
 }

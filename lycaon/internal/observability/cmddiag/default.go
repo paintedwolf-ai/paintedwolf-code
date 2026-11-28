@@ -12,60 +12,19 @@ import (
 var (
 	defaultMu       sync.Mutex
 	defaultObserver *Observer
-	overrideObs     *Observer
 )
 
 // Enabled reports whether opt-in dev command diagnostics are active.
 func Enabled() bool {
-	defaultMu.Lock()
-	override := overrideObs
-	defaultMu.Unlock()
-	if override != nil {
-		return override.enabled
-	}
 	return debugpaths.Enabled(debugpaths.KindCommandDiagnostics)
 }
 
-// Observe submits an immutable observation when enabled.
-func Observe(obs Observation) bool {
-	if target := activeObserver(); target != nil {
-		return target.Submit(obs)
-	}
-	return false
-}
-
-// ObserveTask submits a deferred bounded read task when enabled.
-func ObserveTask(task Task) bool {
-	if target := activeObserver(); target != nil {
-		return target.SubmitTask(task)
-	}
-	return false
-}
-
-func activeObserver() *Observer {
-	defaultMu.Lock()
-	override := overrideObs
-	defaultMu.Unlock()
-	if override != nil {
-		return override
-	}
-	if !debugpaths.Enabled(debugpaths.KindCommandDiagnostics) {
+// DefaultObserver returns the process-wide observer when diagnostics are enabled.
+func DefaultObserver() *Observer {
+	if !Enabled() {
 		return nil
 	}
 	return ensureDefaultObserver()
-}
-
-// SetObserver installs a scoped observer override (intended for tests).
-func SetObserver(obs *Observer) func() {
-	defaultMu.Lock()
-	prev := overrideObs
-	overrideObs = obs
-	defaultMu.Unlock()
-	return func() {
-		defaultMu.Lock()
-		overrideObs = prev
-		defaultMu.Unlock()
-	}
 }
 
 // Close drains and closes the process-wide dev command diagnostics observer.
