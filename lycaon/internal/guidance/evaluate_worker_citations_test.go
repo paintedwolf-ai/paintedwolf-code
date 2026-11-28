@@ -61,11 +61,11 @@ func TestEvaluateWorkerCitations_excerptMismatch(t *testing.T) {
 	eval := guidance.EvaluateWorkerCitations(evidence.CitationRoots{}, []guidance.WorkerFindingInput{
 		{Path: "f.go", Evidence: "read#1", Line: 42, Excerpt: "return 1"},
 	}, nil, guidance.WorkerNarrativeInput{}, ev)
-	if eval.Code != "" {
-		t.Fatalf("eval = %+v want non-blocking traced", eval)
+	if eval.Code != guidance.WorkerEvidenceHandleUnknownCode {
+		t.Fatalf("eval = %+v want %q for mismatched excerpt", eval, guidance.WorkerEvidenceHandleUnknownCode)
 	}
-	if len(eval.Resolutions) != 1 || eval.Resolutions[0].Verdict != evidence.VerdictTraced {
-		t.Fatalf("resolved = %+v want traced", eval.Resolutions)
+	if len(eval.Resolutions) != 1 || eval.Resolutions[0].Verdict != evidence.VerdictUnverifiable {
+		t.Fatalf("resolved = %+v want unverifiable", eval.Resolutions)
 	}
 }
 

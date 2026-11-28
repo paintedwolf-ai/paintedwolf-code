@@ -37,6 +37,25 @@ func TestResolveObservationOpaqueAndCommandExcerptInvariant(t *testing.T) {
 			valid:  "err=permission denied",
 			absent: []string{"exit=0", "succeeded cleanly"},
 		},
+		{
+			name: "file_region_without_source_delivery_r03_07",
+			rec: Record{
+				Handle:     "read#1",
+				Kind:       "read",
+				Shape:      ShapeFileRegion,
+				Fidelity:   FidelityStructured,
+				SourceTool: "read",
+				Path:       "internal/reanchor.go",
+				LineRanges: []LineRange{{Start: 10, End: 12}},
+				Body: []string{
+					"10\tpackage reanchor",
+					"11\t",
+					"12\tfunc Real() int { return 42 }",
+				},
+			},
+			valid:  "func Real() int { return 42 }",
+			absent: []string{"nonexistent_excerpt", "func Fabricated()"},
+		},
 	}
 
 	for _, tc := range cases {
@@ -62,4 +81,43 @@ func TestResolveObservationOpaqueAndCommandExcerptInvariant(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("reanchor_control_preserved_for_unique_live_line", func(t *testing.T) {
+		t.Parallel()
+		rec := Record{
+			Handle:     "read#1",
+			Kind:       "read",
+			Shape:      ShapeFileRegion,
+			Fidelity:   FidelityStructured,
+			SourceTool: "read",
+			Path:       "internal/reanchor.go",
+			LineRanges: []LineRange{{Start: 10, End: 12}},
+			Body: []string{
+				"10\tpackage reanchor",
+				"11\t",
+				"12\tfunc Real() int { return 42 }",
+			},
+		}
+		ev := AssembleLedger([]Record{rec})
+
+		// Explicit handle with wrong line 10 and unique live excerpt on line 12:
+		// stays grounded (matched) rather than rejected, and path-only Resolve
+		// re-anchors line 10 -> 12.
+		obs := ResolveObservation(CitationRoots{}, ev, "read#1", Triple{Path: rec.Path, Line: 10, Excerpt: "func Real() int { return 42 }"})
+		if obs.Verdict != VerdictMatched {
+			t.Fatalf("ResolveObservation unique live excerpt = %+v, want matched", obs)
+		}
+
+		// Path-only resolution with wrong line 99 and unique live excerpt on line 12 re-anchors.
+		byPath := Resolve(CitationRoots{}, Triple{Path: rec.Path, Line: 99, Excerpt: "func Real() int { return 42 }"}, ev, "")
+		if byPath.Verdict != VerdictMatched || byPath.Line != 12 || byPath.LineCorrectedFrom != 99 {
+			t.Fatalf("Resolve re-anchor = %+v, want matched line=12 corrected_from=99", byPath)
+		}
+
+		// Explicit handle with nonexistent excerpt stays VerdictUnverifiable.
+		absentObs := ResolveObservation(CitationRoots{}, ev, "read#1", Triple{Path: rec.Path, Line: 10, Excerpt: "nonexistent_excerpt"})
+		if absentObs.Verdict != VerdictUnverifiable {
+			t.Fatalf("ResolveObservation absent excerpt = %+v, want unverifiable", absentObs)
+		}
+	})
 }
