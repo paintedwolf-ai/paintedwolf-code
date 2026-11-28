@@ -449,9 +449,9 @@ def run_f02_instance(
             p.write_bytes(f"initial {i}\n".encode("utf-8"))
             init_paths.append(p)
 
-    sentinel = root_dir / DRAIN_SENTINEL_REL_PATH
-    sentinel.parent.mkdir(parents=True, exist_ok=True)
-    sentinel.write_bytes(b"f02 sentinel init\n")
+    post_sentinel_rel = f"src/.cfs-f02-post-{case.case_id.lower()}-{uuid.uuid4().hex[:8]}.txt"
+    post_sentinel = root_dir / post_sentinel_rel
+    post_sentinel.parent.mkdir(parents=True, exist_ok=True)
 
     project_id, root_ids = client.driver.attach_project([root_dir])
     root_id = root_ids[0]
@@ -461,16 +461,19 @@ def run_f02_instance(
             return CaseOutcome(case.case_id, "F02", case.is_edge, "UNKNOWN", "initial catalog did not settle", [], int((time.monotonic() - t0) * 1000), {})
         pre_storm_revision = int(pre_summary["revision"]) if pre_summary.get("revision") is not None else None
 
-        sub = LiveSSESubscriber(client.base_url, client.token, project_id=project_id, client_id=f"f02-{case.case_id}")
+        sub = LiveSSESubscriber(client.base_url, client.token, project_id=project_id, client_id=f"f02-{case.case_id}-s1")
+        sub2 = LiveSSESubscriber(client.base_url, client.token, project_id=project_id, client_id=f"f02-{case.case_id}-s2")
         sub.start()
+        sub2.start()
         try:
-            if not sub.wait_ready(max_wait_s=10.0):
+            if not (sub.wait_ready(max_wait_s=10.0) and sub2.wait_ready(max_wait_s=10.0)):
                 return CaseOutcome(case.case_id, "F02", case.is_edge, "UNKNOWN", "SSE readiness failed", [], int((time.monotonic() - t0) * 1000), {})
             init_frames, init_seen = sub.wait_for_frames(
                 lambda fs: any(_is_initial_inventory_frame(f, project_id) for f in fs),
                 max_wait_s=3.0,
             )
             baseline_idx = len(init_frames) if init_seen else len(sub.frames())
+            baseline_idx2 = len(sub2.frames())
 
             # Execute storm and track exact expected touched paths for Decision 071 audit
             expected_paths: set[str] = set()
@@ -510,27 +513,36 @@ def run_f02_instance(
                     p.write_bytes(f"fanout {i}\n".encode("utf-8"))
                     expected_paths.add(rel)
 
-            sentinel.write_bytes(f"f02 sentinel after {case.case_id}\n".encode("utf-8"))
+            post_sentinel.write_bytes(f"f02 unique post-op sentinel {case.case_id}\n".encode("utf-8"))
 
-            frames, arrived = sub.wait_for_frames(
-                lambda fs: any(
+            def _post_op_arrived(fs: list[dict[str, object]], start_idx: int) -> bool:
+                return any(
                     f.get("topic") == "source_changed"
                     and isinstance(f.get("data"), dict)
                     and str(f["data"].get("project_id") or "") == project_id
                     and (
                         f["data"].get("resync") is True
-                        or _has_matching_change([f], project_id, root_id, DRAIN_SENTINEL_REL_PATH)
+                        or _has_matching_change([f], project_id, root_id, post_sentinel_rel)
                     )
-                    for f in fs[baseline_idx:]
-                ),
+                    for f in fs[start_idx:]
+                )
+
+            frames, arrived = sub.wait_for_frames(
+                lambda fs: _post_op_arrived(fs, baseline_idx),
                 max_wait_s=60.0,
+            )
+            _, arrived2 = sub2.wait_for_frames(
+                lambda fs: _post_op_arrived(fs, baseline_idx2),
+                max_wait_s=15.0,
             )
             time.sleep(0.5)
             all_frames = sub.frames()
+            all_frames2 = sub2.frames()
         finally:
             sub.close()
+            sub2.close()
 
-        # Decision 050: strictly scope SSE frames to project_id and audit resync vs named coverage
+        # Decision 050 & 159: strictly scope SSE frames to project_id across both subscribers
         scoped_frames = [
             f
             for f in all_frames[baseline_idx:]
@@ -538,14 +550,22 @@ def run_f02_instance(
             and isinstance(f.get("data"), dict)
             and str(f["data"].get("project_id") or "") == project_id
         ]
+        scoped_frames2 = [
+            f
+            for f in all_frames2[baseline_idx2:]
+            if f.get("topic") == "source_changed"
+            and isinstance(f.get("data"), dict)
+            and str(f["data"].get("project_id") or "") == project_id
+        ]
         resync_frames = [f for f in scoped_frames if f["data"].get("resync") is True]
-        resync_seen = len(resync_frames) > 0
+        resync_frames2 = [f for f in scoped_frames2 if f["data"].get("resync") is True]
+        resync_seen = len(resync_frames) > 0 and len(resync_frames2) > 0
         named_paths: set[str] = set()
         for f in scoped_frames:
             for ch in f["data"].get("changes") or []:
                 if isinstance(ch, dict) and str(ch.get("root_id") or root_id) == root_id:
                     p = str(ch.get("path") or "").removeprefix("./")
-                    if p and p != DRAIN_SENTINEL_REL_PATH:
+                    if p and p != post_sentinel_rel:
                         named_paths.add(p)
 
         ok, cat_res, cat_details = _reconcile_catalog_against_reference(
@@ -564,7 +584,9 @@ def run_f02_instance(
                 f"storm dropped {len(missing_named)} expected path(s) without scoped resync (named={len(named_paths)} expected={len(expected_paths)})"
             )
         if not arrived and not scoped_frames:
-            defects.append("no scoped source_changed SSE frames arrived for storm")
+            defects.append("no scoped source_changed SSE frames arrived for storm (subscriber 1)")
+        if not arrived2 and not scoped_frames2:
+            defects.append("no scoped source_changed SSE frames arrived for storm (subscriber 2)")
 
         # Decision 071: preserve honest resync attribution without assuming which limit fired
         overflow_coverage = (
@@ -587,18 +609,23 @@ def run_f02_instance(
             details={
                 "storm_kind": case.storm_kind,
                 "write_count": case.write_count,
+                "post_sentinel_rel": post_sentinel_rel,
                 "expected_paths_count": len(expected_paths),
                 "missing_named_sample": missing_named[:20],
                 "extra_named_sample": extra_named[:20],
                 "pre_storm_revision": pre_storm_revision,
                 "post_storm_revision": post_storm_revision,
                 "sse_arrived": arrived,
+                "sse_arrived_sub2": arrived2,
                 "resync_seen": resync_seen,
                 "resync_frame_count": len(resync_frames),
+                "resync_frame_count_sub2": len(resync_frames2),
                 "scoped_frame_count": len(scoped_frames),
+                "scoped_frame_count_sub2": len(scoped_frames2),
                 "scoped_named_paths_count": len(named_paths),
                 "overflow_coverage": overflow_coverage,
                 "sample_scoped_frames": scoped_frames[:5],
+                "sample_scoped_frames_sub2": scoped_frames2[:5],
                 "reconcile": cat_details,
             },
         )
