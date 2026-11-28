@@ -411,6 +411,8 @@ class TestTB08SidecarRunner(unittest.TestCase):
             cap = args.get("capability_request") or {}
             if "a08-02" in cmd:
                 return call_id, {"outcome": "rejected", "codes": ["SANDBOX_TRY_READ_PATH"]}, {}
+            if "18999" in cmd:
+                return call_id, {"outcome": "rejected", "codes": ["SANDBOX_TRY_LOCAL_NETWORK"]}, {}
             if "a08_09_cp.txt" in cmd or "a09_07_terminal.txt" in cmd:
                 return call_id, {"outcome": "rejected", "codes": ["SANDBOX_TERMINAL_PATH_REFUSED"]}, {}
             if "a08-10" in cmd:

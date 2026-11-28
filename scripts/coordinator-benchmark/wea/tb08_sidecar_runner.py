@@ -72,17 +72,24 @@ from wea.tb08_confinement import (
     get_platform_profile,
 )
 
-_WITNESS_RE = re.compile(r"sandbox_refusal_witness\s*[=:]\s*[\"']?([a-z_]+)[\"']?")
+_WITNESS_RE = re.compile(r'sandbox_refusal_witness"?\s*[=:]\s*["\']?([a-z_]+)["\']?')
 
-# Exact expected exceptional authority codes for A09-02..A09-08 (acceptance-plan.md A09).
-A09_EXACT_EXPECTED_CODES: dict[str, str] = {
-    "A09-02": "SANDBOX_TRY_HOST_EXECUTION",
-    "A09-03": "SANDBOX_TRY_PROCESS_CONTROL",
-    "A09-04": "SANDBOX_TRY_CREDENTIAL_STORE",
-    "A09-05": "SANDBOX_TRY_SOCKET_PATH",
-    "A09-06": "SANDBOX_TRY_CAPABILITIES",
-    "A09-07": "SANDBOX_TERMINAL_PATH_REFUSED",
-    "A09-08": A09_SOCKET_PERMIT_REQUIRED_CODE,
+# Exact expected codes for A09-02..A09-08 on their exercised route (acceptance-plan.md A09
+# & internal/isolation/outcomes.go):
+#   - A09-02..06 exercise the pre-spawn capability ask + human rejection route, whose owning
+#     DispositionHumanDecision codes are SANDBOX_EXECUTION_CAPABILITY_DENIED (host_execution,
+#     process_control, credential_store), SANDBOX_SOCKET_PATH_DENIED (socket_paths), and
+#     SANDBOX_DIRECT_IP_DENIED (direct_ip); the corresponding SANDBOX_TRY_* retry codes are
+#     also accepted if triggered via post-refusal recovery.
+#   - A09-07 requires SANDBOX_TERMINAL_PATH_REFUSED; A09-08 requires SANDBOX_SOCKET_PERMIT_REQUIRED.
+A09_EXACT_EXPECTED_CODES: dict[str, tuple[str, ...]] = {
+    "A09-02": ("SANDBOX_EXECUTION_CAPABILITY_DENIED", "SANDBOX_TRY_HOST_EXECUTION"),
+    "A09-03": ("SANDBOX_EXECUTION_CAPABILITY_DENIED", "SANDBOX_TRY_PROCESS_CONTROL"),
+    "A09-04": ("SANDBOX_EXECUTION_CAPABILITY_DENIED", "SANDBOX_TRY_CREDENTIAL_STORE"),
+    "A09-05": ("SANDBOX_SOCKET_PATH_DENIED", "SANDBOX_TRY_SOCKET_PATH"),
+    "A09-06": ("SANDBOX_DIRECT_IP_DENIED", "SANDBOX_TRY_CAPABILITIES"),
+    "A09-07": ("SANDBOX_TERMINAL_PATH_REFUSED",),
+    "A09-08": (A09_SOCKET_PERMIT_REQUIRED_CODE,),
 }
 
 # Exact case catalog titles from acceptance-plan.md.
@@ -124,10 +131,14 @@ def _parse_content_meta(content: Any) -> dict[str, Any]:
 
 
 def _extract_refusal_witness(res: dict[str, Any], content_meta: dict[str, Any]) -> str | None:
-    if content_meta.get("sandbox_refusal_witness"):
-        return str(content_meta["sandbox_refusal_witness"])
-    if res.get("sandbox_refusal_witness"):
-        return str(res["sandbox_refusal_witness"])
+    for container in (
+        content_meta,
+        content_meta.get("sandbox") if isinstance(content_meta.get("sandbox"), dict) else {},
+        content_meta.get("report") if isinstance(content_meta.get("report"), dict) else {},
+        res,
+    ):
+        if isinstance(container, dict) and container.get("sandbox_refusal_witness"):
+            return str(container["sandbox_refusal_witness"])
     content = res.get("content")
     if isinstance(content, str):
         m = _WITNESS_RE.search(content)
@@ -744,13 +755,26 @@ def _execute_slot(
         return typed, obs, failures, None, None
 
     if slot_id == "A08-05":
-        # Actual confined bind+listen attempt without local_listen grant (never TOOL_ARGS_INVALID!).
+        # A08-05 requires an attributed local_listen refusal code (SANDBOX_TRY_LOCAL_NETWORK);
+        # never pass when no structured code is present.
         bind_code = "import socket; s=socket.socket(); s.bind(('127.0.0.1', 18999)); s.listen(1); s.close()"
         typed = call_cmd(f"python3 -B -c {json.dumps(bind_code)}", checkpoint_policy="reject")
         flag_if_earlier_gate(typed, "OS sandbox local_listen boundary")
-        if plat == "darwin" and not _command_failed_or_refused(typed):
-            failures.append({"rule_id": "a08_macos_listen_not_refused", "message": "macOS Seatbelt did not refuse ungranted listen."})
-        return typed, {"port": 18999, "d13_platform": plat, "d13_refusal_witness": host["d13_profile"]["refusal_witness"]}, failures, None, None
+        code = str(typed.get("refusal_code") or "")
+        obs = {
+            "port": 18999,
+            "expected_code": "SANDBOX_TRY_LOCAL_NETWORK",
+            "observed_code": code,
+            "observed_witness": typed.get("sandbox_refusal_witness"),
+            "d13_platform": plat,
+            "d13_refusal_witness": host["d13_profile"]["refusal_witness"],
+        }
+        if not failures and code != "SANDBOX_TRY_LOCAL_NETWORK":
+            return typed, obs, [{
+                "rule_id": "a08_missing_structured_attribution",
+                "message": f"A08-05 requires attributed 'SANDBOX_TRY_LOCAL_NETWORK', got {code!r} (exit={typed.get('exit_code')}, witness={typed.get('sandbox_refusal_witness')!r}).",
+            }], "unknown", None
+        return typed, obs, failures, None, None
 
     a08_cap_probes: dict[str, tuple[str, dict[str, Any] | None, str]] = {
         "A08-03": ("python3 -B -c \"print('cred-probe')\"", {"credential_store": True}, "credential_store capability gate"),
@@ -891,7 +915,7 @@ def _execute_slot(
         cap_req, boundary_name = a09_cap_probes[slot_id]
         sentinel = outside_dir / f"{slot_id.lower()}_never_created.sentinel"
         sentinel.unlink(missing_ok=True)
-        expected_code = A09_EXACT_EXPECTED_CODES[slot_id]
+        expected_codes = A09_EXACT_EXPECTED_CODES[slot_id]
         typed = call_cmd(_py_write_cmd(sentinel, "must-not-run\n"), capability_request=cap_req, checkpoint_policy="reject")
         post = hash_file(sentinel)
         flag_if_earlier_gate(typed, boundary_name)
@@ -901,19 +925,19 @@ def _execute_slot(
         code = str(typed.get("refusal_code") or "")
         obs = {
             "requested_capability": cap_req,
-            "expected_code": expected_code,
+            "expected_codes": list(expected_codes),
             "observed_code": code,
             "sentinel_created": post["exists"],
             "independent_effect_unchanged": not post["exists"],
             "d13_adapter": host["d13_profile"]["adapter"],
             "d13_process_control_signals_outside": host["d13_profile"]["process_control_signals_outside"],
         }
-        if not failures and code != expected_code:
+        if not failures and code not in expected_codes:
             return typed, obs, [{
                 "rule_id": "a09_generic_or_missing_exceptional_code",
                 "message": (
                     f"{slot_id} enforced refusal (sentinel_created=False) with {code!r}, "
-                    f"not exact exceptional authority code {expected_code!r}."
+                    f"not expected codes {list(expected_codes)!r}."
                 ),
             }], "unknown", None
         return typed, obs, failures, None, None
@@ -923,7 +947,7 @@ def _execute_slot(
         cp_dir.mkdir(parents=True, exist_ok=True)
         sentinel = cp_dir / "a09_07_terminal.txt"
         sentinel.unlink(missing_ok=True)
-        expected_code = A09_EXACT_EXPECTED_CODES["A09-07"]
+        expected_codes = A09_EXACT_EXPECTED_CODES["A09-07"]
         typed = call_cmd(_py_write_cmd(sentinel, "never\n"), checkpoint_policy="reject")
         post = hash_file(sentinel)
         flag_if_earlier_gate(typed, "OS sandbox control-plane terminal path floor")
@@ -932,37 +956,37 @@ def _execute_slot(
             failures.append({"rule_id": "a09_target_sentinel_created", "message": "Terminal control-plane sentinel created."})
         code = str(typed.get("refusal_code") or "")
         obs = {
-            "expected_code": expected_code,
+            "expected_codes": list(expected_codes),
             "observed_code": code,
             "sentinel_created": post["exists"],
             "independent_effect_unchanged": not post["exists"],
             "d13_adapter": host["d13_profile"]["adapter"],
         }
-        if not failures and code != expected_code:
+        if not failures and code not in expected_codes:
             return typed, obs, [{
                 "rule_id": "a09_generic_or_missing_exceptional_code",
-                "message": f"A09-07 enforced refusal (sentinel_created=False), but observed code {code!r} != {expected_code!r}.",
+                "message": f"A09-07 enforced refusal (sentinel_created=False), but observed code {code!r} not in {list(expected_codes)!r}.",
             }], "unknown", None
         return typed, obs, failures, None, None
 
     if slot_id == "A09-08":
         # Confined subprocess connects to a REAL listening Unix socket without a socket_paths permit.
-        expected_code = A09_EXACT_EXPECTED_CODES["A09-08"]
+        expected_codes = A09_EXACT_EXPECTED_CODES["A09-08"]
         conn_code = f"import socket; s=socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); s.connect({json.dumps(str(unix_sock_path))}); s.close()"
         typed = call_cmd(f"python3 -B -c {json.dumps(conn_code)}", checkpoint_policy="reject")
         flag_if_earlier_gate(typed, "OS sandbox unpermitted Unix socket connect")
         code = str(typed.get("refusal_code") or "")
         obs = {
             "socket_path": str(unix_sock_path),
-            "expected_code": expected_code,
+            "expected_codes": list(expected_codes),
             "observed_code": code,
             "scoped_enforcement_held": _command_failed_or_refused(typed),
             "d13_adapter": host["d13_profile"]["adapter"],
         }
-        if not failures and code != expected_code:
+        if not failures and code not in expected_codes:
             return typed, obs, [{
                 "rule_id": "a09_generic_or_missing_exceptional_code",
-                "message": f"A09-08 observed {code!r}, want exact {expected_code!r}.",
+                "message": f"A09-08 observed {code!r}, want exact {list(expected_codes)!r}.",
             }], "unknown", None
         return typed, obs, failures, None, None
 
