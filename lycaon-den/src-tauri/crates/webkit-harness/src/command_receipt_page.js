@@ -1,4 +1,4 @@
-// Page-side driver for the real macOS WKWebView command activity + receipt identity + reload smoke.
+// Page-side driver for the real macOS WKWebView command activity + output-specific receipt identity + reload smoke.
 window.__wkReceiptSmoke = {
   async waitHarness() {
     for (let i = 0; i < 120 && !window.__harness; i++) {
@@ -59,7 +59,25 @@ window.__wkReceiptSmoke = {
     return false;
   },
 
-  async inspectRendered(token, sessionId, expectedCallId, expectedProgramId, uniqueMarker, maxAttempts = 80) {
+  parseCommandStdout(toolResult) {
+    const raw = String(toolResult?.content || "");
+    const nl = raw.indexOf("\n");
+    const jsonPart = nl >= 0 ? raw.slice(nl + 1).trim() : raw.trim();
+    try {
+      const parsed = JSON.parse(jsonPart);
+      if (typeof parsed?.stdout === "string") return parsed.stdout;
+    } catch (_err) {}
+    return "";
+  },
+
+  checkCardOutputSurface(card, uniqueMarker) {
+    const preview = card.querySelector('[data-testid="action-preview"][data-kind="output"]');
+    if (!preview) return { found: false, text: "" };
+    const text = preview.textContent || "";
+    return { found: text.includes(uniqueMarker), text };
+  },
+
+  async inspectRendered(token, sessionId, expectedCallId, expectedProgramId, uniqueMarker, commandSource, maxAttempts = 80) {
     for (let i = 0; i < maxAttempts; i++) {
       const stream = document.querySelector(`[data-testid="chat-stream"][data-session-id="${CSS.escape(sessionId)}"]`);
       if (stream) {
@@ -69,23 +87,37 @@ window.__wkReceiptSmoke = {
         const card = stream.querySelector(`[data-testid="action-card"][data-tool-call-id="${CSS.escape(expectedCallId)}"]`);
         if (card) {
           this.expandIfCollapsed(card);
-          const cardText = card.textContent || "";
           const renderedCallId = card.getAttribute("data-tool-call-id") || "";
           const renderedStatus = card.getAttribute("data-status") || "";
-          if (renderedCallId === expectedCallId && cardText.includes(uniqueMarker)) {
+          const outCheck = this.checkCardOutputSurface(card, uniqueMarker);
+          if (renderedCallId === expectedCallId && outCheck.found) {
             const body = await this.api(token, "GET", `/v1/sessions/${encodeURIComponent(sessionId)}/messages`);
             const tr = (body?.messages || []).find((m) => m.tool_result?.tool_call_id === expectedCallId)?.tool_result;
             const pid = tr?.command_program?.id || "";
             const state = tr?.command_program?.state || "";
-            const sidecarHasMarker = Boolean(tr && String(tr.content || "").includes(uniqueMarker));
+            const sidecarStdout = this.parseCommandStdout(tr);
+            const sidecarStdoutHasMarker = sidecarStdout.includes(uniqueMarker);
+            const markerAbsentFromSource = !String(commandSource || "").includes(uniqueMarker);
             const exactMatch = Boolean(
               tr
               && tr.tool_call_id === expectedCallId
               && pid.length > 0
               && (!expectedProgramId || pid === expectedProgramId)
               && state === "completed"
-              && sidecarHasMarker
+              && sidecarStdoutHasMarker
+              && markerAbsentFromSource
             );
+            // Negative control: remove the output preview node while leaving the command card present;
+            // output-specific check MUST fail, then restore.
+            const preview = card.querySelector('[data-testid="action-preview"][data-kind="output"]');
+            const parent = preview.parentNode;
+            const nextSib = preview.nextSibling;
+            parent.removeChild(preview);
+            const cardStillPresent = Boolean(stream.querySelector(`[data-testid="action-card"][data-tool-call-id="${CSS.escape(expectedCallId)}"]`));
+            const afterRemoveCheck = this.checkCardOutputSurface(card, uniqueMarker);
+            parent.insertBefore(preview, nextSib);
+            const outputRemovedControlRejected = Boolean(cardStillPresent && !afterRemoveCheck.found);
+
             return {
               sessionId,
               toolCallId: expectedCallId,
@@ -94,8 +126,10 @@ window.__wkReceiptSmoke = {
               programId: pid,
               commandState: state,
               uniqueMarker,
-              renderedCardHasUniqueOutput: cardText.includes(uniqueMarker),
-              sidecarReceiptHasUniqueOutput: sidecarHasMarker,
+              markerAbsentFromSource,
+              outputPreviewHasUniqueOutput: outCheck.found,
+              sidecarStdoutHasUniqueOutput: sidecarStdoutHasMarker,
+              outputRemovedControlRejected,
               receiptIdentityMatched: exactMatch,
               domHasAssistantReply: (stream.textContent || "").includes("WKWebView receipt verified."),
               userAgent: navigator.userAgent,
@@ -105,13 +139,13 @@ window.__wkReceiptSmoke = {
       }
       await new Promise((r) => setTimeout(r, 250));
     }
-    throw new Error(`exact action-card [data-tool-call-id="${expectedCallId}"] with unique output "${uniqueMarker}" not rendered`);
+    throw new Error(`exact action-card [data-tool-call-id="${expectedCallId}"] output preview [data-testid="action-preview"][data-kind="output"] with "${uniqueMarker}" not rendered`);
   },
 
-  async verifyWrongCallRejected(token, sessionId, expectedProgramId, uniqueMarker) {
+  async verifyWrongCallRejected(token, sessionId, expectedProgramId, uniqueMarker, commandSource) {
     const wrongCallId = `wrong-${crypto.randomUUID()}`;
     try {
-      await this.inspectRendered(token, sessionId, wrongCallId, expectedProgramId, uniqueMarker, 4);
+      await this.inspectRendered(token, sessionId, wrongCallId, expectedProgramId, uniqueMarker, commandSource, 4);
       return false;
     } catch (_err) {
       return true;
@@ -136,13 +170,18 @@ window.__wkReceiptSmoke = {
     }
     if (!sessionId) throw new Error("chat-stream session_id did not mount");
 
-    const uniqueMarker = `wkwebview-receipt-${crypto.randomUUID().slice(0, 12)}`;
+    // Generate runtime marker from two separate printf arguments so uniqueMarker NEVER appears verbatim in command source.
+    const left = "wkwebview-out-";
+    const right = crypto.randomUUID().slice(0, 12);
+    const uniqueMarker = left + right;
+    const commandSource = `printf '%s%s\\n' '${left}' '${right}'`;
+    if (commandSource.includes(uniqueMarker)) throw new Error("marker unexpectedly appeared verbatim in command source");
 
     this.step = "disableAutoAndPostPrompt";
     await this.api(token, "POST", "/harness/llm/auto", { enabled: false });
     await this.api(token, "POST", `/v1/sessions/${encodeURIComponent(sessionId)}/prompts`, {
       operation_id: crypto.randomUUID(),
-      text: "Run WKWebView command receipt smoke and verify reload.",
+      text: "Run WKWebView command output-specific receipt smoke and verify reload.",
     });
 
     this.step = "requestUpdateProgress";
@@ -150,22 +189,20 @@ window.__wkReceiptSmoke = {
     await this.waitToolCompleted(token, sessionId, reqId);
     this.step = "updateProgressOpen";
     const progCallId = await this.invokeTool(token, sessionId, "update_progress", {
-      content: "## Progress\n- [ ] Verify WKWebView exact receipt identity and reload\n",
+      content: "## Progress\n- [ ] Verify WKWebView output-specific receipt and reload\n",
     });
     const progRes = await this.waitToolCompleted(token, sessionId, progCallId);
     const snap = JSON.parse(progRes.content).snapshot;
 
     this.step = "invokeCommand";
-    const cmdCallId = await this.invokeTool(token, sessionId, "command", {
-      command: `printf '${uniqueMarker}\\n' > wkwebview-proof.txt && cat wkwebview-proof.txt`,
-    });
+    const cmdCallId = await this.invokeTool(token, sessionId, "command", { command: commandSource });
     const cmdRes = await this.waitToolCompleted(token, sessionId, cmdCallId);
     const programId = cmdRes?.command_program?.id || "";
     if (!programId) throw new Error(`missing command_program.id in tool_result: ${JSON.stringify(cmdRes)}`);
 
     this.step = "updateProgressClose";
     const doneProgId = await this.invokeTool(token, sessionId, "update_progress", {
-      content: "## Progress\n- [x] Verify WKWebView exact receipt identity and reload\n",
+      content: "## Progress\n- [x] Verify WKWebView output-specific receipt and reload\n",
       expected_revision: snap.revision,
       item_ids: snap.item_ids,
     });
@@ -180,13 +217,14 @@ window.__wkReceiptSmoke = {
     });
 
     this.step = "inspectRenderedBeforeReload";
-    const snapBefore = await this.inspectRendered(token, sessionId, cmdCallId, programId, uniqueMarker);
+    const snapBefore = await this.inspectRendered(token, sessionId, cmdCallId, programId, uniqueMarker, commandSource);
     this.step = "wrongCallControlBeforeReload";
-    snapBefore.wrongCallControlRejected = await this.verifyWrongCallRejected(token, sessionId, programId, uniqueMarker);
+    snapBefore.wrongCallControlRejected = await this.verifyWrongCallRejected(token, sessionId, programId, uniqueMarker, commandSource);
+    snapBefore.commandSource = commandSource;
     return snapBefore;
   },
 
-  async runAfterReload(token, sessionId, expectedCallId, expectedProgramId, uniqueMarker) {
+  async runAfterReload(token, sessionId, expectedCallId, expectedProgramId, uniqueMarker, commandSource) {
     this.step = "afterReload:waitHarness";
     await this.waitHarness();
     this.step = "afterReload:openProject";
@@ -200,9 +238,10 @@ window.__wkReceiptSmoke = {
       if (row) row.click();
     }
     this.step = "afterReload:inspectRendered";
-    const snapAfter = await this.inspectRendered(token, sessionId, expectedCallId, expectedProgramId, uniqueMarker);
+    const snapAfter = await this.inspectRendered(token, sessionId, expectedCallId, expectedProgramId, uniqueMarker, commandSource);
     this.step = "afterReload:wrongCallControl";
-    snapAfter.wrongCallControlRejected = await this.verifyWrongCallRejected(token, sessionId, expectedProgramId, uniqueMarker);
+    snapAfter.wrongCallControlRejected = await this.verifyWrongCallRejected(token, sessionId, expectedProgramId, uniqueMarker, commandSource);
+    snapAfter.commandSource = commandSource;
     return snapAfter;
   },
 };
