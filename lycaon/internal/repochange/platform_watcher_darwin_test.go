@@ -29,7 +29,8 @@ func TestFSEventsWatcherIsRecursiveWithoutPerFileDescriptors(t *testing.T) {
 	testutil.FailErr(t, "add root", w.Add(root))
 	testutil.FailErr(t, "add nested", w.Add(nested))
 	after := openFileDescriptorCount(t)
-	if delta := after - before; delta > 16 {
+	// O(1) descriptors for the recursive root stream + private same-volume sentinel dir (vs 1,000 files).
+	if delta := after - before; delta > 32 {
 		t.Fatalf("FSEvents opened %d descriptors for a 1,000-file tree", delta)
 	}
 
