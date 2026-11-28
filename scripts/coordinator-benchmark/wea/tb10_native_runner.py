@@ -499,7 +499,8 @@ def run_product_episode(
         app.close(cleanup=False)
 
     db_path = app_dir / "store.db"
-    db_obs = read_sqlite_tables_ro(db_path, _tables_for_variant(variant), session_id=session_id)
+    # Isolated per-variant DB: read all rows so child worker checkpoints/authz_events are included.
+    db_obs = read_sqlite_tables_ro(db_path, _tables_for_variant(variant), session_id=None)
     row_counts = {t: len(rows) for t, rows in (db_obs.get("rows") or {}).items()}
     total_rows = sum(row_counts.values())
 

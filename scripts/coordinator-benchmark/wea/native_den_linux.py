@@ -946,11 +946,12 @@ def run_linux_tauri_native(
     env["LYCAON_CONFIG_DIR"] = str(cfg_dir)
     env["XDG_CONFIG_HOME"] = str(profile / "xdg-config")
     env["XDG_DATA_HOME"] = str(profile / "xdg-data")
-    eff_token = token or secrets.token_hex(24)
+    eff_token = token
     if api_url:
         env["LYCAON_E2E_API_URL"] = api_url
-    env["LYCAON_E2E_TOKEN"] = eff_token
-    env["LYCAON_API_TOKEN"] = eff_token
+    if token:
+        env["LYCAON_E2E_TOKEN"] = token
+        env["LYCAON_API_TOKEN"] = token
 
     log_path = out / "tauri-app.log"
     log_fh = log_path.open("w", encoding="utf-8")
