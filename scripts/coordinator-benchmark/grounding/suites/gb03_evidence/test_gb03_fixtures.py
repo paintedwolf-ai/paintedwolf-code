@@ -24,6 +24,13 @@ from grounding.suites.gb03_evidence import (
     iter_v02_sample,
     validate_gb03_catalog,
 )
+from grounding.suites.gb03_evidence.full_runner import (
+    FIXED_SIDECAR_SELECTORS,
+    SIDECAR_SLOT_HANDLERS,
+    parse_families_arg,
+    select_gb03_work_items,
+)
+from grounding.suites.gb03_evidence.v07_inprocess_runner import V07_INPROCESS_SELECTORS
 
 
 class TestGB03CatalogManifest(unittest.TestCase):
@@ -139,6 +146,66 @@ class TestGB03V02GeneratedLookalikes(unittest.TestCase):
                 verdict = resolve_citation(sample.delivery_log, cit, sample.scope)
                 self.assertEqual(verdict.verdict_class, "ungrounded")
                 self.assertEqual(verdict.expected_exact_verdict, "unverifiable")
+
+
+class TestGB03RunnerCoverageAndSharding(unittest.TestCase):
+    def test_all_53_fixed_slots_are_mapped_across_sidecar_and_inprocess_runners(self) -> None:
+        sidecar_expected = {s.selector for s in GB03_FIXED_SLOTS if s.lane == "sidecar"}
+        inproc_expected = {s.selector for s in GB03_FIXED_SLOTS if s.lane == "in_process"}
+
+        self.assertEqual(len(sidecar_expected), 49)
+        self.assertEqual(len(inproc_expected), 4)
+        self.assertEqual(set(FIXED_SIDECAR_SELECTORS), sidecar_expected)
+        self.assertEqual(set(SIDECAR_SLOT_HANDLERS.keys()), sidecar_expected)
+        self.assertEqual(set(V07_INPROCESS_SELECTORS), inproc_expected)
+        self.assertTrue(sidecar_expected.isdisjoint(inproc_expected))
+        self.assertEqual(sidecar_expected | inproc_expected, set(SLOTS_BY_SELECTOR.keys()))
+
+        overlay = (
+            pathlib.Path(__file__).resolve().parents[2]
+            / "overlays"
+            / "gb03_v07_inprocess_test.go"
+        )
+        self.assertTrue(overlay.is_file(), f"Missing V07 in-process overlay: {overlay}")
+
+    def test_sharding_is_disjoint_and_complete(self) -> None:
+        all_items = select_gb03_work_items(
+            families=("V01", "V02", "V03", "V04", "V05", "V06", "V07"),
+            base_seed="20261127",
+            limit_v02=100,
+            shard=0,
+            shards=1,
+        )
+        # 49 fixed sidecar slots + 100 V02 sidecar instances = 149
+        self.assertEqual(len(all_items), 149)
+        all_selectors = [it.selector for it in all_items]
+        self.assertEqual(len(set(all_selectors)), 149)
+
+        for total_shards in (2, 3, 4, 7):
+            seen: list[str] = []
+            for k in range(total_shards):
+                part = select_gb03_work_items(
+                    families=("V01", "V02", "V03", "V04", "V05", "V06", "V07"),
+                    base_seed="20261127",
+                    limit_v02=100,
+                    shard=k,
+                    shards=total_shards,
+                )
+                part_sels = [it.selector for it in part]
+                # Disjoint from previously seen shards
+                self.assertTrue(set(seen).isdisjoint(set(part_sels)))
+                seen.extend(part_sels)
+            self.assertEqual(set(seen), set(all_selectors))
+
+    def test_parse_families_arg_validation(self) -> None:
+        self.assertEqual(parse_families_arg("V01,V03,V07"), ("V01", "V03", "V07"))
+        self.assertEqual(parse_families_arg("v04, v04, v05"), ("V04", "V05"))
+        with self.assertRaises(ValueError):
+            parse_families_arg("V01,V99")
+        with self.assertRaises(ValueError):
+            select_gb03_work_items(shard=2, shards=2)
+        with self.assertRaises(ValueError):
+            select_gb03_work_items(shard=0, shards=0)
 
 
 if __name__ == "__main__":
