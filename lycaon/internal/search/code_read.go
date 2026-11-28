@@ -10,53 +10,90 @@ import (
 	"github.com/lycaon/lycaon/internal/textfile"
 )
 
-const codeExecutorMaxFileBytes = 1 << 20
+const (
+	codeExecutorMaxFileBytes = 1 << 20
+	codeReadReplaceAttempts  = 3
+)
+
+type codeReadHandle interface {
+	io.ReadCloser
+	Stat() (os.FileInfo, error)
+}
+
+func openCodeReadFile(abs string) (codeReadHandle, error) {
+	return fseffect.OpenRead(fseffect.Location{Root: filepath.Dir(abs), Rel: filepath.Base(abs)})
+}
 
 // codeOpenStatus classifies why a listed file yielded no searchable text.
 type codeOpenStatus int
 
 const (
 	codeOpenOK codeOpenStatus = iota
-	// codeOpenMissing marks a file removed or replaced since listing.
+	// codeOpenMissing marks a file removed or replaced by an ineligible leaf since listing.
 	codeOpenMissing
 	codeOpenBinary
 	// codeOpenUnsearchable contributes to the skipped-file count.
 	codeOpenUnsearchable
 )
 
-// readCodeBytes reads one regular file up to maxBytes, rejecting a path that
-// was swapped between lookup and open.
+// readCodeBytes reads one regular file up to maxBytes, retrying boundedly when
+// an atomic regular-file replacement swaps the inode between lookup and open.
 func readCodeBytes(abs string, maxBytes int64) ([]byte, codeOpenStatus) {
+	return readCodeBytesWith(abs, maxBytes, os.Lstat, openCodeReadFile)
+}
+
+func readCodeBytesWith(
+	abs string,
+	maxBytes int64,
+	lstat func(string) (os.FileInfo, error),
+	openRead func(string) (codeReadHandle, error),
+) ([]byte, codeOpenStatus) {
 	if maxBytes <= 0 {
 		maxBytes = codeExecutorMaxFileBytes
 	}
-	pathInfo, err := os.Lstat(abs)
-	if err != nil {
-		if os.IsNotExist(err) {
+	for attempt := 0; attempt < codeReadReplaceAttempts; attempt++ {
+		pathInfo, err := lstat(abs)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, codeOpenMissing
+			}
+			return nil, codeOpenUnsearchable
+		}
+		if !pathInfo.Mode().IsRegular() {
 			return nil, codeOpenMissing
 		}
-		return nil, codeOpenUnsearchable
+		f, err := openRead(abs)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, codeOpenMissing
+			}
+			return nil, codeOpenUnsearchable
+		}
+		info, err := f.Stat()
+		if err != nil {
+			_ = f.Close()
+			return nil, codeOpenUnsearchable
+		}
+		if !info.Mode().IsRegular() {
+			_ = f.Close()
+			return nil, codeOpenMissing
+		}
+		if !os.SameFile(pathInfo, info) {
+			_ = f.Close()
+			continue
+		}
+		if info.Size() > maxBytes {
+			_ = f.Close()
+			return nil, codeOpenUnsearchable
+		}
+		raw, err := io.ReadAll(io.LimitReader(f, maxBytes+1))
+		_ = f.Close()
+		if err != nil || int64(len(raw)) > maxBytes {
+			return nil, codeOpenUnsearchable
+		}
+		return raw, codeOpenOK
 	}
-	if !pathInfo.Mode().IsRegular() {
-		return nil, codeOpenMissing
-	}
-	f, err := fseffect.OpenRead(fseffect.Location{Root: filepath.Dir(abs), Rel: filepath.Base(abs)})
-	if err != nil {
-		return nil, codeOpenUnsearchable
-	}
-	defer func() { _ = f.Close() }()
-	info, err := f.Stat()
-	if err != nil || !info.Mode().IsRegular() || !os.SameFile(pathInfo, info) {
-		return nil, codeOpenMissing
-	}
-	if info.Size() > maxBytes {
-		return nil, codeOpenUnsearchable
-	}
-	raw, err := io.ReadAll(io.LimitReader(f, maxBytes+1))
-	if err != nil || int64(len(raw)) > maxBytes {
-		return nil, codeOpenUnsearchable
-	}
-	return raw, codeOpenOK
+	return nil, codeOpenUnsearchable
 }
 
 // codeContent is one file's searchable UTF-8 payload.
