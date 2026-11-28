@@ -2,6 +2,7 @@ package command_test
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 
@@ -59,5 +60,28 @@ func TestRecordedProgramRetainsUtilityUntilBackgroundSettlement(t *testing.T) {
 	testutil.FailErr(t, "run next program", err)
 	if releases.Load() != 2 {
 		t.Fatalf("utility lifetimes released %d times; want once per program", releases.Load())
+	}
+}
+
+func TestRecordedProgramSetupFailureReleasesPlanOnce(t *testing.T) {
+	fixture := newProgramFixture(t)
+	previous := fixture.Runtime.Owners
+	setupErr := errors.New("utility setup failed")
+	released := 0
+	var memory *toolcontract.ProgramMemory
+	fixture.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, admitted *toolcontract.ProgramMemory, spill tooloutput.SpillAdmission) (command.ProgramOwners, error) {
+		memory = admitted
+		owners, err := previous(tc, paths, admitted, spill)
+		owners.Builtins = func(command.BuiltinPorts) (map[string]commandprogram.OperationDispatcher, func(), error) {
+			return nil, func() { released++ }, setupErr
+		}
+		return owners, err
+	}
+	_, err := fixture.call(t, t.Context(), "true")
+	if !errors.Is(err, setupErr) || released != 1 || memory == nil {
+		t.Fatalf("setup error=%v utility release count=%d memory=%v", err, released, memory)
+	}
+	if used := memory.InUse(); used.Working != 0 || used.State != 0 {
+		t.Fatalf("setup retained plan or frame memory: %+v", used)
 	}
 }
