@@ -388,6 +388,7 @@ export function TranscriptVisualFilmstrip(props: Props) {
   return (
     <div
       ref={bindTranscriptEntry}
+      class="den-transcript-visual-host"
       data-artifact-path={artifactFetchPath(sessionId(), artifactId())}
     >
       {card}

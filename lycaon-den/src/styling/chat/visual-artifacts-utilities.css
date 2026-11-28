@@ -1,9 +1,21 @@
+.den-transcript-visual-host {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .den-transcript-visual {
   contain: paint;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .den-chat-stream-inner .den-transcript-visual {
   margin: var(--transcript-visual-before) var(--transcript-visual-right) var(--transcript-visual-after) 0;
+  max-width: min(100%, 520px);
+}
+
+.den-action-card .den-transcript-visual {
+  margin: 0;
   max-width: min(100%, 520px);
 }
 
@@ -78,6 +90,11 @@
   justify-content: center;
   height: 100%;
   padding: 16px;
+}
+
+.den-transcript-visual-lightbox__content > .den-transcript-visual-host {
+  flex: 1 1 auto;
+  width: 100%;
 }
 
 .den-transcript-visual-lightbox__img {

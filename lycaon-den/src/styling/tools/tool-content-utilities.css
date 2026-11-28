@@ -27,27 +27,33 @@
 }
 
 @utility den-tool-part-body {
-padding: 0 10px 10px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 10px 10px;
 }
 
 @utility den-tool-part-card-body {
-display: flex;
+  display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
 }
 
 @utility den-tool-part-card-facts {
-display: flex;
+  display: flex;
   flex-direction: column;
+  min-width: 0;
   margin: 0;
 }
 
 @utility den-tool-part-card-facts--wide {
-flex-direction: column;
+  flex-direction: column;
 }
 
 @utility den-tool-part-card-note {
-margin: 0;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: var(--text-den-hint);
   line-height: 1.45;
   color: var(--den-text-muted);
@@ -90,15 +96,17 @@ border: none;
 }
 
 @utility den-tool-part-card-section {
-display: flex;
+  display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
 }
 
 @utility den-tool-part-card-structured {
-display: flex;
+  display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
 }
 
 @utility den-tool-part-chicklet {

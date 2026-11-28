@@ -14,14 +14,24 @@
   margin: 0;
 }
 
+.den-transcript-visual--filmstrip {
+  container-type: inline-size;
+  container-name: den-visual-filmstrip;
+  width: 100%;
+}
+
 .den-transcript-visual-filmstrip__header {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 10px;
+  gap: 4px 10px;
+  min-width: 0;
   margin-bottom: 8px;
 }
 
 .den-transcript-visual-filmstrip__title {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: var(--text-den-label);
   font-weight: 600;
   color: var(--den-text);
@@ -40,9 +50,9 @@
   align-items: stretch;
 }
 
-@media (max-width: 720px) {
+@container den-visual-filmstrip (max-width: 24rem) {
   .den-transcript-visual-filmstrip__stage {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -307,12 +317,16 @@
 /* A recorded drive: the page at the scrubbed moment, then actions and page events on lanes. */
 .den-transcript-visual-timeline__header {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 10px;
+  gap: 4px 10px;
+  min-width: 0;
   margin-bottom: 8px;
 }
 
 .den-transcript-visual-timeline__title {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: var(--text-den-label);
   font-weight: 600;
   color: var(--den-text);
@@ -360,7 +374,9 @@
   --timeline-thumb-half: 6px;
   position: relative;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
+  min-width: 0;
   margin-top: 6px;
 }
 
