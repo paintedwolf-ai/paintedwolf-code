@@ -6,6 +6,7 @@ import {
   clearSessionHostErrorNotices,
   publishSessionHostError,
 } from "../notices/notice-store.ts";
+import { publishGroundingEventNotice } from "../notices/grounding-notice.ts";
 import type { BackendConnection } from "../platform/connection/backend.ts";
 import type { AppStoreActions } from "../store/app-state-model.ts";
 import { createStoreBoardCoalescer } from "../store/board-sync.ts";
@@ -411,6 +412,9 @@ export function subscribeEvents(
         sessionRevisions.set(session.id, revision);
       }
       snapshotReads.invalidate(session.id);
+    }
+    if (envelope.topic === "grounding") {
+      publishGroundingEventNotice(envelope.data, projectId);
     }
     if (envelope.topic === "settings") {
       options.onSettingsEvent?.(envelope.data, envelope.scope);

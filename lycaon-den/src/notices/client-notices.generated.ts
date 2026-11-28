@@ -29,6 +29,7 @@ export type ClientNoticeKind =
   | "engine_not_started"
   | "engine_restarting"
   | "engine_stopped"
+  | "evidence_body_unavailable"
   | "fetch_failure"
   | "host_incompatible"
   | "installation_unverified"
@@ -134,6 +135,12 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     message: "The app's local engine stopped unexpectedly and could not be kept running. Try again to start it.",
     suggestedAction: "That did not work. Reopening the app is the next thing to try.",
     scope: "app",
+  },
+  evidence_body_unavailable: {
+    title: "Saved file copy was damaged",
+    message: "A saved copy of something the agent read was damaged, so the agent is being asked to read it again before citing it.",
+    suggestedAction: "No action is needed now. If this keeps happening, ask the agent to read the file again.",
+    scope: "session",
   },
   fetch_failure: {
     title: "Could not connect",

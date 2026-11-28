@@ -1,0 +1,7 @@
+# A saved copy of something the agent read was damaged and could not be verified.
+scope: session
+title: Saved file copy was damaged
+message: >-
+  A saved copy of something the agent read was damaged, so the agent is being
+  asked to read it again before citing it.
+suggested_action: No action is needed now. If this keeps happening, ask the agent to read the file again.
