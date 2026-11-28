@@ -522,7 +522,7 @@ func (r *ProgramRuntime) beginProgram(ctx context.Context, run *programRun, outp
 	}
 	start := toolcontract.ProgramStart{
 		Version:       toolcontract.ProgramVersion{ProgramID: run.root.Identity.ProgramID, ParentReceiptID: run.parentReceipt, RootExecutionID: run.root.Identity.ExecutionID, LanguageVersion: plan.Version, CatalogDigest: plan.CatalogDigest, SourceUnitID: "submitted", SourceDigest: plan.SourceDigest, SourceReference: sourceRef},
-		PlanReference: sourceRef, SourceExact: !redacted && spill.EmittedSHA256 == plan.SourceDigest, SyntaxValidated: true,
+		PlanReference: sourceRef, SourceExact: !redacted, SyntaxValidated: true,
 		Sources: []toolcontract.ProgramSource{{UnitID: "submitted", Pin: toolcontract.SourcePin{SourceID: "submitted", Revision: plan.SourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: plan.SourceDigest, EndByte: int64(len(run.source))}, DetailReference: sourceRef}},
 		Nodes:   nodes,
 	}
