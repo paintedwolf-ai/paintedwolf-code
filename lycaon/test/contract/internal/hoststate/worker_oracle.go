@@ -22,6 +22,10 @@ import (
 // native program reach, and Reader for a WorkerState through toolpolicy.Engine
 // and promptloop.ProjectTurnTools.
 func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthority, error) {
+	store, err := heldAuthorityMemos()
+	if err != nil {
+		return TurnAuthority{}, err
+	}
 	overlay := state.Overlay
 	if overlay.Catalog == nil {
 		overlays, err := DiscoverPackOverlays(ctx)
@@ -31,8 +35,8 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 		overlay = overlays[0]
 	}
 	askChild := state.ParentSessionMode == api.SessionModeAsk
-	bundle, narrowed, err := executorBundleForOverlay(
-		overlay, state.Posture, askChild, state.WebSearch, state.CommandExternalHidden, MCPNone,
+	bundle, narrowed, err := executorBundleForOverlayWithStore(
+		store, overlay, state.Posture, askChild, state.WebSearch, state.CommandExternalHidden, MCPNone,
 	)
 	if err != nil {
 		return TurnAuthority{}, err
@@ -49,16 +53,16 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 		cacheKey, state.BranchView, state.SecondaryRootGit, state.HasGit, state.HasAnyGitRoot,
 		state.OnWorkerBranch, state.ApprovalPosture, state.SessionScratchDir, state.SharedTempLocations, state.Vision,
 	)
-	frozenWorkerMu.RLock()
-	if cachedAuth, ok := frozenWorkerCache[fullKey]; ok {
-		frozenWorkerMu.RUnlock()
+	store.frozenMu.RLock()
+	if cachedAuth, ok := store.frozenWorkers[fullKey]; ok {
+		store.frozenMu.RUnlock()
 		return cachedAuth, nil
 	}
-	frozenWorkerMu.RUnlock()
+	store.frozenMu.RUnlock()
 
-	projTurnMu.Lock()
-	proj, hit := projTurnCache[cacheKey]
-	projTurnMu.Unlock()
+	store.projTurnMu.Lock()
+	proj, hit := store.projTurns[cacheKey]
+	store.projTurnMu.Unlock()
 	if !hit {
 		workerSess := workerFixtureSession(state)
 		policy := toolpolicy.NewEngine(toolpolicy.EngineDeps{
@@ -107,9 +111,9 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 			schemasOK:        encErr == nil,
 			programs:         computeProgramsList(progReach),
 		}
-		projTurnMu.Lock()
-		projTurnCache[cacheKey] = proj
-		projTurnMu.Unlock()
+		store.projTurnMu.Lock()
+		store.projTurns[cacheKey] = proj
+		store.projTurnMu.Unlock()
 	}
 
 	host, err := WorkerHostFacts(state, narrowed, overlay.Schemas)
@@ -127,11 +131,11 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 	}
 	reader = reader.WithVision(state.Vision)
 	assembled := assembleTurnAuthorityFromEntry(proj, reader)
-	frozenWorkerMu.Lock()
-	if len(frozenWorkerCache) < 1024 {
-		frozenWorkerCache[fullKey] = assembled
+	store.frozenMu.Lock()
+	if len(store.frozenWorkers) < 1024 {
+		store.frozenWorkers[fullKey] = assembled
 	}
-	frozenWorkerMu.Unlock()
+	store.frozenMu.Unlock()
 	return assembled, nil
 }
 

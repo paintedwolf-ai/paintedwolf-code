@@ -28,10 +28,7 @@ type skillTextAnalysis struct {
 	hasUnloadedCmdSpans bool
 }
 
-var (
-	compiledSkillTplCache  = scopedstore.New[compiledSkillTemplate](512)
-	skillTextAnalysisCache = scopedstore.New[skillTextAnalysis](2048)
-)
+var compiledSkillTplCache = scopedstore.New[compiledSkillTemplate](256)
 
 func skillSelectorRoot(sel string) string {
 	for i := 0; i < len(sel); i++ {
@@ -106,8 +103,8 @@ func renderSkillTextProjected(localCache map[string]skillRenderMemo, text string
 
 func analyzeSkillText(c *Catalog, checkText string) skillTextAnalysis {
 	sum := sha256.Sum256([]byte(checkText))
-	key := fmt.Sprintf("%p\x00%s", c, string(sum[:]))
-	if hit, ok := skillTextAnalysisCache.Load(key); ok {
+	key := string(sum[:])
+	if hit, ok := c.textAnalysis.Load(key); ok {
 		return hit
 	}
 	analysis := skillTextAnalysis{
@@ -136,6 +133,6 @@ func analyzeSkillText(c *Catalog, checkText string) skillTextAnalysis {
 			analysis.blockCalls = append(analysis.blockCalls, calls)
 		}
 	}
-	skillTextAnalysisCache.Store(key, analysis)
+	c.textAnalysis.Store(key, analysis)
 	return analysis
 }

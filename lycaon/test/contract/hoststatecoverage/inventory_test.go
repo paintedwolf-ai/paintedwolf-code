@@ -1,7 +1,6 @@
 package hoststatecoverage_test
 
 import (
-	"runtime"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -17,6 +16,7 @@ import (
 // shipped instruction reads joins to a producer. The report is logged as the
 // inventory receipt.
 func TestHostStateInventoryHasNoUnexplainedGaps(t *testing.T) {
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	ctx := t.Context()
 	stock, err := promptrender.LoadStock(ctx)
 	if err != nil {
@@ -101,6 +101,5 @@ func joinProducers(sites []interactions.InstructionSite) (interactions.ProducerJ
 	if err != nil {
 		return interactions.ProducerJoin{}, err
 	}
-	defer runtime.GC()
 	return interactions.JoinInstructionProducers(sites, graph)
 }
