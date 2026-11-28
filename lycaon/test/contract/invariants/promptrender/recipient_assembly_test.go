@@ -173,6 +173,7 @@ func parsedCallsForTool(cat *toolvocab.Catalog, blocks []string, wantTool string
 // The standing system prompt leads every coordinator request and stays pinned,
 // on a sparse held-host turn and on a broad turn with a live job.
 func TestCoordinatorStandingPromptLeadsAndIsPinned(t *testing.T) {
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	s := mustStock(t)
 	coordStates, err := hoststate.CoordinatorStates(t.Context())
 	if err != nil {

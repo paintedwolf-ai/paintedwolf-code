@@ -71,6 +71,9 @@ type WorkerState struct {
 // postures, branch views, root Git topologies, loading states, Ask-to-Agent parent
 // upgrades, and narrow environment/overlay variants via ResolveWorkerSeed.
 func WorkerStates(ctx context.Context) ([]WorkerState, error) {
+	if _, err := heldAuthorityMemos(); err != nil {
+		return nil, err
+	}
 	domains, err := DefaultSeedDomains()
 	if err != nil {
 		return nil, err
