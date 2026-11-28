@@ -141,6 +141,9 @@ func (s *sqlCompaction) GetCompactionView(ctx context.Context, sessionID string)
 	if projection.Format != 1 || (projection.Continuation != nil && projection.Continuation.Format != messageview.ContinuationFormat) {
 		return nil, false, nil
 	}
+	if hasDamagedContinuationProjection(projection) {
+		return nil, false, nil
+	}
 	view.Messages, view.Continuation = projection.Messages, projection.Continuation
 	if t, perr := db.ParseTime(row.CreatedAt); perr == nil {
 		view.CreatedAt = t
@@ -157,4 +160,31 @@ func (s *sqlCompaction) CompactionViewCurrent(ctx context.Context, sessionID str
 		return false, nil
 	}
 	return err == nil, err
+}
+
+func hasDamagedContinuationProjection(projection compactionProjection) bool {
+	if projection.Continuation == nil || len(projection.Messages) == 0 {
+		return false
+	}
+	hasCheckpoint := false
+	hasCompactedChunk := false
+	for _, msg := range projection.Messages {
+		if len(msg.ContentParts) == 1 && msg.ContentParts[0].Source == "compaction_summary" {
+			return false
+		}
+		if msg.CompactionCheckpoint {
+			hasCheckpoint = true
+		}
+		if msg.CompactedChunk != nil {
+			hasCompactedChunk = true
+			continue
+		}
+		for _, part := range msg.ContentParts {
+			if part.Source == "compacted_chunk" {
+				hasCompactedChunk = true
+				break
+			}
+		}
+	}
+	return hasCheckpoint || hasCompactedChunk
 }
