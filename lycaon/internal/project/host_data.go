@@ -15,12 +15,8 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
-const (
-	// HostProjectsDirName is the per-project host-data tree under the sidecar data dir.
-	HostProjectsDirName = "projects"
-	// HostPlanCriticDir is advisory plan-critic JSONL (not gate evidence).
-	HostPlanCriticDir = "plan-critic"
-)
+// HostProjectsDirName is the per-project host-data tree under the sidecar data dir.
+const HostProjectsDirName = "projects"
 
 // HostDataDir returns dataDir/projects/{projectID}; an empty dataDir means
 // configdir.UserConfigDir, the sidecar data root holding store.db.

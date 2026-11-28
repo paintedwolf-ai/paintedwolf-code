@@ -128,6 +128,9 @@ func catalogCopyWindows(r *invariants.Run) map[string]string {
 }
 
 func matchCatalogCopy(text string, windows map[string]string) (string, bool) {
+	if len(text) < catalogCopyWindow {
+		return "", false
+	}
 	normalized := normalizeCopy(text)
 	for i := 0; i+catalogCopyWindow <= len(normalized); i++ {
 		if source, ok := windows[normalized[i:i+catalogCopyWindow]]; ok {
@@ -138,7 +141,10 @@ func matchCatalogCopy(text string, windows map[string]string) (string, bool) {
 }
 
 func normalizeCopy(text string) string {
-	return strings.Join(strings.Fields(copyPlaceholderRE.ReplaceAllString(text, " ")), " ")
+	if strings.ContainsAny(text, "%{") {
+		text = copyPlaceholderRE.ReplaceAllString(text, " ")
+	}
+	return strings.Join(strings.Fields(text), " ")
 }
 
 // Host decisions read declared codes and typed fields, never prose.

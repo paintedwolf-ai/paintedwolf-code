@@ -3,4 +3,4 @@ steps:
     args:
       view: "summary"
     complete: true
-    say: "Read {{ call }} for current review assignments and exact work identities."
+    say: "{% if load %}Call {{ load }}, then read{% else %}Read{% endif %} {{ call }} for current review assignments and exact work identities."

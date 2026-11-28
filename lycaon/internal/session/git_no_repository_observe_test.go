@@ -2,10 +2,10 @@ package session
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolreach"
-	"github.com/lycaon/lycaon/internal/tools"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolreach"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -21,7 +21,7 @@ func TestACOP01WriteLegGitWarningAnnotatesTheCommand(t *testing.T) {
 		if offered {
 			names = append(names, "source_history")
 		}
-		ctx := tools.WithCallReach(context.Background(), toolreach.Offered(names))
+		ctx := toolreach.WithRequest(context.Background(), toolreach.Offered(names))
 		raised := guidance.ToolResultFacts{}.WithFeedback(toolrejection.GitNoRepositoryOnWriteLegCode, nil, nil)
 		out, facts := mgr.ToolPolicy.AfterTool(ctx, sess, "command", map[string]any{"command": "git status"}, output, 1, raised)
 		if !facts.HasCode(toolrejection.GitNoRepositoryOnWriteLegCode) || !facts.Succeeded() {

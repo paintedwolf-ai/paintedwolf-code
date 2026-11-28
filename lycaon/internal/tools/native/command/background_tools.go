@@ -2,8 +2,10 @@ package command
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -33,9 +35,9 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 	}
 	subject, _ := t.Registry.CommandLine(tctx.Identity.SessionID, handle)
 	tctx.SetDisplaySubject(subject)
-	cursor := int64(0)
-	if v, ok := args["cursor"].(float64); ok {
-		cursor = int64(v)
+	cursor, err := parseCommandOutputCursor(args["cursor"])
+	if err != nil {
+		return "", err
 	}
 	snapshot, err := t.Registry.Output.ReadCommandOutput(ctx, tctx.Identity.SessionID, handle, cursor)
 	if err != nil {
@@ -62,6 +64,75 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 	}
 	snapshot.ExitObservation.Observe()
 	return string(encoded), nil
+}
+
+func parseCommandOutputCursor(raw any) (int64, error) {
+	if raw == nil {
+		return 0, nil
+	}
+	if number, ok := raw.(json.Number); ok {
+		raw = number.String()
+	}
+	switch v := raw.(type) {
+	case string:
+		if !isCanonicalDecimalOffset(v) {
+			return 0, invalidCommandOutputCursor()
+		}
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n < 0 {
+			return 0, invalidCommandOutputCursor()
+		}
+		return n, nil
+	case int:
+		if v < 0 {
+			return 0, invalidCommandOutputCursor()
+		}
+		return int64(v), nil
+	case int64:
+		if v < 0 {
+			return 0, invalidCommandOutputCursor()
+		}
+		return v, nil
+	case uint64:
+		if v > math.MaxInt64 {
+			return 0, invalidCommandOutputCursor()
+		}
+		return int64(v), nil
+	case float64:
+		if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 || math.Trunc(v) != v || v >= 9223372036854775808.0 {
+			return 0, invalidCommandOutputCursor()
+		}
+		return int64(v), nil
+	default:
+		return 0, invalidCommandOutputCursor()
+	}
+}
+
+func isCanonicalDecimalOffset(s string) bool {
+	if s == "" {
+		return false
+	}
+	if s == "0" {
+		return true
+	}
+	if s[0] < '1' || s[0] > '9' {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func invalidCommandOutputCursor() error {
+	return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
+		"tool":                 "command_output",
+		"argument_schema_tool": "command_output",
+		"field":                "cursor",
+		"reason":               "invalid_cursor",
+	})
 }
 
 // commandOutput is command_output's view of retained output, in the tool's

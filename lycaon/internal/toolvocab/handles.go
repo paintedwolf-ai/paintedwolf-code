@@ -3,6 +3,9 @@ package toolvocab
 import (
 	"regexp"
 	"sort"
+	"strings"
+
+	"github.com/lycaon/lycaon/internal/evidence"
 )
 
 // handleToken matches an evidence handle as copy writes it: kind# or kind#N.
@@ -26,6 +29,9 @@ func (c *Catalog) mintFacts(reachable map[string]bool) map[string]bool {
 // command operation mints, as "kind#". A tool name used as a handle is always
 // listed: handles are named by evidence kind.
 func (c *Catalog) unmintableHandles(corpus string, reachable map[string]bool) []string {
+	if strings.IndexByte(corpus, '#') < 0 {
+		return nil
+	}
 	minted := c.mintFacts(reachable)
 	seen := map[string]bool{}
 	var out []string
@@ -39,6 +45,10 @@ func (c *Catalog) unmintableHandles(corpus string, reachable map[string]bool) []
 			continue
 		}
 		seen[name] = true
+		// source_change is minted by the host source ledger brief, never by a tool.
+		if name == evidence.KindSourceChange {
+			continue
+		}
 		ok, kind := minted[name]
 		switch {
 		case kind && !ok:

@@ -78,3 +78,26 @@ func TestUnreachableNamesReportsAHandleRenderedWithoutItsFact(t *testing.T) {
 		t.Fatalf("empty handle: %v", got)
 	}
 }
+
+func TestUnreachableNamesAcceptsHostLedgerSourceChangeAndRejectsUnmintableToolKind(t *testing.T) {
+	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
+	testutil.FailErr(t, "catalog", err)
+	binding, err := evidence.LoadBinding()
+	testutil.FailErr(t, "evidence binding", err)
+	toolKind := binding.ToolKind("terminal_snapshot")
+	if toolKind == "" {
+		t.Fatal("terminal_snapshot mints no kind")
+	}
+
+	// Valid: host-ledger-minted source_change#N requires no tool producer.
+	valid := "A row's `[source_change#1]` cites that the ledger recorded that change."
+	if got := toolvocab.UnreachableNames(catalog, valid, map[string]bool{"recall": true}); len(got) != 0 {
+		t.Fatalf("valid source_change# flagged as unreachable: %v", got)
+	}
+
+	// Nearby invalid: tool-minted kind without its producing tool offered still fails.
+	invalid := "A row's `[" + toolKind + "#1]` cites terminal state."
+	if got := toolvocab.UnreachableNames(catalog, invalid, map[string]bool{"recall": true}); !slices.Contains(got, toolKind+"#") {
+		t.Fatalf("nearby invalid unmintable tool handle %s# was not rejected: %v", toolKind, got)
+	}
+}

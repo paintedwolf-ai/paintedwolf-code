@@ -13,8 +13,8 @@ x-paintedwolf-emit: rule:spec
 message: Establish spec posture via /plan or write a blueprint file first
 what: Establish spec posture via /plan or write a blueprint file first
 cause: Establish spec posture via /plan or write a blueprint file first
-why: Use a staged command redirect to `${overlay_dir}/blueprints/<slug>.md` or run /plan
-fix: Use a staged command redirect to `${overlay_dir}/blueprints/<slug>.md` or run /plan
+why: Establish spec posture via /plan or create `${overlay_dir}/blueprints/<slug>.md` first
+fix: Establish spec posture via /plan or create `${overlay_dir}/blueprints/<slug>.md` using an offered blueprint-writing route first
 instead: Establish spec posture before high-risk tools
 x-paintedwolf-scenarios:
   - id: default

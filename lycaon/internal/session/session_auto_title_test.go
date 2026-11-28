@@ -3,8 +3,9 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/llm/policytest"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/llm/policytest"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"

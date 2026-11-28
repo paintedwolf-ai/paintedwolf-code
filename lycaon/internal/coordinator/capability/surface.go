@@ -26,7 +26,6 @@ type CapabilitySurface struct {
 	DeferredTools  []string
 	// SpawnAllowlist contains the frame’s effective worker roster.
 	SpawnAllowlist      []string
-	Flags               CoordinatorCapabilities
 	Roster              prompts.SpawnRosterData
 	ExcludedDisclosures []prompts.SpawnAgentView
 }
@@ -65,7 +64,6 @@ func Resolve(input ResolveInput) (CapabilitySurface, error) {
 	}
 	resolvedTools = toolcontract.AppendImplied(resolvedTools, input.Resources)
 	spawnAllowlist := append([]string(nil), input.SpawnAllowlist...)
-	flags := Derive(input.RootCount, resolvedTools, spawnAllowlist)
 
 	profiles := input.ToolProfiles
 	if len(profiles) == 0 {
@@ -107,7 +105,6 @@ func Resolve(input ResolveInput) (CapabilitySurface, error) {
 		ResolvedTools:       append([]string(nil), resolvedTools...),
 		DeferredTools:       append([]string(nil), deferredTools...),
 		SpawnAllowlist:      spawnAllowlist,
-		Flags:               flags,
 		Roster:              roster,
 		ExcludedDisclosures: excluded,
 	}, nil
@@ -117,7 +114,6 @@ func Resolve(input ResolveInput) (CapabilitySurface, error) {
 func (s CapabilitySurface) MergeSpawnInjectVars() map[string]any {
 	vars := prompts.SpawnRosterTemplateVars(s.Roster, s.ExcludedDisclosures)
 	vars["repo_known_empty"] = s.RepoKnownEmpty
-	MergeVars(vars, s.Flags)
 	allowed := append([]string(nil), s.SpawnAllowlist...)
 	sort.Strings(allowed)
 	vars["allowed_agents"] = allowed

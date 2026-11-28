@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/isolation"
 )
 
 // LocalNetworkAsk is a pre-spawn widening of both local-listen and
@@ -28,6 +29,8 @@ type LocalNetworkResult struct {
 	Authorized                   bool
 	ConnectRequiresOwnedListener bool
 	Denied                       bool
+	DenialCause                  isolation.PathDenialCause
+	ApprovalResolvedBy           string
 	ListenPorts                  []uint16
 	ConnectPorts                 []uint16
 	UserGuidance                 string

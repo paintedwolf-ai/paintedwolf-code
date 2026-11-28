@@ -20,8 +20,8 @@ func TestPreparationProjectsCallableToolsFromTheLivePlan(t *testing.T) {
 		Policy:        registryTestPolicy{metas: []tools.ToolMeta{{Name: "command"}, {Name: "request_tools"}, {Name: "command_output", Deferred: true}}},
 		LiveResources: func(string) toolcontract.ResourcePresence { return toolcontract.ResourcePresence{CommandJobs: live} },
 		ContextSurfaceDeps: ContextSurfaceDeps{
-			ToolProcedures: func(_ context.Context, _ *api.Session, profile string, _ []string) (string, error) {
-				procedureProfile = profile
+			ToolProcedures: func(_ context.Context, _ *api.Session, reader prompts.Reader) (string, error) {
+				procedureProfile = reader.SurfaceID()
 				return "Known tool procedures", nil
 			},
 		},

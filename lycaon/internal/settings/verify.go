@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"gopkg.in/yaml.v3"
 )
@@ -280,7 +281,7 @@ func DetectVerifyCommandLLM(ctx context.Context, summarizer compaction.Summarize
 		// Empty documentation is a completed detection result.
 		return VerifyDetectCandidate{}, VerifyDetectNoCommand
 	}
-	system, err := guidance.RenderCatalog(ctx, guidance.UtilityVerifyDetectSystemRef, nil)
+	system, err := prompts.RenderUtilityPrompt(ctx, guidance.UtilityVerifyDetectSystemRef, nil)
 	if err != nil {
 		return VerifyDetectCandidate{}, VerifyDetectUnavailable
 	}

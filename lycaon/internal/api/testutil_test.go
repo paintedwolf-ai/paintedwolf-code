@@ -195,8 +195,11 @@ func releaseProjectSources(t *testing.T, srv *Server) {
 
 func drainBackground(t *testing.T, srv *Server) {
 	t.Helper()
-	// A hang is reported by the test binary's deadline, not a local one.
-	srv.WaitForBackground(context.Background())
+	ctx := t.Context()
+	if ctx.Err() != nil {
+		ctx = context.WithoutCancel(ctx)
+	}
+	testutil.FailErr(t, "drain background work", srv.WaitForBackground(ctx))
 }
 
 // testUserNotices loads the bundled user-notice catalog.

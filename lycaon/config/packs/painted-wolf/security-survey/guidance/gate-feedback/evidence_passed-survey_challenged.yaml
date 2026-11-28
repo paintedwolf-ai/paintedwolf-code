@@ -8,5 +8,5 @@ missing_signals:
     detail: "The challenge wave has not recorded a terminal verdict."
     fix: "Dispatch every owed reviewer{% if context.review_agents %} ({{ context.review_agents }}){% endif %} on the stamped claims, wait for their envelopes, then submit CHALLENGED or NEEDS_INVESTIGATION — a terminal verdict needs a succeeded envelope from each."
 satisfy:
-  - "Dispatch every owed reviewer{% if context.review_agents %} ({{ context.review_agents }}){% endif %} as `task` legs in one assistant message and wait for their envelopes."
+  - "Dispatch every owed reviewer{% if context.review_agents %} ({{ context.review_agents }}){% endif %}{% if profile_has_task %} as `task` legs{% elif profile_can_request.task %} — call `request_tools(need=\"task\")`, then start them as `task` legs —{% endif %} in one assistant message and wait for their envelopes."
   - "Then call `submit_verdict` with `verdict: CHALLENGED` or `NEEDS_INVESTIGATION` and one `challenges` entry per stamped claim id (`status` survives or refuted, the skeptic's statement, and its `path:line`)."

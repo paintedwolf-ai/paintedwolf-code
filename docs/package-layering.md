@@ -238,6 +238,7 @@ Coordinator wake decisions and tool policy use their own narrow resource sets in
 | [`session/checkpoint`](../lycaon/internal/session/checkpoint) | Pre-turn source capture, coverage, and its journal |
 | [`session/approvalstate`](../lycaon/internal/session/approvalstate) | Live grants and permits: sandbox paths and ports, sockets, direct IP, approval coalescing, and the gate repeat ledger |
 | [`session/loopguard`](../lycaon/internal/session/loopguard) | Doom-loop detection over repeated identical tool calls |
+| [`session/readerfacts`](../lycaon/internal/session/readerfacts) | The session host facts every prompt `Reader` derives from: `Observe` gathers them from the session services, `Derive` turns an observation into `prompts.HostFacts` |
 | [`session/touchedpaths`](../lycaon/internal/session/touchedpaths) | Deduplicated `(rootID, relPath)` list of files a session authored or observed, shared by source-change briefs and post-turn policy facts |
 | [`session/workercompletion`](../lycaon/internal/session/workercompletion) | Worker completion value types, parse / normalize / synthesize / enrich, `EvaluateWorkerSummary` and the citation-grounding audit, `WorkspaceChangeChecker`, digest formatting. Overlay-diff paths are passed in, so the package stays free of overlay layout |
 | [`session/workercloseout`](../lycaon/internal/session/workercloseout) | Worker reports, bounded closeout prompts, and evidence-grounding retries |

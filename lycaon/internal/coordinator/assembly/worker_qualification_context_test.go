@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
+	"github.com/lycaon/lycaon/internal/coordinator/turnreadertest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
@@ -71,6 +72,7 @@ func newContextQualEnv(t *testing.T) *contextQualEnv {
 	eng.SetDeps(assembly.AssemblyDeps{
 		Prompts:    pe,
 		Injects:    inj,
+		TurnReader: turnreadertest.Fixture{}.TurnReader,
 		Limits:     func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		Deliveries: assembly.Deliveries{Messages: delivery},
 	})

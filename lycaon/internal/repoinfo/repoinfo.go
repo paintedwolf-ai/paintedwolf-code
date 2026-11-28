@@ -69,6 +69,10 @@ type Provider interface {
 	SetOnSettled(fn func(projectDir string))
 	// Wait joins analysis, refinement, and their settled callbacks.
 	Wait(ctx context.Context) error
+	// Epoch increases each time background analysis is admitted.
+	Epoch() uint64
+	// Busy reports whether any background analysis is currently running.
+	Busy() bool
 	// Stop closes admission and cancels background analysis without joining it.
 	Stop()
 	// Close stops background analysis and joins settled callbacks.
@@ -106,6 +110,7 @@ type fileProvider struct {
 	mu       sync.RWMutex
 	cache    map[string]*Brief
 	warming  map[string]struct{}
+	epoch    uint64
 	closed   bool
 	cacheDir string
 
@@ -248,6 +253,7 @@ func (p *fileProvider) ensureAnalyze(projectDir string) {
 		p.idle = make(chan struct{})
 	}
 	p.warming[projectDir] = struct{}{}
+	p.epoch++
 	p.mu.Unlock()
 
 	go func() {
@@ -465,6 +471,18 @@ func (p *fileProvider) Wait(ctx context.Context) error {
 			return ctx.Err()
 		}
 	}
+}
+
+func (p *fileProvider) Epoch() uint64 {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.epoch
+}
+
+func (p *fileProvider) Busy() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return len(p.warming) > 0
 }
 
 // Stop closes analysis admission before canceling the current busy interval.

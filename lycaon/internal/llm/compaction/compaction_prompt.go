@@ -4,10 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/tokenest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -71,15 +70,7 @@ func renderCompactionUserPrompt(ctx context.Context, info SessionInfo, rows []ma
 		"prior_continuation": prior,
 		"recent_messages":    rows,
 	}
-	block, err := guidance.RenderGuidance(ctx, "compaction/resume-user", data)
-	if err != nil {
-		return "", err
-	}
-	block = strings.TrimSpace(block)
-	if block == "" {
-		return "", fmt.Errorf("compaction resume prompt rendered empty")
-	}
-	return block, nil
+	return prompts.RenderUtilityPrompt(ctx, "compaction/resume-user", data)
 }
 
 func compactionRecentMessages(sliced []ContextMessage) ([]map[string]any, []api.Message, error) {

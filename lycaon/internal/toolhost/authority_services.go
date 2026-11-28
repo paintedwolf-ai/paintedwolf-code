@@ -2,9 +2,10 @@ package toolhost
 
 import (
 	"context"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/confine"
@@ -225,8 +226,8 @@ func recordEgressRuleDeny(
 	runtime.authzRecorder.AppendToolDenied(ctx, authzledger.ToolDeniedRecord{
 		SessionID: cmd.SessionID, ParentSessionID: cmd.RootSessionID,
 		Tool: tool, Args: map[string]any{"command": cmd.CommandLine, "host": host},
-		ProjectDir: cmd.ProjectDir, RejectCode: "APPROVAL_RULE_DENIED",
-		BlockReason: "APPROVAL_RULE_DENIED",
+		ProjectDir: cmd.ProjectDir, RejectCode: hitl.CodeApprovalRuleDenied,
+		BlockReason: hitl.CodeApprovalRuleDenied,
 		ApprovalRules: []authzledger.ApprovalRuleCitation{{
 			Category: string(rule.Category), Pattern: rule.Pattern, Effect: string(rule.Effect),
 			UnitID: rule.Source.UnitID, PackID: rule.Source.PackID, Scope: string(rule.Source.Scope),

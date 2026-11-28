@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -43,6 +44,7 @@ type changeConverger struct {
 	headMoved   bool
 	closed      bool
 	flush       func(context.Context, pendingExternalBatch)
+	onAdmit     *atomic.Uint64
 	active      int
 	idle        chan struct{}
 }
@@ -67,6 +69,21 @@ func (c *changeConverger) holdWhile(hold func() bool, ceiling time.Duration) {
 	defer c.mu.Unlock()
 	c.hold = hold
 	c.holdCeiling = max(ceiling, c.maxDelay)
+}
+
+func (c *changeConverger) setAdmitCounter(counter *atomic.Uint64) {
+	c.mu.Lock()
+	c.onAdmit = counter
+	c.mu.Unlock()
+}
+
+func (c *changeConverger) busy() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.active > 0
 }
 
 func (c *changeConverger) queue(ctx context.Context, root RootSpec, rel string) {
@@ -145,6 +162,9 @@ func (c *changeConverger) armLocked(ctx context.Context) {
 		c.timer.Stop()
 	}
 	c.generation++
+	if c.onAdmit != nil {
+		c.onAdmit.Add(1)
+	}
 	generation := c.generation
 	flushCtx := context.WithoutCancel(ctx)
 	c.timer = time.AfterFunc(delay, func() { c.fire(flushCtx, generation) })

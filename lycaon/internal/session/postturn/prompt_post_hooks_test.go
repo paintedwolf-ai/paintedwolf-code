@@ -7,12 +7,16 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type postTurnCalls struct {
 	worker   bool
+	mode     api.SessionMode
+	emits    int
 	audit    error
 	takeErr  error
 	takes    int
@@ -21,7 +25,7 @@ type postTurnCalls struct {
 }
 
 func (c *postTurnCalls) Get(context.Context, string) (*api.Session, error) {
-	sess := &api.Session{ID: "coordinator"}
+	sess := &api.Session{ID: "coordinator", Mode: c.mode}
 	if c.worker {
 		sess.ParentSessionID = "parent"
 	}
@@ -32,7 +36,7 @@ func (c *postTurnCalls) AfterPrompt(context.Context, string, []string) error {
 	c.audited = true
 	return c.audit
 }
-func (c *postTurnCalls) Emit(context.Context, string, anchor.ID, anchor.Envelope)          {}
+func (c *postTurnCalls) Emit(context.Context, string, anchor.ID, anchor.Envelope)          { c.emits++ }
 func (c *postTurnCalls) QueueAdvisories(context.Context, string, []guidance.GuidanceNudge) {}
 func (c *postTurnCalls) TakePolicy(context.Context, string) ([]api.Message, error) {
 	c.takes++
@@ -81,5 +85,30 @@ func TestWorkerPostTurnLeavesFeedbackStaged(t *testing.T) {
 	testutil.FailErr(t, "after", New(calls, calls, calls).After(t.Context(), "worker", "implementer", nil))
 	if calls.takes != 0 {
 		t.Fatalf("feedback commits = %d, want 0", calls.takes)
+	}
+}
+
+func TestProgressMissingSkipsAskModeAndUnofferedTools(t *testing.T) {
+	askCalls := &postTurnCalls{mode: api.SessionModeAsk}
+	askSvc := New(askCalls, askCalls, askCalls)
+	askSvc.SetProgress(progresstest.New(t, "coordinator"))
+	askSvc.ProgressMissing(t.Context(), "coordinator", []string{"write"})
+	if askCalls.emits != 0 {
+		t.Fatalf("Ask mode emitted %d progress-missing nudges, want 0", askCalls.emits)
+	}
+
+	agentCalls := &postTurnCalls{mode: api.SessionModeAgent}
+	agentSvc := New(agentCalls, agentCalls, agentCalls)
+	agentSvc.SetProgress(progresstest.New(t, "coordinator"))
+	ctx := toolreach.WithRequest(t.Context(), toolreach.Offered([]string{"inspect_source", "update_progress"}))
+	agentSvc.ProgressMissing(ctx, "coordinator", []string{"write"})
+	if agentCalls.emits != 0 {
+		t.Fatalf("unoffered tool emitted %d progress-missing nudges, want 0", agentCalls.emits)
+	}
+
+	ctxOffered := toolreach.WithRequest(t.Context(), toolreach.Offered([]string{"task", "update_progress"}))
+	agentSvc.ProgressMissing(ctxOffered, "coordinator", []string{"task"})
+	if agentCalls.emits != 1 {
+		t.Fatalf("offered gated tool emitted %d progress-missing nudges, want 1", agentCalls.emits)
 	}
 }

@@ -3,5 +3,5 @@ steps:
     tool: "instruct_worker"
     args:
       worker: "{{ paintedwolf.worker }}"
-    say: "To give that worker this work, call {{ call }}."
+    say: "To give that worker this work, call {% if load %}{{ load }}, then {% endif %}{{ call }}."
     otherwise: "Choose another name, or leave name out."

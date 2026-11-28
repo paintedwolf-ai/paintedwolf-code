@@ -19,7 +19,6 @@ import (
 	sessionverification "github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolreach"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -95,7 +94,7 @@ func TestBeforeToolObservesWaitVisibility(t *testing.T) {
 		ToolCalls: []api.ToolCall{{ID: "wait-1", Name: "wait"}},
 	}}
 
-	ctx := tools.WithCallReach(t.Context(), toolreach.Offered([]string{"wait"}))
+	ctx := toolreach.WithRequest(t.Context(), toolreach.Offered([]string{"wait"}))
 	_, _, err = svc.BeforeTool(ctx, sess, history, "wait", map[string]any{"timeout_ms": 60000})
 	refusal, rejected := guidance.RefusalFromError(err)
 	if !rejected || refusal.Code() != guard.WaitHiddenTextCode {

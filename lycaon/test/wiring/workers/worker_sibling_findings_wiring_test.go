@@ -103,7 +103,9 @@ func TestParallelWorkerRecordFindingSiblingInjectWiring(t *testing.T) {
 	leg, err := h.Workers.ContextLoader.BuildWorkerPromptContext(workercontext.WithJob(ctx, taskB.ID), childB.ID, childB)
 	testutil.FailErr(t, "build worker leg context", err)
 	leg.SiblingNotes = page.Notes
-	block, err := inject.RenderWorkerLegInject(ctx, prompts.NewInjectRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})), childB.ID, leg)
+	reader, err := prompts.DeclaredReader(nil, "implement")
+	testutil.FailErr(t, "DeclaredReader implement", err)
+	block, err := inject.RenderWorkerLegInject(ctx, prompts.NewInjectRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})), reader, childB.ID, leg)
 	testutil.FailErr(t, "render worker leg", err)
 	for _, want := range []string{summary, page.Notes[0].Ref} {
 		if !strings.Contains(block, want) {
