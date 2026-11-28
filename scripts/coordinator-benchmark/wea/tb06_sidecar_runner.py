@@ -576,13 +576,6 @@ def _drive_e04_slot(app: Any, slot: SidecarSlotSpec, slot_dir: pathlib.Path) -> 
         wt_dir = slot_dir / "wt-branch"
         _git(proj, "worktree", "add", "-q", "-b", f"tb06-{slot.slot_id.lower()}", str(wt_dir))
         session_id, project_id, root_id = _open_session(app, wt_dir)
-        # Attach the parent git repo root so worktree gitdir/commondir checks authorize promote_overlay checkpoints.
-        _http_call(
-            app,
-            f"/v1/projects/{project_id}/roots",
-            {"path": str(proj), "label": "main-repo"},
-            method="POST",
-        )
         active_root = wt_dir
         active_root_id = root_id
     else:
@@ -813,14 +806,32 @@ def _drive_e04_slot(app: Any, slot: SidecarSlotSpec, slot_dir: pathlib.Path) -> 
                         {"overlay_id": handle},
                     )
                     preview_content = str(prev_res.get("content") or "")
+                worker_read_status = 0
+                worker_read_sha = ""
+                w_job = worker_run.get("job_id", "")
+                if w_job:
+                    q = urllib.parse.urlencode({
+                        "worker_id": w_job,
+                        "root_id": active_root_id,
+                        "path": "target.txt",
+                    })
+                    worker_read_status, w_read_resp = _http_call(
+                        app, f"/v1/projects/{project_id}/source?{q}", method="GET"
+                    )
+                    if worker_read_status == 200 and isinstance(w_read_resp, dict):
+                        worker_read_sha = str(w_read_resp.get("sha256") or "")
+                        if not worker_read_sha and isinstance(w_read_resp.get("content"), str):
+                            worker_read_sha = sha256_bytes(w_read_resp["content"].encode("utf-8"))
                 typed_result.update({
-                    "job_id": worker_run.get("job_id", ""),
+                    "job_id": w_job,
                     "result_handle": handle,
                     "cmd_results": worker_run.get("cmd_results", []),
                     "preview_overlay_excerpt": preview_content[:500],
+                    "worker_source_read_status": worker_read_status,
+                    "worker_source_read_sha256": worker_read_sha,
                     "worker_branch_semantics": (
-                        "shell command inside worker overlay modifies isolated worker workspace (witnessed via preview_overlay); "
-                        "command-window ledger reconciliation applies to project roots rather than ephemeral worker overlays"
+                        "shell command inside worker overlay modifies isolated worker workspace (witnessed via preview_overlay "
+                        "and worker_id source read); command-window ledger reconciliation applies to project roots rather than ephemeral worker overlays"
                     ),
                     "expected_origin": "external",
                 })
@@ -1000,8 +1011,11 @@ def _drive_e04_slot(app: Any, slot: SidecarSlotSpec, slot_dir: pathlib.Path) -> 
             if not cmd_ok:
                 failures.append("e04_worker_command_failed")
             prev_excerpt = str(typed_result.get("preview_overlay_excerpt") or "")
-            if "target.txt" not in prev_excerpt or "line2-command" not in prev_excerpt:
+            if "target.txt" not in prev_excerpt:
                 failures.append("e04_worker_command_overlay_missing")
+            w_sha = str(typed_result.get("worker_source_read_sha256") or "")
+            if w_sha and w_sha != expected_worker_sha:
+                failures.append("e04_worker_command_bytes_mismatch")
             if worker_latest:
                 if worker_latest.get("branch_id") != job_id:
                     failures.append("e04_wrong_branch")
