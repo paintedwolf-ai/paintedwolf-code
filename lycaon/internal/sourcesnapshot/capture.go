@@ -40,6 +40,7 @@ func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
 	defer rootRelease()
 
 	started := time.Now()
+	unsettledWait := false
 	captures := make([]rootCapture, 0, len(req.Roots))
 	defer func() {
 		for _, capture := range captures {
@@ -47,15 +48,31 @@ func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
 		}
 	}()
 	for _, root := range req.Roots {
+		rootReq := req
 		var plan deltaPlan
 		// Content verification reads every file; incremental capture waits for events.
 		if req.Verify == VerifyContent || req.Unwatched {
 			plan = deltaPlan{upTo: s.deltas.sequence()}
+		} else if req.Settle {
+			switch repochange.SettleRootStatus(ctx, root.Path, deltaQuietGrace, deltaQuietWait) {
+			case repochange.SettleQuiet:
+				plan = s.deltas.begin(root.Path, s.scopeFor(ctx, req, root).Identity())
+			case repochange.SettleUnproven:
+				// No sentinel barrier covers every stream for this root: verify
+				// admitted content directly instead of trusting the watcher.
+				rootReq.Verify = VerifyContent
+				plan = deltaPlan{upTo: s.deltas.sequence()}
+			default:
+				unsettledWait = true
+				plan = s.deltas.begin(root.Path, s.scopeFor(ctx, req, root).Identity())
+			}
 		} else {
-			repochange.WaitQuiet(ctx, root.Path, deltaQuietGrace, deltaQuietWait)
+			if !repochange.WaitQuiet(ctx, root.Path, deltaQuietGrace, deltaQuietWait) {
+				unsettledWait = true
+			}
 			plan = s.deltas.begin(root.Path, s.scopeFor(ctx, req, root).Identity())
 		}
-		candidate, err := s.candidate(ctx, req, root, plan)
+		candidate, err := s.candidate(ctx, rootReq, root, plan)
 		if err != nil {
 			return Snapshot{}, err
 		}
@@ -101,7 +118,11 @@ func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
 			}
 		}
 		if !moved {
-			return s.publishCandidates(ctx, req, captures, CaptureExact, started)
+			quality := CaptureExact
+			if unsettledWait {
+				quality = CaptureObserved
+			}
+			return s.publishCandidates(ctx, req, captures, quality, started)
 		}
 		stalled++
 		slog.DebugContext(ctx, "source observation pass",
@@ -113,6 +134,9 @@ func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
 	// Stable reads with complete coverage are exact as of the captured plans.
 	unstable := 0
 	quality := CaptureExact
+	if unsettledWait {
+		quality = CaptureObserved
+	}
 	for _, capture := range captures {
 		c := capture.candidate
 		unstable += len(c.unstable)

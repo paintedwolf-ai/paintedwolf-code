@@ -219,7 +219,7 @@ func (m *Service) GateState(ctx context.Context, sess *api.Session, history []ap
 		declared = strings.TrimSpace(m.verifyConfig.VerifyTestCommand(m.workspace.SettingsPath(ctx, sess)))
 	}
 	bound := boundaryTime(history)
-	currentRevision, currentRootDigest := m.Revision(ctx, m.SourceEvidenceRoot(ctx, sess))
+	currentRevision, currentRootDigest := m.SettledRevision(ctx, m.SourceEvidenceRoot(ctx, sess))
 	records, err := m.evidenceStore.ReadAll(ctx, m.EvidenceRootFor(sess), runID, VerifySlot, evidence.GateTypeVerify)
 	if err != nil {
 		return false, false, false
@@ -270,6 +270,8 @@ func (m *Service) GateState(ctx context.Context, sess *api.Session, history []ap
 	switch {
 	case passed:
 		return true, false, false
+	case attempts > 0 && (currentRevision == "" || currentRootDigest == ""):
+		return false, false, true
 	case attempts >= MaxAttemptsPerRun:
 		return false, false, true
 	case attempts > 0:
@@ -284,6 +286,15 @@ func (m *Service) Revision(ctx context.Context, root string) (string, string) {
 		return m.verificationSource(ctx, root)
 	}
 	return sourceledger.VerificationState(ctx, m.sourceObservations, root)
+}
+
+// SettledRevision flushes the root's watcher barrier before evaluating
+// authoritative verification gates.
+func (m *Service) SettledRevision(ctx context.Context, root string) (string, string) {
+	if m.verificationSource != nil {
+		return m.verificationSource(ctx, root)
+	}
+	return sourceledger.SettledVerificationState(ctx, m.sourceObservations, root)
 }
 
 // boundaryTime is the current user-intent boundary; older evidence does not count.

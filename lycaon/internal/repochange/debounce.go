@@ -24,21 +24,22 @@ type debouncer struct {
 }
 
 // WaitQuiet blocks until dir has had no pending burst for grace, or until
-// maxWait elapses. A consumer that builds from delivered events rather than
-// from disk calls it first, because a write that just landed reaches the
-// platform stream and the debouncer only after a delay.
-func WaitQuiet(ctx context.Context, dir string, grace, maxWait time.Duration) {
-	processWatchers().debounce.WaitQuiet(ctx, dir, grace, maxWait)
+// maxWait elapses. It reports whether dir reached quiet before maxWait or ctx.
+func WaitQuiet(ctx context.Context, dir string, grace, maxWait time.Duration) bool {
+	return processWatchers().debounce.WaitQuiet(ctx, dir, grace, maxWait)
 }
 
 // WaitQuiet is the instance form of the package-level WaitQuiet.
-func (d *debouncer) WaitQuiet(ctx context.Context, dir string, grace, maxWait time.Duration) {
-	if d == nil || maxWait <= 0 {
-		return
+func (d *debouncer) WaitQuiet(ctx context.Context, dir string, grace, maxWait time.Duration) bool {
+	if d == nil {
+		return true
+	}
+	if maxWait <= 0 {
+		return false
 	}
 	key, err := filepath.Abs(dir)
 	if err != nil || key == "" {
-		return
+		return false
 	}
 	started := time.Now()
 	deadline := started.Add(maxWait)
@@ -57,11 +58,11 @@ func (d *debouncer) WaitQuiet(ctx context.Context, dir string, grace, maxWait ti
 		}
 		quietFor := time.Since(last)
 		if !busy && quietFor >= grace {
-			return
+			return true
 		}
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
-			return
+			return false
 		}
 		pause := grace - quietFor
 		if busy || pause <= 0 {
@@ -74,7 +75,7 @@ func (d *debouncer) WaitQuiet(ctx context.Context, dir string, grace, maxWait ti
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return
+			return false
 		case <-timer.C:
 		}
 	}

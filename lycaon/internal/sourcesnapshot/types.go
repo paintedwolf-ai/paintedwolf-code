@@ -240,4 +240,7 @@ type Request struct {
 	// Unwatched surveys every root in full and binds no watcher, for a folder
 	// observed only around one command.
 	Unwatched bool
+	// Settle flushes each watched root's platform watcher barrier before
+	// reading pending deltas, for authoritative gate decisions.
+	Settle bool
 }

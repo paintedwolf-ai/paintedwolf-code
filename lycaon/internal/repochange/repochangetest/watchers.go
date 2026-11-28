@@ -63,3 +63,11 @@ func Watch(t testing.TB, root string) {
 	}
 	repochange.WaitQuiet(t.Context(), root, repochange.DefaultDebounce, 5*time.Second)
 }
+
+// DisableSentinel forces the watcher to report that it cannot prove delivery.
+func DisableSentinel(t testing.TB) {
+	t.Helper()
+	deny := func(string, string) bool { return false }
+	previous := repochange.SentinelDeviceCheckForTest.Swap(&deny)
+	t.Cleanup(func() { repochange.SentinelDeviceCheckForTest.Store(previous) })
+}

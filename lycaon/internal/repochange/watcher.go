@@ -46,6 +46,7 @@ type worktreeWatcher struct {
 	limitReported bool
 	refs          refObserver
 	debounce      *debouncer
+	syncCh        chan chan struct{}
 }
 
 func newWorktreeWatcher(ctx context.Context, root string, maxDirs int, budget *watchfd.Budget) (*worktreeWatcher, error) {
@@ -71,6 +72,7 @@ func newWorktreeWatcher(ctx context.Context, root string, maxDirs int, budget *w
 		done:      make(chan struct{}),
 		watched:   map[string]int{},
 		refs:      refObserver{root: root, physicalRoot: physicalRoot},
+		syncCh:    make(chan chan struct{}),
 	}
 	if w.addMeasuredDir(root) != addRegistered {
 		w.setTruncated(1)
@@ -293,57 +295,7 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 			if !ok {
 				return
 			}
-			// Permission changes can make previously unreadable paths discoverable.
-			if ev.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove|fsnotify.Rename|fsnotify.Chmod) == 0 {
-				continue
-			}
-			if ev.Name == w.root && ev.Op == fsnotify.Write {
-				continue
-			}
-			if ev.Op&(fsnotify.Remove|fsnotify.Rename) != 0 {
-				w.forgetRemovedTree(ev.Name)
-			}
-			parent := filepath.Dir(ev.Name)
-			if watchfd.EntryDescriptors && ev.Op&(fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 && w.watchesDir(parent) {
-				entries, err := os.ReadDir(parent)
-				if err == nil {
-					if !w.repriceDir(parent, watchfd.Cost(len(entries))) {
-						w.noteUnwatchedDir()
-					}
-				}
-			}
-			if w.refs.contains(ev.Name) {
-				w.refs.observe(ctx, ev, w.addMeasuredDir)
-			}
-			rel, err := filepath.Rel(w.root, ev.Name)
-			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-				continue
-			}
-			relSlash := filepath.ToSlash(rel)
-			if filepath.Base(relSlash) == ".git" && filepath.Dir(relSlash) != "." && ev.Op&(fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 {
-				checkout := filepath.ToSlash(filepath.Dir(relSlash))
-				w.forgetRemovedTree(filepath.Join(w.root, filepath.FromSlash(checkout)))
-				w.debounce.NotifyWorktreeChanges(ctx, w.root, []WorktreeChange{{Path: checkout, Kind: WorktreeChangeStructural}}, SourceWatcher)
-				continue
-			}
-			if w.scope.BoundaryPath(relSlash, false) != "" {
-				continue
-			}
-			// A symlink is an entry of its parent; the tree it points at is
-			// outside the watched geometry, as it is for the catalog.
-			info, statErr := os.Lstat(ev.Name)
-			isDir := statErr == nil && info.IsDir()
-			if ev.Op&fsnotify.Create != 0 && isDir && relSlash == ".git" {
-				// A repository appeared under a watched root; start watching
-				// its ref surfaces.
-				w.refs.arm(w.addMeasuredDir)
-			}
-			if ev.Op&fsnotify.Create != 0 && isDir && !w.recursive && w.scope.BoundaryDir(relSlash) == "" {
-				if w.addMeasuredDir(ev.Name) != addRegistered {
-					w.noteUnwatchedDir()
-				}
-			}
-			w.debounce.NotifyWorktreeChanges(ctx, w.root, []WorktreeChange{{Path: relSlash, Kind: classifyWatcherChange(ev.Op, isDir, statErr)}}, SourceWatcher)
+			w.handleWatcherEvent(ctx, ev)
 		case err, ok := <-w.watcher.ErrorChannel():
 			if !ok {
 				return
@@ -364,8 +316,68 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 			}
 			w.debounce.NotifyWorktreeChanges(ctx, w.root, []WorktreeChange{{Path: ".", Kind: WorktreeChangeResync}}, SourceWatcher)
 			w.refs.reconcile(ctx, w.addMeasuredDir)
+		case ack := <-w.syncCh:
+			ok := w.drainPending(ctx)
+			close(ack)
+			if !ok {
+				return
+			}
 		}
 	}
+}
+
+func (w *worktreeWatcher) handleWatcherEvent(ctx context.Context, ev fsnotify.Event) {
+	// Permission changes can make previously unreadable paths discoverable.
+	if ev.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove|fsnotify.Rename|fsnotify.Chmod) == 0 {
+		return
+	}
+	if ev.Name == w.root && ev.Op == fsnotify.Write {
+		return
+	}
+	if ev.Op&(fsnotify.Remove|fsnotify.Rename) != 0 {
+		w.forgetRemovedTree(ev.Name)
+	}
+	parent := filepath.Dir(ev.Name)
+	if watchfd.EntryDescriptors && ev.Op&(fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 && w.watchesDir(parent) {
+		entries, err := os.ReadDir(parent)
+		if err == nil {
+			if !w.repriceDir(parent, watchfd.Cost(len(entries))) {
+				w.noteUnwatchedDir()
+			}
+		}
+	}
+	if w.refs.contains(ev.Name) {
+		w.refs.observe(ctx, ev, w.addMeasuredDir)
+	}
+	rel, err := filepath.Rel(w.root, ev.Name)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return
+	}
+	relSlash := filepath.ToSlash(rel)
+	if filepath.Base(relSlash) == ".git" && filepath.Dir(relSlash) != "." && ev.Op&(fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 {
+		checkout := filepath.ToSlash(filepath.Dir(relSlash))
+		w.forgetRemovedTree(filepath.Join(w.root, filepath.FromSlash(checkout)))
+		w.debounce.NotifyWorktreeChanges(ctx, w.root, []WorktreeChange{{Path: checkout, Kind: WorktreeChangeStructural}}, SourceWatcher)
+		return
+	}
+	if w.scope.BoundaryPath(relSlash, false) != "" {
+		return
+	}
+	// A symlink is an entry of its parent; the tree it points at is
+	// outside the watched geometry, as it is for the catalog.
+	info, statErr := os.Lstat(ev.Name)
+	isDir := statErr == nil && info.IsDir()
+	if ev.Op&fsnotify.Create != 0 && isDir && relSlash == ".git" {
+		// A repository appeared under a watched root; start watching
+		// its ref surfaces.
+		w.refs.arm(w.addMeasuredDir)
+	}
+	if ev.Op&fsnotify.Create != 0 && isDir && !w.recursive && w.scope.BoundaryDir(relSlash) == "" {
+		if w.addMeasuredDir(ev.Name) != addRegistered {
+			w.noteUnwatchedDir()
+		}
+	}
+	w.debounce.NotifyWorktreeChanges(ctx, w.root, []WorktreeChange{{Path: relSlash, Kind: classifyWatcherChange(ev.Op, isDir, statErr)}}, SourceWatcher)
 }
 
 // recoverOverflow closes a dropped-event window. The stream itself stays
