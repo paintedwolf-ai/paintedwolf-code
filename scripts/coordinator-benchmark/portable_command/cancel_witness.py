@@ -85,6 +85,7 @@ def run_cancellation_turn(app, session_id, project_id, db_path, surface, send_ca
         'st01_st03_stop_fence_separate': True,
         'abort_barrier': 'active_child_running_verified',
         'aborted_child_running_pre_abort': still_running,
+        'observed_running_execution_id': active_eid,
         'aborted_child_id': last_child[0] if last_child else '',
         'aborted_child_state': last_child[1] if last_child else '',
         'aborted_child_status': last_child[2] if last_child else None,
