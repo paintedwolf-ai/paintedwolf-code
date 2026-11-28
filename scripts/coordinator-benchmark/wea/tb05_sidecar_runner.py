@@ -695,7 +695,14 @@ def _run_e03_slot(
     doc_resp: dict[str, Any] = {}
     apply_ok: bool | None = None
     apply_detail: dict[str, Any] = {}
+    read_res: dict[str, Any] = {}
     write_res: dict[str, Any] = {}
+    attributions: list[dict[str, Any]] = []
+    edit_ops: list[dict[str, Any]] = []
+    obs = EditsObserver(proj, app_dir / "store.db") if scenario == "person_unsaved_draft" else None
+    if obs is not None:
+        obs.capture_pre([rel_path])
+    expected_combined_bytes: bytes | None = None
     eval_rec: dict[str, Any] = {"scenario": scenario, "pre_disk_sha256": pre_sha}
 
     try:
@@ -703,18 +710,22 @@ def _run_e03_slot(
         rev = int(doc.get("revision") or 0)
 
         if scenario == "person_unsaved_draft":
+            # Perform a qualifying read of live.txt before the person introduces an unsaved
+            # draft so the edit exercises non-overlapping rebase + unsaved-draft preservation
+            # under PR #2898 + PR #2903 read-basis rules.
+            app.request(f"/v1/sessions/{session_id}/prompts", {"operation_id": str(uuid.uuid4()), "text": "Edit bottom"})
+            _send_tool_call(app, session_id, "update_progress", {"content": "## Progress\n- [ ] E03 draft\n"})
+            _, read_res, _ = _send_tool_call(app, session_id, "command", {"command": f"cat {rel_path}"})
             doc = _replace_editor_doc(
                 app, project_id, doc["id"], client_id="tb05-win1", expected_revision=rev,
                 content="top_person\nmid\nbottom\n", session_id=session_id,
             )
-            app.request(f"/v1/sessions/{session_id}/prompts", {"operation_id": str(uuid.uuid4()), "text": "Edit bottom"})
-            _send_tool_call(app, session_id, "update_progress", {"content": "## Progress\n- [ ] E03 draft\n"})
-            _send_tool_call(app, session_id, "command", {"command": f"cat {rel_path}"})
             _, write_res, _ = _send_tool_call(
                 app, session_id, "command",
                 {"command": f'edit --path {rel_path} --old-string "bottom" --new-string "bottom_agent"'},
                 checkpoint_policy="approve_chat",
             )
+            expected_combined_bytes = b"top_person\nmid\nbottom_agent\n"
             doc_resp = _open_editor_doc(app, project_id, root_id, rel_path, "tb05-win1")
         elif scenario == "external_program_merge":
             doc = _replace_editor_doc(
@@ -782,23 +793,44 @@ def _run_e03_slot(
         rel_path=rel_path,
         doc_resp=doc_resp if isinstance(doc_resp, dict) else None,
     )
+    if expected_combined_bytes is not None:
+        eval_rec["expected_post_sha256"] = sha256_bytes(expected_combined_bytes)
+    if obs is not None:
+        edits_obs = obs.capture_post([rel_path], session_id=session_id)
+        attributions, edit_ops = _extract_edit_records_from_db(
+            edits_obs,
+            rel_path=rel_path,
+            read_result=read_res,
+            write_result=write_res,
+            disk_sha_before_write=pre_sha,
+            expected_after_sha=eval_rec.get("expected_post_sha256") or "",
+        )
     eval_rec.update({"post_disk_sha256": post_disk_sha, "open_document_sha256": open_doc_sha})
     verdict = evaluate_e03_slot(eval_rec)
+    typed_e03: dict[str, Any] = {
+        "scenario": scenario,
+        "editor_document": {k: doc_resp.get(k) for k in ("id", "revision", "dirty", "diverged", "absent", "encoding", "eol") if isinstance(doc_resp, dict)},
+        "write_result": write_res,
+        "resolve_result": apply_detail,
+    }
+    if read_res:
+        typed_e03["read_result"] = read_res
+        typed_e03["refusal_code"] = _extract_refusal_code(write_res)
+        typed_e03["attributions"] = attributions
+        typed_e03["edit_operations"] = edit_ops
+    indep_e03: dict[str, Any] = {
+        "rel_path": rel_path,
+        "pre_disk_sha256": pre_sha,
+        "post_disk_sha256": post_disk_sha,
+        "open_document_sha256": open_doc_sha,
+    }
+    if expected_combined_bytes is not None:
+        indep_e03["expected_post_sha256"] = eval_rec["expected_post_sha256"]
     return _build_receipt(
         slot=slot,
         prov=prov,
-        typed_result={
-            "scenario": scenario,
-            "editor_document": {k: doc_resp.get(k) for k in ("id", "revision", "dirty", "diverged", "absent", "encoding", "eol") if isinstance(doc_resp, dict)},
-            "write_result": write_res,
-            "resolve_result": apply_detail,
-        },
-        independent_observation={
-            "rel_path": rel_path,
-            "pre_disk_sha256": pre_sha,
-            "post_disk_sha256": post_disk_sha,
-            "open_document_sha256": open_doc_sha,
-        },
+        typed_result=typed_e03,
+        independent_observation=indep_e03,
         verdict=verdict,
         duration_ms=int((time.monotonic() - t0) * 1000),
     )
@@ -823,6 +855,7 @@ def _run_e08_slot(
     expect_refused = False
     expected_after_bytes: bytes | None = None
     outside_seg = b""
+    read_cmd = f"cat {rel_path}"
     edit_cmd = f'edit --path {rel_path} --old-string "TARGET" --new-string "EDITED"'
 
     if scenario == "mixed_eol":
@@ -834,6 +867,9 @@ def _run_e08_slot(
         expected_after_bytes = b"\xef\xbb\xbfL1\r\nEDITED\r\nL3\r\n"
         outside_seg = b"\xef\xbb\xbfL1\r\n"
     elif scenario == "utf16le_bom":
+        # Raw `cat` outputs undecoded UTF-16LE bytes which `command_source_delivery.go`
+        # intentionally refuses to credit as a text read basis; use decoded `summarize --path`.
+        read_cmd = f"summarize --path {rel_path}"
         raw = "L1\r\nTARGET\r\nL3\r\n".encode("utf-16")
         expected_after_bytes = "L1\r\nEDITED\r\nL3\r\n".encode("utf-16")
         outside_seg = raw[:8]
@@ -841,6 +877,10 @@ def _run_e08_slot(
         raw = b"hdr\n\xff\xfe\x00binary\nTARGET\n"
         expect_refused = True
     elif scenario == "very_long_line":
+        # Deliver the relevant range (line 2: TARGET) directly so command output is not truncated
+        # by the 32 KiB inline budget; confirm delivery/coverage from the receipt and surface any
+        # whole-file read-basis limitation explicitly without faking a pass.
+        read_cmd = f"sed -n '2p' {rel_path}"
         long_line = ("A" * 65536).encode("ascii")
         raw = long_line + b"\nTARGET\n" + long_line + b"\n"
         expected_after_bytes = long_line + b"\nEDITED\n" + long_line + b"\n"
@@ -867,12 +907,15 @@ def _run_e08_slot(
     pre_sha = sha256_bytes(raw)
 
     session_id, _, _ = _open_session(app, proj)
+    obs = EditsObserver(proj, app_dir / "store.db") if scenario in {"utf16le_bom", "very_long_line"} else None
+    if obs is not None:
+        obs.capture_pre([rel_path])
     read_res: dict[str, Any] = {}
     write_res: dict[str, Any] = {}
     try:
         app.request(f"/v1/sessions/{session_id}/prompts", {"operation_id": str(uuid.uuid4()), "text": f"TB05 E08 {scenario}"})
         _send_tool_call(app, session_id, "update_progress", {"content": f"## Progress\n- [ ] {slot['slot_id']}\n"})
-        _, read_res, _ = _send_tool_call(app, session_id, "command", {"command": f"cat {rel_path}"})
+        _, read_res, _ = _send_tool_call(app, session_id, "command", {"command": read_cmd})
         _, write_res, _ = _send_tool_call(app, session_id, "command", {"command": edit_cmd}, checkpoint_policy="approve_chat")
     finally:
         with contextlib.suppress(Exception):
@@ -880,6 +923,19 @@ def _run_e08_slot(
 
     post_bytes = target.read_bytes()
     post_sha = sha256_bytes(post_bytes)
+    refusal_code = _extract_refusal_code(write_res)
+    attributions: list[dict[str, Any]] = []
+    edit_ops: list[dict[str, Any]] = []
+    if obs is not None:
+        edits_obs = obs.capture_post([rel_path], session_id=session_id)
+        attributions, edit_ops = _extract_edit_records_from_db(
+            edits_obs,
+            rel_path=rel_path,
+            read_result=read_res,
+            write_result=write_res,
+            disk_sha_before_write=pre_sha,
+            expected_after_sha=sha256_bytes(expected_after_bytes) if expected_after_bytes is not None else "",
+        )
     eval_rec: dict[str, Any] = {
         "scenario": scenario,
         "pre_disk_sha256": pre_sha,
@@ -898,22 +954,52 @@ def _run_e08_slot(
         eval_rec["canary_scan"] = scan_for_canaries([canary_tok], paths=[app_dir / "sidecar.log"])
 
     verdict = evaluate_e08_slot(eval_rec)
+    typed_e08: dict[str, Any] = {
+        "scenario": scenario,
+        "read_command": read_cmd,
+        "read_result": read_res,
+        "write_result": write_res,
+        "refusal_code": refusal_code,
+    }
+    indep_e08: dict[str, Any] = {
+        "rel_path": rel_path,
+        "size_bytes": len(raw),
+        "pre_disk_sha256": pre_sha,
+        "post_disk_sha256": post_sha,
+        "canary_scan": eval_rec.get("canary_scan"),
+    }
+    if scenario in {"utf16le_bom", "very_long_line"}:
+        typed_e08["attributions"] = attributions
+        typed_e08["edit_operations"] = edit_ops
+        if expected_after_bytes is not None:
+            indep_e08["expected_post_sha256"] = sha256_bytes(expected_after_bytes)
+    if scenario == "utf16le_bom":
+        indep_e08["utf16le_bom_preserved"] = post_bytes.startswith(b"\xff\xfe")
+    if scenario == "very_long_line":
+        outputs = ((read_res or {}).get("command_program") or {}).get("outputs") or []
+        read_content = str((read_res or {}).get("content") or "")
+        indep_e08["range_delivery"] = {
+            "read_command": read_cmd,
+            "read_outcome": str((read_res or {}).get("outcome") or ""),
+            "outputs": outputs,
+            "delivered_target_line": "TARGET" in read_content,
+            "truncated": any(bool(o.get("truncated")) for o in outputs if isinstance(o, dict)),
+        }
+        if refusal_code == "EDITOR_DOCUMENT_READ_REQUIRED":
+            typed_e08["surface_limitation"] = {
+                "code": refusal_code,
+                "reason": (
+                    "Delivered range view of line 2 (TARGET) completed without truncation, "
+                    "but `edit` requires a whole-document read (`ReadWhole == true`) and no "
+                    "current product surface can deliver an inline whole-file read for a "
+                    f"{len(raw)}-byte file exceeding the inline command output budget."
+                ),
+            }
     return _build_receipt(
         slot=slot,
         prov=prov,
-        typed_result={
-            "scenario": scenario,
-            "read_result": read_res,
-            "write_result": write_res,
-            "refusal_code": _extract_refusal_code(write_res),
-        },
-        independent_observation={
-            "rel_path": rel_path,
-            "size_bytes": len(raw),
-            "pre_disk_sha256": pre_sha,
-            "post_disk_sha256": post_sha,
-            "canary_scan": eval_rec.get("canary_scan"),
-        },
+        typed_result=typed_e08,
+        independent_observation=indep_e08,
         verdict=verdict,
         duration_ms=int((time.monotonic() - t0) * 1000),
     )

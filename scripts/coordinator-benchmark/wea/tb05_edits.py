@@ -449,6 +449,13 @@ def evaluate_e03_slot(record: dict[str, Any]) -> dict[str, Any]:
                 "message": "Document bytes seen by the person do not match bytes on disk after slot.",
                 "details": {"document_sha256": doc_sha, "disk_sha256": disk_sha},
             })
+        expected_post = str(record.get("expected_post_sha256") or "")
+        if expected_post and disk_sha != expected_post:
+            failures.append({
+                "rule_id": "E03_EXPECTED_BYTES_MISMATCH",
+                "message": "Post-edit disk bytes do not match expected combined draft+agent SHA-256.",
+                "details": {"expected": expected_post, "actual": disk_sha},
+            })
 
     if record.get("expect_refused") and record.get("apply_outcome") == "completed":
         failures.append({
