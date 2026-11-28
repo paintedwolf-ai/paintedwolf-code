@@ -284,10 +284,11 @@ def _complete_progress(app: Any, session_id: str, prog_res: dict[str, Any], done
             try:
                 parsed = json.loads(line)
                 if isinstance(parsed, dict):
-                    if parsed.get("revision"):
-                        args["expected_revision"] = parsed["revision"]
-                    if parsed.get("item_ids"):
-                        args["item_ids"] = parsed["item_ids"]
+                    snap = parsed.get("snapshot") if isinstance(parsed.get("snapshot"), dict) else parsed
+                    if snap.get("revision"):
+                        args["expected_revision"] = snap["revision"]
+                    if snap.get("item_ids"):
+                        args["item_ids"] = snap["item_ids"]
                     break
             except Exception:
                 pass
