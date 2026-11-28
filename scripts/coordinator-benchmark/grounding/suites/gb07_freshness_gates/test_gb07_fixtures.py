@@ -1,9 +1,13 @@
 """Unit tests for GB07 (Freshness, closeout gates, friction: G01..G05, D5 tripled)."""
 from __future__ import annotations
 
+import json
+import pathlib
+import tempfile
 import unittest
 
 from grounding.checker import check_slot
+from grounding.inprocess_driver import validate_test_only_overlay
 from grounding.reference_resolver import resolve_citation
 from grounding.selectors import WORDING_VARIANTS
 from grounding.suites.gb07_freshness_gates import (
@@ -12,6 +16,16 @@ from grounding.suites.gb07_freshness_gates import (
     build_all_gb07_fixtures,
     build_gb07_fixture,
     validate_gb07_catalog,
+)
+from grounding.suites.gb07_freshness_gates.full_runner import (
+    GB07_EXECUTION_SPECS_BY_SELECTOR,
+    INPROCESS_OVERLAYS,
+    INPROCESS_SLOTS,
+    evaluate_wording_invariance,
+    main,
+    parse_and_validate_args,
+    select_gb07_runs,
+    validate_gb07_execution_map,
 )
 
 
@@ -45,6 +59,160 @@ class TestGB07CatalogAndFixtures(unittest.TestCase):
         self.assertEqual(fx2.expected_code, "COORDINATOR_GROUNDING_ESCALATED")
         self.assertTrue(fx3.expected_breaker_tripped)
         self.assertTrue(fx2.expected_breaker_tripped)
+
+    def test_full_runner_maps_all_34_base_slots_and_overlays(self) -> None:
+        summary = validate_gb07_execution_map()
+        self.assertEqual(summary["sidecar_slots"], 28)
+        self.assertEqual(summary["in_process_slots"], 6)
+        self.assertEqual(summary["base_slots"], 34)
+        self.assertEqual(summary["sidecar_d5_runs"], 84)
+        self.assertEqual(summary["in_process_d5_runs"], 18)
+        self.assertEqual(summary["d5_runs_total"], 102)
+
+        sidecar_catalog = {s.selector for s in ALL_GB07_SLOTS if s.lane == "sidecar"}
+        inproc_catalog = {s.selector for s in ALL_GB07_SLOTS if s.lane == "in_process"}
+        self.assertEqual(set(GB07_EXECUTION_SPECS_BY_SELECTOR.keys()), sidecar_catalog)
+        self.assertEqual(set(INPROCESS_SLOTS), inproc_catalog)
+        self.assertEqual(set(GB07_EXECUTION_SPECS_BY_SELECTOR.keys()) | set(INPROCESS_SLOTS), set(SLOTS_BY_SELECTOR.keys()))
+
+        # Verify test-only Go overlays exist, pass Decision 010 validation, and reference all 6 in-process slots + 3 D5 wordings
+        grounding_dir = pathlib.Path(__file__).resolve().parents[2]
+        combined_go_src = ""
+        replacements: dict[str, str] = {}
+        for target_rel, source_rel in INPROCESS_OVERLAYS:
+            src = grounding_dir / source_rel
+            self.assertTrue(src.is_file(), f"Missing overlay file: {src}")
+            replacements[target_rel] = str(src)
+            combined_go_src += "\n" + src.read_text(encoding="utf-8")
+        validated = validate_test_only_overlay(replacements)
+        self.assertEqual(len(validated), len(INPROCESS_OVERLAYS))
+        for sel in INPROCESS_SLOTS:
+            self.assertIn(sel, combined_go_src)
+        for w in WORDING_VARIANTS:
+            self.assertIn(f'"{w}"', combined_go_src)
+
+    def test_full_runner_sharding_partitions_84_sidecar_runs_disjointly(self) -> None:
+        all_runs = select_gb07_runs()
+        self.assertEqual(len(all_runs), 84)
+        sidecar_slots = [s for s in ALL_GB07_SLOTS if s.lane == "sidecar"]
+        expected_pairs = {(spec.selector, w) for spec in sidecar_slots for w in WORDING_VARIANTS}
+        self.assertEqual({(u.spec.selector, u.wording) for u in all_runs}, expected_pairs)
+
+        for total_shards in (1, 2, 3, 4, 7, 28):
+            seen_pairs: set[tuple[str, str]] = set()
+            selector_to_shard: dict[str, int] = {}
+            for shard_idx in range(total_shards):
+                shard_runs = select_gb07_runs(shard=shard_idx, shards=total_shards)
+                for u in shard_runs:
+                    pair = (u.spec.selector, u.wording)
+                    self.assertNotIn(pair, seen_pairs, f"Duplicate pair {pair} in shards={total_shards}")
+                    seen_pairs.add(pair)
+                    if u.spec.selector in selector_to_shard:
+                        self.assertEqual(
+                            selector_to_shard[u.spec.selector],
+                            shard_idx,
+                            f"Slot {u.spec.selector} split across shards for shards={total_shards}",
+                        )
+                    else:
+                        selector_to_shard[u.spec.selector] = shard_idx
+            self.assertEqual(seen_pairs, expected_pairs)
+            self.assertEqual(len(selector_to_shard), 28)
+
+    def test_cli_validation_filters_wording_invariance_and_dry_run(self) -> None:
+        g01_only = select_gb07_runs(families=("G01",))
+        self.assertEqual(len(g01_only), 21)  # 7 G01 slots x 3 wordings
+        g04_conf = select_gb07_runs(families=("G04",), wordings=("confident",))
+        self.assertEqual(len(g04_conf), 5)  # 5 G04 sidecar slots x 1 wording
+
+        with self.assertRaises(ValueError):
+            select_gb07_runs(shard=2, shards=2)
+        with self.assertRaises(ValueError):
+            select_gb07_runs(shard=0, shards=0)
+        with self.assertRaises(ValueError):
+            select_gb07_runs(families=("NOPE",))
+        with self.assertRaises(ValueError):
+            select_gb07_runs(wordings=("invalid",))
+
+        # CLI argument validation
+        with self.assertRaises(SystemExit):
+            parse_and_validate_args(["--product-root", "/tmp/d1", "--out-dir", "/tmp/out", "--inprocess-only", "--sidecar-only"])
+        with self.assertRaises(SystemExit):
+            parse_and_validate_args(["--product-root", "/tmp/d1", "--out-dir", "/tmp/out"])  # missing --engine-bin without --dry-run/--inprocess-only
+        with self.assertRaises(SystemExit):
+            parse_and_validate_args(["--product-root", "/tmp/d1", "--out-dir", "/tmp/out", "--dry-run", "--shard", "3", "--shards", "2"])
+        with self.assertRaises(SystemExit):
+            parse_and_validate_args(["--product-root", "/tmp/d1", "--out-dir", "/tmp/out", "--dry-run", "--families", "UNKNOWN"])
+
+        parsed = parse_and_validate_args(
+            [
+                "--product-root",
+                "/tmp/d1",
+                "--out-dir",
+                "/tmp/out",
+                "--dry-run",
+                "--sidecar-only",
+                "--families",
+                "G01,G02",
+                "--wordings",
+                "confident,hedged",
+                "--shard",
+                "1",
+                "--shards",
+                "2",
+                "--run-id",
+                "test-run",
+            ]
+        )
+        self.assertEqual(parsed.parsed_families, ["G01", "G02"])
+        self.assertEqual(parsed.parsed_wordings, ["confident", "hedged"])
+        self.assertTrue(parsed.dry_run)
+        self.assertTrue(parsed.sidecar_only)
+
+        # Sidecar --dry-run writes gb07-sidecar-summary.json and gb07-sidecar-divergences.jsonl cleanly
+        with tempfile.TemporaryDirectory(prefix="gb07-dryrun-") as td:
+            rc = main(
+                [
+                    "--product-root",
+                    "/tmp/d1",
+                    "--out-dir",
+                    td,
+                    "--dry-run",
+                    "--sidecar-only",
+                    "--run-id",
+                    "dry-run-check",
+                ]
+            )
+            self.assertEqual(rc, 0)
+            summary_path = pathlib.Path(td) / "gb07-sidecar-summary.json"
+            div_path = pathlib.Path(td) / "gb07-sidecar-divergences.jsonl"
+            self.assertTrue(summary_path.is_file())
+            self.assertTrue(div_path.is_file())
+            data = json.loads(summary_path.read_text(encoding="utf-8"))
+            self.assertEqual(data["card"], "GB07")
+            self.assertTrue(data["dry_run"])
+            self.assertEqual(data["base_slot_count"], 28)
+            self.assertEqual(data["run_count"], 84)
+
+        # D5 wording invariance evaluator
+        invariant_rows = [
+            {
+                "selector": "G01-01-fresh-receipt-unchanged-content",
+                "wording": w,
+                "passed": True,
+                "observed_codes": [],
+                "worker_report_refusals": None,
+            }
+            for w in WORDING_VARIANTS
+        ]
+        inv = evaluate_wording_invariance(invariant_rows)
+        self.assertEqual(len(inv), 1)
+        self.assertTrue(inv[0]["checked"])
+        self.assertTrue(inv[0]["invariant"])
+
+        divergent_rows = list(invariant_rows)
+        divergent_rows[2] = dict(divergent_rows[2], passed=False)
+        inv_div = evaluate_wording_invariance(divergent_rows)
+        self.assertFalse(inv_div[0]["invariant"])
 
 
 if __name__ == "__main__":
