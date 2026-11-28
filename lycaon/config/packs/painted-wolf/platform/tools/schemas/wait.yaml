@@ -46,21 +46,10 @@ schema:
         required: [kind]
         additionalProperties: false
     capability_request:
-      type: object
       description: Exact loopback authority for http_ready or port_ready. Never needed for public HTTP(S).
       properties:
         loopback_connect:
-          type: object
           description: Request loopback connection authority for exact ports.
-          properties:
-            ports:
-              type: array
-              minItems: 1
-              maxItems: 8
-              uniqueItems: true
-              description: Loopback TCP ports the readiness probe may connect to.
-              items: {type: integer, minimum: 1, maximum: 65535}
-          additionalProperties: false
+          properties: {ports: {description: Loopback TCP ports the readiness probe may connect to.}}
       required: [loopback_connect]
-      additionalProperties: false
   additionalProperties: false

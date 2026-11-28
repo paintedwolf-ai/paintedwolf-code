@@ -36,6 +36,9 @@ const (
 	SharedIntake        = PlatformShared + "/intake"
 	SharedWorkflowDiag  = PlatformShared + "/workflow-diagnostics"
 
+	// CapabilityRequestFields holds the capability_request field schemas tools share.
+	CapabilityRequestFields = PlatformTools + "/capability-request-fields.yaml"
+
 	// Platform host shells — operator YAML each subsystem reads by a fixed path.
 	Providers           = PlatformHost + "/providers.yaml"
 	CredentialStoreRead = PlatformHost + "/credential-store-read.yaml"
@@ -168,6 +171,8 @@ const (
 )
 
 var consumedPackYAMLFiles = map[Rel]struct{}{
+	CapabilityRequestFields: {},
+
 	CredentialStoreRead: {},
 	EvidenceKinds:       {},
 	PlatformFlows + "/" + WorkflowRegistryFile: {},

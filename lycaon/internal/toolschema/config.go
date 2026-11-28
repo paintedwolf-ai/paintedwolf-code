@@ -51,8 +51,17 @@ func ValidToolName(name string) bool {
 	return toolNameStem.MatchString(strings.TrimSpace(name))
 }
 
-// ParseEntry unmarshals a single-tool unit body (Entry at document root).
-func ParseEntry(data []byte) (Entry, error) {
+// ParseEntry unmarshals tool name's unit body (Entry at document root) and fills
+// its capability_request from the shared field schemas.
+func ParseEntry(name string, data []byte) (Entry, error) {
+	entry, err := parseEntry(data)
+	if err != nil {
+		return Entry{}, err
+	}
+	return entry.withCapabilityRequest(name)
+}
+
+func parseEntry(data []byte) (Entry, error) {
 	var entry Entry
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
@@ -134,7 +143,7 @@ func LoadSchemaDir(dir string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-		entry, err := ParseEntry(data)
+		entry, err := ParseEntry(stem, data)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}

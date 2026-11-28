@@ -8,21 +8,21 @@ import (
 )
 
 func TestParseEntryRejectsUnknownFields(t *testing.T) {
-	if _, err := toolschema.ParseEntry([]byte("description: x\narg_aliases: {}\n")); err == nil {
+	if _, err := toolschema.ParseEntry("render", []byte("description: x\narg_aliases: {}\n")); err == nil {
 		t.Fatal("unknown schema field accepted")
 	}
 }
 
 func TestParseEntryRejectsUnknownDescriptionEffectKey(t *testing.T) {
 	raw := []byte("description: x\ndescription_effects:\n  not_an_effect: extra\nschema: {}\n")
-	if _, err := toolschema.ParseEntry(raw); err == nil {
+	if _, err := toolschema.ParseEntry("render", raw); err == nil {
 		t.Fatal("unknown description_effects key accepted")
 	}
 }
 
 func TestParseEntryAcceptsValidDescriptionEffects(t *testing.T) {
 	raw := []byte("description: base\ndescription_effects:\n  mutation: m\n  external_exec: e\n  external_exec_selector: s\n  network_egress: n\nschema: {}\n")
-	entry, err := toolschema.ParseEntry(raw)
+	entry, err := toolschema.ParseEntry("render", raw)
 	if err != nil {
 		t.Fatalf("ParseEntry: %v", err)
 	}
@@ -32,7 +32,7 @@ func TestParseEntryAcceptsValidDescriptionEffects(t *testing.T) {
 }
 
 func TestParseEntryAcceptsTags(t *testing.T) {
-	entry, err := toolschema.ParseEntry([]byte("description: render\ntags: [visual, design]\nschema: {}\n"))
+	entry, err := toolschema.ParseEntry("render", []byte("description: render\ntags: [visual, design]\nschema: {}\n"))
 	if err != nil {
 		t.Fatalf("ParseEntry: %v", err)
 	}
