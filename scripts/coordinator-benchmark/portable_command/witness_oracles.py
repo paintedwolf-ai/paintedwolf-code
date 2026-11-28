@@ -90,9 +90,12 @@ def inspect_live_witnesses(case, *, project_dir, audit, receipts, effects, last_
         db_prog = wm.get('db_program') or {}
         c_idle, c_after = wm.get('exec_count_at_idle'), wm.get('exec_count_after_wait')
         after_absent = not (proj / 'after').exists()
+        obs_eid = wm.get('observed_running_execution_id')
+        settled_eid = wm.get('aborted_child_id')
         active_child_ok = (
             wm.get('abort_barrier') in {'active_child_started', 'active_child_running_verified'}
-            and wm.get('aborted_child_running_pre_abort', True) is True
+            and wm.get('aborted_child_running_pre_abort') is True
+            and isinstance(obs_eid, str) and bool(obs_eid) and obs_eid == settled_eid
             and wm.get('aborted_child_started') is True
             and wm.get('aborted_child_invoked') is True
             and wm.get('aborted_child_certainty') == 'none'

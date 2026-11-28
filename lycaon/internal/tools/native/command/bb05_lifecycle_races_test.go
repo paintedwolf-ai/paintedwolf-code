@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -120,13 +121,13 @@ func TestBB05_M07_HoldAdmissionVsStopBothWinners(t *testing.T) {
 		var stopCalls atomic.Int32
 
 		_, err := sup.RunProgram(t.Context(), root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
-			var setStop func(func())
+			var setStop func(func(bgprocess.TerminationReason))
 			var holdErr error
 			jobCtx, setStop, release, holdErr = sup.Hold(ctx)
 			if holdErr != nil {
 				return toolcontract.ProducerResult{}, holdErr
 			}
-			setStop(func() { stopCalls.Add(1) })
+			setStop(func(bgprocess.TerminationReason) { stopCalls.Add(1) })
 			close(held)
 			return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted}, nil
 		})
@@ -199,11 +200,8 @@ func TestBB05_M07_HoldAdmissionVsStopBothWinners(t *testing.T) {
 	})
 }
 
-// M07 + F04 (ST02 territory): Hold callback install before vs after Stop.
-// F04 belongs to the separate Stop prerequisite (../paintedwolf-portable-command-stop/STATUS.md)
-// and is not duplicated in BB09. This test preserves the controlled baseline handoff
-// and records the callback-count discrepancy; when ST02 lands, the regression must
-// assert exactly one callback invocation across both handoff winners.
+// M07 + ST02: Hold callback install before vs after Stop must deliver exactly
+// one callback invocation across both handoff winners.
 func TestBB05_M07_HoldCallbackInstallBeforeAndAfterStop(t *testing.T) {
 	t.Run("callback_before_stop", func(t *testing.T) {
 		sup := &command.ProgramSupervisor{}
@@ -213,13 +211,13 @@ func TestBB05_M07_HoldCallbackInstallBeforeAndAfterStop(t *testing.T) {
 		var cbCount atomic.Int32
 
 		_, err := sup.RunProgram(t.Context(), root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
-			var setStop func(func())
+			var setStop func(func(bgprocess.TerminationReason))
 			var holdErr error
 			jobCtx, setStop, release, holdErr = sup.Hold(ctx)
 			if holdErr != nil {
 				return toolcontract.ProducerResult{}, holdErr
 			}
-			setStop(func() { cbCount.Add(1) })
+			setStop(func(bgprocess.TerminationReason) { cbCount.Add(1) })
 			return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted}, nil
 		})
 		testutil.FailErr(t, "run program", err)
@@ -243,7 +241,7 @@ func TestBB05_M07_HoldCallbackInstallBeforeAndAfterStop(t *testing.T) {
 		sup := &command.ProgramSupervisor{}
 		root := bb05RootInvocation("sess-cb-2", "prog-cb-2")
 		var jobCtx context.Context
-		var setStop func(func())
+		var setStop func(func(bgprocess.TerminationReason))
 		var release func()
 		var cbCount atomic.Int32
 
@@ -256,15 +254,14 @@ func TestBB05_M07_HoldCallbackInstallBeforeAndAfterStop(t *testing.T) {
 
 		// Stop runs between Hold registration and setStop installation.
 		sup.Stop(root.SessionID)
-		setStop(func() { cbCount.Add(1) })
+		setStop(func(bgprocess.TerminationReason) { cbCount.Add(1) })
 
-		// Baseline guarantees jobCtx cancellation and single terminal settlement.
-		// F04 (ST02 territory): supervisedJob lacks an ended latch so cbCount is 0
-		// on baseline; ST02 must latch ended state and assert cbCount == 1 here.
 		if !errors.Is(context.Cause(jobCtx), command.ErrProgramStopped) {
 			t.Fatalf("jobCtx cause = %v, want ErrProgramStopped", context.Cause(jobCtx))
 		}
-		t.Logf("baseline observation (F04 / ST02 territory): setStop after Stop -> cbCount=%d (ST02 target: 1)", cbCount.Load())
+		if cbCount.Load() != 1 {
+			t.Fatalf("callback after Stop invoked %d times, want 1 (ST02 latch)", cbCount.Load())
+		}
 
 		var settled atomic.Int32
 		var wasStopped atomic.Bool

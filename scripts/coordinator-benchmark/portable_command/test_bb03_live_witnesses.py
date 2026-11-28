@@ -107,6 +107,7 @@ class BB03LiveWitnessOracleTests(unittest.TestCase):
             turns = [{'program': case['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}]
             wm = {
                 'abort_barrier': 'active_child_running_verified', 'aborted_child_running_pre_abort': True,
+                'observed_running_execution_id': 'e3', 'aborted_child_id': 'e3',
                 'aborted_child_started': True, 'aborted_child_invoked': True,
                 'aborted_child_certainty': 'none', 'aborted_child_status': 130,
                 'db_program': {'state': 'interrupted', 'status_code': 130, 'stop_code': 'TOOL_OWNER_INTERRUPTED'},
@@ -116,6 +117,15 @@ class BB03LiveWitnessOracleTests(unittest.TestCase):
             obs, audit = observe.build_observation(case, session_id='sess1234', identity=IDENT, project_dir=proj, db_path=dbp, sidecar_log=lp, baseline_hashes=base, turn_records=turns, prelude_records=[], witness_meta=wm)
             self.assertEqual(audit['observation_gaps'], [])
             self.assertTrue(grading.grade_case(case, obs, proj, IDENT)['passed'])
+            # Negative controls: missing pre-Abort running observation or substituted execution ID MUST fail.
+            missing_obs_wm = {k: v for k, v in wm.items() if k != 'aborted_child_running_pre_abort'}
+            obs_missing, _ = observe.build_observation(case, session_id='sess1234', identity=IDENT, project_dir=proj, db_path=dbp, sidecar_log=lp, baseline_hashes=base, turn_records=turns, prelude_records=[], witness_meta=missing_obs_wm)
+            self.assertFalse(obs_missing['facts']['admission_closed'])
+            self.assertFalse(grading.grade_case(case, obs_missing, proj, IDENT)['passed'])
+            sub_eid_wm = {**wm, 'observed_running_execution_id': 'e2'}
+            obs_sub, _ = observe.build_observation(case, session_id='sess1234', identity=IDENT, project_dir=proj, db_path=dbp, sidecar_log=lp, baseline_hashes=base, turn_records=turns, prelude_records=[], witness_meta=sub_eid_wm)
+            self.assertFalse(obs_sub['facts']['admission_closed'])
+            self.assertFalse(grading.grade_case(case, obs_sub, proj, IDENT)['passed'])
             # Pre-start cancellation control (started=0, invoked=0, certainty=unknown): distinct schedule MUST NOT pass active-child barrier or loosen authority.
             db = sqlite3.connect(dbp)
             db.execute("UPDATE invocation_program_executions SET effect_certainty='unknown' WHERE id='e3'")
