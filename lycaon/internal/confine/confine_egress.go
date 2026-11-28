@@ -469,12 +469,9 @@ func (b *egressBrokerT) reportHTTPOutcome(token string, ep egressproxy.Endpoint,
 	if token == "" || ep.Host == "" {
 		return
 	}
-	var connectedCmd EgressCommand
-	connected := false
 	b.mu.Lock()
-	cmd, attributed := b.tokens[token]
-	if !attributed {
-		b.mu.Unlock()
+	defer b.mu.Unlock()
+	if _, attributed := b.tokens[token]; !attributed {
 		return
 	}
 	for i := range b.egress[token] {
@@ -485,16 +482,10 @@ func (b *egressBrokerT) reportHTTPOutcome(token string, ep egressproxy.Endpoint,
 		h.ResponseStatus = statusCode
 		if requestErr == nil {
 			h.Outcome = "response_received"
-			connectedCmd = cmd
-			connected = true
 		} else {
 			h.Outcome = "request_failed"
 		}
-		break
-	}
-	b.mu.Unlock()
-	if connected {
-		observeBrokerConnectionWEA(connectedCmd, ep)
+		return
 	}
 }
 

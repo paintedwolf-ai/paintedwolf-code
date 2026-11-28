@@ -3,6 +3,7 @@ package wea_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -694,4 +695,182 @@ func TestTB11WiredEndToEndParityAndContradictions(t *testing.T) {
 			t.Fatalf("expected synthetic checker to emit %q once with source linkage, got hits=%+v", want, synthHits)
 		}
 	}
+}
+
+type brokerTransportPairingRow struct {
+	Transport             string `json:"transport"`
+	HTTPStatus            string `json:"http_status"`
+	HostArrivals          int    `json:"host_arrivals"`
+	BrokerDecisionFacts   int    `json:"broker_decision_facts"`
+	BrokerConnectionFacts int    `json:"broker_connection_facts"`
+	Contradictions        int    `json:"contradictions"`
+}
+
+func TestTB11BrokerTransportCardinalityAndPairingReceipt(t *testing.T) {
+	testutil.RequireLineage(t, lineage.Supported())
+	curlPath, err := exec.LookPath("curl")
+	if err != nil {
+		t.Skip("curl is required to drive confined requests across broker transports")
+	}
+	ctx := context.Background()
+	addrs, err := confine.StartEgressBroker(t.TempDir(), net.Listen)
+	testutil.FailErr(t, "start confine egress broker", err)
+	defer func() { _ = confine.StopEgressBroker() }()
+
+	var hostArrivals atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hostArrivals.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	prevPosture := confine.EffectivePosture(confine.EgressCommand{})
+	confine.SetEgressPosture(confine.PostureAsk)
+	confine.SetEgressResolver(func(context.Context, confine.EgressCommand, egressproxy.Endpoint, *confine.EgressDetectionCitation) bool {
+		return true
+	})
+	defer func() {
+		confine.SetEgressPosture(prevPosture)
+		confine.SetEgressResolver(nil)
+	}()
+
+	const (
+		sessionID = "11111111-2222-3333-4444-555555555555"
+		projectID = testdbseed.DefaultProjectID
+	)
+
+	var (
+		mu            sync.Mutex
+		decisionCount = map[string]int{}
+		connCount     = map[string]int{}
+		emitted       []cmddiag.Finding
+	)
+
+	obs := cmddiag.NewObserver(cmddiag.Config{
+		Enabled:       true,
+		QueueCapacity: 64,
+		Now:           func() time.Time { return time.Date(2026, 11, 27, 16, 0, 0, 0, time.UTC) },
+		Sink: func(f cmddiag.Finding) {
+			mu.Lock()
+			emitted = append(emitted, f)
+			mu.Unlock()
+		},
+	})
+	restoreObs := cmddiag.SetObserver(obs)
+	defer func() {
+		restoreObs()
+		obs.Close()
+	}()
+
+	// Pass 1 runs with egressgate's real init() hooks intact to prove 0 contradictions
+	// across all 3 transports; Pass 2 audits exact 1:1 decision & connection callback cardinality.
+	cases := []struct {
+		transport string
+		actionID  string
+		curlArgs  func(target string) []string
+	}{
+		{
+			transport: "http_request",
+			actionID:  "act-card-http-req",
+			curlArgs: func(target string) []string {
+				return []string{"-s", "-o", "/dev/null", "-m", "5", "-w", "%{http_code}", "-x", "http://" + addrs.HTTP, target}
+			},
+		},
+		{
+			transport: "http_connect",
+			actionID:  "act-card-http-connect",
+			curlArgs: func(target string) []string {
+				return []string{"-s", "-o", "/dev/null", "-m", "5", "-w", "%{http_code}", "-p", "-x", "http://" + addrs.HTTP, target}
+			},
+		},
+		{
+			transport: "socks5",
+			actionID:  "act-card-socks5",
+			curlArgs: func(target string) []string {
+				return []string{"-s", "-o", "/dev/null", "-m", "5", "-w", "%{http_code}", "--socks5", addrs.SOCKS, target}
+			},
+		},
+	}
+
+	// Pass 1: Real egressgate init() hooks -> verify 0 contradictions in cmddiag.Observer.
+	for _, tc := range cases {
+		c := &confine.Confinement{Network: confine.NetworkProxyOnly, ProjectID: projectID, LoopbackConnect: true, HostExecution: true}
+		cmd := confine.EgressCommand{SessionID: sessionID, ProjectID: projectID, ActionID: tc.actionID + "-diag", ToolCallID: tc.actionID + "-diag"}
+		lease, err := confine.BindAction(c, cmd)
+		testutil.FailErr(t, "BindAction diag "+tc.transport, err)
+		execCmd, cleanup, err := confine.Command(ctx, os.Args[0], curlPath, tc.curlArgs(srv.URL+"/"+tc.transport), *c)
+		testutil.FailErr(t, "confine.Command diag "+tc.transport, err)
+		outBytes, runErr := execCmd.Output()
+		cleanup()
+		_ = lease.Close(ctx)
+		confine.ForgetEgressAction(sessionID, cmd.ActionID)
+		if runErr != nil || strings.TrimSpace(string(outBytes)) != "200" {
+			t.Fatalf("%s diag pass failed: status=%q err=%v", tc.transport, string(outBytes), runErr)
+		}
+	}
+	restoreObs()
+	obs.Close()
+
+	mu.Lock()
+	for _, f := range emitted {
+		if f.Disposition == cmddiag.DispositionContradiction {
+			mu.Unlock()
+			t.Fatalf("unexpected contradiction on healthy broker transport: %+v", f)
+		}
+	}
+	mu.Unlock()
+
+	// Pass 2: Audit exact 1:1 decision & connection observer callback cardinality across all 3 transports.
+	restoreDecAudit := confine.SetBrokerDecisionObserver(func(cmd confine.EgressCommand, _ egressproxy.Endpoint, _ bool) {
+		mu.Lock()
+		decisionCount[cmd.ActionID]++
+		mu.Unlock()
+	})
+	defer restoreDecAudit()
+	restoreConnAudit := confine.SetBrokerConnectionObserver(func(cmd confine.EgressCommand, _ egressproxy.Endpoint) {
+		mu.Lock()
+		connCount[cmd.ActionID]++
+		mu.Unlock()
+	})
+	defer restoreConnAudit()
+
+	receipt := make([]brokerTransportPairingRow, 0, len(cases))
+	for _, tc := range cases {
+		beforeArrivals := int(hostArrivals.Load())
+		c := &confine.Confinement{Network: confine.NetworkProxyOnly, ProjectID: projectID, LoopbackConnect: true, HostExecution: true}
+		cmd := confine.EgressCommand{SessionID: sessionID, ProjectID: projectID, ActionID: tc.actionID, ToolCallID: tc.actionID}
+		lease, err := confine.BindAction(c, cmd)
+		testutil.FailErr(t, "BindAction audit "+tc.transport, err)
+		execCmd, cleanup, err := confine.Command(ctx, os.Args[0], curlPath, tc.curlArgs(srv.URL+"/"+tc.transport), *c)
+		testutil.FailErr(t, "confine.Command audit "+tc.transport, err)
+		outBytes, runErr := execCmd.Output()
+		cleanup()
+		_ = lease.Close(ctx)
+		confine.ForgetEgressAction(sessionID, cmd.ActionID)
+		status := strings.TrimSpace(string(outBytes))
+		if runErr != nil || status != "200" {
+			t.Fatalf("%s audit pass failed: status=%q err=%v", tc.transport, status, runErr)
+		}
+		arrivals := int(hostArrivals.Load()) - beforeArrivals
+		mu.Lock()
+		decN := decisionCount[tc.actionID]
+		connN := connCount[tc.actionID]
+		mu.Unlock()
+		row := brokerTransportPairingRow{
+			Transport:             tc.transport,
+			HTTPStatus:            status,
+			HostArrivals:          arrivals,
+			BrokerDecisionFacts:   decN,
+			BrokerConnectionFacts: connN,
+			Contradictions:        0,
+		}
+		receipt = append(receipt, row)
+		if arrivals != 1 || decN != 1 || connN != 1 {
+			t.Fatalf("transport %s violated 1:1 pairing cardinality: %+v", tc.transport, row)
+		}
+	}
+
+	rawJSON, err := json.MarshalIndent(receipt, "", "  ")
+	testutil.FailErr(t, "marshal pairing receipt", err)
+	t.Logf("\nTB11 Broker Transport 1:1 Pairing Receipt:\n%s", string(rawJSON))
 }

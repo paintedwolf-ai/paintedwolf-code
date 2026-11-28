@@ -18,18 +18,20 @@ func TestObserveEgressDecisionWEAParityAndSupersession(t *testing.T) {
 		ToolCallID: "call-egress-1",
 	}
 
-	// Disabled: 0 allocs/op.
+	// Disabled with production init() callbacks installed: 0 allocs/op (no host/port formatting!).
 	restoreOff := cmddiag.SetObserver(cmddiag.NewObserver(cmddiag.Config{Enabled: false}))
 	if observeEgressDecisionWEA(cmd, "fixture.invalid:443", true) {
 		restoreOff()
 		t.Fatal("expected false when diagnostics disabled")
 	}
+	ep := egressproxy.Endpoint{Host: "Fixture.Invalid", Port: 443}
 	allocs := testing.AllocsPerRun(100, func() {
-		_ = observeEgressDecisionWEA(cmd, "fixture.invalid:443", true)
+		brokerDecisionCallback(cmd, ep, true)
+		brokerConnectionCallback(cmd, ep)
 	})
 	restoreOff()
 	if allocs != 0 {
-		t.Fatalf("disabled observeEgressDecisionWEA allocated %v allocs/op, want 0", allocs)
+		t.Fatalf("disabled installed broker callbacks allocated %v allocs/op, want 0", allocs)
 	}
 
 	// Enabled: refusal followed by later superseding admission emits 0 warnings.

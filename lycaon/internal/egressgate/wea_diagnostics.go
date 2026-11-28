@@ -11,16 +11,26 @@ import (
 )
 
 func init() {
-	confine.SetBrokerDecisionObserver(func(cmd confine.EgressCommand, ep egressproxy.Endpoint, allowed bool) {
-		dest := strings.ToLower(strings.TrimSpace(ep.Host))
-		if dest != "" && ep.Port > 0 {
-			dest = net.JoinHostPort(dest, strconv.Itoa(int(ep.Port)))
-		}
-		observeEgressDecisionWEA(cmd, dest, allowed)
-	})
-	confine.SetBrokerConnectionObserver(func(cmd confine.EgressCommand, ep egressproxy.Endpoint) {
-		observeBrokerConnectionWEA(cmd, ep)
-	})
+	confine.SetBrokerDecisionObserver(brokerDecisionCallback)
+	confine.SetBrokerConnectionObserver(brokerConnectionCallback)
+}
+
+func brokerDecisionCallback(cmd confine.EgressCommand, ep egressproxy.Endpoint, allowed bool) {
+	if !cmddiag.Enabled() {
+		return
+	}
+	dest := strings.ToLower(strings.TrimSpace(ep.Host))
+	if dest != "" && ep.Port > 0 {
+		dest = net.JoinHostPort(dest, strconv.Itoa(int(ep.Port)))
+	}
+	observeEgressDecisionWEA(cmd, dest, allowed)
+}
+
+func brokerConnectionCallback(cmd confine.EgressCommand, ep egressproxy.Endpoint) {
+	if !cmddiag.Enabled() {
+		return
+	}
+	observeBrokerConnectionWEA(cmd, ep)
 }
 
 // observeEgressDecisionWEA emits ONLY the real owning policy/decision record
