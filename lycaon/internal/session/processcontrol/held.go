@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -25,7 +27,16 @@ func (m *Service) HandleHeldCallSettled(sessionID, handle string) {
 		"held_call_handle": status.Handle, "held_call_tool": status.Tool,
 		"held_call_outcome": string(status.Settled.Outcome),
 	}}
-	m.processReports.publish(sessionID, handle, processReport{digest: digest})
+	publishedAt := time.Now().UTC()
+	m.processReports.publish(sessionID, handle, processReport{digest: digest, publishedAt: publishedAt})
+	awaitstore.EmitPhaseRecord(context.Background(), awaitstore.PhaseRecord{
+		SessionID:  sessionID,
+		Handle:     strings.TrimSpace(handle),
+		Tool:       status.Tool,
+		Phase:      "process_report_published",
+		Outcome:    string(status.Settled.Outcome),
+		RecordedAt: publishedAt,
+	})
 	m.nudgeProcessWait(context.Background(), sessionID, handle, anchor.ProcessFinished, env)
 }
 
@@ -61,12 +72,20 @@ func (m *Service) HandleSubject(sessionID, handle string) string {
 	return ""
 }
 
-// HandlesRunning reports whether a listed handle of either kind still runs.
+// HandlesRunning reports whether a listed handle still runs or awaits report publication.
 func (m *Service) HandlesRunning(sessionID string, handles []string) bool {
 	if m == nil {
 		return false
 	}
-	return m.Background.HasRunningHandles(sessionID, handles) || m.Held.HasRunningHandles(sessionID, handles)
+	if m.Background.HasRunningHandles(sessionID, handles) || m.Held.HasRunningHandles(sessionID, handles) {
+		return true
+	}
+	for _, h := range bgprocess.DeliverableFinishedHandles(m.Background, sessionID, handles) {
+		if _, published := m.processReports.lookup(sessionID, h); !published {
+			return true
+		}
+	}
+	return false
 }
 
 // heldCallOutput describes a held call for a client that asks for its output.
