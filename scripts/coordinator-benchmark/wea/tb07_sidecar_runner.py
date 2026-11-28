@@ -928,7 +928,10 @@ def _run_warmed_slots(
                 never_ask=False,
             )
             proj_marker_name = "a02_project_grant_marker.txt"
-            proj_cmd = f"echo a02-project-grant-exact > {proj_marker_name}"
+            proj_cmd = (
+                "python3 -B -c "
+                f"\"from pathlib import Path; Path({proj_marker_name!r}).write_text('a02-project-grant-exact\\n')\""
+            )
             s_p1, pid_p1 = open_prompted_session(proj_main, "Grant project-scoped tool approval.")
             c_proj = _call_with_checkpoint_inspect(
                 app, s_p1, "command",
