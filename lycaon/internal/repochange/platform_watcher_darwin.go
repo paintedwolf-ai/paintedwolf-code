@@ -150,6 +150,16 @@ func (w *fseventsPlatformWatcher) WatchList() []string {
 	return out
 }
 
+func (w *fseventsPlatformWatcher) HasWatch(path string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed {
+		return false
+	}
+	_, ok := w.watched[filepath.Clean(path)]
+	return ok
+}
+
 func (w *fseventsPlatformWatcher) EventChannel() <-chan fsnotify.Event { return w.events }
 func (w *fseventsPlatformWatcher) ResyncChannel() <-chan struct{}      { return w.resync }
 func (w *fseventsPlatformWatcher) ErrorChannel() <-chan error          { return w.errors }

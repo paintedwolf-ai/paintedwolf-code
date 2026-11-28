@@ -47,7 +47,7 @@ func (i *credentialIndex) scan(ctx context.Context, root *credentialRoot, path s
 	var seeds []repochange.WatchDirectory
 	flush := func() {
 		if len(seeds) > 0 {
-			repochange.SeedWatch(ctx, root.path, seeds)
+			repochange.SeedExistingWatch(ctx, root.path, seeds)
 			seeds = nil
 		}
 	}

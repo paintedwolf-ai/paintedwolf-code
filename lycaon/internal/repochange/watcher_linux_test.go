@@ -8,7 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -232,4 +235,146 @@ func TestInotifyRootsShareOneInstance(t *testing.T) {
 			t.Fatalf("root coverage = %+v", coverage)
 		}
 	}
+}
+
+func inotifyWatchedInodes(t *testing.T) map[uint64]bool {
+	t.Helper()
+	entries, err := os.ReadDir("/proc/self/fd")
+	testutil.FailErr(t, "list descriptors", err)
+	inodes := map[uint64]bool{}
+	for _, entry := range entries {
+		target, err := os.Readlink(filepath.Join("/proc/self/fd", entry.Name()))
+		if err != nil || target != "anon_inode:inotify" {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join("/proc/self/fdinfo", entry.Name()))
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(raw), "\n") {
+			if !strings.HasPrefix(line, "inotify ") {
+				continue
+			}
+			for _, field := range strings.Fields(line) {
+				if hexIno, ok := strings.CutPrefix(field, "ino:"); ok {
+					if ino, parseErr := strconv.ParseUint(hexIno, 16, 64); parseErr == nil {
+						inodes[ino] = true
+					}
+				}
+			}
+		}
+	}
+	return inodes
+}
+
+func dirInode(t *testing.T, path string) uint64 {
+	t.Helper()
+	info, err := os.Stat(path)
+	testutil.FailErr(t, "stat "+path, err)
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		t.Fatalf("unexpected Stat_t for %s", path)
+	}
+	return stat.Ino
+}
+
+func TestInotifyCloseRootRemovesDetachedInodesAndKeepsSurvivor(t *testing.T) {
+	surviving := newInotifyRoot(t, 64)
+	detachedRoot, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve detached root", err)
+	detachedSub := filepath.Join(detachedRoot, "child")
+	testutil.FailErr(t, "mkdir detached child", os.MkdirAll(detachedSub, 0o755))
+
+	surviving.registry.Ensure(t.Context(), detachedRoot)
+	surviving.registry.SeedExisting(t.Context(), detachedRoot, []WatchDirectory{
+		{Path: detachedRoot, EntryCount: 1},
+		{Path: detachedSub, EntryCount: 0},
+	})
+	testutil.WaitFor(t, "detached root seeded", func() bool {
+		return surviving.registry.Coverage(detachedRoot).Complete && surviving.registry.DirWatched(detachedRoot, "child")
+	})
+
+	survivingIno := dirInode(t, surviving.root)
+	detachedIno := dirInode(t, detachedRoot)
+	detachedSubIno := dirInode(t, detachedSub)
+
+	before := inotifyWatchedInodes(t)
+	if !before[survivingIno] || !before[detachedIno] || !before[detachedSubIno] {
+		t.Fatalf("missing expected inodes before close: surviving=%v detached=%v sub=%v",
+			before[survivingIno], before[detachedIno], before[detachedSubIno])
+	}
+
+	surviving.registry.CloseRoot(detachedRoot)
+	after := inotifyWatchedInodes(t)
+	if after[detachedIno] || after[detachedSubIno] {
+		t.Fatalf("detached inodes leaked in /proc/self/fdinfo: detached=%v sub=%v", after[detachedIno], after[detachedSubIno])
+	}
+	if !after[survivingIno] {
+		t.Fatal("surviving root inode was dropped on detached root close")
+	}
+	testutil.FailErr(t, "write surviving file", os.WriteFile(filepath.Join(surviving.root, "kept.txt"), []byte("ok"), 0o644))
+	surviving.waitFor("kept.txt", WorktreeChangeUnknown)
+}
+
+func TestInotifyRealBackendLossFaultsRecoversAndPreservesSurvivor(t *testing.T) {
+	surviving := newInotifyRoot(t, 64)
+	targetRoot, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve target root", err)
+
+	var mu sync.Mutex
+	var targetChanges []WorktreeChange
+	unbind := RegisterObserver(func(_ context.Context, event Event) {
+		if event.ProjectDir == targetRoot && event.Kind == WorktreeChanged && event.Source == SourceWatcher {
+			mu.Lock()
+			targetChanges = append(targetChanges, event.Changes...)
+			mu.Unlock()
+		}
+	})
+	t.Cleanup(unbind)
+
+	surviving.registry.Ensure(t.Context(), targetRoot)
+	testutil.WaitFor(t, "both roots complete coverage", func() bool {
+		return surviving.registry.Coverage(surviving.root).Complete && surviving.registry.Coverage(targetRoot).Complete
+	})
+
+	// Drop targetRoot's watch directly from the real kernel inotify backend
+	// while keeping the directory and its inode intact (same-inode loss).
+	sharedFsnotify.ops.Lock()
+	fw := sharedFsnotify.fw
+	sharedFsnotify.ops.Unlock()
+	if fw == nil {
+		t.Fatal("shared inotify backend stream is nil")
+	}
+	testutil.FailErr(t, "remove target from backend stream", fw.Remove(streamPath(targetRoot)))
+
+	// Target transitions to faulted; surviving root stays live and complete.
+	if cov := surviving.registry.Coverage(targetRoot); !cov.Watching || !cov.Faulted || cov.Complete {
+		t.Fatalf("target coverage after real backend loss = %+v, want Faulted=true Complete=false", cov)
+	}
+	if cov := surviving.registry.Coverage(surviving.root); !cov.Watching || cov.Faulted || !cov.Complete {
+		t.Fatalf("surviving root disrupted by peer backend loss: %+v", cov)
+	}
+
+	// Rebind targetRoot via Ensure and verify positive settled delivery on both roots.
+	surviving.registry.Ensure(t.Context(), targetRoot)
+	testutil.WaitFor(t, "target recovers complete coverage", func() bool {
+		cov := surviving.registry.Coverage(targetRoot)
+		return cov.Watching && !cov.Faulted && cov.Complete
+	})
+
+	mu.Lock()
+	targetChanges = nil
+	mu.Unlock()
+	testutil.FailErr(t, "write recovered target file", os.WriteFile(filepath.Join(targetRoot, "recovered.txt"), []byte("live"), 0o644))
+	testutil.WaitFor(t, "recovered target delivers write", func() bool {
+		ResetDebouncerForTest(t.Context())
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.ContainsFunc(targetChanges, func(ch WorktreeChange) bool {
+			return ch.Path == "recovered.txt"
+		})
+	})
+
+	testutil.FailErr(t, "write surviving file", os.WriteFile(filepath.Join(surviving.root, "still-live.txt"), []byte("ok"), 0o644))
+	surviving.waitFor("still-live.txt", WorktreeChangeUnknown)
 }
