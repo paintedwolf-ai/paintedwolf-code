@@ -37,7 +37,8 @@ func (f *frame) statements(ctx context.Context, list []commandsurface.Statement)
 }
 
 // statement charges the visit before expanding or admitting anything inside it,
-// so even an empty loop body is bounded by host counters.
+// so even an empty loop body is bounded by host counters. Inside a pipeline
+// stage, eligible redirect scopes are deferred to the enclosing pipeline fence.
 func (f *frame) statement(ctx context.Context, s commandsurface.Statement) (signal, error) {
 	if err := ctx.Err(); err != nil {
 		return signal{}, f.interrupt(err)
@@ -78,8 +79,16 @@ func (f *frame) statement(ctx context.Context, s commandsurface.Statement) (sign
 		_, stopped := f.state.latch.Stop()
 		eligible := err == nil && !stopped && inner.publish.eligible()
 		f.publish.mark(eligible)
-		if finishErr := descriptors.finish(ctx, eligible); finishErr != nil && err == nil {
-			err = finishErr
+		if eligible && f.pipelineRedirects != nil {
+			*f.pipelineRedirects = append(*f.pipelineRedirects, descriptors)
+		} else {
+			finishCtx := ctx
+			if !eligible {
+				finishCtx = context.WithoutCancel(ctx)
+			}
+			if finishErr := descriptors.finish(finishCtx, eligible); finishErr != nil && err == nil {
+				err = finishErr
+			}
 		}
 	}
 	if err == nil && s.Negated {
@@ -310,7 +319,7 @@ func (f *frame) isolated(ctx context.Context, s commandsurface.Statement, list [
 		return f.stateRefusal(s.SyntaxLocation, err)
 	}
 	defer release()
-	g.parent, g.loops, g.returnable = run.inv, 0, false
+	g.parent, g.loops, g.returnable, g.pipelineRedirects = run.inv, 0, false, f.pipelineRedirects
 	_, err = g.statements(ctx, list)
 	if trapErr := runExitTrap(ctx, g, err); trapErr != nil && err == nil {
 		err = trapErr
