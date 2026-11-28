@@ -1006,28 +1006,56 @@ def _run_warmed_slots(
 
             _revoke_all_grants(app)
 
-            # A02-12: Fresh chat in SAME project_id does not inherit revoked authority
+            # A02-12: Deleting a chat session ends its chat-scoped authority (actual DELETE /v1/sessions/{id})
             if "A02-12-scope-chat-delete-ends-authority" in spec_map:
-                marker_main = proj_main / proj_marker_name
-                if marker_main.exists():
-                    marker_main.unlink()
-                s_del = open_prompted_session_in_project(pid_p1, "Fresh chat after grant clear.")
-                _call_with_checkpoint_inspect(app, s_del, "update_progress", {"content": "- [ ] Post-revoke marker probe\n"}, action=None, timeout_s=30.0)
+                marker_del_name = "a02_12_chat_delete_marker.txt"
+                marker_del_cmd = f"cp notes.txt {marker_del_name}"
+                marker_del = proj_main / marker_del_name
+                if marker_del.exists():
+                    marker_del.unlink()
+                s_del_src = open_prompted_session_in_project(pid_p1, "Grant chat-scoped approval before deleting chat.")
+                _call_with_checkpoint_inspect(app, s_del_src, "update_progress", {"content": "- [ ] Chat-scoped grant before delete\n"}, action=None, timeout_s=30.0)
+                c_del_grant = _call_with_checkpoint_inspect(
+                    app, s_del_src, "command",
+                    {"command": marker_del_cmd},
+                    action="approve", rung="chat", timeout_s=60.0,
+                )
+                abort_session(s_del_src)
+                grants_before_del = (app.request(f"/v1/approval-grants?session_id={s_del_src}") or {}).get("grants") or []
+                app.request(f"/v1/sessions/{s_del_src}", method="DELETE")
+                grants_after_del = (app.request(f"/v1/approval-grants?session_id={s_del_src}") or {}).get("grants") or []
+                if marker_del.exists():
+                    marker_del.unlink()
+                s_after_del = open_prompted_session_in_project(pid_p1, "Fresh chat after deleting prior chat.")
+                _call_with_checkpoint_inspect(app, s_after_del, "update_progress", {"content": "- [ ] Post-delete marker probe\n"}, action=None, timeout_s=30.0)
                 c_fresh = _call_with_checkpoint_inspect(
-                    app, s_del, "command",
-                    {"command": proj_cmd},
+                    app, s_after_del, "command",
+                    {"command": marker_del_cmd},
                     action="reject", timeout_s=60.0,
                 )
-                abort_session(s_del)
-                marker_main_withheld = not marker_main.exists()
-                ok = c_fresh["checkpoint"]["asked"] and marker_main_withheld
+                abort_session(s_after_del)
+                marker_del_withheld = not marker_del.exists()
+                ok = (
+                    c_del_grant["checkpoint"]["asked"]
+                    and c_del_grant["checkpoint"]["rung"] == "chat"
+                    and len(grants_before_del) >= 1
+                    and len(grants_after_del) == 0
+                    and c_fresh["checkpoint"]["asked"]
+                    and marker_del_withheld
+                )
                 receipts.append(_build_receipt(
                     spec=spec_map["A02-12-scope-chat-delete-ends-authority"], prov=prov,
-                    typed_result={"fresh_chat_asked": c_fresh["checkpoint"]["asked"]},
+                    typed_result={
+                        "deleted_session_id": s_del_src,
+                        "grants_before_delete": len(grants_before_del),
+                        "grants_after_delete": len(grants_after_del),
+                        "fresh_chat_asked": c_fresh["checkpoint"]["asked"],
+                    },
                     independent_observation={
+                        "chat_deleted": True,
                         "no_leaked_authority": c_fresh["checkpoint"]["asked"],
-                        "marker_file_withheld": marker_main_withheld,
-                        "marker_path": proj_marker_name,
+                        "marker_file_withheld": marker_del_withheld,
+                        "marker_path": marker_del_name,
                     },
                     passed=ok,
                 ))
@@ -1447,6 +1475,7 @@ def _run_a12_restart_slots(
         # Boot 2: Restart lycaon-dev on the exact same app_dir (preserving store.db + config/)
         app2 = _restart_application(app_dir, engine_bin=engine_bin, engine_manifest=engine_manifest, engine_root=engine_root)
         post_restart_before_approve_existed = False
+        post_restart_settled: dict[str, Any] = {}
         try:
             app2.ready()
 
@@ -1462,6 +1491,16 @@ def _run_a12_restart_slots(
                     f"/v1/sessions/{session_id}/checkpoints/{pending_cp_id}",
                     {"kind": "tool_approval", "action": "approve", "option_id": opt["id"]},
                 )
+                # Wait for the post-restart approved call to settle (or session idle) before aborting
+                deadline = time.monotonic() + 30.0
+                while time.monotonic() < deadline:
+                    settled = _find_tool_result(app2, session_id, pending_call_id)
+                    if settled is not None:
+                        post_restart_settled = settled
+                        break
+                    if (app2.request(f"/v1/sessions/{session_id}") or {}).get("status") == "idle":
+                        break
+                    time.sleep(0.25)
             with contextlib.suppress(Exception):
                 app2.request(f"/v1/sessions/{session_id}/abort", {})
             _wait_session_idle(app2, session_id, "a12 idle after restart")
@@ -1504,12 +1543,17 @@ def _run_a12_restart_slots(
             app2.close(cleanup=False)
 
     if "A12-01-restart-pending-preserved-no-double-run" in spec_map:
+        post_exists = pending_target.exists()
+        post_text = pending_target.read_text(encoding="utf-8", errors="replace") if post_exists else ""
+        effect_count = post_text.count("a12-once-after-restart")
+        settled_outcome = str(post_restart_settled.get("outcome") or "")
         ok = (
             pending_preserved
             and (not pre_restart_target_existed)
             and (not post_restart_before_approve_existed)
             and bool(pre_plan_id)
             and pre_plan_id == post_plan_id
+            and effect_count <= 1
         )
         receipts.append(_build_receipt(
             spec=spec_map["A12-01-restart-pending-preserved-no-double-run"], prov=prov,
@@ -1518,11 +1562,13 @@ def _run_a12_restart_slots(
                 "pending_preserved": pending_preserved,
                 "pre_restart_plan_id": pre_plan_id,
                 "post_restart_plan_id": post_plan_id,
+                "post_restart_settled_outcome": settled_outcome,
             },
             independent_observation={
                 "pre_restart_target_existed": pre_restart_target_existed,
                 "post_restart_before_approve_existed": post_restart_before_approve_existed,
-                "post_restart_target_exists": pending_target.exists(),
+                "post_restart_target_exists": post_exists,
+                "post_restart_effect_count": effect_count,
             },
             passed=ok,
         ))
