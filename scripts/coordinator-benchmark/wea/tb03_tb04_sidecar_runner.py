@@ -1114,8 +1114,8 @@ def _slot_w07_12_decision_stays_with_raising_worker(ctx: SlotContext) -> dict[st
         _settle_child_leg(ctx.app, ctx.db_path, csid_b, job_b, sid, brief="B done independently.")
         _wait_tool_result(ctx.app, sid, wait_id)
 
-        dec_rows = _ro_query(ctx.db_path, "SELECT worker_job_id FROM worker_decisions WHERE worker_job_id IN (?, ?)", (job_a, job_b))
-        _check(checks, "decision_bound_only_to_a", len(dec_rows) == 1 and dec_rows[0]["worker_job_id"] == job_a, dec_rows)
+        dec_rows = _ro_query(ctx.db_path, "SELECT job_id FROM worker_decisions WHERE job_id IN (?, ?)", (job_a, job_b))
+        _check(checks, "decision_bound_only_to_a", len(dec_rows) == 1 and dec_rows[0]["job_id"] == job_a, dec_rows)
         _check(checks, "sibling_b_settled", bool(_lookup_result_handle(ctx.db_path, job_b)), _lookup_result_handle(ctx.db_path, job_b))
         _call_tool(ctx.app, sid, "worker_cancel", {"worker": "w07-dec-a", "reason": "cleanup"})
         return {"typed_result": {"decisions": dec_rows, "job_a": job_a, "job_b": job_b}, "independent_observation": {}, "checks": checks}
@@ -1800,7 +1800,7 @@ def _slot_w09_01_worker_verify_receipt_current(ctx: SlotContext) -> dict[str, An
             commands=["cat ok.txt", 'edit --path ok.txt --old-string "0" --new-string "1"', "true"],
         )
         _, prev_res, prev_code = _call_tool(ctx.app, sid, "preview_overlay", {"overlay_id": run["result_handle"]})
-        receipts = _ro_query(ctx.db_path, "SELECT id, tool, status, source_revision, source_root_digest FROM invocation_receipts WHERE session_id=?", (run["child_sid"],))
+        receipts = _ro_query(ctx.db_path, "SELECT id, tool_name AS tool, status, source_revision, source_root_digest FROM invocation_receipts WHERE session_id=?", (run["child_sid"],))
         _check(checks, "preview_succeeded", prev_code == "", prev_code)
         _check(checks, "worker_receipts_recorded_with_revision", any(r.get("source_revision") and r.get("source_root_digest") for r in receipts), len(receipts))
         return {"typed_result": {"receipt_count": len(receipts), "preview_outcome": prev_res.get("outcome")}, "independent_observation": {"receipts_sample": receipts[:3]}, "checks": checks}
@@ -1814,7 +1814,7 @@ def _slot_w09_02_primary_verify_receipt(ctx: SlotContext) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     try:
         _, cmd_res, cmd_code = _call_tool(ctx.app, sid, "command", {"command": "true"})
-        receipts = _ro_query(ctx.db_path, "SELECT id, tool, status, source_revision, source_root_digest FROM invocation_receipts WHERE session_id=?", (sid,))
+        receipts = _ro_query(ctx.db_path, "SELECT id, tool_name AS tool, status, source_revision, source_root_digest FROM invocation_receipts WHERE session_id=?", (sid,))
         _check(checks, "primary_command_completed", cmd_code == "" and cmd_res.get("outcome") == "completed", cmd_code)
         _check(checks, "receipt_names_revision_and_digest", any(r.get("source_revision") and r.get("source_root_digest") for r in receipts), receipts[:2])
         return {"typed_result": {"receipts": receipts[:3]}, "independent_observation": {"count": len(receipts)}, "checks": checks}
@@ -1828,12 +1828,12 @@ def _slot_w09_03_receipt_stale_after_person_edit(ctx: SlotContext) -> dict[str, 
     checks: list[dict[str, Any]] = []
     try:
         _call_tool(ctx.app, sid, "command", {"command": "true"})
-        r1 = _ro_query(ctx.db_path, "SELECT source_revision, source_root_digest FROM invocation_receipts WHERE session_id=? ORDER BY created_at ASC", (sid,))
+        r1 = _ro_query(ctx.db_path, "SELECT source_revision, source_root_digest FROM invocation_receipts WHERE session_id=? ORDER BY started_at ASC", (sid,))
         (proj / "v.txt").write_text("v2-person-edit\n", encoding="utf-8")
         _call_tool(ctx.app, sid, "command", {"command": "cat v.txt"})
         _call_tool(ctx.app, sid, "command", {"command": 'edit --path v.txt --old-string "v2-person-edit" --new-string "v3"'})
         _call_tool(ctx.app, sid, "command", {"command": "true"})
-        r2 = _ro_query(ctx.db_path, "SELECT source_revision, source_root_digest FROM invocation_receipts WHERE session_id=? ORDER BY created_at ASC", (sid,))
+        r2 = _ro_query(ctx.db_path, "SELECT source_revision, source_root_digest FROM invocation_receipts WHERE session_id=? ORDER BY started_at ASC", (sid,))
         rev_changed = bool(r1 and r2 and r1[0].get("source_revision") != r2[-1].get("source_revision"))
         _check(checks, "receipt_revision_advanced_after_edit", rev_changed, {"first": r1[0] if r1 else None, "last": r2[-1] if r2 else None})
         return {"typed_result": {"first": r1[0] if r1 else None, "last": r2[-1] if r2 else None}, "independent_observation": {"v_txt": (proj / "v.txt").read_text(encoding="utf-8")}, "checks": checks}
@@ -1847,11 +1847,11 @@ def _slot_w09_04_receipt_stale_after_landing(ctx: SlotContext) -> dict[str, Any]
     checks: list[dict[str, Any]] = []
     try:
         _call_tool(ctx.app, sid, "command", {"command": "true"})
-        before = _ro_query(ctx.db_path, "SELECT source_revision FROM invocation_receipts WHERE session_id=? ORDER BY created_at ASC", (sid,))
+        before = _ro_query(ctx.db_path, "SELECT source_revision FROM invocation_receipts WHERE session_id=? ORDER BY started_at ASC", (sid,))
         run = _run_write_worker_edit(ctx.app, ctx.db_path, sid, goal="Edit l.txt", scope_paths=["l.txt"], commands=['cat l.txt', 'edit --path l.txt --old-string "l0" --new-string "l1"'])
         _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
         _call_tool(ctx.app, sid, "command", {"command": "true"})
-        after = _ro_query(ctx.db_path, "SELECT source_revision FROM invocation_receipts WHERE session_id=? ORDER BY created_at ASC", (sid,))
+        after = _ro_query(ctx.db_path, "SELECT source_revision FROM invocation_receipts WHERE session_id=? ORDER BY started_at ASC", (sid,))
         _check(checks, "revision_advanced_after_landing", bool(before and after and before[0]["source_revision"] != after[-1]["source_revision"]), {"before": before[:1], "after": after[-1:]})
         return {"typed_result": {"before": before[:1], "after": after[-1:]}, "independent_observation": {"l_txt": (proj / "l.txt").read_text(encoding="utf-8")}, "checks": checks}
     finally:
