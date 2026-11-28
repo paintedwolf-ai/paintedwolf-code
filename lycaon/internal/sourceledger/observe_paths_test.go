@@ -338,3 +338,86 @@ func TestFailedObservationKeepsHistoryViewsAndCheckpointClockAtomic(t *testing.T
 		t.Fatalf("retried walk effects=%d, want 2", len(effects))
 	}
 }
+
+// Decision 064 / 074 D10 invariant test:
+// Renaming a preexisting untouched file (no prior ledger head) adopts its pre-rename digest
+// from the immutable inventory manifest (zero foreground disk reads/hashing), preventing
+// ObservePaths from minting a duplicate filesystem_reconcile write while still detecting
+// any genuine outside edit (including same-size, preserved-mtime edits).
+func TestPreexistingUntouchedRenameUsesInventorySnapshotDigest(t *testing.T) {
+	store, ctx, root := openLedgerOnDisk(t)
+	roots := onDiskRoots(root)
+	seedContent := "preexisting\n"
+	seedSHA := sourceblob.ContentSHA([]byte(seedContent))
+	writeRootFile(t, root, "seed.txt", seedContent)
+
+	// Initial inventory captures seed.txt in the immutable snapshot manifest without
+	// creating a sparse source_branch_heads row.
+	testutil.FailErr(t, "ensure initial inventory", store.Inventory.EnsureInventory(ctx, InventoryRequest{
+		ProjectID: "p1", RootsGeneration: 1, Roots: roots, Wait: true,
+	}))
+
+	// Rename seed.txt -> renamed.txt on disk and commit the host rename with empty AfterSHA256.
+	src := filepath.Join(root, "seed.txt")
+	dst := filepath.Join(root, "renamed.txt")
+	infoBefore, err := os.Lstat(src)
+	testutil.FailErr(t, "stat seed", err)
+	testutil.FailErr(t, "rename", os.Rename(src, dst))
+
+	prep, err := store.Prepare(ctx, []RecordInput{{
+		RecordLocation: RecordLocation{RootID: "r1", Path: "renamed.txt", FromRootID: "r1", FromPath: "seed.txt", EntryKind: EntryKindFile},
+		FromRootPath:   root,
+		ProjectID:      "p1", BranchID: sourcebranch.Trunk,
+		Op: api.SourceChangeOpRename, Origin: api.SourceChangeOriginUser,
+		BeforeSize: infoBefore.Size(), AfterSize: infoBefore.Size(),
+	}})
+	testutil.FailErr(t, "prepare preexisting rename", err)
+	defer prep.Close()
+
+	tx, err := store.sqlDB.BeginTx(ctx, nil)
+	testutil.FailErr(t, "begin tx", err)
+	recorded, err := prep.CommitTx(ctx, tx)
+	testutil.FailErr(t, "commit preexisting rename", err)
+	testutil.FailErr(t, "tx commit", tx.Commit())
+
+	if recorded.ContentSHA256 != seedSHA {
+		t.Fatalf("preexisting rename ContentSHA256 = %q, want %q", recorded.ContentSHA256, seedSHA)
+	}
+
+	// ObservePaths on renamed.txt must NOT record a duplicate external write.
+	drift, err := store.Inventory.ObservePaths(ctx, "p1", roots, []PathRef{{RootID: "r1", Path: "renamed.txt"}})
+	testutil.FailErr(t, "observe unchanged renamed file", err)
+	if drift != 0 {
+		t.Fatalf("ObservePaths recorded %d duplicate effects for unchanged preexisting rename, want 0", drift)
+	}
+
+	// An adversarial same-size, preserved-mtime outside edit MUST still be recorded.
+	writeRootFile(t, root, "renamed.txt", "OUTSIDEEDIT\n")
+	testutil.FailErr(t, "preserve mtime", os.Chtimes(dst, infoBefore.ModTime(), infoBefore.ModTime()))
+	drift, err = store.Inventory.ObservePaths(ctx, "p1", roots, []PathRef{{RootID: "r1", Path: "renamed.txt"}})
+	testutil.FailErr(t, "observe adversarial outside edit", err)
+	if drift != 1 {
+		t.Fatalf("ObservePaths recorded %d effects for adversarial outside edit, want 1", drift)
+	}
+
+	// Tracked file rename must ALWAYS prefer its newer ledger head digest over an older snapshot.
+	trackRootFile(t, store, ctx, root, "tracked.txt", "newer tracked bytes\n")
+	newerSHA := sourceblob.ContentSHA([]byte("newer tracked bytes\n"))
+	testutil.FailErr(t, "rename tracked", os.Rename(filepath.Join(root, "tracked.txt"), filepath.Join(root, "tracked_moved.txt")))
+	prepTracked, err := store.Prepare(ctx, []RecordInput{{
+		RecordLocation: RecordLocation{RootID: "r1", Path: "tracked_moved.txt", FromRootID: "r1", FromPath: "tracked.txt", EntryKind: EntryKindFile},
+		FromRootPath:   root,
+		ProjectID:      "p1", BranchID: sourcebranch.Trunk,
+		Op: api.SourceChangeOpRename, Origin: api.SourceChangeOriginUser,
+	}})
+	testutil.FailErr(t, "prepare tracked rename", err)
+	defer prepTracked.Close()
+	tx2, err := store.sqlDB.BeginTx(ctx, nil)
+	testutil.FailErr(t, "begin tx2", err)
+	recTracked, err := prepTracked.CommitTx(ctx, tx2)
+	testutil.FailErr(t, "commit tracked rename", err)
+	testutil.FailErr(t, "tx2 commit", tx2.Commit())
+	if recTracked.ContentSHA256 != newerSHA {
+		t.Fatalf("tracked rename ContentSHA256 = %q, want newer head %q", recTracked.ContentSHA256, newerSHA)
+	}
+}

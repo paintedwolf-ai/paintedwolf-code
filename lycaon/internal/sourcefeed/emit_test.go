@@ -89,10 +89,34 @@ func TestSourceMetadataRenameDoesNotReadMovedContents(t *testing.T) {
 	testutil.FailErr(t, "create sparse source", err)
 	testutil.FailErr(t, "size source", file.Truncate(3<<30))
 	testutil.FailErr(t, "close source", file.Close())
-	prepared, err := prepareChanges([]Change{{ProjectID: "project", WorkspaceID: "workspace", WorkspaceKind: api.SourceWorkspaceKindProject, RootID: "root", Path: "large", FromPath: "old", AbsPath: path, Op: api.SourceChangeOpRename, Origin: api.SourceChangeOriginUser}}, false)
+	// Revoke read permission so any content read/hash attempt would fail.
+	testutil.FailErr(t, "chmod 000", os.Chmod(path, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+
+	// Without a committed ledger AfterSHA256, rename fails open for destination (zero foreground hashing)
+	// while still suppressing the known source absence without reading disk.
+	prepared, err := prepareChanges([]Change{{ProjectID: "project", WorkspaceID: "workspace", WorkspaceKind: api.SourceWorkspaceKindProject, RootID: "root", Path: "large", FromPath: "old", AbsPath: path, FromAbsPath: filepath.Join(root, "old"), Op: api.SourceChangeOpRename, Origin: api.SourceChangeOriginUser}}, false)
 	testutil.FailErr(t, "prepare rename event", err)
-	if len(prepared.writePaths) != 0 || len(prepared.event.Changes) != 1 {
-		t.Fatalf("metadata move scheduled content observation: %+v", prepared)
+	if len(prepared.event.Changes) != 1 || len(prepared.writePaths) != 1 {
+		t.Fatalf("metadata move prepared unexpected paths: %+v", prepared)
+	}
+	if prepared.writePaths[0].path != filepath.Join(root, "old") || prepared.writePaths[0].preCaptured == nil || !prepared.writePaths[0].preCaptured.absent {
+		t.Fatalf("metadata move should only suppress source absence when AfterSHA256 is empty: %+v", prepared.writePaths)
+	}
+	// With a committed ledger EchoSHA256 + AfterMode, destination echo suppression is staged
+	// with zero foreground file open/hashing (verified on this 0o000 3 GiB sparse file),
+	// while keeping wire AfterSHA256 untouched.
+	preparedTracked, err := prepareChanges([]Change{{ProjectID: "project", WorkspaceID: "workspace", WorkspaceKind: api.SourceWorkspaceKindProject, RootID: "root", Path: "large", FromPath: "old", AbsPath: path, FromAbsPath: filepath.Join(root, "old"), EchoSHA256: "known-ledger-sha", AfterMode: 0o000, HasAfterMode: true, Op: api.SourceChangeOpRename, Origin: api.SourceChangeOriginUser}}, false)
+	testutil.FailErr(t, "prepare tracked rename event", err)
+	if len(preparedTracked.writePaths) != 2 || preparedTracked.writePaths[0].preCaptured == nil {
+		t.Fatalf("tracked rename must bind preCaptured (EchoSHA256, AfterMode) without live-FS read: %+v", preparedTracked.writePaths)
+	}
+	if preparedTracked.event.Changes[0].AfterSHA256 != "" {
+		t.Fatalf("wire after_sha256 must remain unchanged on rename, got %q", preparedTracked.event.Changes[0].AfterSHA256)
+	}
+	noteHostWritePaths(preparedTracked.writePaths)
+	if !isRecentHostWrite(filepath.Join(root, "old")) {
+		t.Fatal("metadata rename source absence did not suppress its own watcher echo")
 	}
 }
 

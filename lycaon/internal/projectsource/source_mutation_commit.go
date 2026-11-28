@@ -48,22 +48,34 @@ func (s *sourceSettlement) commitOnce(ctx context.Context, row *sourceMutationRo
 func commitSourceMutationTxWithCache(ctx context.Context, tx *sql.Tx, row *sourceMutationRow, response json.RawMessage, completedPlan any, updatedAt time.Time, history *sourceHistoryEntry, quotaBytes int64, prepared sourceledger.PreparedRecording, cache *sourceledger.TxBatchCache, emitEvent, deferJournalUpdate bool) (*sourcefeed.StagedDelivery, error) {
 	var delivery *sourcefeed.StagedDelivery
 	if row.Plan.Changed {
+		var recorded sourceledger.TrackedFile
 		if prepared != nil {
+			var err error
 			if cache != nil {
 				if batchRec, ok := prepared.(sourceledger.BatchPreparedRecording); ok {
-					if _, err := batchRec.CommitTxWithCache(ctx, tx, cache); err != nil {
-						return nil, err
-					}
-				} else if _, err := prepared.CommitTx(ctx, tx); err != nil {
-					return nil, err
+					recorded, err = batchRec.CommitTxWithCache(ctx, tx, cache)
+				} else {
+					recorded, err = prepared.CommitTx(ctx, tx)
 				}
-			} else if _, err := prepared.CommitTx(ctx, tx); err != nil {
+			} else {
+				recorded, err = prepared.CommitTx(ctx, tx)
+			}
+			if err != nil {
 				return nil, err
 			}
 		}
 		if emitEvent {
+			changes := row.Plan.sourceChanges()
+			if row.Plan.Kind == "rename" && len(changes) == 1 {
+				if changes[0].EchoSHA256 == "" && recorded.ContentSHA256 != "" {
+					changes[0].EchoSHA256 = recorded.ContentSHA256
+				}
+				if changes[0].EchoGitOID == "" && recorded.ContentGitOID != "" {
+					changes[0].EchoGitOID = recorded.ContentGitOID
+				}
+			}
 			var err error
-			delivery, err = sourcefeed.EmitBatchTx(ctx, tx, row.Plan.sourceChanges())
+			delivery, err = sourcefeed.EmitBatchTx(ctx, tx, changes)
 			if err != nil {
 				return nil, err
 			}

@@ -320,6 +320,14 @@ func (s *Store) recordEffectWithCache(ctx context.Context, q *db.Queries, operat
 			return err
 		}
 		afterSize = parent.ByteSize
+		if afterSHA == "" && in.snapshotSHA256 != "" {
+			afterSHA = in.snapshotSHA256
+		}
+	case in.Op == api.SourceChangeOpRename && afterSHA == "" && headErr != nil && in.snapshotSHA256 != "":
+		afterSHA = in.snapshotSHA256
+		if afterSize == 0 {
+			afterSize = in.snapshotSize
+		}
 	}
 
 	if state == "content" && in.EntryKind == EntryKindLink {
@@ -339,7 +347,11 @@ func (s *Store) recordEffectWithCache(ctx context.Context, q *db.Queries, operat
 		return err
 	}
 	if recorded != nil {
-		*recorded = TrackedFile{FileID: fileID, VersionID: afterVersionID}
+		gitOID := ""
+		if in.Op == api.SourceChangeOpRename && afterSHA == "" {
+			gitOID = in.snapshotGitOID
+		}
+		*recorded = TrackedFile{FileID: fileID, VersionID: afterVersionID, ContentSHA256: afterSHA, ContentGitOID: gitOID}
 	}
 	ordinal, err := cache.advanceOrdinal(ctx, q, in.ProjectID)
 	if err != nil {
