@@ -16,6 +16,7 @@ import contextlib
 import json
 import os
 import pathlib
+import re
 import shlex
 import sqlite3
 import sys
@@ -862,7 +863,10 @@ def _read_long_file(
         else:
             command, result, delivered_start = prefix_cmd, prefix, 0
         content = str(result.get("content") or "")
-        program, _ = json.JSONDecoder().raw_decode(content.split("\n", 1)[-1].lstrip())
+        result_header = re.search(r"\[command#\d+\]\s*", content)
+        if result_header is None:
+            raise RuntimeError("long-file command result has no command payload")
+        program, _ = json.JSONDecoder().raw_decode(content, result_header.end())
         delivered = program.get("stdout", "").encode("utf-8")
         if result.get("outcome") != "completed" or delivered != raw[delivered_start:end]:
             raise RuntimeError(f"long-file window [{delivered_start}, {end}) was not delivered exactly")
