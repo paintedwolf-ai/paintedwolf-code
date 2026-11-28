@@ -139,11 +139,9 @@ func TestCoordinatorWatchStoreAndSchedulerWiring(t *testing.T) {
 	}
 }
 
-// TestBuildWiresProcessOutputWatchProducer guards the app.Build startup ordering
-// invariant: runtime-services creates the background process registry after
-// coordinator-runtime creates the watch store, so Build must still wire both
-// processOutputLookup (catch-up) and SetWatchOutputHook (live notifications).
-func TestBuildWiresProcessOutputWatchProducer(t *testing.T) {
+// TestBuildWiresWatchProducers checks the event ingress paths owned by app
+// startup. Producer adapters are exercised through the assembled host.
+func TestBuildWiresWatchProducers(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	t.Setenv("LYCAON_API_TOKEN", "test-token")
 
@@ -161,14 +159,36 @@ func TestBuildWiresProcessOutputWatchProducer(t *testing.T) {
 		t.Fatal("expected background process registry wired by Build")
 	}
 
-	testdbseed.InsertProjectRoot(t, built.DB, testdbseed.DefaultProjectID, t.TempDir())
+	root := t.TempDir()
+	testdbseed.InsertProjectRoot(t, built.DB, testdbseed.DefaultProjectID, root)
 	sess, err := built.Sessions.Manager.Chats.CreateForProject(t.Context(), testdbseed.DefaultProjectID, wire.SessionPostureBuild)
 	testutil.FailErr(t, "create session", err)
 
+	owner := watch.Owner{ProjectID: testdbseed.DefaultProjectID, SessionID: sess.ID}
+	probe := watchIngressProbe{store: ws, owner: owner, matched: map[string]bool{}}
+	t.Run("process", func(t *testing.T) {
+		assertBuiltWatchProcessProducer(t, built, probe)
+	})
+	t.Run("workspace", func(t *testing.T) {
+		assertBuiltWatchWorkspaceProducers(t, probe, root)
+	})
+	t.Run("scan", func(t *testing.T) {
+		assertBuiltWatchScanProducer(t, built, probe, root)
+	})
+	t.Run("worker lifecycle", func(t *testing.T) {
+		assertBuiltWatchWorkerProducers(t, built, probe)
+	})
+	probe.checkInventory(t, built)
+}
+
+func assertBuiltWatchProcessProducer(t *testing.T, built *ServeApp, probe watchIngressProbe) {
+	t.Helper()
+	ws, owner := probe.store, probe.owner
+	bg := built.Sessions.Manager.Processes.Background
 	writeCh := make(chan func([]byte), 1)
 	releaseJob := make(chan struct{})
 	handle, err := bg.StartProgram(t.Context(), bgprocess.ProgramJobSpec{
-		SessionID:   sess.ID,
+		SessionID:   owner.SessionID,
 		ProjectID:   testdbseed.DefaultProjectID,
 		OriginTool:  "command",
 		CommandLine: "process-output-build-invariant",
@@ -185,7 +205,7 @@ func TestBuildWiresProcessOutputWatchProducer(t *testing.T) {
 		default:
 			close(releaseJob)
 		}
-		_, _, _ = bg.Lifecycle.Wait(context.Background(), sess.ID, handle)
+		_, _, _ = bg.Lifecycle.Wait(context.Background(), owner.SessionID, handle)
 	})
 	writeProc := <-writeCh
 
@@ -193,7 +213,6 @@ func TestBuildWiresProcessOutputWatchProducer(t *testing.T) {
 	preBytes := "pre-registration-output\n"
 	writeProc([]byte(preBytes))
 
-	owner := watch.Owner{ProjectID: testdbseed.DefaultProjectID, SessionID: sess.ID}
 	zero := int64(0)
 	catchup, err := ws.Register(t.Context(), watch.RegisterRequest{
 		Owner:        owner,
@@ -254,4 +273,19 @@ func TestBuildWiresProcessOutputWatchProducer(t *testing.T) {
 	if matchRows != 1 {
 		t.Fatalf("watch_matches count for live watch %q = %d, want 1", live.WatchID, matchRows)
 	}
+
+	doneCondition := awaitstore.Condition{Kind: "process_done", Handles: []string{handle}}
+	probe.expectMatch(t, live, "process_output")
+	done := probe.register(t, doneCondition, watch.Authority{})
+	close(releaseJob)
+	_, _, err = bg.Lifecycle.Wait(t.Context(), owner.SessionID, handle)
+	testutil.FailErr(t, "settle background process", err)
+	probe.expectMatch(t, done, doneCondition.Kind)
+
+	retained, err := ws.Register(t.Context(), watch.RegisterRequest{
+		Owner: owner, InvocationID: "ingress-process-done-retained",
+		Conditions: []awaitstore.Condition{doneCondition},
+	})
+	testutil.FailErr(t, "register process completion catch-up", err)
+	probe.expectMatch(t, retained, doneCondition.Kind)
 }
