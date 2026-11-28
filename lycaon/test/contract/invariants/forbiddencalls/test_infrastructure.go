@@ -283,14 +283,21 @@ func checkHostStateAuthorityHoldPkg(r *invariants.Run, files []*invariants.GoFil
 
 // verifiedHoldSpan returns the statement-index range [start, end) in fn.Body.List
 // covered by a verified HoldAuthorityMemos acquisition and cleanup pattern.
-// In TestMain, deferred cleanup is skipped by os.Exit, so only an explicit
-// release call after m.Run() is accepted.
+// Cleanup calls must target the enclosing function's testing.T/F/B/TB parameter,
+// an explicit early release stops coverage even if a defer/Cleanup was also
+// registered, and in TestMain only an explicit release after the *testing.M
+// parameter's direct Run() call is accepted.
 func verifiedHoldSpan(f *invariants.GoFile, fn *ast.FuncDecl, isTestMain bool) (int, int, bool) {
 	stmts := fn.Body.List
+	testParams := testingParamNames(f, fn)
+	testMainM := ""
+	if isTestMain {
+		testMainM = testMainMParam(f, fn)
+	}
 	for i, stmt := range stmts {
 		switch s := stmt.(type) {
 		case *ast.ExprStmt:
-			if !isTestMain && isCleanupWithHoldCall(f, s.X) {
+			if !isTestMain && isCleanupWithHoldCall(f, s.X, testParams) {
 				return i, len(stmts), true
 			}
 		case *ast.DeferStmt:
@@ -305,12 +312,56 @@ func verifiedHoldSpan(f *invariants.GoFile, fn *ast.FuncDecl, isTestMain bool) (
 			if !ok || id.Name == "_" || !isHoldAuthorityCall(f, s.Rhs[0]) {
 				continue
 			}
-			if end, ok := findVerifiedRelease(stmts, i+1, id.Name, isTestMain); ok {
+			if end, ok := findVerifiedRelease(stmts, i+1, id.Name, testParams, testMainM); ok {
 				return i, end, true
 			}
 		}
 	}
 	return 0, 0, false
+}
+
+func testingParamNames(f *invariants.GoFile, fn *ast.FuncDecl) map[string]bool {
+	out := map[string]bool{}
+	if fn.Type == nil || fn.Type.Params == nil {
+		return out
+	}
+	for _, field := range fn.Type.Params.List {
+		expr := ast.Unparen(field.Type)
+		isPtr := false
+		if star, ok := expr.(*ast.StarExpr); ok {
+			isPtr = true
+			expr = ast.Unparen(star.X)
+		}
+		pkg, name, ok := f.Qualified(expr)
+		if !ok || pkg != "testing" {
+			continue
+		}
+		valid := (!isPtr && name == "TB") || (isPtr && (name == "T" || name == "F" || name == "B"))
+		if !valid {
+			continue
+		}
+		for _, id := range field.Names {
+			out[id.Name] = true
+		}
+	}
+	return out
+}
+
+func testMainMParam(f *invariants.GoFile, fn *ast.FuncDecl) string {
+	if fn.Type == nil || fn.Type.Params == nil {
+		return ""
+	}
+	for _, field := range fn.Type.Params.List {
+		star, ok := ast.Unparen(field.Type).(*ast.StarExpr)
+		if !ok {
+			continue
+		}
+		pkg, name, ok := f.Qualified(star.X)
+		if ok && pkg == "testing" && name == "M" && len(field.Names) > 0 {
+			return field.Names[0].Name
+		}
+	}
+	return ""
 }
 
 func isHoldAuthorityCall(f *invariants.GoFile, expr ast.Expr) bool {
@@ -322,36 +373,44 @@ func isHoldAuthorityCall(f *invariants.GoFile, expr ast.Expr) bool {
 	return ok && pkg == hoststateImportPath && name == "HoldAuthorityMemos"
 }
 
-func isCleanupWithHoldCall(f *invariants.GoFile, expr ast.Expr) bool {
-	call, ok := ast.Unparen(expr).(*ast.CallExpr)
-	if !ok || len(call.Args) != 1 {
+func isCleanupCallOn(call *ast.CallExpr, testParams map[string]bool) bool {
+	if call == nil || len(call.Args) != 1 {
 		return false
 	}
 	sel, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr)
-	return ok && sel.Sel.Name == "Cleanup" && isHoldAuthorityCall(f, call.Args[0])
+	if !ok || sel.Sel.Name != "Cleanup" {
+		return false
+	}
+	recv, ok := ast.Unparen(sel.X).(*ast.Ident)
+	return ok && testParams[recv.Name]
 }
 
-func findVerifiedRelease(stmts []ast.Stmt, from int, varName string, isTestMain bool) (int, bool) {
+func isCleanupWithHoldCall(f *invariants.GoFile, expr ast.Expr, testParams map[string]bool) bool {
+	call, ok := ast.Unparen(expr).(*ast.CallExpr)
+	return ok && isCleanupCallOn(call, testParams) && isHoldAuthorityCall(f, call.Args[0])
+}
+
+func findVerifiedRelease(stmts []ast.Stmt, from int, varName string, testParams map[string]bool, testMainM string) (int, bool) {
+	isTestMain := testMainM != ""
 	sawMRun := false
+	hasDeferredCleanup := false
 	for j := from; j < len(stmts); j++ {
-		if isTestMain && stmtCallsMRun(stmts[j]) {
+		if isTestMain && stmtCallsMRun(stmts[j], testMainM) {
 			sawMRun = true
 		}
 		switch s := stmts[j].(type) {
 		case *ast.DeferStmt:
 			if !isTestMain && isZeroArgIdentCall(s.Call, varName) {
-				return len(stmts), true
+				hasDeferredCleanup = true
 			}
 		case *ast.ExprStmt:
 			call, ok := ast.Unparen(s.X).(*ast.CallExpr)
 			if !ok {
 				continue
 			}
-			if !isTestMain && len(call.Args) == 1 {
-				if sel, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr); ok && sel.Sel.Name == "Cleanup" {
-					if arg, ok := ast.Unparen(call.Args[0]).(*ast.Ident); ok && arg.Name == varName {
-						return len(stmts), true
-					}
+			if !isTestMain && isCleanupCallOn(call, testParams) {
+				if arg, ok := ast.Unparen(call.Args[0]).(*ast.Ident); ok && arg.Name == varName {
+					hasDeferredCleanup = true
 				}
 			}
 			if isZeroArgIdentCall(call, varName) {
@@ -361,6 +420,9 @@ func findVerifiedRelease(stmts []ast.Stmt, from int, varName string, isTestMain 
 				return j, true
 			}
 		}
+	}
+	if hasDeferredCleanup {
+		return len(stmts), true
 	}
 	return 0, false
 }
@@ -373,14 +435,24 @@ func isZeroArgIdentCall(call *ast.CallExpr, name string) bool {
 	return ok && id.Name == name
 }
 
-func stmtCallsMRun(stmt ast.Stmt) bool {
+func stmtCallsMRun(stmt ast.Stmt, mParam string) bool {
+	if mParam == "" {
+		return false
+	}
 	found := false
 	ast.Inspect(stmt, func(n ast.Node) bool {
+		if _, isClosure := n.(*ast.FuncLit); isClosure {
+			return false
+		}
 		call, ok := n.(*ast.CallExpr)
 		if !ok || len(call.Args) != 0 {
 			return true
 		}
-		if sel, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr); ok && sel.Sel.Name == "Run" {
+		sel, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != "Run" {
+			return true
+		}
+		if recv, ok := ast.Unparen(sel.X).(*ast.Ident); ok && recv.Name == mParam {
 			found = true
 			return false
 		}

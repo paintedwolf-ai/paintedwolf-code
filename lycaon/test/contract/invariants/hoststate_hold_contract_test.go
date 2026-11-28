@@ -87,6 +87,34 @@ func TestHostStateAuthorityTestsHoldMemos(t *testing.T) {
 			want:    invariantstest.Violates,
 			wantPos: "test/contract/sample/sample_test.go:15:",
 		},
+		"misleading same-name Cleanup receiver is rejected": {
+			overrides: map[string]string{
+				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport (\n\t\"testing\"\n\n\t\"github.com/lycaon/lycaon/test/contract/internal/hoststate\"\n)\n\ntype fakeCleaner struct{}\n\nfunc (fakeCleaner) Cleanup(fn func()) { fn() }\n\nfunc TestMisleadingCleanup(t *testing.T) {\n\tvar fake fakeCleaner\n\tfake.Cleanup(hoststate.HoldAuthorityMemos())\n\t_ = hoststate.FreezeTurnAuthority()\n}\n",
+			},
+			want:    invariantstest.Violates,
+			wantPos: "test/contract/sample/sample_test.go:13:",
+		},
+		"defer release followed by early explicit release before accessor": {
+			overrides: map[string]string{
+				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport (\n\t\"testing\"\n\n\t\"github.com/lycaon/lycaon/test/contract/internal/hoststate\"\n)\n\nfunc TestDeferThenEarlyRelease(t *testing.T) {\n\trelease := hoststate.HoldAuthorityMemos()\n\tdefer release()\n\trelease()\n\t_ = hoststate.FreezeTurnAuthority()\n}\n",
+			},
+			want:    invariantstest.Violates,
+			wantPos: "test/contract/sample/sample_test.go:9:",
+		},
+		"TestMain uninvoked closure calling m.Run is rejected": {
+			overrides: map[string]string{
+				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport (\n\t\"os\"\n\t\"testing\"\n\n\t\"github.com/lycaon/lycaon/test/contract/internal/hoststate\"\n)\n\nfunc TestMain(m *testing.M) {\n\trelease := hoststate.HoldAuthorityMemos()\n\t_ = func() int { return m.Run() }\n\trelease()\n\tos.Exit(m.Run())\n}\n\nfunc TestUsesClosureTestMain(t *testing.T) {\n\t_ = hoststate.FreezeTurnAuthority()\n}\n",
+			},
+			want:    invariantstest.Violates,
+			wantPos: "test/contract/sample/sample_test.go:17:",
+		},
+		"TestMain non-m receiver Run call is rejected": {
+			overrides: map[string]string{
+				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport (\n\t\"os\"\n\t\"testing\"\n\n\t\"github.com/lycaon/lycaon/test/contract/internal/hoststate\"\n)\n\ntype fakeRunner struct{}\n\nfunc (fakeRunner) Run() int { return 0 }\n\nfunc TestMain(m *testing.M) {\n\tvar other fakeRunner\n\trelease := hoststate.HoldAuthorityMemos()\n\t_ = other.Run()\n\trelease()\n\tos.Exit(m.Run())\n}\n\nfunc TestUsesFakeRunTestMain(t *testing.T) {\n\t_ = hoststate.FreezeTurnAuthority()\n}\n",
+			},
+			want:    invariantstest.Violates,
+			wantPos: "test/contract/sample/sample_test.go:22:",
+		},
 		"valid caller-owned hold calling unheld helper": {
 			overrides: map[string]string{
 				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport (\n\t\"testing\"\n\n\t\"github.com/lycaon/lycaon/test/contract/internal/hoststate\"\n)\n\nfunc freezeHelper() {\n\t_ = hoststate.FreezeTurnAuthority()\n}\n\nfunc TestCallerOwnsHold(t *testing.T) {\n\tt.Cleanup(hoststate.HoldAuthorityMemos())\n\tfreezeHelper()\n}\n",
