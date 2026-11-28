@@ -13,6 +13,8 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/textfile"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -270,5 +272,107 @@ func TestStructuredEditsEnforceConversationalReadBasisAndRebaseWithoutAutosaveOn
 	requireRejectCode(t, h.run("overwrite-without-read\n", "tee", "doc.txt"), "EDITOR_DOCUMENT_READ_REQUIRED")
 	if got := h.read("doc.txt"); got != wantCombined {
 		t.Fatalf("refused standalone tee mutated disk: got=%q want=%q", got, wantCombined)
+	}
+}
+
+// editorMoveRetryAdapter wraps testEditorAdapter to deterministically force an
+// ErrEditorDocumentMoved retry on the first ApplyAgentEdit attempt, while
+// updating the document and advancing the conversational basis between attempts
+// so attempt 2 transforms and lands against the moved text.
+type editorMoveRetryAdapter struct {
+	testEditorAdapter
+	onFirstMove func() error
+	attempts    int
+	baseTexts   []string
+}
+
+func (a *editorMoveRetryAdapter) AgentReadBase(ctx context.Context, projectID, sessionID, documentID string, frozen *tools.AgentReadBases) (tools.EditorDocumentText, error) {
+	doc, err := a.testEditorAdapter.AgentReadBase(ctx, projectID, sessionID, documentID, frozen)
+	if err == nil {
+		a.baseTexts = append(a.baseTexts, doc.Text)
+	}
+	return doc, err
+}
+
+func (a *editorMoveRetryAdapter) ApplyAgentEdit(ctx context.Context, projectID string, edit tools.EditorDocumentEdit) (tools.EditorDocumentApplied, error) {
+	a.attempts++
+	if a.attempts == 1 && a.onFirstMove != nil {
+		if err := a.onFirstMove(); err != nil {
+			return tools.EditorDocumentApplied{}, err
+		}
+		return tools.EditorDocumentApplied{}, tools.ErrEditorDocumentMoved
+	}
+	return a.testEditorAdapter.ApplyAgentEdit(ctx, projectID, edit)
+}
+
+func TestCodeRewriteEditorMoveRetryAlignsPinWithAppliedBasis(t *testing.T) {
+	initial := "package main\n\n// header v1\nfunc calc() int {\n\treturn 1 + 2\n}\n"
+	moved := "package main\n\n// header v2 moved\nfunc calc() int {\n\treturn 1 + 2\n}\n"
+	wantAfter := "package main\n\n// header v2 moved\nfunc calc() int {\n\treturn 3\n}\n"
+
+	h := newHarness(t, map[string]string{
+		"main.go": initial,
+	})
+	svc, _ := wireRealEditorDocs(t, h)
+	doc, ok, err := svc.OpenText(t.Context(), h.project.ID, sourcebranch.Trunk, h.project.Roots[0].ID, "main.go")
+	testutil.FailErr(t, "open main.go", err)
+	if !ok {
+		t.Fatal("expected main.go")
+	}
+	svc.RememberAgentRead(h.project.ID, h.tc.Identity.SessionID, doc.ID, doc.Revision)
+
+	adapter := &editorMoveRetryAdapter{
+		testEditorAdapter: testEditorAdapter{service: svc},
+	}
+	adapter.onFirstMove = func() error {
+		updated, repErr := svc.ReplaceSnapshot(t.Context(), doc.ID, h.project.ID, editordoc.SnapshotReplacement{
+			DocumentCommand: editordoc.DocumentCommand{ClientID: "window-1", OperationID: uuid.NewString(), ExpectedRevision: doc.Revision},
+			Content:         moved,
+			EOL:             "lf",
+		})
+		if repErr != nil {
+			return repErr
+		}
+		// Advance the conversational read basis to the moved revision so attempt 2
+		// transforms against `moved` instead of `initial`.
+		svc.RememberAgentRead(h.project.ID, h.tc.Identity.SessionID, updated.ID, updated.Revision)
+		return nil
+	}
+	h.tc.Source.EditorDocuments = adapter
+
+	r := h.run("", "code-rewrite", "--path", "main.go", "--pattern", "return 1 + 2", "--rewrite", "return 3")
+	if r.err != nil || r.result.Status != 0 {
+		t.Fatalf("code-rewrite retry failed: err=%v result=%+v", r.err, r.result)
+	}
+	if adapter.attempts != 2 {
+		t.Fatalf("ApplyAgentEdit attempts = %d, want 2 (1 editor-moved retry)", adapter.attempts)
+	}
+	if len(adapter.baseTexts) != 2 || adapter.baseTexts[0] != initial || adapter.baseTexts[1] != moved {
+		t.Fatalf("loader baseTexts = %q, want [initial, moved]", adapter.baseTexts)
+	}
+
+	// Join: recorded execution revision pin MUST match attempt 2's applied transform basis (`moved`),
+	// NOT attempt 1's superseded basis (`initial`), and MUST be recorded exactly once.
+	var recorded []toolcontract.ExecutionRevision
+	for _, pins := range h.pins.pins {
+		recorded = append(recorded, pins...)
+	}
+	if len(recorded) != 1 {
+		t.Fatalf("recorded revision pins = %d, want exactly 1 (for the successful attempt)", len(recorded))
+	}
+	wantBasisSHA := textfile.StringSHA256(moved)
+	if recorded[0].ContentSHA256 != wantBasisSHA || recorded[0].ContentBytes != int64(len(moved)) {
+		t.Fatalf("recorded pin = (sha=%s bytes=%d), want applied attempt basis (sha=%s bytes=%d); initial sha=%s",
+			recorded[0].ContentSHA256, recorded[0].ContentBytes, wantBasisSHA, len(moved), textfile.StringSHA256(initial))
+	}
+
+	// Join: accepted document and disk witness MUST match the rewritten moved text.
+	if got := h.read("main.go"); got != wantAfter {
+		t.Fatalf("disk witness = %q, want %q", got, wantAfter)
+	}
+	finalDoc, ok, err := svc.OpenText(t.Context(), h.project.ID, sourcebranch.Trunk, h.project.Roots[0].ID, "main.go")
+	testutil.FailErr(t, "reopen main.go", err)
+	if !ok || finalDoc.Draft != wantAfter {
+		t.Fatalf("document witness = %q (ok=%v), want %q", finalDoc.Draft, ok, wantAfter)
 	}
 }
