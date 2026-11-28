@@ -86,16 +86,22 @@ func TestEvaluateCloseoutCitations_commandReadPathTracesParaphrase(t *testing.T)
 		}},
 	}
 	eval := guidance.EvaluateCloseoutCitations(evidence.CitationRoots{ProjectDir: root}, "implement_investigate", report, guidance.CloseoutEvidence{Ledger: ev})
-	if eval.Code != "" {
-		t.Fatalf("command-read path with paraphrased excerpt should trace, not fail: code=%q offenders=%v", eval.Code, eval.Offenders)
+	if eval.Code != guidance.InvestCitationUnverifiableCode {
+		t.Fatalf("command-read path with paraphrased excerpt should fail closed: code=%q offenders=%v", eval.Code, eval.Offenders)
 	}
 	res := evidence.Resolve(evidence.CitationRoots{ProjectDir: root}, evidence.Triple{
 		Path:    "docs/coordination.md",
 		Line:    1,
 		Excerpt: report.CitedEvidence[0].Excerpt,
 	}, ev, "")
-	if res.Verdict == evidence.VerdictUnverifiable {
-		t.Fatalf("resolution = %+v want traced/matched, not unverifiable", res)
+	if res.Verdict != evidence.VerdictUnverifiable {
+		t.Fatalf("resolution = %+v want unverifiable for contradicted excerpt", res)
+	}
+	traced := evidence.Resolve(evidence.CitationRoots{ProjectDir: root}, evidence.Triple{
+		Path: "docs/coordination.md",
+	}, ev, "")
+	if traced.Verdict != evidence.VerdictTraced {
+		t.Fatalf("resolution = %+v want traced for observed path without excerpt", traced)
 	}
 }
 

@@ -122,7 +122,7 @@ A bare path names a file, not a claim: useful for navigation, insufficient as li
 Resolution produces one of five verdicts (`internal/evidence/resolve.go`):
 
 - **matched**: the supplied claim and observation agree directly;
-- **traced**: the reference reaches the observation but the prose is a paraphrase or lower-resolution claim;
+- **traced**: the reference reaches the observation, and either no excerpt was supplied or the surrounding prose summarizes rather than quotes. A supplied excerpt that does not occur in the observation is refused;
 - **bound**: the exact resolver bounced the citation, but the host found exactly one ledger record satisfying every structured field the claim supplied, and adopted its canonical handle;
 - **ambiguous**: more than one ledger record satisfies the claim;
 - **unverifiable**: the host cannot connect the claim to admitted evidence.

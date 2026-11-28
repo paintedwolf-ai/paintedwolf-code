@@ -48,7 +48,7 @@ func TestResolve_matchedWhitespaceReflow(t *testing.T) {
 	}
 }
 
-func TestResolve_tracedParaphrase(t *testing.T) {
+func TestResolve_unverifiableParaphrase(t *testing.T) {
 	readJSON := `{"path":"f.go","content":"42|  return nil","offset":42,"end_line":42,"limit":1}`
 	ev := ledgertest.BuildFromMessages("", []api.Message{
 		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
@@ -60,15 +60,15 @@ func TestResolve_tracedParaphrase(t *testing.T) {
 	got := evidence.Resolve(evidence.CitationRoots{}, evidence.Triple{
 		Path: "f.go", Line: 42, Excerpt: "returns nil on success",
 	}, ev, "")
-	if got.Verdict != evidence.VerdictTraced {
-		t.Fatalf("verdict = %q want traced", got.Verdict)
+	if got.Verdict != evidence.VerdictUnverifiable {
+		t.Fatalf("verdict = %q want unverifiable", got.Verdict)
 	}
-	if got.Handle != "read#1" {
-		t.Fatalf("handle = %q want read#1", got.Handle)
+	if got.Reason != evidence.VerifyReasonSourceExcerpt {
+		t.Fatalf("reason = %q want %q", got.Reason, evidence.VerifyReasonSourceExcerpt)
 	}
 }
 
-func TestResolve_tracedWrongLine(t *testing.T) {
+func TestResolve_unverifiableWrongLineAmbiguousExcerpt(t *testing.T) {
 	readJSON := `{"path":"f.go","content":"42|  return nil\n43|  return nil","offset":42,"end_line":43,"limit":2}`
 	ev := ledgertest.BuildFromMessages("", []api.Message{
 		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
@@ -80,11 +80,11 @@ func TestResolve_tracedWrongLine(t *testing.T) {
 	got := evidence.Resolve(evidence.CitationRoots{}, evidence.Triple{
 		Path: "f.go", Line: 99, Excerpt: "return nil",
 	}, ev, "")
-	if got.Verdict != evidence.VerdictTraced {
-		t.Fatalf("verdict = %q want traced", got.Verdict)
+	if got.Verdict != evidence.VerdictUnverifiable {
+		t.Fatalf("verdict = %q want unverifiable", got.Verdict)
 	}
-	if got.Handle == "" {
-		t.Fatal("expected best-effort handle mint for traced citation")
+	if got.Reason != evidence.VerifyReasonSourceRange {
+		t.Fatalf("reason = %q want %q", got.Reason, evidence.VerifyReasonSourceRange)
 	}
 }
 
@@ -139,7 +139,7 @@ func TestResolve_handleHintNarrowsMint(t *testing.T) {
 	})
 
 	got := evidence.Resolve(evidence.CitationRoots{}, evidence.Triple{
-		Path: "f.go", Line: 10, Excerpt: "paraphrased beta",
+		Path: "f.go", Line: 1,
 	}, ev, "read#1")
 	if got.Verdict != evidence.VerdictTraced {
 		t.Fatalf("verdict = %q want traced", got.Verdict)
@@ -158,7 +158,7 @@ func TestResolve_handleHintIgnoredWhenInvalid(t *testing.T) {
 	})
 
 	got := evidence.Resolve(evidence.CitationRoots{}, evidence.Triple{
-		Path: "f.go", Line: 10, Excerpt: "paraphrased beta",
+		Path: "f.go", Line: 10,
 	}, ev, "read#99")
 	if got.Verdict != evidence.VerdictTraced {
 		t.Fatalf("verdict = %q want traced", got.Verdict)

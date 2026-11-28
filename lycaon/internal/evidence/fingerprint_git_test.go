@@ -59,13 +59,21 @@ func TestGitDiffEvidenceResolvesDeletedFileFinding(t *testing.T) {
 		t.Fatalf("verdict = %q want matched (handle=%q)", res.Verdict, res.Handle)
 	}
 
-	// A fabricated excerpt for the same observed path stays traced, not matched.
-	traced := evidence.Resolve(evidence.CitationRoots{}, evidence.Triple{
+	// A fabricated excerpt for the same observed path fails closed.
+	rejected := evidence.Resolve(evidence.CitationRoots{}, evidence.Triple{
 		Path:    deleted,
 		Excerpt: "this text is not in the diff",
 	}, ev, "")
+	if rejected.Verdict != evidence.VerdictUnverifiable || rejected.Reason != evidence.VerifyReasonSourceExcerpt {
+		t.Fatalf("resolution = %+v want unverifiable with %q for unmatched excerpt on observed path", rejected, evidence.VerifyReasonSourceExcerpt)
+	}
+
+	// Without a contradicting excerpt, the observed deleted path still traces.
+	traced := evidence.Resolve(evidence.CitationRoots{}, evidence.Triple{
+		Path: deleted,
+	}, ev, "")
 	if traced.Verdict != evidence.VerdictTraced {
-		t.Fatalf("verdict = %q want traced for unmatched excerpt on observed path", traced.Verdict)
+		t.Fatalf("verdict = %q want traced for observed path without excerpt", traced.Verdict)
 	}
 }
 
