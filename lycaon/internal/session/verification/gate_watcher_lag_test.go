@@ -272,7 +272,8 @@ func TestGateStateSecondaryStreamFallbackVerifiesContentDirectly(t *testing.T) {
 		t.Fatalf("GateState current receipt with external gitdir = (passed=%v repair=%v unverified=%v), want (true, false, false)", passed, repair, unverified)
 	}
 
-	// External edit while watcher is held back MUST NOT pass (repair on darwin VerifyContent fallback, unverified on linux held debounce).
+	// External edit while watcher is held back MUST NOT pass (repair on darwin
+	// VerifyContent fallback, unverified on linux held debounce).
 	testutil.FailErr(t, "external edit gate.go", os.WriteFile(gatePath, []byte("package gate\n\nfunc Verify() bool { return false }\n"), 0o600))
 	if passed, _, _ := m.GateState(ctx, sess, history); passed {
 		t.Fatal("GateState falsely passed stale receipt with external secondary stream")
