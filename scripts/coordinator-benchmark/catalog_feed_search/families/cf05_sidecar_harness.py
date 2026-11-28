@@ -351,9 +351,64 @@ class CF05SidecarClient:
             "commit_available": last_resp.get("commit_available", False),
         }
 
-    def delete_project(self, project_id: str) -> None:
-        with contextlib.suppress(Exception):
-            self.transport.request_raw(f"/v1/projects/{project_id}", method="DELETE")
+    def delete_project(self, project_id: str, *, timeout_s: float = 15.0) -> None:
+        """Remove a project via POST /v1/projects/{id}/removals (202), wait for deleted + 404."""
+        op_id = str(uuid.uuid4())
+        req = urllib.request.Request(
+            f"{self.base_url}/v1/projects/{project_id}/removals",
+            data=json.dumps({"operation_id": op_id, "force": True}).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+                status = resp.status
+        except urllib.error.HTTPError as err:
+            if err.code == 404:
+                return
+            raise RuntimeError(f"project removal POST returned HTTP {err.code} for {project_id}") from err
+        if status not in (200, 202, 204):
+            raise RuntimeError(f"project removal POST returned unexpected HTTP {status} for {project_id}")
+
+        deadline = time.monotonic() + timeout_s
+        deleted = False
+        while time.monotonic() < deadline:
+            try:
+                st_req = urllib.request.Request(
+                    f"{self.base_url}/v1/projects/{project_id}/removals/{op_id}",
+                    headers={"Authorization": f"Bearer {self.token}"},
+                    method="GET",
+                )
+                with urllib.request.urlopen(st_req, timeout=5.0) as st_resp:
+                    body = json.loads(st_resp.read().decode("utf-8"))
+                    if isinstance(body, dict) and body.get("project_state") == "deleted":
+                        deleted = True
+                        break
+                    if isinstance(body, dict) and body.get("project_state") == "failed":
+                        raise RuntimeError(f"project removal failed for {project_id}: {body}")
+            except urllib.error.HTTPError as err:
+                if err.code == 404:
+                    deleted = True
+                    break
+            time.sleep(0.1)
+        if not deleted:
+            raise RuntimeError(f"project removal did not reach deleted within {timeout_s}s for {project_id}")
+
+        # Verify 404 on GET /v1/projects/{id}
+        g_req = urllib.request.Request(
+            f"{self.base_url}/v1/projects/{project_id}",
+            headers={"Authorization": f"Bearer {self.token}"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(g_req, timeout=5.0) as g_resp:
+                raise RuntimeError(f"project {project_id} still returned HTTP {g_resp.status} after removal")
+        except urllib.error.HTTPError as err:
+            if err.code != 404:
+                raise RuntimeError(f"project {project_id} post-removal GET returned HTTP {err.code}") from err
 
     def probe_sse_cursor(
         self,
