@@ -510,6 +510,8 @@ def run_gb04_inprocess(
     limit_generated: int = 0,
     dry_run: bool = False,
     timeout: float = 600.0,
+    expected_commit: str | None = None,
+    expected_tree: str | None = None,
 ) -> dict[str, Any]:
     """Generate cases, invoke D1 in-process Go overlay, and write summary + divergences."""
     t0 = time.monotonic()
@@ -543,13 +545,18 @@ def run_gb04_inprocess(
         product_root=prod_root,
     )
 
-    plan = InProcessPlan(
-        product_root=prod_root,
-        packages=("./internal/guidance",),
-        run_pattern="^TestGB04InProcess$",
-        overlay_path=overlay_file,
-        count=1,
-    )
+    plan_kwargs: dict[str, Any] = {
+        "product_root": prod_root,
+        "packages": ("./internal/guidance",),
+        "run_pattern": "^TestGB04InProcess$",
+        "overlay_path": overlay_file,
+        "count": 1,
+    }
+    if expected_commit:
+        plan_kwargs["expected_commit"] = expected_commit
+    if expected_tree:
+        plan_kwargs["expected_tree"] = expected_tree
+    plan = InProcessPlan(**plan_kwargs)
 
     prev_cases = os.environ.get("GB04_CASES_FILE")
     prev_results = os.environ.get("GB04_RESULTS_FILE")
@@ -684,6 +691,8 @@ def main(argv: list[str] | None = None) -> int:
         default=0,
         help="Cap generated cases per family (0 = full ledger counts 10000/5000/5000)",
     )
+    ap.add_argument("--expected-commit", default="", help="Override expected product commit SHA (for fix PR qualification)")
+    ap.add_argument("--expected-tree", default="", help="Override expected product tree SHA (for fix PR qualification)")
     ap.add_argument("--timeout", type=float, default=600.0)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args(argv)
@@ -698,6 +707,8 @@ def main(argv: list[str] | None = None) -> int:
         limit_generated=args.limit_generated,
         dry_run=args.dry_run,
         timeout=args.timeout,
+        expected_commit=args.expected_commit or None,
+        expected_tree=args.expected_tree or None,
     )
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0 if summary["go_returncode"] == 0 else 1
