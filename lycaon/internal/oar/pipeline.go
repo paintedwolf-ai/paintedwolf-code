@@ -150,6 +150,11 @@ func (p *GuardPipeline) Evaluate(ctx context.Context, stage Stage, gc *GuardCont
 // evaluateMatched evaluates selected rules and resolves one Decision.
 func (p *GuardPipeline) evaluateMatched(ctx context.Context, holder *evalHolder, gc *GuardContext, matched []*Rule, selectionErrors map[*Rule]error, stage Stage, res *PipelineResult) error {
 	var blocks, nudges, warns []Decision
+	var baseAct map[string]any
+	baseComputed, baseMCP := gc.lazyState()
+	if len(matched) > 0 {
+		baseAct = activation(gc)
+	}
 	for _, r := range matched {
 		detectorState := captureDetectorFacts(gc)
 		restoreRuleDetector := func() {
@@ -159,7 +164,7 @@ func (p *GuardPipeline) evaluateMatched(ctx context.Context, holder *evalHolder,
 		}
 		outcome, err := TraceErrored, selectionErrors[r]
 		if err == nil {
-			outcome, err = p.evalRule(ctx, holder, r, gc)
+			outcome, err = p.evalRule(ctx, holder, r, gc, &baseAct, &baseComputed, &baseMCP)
 		}
 		if err != nil {
 			restoreRuleDetector()
@@ -263,7 +268,7 @@ func (p *GuardPipeline) selectRules(rules *RuleSet, stage Stage, anchor string, 
 }
 
 // evalRule reports the trace outcome. Fired is TraceFired or TraceMonitoredFired.
-func (p *GuardPipeline) evalRule(ctx context.Context, holder *evalHolder, r *Rule, gc *GuardContext) (outcome TraceOutcome, err error) {
+func (p *GuardPipeline) evalRule(ctx context.Context, holder *evalHolder, r *Rule, gc *GuardContext, baseAct *map[string]any, baseComputed *int, baseMCP *bool) (outcome TraceOutcome, err error) {
 	// Flow precedes the potentially raising condition ([OAR-EVAL-2]).
 	if len(r.Flow) > 0 && !FlowMatches(gc.Session.RecentToolNames, r.Flow) {
 		return notFiredOutcome(r), nil
@@ -291,6 +296,7 @@ func (p *GuardPipeline) evalRule(ctx context.Context, holder *evalHolder, r *Rul
 	key := counterKeyFor(r, gc)
 	gc.Counters.FireCount = holder.getCounter(gc.Session.SessionID, key, CounterFire)
 	gc.Counters.BreakerCount = holder.getCounter(gc.Session.SessionID, key, CounterBreaker)
+	var act map[string]any
 	if r.Kind == KindDetector {
 		ref := ""
 		if r.Detector != nil {
@@ -302,8 +308,20 @@ func (p *GuardPipeline) evalRule(ctx context.Context, holder *evalHolder, r *Rul
 		}
 		// Observation facts only — rule when defines thresholds / fire decision.
 		ApplyFindings(gc, findings)
+		act = activation(gc)
+	} else {
+		curComputed, curMCP := gc.lazyState()
+		if *baseAct == nil || curComputed != *baseComputed || curMCP != *baseMCP {
+			*baseAct = activation(gc)
+			*baseComputed = curComputed
+			*baseMCP = curMCP
+		} else {
+			(*baseAct)["fire_count"] = gc.Counters.FireCount
+			(*baseAct)["breaker_count"] = gc.Counters.BreakerCount
+		}
+		act = *baseAct
 	}
-	ok, err := evalRuleWhen(holder, r, gc)
+	ok, err := evalRuleWhenWithActivation(holder, r, gc, act)
 	if err != nil {
 		return TraceErrored, err
 	}
@@ -311,7 +329,7 @@ func (p *GuardPipeline) evalRule(ctx context.Context, holder *evalHolder, r *Rul
 		return notFiredOutcome(r), nil
 	}
 	if r.document != nil {
-		if _, err := r.document.RenderCopy(activation(gc)); err != nil {
+		if _, err := r.document.RenderCopy(act); err != nil {
 			return TraceErrored, err
 		}
 	}

@@ -140,25 +140,42 @@ func (r *RuleBranchRecorder) record(ruleID, branchID string, stepIndex int, take
 	}
 }
 
-// observeRuleCondition records the atoms of a guarded branch's condition, each
-// evaluated on its own against the facts the occurrence published. compiled is
-// the rule's own checked condition, or nil for a step guard compiled here.
-func observeRuleCondition(ruleID, branchID, source string, compiled *oarcore.Rule, holder *evalHolder, gc *GuardContext, decision bool) {
+var compiledStepCondCache sync.Map
+
+func compiledStepCondition(source string) (*oarcore.Rule, error) {
+	if cached, ok := compiledStepCondCache.Load(source); ok {
+		return cached.(*oarcore.Rule), nil
+	}
+	env, err := capabilityEnvironment(InstalledEngineDeclaration())
+	if err != nil {
+		return nil, err
+	}
+	compiled, err := oarcore.CompileCondition(source, env)
+	if err != nil {
+		return nil, err
+	}
+	actual, _ := compiledStepCondCache.LoadOrStore(source, compiled)
+	return actual.(*oarcore.Rule), nil
+}
+
+// observeRuleConditionWithActivation records the atoms of a guarded branch's
+// condition using an already-built activation map when provided.
+func observeRuleConditionWithActivation(ruleID, branchID, source string, compiled *oarcore.Rule, holder *evalHolder, gc *GuardContext, act map[string]any, decision bool) {
 	rec := ActiveRuleBranchRecorder.Load()
 	if rec == nil || !rec.ObserveConditions || ruleID == "" || (gc != nil && gc.FromScenario) {
 		return
 	}
 	if compiled == nil {
-		env, err := capabilityEnvironment(InstalledEngineDeclaration())
-		if err != nil {
-			return
-		}
-		if compiled, err = oarcore.CompileCondition(source, env); err != nil {
+		var err error
+		if compiled, err = compiledStepCondition(source); err != nil {
 			return
 		}
 	}
 	holder.set(gc)
-	values, err := compiled.EvaluateAtoms(activation(gc), specObservationFuncs(holder))
+	if act == nil {
+		act = activation(gc)
+	}
+	values, err := compiled.EvaluateAtoms(act, specObservationFuncs(holder))
 	if err != nil {
 		return
 	}

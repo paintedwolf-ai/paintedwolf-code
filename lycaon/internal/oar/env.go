@@ -127,39 +127,52 @@ func EvaluateCondition(when string, gc *GuardContext) (bool, error) {
 }
 
 func evalCondition(holder *evalHolder, when string, gc *GuardContext) (bool, error) {
+	return evalConditionWithActivation(holder, when, gc, nil)
+}
+
+func evalConditionWithActivation(holder *evalHolder, when string, gc *GuardContext, act map[string]any) (bool, error) {
 	if strings.TrimSpace(when) == "" {
 		return true, nil
 	}
 	holder.set(gc)
+	if act == nil {
+		act = activation(gc)
+	}
+	if compiled, err := compiledStepCondition(when); err == nil && compiled != nil {
+		return compiled.EvaluateCondition(act, specObservationFuncs(holder))
+	}
 	env, err := capabilityEnvironment(InstalledEngineDeclaration())
 	if err != nil {
 		return false, err
 	}
-	return oarcore.EvaluateCondition(when, env, activation(gc), specObservationFuncs(holder))
+	return oarcore.EvaluateCondition(when, env, act, specObservationFuncs(holder))
 }
 
 func capabilityEnvironment(cap *EngineDeclaration) (*oarcore.Environment, error) {
 	return cap.Environment()
 }
 
-func evalRuleWhen(holder *evalHolder, r *Rule, gc *GuardContext) (bool, error) {
+func evalRuleWhenWithActivation(holder *evalHolder, r *Rule, gc *GuardContext, act map[string]any) (bool, error) {
 	if r == nil {
 		return true, nil
 	}
 	holder.set(gc)
+	if act == nil {
+		act = activation(gc)
+	}
 	var (
 		ok  bool
 		err error
 	)
 	if r.document != nil {
-		ok, err = r.document.EvaluateCondition(activation(gc), specObservationFuncs(holder))
+		ok, err = r.document.EvaluateCondition(act, specObservationFuncs(holder))
 	} else {
-		ok, err = evalCondition(holder, r.When, gc)
+		ok, err = evalConditionWithActivation(holder, r.When, gc, act)
 	}
 	switch {
 	case err == nil && strings.TrimSpace(r.When) != "":
 		recordRuleBranch(r.Qualified(), "when", -1, gc, ok)
-		observeRuleCondition(r.Qualified(), "when", r.When, r.document, holder, gc, ok)
+		observeRuleConditionWithActivation(r.Qualified(), "when", r.When, r.document, holder, gc, act, ok)
 	case err != nil:
 		observeRuleError(r.Qualified(), "when", r.When, strings.TrimSpace(r.OnError) != "", gc, err)
 	}

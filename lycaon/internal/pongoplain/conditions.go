@@ -55,11 +55,14 @@ const atomReplayKey = "1"
 
 // conditionArm holds one arm's source and, once observed, its compiled atoms.
 type conditionArm struct {
-	source string
-	once   sync.Once
-	expr   *Expr
-	atoms  []string
-	tpls   []*pongo2.Template
+	source           string
+	once             sync.Once
+	expr             *Expr
+	atoms            []string
+	tpls             []*pongo2.Template
+	atomRoots        [][]string
+	directSingle     bool
+	directTrueResult bool
 }
 
 // tokenSource rebuilds a tag argument's expression text from its tokens.
@@ -101,16 +104,49 @@ func (arm *conditionArm) compile() {
 			return
 		}
 		arm.expr = expr
-		for _, atom := range expr.Atoms() {
+		exprAtoms := expr.Atoms()
+		for _, atom := range exprAtoms {
 			src := atom.Source()
+			arm.atoms = append(arm.atoms, src)
+			var roots []string
+			for _, id := range atom.Identifiers() {
+				root, _, _ := strings.Cut(id, ".")
+				if root != "" && !slices.Contains(roots, root) {
+					roots = append(roots, root)
+				}
+			}
+			arm.atomRoots = append(arm.atomRoots, roots)
+		}
+		if len(arm.atoms) == 1 {
+			tVal := expr.Decide(map[string]bool{arm.atoms[0]: true})
+			fVal := expr.Decide(map[string]bool{arm.atoms[0]: false})
+			if tVal != fVal {
+				arm.directSingle = true
+				arm.directTrueResult = tVal
+				return
+			}
+		}
+		for _, src := range arm.atoms {
 			tpl, err := Compile("{% if " + src + " %}1{% else %}0{% endif %}")
 			if err != nil {
 				tpl = nil
 			}
-			arm.atoms = append(arm.atoms, src)
 			arm.tpls = append(arm.tpls, tpl)
 		}
 	})
+}
+
+func lookupExecContext(ctx *pongo2.ExecutionContext, key string) (any, bool) {
+	if v, ok := ctx.Private[key]; ok {
+		return v, true
+	}
+	if v, ok := ctx.Public[key]; ok {
+		return v, true
+	}
+	if v, ok := ctx.Shared[key]; ok {
+		return v, true
+	}
+	return nil, false
 }
 
 // armObservation is one evaluation of an arm: its atoms, their values, the
@@ -129,29 +165,49 @@ type armObservation struct {
 // unparsable condition are not observed.
 func (arm *conditionArm) observe(ctx *pongo2.ExecutionContext, decision bool, partition func(map[string]any) string) armObservation {
 	arm.compile()
-	scope := pongo2.Context{}
-	for _, layer := range []pongo2.Context{ctx.Shared, ctx.Public, ctx.Private} {
-		for k, v := range layer {
-			scope[k] = v
-		}
-	}
 	obs := armObservation{decision: decision}
 	if partition != nil {
-		obs.partition = partition(scope)
+		if len(ctx.Shared) == 0 && len(ctx.Private) == 0 {
+			obs.partition = partition(ctx.Public)
+		} else {
+			scope := make(pongo2.Context, len(ctx.Shared)+len(ctx.Public)+len(ctx.Private))
+			for _, layer := range []pongo2.Context{ctx.Shared, ctx.Public, ctx.Private} {
+				for k, v := range layer {
+					scope[k] = v
+				}
+			}
+			obs.partition = partition(scope)
+		}
 	}
 	if len(arm.atoms) == 0 {
 		return obs
 	}
-	scope[atomReplayKey] = true
-	scope[execStateKey] = &executionState{ctx: context.Background()}
 	obs.atoms = arm.atoms
+	if arm.directSingle {
+		val := False
+		if decision == arm.directTrueResult {
+			val = True
+		}
+		obs.values = []Truth{val}
+		obs.recomposes = true
+		return obs
+	}
 	obs.values = make([]Truth, len(arm.tpls))
 	for i, tpl := range arm.tpls {
 		if tpl == nil {
 			continue
 		}
+		roots := arm.atomRoots[i]
+		atomScope := make(pongo2.Context, len(roots)+2)
+		for _, root := range roots {
+			if v, ok := lookupExecContext(ctx, root); ok {
+				atomScope[root] = v
+			}
+		}
+		atomScope[atomReplayKey] = true
+		atomScope[execStateKey] = &executionState{ctx: context.Background()}
 		var b strings.Builder
-		if err := tpl.ExecuteWriterUnbuffered(scope, &b); err != nil {
+		if err := tpl.ExecuteWriterUnbuffered(atomScope, &b); err != nil {
 			continue
 		}
 		switch b.String() {

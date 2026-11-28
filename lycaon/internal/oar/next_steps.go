@@ -477,11 +477,12 @@ func (sr stepResolver) resolve(ctx context.Context, branchPrefix string, stepInd
 		return "", nil
 	}
 	hasGuard := strings.TrimSpace(step.When) != ""
-	applies, err := EvaluateCondition(step.When, gc)
+	holder := newEvalHolder(gc, nil, nil)
+	applies, err := evalConditionWithActivation(holder, step.When, gc, facts)
 	switch {
 	case hasGuard && err == nil:
 		recordRuleBranch(ruleID, branchPrefix+".when", stepIndex, gc, applies)
-		observeRuleCondition(ruleID, branchPrefix+".when", step.When, nil, newEvalHolder(gc, nil, nil), gc, applies)
+		observeRuleConditionWithActivation(ruleID, branchPrefix+".when", step.When, nil, holder, gc, facts, applies)
 	case hasGuard:
 		observeRuleError(ruleID, branchPrefix+".when", step.When, false, gc, err)
 	}

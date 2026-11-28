@@ -125,6 +125,19 @@ func (gc *GuardContext) RegisterProvider(name string, p FactProvider) {
 }
 
 // Ensure runs the named provider once if registered.
+// lazyState returns the count of lazily computed facts and whether MCP schema
+// projection has run, allowing evaluateMatched to reuse a base activation map
+// across rules when no lazy facts were newly materialized.
+func (gc *GuardContext) lazyState() (int, bool) {
+	if gc == nil {
+		return 0, false
+	}
+	gc.lazy.mu.Lock()
+	n := len(gc.lazy.computed)
+	gc.lazy.mu.Unlock()
+	return n, gc.lazy.mcpSchemaComputed
+}
+
 func (gc *GuardContext) Ensure(name string) error {
 	if gc == nil || name == "" {
 		return nil
