@@ -58,10 +58,58 @@ func (m *Checkpoints) RestorePending(ctx context.Context) error {
 			}
 			continue
 		}
+		if row.Kind == api.CheckpointKindToolApproval && m.invocationEnded != nil {
+			if ids := checkpointToolCallIDs(row); len(ids) > 0 {
+				ended, err := m.invocationEnded(ctx, row.SessionID, ids)
+				if err != nil {
+					return err
+				}
+				if ended {
+					if err := m.settlePending(ctx, row.ID, DecisionStatusCanceled,
+						DecisionResult{Approved: false, Comments: "The host stopped before this approval was answered. Request the action again for fresh approval."},
+						Resolution{By: authzledger.ResolvedByHostStop}); err != nil {
+						return err
+					}
+					continue
+				}
+			}
+		}
 		m.Authority.restoreToolApproval(row)
 		m.expiries.schedule(ctx, row.ID, d, m.expirePending)
 	}
 	return nil
+}
+
+func checkpointToolCallIDs(row StoredCheckpoint) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	add := func(id string) {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	if id, ok := row.Payload["tool_call_id"].(string); ok {
+		add(id)
+	}
+	if raw, ok := row.Payload["joined_tool_call_ids"].([]any); ok {
+		for _, v := range raw {
+			if id, ok := v.(string); ok {
+				add(id)
+			}
+		}
+	}
+	if raw, ok := row.Payload["joined_tool_call_ids"].([]string); ok {
+		for _, id := range raw {
+			add(id)
+		}
+	}
+	return out
 }
 
 // expirePending serializes expiry with human resolution and skips resolved rows.
