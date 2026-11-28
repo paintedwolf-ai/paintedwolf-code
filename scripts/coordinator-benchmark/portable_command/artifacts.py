@@ -11,7 +11,7 @@ from outcomes import successful_tests
 from portable_command.contracts import bytes_value, fixture_path
 
 
-def grade_artifacts(project, case):
+def grade_artifacts(project, case, expected_init_hashes=None):
     project, expected = pathlib.Path(project), case['expected']
     files = dict(expected['files'])
     for generator in case['setup'].get('generators', []):
@@ -19,7 +19,21 @@ def grade_artifacts(project, case):
             files[f"{generator['directory']}/{index:05}.txt"] = generator['body']
     names = set(files) | set(expected.get('artifact_formats', {})) | set(expected.get('behavior_files', []))
     try:
-        if set(project_hashes(project)) != names:
+        actual_map = project_hashes(project)
+        actual = set(actual_map)
+        if case['setup'].get('git'):
+            actual = {p for p in actual if p != '.git' and not p.startswith('.git/')}
+        if expected_init_hashes is not None:
+            if not isinstance(expected_init_hashes, dict) or not all(
+                isinstance(p, str) and p.startswith('.paintedwolf/blueprints/') and '..' not in pathlib.PurePosixPath(p).parts
+                for p in expected_init_hashes
+            ):
+                return False
+            if actual != (names | set(expected_init_hashes)):
+                return False
+            if any(actual_map.get(p) != sha for p, sha in expected_init_hashes.items()):
+                return False
+        elif actual != names:
             return False
     except ValueError:
         return False

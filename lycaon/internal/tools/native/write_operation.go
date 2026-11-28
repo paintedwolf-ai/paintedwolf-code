@@ -115,7 +115,8 @@ func (t *WriteTool) Apply(ctx context.Context, input WriteInput, tctx tools.Tool
 	return retryEditorOperation(ctx, resolved.DisplayPath, func() (WriteResult, error) {
 		// A missing file is a create; otherwise the base is the served source text.
 		var before *string
-		st, err := loadAgentSourceText(ctx, "write", tctx, resolved)
+		op := input.operation()
+		st, err := loadAgentSourceText(ctx, op, tctx, resolved)
 		if err == nil {
 			beforeText := st.Content
 			before = &beforeText
@@ -130,7 +131,7 @@ func (t *WriteTool) Apply(ctx context.Context, input WriteInput, tctx tools.Tool
 			if input.Append && before != nil {
 				authored = *before + input.Content
 			}
-			return landEditedText(ctx, tctx, "write", resolved, st, editorTextProposal{Authored: authored, Reviewed: final})
+			return landEditedText(ctx, tctx, op, resolved, st, editorTextProposal{Authored: authored, Reviewed: final})
 		})
 	})
 }

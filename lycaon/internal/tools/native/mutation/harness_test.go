@@ -78,6 +78,11 @@ type harness struct {
 // be reached, and a real session scratch directory.
 func newHarness(t testing.TB, files map[string]string) *harness {
 	t.Helper()
+	return newHarnessWithBoundary(t, files, mutationBoundary())
+}
+
+func newHarnessWithBoundary(t testing.TB, files map[string]string, boundary *sandbox.Boundary) *harness {
+	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	raw := t.TempDir()
 	root, err := filepath.EvalSymlinks(raw)
@@ -110,7 +115,6 @@ func newHarness(t testing.TB, files map[string]string) *harness {
 	scratch, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve scratch", err)
 	tc.Host.SessionScratchDir = scratch
-	boundary := mutationBoundary()
 	pins := &pinLog{}
 	owners, err := NewOwners(native.ExecutionRevisions{Boundary: boundary}, pins, Operations{Write: &native.WriteTool{Boundary: boundary}, Delete: &native.DeleteTool{Boundary: boundary},
 		Move: &native.MoveTool{Boundary: boundary}, Copy: &native.CopyTool{Boundary: boundary}, Mkdir: &native.MkdirTool{Boundary: boundary}, Chmod: &native.ChmodTool{Boundary: boundary},

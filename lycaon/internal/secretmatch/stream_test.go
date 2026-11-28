@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"strings"
 	"testing"
 
@@ -76,5 +77,32 @@ func TestStreamCursorStaysPastAMatchCrossingTheWindowStop(t *testing.T) {
 	testutil.FailErr(t, "screen", err)
 	if out.String() != want {
 		t.Fatalf("stream %q, whole field %q", out.String(), want)
+	}
+}
+
+func TestStreamCatalogWorkBudgetClassifiesAsStreamLimitError(t *testing.T) {
+	rule := config.Rule{RuleID: "fixture", Description: "Synthetic fixture", Regex: regexp.MustCompile(`(?i)fixture_[a-z0-9]{12}`), Keywords: []string{"fixture"}}
+	detector := detect.NewDetector(config.Config{Rules: map[string]config.Rule{"fixture": rule}, Keywords: map[string]struct{}{"fixture": {}}})
+	m := &Matcher{detector: detector}
+	var out bytes.Buffer
+	_, err := m.ScreenBytes(t.Context(), strings.NewReader("fixture_123456abcdef ordinary line"), &out, "", StreamPolicy{}, StreamBounds{
+		InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1,
+	}, nil, nil, nil)
+	var limit *StreamLimitError
+	if !errors.As(err, &limit) || limit.Resource != "screen_work_units" || limit.Maximum != 1 || limit.Observed <= limit.Maximum || out.Len() != 0 {
+		t.Fatalf("catalog work budget = %T (%v), limit=%+v, out=%d", err, err, limit, out.Len())
+	}
+	for _, tc := range []struct {
+		raw, want string
+	}{
+		{"work", "screen_work_units"},
+		{"allocation_bytes", "screen_memory_bytes"},
+		{"input_bytes", "screen_input_bytes"},
+		{"match_candidates", "screen_match_candidates"},
+		{"limits", "limits"},
+	} {
+		if got := streamBudgetResource(tc.raw); got != tc.want {
+			t.Fatalf("streamBudgetResource(%q) = %q, want %q", tc.raw, got, tc.want)
+		}
 	}
 }

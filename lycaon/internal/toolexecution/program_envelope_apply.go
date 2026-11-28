@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -58,6 +59,21 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 		return result, err
 	}
 	defer releaseObservation()
+	if tc.Turn.TurnSurfaceID != "" {
+		surfaceTools, err := surfaceCommandFormTools(tc.Turn.TurnSurfaceID)
+		if err != nil || (surfaceTools != nil && !surfaceTools["update_progress"]) {
+			return result, &toolrejection.ToolReject{
+				Code:         "TOOL_NOT_OFFERED",
+				OwnerRef:     "progress",
+				BeforeEffect: true,
+				Data: map[string]any{
+					"tool":          "update_progress",
+					"surface":       tc.Turn.TurnSurfaceID,
+					"tool_loadable": false,
+				},
+			}
+		}
+	}
 	if reject := e.validateInvocation(ctx, "update_progress", tc.Identity.Agent, arguments.values, &tc); reject != nil {
 		return result, reject
 	}
@@ -137,5 +153,5 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	expected, _ := resolved["expected_revision"].(string)
 	token, _ := resolved["reconciliation_token"].(string)
 	result.Outcome, err = author.ExpectRevision(expected).ExpectItemIDsFromArgs(resolved).ExpectReconciliation(token).Apply(ctx, store, current.RootSessionID, reconciler)
-	return result, progressOwnerError(err)
+	return result, progressOwnerErrorForRoot(current.RootSessionID, err)
 }
