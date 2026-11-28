@@ -75,10 +75,11 @@ func WatchNeedsSeed(rootPath string) bool {
 
 // SeedProjectWatch extends bound root streams with catalog directories.
 func SeedProjectWatch(ctx context.Context, projectID string, seeds []RootSeed) {
+	projectID = strings.TrimSpace(projectID)
 	watchRegMu.Lock()
 	var bound []RootSpec
 	for key, watch := range watchers {
-		if key.projectID == strings.TrimSpace(projectID) {
+		if key.projectID == projectID {
 			bound = append(bound, watch.roots...)
 		}
 	}
@@ -95,8 +96,27 @@ func SeedProjectWatch(ctx context.Context, projectID string, seeds []RootSeed) {
 		if len(directories) == 0 {
 			continue
 		}
-		repochange.SeedWatch(ctx, root.Path, directories)
+		// Re-check binding before seeding so a detached or stopped root is
+		// never seeded after retirement, and never recreate a closed watcher.
+		if !rootStillBoundToProject(projectID, root.Path) {
+			continue
+		}
+		repochange.SeedExistingWatch(ctx, root.Path, directories)
 	}
+}
+
+func rootStillBoundToProject(projectID, rootPath string) bool {
+	watchRegMu.Lock()
+	defer watchRegMu.Unlock()
+	for key, watch := range watchers {
+		if key.projectID != projectID {
+			continue
+		}
+		if _, ok := rootForPath(watch.roots, rootPath); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func unusedWatchRootsLocked(removed *projectWatch) []string {

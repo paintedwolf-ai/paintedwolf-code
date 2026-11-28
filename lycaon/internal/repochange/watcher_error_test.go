@@ -11,15 +11,17 @@ import (
 )
 
 type errorTestWatcher struct {
-	events chan fsnotify.Event
-	errors chan error
-	resync chan struct{}
+	events   chan fsnotify.Event
+	errors   chan error
+	resync   chan struct{}
+	watchOff atomic.Bool
 }
 
 func (*errorTestWatcher) Add(string) error                      { return nil }
 func (*errorTestWatcher) Remove(string) error                   { return nil }
 func (*errorTestWatcher) Close() error                          { return nil }
 func (*errorTestWatcher) WatchList() []string                   { return nil }
+func (w *errorTestWatcher) HasWatch(string) bool                { return !w.watchOff.Load() }
 func (w *errorTestWatcher) EventChannel() <-chan fsnotify.Event { return w.events }
 func (w *errorTestWatcher) ErrorChannel() <-chan error          { return w.errors }
 func (w *errorTestWatcher) ResyncChannel() <-chan struct{}      { return w.resync }
