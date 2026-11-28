@@ -50,16 +50,7 @@ func noteEvidenceTypedCitation(ref string) []TypedCitation {
 	if ref == "" {
 		return nil
 	}
-	if evidence.HandleGrammar.MatchString(ref) {
-		return parseCitationToken(ref)
-	}
-	if _, _, ok := evidence.SplitPathLineToken(ref); ok {
-		return parseCitationToken(ref)
-	}
-	if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") {
-		return parseCitationToken(ref)
-	}
-	return nil
+	return parseCitationToken(ref)
 }
 
 func evaluateNarrative(projectDir, narrative string, typed []TypedCitation, ev evidence.Ledger) FindingGroundingEval {
@@ -172,7 +163,10 @@ func typedCitationGrounded(projectDir string, cite TypedCitation, ev evidence.Le
 	res := evidence.Resolve(evidence.CitationRoots{ProjectDir: projectDir}, evidence.Triple{
 		Path: path, Line: line, Excerpt: excerpt,
 	}, ev, "")
-	return res.Verdict != evidence.VerdictUnverifiable
+	if excerpt != "" {
+		return res.Verdict == evidence.VerdictMatched
+	}
+	return res.Verdict.Grounded()
 }
 
 func citationDisplay(cite TypedCitation) string {
@@ -213,6 +207,16 @@ func parseCitationToken(token string) []TypedCitation {
 	}
 	if path, line, ok := evidence.SplitPathLineToken(token); ok {
 		return []TypedCitation{{Path: path, Line: line, Raw: token}}
+	}
+	if first, rest, ok := strings.Cut(token, " "); ok {
+		if path, line, ok := evidence.SplitPathLineToken(first); ok {
+			return []TypedCitation{{
+				Path:    path,
+				Line:    line,
+				Excerpt: strings.Trim(strings.TrimSpace(rest), `"'`),
+				Raw:     token,
+			}}
+		}
 	}
 	if norm, ok := evidence.NormalizeCitationPath("", token); ok {
 		return []TypedCitation{{Path: norm, Raw: token}}
