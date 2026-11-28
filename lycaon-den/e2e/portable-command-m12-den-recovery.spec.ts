@@ -163,7 +163,9 @@ webE2e("M12 Den recovery: rendered approval-no denies outside write_root, allowe
       await expandDisclosure(spans.nth(i));
     }
 
-    const allowedCard = stream.locator(`[data-testid="action-card"][data-tool-call-id="${allowedCallId}"][data-status="done"]`);
+    const allowedCard = stream.locator(
+      `[data-testid="action-card"][data-tool-call-id="${allowedCallId}"][data-status="done"]:not([data-tool-part-id*=":activity:"])`,
+    );
     await expect(allowedCard).toBeVisible({ timeout: 30_000 });
     await expandDisclosure(allowedCard);
     const outputLink = allowedCard.getByTestId("action-link-output");
