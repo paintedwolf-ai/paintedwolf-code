@@ -421,7 +421,11 @@ def _inspect_sidecar_artifact(art: SidecarRunArtifact, *, initial_turns: int) ->
                 content = str(msg.get("content") or "")
                 if role in ("user", "system") and content:
                     feedback_chunks.append(content)
-    feedback_text = "\n".join(feedback_chunks[-3:])
+    # Keep the full tail of user/system feedback messages (the first chunk is
+    # often the >1000-char workflow runtime preamble, which previously hid the
+    # actual grounding repair prompt when truncated to [:1000]).
+    repair_chunks = [c for c in feedback_chunks if "lycaon-workflow-runtime" not in c]
+    feedback_text = "\n---\n".join(repair_chunks[-3:]) if repair_chunks else "\n---\n".join(feedback_chunks[-3:])
 
     return {
         "session_id": art.session_id,
@@ -434,7 +438,7 @@ def _inspect_sidecar_artifact(art: SidecarRunArtifact, *, initial_turns: int) ->
         "refused": refused,
         "cited_evidence_count": len(cited),
         "minted_handles": [r.handle for r in art.product_records],
-        "feedback_excerpt": feedback_text[:1000],
+        "feedback_excerpt": feedback_text[:4000],
     }
 
 
