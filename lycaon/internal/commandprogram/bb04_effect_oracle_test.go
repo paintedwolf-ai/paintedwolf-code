@@ -136,10 +136,12 @@ func bb04GenerateFamilyB(seed uint64) []bb04EffectStep {
 		kind := bb04EffectStepKind(rng.IntN(7))
 		target := targets[rng.IntN(len(targets))]
 		payload := payloads[rng.IntN(len(payloads))]
-		if kind == bb04StepDeny {
+		switch kind {
+		case bb04StepDeny:
 			target = "refused"
-		} else if kind == bb04StepCancel {
+		case bb04StepCancel:
 			target = "cancel-target"
+		case bb04StepCreate, bb04StepAppend, bb04StepReplace, bb04StepProducerFail, bb04StepRetryFromKnown:
 		}
 		steps = append(steps, bb04EffectStep{kind: kind, target: target, payload: payload})
 	}

@@ -566,6 +566,7 @@ func (r *ProgramRuntime) retainScreened(ctx context.Context, memory *toolcontrac
 // overrides it with the interruption RunProgram reported.
 func (r *ProgramRuntime) settleProgram(ctx context.Context, run *programRun, result toolcontract.ProducerResult, evaluated commandprogram.ProgramOutcome, stopped bool) error {
 	settlement := evaluated.Settlement("output:program-source:" + run.root.Identity.ProgramID)
+	settlement.Status = &result.Status
 	if stopped || result.Terminal == toolcontract.ProducerInterrupted {
 		status := 130
 		settlement.State, settlement.Status, settlement.StopCode = "interrupted", &status, toolrejection.ToolOwnerInterruptedCode

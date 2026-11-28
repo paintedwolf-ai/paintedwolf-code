@@ -182,7 +182,9 @@ func (inv *invocation) outcome(err error) (toolcontract.ProducerResult, error) {
 		return domain.ProducerResult(), err
 	}
 	err = tools.CommandResourceRejection(err)
-	err = native.ProgramWriteScopeReject(inv.ctx, inv.owners.Revisions.Boundary, inv.tc.ProfileID(), inv.name(), err)
+	if inv.owners != nil {
+		err = native.ProgramWriteScopeReject(inv.ctx, inv.owners.Revisions.Boundary, inv.tc.ProfileID(), inv.name(), err)
+	}
 	certainty := toolcontract.NoEffect
 	if inv.effects > 0 {
 		certainty = toolcontract.EffectCompleted
