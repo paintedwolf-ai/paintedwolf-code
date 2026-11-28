@@ -821,17 +821,22 @@ def _run_warmed_slots(
                     {"command": _http_probe_cmd(f"{ep2.base_url}/a02-05-a"), "capability_request": {"loopback_connect": {"ports": [ep1.port, ep2.port]}}},
                     action="approve", rung="chat",
                 )
+                b_set = len(ep2.snapshot()["requests"])
                 c2 = _call_with_checkpoint_inspect(
                     app, s_set, "command",
                     {"command": _http_probe_cmd(f"{ep2.base_url}/a02-05-b"), "capability_request": {"loopback_connect": {"ports": [ep2.port, ep1.port]}}},
                     action=None,
                 )
+                a_set = len(ep2.snapshot()["requests"])
                 abort_session(s_set)
-                ok = c1["checkpoint"]["asked"] and (not c2["checkpoint"]["asked"])
+                ok = c1["checkpoint"]["asked"] and (not c2["checkpoint"]["asked"]) and (a_set - b_set) == 1
                 receipts.append(_build_receipt(
                     spec=spec_map["A02-05-scope-chat-set-dest-reorder"], prov=prov,
                     typed_result={"first_asked": c1["checkpoint"]["asked"], "reordered_asked": c2["checkpoint"]["asked"]},
-                    independent_observation={"reordered_matched_without_ask": not c2["checkpoint"]["asked"]},
+                    independent_observation={
+                        "reordered_matched_without_ask": not c2["checkpoint"]["asked"],
+                        "fixture_arrivals_delta": a_set - b_set,
+                    },
                     passed=ok,
                 ))
                 app.request(f"/v1/sessions/{a02_sid}/prompts", {"operation_id": str(uuid.uuid4()), "text": "Continue A02 stop check."})
@@ -922,7 +927,8 @@ def _run_warmed_slots(
                 rules=[{"category": "tool", "pattern": "command", "effect": "ask"}],
                 never_ask=False,
             )
-            proj_cmd = "echo a02-project-grant-exact"
+            proj_marker_name = "a02_project_grant_marker.txt"
+            proj_cmd = f"echo a02-project-grant-exact > {proj_marker_name}"
             s_p1, pid_p1 = open_prompted_session(proj_main, "Grant project-scoped tool approval.")
             c_proj = _call_with_checkpoint_inspect(
                 app, s_p1, "command",
@@ -932,6 +938,9 @@ def _run_warmed_slots(
             abort_session(s_p1)
 
             if "A02-09-scope-project-in-project-reuse" in spec_map:
+                marker_main = proj_main / proj_marker_name
+                if marker_main.exists():
+                    marker_main.unlink()
                 s_p2 = open_prompted_session_in_project(pid_p1, "Reuse project grant in fresh session of SAME project_id.")
                 c_reuse = _call_with_checkpoint_inspect(
                     app, s_p2, "command",
@@ -939,7 +948,8 @@ def _run_warmed_slots(
                     action=None, timeout_s=60.0,
                 )
                 abort_session(s_p2)
-                ok = c_proj["checkpoint"]["asked"] and c_proj["checkpoint"]["rung"] == "project" and (not c_reuse["checkpoint"]["asked"])
+                marker_written = marker_main.exists() and "a02-project-grant-exact" in marker_main.read_text(encoding="utf-8", errors="replace")
+                ok = c_proj["checkpoint"]["asked"] and c_proj["checkpoint"]["rung"] == "project" and (not c_reuse["checkpoint"]["asked"]) and marker_written
                 receipts.append(_build_receipt(
                     spec=spec_map["A02-09-scope-project-in-project-reuse"], prov=prov,
                     typed_result={
@@ -947,11 +957,18 @@ def _run_warmed_slots(
                         "granted_rung": c_proj["checkpoint"]["rung"],
                         "fresh_session_same_project_asked": c_reuse["checkpoint"]["asked"],
                     },
-                    independent_observation={"reused_without_ask": not c_reuse["checkpoint"]["asked"]},
+                    independent_observation={
+                        "reused_without_ask": not c_reuse["checkpoint"]["asked"],
+                        "marker_file_written": marker_written,
+                        "marker_path": proj_marker_name,
+                    },
                     passed=ok,
                 ))
 
             if "A02-10-scope-project-cross-project-isolated" in spec_map:
+                marker_b = proj_b / proj_marker_name
+                if marker_b.exists():
+                    marker_b.unlink()
                 s_pb, pid_pb = open_prompted_session(proj_b, "Cross-project isolation probe.")
                 c_cross = _call_with_checkpoint_inspect(
                     app, s_pb, "command",
@@ -959,11 +976,16 @@ def _run_warmed_slots(
                     action="reject", timeout_s=60.0,
                 )
                 abort_session(s_pb)
-                ok = pid_pb != pid_p1 and c_cross["checkpoint"]["asked"]
+                marker_b_withheld = not marker_b.exists()
+                ok = pid_pb != pid_p1 and c_cross["checkpoint"]["asked"] and marker_b_withheld
                 receipts.append(_build_receipt(
                     spec=spec_map["A02-10-scope-project-cross-project-isolated"], prov=prov,
                     typed_result={"other_project_id": pid_pb, "other_project_asked": c_cross["checkpoint"]["asked"]},
-                    independent_observation={"isolated": c_cross["checkpoint"]["asked"]},
+                    independent_observation={
+                        "isolated": c_cross["checkpoint"]["asked"],
+                        "marker_file_withheld": marker_b_withheld,
+                        "marker_path": proj_marker_name,
+                    },
                     passed=ok,
                 ))
 
@@ -983,6 +1005,9 @@ def _run_warmed_slots(
 
             # A02-12: Fresh chat in SAME project_id does not inherit revoked authority
             if "A02-12-scope-chat-delete-ends-authority" in spec_map:
+                marker_main = proj_main / proj_marker_name
+                if marker_main.exists():
+                    marker_main.unlink()
                 s_del = open_prompted_session_in_project(pid_p1, "Fresh chat after grant clear.")
                 c_fresh = _call_with_checkpoint_inspect(
                     app, s_del, "command",
@@ -990,11 +1015,16 @@ def _run_warmed_slots(
                     action="reject", timeout_s=60.0,
                 )
                 abort_session(s_del)
-                ok = c_fresh["checkpoint"]["asked"]
+                marker_main_withheld = not marker_main.exists()
+                ok = c_fresh["checkpoint"]["asked"] and marker_main_withheld
                 receipts.append(_build_receipt(
                     spec=spec_map["A02-12-scope-chat-delete-ends-authority"], prov=prov,
                     typed_result={"fresh_chat_asked": c_fresh["checkpoint"]["asked"]},
-                    independent_observation={"no_leaked_authority": c_fresh["checkpoint"]["asked"]},
+                    independent_observation={
+                        "no_leaked_authority": c_fresh["checkpoint"]["asked"],
+                        "marker_file_withheld": marker_main_withheld,
+                        "marker_path": proj_marker_name,
+                    },
                     passed=ok,
                 ))
             _patch_global_approvals(app, posture="balanced", rules=[], never_ask=False)
@@ -1412,10 +1442,12 @@ def _run_a12_restart_slots(
 
         # Boot 2: Restart lycaon-dev on the exact same app_dir (preserving store.db + config/)
         app2 = _restart_application(app_dir, engine_bin=engine_bin, engine_manifest=engine_manifest, engine_root=engine_root)
+        post_restart_before_approve_existed = False
         try:
             app2.ready()
 
-            # A12-01: Pending checkpoint preserved with identical plan ID; approve once
+            # A12-01: Pending checkpoint preserved with identical plan ID; verify no premature effect before approve
+            post_restart_before_approve_existed = pending_target.exists()
             cps_after = (app2.request(f"/v1/sessions/{session_id}/checkpoints?status=pending") or {}).get("checkpoints") or []
             matched_cp = next((c for c in cps_after if c.get("id") == pending_cp_id), None)
             if matched_cp is not None:
@@ -1468,7 +1500,13 @@ def _run_a12_restart_slots(
             app2.close(cleanup=False)
 
     if "A12-01-restart-pending-preserved-no-double-run" in spec_map:
-        ok = pending_preserved and (not pre_restart_target_existed) and bool(pre_plan_id) and pre_plan_id == post_plan_id
+        ok = (
+            pending_preserved
+            and (not pre_restart_target_existed)
+            and (not post_restart_before_approve_existed)
+            and bool(pre_plan_id)
+            and pre_plan_id == post_plan_id
+        )
         receipts.append(_build_receipt(
             spec=spec_map["A12-01-restart-pending-preserved-no-double-run"], prov=prov,
             typed_result={
@@ -1477,7 +1515,11 @@ def _run_a12_restart_slots(
                 "pre_restart_plan_id": pre_plan_id,
                 "post_restart_plan_id": post_plan_id,
             },
-            independent_observation={"pre_restart_target_existed": pre_restart_target_existed, "post_restart_target_exists": pending_target.exists()},
+            independent_observation={
+                "pre_restart_target_existed": pre_restart_target_existed,
+                "post_restart_before_approve_existed": post_restart_before_approve_existed,
+                "post_restart_target_exists": pending_target.exists(),
+            },
             passed=ok,
         ))
 
