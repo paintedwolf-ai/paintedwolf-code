@@ -257,3 +257,114 @@ func TestRepairedDraftRevalidatesDocumentCitations(t *testing.T) {
 		t.Fatalf("occurrences = %+v", read.Draft.Occurrences)
 	}
 }
+
+func TestCitationRepairDirectiveShapeInvariants(t *testing.T) {
+	const draft = "One [read#9:1], two [read#9:2]."
+	retained := retainedFor(draft, false, InvestHandleNotObservedCode)
+	priorKey := GroundingOffenderKey(InvestHandleNotObservedCode, OffenderHintData([]string{"read#9:1"}))
+
+	for _, tc := range []struct {
+		name        string
+		raw         string
+		wantApplied string
+		wantReason  RepairDefectReason
+		wantValue   string
+	}{
+		{
+			name:        "valid",
+			raw:         "[cite: c1 => read#5:1]",
+			wantApplied: "One [read#5:1], two [read#9:2].",
+		},
+		{
+			name:       "malformed bad target",
+			raw:        "[cite: x1 => read#5:1]",
+			wantReason: RepairMalformed,
+			wantValue:  "[cite: x1 => read#5:1]",
+		},
+		{
+			name:       "malformed empty value",
+			raw:        "[cite: c1 => ]",
+			wantReason: RepairMalformed,
+			wantValue:  "[cite: c1 => ]",
+		},
+		{
+			name:       "malformed spaced cite",
+			raw:        "[cite : c1 => read#5:1]",
+			wantReason: RepairMalformed,
+			wantValue:  "[cite : c1 => read#5:1]",
+		},
+		{
+			name:       "malformed unterminated",
+			raw:        "[cite: c1 => read#5:1",
+			wantReason: RepairMalformed,
+			wantValue:  "[cite: c1 => read#5:1",
+		},
+		{
+			name:       "malformed non-web url",
+			raw:        "[cite: c1 => <ftp://example.test>]",
+			wantReason: RepairMalformed,
+			wantValue:  "[cite: c1 => <ftp://example.test>]",
+		},
+		{
+			name:       "extra words",
+			raw:        "[cite: c1 => read#5:1 extra words]",
+			wantReason: RepairMalformed,
+			wantValue:  "[cite: c1 => read#5:1 extra words]",
+		},
+		{
+			name:       "valid plus malformed applies neither",
+			raw:        "[cite: c1 => read#5:1]\n[cite: c2 => read#5:2 extra words]",
+			wantReason: RepairMalformed,
+			wantValue:  "[cite: c2 => read#5:2 extra words]",
+		},
+		{
+			name:       "malformed non-repair directive with no usable repair",
+			raw:        "[read#0]",
+			wantReason: RepairMalformed,
+			wantValue:  "[read#0]",
+		},
+		{
+			name:       "unknown target",
+			raw:        "[cite: c9 => read#5:1]",
+			wantReason: RepairUnknownTarget,
+			wantValue:  "read#5:1",
+		},
+		{
+			name:       "duplicate",
+			raw:        "[cite: c1 => read#5:1]\n[cite: c1 => read#5:2]",
+			wantReason: RepairDuplicateTarget,
+			wantValue:  "read#5:2",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			read := repair(retained, tc.raw, false)
+			if tc.wantReason == "" {
+				if len(read.RepairDefects) != 0 {
+					t.Fatalf("defects = %+v, want none", read.RepairDefects)
+				}
+				if read.Draft.Synthesis != tc.wantApplied {
+					t.Fatalf("synthesis = %q, want %q", read.Draft.Synthesis, tc.wantApplied)
+				}
+				return
+			}
+			if len(read.RepairDefects) == 0 {
+				t.Fatalf("expected repair defect %s, got none (draft=%q)", tc.wantReason, read.Draft.Synthesis)
+			}
+			got := read.RepairDefects[0]
+			if got.Reason != tc.wantReason || got.Value != tc.wantValue {
+				t.Fatalf("defect = %+v, want reason=%s value=%q", got, tc.wantReason, tc.wantValue)
+			}
+			if read.Draft.Synthesis != draft {
+				t.Fatalf("retained draft mutated: %q", read.Draft.Synthesis)
+			}
+			data := CitationRepairRefusalData(read.RepairDefects)
+			if sample, _ := data["offenders_sample"].(string); !strings.Contains(sample, tc.wantValue) || !strings.Contains(sample, string(tc.wantReason)) {
+				t.Fatalf("offenders_sample = %q, want value %q and reason %q", sample, tc.wantValue, tc.wantReason)
+			}
+			repairKey := GroundingOffenderKey(CitationRepairInvalidCode, data)
+			if repairKey == priorKey {
+				t.Fatalf("repair refusal key %q collided with prior refusal key %q", repairKey, priorKey)
+			}
+		})
+	}
+}

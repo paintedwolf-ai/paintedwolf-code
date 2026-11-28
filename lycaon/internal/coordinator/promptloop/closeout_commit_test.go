@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -193,6 +194,95 @@ func TestCloseoutCitationRetryKeepsPinnedSynthesis(t *testing.T) {
 	}
 	if st.closeoutRetry.attempt != 2 || st.closeoutRetry.documentAttempt != 0 {
 		t.Fatalf("a refused repair spends the citation budget: %+v", st.closeoutRetry)
+	}
+}
+
+func TestCloseoutMalformedRepairDirectiveRefusesWithoutImmediateStuck(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	const pinned = "The timeout moved [read#9:42] to the caller."
+	const malformed = "[cite: c1 => read#1:1 extra words]"
+	retained := activeRetained(pinned, 1, false, guidance.InvestHandleNotObservedCode)
+	priorKey := guidance.GroundingOffenderKey(guidance.InvestHandleNotObservedCode, guidance.OffenderHintData([]string{"read#9:42"}))
+	hints := loadCoordinatorTestHintConfig(t)
+	var observations []string
+	st := &promptLoopTurnState{
+		coordinatorFrame:  testReportFrame(),
+		draftSlotID:       "slot-1",
+		draftSlotAppended: true,
+		turnBatchState:    turnBatchState{turnTools: []string{"read"}},
+		turnCloseoutState: turnCloseoutState{closeoutRetry: closeoutRetryState{attempt: 1, prevKey: priorKey}},
+	}
+	attempts := 1
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Closeout: CloseoutDeps{
+			HintConfig: hints,
+			RejectFmt:  guidance.NewStaticRejectFormatter(hints),
+			EvidenceLedger: closeoutLedgerReader{ledger: evidence.Ledger{
+				Handles: map[string]evidence.Record{
+					"read#1": {Handle: "read#1", Kind: "read", Path: "src/a.go", Body: []string{"package main"}},
+				},
+				ByPath:       map[string][]string{"src/a.go": {"read#1"}},
+				PathFidelity: map[string]string{"src/a.go": "structured"},
+			}},
+			CloseoutStallState: func(_ context.Context, _ string) guidance.RetainedCloseout { return retained },
+			EvaluateCloseoutBlock: func(_ context.Context, _ *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
+				observations = append(observations, gc.Rejection.RejectObservation)
+				if gc.Rejection.RejectObservation != "citation_repair_invalid" {
+					t.Fatalf("observation = %q, want citation_repair_invalid", gc.Rejection.RejectObservation)
+				}
+				return &oar.Decision{Code: guidance.CitationRepairInvalidCode, Data: gc.RejectData[guidance.CitationRepairInvalidCode]}, nil
+			},
+			CloseoutTrackingDeps: CloseoutTrackingDeps{NoteCloseoutGroundingReject: func(_ context.Context, _, _, _ string, draft guidance.CloseoutDraft, _ []jsonshape.Issue) (int, string) {
+				if draft.Synthesis != pinned {
+					t.Fatalf("retained draft changed to %q, want %q", draft.Synthesis, pinned)
+				}
+				attempts++
+				return attempts, ""
+			}},
+		},
+		Projection: ProjectionDeps{
+			AppendMessages:     func(context.Context, string, ...api.Message) error { return nil },
+			AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
+			UpdateMessage:      func(_ context.Context, _, _ string, _ api.Message) error { return nil },
+		},
+	})
+	history := []api.Message{
+		{ID: "u1", Role: api.MessageRoleUser, Content: "research"},
+		{ID: "slot-1", Role: api.MessageRoleAssistant, Content: malformed, Visibility: api.MessageVisibilityInternal},
+	}
+
+	// First malformed repair gets typed CITATION_REPAIR_INVALID feedback and retries.
+	first, err := loop.Closeout.handleAcceptedCloseoutReport(
+		context.Background(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()},
+		"s1", "implement_investigate", st, history,
+		api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: malformed},
+		guidance.ReadCloseoutReport(malformed, retained, false, citationmd.Options{}),
+	)
+	testutil.FailErr(t, "first malformed repair", err)
+	if first.committed || !first.retry || first.exhausted {
+		t.Fatalf("first outcome = %+v, want retry=true exhausted=false", first)
+	}
+	if len(first.history) == 0 {
+		t.Fatal("expected refusal nudge appended to history")
+	}
+	nudge := first.history[len(first.history)-1].Content
+	if !strings.Contains(nudge, malformed) || !strings.Contains(nudge, string(guidance.RepairMalformed)) {
+		t.Fatalf("expected typed refusal nudge naming %q and %q, got %q", malformed, guidance.RepairMalformed, nudge)
+	}
+
+	// Repeating the exact same malformed repair after receiving that feedback trips stuck detection.
+	second, err := loop.Closeout.handleAcceptedCloseoutReport(
+		context.Background(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()},
+		"s1", "implement_investigate", st, history,
+		api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: malformed},
+		guidance.ReadCloseoutReport(malformed, retained, false, citationmd.Options{}),
+	)
+	testutil.FailErr(t, "repeated malformed repair", err)
+	if second.committed || second.retry || !second.exhausted {
+		t.Fatalf("second outcome = %+v, want retry=false exhausted=true", second)
+	}
+	if len(observations) != 2 {
+		t.Fatalf("observations = %v", observations)
 	}
 }
 

@@ -18,6 +18,7 @@ const (
 	RepairOutsideCycle    RepairDefectReason = "outside_repair"
 	RepairCitationBag     RepairDefectReason = "citations_without_targets"
 	RepairNarrativeChange RepairDefectReason = "narrative_changed"
+	RepairMalformed       RepairDefectReason = "malformed_repair"
 )
 
 // RepairDefect is one refused part of a repair. Value is the offending value, or
@@ -26,6 +27,20 @@ type RepairDefect struct {
 	Target string
 	Value  string
 	Reason RepairDefectReason
+}
+
+func malformedRepairDefects(issues []citationmd.Issue, includeOtherKinds bool) []RepairDefect {
+	var defects []RepairDefect
+	for _, issue := range issues {
+		if !includeOtherKinds && issue.Kind != citationmd.KindRepair {
+			continue
+		}
+		defects = append(defects, RepairDefect{
+			Value:  issue.Token,
+			Reason: RepairMalformed,
+		})
+	}
+	return defects
 }
 
 func inactiveRepairDefects(draft CloseoutDraft) []RepairDefect {
@@ -72,6 +87,8 @@ func applyRetainedRepair(next CloseoutDraft, document *WorkflowRunReportDocument
 		}
 		base = withRepairedBody(next, base, opts)
 		corrected = true
+	case len(malformedRepairDefects(next.Issues, false)) > 0:
+		return refused(malformedRepairDefects(next.Issues, false)...)
 	case len(repairs) > 0:
 		patched, defects := applyCitationRepairs(base, repairs, retained, opts)
 		if len(defects) > 0 {
@@ -81,6 +98,9 @@ func applyRetainedRepair(next CloseoutDraft, document *WorkflowRunReportDocument
 	case narrative == "" && next.CitationCount() > 0:
 		return refused(RepairDefect{Reason: RepairCitationBag})
 	case narrative == "":
+		if len(next.Issues) > 0 && document == nil && next.Verification == nil && len(next.ArtifactIDs) == 0 {
+			return refused(malformedRepairDefects(next.Issues, true)...)
+		}
 	case narrative == citationmd.Narrative(base.Parsed):
 		kept := base.Document
 		base = withRetainedDirectives(next, base, opts)
