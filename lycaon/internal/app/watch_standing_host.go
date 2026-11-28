@@ -374,18 +374,32 @@ func dispatchStandingWatchRun(
 	wg.Add(1)
 	go func(runID, sid string) {
 		defer wg.Done()
-		defer tracker.leave(sid)
+		leftTracker := false
+		leaveTracker := func() {
+			if !leftTracker {
+				leftTracker = true
+				tracker.leave(sid)
+			}
+		}
+		defer leaveTracker()
 		turnCtx := runCtx
 		if existingChat {
 			var unlockDispatch func()
 			turnCtx, unlockDispatch = b.sessions.Manager.Submissions.LockDispatch(runCtx, sid)
 			eligible, retryable := b.sessions.Manager.Submissions.AmbientWakeEligible(turnCtx, sid)
 			if !eligible {
-				unlockDispatch()
 				if retryable {
-					_ = engine.RequeueBusyRunByID(runCtx, runID)
+					requeueErr := engine.RequeueBusyRunByID(runCtx, runID)
+					unlockDispatch()
+					leaveTracker()
+					if requeueErr == nil {
+						if eligibleNow, _ := b.sessions.Manager.Submissions.AmbientWakeEligible(runCtx, sid); eligibleNow {
+							_ = engine.DispatchProjectRuns(runCtx, sw.ProjectID)
+						}
+					}
 					return
 				}
+				unlockDispatch()
 				slog.WarnContext(runCtx, "standing watch existing_chat target ineligible at admission", "run_id", runID, "session_id", sid)
 				_ = engine.SettleRunByID(runCtx, runID, sid, watch.RunFailed)
 				return

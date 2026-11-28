@@ -839,3 +839,136 @@ func TestStandingWatchExistingChatBecomesBusyBetweenEligibilityAndAdmission(t *t
 		t.Fatalf("final status after idle retry = %q, want completed", finalStatus)
 	}
 }
+
+type hookSessionsReader struct {
+	base  submissions.Sessions
+	onGet func(ctx context.Context, id string, sess *api.Session)
+}
+
+func (h *hookSessionsReader) Get(ctx context.Context, id string) (*api.Session, error) {
+	sess, err := h.base.Get(ctx, id)
+	if err == nil && sess != nil && h.onGet != nil {
+		h.onGet(ctx, id, sess)
+	}
+	return sess, err
+}
+
+func TestStandingWatchExistingChatIdleDuringBusyToPendingTransitionRetriesSameRun(t *testing.T) {
+	ctx := t.Context()
+	database := testdbfixture.Open(t, "watch_standing_busy_to_pending_idle.db")
+	rootDir := t.TempDir()
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, rootDir)
+	repos := sessionstore.NewSQL(database)
+	ownerPerson, err := repos.People.HostOwner(ctx)
+	testutil.FailErr(t, "host owner", err)
+	sess, err := repos.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create target session", err)
+
+	clock := testutil.NewFakeClock(time.Date(2026, 5, 1, 20, 0, 0, 0, time.UTC))
+	ws := watch.NewStore(database, clock)
+	engine := ws.Standing()
+
+	var (
+		mu                        sync.Mutex
+		execCount                 int
+		firedIdleDuringTransition bool
+		idleSeenWhileActive       bool
+		b                         *serveBuilder
+	)
+	tracker := &standingDispatchTracker{}
+	hookedSessions := &hookSessionsReader{
+		base: repos.Sessions,
+		onGet: func(getCtx context.Context, id string, got *api.Session) {
+			if id != sess.ID || got.Status != api.SessionStatusBusy {
+				return
+			}
+			mu.Lock()
+			if firedIdleDuringTransition {
+				mu.Unlock()
+				return
+			}
+			firedIdleDuringTransition = true
+			idleSeenWhileActive = tracker.isActive(id)
+			mu.Unlock()
+			// Transition the session to idle and deliver SessionStatusIdle while the tracker
+			// is still active and before RequeueBusyRunByID / leaveTracker finish.
+			testutil.FailErr(t, "mark session idle during busy-to-pending transition",
+				repos.Sessions.SetSessionStatus(getCtx, id, api.SessionStatusIdle))
+			idleEv, mErr := json.Marshal(api.SessionEvent{
+				ID:              id,
+				Action:          api.SessionEventActionUpdated,
+				Status:          api.SessionStatusIdle,
+				IdleDisposition: api.SessionIdleDispositionCompleted,
+			})
+			testutil.FailErr(t, "marshal idle event", mErr)
+			observeStandingWatchEvent(getCtx, b, engine, tracker, api.EventEnvelope{
+				Topic: api.EventTopicSession,
+				Data:  idleEv,
+			})
+		},
+	}
+
+	subs := submissions.New(
+		hookedSessions, repos.Submissions, repos.People, queue.New(),
+		lifecycle.New(repos.Sessions), nil, nil, nil,
+		&submissionstate.Service{}, &promptstate.MutexRegistry{},
+		func(_ context.Context, _ string, _ promptinput.Input, lock *promptstate.Lock) (*promptresult.Result, error) {
+			defer lock.Unlock()
+			mu.Lock()
+			execCount++
+			mu.Unlock()
+			return &promptresult.Result{}, nil
+		},
+		nil, nil, func(context.Context, string) bool { return false },
+	)
+	b = &serveBuilder{
+		startup: startupBootstrap{ctx: ctx},
+		storage: persistence.Runtime{Database: database, Sessions: repos},
+		sessions: &sessions.Runtime{
+			Manager: &session.Host{Submissions: subs},
+		},
+	}
+
+	var wg sync.WaitGroup
+	engine.SetCallbacks(watch.StandingCallbacks{
+		RunDispatcher: func(dCtx context.Context, sw watch.StandingWatch, run watch.WatchRun, promptText string) (watch.StandingRunDispatchOutcome, error) {
+			return dispatchStandingWatchRun(b, dCtx, &wg, engine, tracker, sw, run, promptText)
+		},
+	})
+
+	sw, err := engine.Create(ctx, ownerPerson.ID, watch.StandingWatchInput{
+		ProjectID:  testdbseed.DefaultProjectID,
+		Name:       "existing-chat-busy-idle-window",
+		Prompt:     "retry same run without future event",
+		Conditions: []awaitstore.Condition{{Kind: "timer", EveryMinutes: 60}},
+		Target:     &watch.StandingTarget{Kind: "existing_chat", SessionID: sess.ID},
+	})
+	testutil.FailErr(t, "create standing watch", err)
+
+	dispatchLock := subs.DispatchLock(sess.ID)
+	dispatchLock.Lock()
+	run, err := engine.RunNow(ctx, ownerPerson.ID, testdbseed.DefaultProjectID, sw.WatchID)
+	testutil.FailErr(t, "run standing watch now", err)
+	testutil.FailErr(t, "mark session busy before admission", repos.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	dispatchLock.Unlock()
+	// No subsequent idle event is sent after wg.Wait(); the scoped wake after requeue must retry the exact same run_id.
+	wg.Wait()
+
+	mu.Lock()
+	gotFired := firedIdleDuringTransition
+	gotActive := idleSeenWhileActive
+	gotExec := execCount
+	mu.Unlock()
+	if !gotFired || !gotActive {
+		t.Fatalf("expected idle event during active busy-to-pending transition (fired=%v active=%v)", gotFired, gotActive)
+	}
+	if gotExec != 1 {
+		t.Fatalf("execCount = %d, want 1 (requeued run must retry without a future unrelated event)", gotExec)
+	}
+	var finalStatus string
+	testutil.FailErr(t, "query final retried run", database.QueryRowContext(ctx,
+		`SELECT status FROM watch_runs WHERE run_id = ?`, run.RunID).Scan(&finalStatus))
+	if watch.WatchRunStatus(finalStatus) != watch.RunCompleted {
+		t.Fatalf("final status for run_id=%s = %q, want completed", run.RunID, finalStatus)
+	}
+}
