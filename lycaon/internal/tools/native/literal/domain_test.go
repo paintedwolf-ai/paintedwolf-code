@@ -213,4 +213,35 @@ func TestCaptureWindowDocumentIdentity(t *testing.T) {
 	if id, rev := captureWindowDocumentIdentity(t.Context(), badBranchTC, "r1", "target.txt", "target.txt", 1, len(lines), fullBody); id != "" || rev != 0 {
 		t.Fatalf("invalid source branch = (%q, %d), want empty", id, rev)
 	}
+
+	// CRLF + UTF-16LE BOM document: summarize preserves trailing '\r' on CRLF lines while
+	// OpenDocument stores LF-normalized Text with EOL="crlf".
+	crlfDoc := tools.EditorDocumentText{
+		ID:       "doc-utf16",
+		Revision: 2,
+		Text:     "L1\nTARGET\nL3\n",
+		Encoding: textfile.UTF16LEBOM,
+		EOL:      "crlf",
+	}
+	crlfTC := makeTC(&stubDomainEditorDocs{doc: crlfDoc, open: true}, api.SourceWorkspaceKindProject)
+	crlfBody := hostmarker.FormatNumberedLines([]string{"L1\r", "TARGET\r", "L3\r"}, 1)
+	if id, rev := captureWindowDocumentIdentity(t.Context(), crlfTC, "r1", "e08_target.txt", "e08_target.txt", 1, 3, crlfBody); id != "doc-utf16" || rev != 2 {
+		t.Fatalf("crlf utf16le whole window = (%q, %d), want (doc-utf16, 2)", id, rev)
+	}
+	// Negative control: LF document must NOT accept CRLF-suffixed window body.
+	if id, rev := captureWindowDocumentIdentity(t.Context(), tc, "r1", "target.txt", "target.txt", 1, 3, hostmarker.FormatNumberedLines([]string{"alpha\r", "beta\r", "gamma\r"}, 1)); id != "" || rev != 0 {
+		t.Fatalf("lf doc accepted crlf body = (%q, %d), want empty", id, rev)
+	}
+	// CRLF document without trailing newline: last line has no '\r'.
+	crlfNoTrailDoc := tools.EditorDocumentText{
+		ID:       "doc-crlf-notrail",
+		Revision: 3,
+		Text:     "L1\nTARGET",
+		Encoding: textfile.UTF8,
+		EOL:      "crlf",
+	}
+	crlfNoTrailTC := makeTC(&stubDomainEditorDocs{doc: crlfNoTrailDoc, open: true}, api.SourceWorkspaceKindProject)
+	if id, rev := captureWindowDocumentIdentity(t.Context(), crlfNoTrailTC, "r1", "notrail.txt", "notrail.txt", 1, 2, hostmarker.FormatNumberedLines([]string{"L1\r", "TARGET"}, 1)); id != "doc-crlf-notrail" || rev != 3 {
+		t.Fatalf("crlf no-trailing-newline window = (%q, %d), want (doc-crlf-notrail, 3)", id, rev)
+	}
 }

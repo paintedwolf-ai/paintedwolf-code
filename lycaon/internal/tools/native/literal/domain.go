@@ -7,7 +7,6 @@ import (
 	"slices"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -188,7 +187,7 @@ func captureWindowDocumentIdentity(ctx context.Context, tc tools.ToolContext, ro
 		return "", 0
 	}
 	lines := toolkit.SplitLines(doc.Text)
-	if endLine != len(lines) || body != hostmarker.FormatNumberedLines(lines, 1) {
+	if !tools.MatchesWholeDocumentWindow(doc, lines, startLine, endLine, body) {
 		return "", 0
 	}
 	return doc.ID, doc.Revision

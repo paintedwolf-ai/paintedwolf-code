@@ -285,7 +285,7 @@ func rememberDeliveredProgramWindow(ctx context.Context, tc tools.ToolContext, w
 		return
 	}
 	lines := toolkit.SplitLines(doc.Text)
-	if window.EndLine != len(lines) || window.Body != hostmarker.FormatNumberedLines(lines, 1) {
+	if !tools.MatchesWholeDocumentWindow(doc, lines, window.StartLine, window.EndLine, window.Body) {
 		return
 	}
 	documents.RememberAgentRead(tc.Identity.ProjectID, tc.Identity.SessionID, doc)
