@@ -104,4 +104,11 @@ describe("generated operation query contract", () => {
       }
     }
   });
+
+  it("allows optional session_id on POST /v1/search while rejecting undeclared query params", () => {
+    expect(() => assertOperationQuery("/v1/search", "POST")).not.toThrow();
+    expect(() => assertOperationQuery("/v1/search?session_id=00000000-0000-4000-8000-000000000001", "POST")).not.toThrow();
+    expect(() => assertOperationQuery("/v1/search?session_id=a&session_id=b", "POST")).toThrow(OperationContractError);
+    expect(() => assertOperationQuery("/v1/search?undeclared=1", "POST")).toThrow(OperationContractError);
+  });
 });

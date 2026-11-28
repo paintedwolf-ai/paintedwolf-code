@@ -8880,6 +8880,8 @@ paths:
       operationId: search
       x-person-action: none
       summary: Global federated search across all projects
+      parameters:
+        - $ref: '#/components/parameters/SourceSessionIdQuery'
       requestBody:
         required: true
         content:

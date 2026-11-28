@@ -656,7 +656,9 @@ export const API_OPERATIONS = {
   saveEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/save", query: [
     {"name":"session_id","type":"string"},
   ] },
-  search: { method: "POST", path: "/v1/search" },
+  search: { method: "POST", path: "/v1/search", query: [
+    {"name":"session_id","type":"string"},
+  ] },
   searchChatContent: { method: "GET", path: "/v1/sessions/{id}/messages/{message_id}/content/search", query: [
     {"name":"case_sensitive","type":"boolean"},
     {"name":"cursor","type":"string"},

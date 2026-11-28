@@ -26222,7 +26222,10 @@ export interface operations {
     };
     search: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Optional session whose bound checkout supplies the project roots */
+                session_id?: components["parameters"]["SourceSessionIdQuery"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
