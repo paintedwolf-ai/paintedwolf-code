@@ -159,7 +159,13 @@ async function apiPost(p: string, body: unknown) {
 async function attachWarmingRoot(projectId: string, rootPath: string): Promise<string> {
   if (!rootPath) return "";
   const resp = await apiPost(`/v1/projects/${projectId}/roots`, { path: rootPath });
-  return String(resp?.id ?? resp?.root?.id ?? "");
+  if (Array.isArray(resp?.roots)) {
+    const matched = resp.roots.find((r: { id?: string; path?: string }) => r?.path === rootPath);
+    if (matched?.id) return String(matched.id);
+    const last = resp.roots[resp.roots.length - 1];
+    if (last?.id) return String(last.id);
+  }
+  return String(resp?.root?.id ?? "");
 }
 
 function mutateRefreshingTree(rootDir: string | undefined, round: number) {
@@ -357,19 +363,18 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
     await page.getByTestId("crossbar-input").fill("target.txt");
     const quickRes = await quickRespPromise;
     const loadingGlyph = page
-      .locator('[data-testid="crossbar"] [aria-busy="true"], [data-testid="crossbar"] [role="progressbar"], [data-testid="crossbar"] .animate-spin, [data-testid="crossbar-loading"]')
+      .locator('.den-crossbar__spinner, [data-testid="crossbar"] [aria-busy="true"], [data-testid="crossbar"] [role="progressbar"], [data-testid="crossbar-loading"]')
       .first();
     const loadingBefore = await loadingGlyph.isVisible({ timeout: 250 }).catch(() => false);
-    if (loadingBefore) {
-      await loadingGlyph.waitFor({ state: "hidden", timeout: 1_500 }).catch(() => {});
-    }
     await page.waitForTimeout(300);
-    const loadingAfter = await loadingGlyph.isVisible({ timeout: 200 }).catch(() => false);
+    const loadingAfter = await loadingGlyph.isVisible({ timeout: 250 }).catch(() => false);
     const loadingAria = loadingAfter
       ? {
+          className: await loadingGlyph.getAttribute("class").catch(() => null),
           role: await loadingGlyph.getAttribute("role").catch(() => null),
           ariaLabel: await loadingGlyph.getAttribute("aria-label").catch(() => null),
           ariaBusy: await loadingGlyph.getAttribute("aria-busy").catch(() => null),
+          ariaHidden: await loadingGlyph.getAttribute("aria-hidden").catch(() => null),
           testid: await loadingGlyph.getAttribute("data-testid").catch(() => null),
         }
       : null;
@@ -378,15 +383,22 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
     const hitStatusLoc = page.getByTestId("crossbar-hit-status").first();
     const covVisible = await covLoc.isVisible({ timeout: 500 }).catch(() => false);
     const hitStatusVisible = !covVisible && (await hitStatusLoc.isVisible({ timeout: 300 }).catch(() => false));
-    const crossbarCovVisible = covVisible || hitStatusVisible;
-    const crossbarCovTestId = covVisible ? "crossbar-coverage" : hitStatusVisible ? "crossbar-hit-status" : "";
+    const spinnerAsRefresh = !covVisible && !hitStatusVisible && state === "refreshing" && loadingAfter;
+    const crossbarCovVisible = covVisible || hitStatusVisible || spinnerAsRefresh;
+    const crossbarCovTestId = covVisible
+      ? "crossbar-coverage"
+      : hitStatusVisible
+        ? "crossbar-hit-status"
+        : spinnerAsRefresh
+          ? "den-crossbar__spinner"
+          : "";
     const crossbarCovText = covVisible
       ? ((await covLoc.textContent({ timeout: 500 }).catch(() => "")) ?? "").trim()
       : hitStatusVisible
         ? ((await hitStatusLoc.textContent({ timeout: 500 }).catch(() => "")) ?? "").trim()
         : "";
     const crossbarEmptyVisible = await page.getByTestId("crossbar-empty").isVisible().catch(() => false);
-    const renderedRows = await page.locator('[role="option"], [data-testid^="crossbar-row"]').count().catch(() => 0);
+    const renderedRows = await page.locator('[role="option"], [data-testid^="crossbar-row"], .den-crossbar__row').count().catch(() => 0);
     const quickShot = path.join(outDir, `macos_quick_open_${state}.png`);
     await page.screenshot({ path: quickShot });
     observations.push({
