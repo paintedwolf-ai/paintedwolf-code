@@ -220,13 +220,13 @@ def _resolve_editor_doc(
         return False, {"http_status": exc.code, "body": body}
 
 
-def _latest_version_id(db_path: pathlib.Path, rel_path: str, *, offset: int = 0) -> str:
+def _latest_version_id(db_path: pathlib.Path, project_id: str, rel_path: str, *, offset: int = 0) -> str:
     if not db_path.is_file():
         return ""
     with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
         rows = conn.execute(
-            "SELECT id FROM source_versions WHERE path = ? AND branch_id = '' ORDER BY seq DESC LIMIT 4",
-            (rel_path,),
+            "SELECT id FROM source_versions WHERE project_id = ? AND path = ? AND branch_id = '' ORDER BY seq DESC LIMIT 4",
+            (project_id, rel_path),
         ).fetchall()
     if len(rows) > offset and rows[offset][0]:
         return str(rows[offset][0])
@@ -364,11 +364,13 @@ def _run_e01_slot(
                 {"command": f'edit --path {rel_path} --old-string "beta" --new-string "TEMP_MID"'},
                 checkpoint_policy="approve_chat",
             )
-            restore_ver_id = _latest_version_id(app_dir / "store.db", rel_path, offset=1)
+            restore_ver_id = _latest_version_id(app_dir / "store.db", project_id, rel_path, offset=1)
             expected_after = initial_bytes
-            # Reset session so prior setup read doesn't leak into the read-form under test.
+            # Reset session in the SAME project so prior setup read doesn't leak while preserving project_id.
             app.request(f"/v1/sessions/{session_id}/abort", {})
-            session_id, project_id, root_id = _open_session(app, proj)
+            sess2 = app.request("/v1/sessions", {"project_id": project_id, "posture": "build"})
+            session_id = sess2["id"]
+            app.request("/harness/model-limit", {"session_id": session_id, "limit": 40})
             app.request(f"/v1/sessions/{session_id}/prompts", {"operation_id": str(uuid.uuid4()), "text": prompt_text})
             _send_tool_call(app, session_id, "update_progress", {"content": f"## Progress\n- [ ] {slot['slot_id']}\n"})
 
@@ -405,8 +407,21 @@ def _run_e01_slot(
                 read_call_issued = True
                 _, read_res, _ = _send_tool_call(app, session_id, read_call[0], read_call[1], checkpoint_policy="approve_chat")
             if read_form == "stale_disk":
-                # Mutate disk externally after the read so the read basis is stale.
-                target.write_bytes(initial_bytes.replace(b"beta", b"STALE_EXT"))
+                # Mutate disk externally after the read so the read basis is genuinely stale.
+                if route.kind == "command_shell":
+                    # Preserve target line `beta` so execution-pinned shell routes can still apply
+                    # and be verified independently on the mutated post-stale file.
+                    stale_bytes = initial_bytes.replace(b"pad_line_02", b"STALE_EXT_02")
+                    expected_after = expected_after.replace(b"pad_line_02", b"STALE_EXT_02")
+                    after_text = expected_after.decode("utf-8", errors="replace")
+                elif b"beta" in initial_bytes:
+                    stale_bytes = initial_bytes.replace(b"beta", b"STALE_EXT")
+                elif b"1 + 2" in initial_bytes:
+                    stale_bytes = initial_bytes.replace(b"1 + 2", b"9 + 9")
+                else:
+                    stale_bytes = initial_bytes + b"\n// STALE_EXT\n"
+                assert stale_bytes != initial_bytes, f"stale_disk mutation was a no-op for {route.route_id}"
+                target.write_bytes(stale_bytes)
             disk_sha_before_write = str(hash_file(target).get("sha256") or "")
             w_tool, w_args = build_route_write_call(
                 route,

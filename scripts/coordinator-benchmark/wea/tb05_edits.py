@@ -126,6 +126,10 @@ def build_tb05_slot_catalog() -> dict[str, list[dict[str, Any]]]:
     e01_slots: list[dict[str, Any]] = []
     for route in D14_EDIT_ROUTES:
         for rf in E01_READ_FORMS:
+            # Person-approved D14 Option A2 split (TB05-read-basis-person-approved.md):
+            # the 6 document-aware structured edit routes require a whole conversational read;
+            # the 4 program-effect shell routes (`command_shell`) preserve execution-pinned semantics.
+            expected_auth = True if route.kind == "command_shell" else bool(rf["qualifies"])
             e01_slots.append({
                 "slot_id": f"E01-{route.route_id}-{rf['id']}",
                 "family": "E01",
@@ -135,7 +139,7 @@ def build_tb05_slot_catalog() -> dict[str, list[dict[str, Any]]]:
                 "tool_name": route.tool_name,
                 "operation": route.operation,
                 "read_form": rf["id"],
-                "expected_authorized": bool(rf["qualifies"]),
+                "expected_authorized": expected_auth,
             })
     # Two combined read-and-write responses (60 + 2 = 62 E01 sidecar slots).
     e01_slots.append({
