@@ -371,6 +371,11 @@ def _run_e01_slot(
             sess2 = app.request("/v1/sessions", {"project_id": project_id, "posture": "build"})
             session_id = sess2["id"]
             app.request("/harness/model-limit", {"session_id": session_id, "limit": 40})
+            app.wait_for(
+                lambda: app.request(f"/v1/sessions/{session_id}").get("status") == "idle",
+                "tb05 restore_version session idle",
+                session_id,
+            )
             app.request(f"/v1/sessions/{session_id}/prompts", {"operation_id": str(uuid.uuid4()), "text": prompt_text})
             _send_tool_call(app, session_id, "update_progress", {"content": f"## Progress\n- [ ] {slot['slot_id']}\n"})
 
