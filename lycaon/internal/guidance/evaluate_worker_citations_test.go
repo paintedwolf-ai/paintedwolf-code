@@ -61,11 +61,11 @@ func TestEvaluateWorkerCitations_excerptMismatch(t *testing.T) {
 	eval := guidance.EvaluateWorkerCitations(evidence.CitationRoots{}, []guidance.WorkerFindingInput{
 		{Path: "f.go", Evidence: "read#1", Line: 42, Excerpt: "return 1"},
 	}, nil, guidance.WorkerNarrativeInput{}, ev)
-	if eval.Code != "" {
-		t.Fatalf("eval = %+v want non-blocking traced", eval)
+	if eval.Code != guidance.WorkerEvidenceHandleUnknownCode {
+		t.Fatalf("eval = %+v want %q for mismatched excerpt", eval, guidance.WorkerEvidenceHandleUnknownCode)
 	}
-	if len(eval.Resolutions) != 1 || eval.Resolutions[0].Verdict != evidence.VerdictTraced {
-		t.Fatalf("resolved = %+v want traced", eval.Resolutions)
+	if len(eval.Resolutions) != 1 || eval.Resolutions[0].Verdict != evidence.VerdictUnverifiable {
+		t.Fatalf("resolved = %+v want unverifiable", eval.Resolutions)
 	}
 }
 
@@ -103,11 +103,18 @@ func TestEvaluateWorkerCitations_mcpOpaqueExcerptMismatch(t *testing.T) {
 	eval := guidance.EvaluateWorkerCitations(evidence.CitationRoots{}, []guidance.WorkerFindingInput{
 		{Evidence: handle, Excerpt: "fabricated finding never returned by the tool"},
 	}, nil, guidance.WorkerNarrativeInput{}, ev)
-	if eval.Code != "" {
-		t.Fatalf("eval = %+v want non-blocking traced", eval)
+	if eval.Code == "" {
+		t.Fatalf("eval = %+v want typed refusal for absent excerpt on opaque MCP record", eval)
 	}
-	if len(eval.Resolutions) != 1 || eval.Resolutions[0].Verdict != evidence.VerdictTraced {
-		t.Fatalf("resolved = %+v want traced", eval.Resolutions)
+	if len(eval.Resolutions) != 1 || eval.Resolutions[0].Verdict != evidence.VerdictUnverifiable {
+		t.Fatalf("resolved = %+v want unverifiable", eval.Resolutions)
+	}
+	// Bare handle without a fabricated excerpt remains traced.
+	bare := guidance.EvaluateWorkerCitations(evidence.CitationRoots{}, []guidance.WorkerFindingInput{
+		{Evidence: handle},
+	}, nil, guidance.WorkerNarrativeInput{}, ev)
+	if bare.Code != "" || len(bare.Resolutions) != 1 || bare.Resolutions[0].Verdict != evidence.VerdictTraced {
+		t.Fatalf("bare = %+v want non-blocking traced", bare)
 	}
 }
 
