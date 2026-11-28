@@ -33,7 +33,8 @@ var goldenResolveCases = []struct {
 	want   evidence.Verdict
 }{
 	{evidence.Triple{Path: "pkg/main.go", Line: 1, Excerpt: "package main"}, "read#1", evidence.VerdictMatched},
-	{evidence.Triple{Path: "pkg/main.go", Line: 1, Excerpt: "package entrypoint"}, "read#1", evidence.VerdictTraced},
+	{evidence.Triple{Path: "pkg/main.go", Line: 1}, "read#1", evidence.VerdictTraced},
+	{evidence.Triple{Path: "pkg/main.go", Line: 1, Excerpt: "package entrypoint"}, "read#1", evidence.VerdictUnverifiable},
 	{evidence.Triple{Path: "missing.go", Line: 1, Excerpt: "package missing"}, "", evidence.VerdictUnverifiable},
 }
 

@@ -98,7 +98,29 @@ func Resolve(
 		return out
 	}
 
-	out.Handle = bestHandleForPath(ev, path, line, handleHint)
+	handle := bestHandleForPath(ev, path, line, handleHint)
+	rec, ok := ResolveHandle(ev, handle)
+	if !ok {
+		out.Verdict = VerdictUnverifiable
+		return out
+	}
+	out.Handle = handle
+	if line > 0 && CoordinateSupport(rec, path, line, line) == CoordinateUnsupported {
+		out.Verdict = VerdictUnverifiable
+		out.Reason = VerifyReasonSourceRange
+		return out
+	}
+	if excerpt != "" {
+		if verified, reason := VerifyRecord(rec, Claim{Handle: handle, Path: path, Line: line, Excerpt: excerpt}); !verified {
+			out.Verdict = VerdictUnverifiable
+			if reason != "" {
+				out.Reason = reason
+			} else {
+				out.Reason = VerifyReasonSourceExcerpt
+			}
+			return out
+		}
+	}
 	out.Verdict = VerdictTraced
 	return out
 }
