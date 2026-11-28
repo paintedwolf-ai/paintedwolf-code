@@ -6,7 +6,6 @@ import (
 	"go/constant"
 	"go/token"
 	"go/types"
-	"runtime"
 	"slices"
 	"strings"
 
@@ -147,7 +146,6 @@ func (g *ProducerGraph) compact() {
 	g.globalStores = nil
 	g.methodsByName = nil
 	g.wrapperHelpers = nil
-	runtime.GC()
 }
 
 func (g *ProducerGraph) traceFactScoped(fact string, site *InstructionSite) FactTrace {

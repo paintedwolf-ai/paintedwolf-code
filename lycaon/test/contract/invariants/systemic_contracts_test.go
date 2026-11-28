@@ -14,6 +14,7 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/invariants"
 	"github.com/lycaon/lycaon/test/contract/invariants/forbiddencalls"
+	"github.com/lycaon/lycaon/test/contract/invariants/invariantstest"
 )
 
 var forcedGCTree = map[string]string{
@@ -27,87 +28,87 @@ var forcedGCTree = map[string]string{
 // collector-behavior tests outside contract suites remain allowed.
 func TestContractSuitesAvoidForcedGC(t *testing.T) {
 	t.Parallel()
-	gcRule := rule(t, forbiddencalls.Family, "contract-suites-avoid-forced-gc")
+	gcRule := invariantstest.Rule(t, forbiddencalls.Family, "contract-suites-avoid-forced-gc")
 	for name, tc := range map[string]struct {
 		overrides map[string]string
-		want      outcome
+		want      invariantstest.Outcome
 		wantPos   string
 	}{
-		"clean contract suite": {want: passes},
+		"clean contract suite": {want: invariantstest.Passes},
 		"seeded runtime.GC in contract test": {
 			overrides: map[string]string{
 				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport (\n\t\"runtime\"\n\t\"testing\"\n)\n\nfunc TestSeeded(t *testing.T) {\n\truntime.GC()\n}\n",
 			},
-			want:    violates,
+			want:    invariantstest.Violates,
 			wantPos: "test/contract/sample/sample_test.go:9:",
 		},
 		"aliased runtime import in shared helper": {
 			overrides: map[string]string{
 				"lycaon/pkg/testcorpus/corpus.go": "package testcorpus\n\nimport rt \"runtime\"\n\nfunc Load() { rt.GC() }\n",
 			},
-			want:    violates,
+			want:    invariantstest.Violates,
 			wantPos: "pkg/testcorpus/corpus.go:5:",
 		},
 		"debug.FreeOSMemory in contract helper": {
 			overrides: map[string]string{
 				"lycaon/test/contract/internal/helper/helper.go": "package helper\n\nimport \"runtime/debug\"\n\nfunc Scavenge() { debug.FreeOSMemory() }\n",
 			},
-			want:    violates,
+			want:    invariantstest.Violates,
 			wantPos: "test/contract/internal/helper/helper.go:5:",
 		},
 		"aliased debug.FreeOSMemory in contract test": {
 			overrides: map[string]string{
 				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport dbg \"runtime/debug\"\n\nfunc helper() { dbg.FreeOSMemory() }\n",
 			},
-			want:    violates,
+			want:    invariantstest.Violates,
 			wantPos: "test/contract/sample/sample_test.go:5:",
 		},
 		"dot-imported runtime.GC": {
 			overrides: map[string]string{
 				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport . \"runtime\"\n\nfunc helper() { GC() }\n",
 			},
-			want:    violates,
+			want:    invariantstest.Violates,
 			wantPos: "test/contract/sample/sample_test.go:5:",
 		},
 		"local GC function shadowing dot-imported runtime": {
 			overrides: map[string]string{
 				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport . \"runtime\"\n\nfunc helper() {\n\t_ = GOOS\n\tGC := func() {}\n\tGC()\n}\n",
 			},
-			want: passes,
+			want: invariantstest.Passes,
 		},
 		"dot-imported runtime.GC outside inner shadow block": {
 			overrides: map[string]string{
 				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport . \"runtime\"\n\nfunc helper() {\n\t{\n\t\tGC := func() {}\n\t\tGC()\n\t}\n\tGC()\n}\n",
 			},
-			want:    violates,
+			want:    invariantstest.Violates,
 			wantPos: "test/contract/sample/sample_test.go:10:",
 		},
 		"if-initializer shadows runtime import only inside if and genuine call after is caught": {
 			overrides: map[string]string{
 				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport \"runtime\"\n\ntype localGC struct{}\n\nfunc (localGC) GC() {}\n\nfunc helper() {\n\tif runtime := (localGC{}); true {\n\t\truntime.GC()\n\t}\n\truntime.GC()\n}\n",
 			},
-			want:    violates,
+			want:    invariantstest.Violates,
 			wantPos: "test/contract/sample/sample_test.go:13:",
 		},
 		"if-initializer shadows dot-imported GC only inside if and genuine call after is caught": {
 			overrides: map[string]string{
 				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport . \"runtime\"\n\nfunc helper() {\n\tif GC := func() {}; true {\n\t\tGC()\n\t}\n\tGC()\n}\n",
 			},
-			want:    violates,
+			want:    invariantstest.Violates,
 			wantPos: "test/contract/sample/sample_test.go:9:",
 		},
 		"shadowed runtime and debug identifiers": {
 			overrides: map[string]string{
 				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport (\n\t\"runtime\"\n\t\"runtime/debug\"\n)\n\ntype localGC struct{}\n\nfunc (localGC) GC()           {}\nfunc (localGC) FreeOSMemory() {}\n\nfunc realUse() string {\n\t_, _ = runtime.GOOS, debug.SetMemoryLimit\n\treturn runtime.GOOS\n}\n\nfunc shadowed(runtime localGC) {\n\tdebug := localGC{}\n\truntime.GC()\n\tdebug.FreeOSMemory()\n}\n",
 			},
-			want: passes,
+			want: invariantstest.Passes,
 		},
 		"unrelated same-named methods and packages": {
 			overrides: map[string]string{
 				"lycaon/internal/other/other.go":             "package other\n\nfunc GC() {}\nfunc FreeOSMemory() {}\n",
 				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport \"github.com/lycaon/lycaon/internal/other\"\n\ntype local struct{}\n\nfunc (local) GC() {}\nfunc (local) FreeOSMemory() {}\n\nfunc helper(x local) {\n\tx.GC()\n\tx.FreeOSMemory()\n\tother.GC()\n\tother.FreeOSMemory()\n}\n",
 			},
-			want: passes,
+			want: invariantstest.Passes,
 		},
 		"permitted collector-behavior and profiling tests outside contract suites": {
 			overrides: map[string]string{
@@ -116,13 +117,13 @@ func TestContractSuitesAvoidForcedGC(t *testing.T) {
 				"lycaon/internal/testutil/resourceguard/guard.go":   "package resourceguard\n\nimport \"runtime/debug\"\n\nfunc Check() { debug.FreeOSMemory() }\n",
 				"lycaon/internal/sourcecatalog/index_bench_test.go": "package sourcecatalog\n\nimport \"runtime\"\n\nfunc bench() { runtime.GC() }\n",
 			},
-			want: passes,
+			want: invariantstest.Passes,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			res := invariants.Evaluate(fixture(t, with(forcedGCTree, tc.overrides)), gcRule)
-			expect(t, res, tc.want, 1)
+			res := invariants.Evaluate(invariantstest.Fixture(t, invariantstest.With(forcedGCTree, tc.overrides)), gcRule)
+			invariantstest.Expect(t, res, tc.want, 1)
 			if tc.wantPos != "" && !strings.HasPrefix(res.Violations[0], tc.wantPos) {
 				t.Fatalf("violation = %q, want prefix %q", res.Violations[0], tc.wantPos)
 			}
@@ -142,71 +143,71 @@ var onceMemoTree = map[string]string{
 // resettable caches, and unrelated sync.Once uses are all handled accurately.
 func TestSharedOnceMemoOwnership(t *testing.T) {
 	t.Parallel()
-	memoRule := rule(t, forbiddencalls.Family, "shared-once-memo-results-stay-immutable")
+	memoRule := invariantstest.Rule(t, forbiddencalls.Family, "shared-once-memo-results-stay-immutable")
 	for name, tc := range map[string]struct {
 		overrides map[string]string
-		want      outcome
+		want      invariantstest.Outcome
 		wantPos   string
 	}{
-		"clean memos": {want: passes},
+		"clean memos": {want: invariantstest.Passes},
 		"seeded write to nested onceValue field outside once.Do": {
 			overrides: map[string]string{
 				"lycaon/test/contract/invariants/release.go": "package invariants\n\nfunc (c *Corpus) Release() {\n\tc.typed.value = nil\n}\n",
 			},
-			want:    violates,
+			want:    invariantstest.Violates,
 			wantPos: "test/contract/invariants/release.go:4:",
 		},
 		"seeded write to direct onceValue field in clear method": {
 			overrides: map[string]string{
 				"lycaon/test/contract/invariants/clear.go": "package invariants\n\nfunc (o *onceValue[T]) Clear() {\n\tvar zero T\n\to.value = zero\n}\n",
 			},
-			want:    violates,
+			want:    invariantstest.Violates,
 			wantPos: "test/contract/invariants/clear.go:5:",
 		},
 		"unguarded sync.Once reset in branch does not exempt write": {
 			overrides: map[string]string{
 				"lycaon/test/contract/invariants/unsafe_reset.go": "package invariants\n\nimport \"sync\"\n\nfunc (o *onceValue[T]) UnsafeReset(cond bool) {\n\tif cond {\n\t\to.once = sync.Once{}\n\t}\n\tvar zero T\n\to.value = zero\n}\n",
 			},
-			want:    violates,
+			want:    invariantstest.Violates,
 			wantPos: "test/contract/invariants/unsafe_reset.go:10:",
 		},
 		"renamed fields and distinct result type with aliased sync import": {
 			overrides: map[string]string{
 				"lycaon/test/contract/internal/cache/memo.go": "package cache\n\nimport s \"sync\"\n\ntype Index struct{}\n\ntype indexMemo struct {\n\tinitOnce s.Once\n\tsnapshot *Index\n}\n\nfunc (m *indexMemo) Get() *Index {\n\tm.initOnce.Do(func() { m.snapshot = &Index{} })\n\treturn m.snapshot\n}\n\nfunc (m *indexMemo) Drop() {\n\tm.snapshot = nil\n}\n",
 			},
-			want:    violates,
+			want:    invariantstest.Violates,
 			wantPos: "test/contract/internal/cache/memo.go:18:",
 		},
 		"distinct receiver written inside another instance once.Do": {
 			overrides: map[string]string{
 				"lycaon/test/contract/internal/cache/distinct.go": "package cache\n\nimport \"sync\"\n\ntype Index struct{}\n\ntype indexMemo struct {\n\tinitOnce sync.Once\n\tsnapshot *Index\n}\n\nfunc (first *indexMemo) Corrupt(second *indexMemo) {\n\tfirst.initOnce.Do(func() {\n\t\tfirst.snapshot = &Index{}\n\t\tsecond.snapshot = nil\n\t})\n}\n",
 			},
-			want:    violates,
+			want:    invariantstest.Violates,
 			wantPos: "test/contract/internal/cache/distinct.go:15:",
 		},
 		"legitimate caller-local release": {
 			overrides: map[string]string{
 				"lycaon/test/contract/internal/cache/local.go": "package cache\n\nimport \"sync\"\n\ntype Index struct{}\n\ntype indexMemo struct {\n\tinitOnce sync.Once\n\tsnapshot *Index\n}\n\nfunc (m *indexMemo) Get() *Index {\n\tm.initOnce.Do(func() { m.snapshot = &Index{} })\n\treturn m.snapshot\n}\n\nfunc consume(m *indexMemo) {\n\tsnap := m.Get()\n\t_ = snap\n\tsnap = nil\n}\n",
 			},
-			want: passes,
+			want: invariantstest.Passes,
 		},
 		"independently resettable cache coordinated by mutex": {
 			overrides: map[string]string{
 				"lycaon/test/contract/internal/cache/resettable.go": "package cache\n\nimport \"sync\"\n\ntype Index struct{}\n\ntype resettableMemo struct {\n\tmu       sync.Mutex\n\tready    bool\n\tsnapshot *Index\n}\n\nfunc (m *resettableMemo) Get() *Index {\n\tm.mu.Lock()\n\tdefer m.mu.Unlock()\n\tif !m.ready {\n\t\tm.snapshot = &Index{}\n\t\tm.ready = true\n\t}\n\treturn m.snapshot\n}\n\nfunc (m *resettableMemo) Reset() {\n\tm.mu.Lock()\n\tdefer m.mu.Unlock()\n\tm.ready = false\n\tm.snapshot = nil\n}\n",
 			},
-			want: passes,
+			want: invariantstest.Passes,
 		},
 		"unrelated sync.Once synchronization": {
 			overrides: map[string]string{
 				"lycaon/test/contract/internal/cache/notify.go": "package cache\n\nimport \"sync\"\n\ntype notifier struct {\n\tonce  sync.Once\n\tch    chan struct{}\n\tcount int\n}\n\nfunc (n *notifier) Notify() { n.once.Do(func() { close(n.ch) }) }\nfunc (n *notifier) Bump()   { n.count++ }\n",
 			},
-			want: passes,
+			want: invariantstest.Passes,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			res := invariants.Evaluate(fixture(t, with(onceMemoTree, tc.overrides)), memoRule)
-			expect(t, res, tc.want, 1)
+			res := invariants.Evaluate(invariantstest.Fixture(t, invariantstest.With(onceMemoTree, tc.overrides)), memoRule)
+			invariantstest.Expect(t, res, tc.want, 1)
 			if tc.wantPos != "" && !strings.HasPrefix(res.Violations[0], tc.wantPos) {
 				t.Fatalf("violation = %q, want prefix %q", res.Violations[0], tc.wantPos)
 			}
@@ -265,7 +266,7 @@ func TestSharedMemoLifetimeBehavioralContract(t *testing.T) {
 
 	t.Run("invariants corpus remains usable across concurrent consumers", func(t *testing.T) {
 		t.Parallel()
-		corpus := fixture(t, forcedGCTree)
+		corpus := invariantstest.Fixture(t, forcedGCTree)
 		err := verifySharedMemoLifetime(
 			func() (*invariants.GoCorpus, error) { return corpus.Go(), nil },
 			func(g *invariants.GoCorpus) bool { return g != nil && len(g.Files()) > 0 },
@@ -279,7 +280,7 @@ func TestSharedMemoLifetimeBehavioralContract(t *testing.T) {
 
 	t.Run("testcorpus.GoLoader remains usable across concurrent consumers", func(t *testing.T) {
 		t.Parallel()
-		corpus := fixture(t, forcedGCTree)
+		corpus := invariantstest.Fixture(t, forcedGCTree)
 		var loader testcorpus.GoLoader
 		err := verifySharedMemoLifetime(
 			func() (*testcorpus.GoCorpus, error) {
@@ -351,16 +352,16 @@ func TestSharedMemoLifetimeBehavioralContract(t *testing.T) {
 // at most once. Seeded violations ensure two empty outputs cannot pass.
 func TestSharedAnalysisRepeatedRunsPreserveFindingsAndLoadOnce(t *testing.T) {
 	t.Parallel()
-	files := with(with(onceMemoTree, pongoStub), map[string]string{
+	files := invariantstest.With(invariantstest.With(onceMemoTree, pongoStub), map[string]string{
 		"lycaon/internal/fixture/render.go": "package fixture\n\nimport \"github.com/flosch/pongo2/v6\"\n\n" +
 			"func example(tpl *pongo2.Template) {\n\t_, _ = tpl.Execute(nil)\n}\n",
 		"lycaon/test/contract/sample/seeded_test.go": "package sample\n\nimport rt \"runtime\"\n\nfunc seeded() { rt.GC() }\n",
 	})
-	corpus := fixture(t, files)
+	corpus := invariantstest.Fixture(t, files)
 
-	gcRule := rule(t, forbiddencalls.Family, "contract-suites-avoid-forced-gc")
-	pongoRule := rule(t, forbiddencalls.Family, "pongo-templates-carry-the-host-ceiling")
-	memoRule := rule(t, forbiddencalls.Family, "shared-once-memo-results-stay-immutable")
+	gcRule := invariantstest.Rule(t, forbiddencalls.Family, "contract-suites-avoid-forced-gc")
+	pongoRule := invariantstest.Rule(t, forbiddencalls.Family, "pongo-templates-carry-the-host-ceiling")
+	memoRule := invariantstest.Rule(t, forbiddencalls.Family, "shared-once-memo-results-stay-immutable")
 
 	type snapshot struct {
 		violations []string
@@ -494,12 +495,12 @@ func TestOptimizedSourceSelectionPreservesFindingsAndScope(t *testing.T) {
 	}
 
 	// 1. Direct declaration fixture.
-	directFiles := with(pongoStub, map[string]string{
+	directFiles := invariantstest.With(pongoStub, map[string]string{
 		"lycaon/internal/target/direct.go": "package target\n\nimport \"github.com/lycaon/lycaon/internal/pongoplain\"\n\n" +
 			"func run() {\n\ttpl, _ := pongoplain.Compile(\"hello\")\n\t_, _ = tpl.Execute(nil)\n}\n",
 	})
-	directRes := invariants.Evaluate(fixture(t, directFiles), typedCeilingRule)
-	expect(t, directRes, violates, 1)
+	directRes := invariants.Evaluate(invariantstest.Fixture(t, directFiles), typedCeilingRule)
+	invariantstest.Expect(t, directRes, invariantstest.Violates, 1)
 	if got := normalizeFindings("typed", typedCeilingRule, directRes); !slices.Equal(got, []normalizedFinding{
 		{ruleID: "typed/typed-template-execute-ceiling", location: "internal/target/direct.go:7"},
 	}) {
@@ -508,7 +509,7 @@ func TestOptimizedSourceSelectionPreservesFindingsAndScope(t *testing.T) {
 
 	// 2. Multi-package helper chain fixture: leaf compiles, mid forwards, target executes directly
 	// without directly importing pongo2.
-	chainFiles := with(pongoStub, map[string]string{
+	chainFiles := invariantstest.With(pongoStub, map[string]string{
 		"lycaon/internal/leaf/leaf.go": "package leaf\n\nimport (\n\t\"github.com/flosch/pongo2/v6\"\n\t\"github.com/lycaon/lycaon/internal/pongoplain\"\n)\n\n" +
 			"func Build() *pongo2.Template {\n\ttpl, _ := pongoplain.Compile(\"hello\")\n\treturn tpl\n}\n",
 		"lycaon/internal/mid/bridge.go": "package mid\n\nimport (\n\t\"github.com/flosch/pongo2/v6\"\n\t\"github.com/lycaon/lycaon/internal/leaf\"\n)\n\n" +
@@ -516,8 +517,8 @@ func TestOptimizedSourceSelectionPreservesFindingsAndScope(t *testing.T) {
 		"lycaon/internal/target/call.go": "package target\n\nimport \"github.com/lycaon/lycaon/internal/mid\"\n\n" +
 			"func invoke() {\n\ttpl := mid.Forward()\n\t_, _ = tpl.Execute(nil)\n}\n",
 	})
-	chainRes := invariants.Evaluate(fixture(t, chainFiles), typedCeilingRule)
-	expect(t, chainRes, violates, 1)
+	chainRes := invariants.Evaluate(invariantstest.Fixture(t, chainFiles), typedCeilingRule)
+	invariantstest.Expect(t, chainRes, invariantstest.Violates, 1)
 	if got := normalizeFindings("typed", typedCeilingRule, chainRes); !slices.Equal(got, []normalizedFinding{
 		{ruleID: "typed/typed-template-execute-ceiling", location: "internal/target/call.go:7"},
 	}) {
@@ -553,16 +554,16 @@ func TestOptimizedSourceSelectionPreservesFindingsAndScope(t *testing.T) {
 		"lycaon/internal/target/direct.go":  "package target\n\nimport \"runtime\"\n\nfunc run() { runtime.GC() }\n",
 		"lycaon/internal/sibling/broken.go": "package sibling\n\nfunc (\n",
 	}
-	scopedRes := invariants.Evaluate(fixture(t, validWithMalformedSibling), scopedRule)
-	expect(t, scopedRes, violates, 1)
+	scopedRes := invariants.Evaluate(invariantstest.Fixture(t, validWithMalformedSibling), scopedRule)
+	invariantstest.Expect(t, scopedRes, invariantstest.Violates, 1)
 	if got := normalizeFindings("scoped", scopedRule, scopedRes); !slices.Equal(got, []normalizedFinding{
 		{ruleID: "scoped/scoped-subtree-forced-gc", location: "internal/target/direct.go:5"},
 	}) {
 		t.Fatalf("scoped subtree findings with malformed sibling = %+v", got)
 	}
 
-	malformedInsideScope := with(validWithMalformedSibling, map[string]string{
+	malformedInsideScope := invariantstest.With(validWithMalformedSibling, map[string]string{
 		"lycaon/internal/target/broken.go": "package target\n\nfunc (\n",
 	})
-	expect(t, invariants.Evaluate(fixture(t, malformedInsideScope), scopedRule), fails, 0)
+	invariantstest.Expect(t, invariants.Evaluate(invariantstest.Fixture(t, malformedInsideScope), scopedRule), invariantstest.Fails, 0)
 }
