@@ -47,32 +47,75 @@ window.__wkReceiptSmoke = {
     throw new Error(`timed out waiting for tool_result ${callId}`);
   },
 
-  async inspectRendered(token, sessionId, expectedCallId, expectedProgramId) {
-    for (let i = 0; i < 80; i++) {
+  expandIfCollapsed(container) {
+    if (!container) return false;
+    if (container.getAttribute("data-expanded") !== "true") {
+      const hdr = container.querySelector(":scope > .den-transcript-disclosure-header");
+      if (hdr) {
+        hdr.click();
+        return true;
+      }
+    }
+    return false;
+  },
+
+  async inspectRendered(token, sessionId, expectedCallId, expectedProgramId, uniqueMarker, maxAttempts = 80) {
+    for (let i = 0; i < maxAttempts; i++) {
       const stream = document.querySelector(`[data-testid="chat-stream"][data-session-id="${CSS.escape(sessionId)}"]`);
-      const text = stream?.textContent || "";
-      const hasReply = text.includes("WKWebView receipt verified.");
-      const disclosures = stream ? stream.querySelectorAll(".den-transcript-disclosure, .den-transcript-disclosure-header, [data-tool-call-id], .activity-row") : [];
-      if (hasReply && (disclosures.length > 0 || text.includes("wkwebview-proof.txt") || text.includes("command"))) {
-        const body = await this.api(token, "GET", `/v1/sessions/${encodeURIComponent(sessionId)}/messages`);
-        const tr = (body?.messages || []).find((m) => m.tool_result?.tool_call_id === expectedCallId)?.tool_result;
-        const pid = tr?.command_program?.program_id || "";
-        return {
-          sessionId,
-          toolCallId: tr?.tool_call_id || "",
-          programId: pid,
-          commandState: tr?.command_program?.state || "",
-          receiptIdentityMatched: Boolean(tr && tr.tool_call_id === expectedCallId && (!expectedProgramId || pid === expectedProgramId)),
-          domHasAssistantReply: hasReply,
-          domDisclosureCount: disclosures.length,
-          domHasCommandText: text.includes("wkwebview-proof.txt") || text.includes("wkwebview-receipt-ok") || disclosures.length > 0,
-          userAgent: navigator.userAgent,
-        };
+      if (stream) {
+        for (const span of stream.querySelectorAll('[data-testid="activity-span-card"]')) {
+          this.expandIfCollapsed(span);
+        }
+        const card = stream.querySelector(`[data-testid="action-card"][data-tool-call-id="${CSS.escape(expectedCallId)}"]`);
+        if (card) {
+          this.expandIfCollapsed(card);
+          const cardText = card.textContent || "";
+          const renderedCallId = card.getAttribute("data-tool-call-id") || "";
+          const renderedStatus = card.getAttribute("data-status") || "";
+          if (renderedCallId === expectedCallId && cardText.includes(uniqueMarker)) {
+            const body = await this.api(token, "GET", `/v1/sessions/${encodeURIComponent(sessionId)}/messages`);
+            const tr = (body?.messages || []).find((m) => m.tool_result?.tool_call_id === expectedCallId)?.tool_result;
+            const pid = tr?.command_program?.id || "";
+            const state = tr?.command_program?.state || "";
+            const sidecarHasMarker = Boolean(tr && String(tr.content || "").includes(uniqueMarker));
+            const exactMatch = Boolean(
+              tr
+              && tr.tool_call_id === expectedCallId
+              && pid.length > 0
+              && (!expectedProgramId || pid === expectedProgramId)
+              && state === "completed"
+              && sidecarHasMarker
+            );
+            return {
+              sessionId,
+              toolCallId: expectedCallId,
+              renderedCallId,
+              renderedStatus,
+              programId: pid,
+              commandState: state,
+              uniqueMarker,
+              renderedCardHasUniqueOutput: cardText.includes(uniqueMarker),
+              sidecarReceiptHasUniqueOutput: sidecarHasMarker,
+              receiptIdentityMatched: exactMatch,
+              domHasAssistantReply: (stream.textContent || "").includes("WKWebView receipt verified."),
+              userAgent: navigator.userAgent,
+            };
+          }
+        }
       }
       await new Promise((r) => setTimeout(r, 250));
     }
-    const stream = document.querySelector('[data-testid="chat-stream"]');
-    throw new Error(`rendered DOM did not show command receipt for ${sessionId}; text=${(stream?.textContent || "").slice(0, 400)}`);
+    throw new Error(`exact action-card [data-tool-call-id="${expectedCallId}"] with unique output "${uniqueMarker}" not rendered`);
+  },
+
+  async verifyWrongCallRejected(token, sessionId, expectedProgramId, uniqueMarker) {
+    const wrongCallId = `wrong-${crypto.randomUUID()}`;
+    try {
+      await this.inspectRendered(token, sessionId, wrongCallId, expectedProgramId, uniqueMarker, 4);
+      return false;
+    } catch (_err) {
+      return true;
+    }
   },
 
   async runBeforeReload(token) {
@@ -93,6 +136,8 @@ window.__wkReceiptSmoke = {
     }
     if (!sessionId) throw new Error("chat-stream session_id did not mount");
 
+    const uniqueMarker = `wkwebview-receipt-${crypto.randomUUID().slice(0, 12)}`;
+
     this.step = "disableAutoAndPostPrompt";
     await this.api(token, "POST", "/harness/llm/auto", { enabled: false });
     await this.api(token, "POST", `/v1/sessions/${encodeURIComponent(sessionId)}/prompts`, {
@@ -105,21 +150,22 @@ window.__wkReceiptSmoke = {
     await this.waitToolCompleted(token, sessionId, reqId);
     this.step = "updateProgressOpen";
     const progCallId = await this.invokeTool(token, sessionId, "update_progress", {
-      content: "## Progress\n- [ ] Verify WKWebView receipt identity and reload\n",
+      content: "## Progress\n- [ ] Verify WKWebView exact receipt identity and reload\n",
     });
     const progRes = await this.waitToolCompleted(token, sessionId, progCallId);
     const snap = JSON.parse(progRes.content).snapshot;
 
     this.step = "invokeCommand";
     const cmdCallId = await this.invokeTool(token, sessionId, "command", {
-      command: "printf 'wkwebview-receipt-ok\\n' > wkwebview-proof.txt && cat wkwebview-proof.txt",
+      command: `printf '${uniqueMarker}\\n' > wkwebview-proof.txt && cat wkwebview-proof.txt`,
     });
     const cmdRes = await this.waitToolCompleted(token, sessionId, cmdCallId);
-    const programId = cmdRes?.command_program?.program_id || "";
+    const programId = cmdRes?.command_program?.id || "";
+    if (!programId) throw new Error(`missing command_program.id in tool_result: ${JSON.stringify(cmdRes)}`);
 
     this.step = "updateProgressClose";
     const doneProgId = await this.invokeTool(token, sessionId, "update_progress", {
-      content: "## Progress\n- [x] Verify WKWebView receipt identity and reload\n",
+      content: "## Progress\n- [x] Verify WKWebView exact receipt identity and reload\n",
       expected_revision: snap.revision,
       item_ids: snap.item_ids,
     });
@@ -134,10 +180,13 @@ window.__wkReceiptSmoke = {
     });
 
     this.step = "inspectRenderedBeforeReload";
-    return await this.inspectRendered(token, sessionId, cmdCallId, programId);
+    const snapBefore = await this.inspectRendered(token, sessionId, cmdCallId, programId, uniqueMarker);
+    this.step = "wrongCallControlBeforeReload";
+    snapBefore.wrongCallControlRejected = await this.verifyWrongCallRejected(token, sessionId, programId, uniqueMarker);
+    return snapBefore;
   },
 
-  async runAfterReload(token, sessionId, expectedCallId, expectedProgramId) {
+  async runAfterReload(token, sessionId, expectedCallId, expectedProgramId, uniqueMarker) {
     this.step = "afterReload:waitHarness";
     await this.waitHarness();
     this.step = "afterReload:openProject";
@@ -151,6 +200,9 @@ window.__wkReceiptSmoke = {
       if (row) row.click();
     }
     this.step = "afterReload:inspectRendered";
-    return await this.inspectRendered(token, sessionId, expectedCallId, expectedProgramId);
+    const snapAfter = await this.inspectRendered(token, sessionId, expectedCallId, expectedProgramId, uniqueMarker);
+    this.step = "afterReload:wrongCallControl";
+    snapAfter.wrongCallControlRejected = await this.verifyWrongCallRejected(token, sessionId, expectedProgramId, uniqueMarker);
+    return snapAfter;
   },
 };

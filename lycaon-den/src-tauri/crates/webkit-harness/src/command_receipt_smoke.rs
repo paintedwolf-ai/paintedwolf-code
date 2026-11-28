@@ -1,9 +1,11 @@
 //! Real macOS WKWebView command activity, receipt identity, and reload smoke.
 //!
 //! Drives the harness Den in a real macOS WKWebView via `Driver`, executes a live
-//! Portable Command turn against the real sidecar, checks rendered DOM + receipt
-//! identity, performs a full WKWebView `load_url` reload, and re-verifies rendered
-//! receipt identity after reload.
+//! Portable Command turn against the real sidecar, binds to the exact rendered
+//! action card (`[data-testid="action-card"][data-tool-call-id="..."]`), expands
+//! it to verify unique retained output and nonempty `command_program.id` alongside
+//! an independent sidecar receipt check and wrong-call negative control, performs
+//! a full WKWebView `loadRequest` reload, and re-verifies all assertions after reload.
 
 use std::time::Duration;
 
@@ -25,12 +27,16 @@ const WINDOW: NSSize = NSSize::new(1100.0, 720.0);
 struct ReceiptSnapshot {
     session_id: String,
     tool_call_id: String,
+    rendered_call_id: String,
+    rendered_status: String,
     program_id: String,
     command_state: String,
+    unique_marker: String,
+    rendered_card_has_unique_output: bool,
+    sidecar_receipt_has_unique_output: bool,
     receipt_identity_matched: bool,
     dom_has_assistant_reply: bool,
-    dom_disclosure_count: usize,
-    dom_has_command_text: bool,
+    wrong_call_control_rejected: bool,
     user_agent: String,
 }
 
@@ -106,8 +112,9 @@ pub fn run(url: &str) -> i32 {
     let sid_json = serde_json::to_string(&before.session_id).expect("encode sid");
     let cid_json = serde_json::to_string(&before.tool_call_id).expect("encode cid");
     let pid_json = serde_json::to_string(&before.program_id).expect("encode pid");
+    let mk_json = serde_json::to_string(&before.unique_marker).expect("encode marker");
     let after_raw = match den.eval_async(
-        &format!("window.__wkReceiptSmoke.runAfterReload({tok_json}, {sid_json}, {cid_json}, {pid_json})"),
+        &format!("window.__wkReceiptSmoke.runAfterReload({tok_json}, {sid_json}, {cid_json}, {pid_json}, {mk_json})"),
         Duration::from_secs(90),
     ) {
         Ok(raw) => raw,
@@ -129,14 +136,23 @@ pub fn run(url: &str) -> i32 {
         && after.receipt_identity_matched
         && !before.tool_call_id.is_empty()
         && before.tool_call_id == after.tool_call_id
+        && before.rendered_call_id == before.tool_call_id
+        && after.rendered_call_id == after.tool_call_id
+        && !before.program_id.is_empty()
         && before.program_id == after.program_id
-        && before.dom_has_command_text
-        && after.dom_has_command_text
+        && before.command_state == "completed"
+        && after.command_state == "completed"
+        && before.rendered_card_has_unique_output
+        && after.rendered_card_has_unique_output
+        && before.sidecar_receipt_has_unique_output
+        && after.sidecar_receipt_has_unique_output
+        && before.wrong_call_control_rejected
+        && after.wrong_call_control_rejected
         && after.dom_has_assistant_reply;
 
     let evidence = SmokeEvidence {
         harness: "webkit-harness (real macOS WKWebView)",
-        scope: "WKWebView+Vite+real-sidecar receipt identity and reload; shipped Tauri shell and OS notifications remain separate",
+        scope: "WKWebView+Vite+real-sidecar exact rendered action-card receipt identity, unique output, wrong-call control, and reload; shipped Tauri shell and OS notifications remain separate",
         before_reload: before,
         after_reload: after,
         survived_reload: survived,
