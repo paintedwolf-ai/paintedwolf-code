@@ -96,6 +96,7 @@ export function useCrossbarDataSources(options: UseCrossbarDataSourcesOptions) {
   const { runSearch, scheduleSearch, cancelWhenClosed, dispose: disposeSearchRequests } = createCrossbarRequests({
     open: options.open,
     originProjectId: options.originProjectId,
+    originSessionId: sessionId,
     mode: options.mode,
     hasLocalFileArm,
     activeSource,

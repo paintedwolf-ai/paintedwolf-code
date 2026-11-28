@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -163,6 +164,52 @@ func TestDirtyDocumentsListsUnsavedDraftsOnly(t *testing.T) {
 	testutil.FailErr(t, "dirty documents", err)
 	if len(dirty) != 1 || dirty[0].Path != "a.txt" || dirty[0].Draft != "a typed\n" {
 		t.Fatalf("dirty = %+v", dirty)
+	}
+}
+
+func TestDirtyDraftsForRootBoundsMaterializedBytesAndOmitsCappedPaths(t *testing.T) {
+	f := newAgentFixture(t, map[string]string{
+		"a.txt": "seed\n",
+		"b.txt": "seed\n",
+		"c.txt": "seed\n",
+	})
+	dirtyFile := func(name, content string) {
+		t.Helper()
+		d := f.open(t, name)
+		_, err := f.service.ReplaceSnapshot(t.Context(), d.ID, f.project.ID, SnapshotReplacement{
+			DocumentCommand: DocumentCommand{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: d.Revision},
+			Content:         content,
+			EOL:             "lf",
+		})
+		testutil.FailErr(t, "dirty "+name, err)
+	}
+	dirtyFile("a.txt", strings.Repeat("a", 50))
+	dirtyFile("b.txt", strings.Repeat("b", 60))
+	dirtyFile("c.txt", strings.Repeat("c", 200))
+
+	// Total byte budget 120 admits a.txt (50B) + b.txt (60B) = 110B <= 120B and omits c.txt (200B).
+	got, err := f.service.DirtyDraftsForRoot(t.Context(), f.project.ID, f.project.SourceBranch, f.rootID, 10, 500, 120)
+	testutil.FailErr(t, "total cap query", err)
+	var materializedBytes int
+	for _, d := range got.Drafts {
+		materializedBytes += len(d.Draft)
+	}
+	if len(got.Drafts) != 2 || materializedBytes != 110 || len(got.OmittedPaths) != 1 || got.OmittedPaths[0] != "c.txt" {
+		t.Fatalf("total cap: drafts=%d bytes=%d omitted=%v, want 2 drafts (110B) + omitted=[c.txt]", len(got.Drafts), materializedBytes, got.OmittedPaths)
+	}
+
+	// Row count cap 1 admits only a.txt and omits b.txt + c.txt.
+	byCount, err := f.service.DirtyDraftsForRoot(t.Context(), f.project.ID, f.project.SourceBranch, f.rootID, 1, 500, 1000)
+	testutil.FailErr(t, "count cap query", err)
+	if len(byCount.Drafts) != 1 || byCount.Drafts[0].Path != "a.txt" || len(byCount.OmittedPaths) != 2 {
+		t.Fatalf("count cap: drafts=%+v omitted=%v", byCount.Drafts, byCount.OmittedPaths)
+	}
+
+	// Per-doc byte cap 55 admits only a.txt (50B) and omits b.txt (60B) + c.txt (200B).
+	byDoc, err := f.service.DirtyDraftsForRoot(t.Context(), f.project.ID, f.project.SourceBranch, f.rootID, 10, 55, 1000)
+	testutil.FailErr(t, "doc cap query", err)
+	if len(byDoc.Drafts) != 1 || byDoc.Drafts[0].Path != "a.txt" || len(byDoc.OmittedPaths) != 2 {
+		t.Fatalf("doc cap: drafts=%+v omitted=%v", byDoc.Drafts, byDoc.OmittedPaths)
 	}
 }
 

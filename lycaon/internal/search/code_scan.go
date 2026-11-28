@@ -31,9 +31,12 @@ type codeScanSpec struct {
 }
 
 // codeScanJob is one listed file; content marks it for the line arm.
+// When draft is non-nil, scanOneCodeFile scans the authorized in-memory draft
+// buffer instead of reading stale on-disk bytes.
 type codeScanJob struct {
 	file    codeFile
 	content bool
+	draft   *string
 }
 
 type codeFileOutcome struct {
@@ -185,6 +188,15 @@ func scanOneCodeFile(ctx context.Context, job codeScanJob, seq int, spec codeSca
 		return out
 	}
 	out.opened = true
+	if job.draft != nil {
+		draftText := *job.draft
+		if spec.prefilter.active() && !spec.prefilter.matches([]byte(draftText)) {
+			out.prefiltered = true
+			return out
+		}
+		out.lineHits = collectCodeLineHits(ctx, file, draftText, spec.matcher, spec.terms, spec.lineCap)
+		return out
+	}
 	content, status := readCodeContent(file.abs, spec.maxBytes)
 	if status != codeOpenOK {
 		out.skipped = status == codeOpenUnsearchable

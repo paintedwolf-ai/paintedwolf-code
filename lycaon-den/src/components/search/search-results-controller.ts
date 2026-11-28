@@ -14,6 +14,7 @@ import { createDebounced } from "../../ui/debounced.ts";
 
 type Options = {
   originProjectId: () => string | null;
+  originSessionId?: () => string | null | undefined;
   residentLive: () => boolean;
   query: () => string;
   matchOptions: () => SearchMatchOptions;
@@ -104,11 +105,13 @@ export function createSearchResultsController(options: Options) {
     try {
       const match = options.matchOptions();
       const projectId = options.originProjectId() ?? undefined;
+      const sessionId = options.originSessionId?.()?.trim() || undefined;
+      const scopedMatch = sessionId ? { ...match, sessionId } : match;
       const budget = presentation === "foreground" ? "interactive" : "complete";
       const result = await client.search(
         trimmed,
         projectId,
-        { ...match, budget },
+        { ...scopedMatch, budget },
         controller.signal,
       );
       if (!current()) return;
@@ -116,7 +119,7 @@ export function createSearchResultsController(options: Options) {
         setSearchFrame({
           pages: [{ response: result, start: 0 }],
           index: 0,
-          scope: { query: trimmed, projectId, options: match, budget },
+          scope: { query: trimmed, projectId, options: scopedMatch, budget },
         });
         setPageLoadFailed(false);
         setSearchFailed(false);
