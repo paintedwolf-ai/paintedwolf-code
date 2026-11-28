@@ -50,7 +50,7 @@ func EvaluateCoordinatorCloseoutGrounding(
 	eval := guidance.EvaluateDraftCitations(draft, resolved)
 	report := draft.Report()
 	report.CitedEvidence, report.CitedURLs, report.ArtifactIDs = guidance.AcceptedDraftReferences(draft, resolved)
-	unavailable := ev.Ledger.UnavailableBodyHandles()
+	unavailable := ev.UnavailableBodyHandles()
 	if eval.Code == "" && draft.CitationCount() == 0 && len(report.CitedEvidence) == 0 {
 		if !CoordinatorEvidenceOptional(history, ev) && guidance.CloseoutLedgerHasCitableEvidence(ev) {
 			// Recorded sources permit host attachment when citations are omitted.
