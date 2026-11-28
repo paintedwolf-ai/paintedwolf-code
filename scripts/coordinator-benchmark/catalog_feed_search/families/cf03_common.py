@@ -77,7 +77,8 @@ class ManagedSidecar:
         )
         config_root_env = env.get("LYCAON_CONFIG_ROOT", "").strip()
         if config_root_env:
-            run_cwd: str | None = str(Path(config_root_env).resolve().parent)
+            cfg_root_path = Path(config_root_env).resolve()
+            run_cwd: str | None = str(cfg_root_path) if (cfg_root_path / "schemas").is_dir() else str(cfg_root_path.parent)
         elif self.repo_root is not None:
             env["LYCAON_CONFIG_ROOT"] = str(self.repo_root / "lycaon")
             run_cwd = str(self.repo_root)
