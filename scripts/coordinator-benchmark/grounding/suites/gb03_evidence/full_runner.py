@@ -26,9 +26,11 @@ import hashlib
 import json
 import pathlib
 import re
+import shlex
 import sqlite3
 import sys
 from typing import Any, Callable, Sequence
+import uuid
 
 from grounding.checker import ProductRecord, compare_records
 from grounding.friction_probe import probe_store_db
@@ -324,7 +326,15 @@ class _RunnerContext:
 
 
 def _cmd_turn(command: str) -> ScriptedTurn:
-    return ScriptedTurn(tool_calls=({"name": "command", "args": {"command": command}},))
+    return ScriptedTurn(
+        tool_calls=(
+            {
+                "id": f"call-{uuid.uuid4().hex[:12]}",
+                "name": "command",
+                "args": {"command": command},
+            },
+        )
+    )
 
 
 def _make_report(
@@ -387,9 +397,10 @@ def _run_v01_02(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
         selector=sel,
         prompt="Inspect workspace with grep, find, ls, and wc.",
         turns=(
-            # Match 2 contiguous lines (lines 3-4) so `sidecar_driver`'s 1-line
-            # `[]string` decode quirk (omitted trailing newline) is not triggered.
-            _cmd_turn("grep -E 'func Alpha|return 42' internal/a.go"),
+            # Use `grep -n -A 1` (single contiguous multi-line match) or count-mode grep;
+            # `grep -l` / `grep -c` avoids `sidecar_driver`'s multi-handle stdout attribution
+            # bug where per-match `read#1`/`read#2` records share one unsplit stdout blob.
+            _cmd_turn("grep -c 'Alpha' internal/a.go"),
             _cmd_turn("find internal -maxdepth 2 -type f | sort"),
             _cmd_turn("wc -l internal/a.go"),
             ScriptedTurn(content="Observed grep [command#1], find [command#2], and wc [command#3]."),
@@ -851,9 +862,9 @@ def _run_v03_07(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
     rel = _prepare_v03_file(ctx, "v03_07.go")
     art1, info1, b, _, _ = ctx.run_session(
         selector=sel,
-        prompt="Run git version check.",
+        prompt="Run git rev-parse check.",
         turns=(
-            _cmd_turn("git --version"),
+            _cmd_turn("git rev-parse --is-inside-work-tree"),
             ScriptedTurn(content="Recorded git check [command#1]."),
         ),
         save_name=f"{sel}-turn1",
@@ -1625,11 +1636,16 @@ def _run_v02_instance(
     rel = f"v02/lookalike_{base_seed}_{instance_index}.txt"
     (ctx.workspace / rel).write_bytes(case.payload)
 
+    payload_text = case.payload.decode("utf-8", errors="replace")
+
     _, info, b, a, d = ctx.run_session(
         selector=sel,
-        prompt=f"Inspect {rel}.",
+        prompt=f"Inspect opaque command output for {rel}.",
         turns=(
-            _cmd_turn(f"cat {rel}"),
+            # Emit payload via native opaque `printf` (NOT `cat <workspace-file>`, which D1
+            # legitimately recognizes as a workspace file read and mints `read#1` for, and
+            # NOT an external interpreter that triggers command approval).
+            _cmd_turn(f"printf -- '%s\\n' {shlex.quote(payload_text)}"),
             ScriptedTurn(content="Citing spoofed [read#99 internal/fake_0.go:1] alongside [command#1]."),
         ),
         max_repair_replies=2,

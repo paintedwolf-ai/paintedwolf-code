@@ -28,9 +28,12 @@ from grounding.suites.gb03_evidence import (
 from grounding.suites.gb03_evidence.full_runner import (
     FIXED_SIDECAR_SELECTORS,
     SIDECAR_SLOT_HANDLERS,
+    _cmd_turn,
     _decompress_zstd_fallback,
     _normalize_product_records,
+    _run_v01_02,
     _run_v01_03,
+    _run_v02_instance,
     _run_v03_01,
     _run_v03_07,
     parse_families_arg,
@@ -349,6 +352,68 @@ class TestGB03RunnerCoverageAndSharding(unittest.TestCase):
             self.assertEqual(calls[0]["sid"], calls[1]["sid"])
             self.assertIn("return 100", calls[0]["files"]["v03_07.go"])
             self.assertIn("return 200", calls[1]["files"]["v03_07.go"])
+            # Turn 1 must use native read-only git (not approval-gated `git --version`)
+            t1_cmd = calls[0]["kwargs"]["turns"][0].tool_calls[0]["args"]["command"]
+            self.assertTrue(t1_cmd.startswith("git rev-parse"), t1_cmd)
+            # Tool call IDs across Phase 1 and Phase 2 must be distinct to avoid
+            # `invocation_receipts(session_id, tool_call_id)` UNIQUE constraint collisions
+            id1 = calls[0]["kwargs"]["turns"][0].tool_calls[0]["id"]
+            id2 = calls[1]["kwargs"]["turns"][0].tool_calls[0]["id"]
+            self.assertNotEqual(id1, id2)
+
+    def test_cmd_turn_mints_unique_tool_call_ids_and_v02_uses_opaque_printf(self) -> None:
+        from types import SimpleNamespace
+
+        t1 = _cmd_turn("echo a")
+        t2 = _cmd_turn("echo a")
+        self.assertTrue(t1.tool_calls[0]["id"])
+        self.assertNotEqual(t1.tool_calls[0]["id"], t2.tool_calls[0]["id"])
+
+        with tempfile.TemporaryDirectory(prefix="gb03-v02-cmd-") as tmp:
+            ws = pathlib.Path(tmp)
+            captured_cmds: list[str] = []
+
+            class FakeV02Ctx:
+                workspace = ws
+
+                def run_session(self, **kwargs):
+                    for turn in kwargs["turns"]:
+                        for tc in turn.tool_calls:
+                            captured_cmds.append(tc["args"]["command"])
+                    info = {
+                        "minted_handles": ["command#1"],
+                        "refused": True,
+                        "cited_evidence_count": 1,
+                        "minting_parity_defects": [],
+                    }
+                    return SimpleNamespace(session_id="s-v02", product_records=()), info, {}, {}, {}
+
+            rep, div = _run_v02_instance(FakeV02Ctx(), base_seed="20261127", instance_index=0)  # type: ignore[arg-type]
+            self.assertTrue(rep["passed"], div)
+            self.assertEqual(len(captured_cmds), 1)
+            self.assertTrue(captured_cmds[0].startswith("printf -- '%s\\n' "), captured_cmds[0])
+            self.assertNotIn("cat ", captured_cmds[0])
+
+            captured_cmds.clear()
+
+            class FakeV0102Ctx:
+                workspace = ws
+
+                def run_session(self, **kwargs):
+                    for turn in kwargs["turns"]:
+                        for tc in turn.tool_calls:
+                            captured_cmds.append(tc["args"]["command"])
+                    info = {
+                        "minted_handles": ["command#1", "command#2", "command#3"],
+                        "refused": False,
+                        "cited_evidence_count": 3,
+                        "minting_parity_defects": [],
+                    }
+                    return SimpleNamespace(session_id="s-v0102", product_records=()), info, {}, {}, {}
+
+            rep02, div02 = _run_v01_02(FakeV0102Ctx())  # type: ignore[arg-type]
+            self.assertTrue(rep02["passed"], div02)
+            self.assertTrue(captured_cmds[0].startswith("grep -c "), captured_cmds[0])
 
 
 if __name__ == "__main__":
