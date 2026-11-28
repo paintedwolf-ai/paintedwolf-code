@@ -50,7 +50,12 @@ from .cf05_generators import (
     generate_f05_case,
     generate_f06_case,
 )
-from .cf05_sidecar_harness import CF05SidecarClient, CursorSSESubscriber, start_isolated_sidecar
+from .cf05_sidecar_harness import (
+    CF05SidecarClient,
+    CursorSSESubscriber,
+    ProjectCleanupError,
+    start_isolated_sidecar,
+)
 
 
 @dataclass
@@ -1166,6 +1171,8 @@ def _run_guarded(
             elapsed_ms=int((time.monotonic() - t0) * 1000),
             details={"http_status": err.code, "http_body": body},
         )
+    except ProjectCleanupError:
+        raise
     except Exception as exc:
         return CaseOutcome(
             case_id=case_id,
@@ -1188,6 +1195,7 @@ def run_family_suite(
     base_seed: str = BASE_SEED_PRIMARY,
     max_instances: int | None = None,
 ) -> list[CaseOutcome]:
+    client.ensure_clean()
     fam_dir = work_dir / family
     fam_dir.mkdir(parents=True, exist_ok=True)
     count = CF05_LEDGER_SIDECAR_COUNTS[family]

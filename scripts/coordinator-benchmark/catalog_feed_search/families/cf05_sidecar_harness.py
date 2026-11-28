@@ -28,6 +28,10 @@ from ..driver_provenance import file_sha256
 from ..driver_sidecar import SidecarDriver
 
 
+class ProjectCleanupError(RuntimeError):
+    """Raised when project removal does not reach typed deleted + separate GET 404."""
+
+
 def pick_ephemeral_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
@@ -104,6 +108,8 @@ def start_isolated_sidecar(
     bin_resolved = Path(binary_path).resolve()
     bin_sha = file_sha256(bin_resolved)
 
+    d1_root = Path(d1_worktree).resolve()
+    config_root = d1_root if (d1_root / "schemas").is_dir() else (d1_root / "lycaon")
     env = {k: v for k, v in os.environ.items() if not k.startswith("LYCAON_")}
     env.update(
         {
@@ -112,7 +118,7 @@ def start_isolated_sidecar(
             "LYCAON_ADDR": f"127.0.0.1:{port}",
             "LYCAON_API_TOKEN": token,
             "LYCAON_CONFIG_DIR": str(config_dir),
-            "LYCAON_CONFIG_ROOT": str(Path(d1_worktree).resolve() / "lycaon"),
+            "LYCAON_CONFIG_ROOT": str(config_root),
             "LYCAON_LLM_MOCK": "1",
             "LYCAON_LLM_MANUAL": "1",
         }
@@ -179,8 +185,22 @@ class CF05SidecarClient:
     def __init__(self, base_url: str, token: str) -> None:
         self.base_url = base_url.rstrip("/")
         self.token = token
+        self.contaminated: str | None = None
         self.transport = HTTPTransport(self.base_url, self.token)
         self.driver = SidecarDriver(self.transport)
+        raw_attach = self.driver.attach_project
+
+        def _guarded_attach_project(*args, **kwargs):
+            self.ensure_clean()
+            return raw_attach(*args, **kwargs)
+
+        self.driver.attach_project = _guarded_attach_project  # type: ignore[method-assign]
+
+    def ensure_clean(self) -> None:
+        if self.contaminated is not None:
+            raise ProjectCleanupError(
+                f"refusing to reuse contaminated sidecar client: {self.contaminated}"
+            )
 
     def create_source_entry(
         self,
@@ -351,8 +371,12 @@ class CF05SidecarClient:
             "commit_available": last_resp.get("commit_available", False),
         }
 
-    def delete_project(self, project_id: str, *, timeout_s: float = 15.0) -> None:
-        """Remove a project via POST /v1/projects/{id}/removals (202), wait for deleted + 404."""
+    def delete_project(self, project_id: str, *, timeout_s: float = 15.0) -> dict[str, object]:
+        """Remove a project via POST /v1/projects/{id}/removals (202 -> typed deleted -> separate GET 404).
+
+        Never treats a 404 on the removal status endpoint as deleted. On any cleanup failure,
+        marks `self.contaminated` so no subsequent case or family can reuse this sidecar client.
+        """
         op_id = str(uuid.uuid4())
         req = urllib.request.Request(
             f"{self.base_url}/v1/projects/{project_id}/removals",
@@ -368,36 +392,75 @@ class CF05SidecarClient:
                 status = resp.status
         except urllib.error.HTTPError as err:
             if err.code == 404:
-                return
-            raise RuntimeError(f"project removal POST returned HTTP {err.code} for {project_id}") from err
-        if status not in (200, 202, 204):
-            raise RuntimeError(f"project removal POST returned unexpected HTTP {status} for {project_id}")
+                # Idempotent already-absent path: explicitly prove project absence via separate GET 404.
+                self._require_project_absent_404(project_id, context="already-absent POST 404")
+                return {"cleanup_status": "already_absent_verified_404", "project_id": project_id}
+            msg = f"project removal POST returned HTTP {err.code} for {project_id}"
+            self.contaminated = msg
+            raise ProjectCleanupError(msg) from err
+        except Exception as err:
+            msg = f"project removal POST failed for {project_id}: {err}"
+            self.contaminated = msg
+            raise ProjectCleanupError(msg) from err
+
+        if status != 202:
+            msg = f"project removal POST returned HTTP {status}, expected 202 for {project_id}"
+            self.contaminated = msg
+            raise ProjectCleanupError(msg)
 
         deadline = time.monotonic() + timeout_s
-        deleted = False
+        deleted_body: dict[str, object] | None = None
         while time.monotonic() < deadline:
+            st_req = urllib.request.Request(
+                f"{self.base_url}/v1/projects/{project_id}/removals/{op_id}",
+                headers={"Authorization": f"Bearer {self.token}"},
+                method="GET",
+            )
             try:
-                st_req = urllib.request.Request(
-                    f"{self.base_url}/v1/projects/{project_id}/removals/{op_id}",
-                    headers={"Authorization": f"Bearer {self.token}"},
-                    method="GET",
-                )
                 with urllib.request.urlopen(st_req, timeout=5.0) as st_resp:
                     body = json.loads(st_resp.read().decode("utf-8"))
-                    if isinstance(body, dict) and body.get("project_state") == "deleted":
-                        deleted = True
-                        break
-                    if isinstance(body, dict) and body.get("project_state") == "failed":
-                        raise RuntimeError(f"project removal failed for {project_id}: {body}")
             except urllib.error.HTTPError as err:
-                if err.code == 404:
-                    deleted = True
-                    break
-            time.sleep(0.1)
-        if not deleted:
-            raise RuntimeError(f"project removal did not reach deleted within {timeout_s}s for {project_id}")
+                msg = f"removal status GET /removals/{op_id} returned HTTP {err.code} (false-404/error not accepted as deleted) for {project_id}"
+                self.contaminated = msg
+                raise ProjectCleanupError(msg) from err
+            except Exception as err:
+                msg = f"removal status GET /removals/{op_id} failed for {project_id}: {err}"
+                self.contaminated = msg
+                raise ProjectCleanupError(msg) from err
 
-        # Verify 404 on GET /v1/projects/{id}
+            if not isinstance(body, dict):
+                msg = f"removal status GET /removals/{op_id} returned non-object for {project_id}"
+                self.contaminated = msg
+                raise ProjectCleanupError(msg)
+            resp_op = body.get("operation_id")
+            if resp_op is not None and resp_op != op_id:
+                msg = f"removal status operation_id mismatch {resp_op!r} != {op_id!r} for {project_id}"
+                self.contaminated = msg
+                raise ProjectCleanupError(msg)
+            pstate = body.get("project_state")
+            if pstate == "deleted":
+                deleted_body = body
+                break
+            if pstate == "failed":
+                msg = f"project removal failed for {project_id}: {body}"
+                self.contaminated = msg
+                raise ProjectCleanupError(msg)
+            time.sleep(0.1)
+
+        if deleted_body is None:
+            msg = f"project removal did not reach typed project_state=deleted within {timeout_s}s for {project_id} (op={op_id})"
+            self.contaminated = msg
+            raise ProjectCleanupError(msg)
+
+        self._require_project_absent_404(project_id, context=f"post-deleted op={op_id}")
+        return {
+            "cleanup_status": "deleted_verified_404",
+            "project_id": project_id,
+            "operation_id": op_id,
+            "cleanup_state": deleted_body.get("cleanup_state"),
+        }
+
+    def _require_project_absent_404(self, project_id: str, *, context: str) -> None:
         g_req = urllib.request.Request(
             f"{self.base_url}/v1/projects/{project_id}",
             headers={"Authorization": f"Bearer {self.token}"},
@@ -405,10 +468,14 @@ class CF05SidecarClient:
         )
         try:
             with urllib.request.urlopen(g_req, timeout=5.0) as g_resp:
-                raise RuntimeError(f"project {project_id} still returned HTTP {g_resp.status} after removal")
+                msg = f"project {project_id} still returned HTTP {g_resp.status} ({context})"
+                self.contaminated = msg
+                raise ProjectCleanupError(msg)
         except urllib.error.HTTPError as err:
             if err.code != 404:
-                raise RuntimeError(f"project {project_id} post-removal GET returned HTTP {err.code}") from err
+                msg = f"project {project_id} post-removal GET returned HTTP {err.code} ({context})"
+                self.contaminated = msg
+                raise ProjectCleanupError(msg) from err
 
     def probe_sse_cursor(
         self,
