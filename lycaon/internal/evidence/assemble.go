@@ -33,11 +33,31 @@ func MergeLedger(dst *Ledger, src Ledger) {
 	for path, tier := range src.PathFidelity {
 		dst.PathFidelity[path] = mergePathFidelity(dst.PathFidelity[path], tier)
 	}
+	for handle := range src.unavailableBodies {
+		if dst.unavailableBodies == nil {
+			dst.unavailableBodies = make(map[string]struct{})
+		}
+		dst.unavailableBodies[handle] = struct{}{}
+	}
 }
 
 // AssembleLedger builds an in-memory ledger from stored evidence rows.
 func AssembleLedger(records []Record) Ledger {
+	return AssembleLedgerWithUnavailable(records, nil)
+}
+
+// AssembleLedgerWithUnavailable builds an in-memory ledger from stored evidence
+// rows while marking any handles in unavailable as having undecodable bodies.
+func AssembleLedgerWithUnavailable(records []Record, unavailable map[string]struct{}) Ledger {
 	ev := InitLedger()
+	if len(unavailable) > 0 {
+		ev.unavailableBodies = make(map[string]struct{}, len(unavailable))
+		for h := range unavailable {
+			if h != "" {
+				ev.unavailableBodies[h] = struct{}{}
+			}
+		}
+	}
 	if len(records) == 0 {
 		return ev
 	}
@@ -50,7 +70,7 @@ func AssembleLedger(records []Record) Ledger {
 			continue
 		}
 		ev.observationOrder = append(ev.observationOrder, rec.Handle)
-		if rec.SupersededBy != "" || rec.BodyUnavailable {
+		if rec.SupersededBy != "" || ev.BodyUnavailable(rec.Handle) {
 			continue
 		}
 		for _, path := range IndexedPathsForRecord(rec) {
@@ -76,19 +96,32 @@ func AssembleLedger(records []Record) Ledger {
 		}
 		ev.Handles[handle] = rec
 		ev.handleOrder = append(ev.handleOrder, handle)
-		if rec.SupersededBy == "" && !rec.BodyUnavailable {
+		if rec.SupersededBy == "" && !ev.BodyUnavailable(handle) {
 			indexRecordPaths(&ev, handle, rec)
 		}
 	}
 	return ev
 }
 
+// BodyUnavailable reports whether handle's persisted body blob failed
+// verification when the ledger was loaded.
+func (ev Ledger) BodyUnavailable(handle string) bool {
+	if len(ev.unavailableBodies) == 0 {
+		return false
+	}
+	_, ok := ev.unavailableBodies[handle]
+	return ok
+}
+
 // UnavailableBodyHandles returns handles in deterministic order whose persisted
 // body blobs could not be decoded.
 func (ev Ledger) UnavailableBodyHandles() []string {
+	if len(ev.unavailableBodies) == 0 {
+		return nil
+	}
 	var out []string
-	for handle, rec := range ev.Handles {
-		if rec.BodyUnavailable {
+	for handle := range ev.unavailableBodies {
+		if _, exists := ev.Handles[handle]; exists {
 			out = append(out, handle)
 		}
 	}

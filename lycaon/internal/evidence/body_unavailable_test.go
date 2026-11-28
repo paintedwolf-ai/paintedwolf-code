@@ -14,36 +14,38 @@ func TestBodyUnavailableRecordNeverGroundsAndRecoversWithNewHandle(t *testing.T)
 	t.Parallel()
 
 	damagedFile := evidence.Record{
-		Handle:          "read#1",
-		Kind:            "read",
-		Shape:           evidence.ShapeFileRegion,
-		Fidelity:        "structured",
-		SourceTool:      "read",
-		Path:            "internal/app.go",
-		LineRanges:      []evidence.LineRange{{Start: 1, End: 10}},
-		BodyUnavailable: true,
+		Handle:     "read#1",
+		Kind:       "read",
+		Shape:      evidence.ShapeFileRegion,
+		Fidelity:   "structured",
+		SourceTool: "read",
+		Path:       "internal/app.go",
+		LineRanges: []evidence.LineRange{{Start: 1, End: 10}},
 	}
 	damagedURL := evidence.Record{
-		Handle:          "fetch#1",
-		Kind:            "fetch",
-		Shape:           evidence.ShapeURL,
-		Fidelity:        "structured",
-		SourceTool:      "fetch_url",
-		URL:             "https://example.test/doc",
-		BodyUnavailable: true,
+		Handle:     "fetch#1",
+		Kind:       "fetch",
+		Shape:      evidence.ShapeURL,
+		Fidelity:   "structured",
+		SourceTool: "fetch_url",
+		URL:        "https://example.test/doc",
 	}
 	damagedArtifact := evidence.Record{
-		Handle:          "artifact#1",
-		Kind:            "artifact",
-		Shape:           evidence.ShapeArtifact,
-		Fidelity:        "structured",
-		SourceTool:      "capture",
-		Path:            "shot.png",
-		ArtifactID:      "art-1",
-		BodyUnavailable: true,
+		Handle:     "artifact#1",
+		Kind:       "artifact",
+		Shape:      evidence.ShapeArtifact,
+		Fidelity:   "structured",
+		SourceTool: "capture",
+		Path:       "shot.png",
+		ArtifactID: "art-1",
 	}
 
-	ev := evidence.AssembleLedger([]evidence.Record{damagedFile, damagedURL, damagedArtifact})
+	unavailable := map[string]struct{}{
+		"read#1":     {},
+		"fetch#1":    {},
+		"artifact#1": {},
+	}
+	ev := evidence.AssembleLedgerWithUnavailable([]evidence.Record{damagedFile, damagedURL, damagedArtifact}, unavailable)
 
 	// Ledger stays non-empty (exemption rule preserved).
 	if len(ev.Handles) != 3 {
@@ -107,7 +109,7 @@ func TestBodyUnavailableRecordNeverGroundsAndRecoversWithNewHandle(t *testing.T)
 		LineRanges: []evidence.LineRange{{Start: 1, End: 10}},
 		Body:       []string{"1| package app", "2| ", "3| func Val() int { return 1 }"},
 	}
-	evRecovered := evidence.AssembleLedger([]evidence.Record{damagedFile, healthy})
+	evRecovered := evidence.AssembleLedgerWithUnavailable([]evidence.Record{damagedFile, healthy}, map[string]struct{}{"read#1": {}})
 	if res := evidence.Resolve(evidence.CitationRoots{}, evidence.Triple{Path: "internal/app.go", Line: 3, Excerpt: "return 1"}, evRecovered, ""); res.Verdict != evidence.VerdictMatched || res.Handle != "read#2" {
 		t.Fatalf("Resolve after recovery = %+v, want matched/read#2", res)
 	}

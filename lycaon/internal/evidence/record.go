@@ -19,16 +19,12 @@ type Record struct {
 	// SupersededBy changes path lookup currency, never exact handle identity.
 	SupersededBy string `json:"-"`
 	Survey       bool   // true for survey-grade observations
-	Truncated    bool   // body capture exceeded EvidenceCaptureBodyCapBytes
-	// BodyUnavailable is true when the persisted body blob could not be decoded.
-	// The record remains in Handles so the ledger stays non-empty and ordinals
-	// stay monotonic, but it can never ground any citation.
-	BodyUnavailable bool   `json:"-"`
-	Path            string // scope-relative when the tool touched a rooted path; normalized unrooted token otherwise
-	RootID          string // root ID of Path; empty for unrooted tokens
-	LineRanges      []LineRange
-	Body            []string // result lines for excerpt verification
-	URL             string   // primary observed URL
+	Truncated  bool   // body capture exceeded EvidenceCaptureBodyCapBytes
+	Path       string // scope-relative when the tool touched a rooted path; normalized unrooted token otherwise
+	RootID     string // root ID of Path; empty for unrooted tokens
+	LineRanges []LineRange
+	Body       []string // result lines for excerpt verification
+	URL        string   // primary observed URL
 
 	Surface          string // dom | tui | http
 	ArtifactID       string
@@ -111,8 +107,9 @@ type Ledger struct {
 	ByPath           map[string][]string // normalized path → handles (newest last)
 	byPathOrder      map[string][]string // normalized path → handles in chronological assembly order
 	PathFidelity     map[string]string   // normalized path → trust tier (structured wins)
-	handleOrder      []string            // stable (kind, ordinal) order for HandlesSorted
-	observationOrder []string            // chronological assembly order for HandlesNewestFirst
+	handleOrder       []string            // stable (kind, ordinal) order for HandlesSorted
+	observationOrder  []string            // chronological assembly order for HandlesNewestFirst
+	unavailableBodies map[string]struct{} // handles whose persisted body blobs failed verification at load
 }
 
 // OffenderReport is the bounded reject display for hint templates.

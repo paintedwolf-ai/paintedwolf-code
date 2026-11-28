@@ -94,8 +94,8 @@ func TestLoadLedgerMarksDamagedBodyUnavailableAndRecovers(t *testing.T) {
 	if !ok {
 		t.Fatal("damaged record vanished from Handles (would violate non-empty ledger / monotonic ordinals)")
 	}
-	if !got.BodyUnavailable || len(got.Body) != 0 {
-		t.Fatalf("damaged record = %+v, want BodyUnavailable=true and empty Body", got)
+	if !ev.BodyUnavailable("read#1") || len(got.Body) != 0 {
+		t.Fatalf("damaged record = %+v, want ev.BodyUnavailable(read#1)=true and empty Body", got)
 	}
 	if handles := ev.UnavailableBodyHandles(); len(handles) != 1 || handles[0] != "read#1" {
 		t.Fatalf("UnavailableBodyHandles = %v, want [read#1]", handles)

@@ -48,9 +48,6 @@ func (r *ShapeRegistry) Lookup(id string) (Shape, bool) {
 
 // Verify dispatches claim verification to the shape registered for rec.
 func (r *ShapeRegistry) Verify(rec Record, claim Claim) (bool, string) {
-	if rec.BodyUnavailable {
-		return false, VerifyReasonBodyUnavailable
-	}
 	shapeID := RecordShape(rec)
 	if shapeID == "" {
 		return false, ""
@@ -91,6 +88,9 @@ func VerifyHandle(ev Ledger, handle string, claim Claim) (bool, string) {
 	rec, ok := ResolveHandle(ev, handle)
 	if !ok {
 		return false, ""
+	}
+	if ev.BodyUnavailable(handle) {
+		return false, VerifyReasonBodyUnavailable
 	}
 	if strings.TrimSpace(claim.Handle) == "" {
 		claim.Handle = handle

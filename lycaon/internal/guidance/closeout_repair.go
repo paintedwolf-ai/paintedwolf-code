@@ -76,18 +76,18 @@ func CloseoutRepairHintData(roots evidence.CitationRoots, draft CloseoutDraft, r
 // a record whose stored body failed verification and is unavailable.
 func citationTargetsUnavailableBody(ev evidence.Ledger, citation citationmd.Citation) bool {
 	if h := strings.TrimSpace(citation.Handle); h != "" {
-		if rec, ok := evidence.ResolveHandle(ev, h); ok && rec.BodyUnavailable {
+		if _, ok := evidence.ResolveHandle(ev, h); ok && ev.BodyUnavailable(h) {
 			return true
 		}
 	}
 	if p := strings.TrimSpace(citation.Path); p != "" {
 		hasUnavailable := false
 		hasHealthy := false
-		for _, rec := range ev.Handles {
+		for handle, rec := range ev.Handles {
 			if strings.TrimSpace(rec.Path) != p || rec.IsGate() {
 				continue
 			}
-			if rec.BodyUnavailable {
+			if ev.BodyUnavailable(handle) {
 				hasUnavailable = true
 			} else if rec.SupersededBy == "" {
 				hasHealthy = true
@@ -141,7 +141,7 @@ func citationRepairOffer(roots evidence.CitationRoots, ev evidence.Ledger, citat
 	if citation.Line > 0 && evidence.UnionObserved(active, path, citation.Line, end) {
 		return map[string]any{"use": citationmd.Citation{Path: path, Line: citation.Line, EndLine: citation.EndLine}.Token()}
 	}
-	if newest == "" && known && cited.SupersededBy == "" && !cited.IsGate() && !cited.Survey && !cited.BodyUnavailable {
+	if newest == "" && known && cited.SupersededBy == "" && !cited.IsGate() && !cited.Survey && !ev.BodyUnavailable(citation.Handle) {
 		newest = citation.Handle
 	}
 	if newest == "" && len(ev.ByPath) == 0 {
@@ -157,7 +157,7 @@ func newestCitableHandle(ev evidence.Ledger) string {
 	handles := evidence.HandlesSorted(ev)
 	for i := len(handles) - 1; i >= 0; i-- {
 		rec, ok := evidence.ResolveHandle(ev, handles[i])
-		if !ok || rec.SupersededBy != "" || rec.IsGate() || rec.Survey || rec.BodyUnavailable {
+		if !ok || rec.SupersededBy != "" || rec.IsGate() || rec.Survey || ev.BodyUnavailable(handles[i]) {
 			continue
 		}
 		return handles[i]

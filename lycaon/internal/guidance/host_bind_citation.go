@@ -45,7 +45,7 @@ func ledgerRecordsMatching(projectDir string, finding WorkerFindingInput, ev evi
 	var out []string
 	for _, handle := range evidence.HandlesSorted(ev) {
 		rec, ok := evidence.ResolveHandle(ev, handle)
-		if !ok || rec.IsGate() || rec.SupersededBy != "" || rec.BodyUnavailable {
+		if !ok || rec.IsGate() || rec.SupersededBy != "" || ev.BodyUnavailable(handle) {
 			continue
 		}
 		if normPath != "" && filepath.ToSlash(strings.TrimSpace(rec.Path)) != normPath {

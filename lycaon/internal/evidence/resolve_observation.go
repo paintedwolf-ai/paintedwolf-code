@@ -11,7 +11,7 @@ func ResolveObservation(roots CitationRoots, ev Ledger, handle string, triple Tr
 	if !ok {
 		return out
 	}
-	if rec.BodyUnavailable {
+	if ev.BodyUnavailable(handle) {
 		out.Path = rec.Path
 		out.Reason = VerifyReasonBodyUnavailable
 		return out
