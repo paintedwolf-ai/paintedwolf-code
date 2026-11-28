@@ -76,11 +76,11 @@ func checkPythonVerificationScope(r *invariants.Run) {
 	if results.Len() == 0 {
 		r.Fatalf("image verifier has no result")
 	}
-	ptr, ok := types.Unalias(results.At(0).Type()).(*types.Pointer)
-	if !ok {
-		r.Fatalf("image verifier must return a private result pointer")
+	result := types.Unalias(results.At(0).Type())
+	if ptr, ok := result.(*types.Pointer); ok {
+		result = types.Unalias(ptr.Elem())
 	}
-	named, ok := types.Unalias(ptr.Elem()).(*types.Named)
+	named, ok := result.(*types.Named)
 	if !ok || named.Obj().Pkg() != pkg.Types || named.Obj().Exported() {
 		r.Fatalf("image verifier result must be a private package type")
 	}
