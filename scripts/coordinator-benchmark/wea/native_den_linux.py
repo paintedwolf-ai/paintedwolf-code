@@ -1070,7 +1070,7 @@ def run_linux_tauri_native(
                     navigation_events.append({"step": "all_projects_click", **_click_x11_window_point(xid, cx, cy)})
                 time.sleep(1.5)
             if open_project_hint:
-                proj_hints = [f"/{open_session_hint}/project", open_project_hint] if open_session_hint else [open_project_hint]
+                proj_hints = [f"/{open_session_hint}/project"] if open_session_hint else [f"/{open_project_hint}"]
                 proj_match = _activate_atspi_match(proc.pid, proj_hints, invoke=True)
                 navigation_events.append({"step": "open_project", **proj_match})
                 if not proj_match.get("invoked") and isinstance(proj_match.get("center"), list):
@@ -1079,7 +1079,7 @@ def run_linux_tauri_native(
                 time.sleep(2.0)
                 _capture_x11_window_png(xid, out / "linux-native-den-tauri-project.png")
             if open_session_hint:
-                sess_hints = [f"TB10 {open_session_hint}", open_session_hint]
+                sess_hints = [f"TB10 {open_session_hint}"]
                 sess_match = _activate_atspi_match(proc.pid, sess_hints, invoke=True)
                 navigation_events.append({"step": "open_session", **sess_match})
                 if not sess_match.get("invoked") and isinstance(sess_match.get("center"), list):
