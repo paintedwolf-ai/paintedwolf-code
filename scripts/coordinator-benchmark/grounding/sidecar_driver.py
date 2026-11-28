@@ -30,9 +30,11 @@ import pathlib
 import platform as py_platform
 import re
 import secrets
+import signal
 import socket
 import sqlite3
 import subprocess
+import threading
 import time
 from typing import Any, Mapping, Sequence
 import urllib.error
@@ -458,6 +460,9 @@ class IsolatedSidecarProcess:
         self.pid: int | None = None
         self.process: subprocess.Popen[bytes] | None = None
         self.manual_boundary_verified: bool = False
+        self._saved_signal_handlers: dict[int, Any] = {}
+        self._interrupt_deferred = False
+        self._pending_interrupt: int | None = None
 
         if not self.product_root.is_dir():
             raise FileNotFoundError(f"D1 product_root directory not found: {self.product_root}")
@@ -556,6 +561,34 @@ class IsolatedSidecarProcess:
         )
 
     def start(self, *, ready_timeout: float | None = None) -> SidecarSessionClient:
+        if self.process is not None:
+            raise RuntimeError("Stop the owned sidecar before starting another")
+        try:
+            self._interrupt_deferred = True
+            if threading.current_thread() is threading.main_thread():
+                for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+                    self._saved_signal_handlers[signum] = signal.getsignal(signum)
+                    signal.signal(signum, self._interrupt)
+            self._interrupt_deferred = False
+            self._deliver_interrupt()
+            return self._start(ready_timeout)
+        except BaseException:
+            self._close(deliver_interrupt=False)
+            raise
+
+    def _interrupt(self, signum: int, _frame: Any) -> None:
+        if self._interrupt_deferred:
+            if self._pending_interrupt is None:
+                self._pending_interrupt = signum
+            return
+        raise SystemExit(128 + signum)
+
+    def _deliver_interrupt(self) -> None:
+        if self._pending_interrupt is not None:
+            signum, self._pending_interrupt = self._pending_interrupt, None
+            raise SystemExit(128 + signum)
+
+    def _start(self, ready_timeout: float | None) -> SidecarSessionClient:
         if ready_timeout is None:
             ready_timeout = 90.0 if self.trace_friction else 60.0
         self.config_dir.mkdir(parents=True, exist_ok=True)
@@ -567,28 +600,35 @@ class IsolatedSidecarProcess:
         cmd = self.build_command()
         if self.trace_friction:
             cmd = [*build_exact_binary_debugger_prefix(self.config_dir), *cmd]
-        with log_path.open("wb") as log_fh:
-            self.process = subprocess.Popen(
-                cmd,
-                cwd=str(self.product_root),
-                env=env,
-                stdout=log_fh,
-                stderr=subprocess.STDOUT,
+        # Publish ownership before a runner signal can unwind launch.
+        self._interrupt_deferred = True
+        try:
+            with log_path.open("wb") as log_fh:
+                self.process = subprocess.Popen(
+                    cmd,
+                    cwd=str(self.product_root),
+                    env=env,
+                    stdout=log_fh,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+            self.pid = self.process.pid
+            # Persist ownership metadata without any token/credential
+            (self.config_dir / "ownership.json").write_text(
+                json.dumps(
+                    {
+                        "pid": self.pid,
+                        "listen_addr": f"127.0.0.1:{self.port}",
+                        "scratch_db_path": str(self.store_db_path),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                ),
+                encoding="utf-8",
             )
-        self.pid = self.process.pid
-        # Persist ownership metadata without any token/credential
-        (self.config_dir / "ownership.json").write_text(
-            json.dumps(
-                {
-                    "pid": self.pid,
-                    "listen_addr": f"127.0.0.1:{self.port}",
-                    "scratch_db_path": str(self.store_db_path),
-                },
-                indent=2,
-                sort_keys=True,
-            ),
-            encoding="utf-8",
-        )
+        finally:
+            self._interrupt_deferred = False
+        self._deliver_interrupt()
         client = SidecarSessionClient(self.base_url, self.token)
         deadline = time.monotonic() + ready_timeout
         while time.monotonic() < deadline:
@@ -606,25 +646,42 @@ class IsolatedSidecarProcess:
                 if exc.code in {408, 429, 500, 502, 503, 504}:
                     time.sleep(0.1)
                     continue
-                self.stop()
                 raise
             except (urllib.error.URLError, OSError):
                 time.sleep(0.1)
-        self.stop()
         raise TimeoutError(f"Sidecar failed to become ready on {self.base_url}/health within {ready_timeout}s")
 
     def stop(self) -> None:
+        self._close(deliver_interrupt=True)
+
+    def _close(self, *, deliver_interrupt: bool) -> None:
+        self._interrupt_deferred = True
+        try:
+            self._stop_owned_process()
+        finally:
+            for signum, handler in self._saved_signal_handlers.items():
+                signal.signal(signum, handler)
+            self._saved_signal_handlers.clear()
+            self._interrupt_deferred = False
+        if deliver_interrupt:
+            self._deliver_interrupt()
+        self._pending_interrupt = None
+
+    def _stop_owned_process(self) -> None:
+        if self.process is None:
+            return
         if self.trace_friction and getattr(self, "log_path", None) and self.log_path.is_file():
             try:
                 owned_pid, _ = parse_friction_trace_log(self.log_path.read_text(encoding="utf-8", errors="replace"))
                 if owned_pid:
-                    chk = subprocess.run(["ps", "-p", str(owned_pid), "-o", "comm="], capture_output=True, text=True, check=False)
-                    if chk.returncode == 0 and pathlib.Path(chk.stdout.strip()).name == "lycaon-dev":
-                        os.kill(owned_pid, 15)
+                    check = subprocess.run(
+                        ["ps", "-ww", "-p", str(owned_pid), "-o", "args="],
+                        capture_output=True, text=True, check=False,
+                    )
+                    if check.returncode == 0 and check.stdout.strip() == " ".join(self.build_command()):
+                        os.kill(owned_pid, signal.SIGTERM)
             except OSError:
                 pass
-        if self.process is None:
-            return
         if self.process.poll() is None:
             self.process.terminate()
             try:
@@ -637,8 +694,8 @@ class IsolatedSidecarProcess:
     def __enter__(self) -> SidecarSessionClient:
         return self.start()
 
-    def __exit__(self, *_exc: Any) -> None:
-        self.stop()
+    def __exit__(self, exc_type: Any, _exc: Any, _traceback: Any) -> None:
+        self._close(deliver_interrupt=exc_type is None)
 
 
 def _decompress_zstd(data: bytes) -> bytes | None:
