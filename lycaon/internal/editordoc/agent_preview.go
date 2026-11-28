@@ -40,7 +40,7 @@ func (a *AgentService) PreviewAgentEdits(ctx context.Context, inputs []AgentEdit
 			return nil, err
 		}
 		limits := textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes)
-		beforeContent, _, err := s.serializeDocumentContent(ctx, d, d.Draft, nil)
+		beforeContent, err := s.serializeDocumentContent(ctx, d, d.Draft, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -48,7 +48,7 @@ func (a *AgentService) PreviewAgentEdits(ctx context.Context, inputs []AgentEdit
 		if err != nil {
 			return nil, err
 		}
-		afterContent, _, err := s.serializeDocumentContent(ctx, d, plan.content, nil)
+		afterContent, err := s.serializeDocumentContent(ctx, d, plan.content, nil)
 		if err != nil {
 			return nil, err
 		}

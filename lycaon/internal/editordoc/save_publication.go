@@ -109,34 +109,34 @@ func (c savePublisher) saveLocked(ctx context.Context, p *project.Project, d *Do
 // "\r\n" vs "\n" terminators from the authorized preimage on disk. If the
 // preimage is unavailable, changed on disk, or cannot be decoded, this fails
 // closed instead of silently converting mixed line endings to uniform EOL.
-func (s *Service) serializeDocumentContent(ctx context.Context, d *Document, draft string, preimage []byte) (string, bool, error) {
+func (s *Service) serializeDocumentContent(ctx context.Context, d *Document, draft string, preimage []byte) (string, error) {
 	if !d.MixedEOL {
-		return textfile.SerializeEOL(draft, d.EOL), false, nil
+		return textfile.SerializeEOL(draft, d.EOL), nil
 	}
 	raw := preimage
 	if len(raw) == 0 {
 		if d.Absent {
-			return "", false, projectsource.ErrSourceWriteConflict
+			return "", projectsource.ErrSourceWriteConflict
 		}
 		root, err := s.liveRootPath(ctx, d.ProjectID, d.BranchID, d.RootID)
 		if err != nil {
-			return "", false, fmt.Errorf("mixed-eol preimage root: %w", err)
+			return "", fmt.Errorf("mixed-eol preimage root: %w", err)
 		}
 		parentIdentity, err := s.publicationParent(ctx, root, d)
 		if err != nil {
-			return "", false, fmt.Errorf("mixed-eol preimage parent: %w", err)
+			return "", fmt.Errorf("mixed-eol preimage parent: %w", err)
 		}
 		read, err := readPublicationPreimage(root, d.Path, parentIdentity)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
-				return "", false, projectsource.ErrSourceWriteConflict
+				return "", projectsource.ErrSourceWriteConflict
 			}
-			return "", false, fmt.Errorf("mixed-eol preimage read: %w", err)
+			return "", fmt.Errorf("mixed-eol preimage read: %w", err)
 		}
 		raw = read
 	}
 	if d.BaseSHA256 != "" && textfile.SHA256(raw) != d.BaseSHA256 {
-		return "", false, projectsource.ErrSourceWriteConflict
+		return "", projectsource.ErrSourceWriteConflict
 	}
 	limits := textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes)
 	var (
@@ -149,16 +149,16 @@ func (s *Service) serializeDocumentContent(ctx context.Context, d *Document, dra
 		doc, _, err = textfile.Open(raw, limits)
 	}
 	if err != nil {
-		return "", false, fmt.Errorf("decode mixed-eol preimage: %w", err)
+		return "", fmt.Errorf("decode mixed-eol preimage: %w", err)
 	}
-	serialized, mixed, err := textfile.SerializePreservingMixedEOL(doc.Text(), draft, d.EOL)
+	serialized, _, err := textfile.SerializePreservingMixedEOL(doc.Text(), draft, d.EOL)
 	if err != nil {
 		if errors.Is(err, textfile.ErrMixedEOLAlignmentUnresolved) {
-			return "", false, projectsource.ErrSourceWriteConflict
+			return "", projectsource.ErrSourceWriteConflict
 		}
-		return "", false, fmt.Errorf("preserve mixed-eol terminators: %w", err)
+		return "", fmt.Errorf("preserve mixed-eol terminators: %w", err)
 	}
-	return serialized, mixed, nil
+	return serialized, nil
 }
 
 // prepareSaveMutation journals the exact bytes one save will publish. An
@@ -188,7 +188,7 @@ func (c savePublisher) prepareSaveMutation(ctx context.Context, d *Document, ope
 	} else if before, err = readPublicationPreimage(root, d.Path, parentIdentity); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
-	content, _, err := s.serializeDocumentContent(ctx, d, d.Draft, before)
+	content, err := s.serializeDocumentContent(ctx, d, d.Draft, before)
 	if err != nil {
 		return nil, err
 	}
