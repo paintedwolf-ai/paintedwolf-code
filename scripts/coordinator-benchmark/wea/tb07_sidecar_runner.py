@@ -1475,6 +1475,8 @@ def _run_a12_restart_slots(
             cp_before, _settled_before = _wait_pending_checkpoint_or_settled(app1, session_id, pending_call_id, timeout_s=20.0)
             pending_cp_id = str((cp_before or {}).get("id") or "")
             pre_plan_id = str((((cp_before or {}).get("tool_approval") or {}).get("plan") or {}).get("id") or "")
+            pre_once_opt = _select_option(cp_before, rung="once") if cp_before else {}
+            pre_once_opt_id = str((pre_once_opt or {}).get("id") or "")
             pre_restart_target_existed = pending_target.exists()
         finally:
             app1.close(cleanup=False)
@@ -1483,40 +1485,62 @@ def _run_a12_restart_slots(
         app2 = _restart_application(app_dir, engine_bin=engine_bin, engine_manifest=engine_manifest, engine_root=engine_root)
         post_restart_before_approve_existed = False
         post_restart_settled: dict[str, Any] = {}
+        interrupted_tool_msg: dict[str, Any] = {}
+        post_cp_db: dict[str, Any] = {}
+        stale_click_status = 0
+        stale_click_body: Any = None
+        grants_before_stale = 0
+        grants_after_stale = 0
         try:
             app2.ready()
 
-            # A12-01: Pending checkpoint preserved with identical plan ID; verify no premature effect before approve
+            # A12-01: Inspect interrupted transcript row and checkpoint disposition after restart.
             post_restart_before_approve_existed = pending_target.exists()
+            msgs_after = (app2.request(f"/v1/sessions/{session_id}/messages") or {}).get("messages") or []
+            for m in msgs_after:
+                if not isinstance(m, dict) or m.get("role") != "tool":
+                    continue
+                tr = m.get("tool_result") if isinstance(m.get("tool_result"), dict) else {}
+                tcid = str(tr.get("tool_call_id") or m.get("tool_call_id") or "")
+                if tcid == pending_call_id:
+                    interrupted_tool_msg = {
+                        "message_id": m.get("id"),
+                        "tool_call_id": tcid,
+                        "outcome": tr.get("outcome") or m.get("outcome") or "",
+                        "content": tr.get("content") or m.get("content") or "",
+                        "codes": tr.get("codes") or [],
+                    }
+                    post_restart_settled = m
+                    break
+
+            post_cp_db = _read_checkpoint_and_decision_ro(app2.directory / "store.db", pending_cp_id) if pending_cp_id else {}
             cps_after = (app2.request(f"/v1/sessions/{session_id}/checkpoints?status=pending") or {}).get("checkpoints") or []
             matched_cp = next((c for c in cps_after if c.get("id") == pending_cp_id), None)
-            if matched_cp is not None:
-                pending_preserved = True
-                post_plan_id = str(((matched_cp.get("tool_approval") or {}).get("plan") or {}).get("id") or "")
-                opt = _select_option(matched_cp, rung="once")
-                app2.request(
-                    f"/v1/sessions/{session_id}/checkpoints/{pending_cp_id}",
-                    {"kind": "tool_approval", "action": "approve", "option_id": opt["id"]},
-                )
-                # Wait for the post-restart approved call to settle (or session idle) before aborting
-                deadline = time.monotonic() + 30.0
-                while time.monotonic() < deadline:
-                    msgs = (app2.request(f"/v1/sessions/{session_id}/messages") or {}).get("messages") or []
-                    settled = next(
-                        (
-                            m for m in msgs
-                            if isinstance(m, dict)
-                            and m.get("role") == "tool"
-                            and m.get("tool_call_id") == pending_call_id
-                        ),
-                        None,
+            pending_preserved = matched_cp is not None
+            post_plan_id = str(
+                (((matched_cp or {}).get("tool_approval") or {}).get("plan") or {}).get("id")
+                or post_cp_db.get("plan_id")
+                or ""
+            )
+
+            grants_before_stale = len((app2.request("/v1/approval-grants") or {}).get("grants") or [])
+            if pending_cp_id and pre_once_opt_id:
+                try:
+                    stale_click_body = app2.request(
+                        f"/v1/sessions/{session_id}/checkpoints/{pending_cp_id}",
+                        {"kind": "tool_approval", "action": "approve", "option_id": pre_once_opt_id},
                     )
-                    if settled is not None:
-                        post_restart_settled = settled
-                        break
-                    if (app2.request(f"/v1/sessions/{session_id}") or {}).get("status") == "idle":
-                        break
-                    time.sleep(0.25)
+                    stale_click_status = 200
+                except urllib.error.HTTPError as exc:
+                    stale_click_status = int(exc.code)
+                    try:
+                        stale_click_body = json.loads(exc.read().decode("utf-8", errors="replace"))
+                    except Exception:
+                        stale_click_body = str(exc)
+                except Exception as exc:
+                    stale_click_status = 409
+                    stale_click_body = str(exc)
+            grants_after_stale = len((app2.request("/v1/approval-grants") or {}).get("grants") or [])
             with contextlib.suppress(Exception):
                 app2.request(f"/v1/sessions/{session_id}/abort", {})
             _wait_session_idle(app2, session_id, "a12 idle after restart")
@@ -1562,29 +1586,48 @@ def _run_a12_restart_slots(
         post_exists = pending_target.exists()
         post_text = pending_target.read_text(encoding="utf-8", errors="replace") if post_exists else ""
         effect_count = post_text.count("a12-once-after-restart")
-        settled_outcome = str(post_restart_settled.get("outcome") or "")
+        settled_outcome = str(interrupted_tool_msg.get("outcome") or "")
+        post_cp_status = str(post_cp_db.get("status") or "")
+        post_resolved_by = str((post_cp_db.get("decision") or {}).get("resolved_by") or "")
+        stale_click_rejected = stale_click_status >= 400
+        # Per TB07-A12-01-restart-recovery-disposition.md: once the owning invocation
+        # durably ended (interrupted across host stop), the orphaned approval must be
+        # settled as canceled (not left clickable), a stale click must be rejected with
+        # zero effect and zero authority installed, and the interrupted transcript row
+        # must be present for the same tool_call_id.
         ok = (
-            pending_preserved
-            and (not pre_restart_target_existed)
+            (not pre_restart_target_existed)
             and (not post_restart_before_approve_existed)
+            and (not post_exists)
+            and effect_count == 0
             and bool(pre_plan_id)
-            and pre_plan_id == post_plan_id
-            and effect_count <= 1
+            and (not pending_preserved)
+            and post_cp_status == "canceled"
+            and stale_click_rejected
+            and grants_after_stale == grants_before_stale
+            and bool(interrupted_tool_msg.get("tool_call_id") == pending_call_id)
         )
         receipts.append(_build_receipt(
             spec=spec_map["A12-01-restart-pending-preserved-no-double-run"], prov=prov,
             typed_result={
                 "checkpoint_id": pending_cp_id,
                 "pending_preserved": pending_preserved,
+                "post_restart_checkpoint_status": post_cp_status,
+                "post_restart_resolved_by": post_resolved_by,
                 "pre_restart_plan_id": pre_plan_id,
                 "post_restart_plan_id": post_plan_id,
                 "post_restart_settled_outcome": settled_outcome,
+                "interrupted_tool_message": interrupted_tool_msg,
+                "stale_click_http_status": stale_click_status,
+                "stale_click_response": stale_click_body,
             },
             independent_observation={
                 "pre_restart_target_existed": pre_restart_target_existed,
                 "post_restart_before_approve_existed": post_restart_before_approve_existed,
                 "post_restart_target_exists": post_exists,
                 "post_restart_effect_count": effect_count,
+                "grants_before_stale_click": grants_before_stale,
+                "grants_after_stale_click": grants_after_stale,
             },
             passed=ok,
         ))
