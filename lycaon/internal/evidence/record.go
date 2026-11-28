@@ -19,12 +19,12 @@ type Record struct {
 	// SupersededBy changes path lookup currency, never exact handle identity.
 	SupersededBy string `json:"-"`
 	Survey       bool   // true for survey-grade observations
-	Truncated  bool   // body capture exceeded EvidenceCaptureBodyCapBytes
-	Path       string // scope-relative when the tool touched a rooted path; normalized unrooted token otherwise
-	RootID     string // root ID of Path; empty for unrooted tokens
-	LineRanges []LineRange
-	Body       []string // result lines for excerpt verification
-	URL        string   // primary observed URL
+	Truncated    bool   // body capture exceeded EvidenceCaptureBodyCapBytes
+	Path         string // scope-relative when the tool touched a rooted path; normalized unrooted token otherwise
+	RootID       string // root ID of Path; empty for unrooted tokens
+	LineRanges   []LineRange
+	Body         []string // result lines for excerpt verification
+	URL          string   // primary observed URL
 
 	Surface          string // dom | tui | http
 	ArtifactID       string
@@ -103,10 +103,10 @@ func (r *Record) SetCustodySeq(seq int) {
 
 // Ledger is the handle-keyed evidence ledger for citation grounding.
 type Ledger struct {
-	Handles          map[string]Record   // handle → record (single store)
-	ByPath           map[string][]string // normalized path → handles (newest last)
-	byPathOrder      map[string][]string // normalized path → handles in chronological assembly order
-	PathFidelity     map[string]string   // normalized path → trust tier (structured wins)
+	Handles           map[string]Record   // handle → record (single store)
+	ByPath            map[string][]string // normalized path → handles (newest last)
+	byPathOrder       map[string][]string // normalized path → handles in chronological assembly order
+	PathFidelity      map[string]string   // normalized path → trust tier (structured wins)
 	handleOrder       []string            // stable (kind, ordinal) order for HandlesSorted
 	observationOrder  []string            // chronological assembly order for HandlesNewestFirst
 	unavailableBodies map[string]struct{} // handles whose persisted body blobs failed verification at load
