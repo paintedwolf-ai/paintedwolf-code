@@ -22,18 +22,18 @@ type WorkerQueue interface {
 
 // AmbientGroundingInput carries per-turn coordinator grounding inputs.
 type AmbientGroundingInput struct {
-	SessionID              string
-	ProjectID              string
-	ProjectDir             string
-	Jobs                   []api.WorkerTask
-	SummaryTags            []grounding.WorkerSummaryTag
-	LastTurnTools          []string
+	SessionID                string
+	ProjectID                string
+	ProjectDir               string
+	Jobs                     []api.WorkerTask
+	SummaryTags              []grounding.WorkerSummaryTag
+	LastTurnTools            []string
 	LastAuditUngrounded      bool
 	LastAuditHostAssembled   bool
 	LastAuditTraced          bool
 	LastAuditRepairExhausted bool
 	LastAuditCode            string
-	UngroundedState        grounding.UngroundedCounter
+	UngroundedState          grounding.UngroundedCounter
 }
 
 // AmbientGroundingGate evaluates coordinator turns against worker jobs and citation audits.
