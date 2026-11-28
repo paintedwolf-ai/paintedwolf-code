@@ -21,7 +21,7 @@ var security = []invariants.Invariant{{
 		r.Expect(len(registered), "registered overlay basenames")
 		dirs := []string{"internal/settings", "internal/mcp", "internal/llm", "internal/standingpatterns"}
 		for _, f := range r.GoFiles(func(f *invariants.GoFile) bool { return !f.IsTest && contains(dirs, f.Dir) }, dirs...) {
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				if invariants.CalleeName(call) != "Join" || len(call.Args) < 3 {
 					return
 				}
@@ -43,7 +43,7 @@ var security = []invariants.Invariant{{
 			return !f.IsTest && (strings.Contains(base, "capability") || strings.HasPrefix(base, "socket_"))
 		}, "internal")
 		for _, f := range files {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				if branch, ok := n.(*ast.IfStmt); ok && branch.Else == nil && rejectsCapabilityBranch(branch.Body) {
 					return false
 				}
@@ -73,7 +73,7 @@ var security = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		for _, rel := range []string{"internal/detectionpack/matcher.go", "internal/detectionpack/selection.go", "internal/detectionpack/rule.go"} {
 			f := r.GoFile(rel)
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				if id, ok := n.(*ast.Ident); ok && id.Name == "Equivalents" {
 					r.ReportAt(id.Pos(), "reads Equivalents")
 				}
@@ -168,7 +168,7 @@ var approvalMint = []invariants.Invariant{{
 	},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, invariants.Source...) {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				lit, ok := n.(*ast.CompositeLit)
 				if !ok {
 					return true
@@ -200,7 +200,7 @@ var runnerNeutrality = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Package("internal/exec"), invariants.Package("internal/hostcmd")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/exec", "internal/hostcmd") {
-			for i, line := range strings.Split(string(f.Src), "\n") {
+			for i, line := range strings.Split(string(f.Bytes()), "\n") {
 				if packageManagerWords.MatchString(line) {
 					r.Report("%s:%d names a package manager: %s", f.Rel, i+1, strings.TrimSpace(line))
 				}
@@ -214,7 +214,7 @@ var runnerNeutrality = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Func("internal/sensitivepath", "Catalog.ClassifyResolved")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal") {
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				sel, ok := call.Fun.(*ast.SelectorExpr)
 				if !ok || sel.Sel.Name != "Match" && sel.Sel.Name != "MatchCovering" {
 					return

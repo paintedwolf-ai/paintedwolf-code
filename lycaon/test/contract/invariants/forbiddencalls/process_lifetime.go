@@ -17,8 +17,8 @@ var processLifetime = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		channels := 0
 		for _, f := range r.GoFiles(invariants.Production, "internal/llm") {
-			channels += len(streamChunkChannels(f.AST))
-			for _, send := range bareStreamSends(f.AST) {
+			channels += len(streamChunkChannels(f.Syntax()))
+			for _, send := range bareStreamSends(f.Syntax()) {
 				r.ReportAt(send.Pos(), "bare send on a stream-chunk channel; select on ctx.Done()")
 			}
 		}
@@ -34,12 +34,12 @@ var processLifetime = []invariants.Invariant{{
 			if invariants.Under(f, "internal/exec", "internal/confine") {
 				continue
 			}
-			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+			f.Selectors(f.Syntax(), func(sel *ast.SelectorExpr, pkg, name string) {
 				if pkg == "os/exec" && name == "LookPath" {
 					r.ReportAt(sel.Pos(), "os/exec.LookPath searches the process PATH; use internal/exec")
 				}
 			})
-			f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 				if pkg == "os" && (name == "Getenv" || name == "LookupEnv") && len(call.Args) > 0 {
 					if value, _ := invariants.StringLit(call.Args[0]); value == "PATH" {
 						r.ReportAt(call.Pos(), "os.%s(\"PATH\") reads the process PATH; use exec.EffectivePathValue", name)
@@ -175,7 +175,7 @@ var workerViews = []invariants.Invariant{{
 	},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal") {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				if setsCommandDir(n) && !r.Exempt(f.Rel) {
 					r.ReportAt(n.Pos(), "sets a raw working directory; start through internal/exec with ExecOpts.Dir")
 				}
@@ -193,7 +193,7 @@ var workerViews = []invariants.Invariant{{
 		dirs := []string{"internal/workspace", "internal/worker", "internal/session", "internal/tools", "internal/toolhost",
 			"internal/layeredfs/consumer", "internal/api/sourceapi"}
 		for _, f := range r.GoFiles(invariants.Production, dirs...) {
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				if name := invariants.CalleeName(call); name == "Sync" && len(call.Args) == 0 || name == "Mmap" {
 					r.ReportAt(call.Pos(), "%s on a view path consumer; flush through internal/fssync and map nothing", name)
 				}

@@ -21,7 +21,7 @@ var testInfrastructure = []invariants.Invariant{{
 			if invariants.Under(f, "internal/testutil") {
 				continue
 			}
-			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+			f.Selectors(f.Syntax(), func(sel *ast.SelectorExpr, pkg, name string) {
 				if pkg == "go.uber.org/goleak" {
 					r.ReportAt(sel.Pos(), "goleak.%s outside testutil.VerifyNoLeaks", name)
 				}
@@ -59,7 +59,7 @@ var testInfrastructure = []invariants.Invariant{{
 		const gittest = "github.com/lycaon/lycaon/internal/testutil/gittest"
 		uses, enables := map[string]string{}, map[string]bool{}
 		for _, f := range r.GoFiles(invariants.Tests, testDirs...) {
-			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+			f.Selectors(f.Syntax(), func(sel *ast.SelectorExpr, pkg, name string) {
 				switch {
 				case pkg == gittest && uses[f.Dir] == "":
 					uses[f.Dir] = f.Rel
@@ -96,7 +96,7 @@ var testInfrastructure = []invariants.Invariant{{
 	),
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Tests, testDirs...) {
-			f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 				if pkg == "github.com/lycaon/lycaon/internal/db" && name == "Open" && len(call.Args) > 0 && !r.Exempt(f.Rel) {
 					r.ReportAt(call.Pos(), "direct db.Open; use testdbfixture")
 				}
@@ -127,7 +127,7 @@ var testInfrastructure = []invariants.Invariant{{
 			if invariants.Under(f, "internal/git", "internal/testutil/gittest") {
 				continue
 			}
-			f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 				if pkg != "os/exec" || (name != "Command" && name != "CommandContext") {
 					return
 				}
@@ -179,12 +179,12 @@ var surveyTools = []invariants.Invariant{{
 			"github.com/lycaon/lycaon/internal/tools/toolkit":      "PathEscapeReject",
 		}
 		for _, f := range r.GoFiles(isEnvelopeOnlyTool, "internal/tools/native/survey", "internal/tools/native/jq") {
-			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+			f.Selectors(f.Syntax(), func(sel *ast.SelectorExpr, pkg, name string) {
 				if banned[pkg] == name {
 					r.ReportAt(sel.Pos(), "%s; take it from safecmd", invariants.SelectorName(sel))
 				}
 			})
-			for _, decl := range f.AST.Decls {
+			for _, decl := range f.Syntax().Decls {
 				gen, ok := decl.(*ast.GenDecl)
 				if !ok || (gen.Tok != token.CONST && gen.Tok != token.VAR) {
 					continue
@@ -210,7 +210,7 @@ var surveyTools = []invariants.Invariant{{
 			if f.Rel == "internal/sandbox/survey_walk.go" {
 				continue
 			}
-			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+			f.Selectors(f.Syntax(), func(sel *ast.SelectorExpr, pkg, name string) {
 				if name == "WalkDir" && (pkg == "path/filepath" || pkg == "io/fs") {
 					r.ReportAt(sel.Pos(), "raw %s; walk through sandbox.SurveyWalk", invariants.SelectorName(sel))
 				}
@@ -275,7 +275,7 @@ var toolOutcomes = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Decl("pkg/api", "ToolResultOutcomeError"), invariants.Decl("pkg/api", "ToolResultOutcomeRejected")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/tools") {
-			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+			f.Selectors(f.Syntax(), func(sel *ast.SelectorExpr, pkg, name string) {
 				if pkg == "github.com/lycaon/lycaon/pkg/api" && (name == "ToolResultOutcomeError" || name == "ToolResultOutcomeRejected") {
 					r.ReportAt(sel.Pos(), "states %s; return a coded refusal", name)
 				}

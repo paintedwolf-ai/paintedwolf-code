@@ -19,7 +19,7 @@ var authorities = []invariants.Invariant{{
 	},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, invariants.Source...) {
-			if invariants.Under(f, "internal/egress") || !fileDecidesLoopbackFromAString(f.AST) || r.Exempt(f.Rel) {
+			if invariants.Under(f, "internal/egress") || !fileDecidesLoopbackFromAString(f.Syntax()) || r.Exempt(f.Rel) {
 				continue
 			}
 			r.Report("%s decides loopback from a host string: use egress.SyntacticLoopback for a name, egress.LoopbackLiteral for an address literal", f.Rel)
@@ -42,7 +42,7 @@ var authorities = []invariants.Invariant{{
 			"github.com/lycaon/lycaon/internal/grantedpath",
 		}
 		for _, f := range r.GoFiles(invariants.Production, invariants.Source...) {
-			if invariants.Under(f, "internal/fspath") || !callsFilepath(f, f.AST, "EvalSymlinks") || r.Exempt(f.Rel) {
+			if invariants.Under(f, "internal/fspath") || !callsFilepath(f, f.Syntax(), "EvalSymlinks") || r.Exempt(f.Rel) {
 				continue
 			}
 			for _, p := range classifiers {
@@ -71,7 +71,7 @@ func callsFilepath(f *invariants.GoFile, node ast.Node, name string) bool {
 // filepath.Dir.
 func resolvesByClimbing(f *invariants.GoFile) bool {
 	found := false
-	ast.Inspect(f.AST, func(n ast.Node) bool {
+	ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 		var body ast.Node
 		switch loop := n.(type) {
 		case *ast.ForStmt:
@@ -209,7 +209,7 @@ var confinement = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		consulted := false
 		for _, f := range r.GoFiles(invariants.Production, "internal") {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				switch node := n.(type) {
 				case *ast.FuncDecl:
 					if node.Name.Name == "AttachedWriteRootRefused" && node.Recv == nil && invariants.Under(f, "internal/confine") {
@@ -238,7 +238,7 @@ var confinement = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal") {
 			produces := false
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				switch node := n.(type) {
 				case *ast.CallExpr:
 					switch invariants.CalleeName(node) {
@@ -262,7 +262,7 @@ var confinement = []invariants.Invariant{{
 	Exempt:  []invariants.Exemption{{Key: "internal/confine/package_cache_roots.go", Reason: "the bounded package-store exception, held clear of executable install directories by the security contract"}},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/confine") {
-			invariants.StringLits(f.AST, func(lit *ast.BasicLit, value string) {
+			invariants.StringLits(f.Syntax(), func(lit *ast.BasicLit, value string) {
 				for _, needle := range []string{"/pkg/mod/", ".npm", ".cargo", "GOPATH", "GOCACHE"} {
 					if strings.Contains(value, needle) && !r.Exempt(f.Rel) {
 						r.ReportAt(lit.Pos(), "names the ecosystem cache %s", needle)

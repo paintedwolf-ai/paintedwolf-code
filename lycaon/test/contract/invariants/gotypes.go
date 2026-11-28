@@ -31,19 +31,16 @@ type Program struct {
 
 // TypedPackage is one type-checked package.
 type TypedPackage struct {
-	Path  string
-	Types *types.Package
-	Info  *types.Info
-	Files []*GoFile
+	Path   string
+	Types  *types.Package
+	Info   *types.Info
+	Files  []*GoFile
+	syntax []*ast.File
 }
 
-// Syntax returns the package's parsed files.
+// Syntax returns the package's parsed files matching Info.
 func (p *TypedPackage) Syntax() []*ast.File {
-	files := make([]*ast.File, len(p.Files))
-	for i, f := range p.Files {
-		files[i] = f.AST
-	}
-	return files
+	return p.syntax
 }
 
 // Types returns the type-checked program; a failure ends the check.
@@ -210,8 +207,9 @@ func checkPackage(g *GoCorpus, imp *programImporter, pkg listedPackage) (*TypedP
 			return nil, fmt.Errorf("%s/%s is not in the Go corpus", pkg.ImportPath, name)
 		}
 		typed.Files = append(typed.Files, f)
-		files = append(files, f.AST)
+		files = append(files, f.Syntax())
 	}
+	typed.syntax = files
 	var typeErrs []string
 	conf := types.Config{
 		Importer:    imp,

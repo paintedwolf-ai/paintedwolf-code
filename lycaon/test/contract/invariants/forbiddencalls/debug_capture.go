@@ -32,7 +32,7 @@ var debugCapture = []invariants.Invariant{{
 			if invariants.Under(f, "internal/debugpaths") {
 				continue
 			}
-			invariants.StringLits(f.AST, func(lit *ast.BasicLit, value string) {
+			invariants.StringLits(f.Syntax(), func(lit *ast.BasicLit, value string) {
 				if names[value] {
 					r.ReportAt(lit.Pos(), "spells %s; use internal/debugpaths", value)
 				}
@@ -82,11 +82,12 @@ var debugSwitch = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Decl("internal/debugpaths", "FullDebugEnv")},
 	Check: func(r *invariants.Run) {
 		for _, pkg := range r.TypedPackages("internal", "cmd", "pkg", "config") {
-			for _, f := range pkg.Files {
+			syntax := pkg.Syntax()
+			for i, f := range pkg.Files {
 				if invariants.Under(f, "internal/debugpaths") {
 					continue
 				}
-				f.Calls(f.AST, func(call *ast.CallExpr, p, name string) {
+				f.Calls(syntax[i], func(call *ast.CallExpr, p, name string) {
 					if p != "os" || name != "Getenv" || len(call.Args) != 1 {
 						return
 					}
@@ -114,7 +115,7 @@ var overlayDir = []invariants.Invariant{{
 			if f.Rel == "internal/settingsoverlay/basenames.go" {
 				continue
 			}
-			invariants.StringLits(f.AST, func(lit *ast.BasicLit, value string) {
+			invariants.StringLits(f.Syntax(), func(lit *ast.BasicLit, value string) {
 				if value == name {
 					r.ReportAt(lit.Pos(), "spells the overlay directory %q; use settingsoverlay.DirName()", name)
 				}
@@ -140,7 +141,7 @@ var frontendText = []invariants.Invariant{{
 				continue
 			}
 			for _, marker := range guardedMarkers {
-				if spellsMarker(string(f.Src), marker) {
+				if spellsMarker(string(f.Bytes()), marker) {
 					r.Report("%s spells the host marker %q", f.Rel, marker)
 				}
 			}
@@ -156,7 +157,7 @@ var frontendText = []invariants.Invariant{{
 			if invariants.Under(f, "internal/runeclamp") {
 				continue
 			}
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				bin, ok := n.(*ast.BinaryExpr)
 				if ok && bin.Op == token.ADD && (isElisionMarker(bin.X) || isElisionMarker(bin.Y)) && (slicesString(bin.X) || slicesString(bin.Y)) {
 					r.ReportAt(bin.Pos(), "cuts text by offset and appends an elision marker; use internal/runeclamp")
@@ -178,13 +179,13 @@ var frontendText = []invariants.Invariant{{
 			`"/.paintedwolfcode"`, `'.paintedwolfcode'`, "~/.paintedwolfcode",
 		}
 		for _, f := range r.GoFiles(invariants.Production, "internal/visual") {
-			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+			f.Selectors(f.Syntax(), func(sel *ast.SelectorExpr, pkg, name string) {
 				if pkg == "os" && name == "UserHomeDir" {
 					r.ReportAt(sel.Pos(), "os.UserHomeDir; inject the artifacts directory")
 				}
 			})
 			for _, needle := range needles {
-				if strings.Contains(string(f.Src), needle) {
+				if strings.Contains(string(f.Bytes()), needle) {
 					r.Report("%s hardcodes the home path %q; inject the artifacts directory", f.Rel, needle)
 				}
 			}

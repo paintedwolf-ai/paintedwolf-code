@@ -38,7 +38,7 @@ func (c *Corpus) GuidanceEmission() *GuidanceEmission {
 				continue
 			}
 			site := func(pos token.Pos) string { return fmt.Sprintf("%s:%d", f.Rel, g.Line(pos)) }
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				switch node := n.(type) {
 				case *ast.CallExpr:
 					if CalleeName(node) == "QueuePendingText" {

@@ -21,7 +21,7 @@ var globals = []invariants.Invariant{{
 			if invariants.Under(f, "internal/testutil") {
 				continue
 			}
-			for _, decl := range f.AST.Decls {
+			for _, decl := range f.Syntax().Decls {
 				gen, ok := decl.(*ast.GenDecl)
 				if !ok || gen.Tok != token.VAR {
 					continue
@@ -124,7 +124,7 @@ var retention = []invariants.Invariant{{
 				}
 				r.ReportAt(pos, "%s#%s is keyed by runtime identity and declares no retention bound", f.Rel, name)
 			}
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				switch node := n.(type) {
 				case *ast.StructType:
 					for _, field := range node.Fields.List {

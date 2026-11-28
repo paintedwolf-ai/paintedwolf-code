@@ -20,7 +20,7 @@ var approvals = []invariants.Invariant{{
 	},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal") {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				var at ast.Node
 				switch node := n.(type) {
 				case *ast.KeyValueExpr:
@@ -49,7 +49,7 @@ var approvals = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		const gate = "github.com/lycaon/lycaon/internal/gate"
 		for _, f := range r.GoFiles(invariants.Production, invariants.Source...) {
-			f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 				if pkg == gate && name == "Posture" && len(call.Args) == 1 {
 					r.ReportAt(call.Pos(), "gate.Posture(...) conversion carries an unchecked token; use gate.ParsePosture")
 				}
@@ -97,7 +97,7 @@ var isolation = []invariants.Invariant{{
 			if f.Rel == "internal/isolation/outcomes.go" {
 				continue
 			}
-			invariants.StringLits(f.AST, func(lit *ast.BasicLit, value string) {
+			invariants.StringLits(f.Syntax(), func(lit *ast.BasicLit, value string) {
 				if strings.HasPrefix(value, "SANDBOX_") || strings.HasPrefix(value, "REMOTE_PACKAGE_EXECUTION_") {
 					r.ReportAt(lit.Pos(), "isolation code %s outside internal/isolation/outcomes.go", value)
 				}
@@ -126,7 +126,7 @@ var isolation = []invariants.Invariant{{
 		r.Diff("gate.Verdict constants", []string{"Ask", "Silent"}, verdicts)
 		minted := map[string]int{}
 		for _, f := range r.GoFiles(invariants.Production, "internal") {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				lit, ok := n.(*ast.CompositeLit)
 				if !ok || invariants.TypeName(lit.Type) != "ApprovalResult" || !trueField(lit, "Denied") {
 					return true
@@ -170,7 +170,7 @@ var bootRecovery = []invariants.Invariant{{
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/app") {
 			var stack []ast.Node
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				if n == nil {
 					stack = stack[:len(stack)-1]
 					return true
@@ -269,7 +269,7 @@ var person = []invariants.Invariant{{
 		files := r.GoFiles(invariants.Production, "internal/api")
 		methods := map[string]string{}
 		for _, f := range files {
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				value, ok := n.(*ast.ValueSpec)
 				if !ok || len(value.Names) != 1 || len(value.Values) != 1 {
 					return true
@@ -290,7 +290,7 @@ var person = []invariants.Invariant{{
 		}
 		r.Expect(len(methods), "generated operations")
 		for _, f := range files {
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				if invariants.CalleeName(call) != "registerRootOperation" || len(call.Args) < 2 {
 					return
 				}

@@ -25,8 +25,8 @@ var programFloor = []invariants.Invariant{{
 
 func checkProgramNameFloor(r *invariants.Run, dirs ...string) {
 	for _, f := range r.GoFiles(invariants.Production, dirs...) {
-		locals := localSingleAssignments(f.AST)
-		ast.Inspect(f.AST, func(n ast.Node) bool {
+		locals := localSingleAssignments(f.Syntax())
+		ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 			switch node := n.(type) {
 			case *ast.CompositeLit:
 				if isProgramNameBoolMap(node) {
@@ -229,7 +229,7 @@ var templates = []invariants.Invariant{{
 			if f.DotImports(pongoplainPkg) {
 				r.Report("%s dot-imports pongoplain", f.Rel)
 			}
-			f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 				sel, ok := call.Fun.(*ast.SelectorExpr)
 				if !ok {
 					return

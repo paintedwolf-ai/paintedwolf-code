@@ -67,12 +67,12 @@ var agentDoors = []invariants.Invariant{{
 					found = append(found, "dot-imports "+p)
 				}
 			}
-			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+			f.Selectors(f.Syntax(), func(sel *ast.SelectorExpr, pkg, name string) {
 				if slices.Contains(agentForbiddenRefs[pkg], name) {
 					found = append(found, "uses "+invariants.SelectorName(sel))
 				}
 			})
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				if lit, ok := n.(*ast.CompositeLit); ok {
 					if pkg, name, ok := f.Qualified(lit.Type); ok && slices.Contains(agentForbiddenBuilds[pkg], name) {
 						found = append(found, "builds "+invariants.SelectorName(lit.Type))
@@ -104,7 +104,7 @@ var agentDoors = []invariants.Invariant{{
 			if f.DotImports("os") {
 				r.Report("%s dot-imports os", f.Rel)
 			}
-			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+			f.Selectors(f.Syntax(), func(sel *ast.SelectorExpr, pkg, name string) {
 				if pkg == "os" && slices.Contains(rawFilesystemCalls, name) && !r.Exempt(f.Site(sel.Pos())) {
 					r.Report("%s uses os.%s: go through ProgramPaths, projectpaths or fseffect", f.Site(sel.Pos()), name)
 				}
@@ -137,7 +137,7 @@ var catalogReach = []invariants.Invariant{{
 	Exempt:  deviceCatalogBoundaries,
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal", "cmd", "pkg", "config", "test") {
-			f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 				if pkg == extpacksPkg && name == "Active" && !r.Exempt(f.Rel) {
 					r.ReportAt(call.Pos(), "extpacks.Active() below the device boundaries; take a turn View")
 				}
@@ -150,8 +150,9 @@ var catalogReach = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Decl("internal/extpacks", "EffectiveCatalog"), invariants.Decl("internal/catalogview", "View")},
 	Check: func(r *invariants.Run) {
 		for _, pkg := range r.TypedPackages(invariants.Source...) {
-			for _, f := range pkg.Files {
-				f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			syntax := pkg.Syntax()
+			for i, f := range pkg.Files {
+				f.Calls(syntax[i], func(call *ast.CallExpr, _, _ string) {
 					fn := pkg.Callee(call)
 					if fn == nil || fn.Pkg() == nil || fn.Pkg().Path() != "context" || fn.Name() != "WithValue" || len(call.Args) != 3 {
 						return
@@ -192,7 +193,7 @@ var extensionTransactions = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.GoPath("internal/api/extensionadmin/extensions.go"), invariants.Func("internal/extpacks", "PrepareInstall"), invariants.Func("internal/extpacks", "AcquireIntentLocks")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/api/extensionadmin") {
-			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+			f.Selectors(f.Syntax(), func(sel *ast.SelectorExpr, pkg, name string) {
 				if pkg == extpacksPkg && contains(extensionHandlerBans, name) {
 					r.ReportAt(sel.Pos(), "extpacks.%s; submit the intent and let the extension subsystem prepare and commit", name)
 				}
@@ -216,7 +217,7 @@ var extensionTransactions = []invariants.Invariant{{
 				continue
 			}
 			walks := false
-			f.Calls(f.AST, func(_ *ast.CallExpr, pkg, name string) {
+			f.Calls(f.Syntax(), func(_ *ast.CallExpr, pkg, name string) {
 				walks = walks || pkg == extpacksPkg && contains(packWalkPrimitives, name)
 			})
 			if walks && !r.Exempt(f.Rel) {
@@ -261,7 +262,7 @@ var promptReader = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Func("internal/prompts", "DeclaredReader")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.AnyGo, "internal/coordinator", "internal/session", "internal/app/sessions", "internal/toolexecution") {
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "DeclaredReader" {
 					r.ReportAt(call.Pos(), "calls DeclaredReader")
 				}
@@ -282,7 +283,7 @@ var promptReader = []invariants.Invariant{{
 			if invariants.Under(f, "internal/toolcontract", "internal/prompts") {
 				continue
 			}
-			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+			f.Selectors(f.Syntax(), func(sel *ast.SelectorExpr, pkg, name string) {
 				if pkg == toolcontractPkg && name == "ReachMarks" {
 					r.ReportAt(sel.Pos(), "references toolcontract.ReachMarks")
 				}
@@ -290,7 +291,7 @@ var promptReader = []invariants.Invariant{{
 			if f.IsTest {
 				continue
 			}
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				assign, ok := n.(*ast.AssignStmt)
 				if !ok {
 					return true

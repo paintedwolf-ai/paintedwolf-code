@@ -26,8 +26,9 @@ var readerFacts = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Func("internal/prompts", "Vars"), invariants.Func("internal/prompts", "buildReaderFacts"), invariants.Decl("internal/prompts", "Reader.Facts"), invariants.Decl("internal/prompts", "ReaderFacts.Map")},
 	Check: func(r *invariants.Run) {
 		for _, pkg := range r.TypedPackages(invariants.Source...) {
-			for _, f := range pkg.Files {
-				ast.Inspect(f.AST, func(n ast.Node) bool {
+			syntax := pkg.Syntax()
+			for i, f := range pkg.Files {
+				ast.Inspect(syntax[i], func(n ast.Node) bool {
 					var key string
 					switch n := n.(type) {
 					case *ast.SelectorExpr:

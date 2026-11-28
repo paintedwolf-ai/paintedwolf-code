@@ -18,7 +18,7 @@ var probeRule = invariants.Invariant{
 	Exempt:  []invariants.Exemption{{Key: "internal/app/main.go:main", Reason: "the process entry point"}},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal") {
-			f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, pkg, name string) {
 				if pkg == "os" && name == "Exit" && !invariants.Under(f, "internal/door") && !r.Exempt(f.Site(call.Pos())) {
 					r.ReportAt(call.Pos(), "os.Exit outside the door")
 				}
@@ -147,5 +147,130 @@ func TestCorpusLoadsGoOnce(t *testing.T) {
 	}
 	if stats := corpus.Stats(); stats.GoParses != 1 || stats.TypeChecks != 1 {
 		t.Fatalf("stats = %+v, want one parse and one type-check", stats)
+	}
+}
+
+// Anchors, import queries, and string-constant resolution read the compact
+// index without loading any on-demand syntax trees into GoCorpus.Fset.
+func TestCompactIndexAvoidsOnDemandASTForAnchors(t *testing.T) {
+	t.Parallel()
+	corpus := invariantstest.Fixture(t, map[string]string{
+		"lycaon/internal/door/door.go": `package door
+
+import (
+	_ "embed"
+	"os"
+)
+
+const Banner = "door-banner"
+
+type Gate struct {
+	Open bool
+}
+
+func (Gate) Enter() {}
+
+func Exit(code int) { os.Exit(code) }
+`,
+	})
+	anchorOnly := invariants.Invariant{
+		Name: "anchor-only",
+		Anchors: []invariants.Anchor{
+			invariants.GoPath("internal/door/door.go"),
+			invariants.Package("internal/door"),
+			invariants.Decl("internal/door", "Gate"),
+			invariants.Decl("internal/door", "Gate.Open"),
+			invariants.Decl("internal/door", "Gate.Enter"),
+			invariants.Func("internal/door", "Exit"),
+			invariants.Named("internal/door", "Enter"),
+		},
+		Check: func(r *invariants.Run) {
+			f := r.GoFile("internal/door/door.go")
+			if !f.Imports("embed") || !f.Imports("os") || f.Imports("fmt") {
+				r.Fatalf("unexpected Imports results for %s", f.Rel)
+			}
+			if f.PkgName != "door" {
+				r.Fatalf("PkgName = %q, want door", f.PkgName)
+			}
+		},
+	}
+	invariantstest.Expect(t, invariants.Evaluate(corpus, anchorOnly), invariantstest.Passes, 0)
+	if base := corpus.Go().Fset.Base(); base != 1 {
+		t.Fatalf("Fset.Base() = %d, want 1 (no on-demand AST parses for anchor-only check)", base)
+	}
+	if stats := corpus.Stats(); stats.GoParses != 1 || stats.TypeChecks != 0 {
+		t.Fatalf("stats = %+v, want 1 GoParse and 0 TypeChecks", stats)
+	}
+}
+
+// On-demand syntax loading, declaration lookups, Site resolution, ConstString,
+// and TypedPackage.Syntax stay deterministic and race-free across concurrent
+// and repeated in-process evaluations.
+func TestOnDemandSyntaxRepeatableAndConcurrent(t *testing.T) {
+	t.Parallel()
+	tree := invariantstest.With(probeTree, map[string]string{
+		"lycaon/internal/app/clean.go": "package app\n\nimport quit \"os\"\n\nconst tag = \"seeded\"\n\nfunc clean() { _ = tag; quit.Exit(2) }\n",
+	})
+	corpus := invariantstest.Fixture(t, tree)
+	constRule := invariants.Invariant{
+		Name:    "const-and-source",
+		Anchors: []invariants.Anchor{invariants.Decl("internal/app", "tag"), invariants.Func("internal/app", "clean")},
+		Check: func(r *invariants.Run) {
+			f, fn := r.FuncNamed("internal/app", "clean")
+			if got := f.Site(fn.Body.Pos()); got != "internal/app/clean.go:clean" {
+				r.Fatalf("Site = %q, want internal/app/clean.go:clean", got)
+			}
+			if enc := f.EnclosingFunc(fn.Body.Pos()); enc == nil || enc.Name.Name != "clean" {
+				r.Fatalf("EnclosingFunc = %v, want clean", enc)
+			}
+			d := r.Declaration("internal/app", "tag")
+			if d.Node == nil || d.File != f {
+				r.Fatalf("Declaration(tag) = %+v, want node in %s", d, f.Rel)
+			}
+			if val, ok := r.Go().ConstString(f, &ast.Ident{Name: "tag"}); !ok || val != "seeded" {
+				r.Fatalf("ConstString(tag) = (%q, %v), want (seeded, true)", val, ok)
+			}
+			if src := f.Source(r.Go(), fn.Name); src != "clean" {
+				r.Fatalf("Source(fn.Name) = %q, want clean", src)
+			}
+			if len(f.Bytes()) == 0 {
+				r.Fatalf("Bytes() returned empty slice")
+			}
+			pkg := r.TypedPackage("internal/app")
+			if len(pkg.Syntax()) != len(pkg.Files) {
+				r.Fatalf("len(pkg.Syntax()) = %d, want %d", len(pkg.Syntax()), len(pkg.Files))
+			}
+		},
+	}
+
+	first := invariants.Evaluate(corpus, probeRule)
+	invariantstest.Expect(t, first, invariantstest.Violates, 1)
+
+	const workers = 4
+	errs := make(chan string, workers*2)
+	done := make(chan struct{}, workers)
+	for range workers {
+		go func() {
+			defer func() { done <- struct{}{} }()
+			for range 3 {
+				res := invariants.Evaluate(corpus, probeRule)
+				if res.String() != first.String() {
+					errs <- "probeRule mismatch: " + res.String()
+				}
+				if cres := invariants.Evaluate(corpus, constRule); cres.Failed() {
+					errs <- "constRule failed: " + cres.String()
+				}
+			}
+		}()
+	}
+	for range workers {
+		<-done
+	}
+	close(errs)
+	for msg := range errs {
+		t.Error(msg)
+	}
+	if stats := corpus.Stats(); stats.GoParses != 1 || stats.TypeChecks != 1 {
+		t.Fatalf("stats = %+v, want 1 GoParse and 1 TypeCheck", stats)
 	}
 }

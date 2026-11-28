@@ -90,7 +90,7 @@ func Package(dir string) Anchor {
 func Decl(dir, name string) Anchor {
 	return AnchorFunc(dir+"."+name, func(c *Corpus) error {
 		g := c.Go()
-		if _, ok := g.Decl(g.Pkg(dir), name); !ok {
+		if !g.HasDecl(g.Pkg(dir), name) {
 			return errors.New("not declared")
 		}
 		return nil
@@ -101,11 +101,10 @@ func Decl(dir, name string) Anchor {
 func Func(dir, name string) Anchor {
 	return AnchorFunc("func "+dir+"."+name, func(c *Corpus) error {
 		g := c.Go()
-		d, ok := g.Decl(g.Pkg(dir), name)
-		if !ok {
+		if !g.HasDecl(g.Pkg(dir), name) {
 			return errors.New("not declared")
 		}
-		if fn, isFunc := d.Node.(*ast.FuncDecl); !isFunc || fn.Body == nil {
+		if !g.HasFunc(g.Pkg(dir), name) {
 			return errors.New("not a function with a body")
 		}
 		return nil
@@ -178,24 +177,31 @@ func (r *Run) FuncDecl(dir, name string) *ast.FuncDecl {
 // module directory, whatever its receiver. None or several ends the check.
 func (r *Run) FuncNamed(dir, name string) (*GoFile, *ast.FuncDecl) {
 	var file *GoFile
-	var found *ast.FuncDecl
+	matches := 0
 	for _, f := range r.Go().files {
 		if f.IsTest || f.Dir != dir {
 			continue
 		}
-		for _, decl := range f.AST.Decls {
-			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil && fn.Name.Name == name {
-				if found != nil {
-					r.Fatalf("%s declares %s more than once", dir, name)
-				}
-				file, found = f, fn
+		for _, fn := range f.funcs {
+			if fn.hasBody && fn.name == name {
+				matches++
+				file = f
 			}
 		}
 	}
-	if found == nil {
+	if matches == 0 {
 		r.Fatalf("%s declares no function %s", dir, name)
 	}
-	return file, found
+	if matches > 1 {
+		r.Fatalf("%s declares %s more than once", dir, name)
+	}
+	for _, decl := range file.Syntax().Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil && fn.Name.Name == name {
+			return file, fn
+		}
+	}
+	r.Fatalf("%s declares no function %s", dir, name)
+	return nil, nil
 }
 
 // Named anchors on a production function or method named name at or below
@@ -206,10 +212,8 @@ func Named(dir, name string) Anchor {
 			if f.IsTest || !Under(f, dir) {
 				continue
 			}
-			for _, decl := range f.AST.Decls {
-				if fn, ok := decl.(*ast.FuncDecl); ok && fn.Name.Name == name {
-					return nil
-				}
+			if f.hasFuncName(name) {
+				return nil
 			}
 		}
 		return errors.New("not declared")

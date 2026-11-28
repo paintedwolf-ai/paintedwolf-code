@@ -22,7 +22,7 @@ var hostDoors = []invariants.Invariant{{
 	Exempt:  []invariants.Exemption{{Key: "internal/tools/native/git_commit_staging.go", Reason: "narrows whole-tree dirtiness to session authorship"}},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(func(f *invariants.GoFile) bool { return !f.IsTest && f.Dir == "internal/tools/native" }, "internal/tools/native") {
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				if invariants.CalleeName(call) == "ChangedPaths" && !r.Exempt(f.Rel) {
 					r.ReportAt(call.Pos(), "reads ChangedPaths; narrow through session authorship in git_commit_staging.go")
 				}
@@ -36,7 +36,7 @@ var hostDoors = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Package("internal/app"), invariants.Package("internal/bootrecovery"), invariants.Package("internal/db")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal/app", "internal/bootrecovery", "internal/db") {
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				sel, ok := call.Fun.(*ast.SelectorExpr)
 				if !ok {
 					return
@@ -73,12 +73,12 @@ var hostDoors = []invariants.Invariant{{
 			if invariants.Under(f, "internal/httpclient") {
 				continue
 			}
-			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+			f.Selectors(f.Syntax(), func(sel *ast.SelectorExpr, pkg, name string) {
 				if pkg == "net/http" && contains([]string{"DefaultClient", "Get", "Post", "Head", "PostForm"}, name) {
 					r.ReportAt(sel.Pos(), "http.%s has no deadline; use internal/httpclient", name)
 				}
 			})
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				if lit, ok := n.(*ast.CompositeLit); ok && len(lit.Elts) == 0 {
 					if pkg, name, ok := f.Qualified(lit.Type); ok && pkg == "net/http" && name == "Client" {
 						r.ReportAt(lit.Pos(), "http.Client{} has no deadline; use internal/httpclient")
@@ -163,7 +163,7 @@ var egressSeams = []invariants.Invariant{{
 			}
 		}
 		for _, f := range r.GoFiles(invariants.Production, "internal/webresearch") {
-			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+			f.Selectors(f.Syntax(), func(sel *ast.SelectorExpr, pkg, name string) {
 				if pkg == "net/http" && (name == "DefaultClient" || name == "ProxyFromEnvironment") {
 					r.ReportAt(sel.Pos(), "http.%s bypasses the guarded transport", name)
 				}
@@ -180,7 +180,7 @@ var egressSeams = []invariants.Invariant{{
 			if f.Rel == "internal/argv/whitespace.go" {
 				continue
 			}
-			ast.Inspect(f.AST, func(n ast.Node) bool {
+			ast.Inspect(f.Syntax(), func(n ast.Node) bool {
 				switch v := n.(type) {
 				case *ast.CallExpr:
 					if name := invariants.CalleeName(v); contains([]string{"TrimSpace", "TrimLeft", "TrimRight", "IsSpace", "Fields"}, name) {
@@ -202,7 +202,7 @@ var egressSeams = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Dir("lycaon/test/security")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Tests, "test/security") {
-			if strings.Contains(string(f.Src), "installedhelper") {
+			if strings.Contains(string(f.Bytes()), "installedhelper") {
 				r.Report("%s qualifies the installed helper inside the HTTP journey layer", f.Rel)
 			}
 		}

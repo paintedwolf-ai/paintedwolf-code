@@ -78,7 +78,7 @@ var hostSubprocess = []invariants.Invariant{{
 			if invariants.Under(f, "internal/exec", "internal/confine") {
 				continue
 			}
-			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+			f.Calls(f.Syntax(), func(call *ast.CallExpr, _, _ string) {
 				if at, ok := subjectArg[invariants.CalleeName(call)]; ok && at < len(call.Args) {
 					if subject, ok := g.ConstString(f, call.Args[at]); ok {
 						if reason, forbidden := forbiddenHostLaunchSubjects[subject]; forbidden {
@@ -201,10 +201,10 @@ func platformFindings(r *invariants.Run, roots []string) []string {
 		if platformFileSuffix(path.Base(f.Rel)) {
 			findings = append(findings, f.Rel+": platform-suffixed file")
 		}
-		if platformBuildConstraint(f.AST) {
+		if platformBuildConstraint(f.Syntax()) {
 			findings = append(findings, f.Rel+": platform build constraint")
 		}
-		f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+		f.Selectors(f.Syntax(), func(sel *ast.SelectorExpr, pkg, name string) {
 			if pkg == "runtime" && (name == "GOOS" || name == "GOARCH") {
 				findings = append(findings, fmt.Sprintf("%s: runtime.%s check", r.Go().Position(sel.Pos()), name))
 			}
