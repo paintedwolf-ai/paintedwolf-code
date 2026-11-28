@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -513,19 +514,34 @@ def run_f02_instance(
                     p.write_bytes(f"fanout {i}\n".encode("utf-8"))
                     expected_paths.add(rel)
 
+            post_sentinel_utc = datetime.now(timezone.utc)
             post_sentinel.write_bytes(f"f02 unique post-op sentinel {case.case_id}\n".encode("utf-8"))
 
+            def _parse_utc(raw: object) -> datetime | None:
+                if not isinstance(raw, str) or not raw:
+                    return None
+                try:
+                    return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                except ValueError:
+                    return None
+
+            def _is_post_op_frame(f: dict[str, object]) -> bool:
+                if (
+                    f.get("topic") != "source_changed"
+                    or not isinstance(f.get("data"), dict)
+                    or str(f["data"].get("project_id") or "") != project_id
+                ):
+                    return False
+                if _has_matching_change([f], project_id, root_id, post_sentinel_rel):
+                    return True
+                if f["data"].get("resync") is True:
+                    pub = _parse_utc(f.get("published_at"))
+                    if pub is not None and pub >= post_sentinel_utc:
+                        return True
+                return False
+
             def _post_op_arrived(fs: list[dict[str, object]], start_idx: int) -> bool:
-                return any(
-                    f.get("topic") == "source_changed"
-                    and isinstance(f.get("data"), dict)
-                    and str(f["data"].get("project_id") or "") == project_id
-                    and (
-                        f["data"].get("resync") is True
-                        or _has_matching_change([f], project_id, root_id, post_sentinel_rel)
-                    )
-                    for f in fs[start_idx:]
-                )
+                return any(_is_post_op_frame(f) for f in fs[start_idx:])
 
             frames, arrived = sub.wait_for_frames(
                 lambda fs: _post_op_arrived(fs, baseline_idx),
@@ -535,14 +551,13 @@ def run_f02_instance(
                 lambda fs: _post_op_arrived(fs, baseline_idx2),
                 max_wait_s=15.0,
             )
-            time.sleep(0.5)
             all_frames = sub.frames()
             all_frames2 = sub2.frames()
         finally:
             sub.close()
             sub2.close()
 
-        # Decision 050 & 159: strictly scope SSE frames to project_id across both subscribers
+        # Decision 050, 159 & 161: strictly scope SSE frames to project_id and grade BOTH subscribers independently
         scoped_frames = [
             f
             for f in all_frames[baseline_idx:]
@@ -557,36 +572,55 @@ def run_f02_instance(
             and isinstance(f.get("data"), dict)
             and str(f["data"].get("project_id") or "") == project_id
         ]
-        resync_frames = [f for f in scoped_frames if f["data"].get("resync") is True]
-        resync_frames2 = [f for f in scoped_frames2 if f["data"].get("resync") is True]
-        resync_seen = len(resync_frames) > 0 and len(resync_frames2) > 0
-        named_paths: set[str] = set()
-        for f in scoped_frames:
-            for ch in f["data"].get("changes") or []:
-                if isinstance(ch, dict) and str(ch.get("root_id") or root_id) == root_id:
-                    p = str(ch.get("path") or "").removeprefix("./")
-                    if p and p != post_sentinel_rel:
-                        named_paths.add(p)
+        resync_frames = [
+            f for f in scoped_frames
+            if f["data"].get("resync") is True and (_parse_utc(f.get("published_at")) or datetime.min.replace(tzinfo=timezone.utc)) >= post_sentinel_utc
+        ]
+        resync_frames2 = [
+            f for f in scoped_frames2
+            if f["data"].get("resync") is True and (_parse_utc(f.get("published_at")) or datetime.min.replace(tzinfo=timezone.utc)) >= post_sentinel_utc
+        ]
+        resync_seen_sub1 = len(resync_frames) > 0
+        resync_seen_sub2 = len(resync_frames2) > 0
+        resync_seen = resync_seen_sub1 and resync_seen_sub2
+
+        def _extract_named(frames_list: list[dict[str, object]]) -> set[str]:
+            out_paths: set[str] = set()
+            for f in frames_list:
+                for ch in f["data"].get("changes") or []:
+                    if isinstance(ch, dict) and str(ch.get("root_id") or root_id) == root_id:
+                        p = str(ch.get("path") or "").removeprefix("./")
+                        if p and p != post_sentinel_rel:
+                            out_paths.add(p)
+            return out_paths
+
+        named_paths = _extract_named(scoped_frames)
+        named_paths_sub2 = _extract_named(scoped_frames2)
 
         ok, cat_res, cat_details = _reconcile_catalog_against_reference(
             client, root_dir, project_id, root_id, boundary_config, settle_wait_s=90.0
         )
         post_storm_revision = cat_details.get("revision")
 
-        # Decision 071: grade scoped path coverage against actual changed paths when no resync emitted
+        # Decision 071 & 161: grade scoped path coverage independently on BOTH subscribers
         missing_named = sorted(expected_paths - named_paths)
+        missing_named_sub2 = sorted(expected_paths - named_paths_sub2)
         extra_named = sorted(named_paths - expected_paths)
         defects: list[str] = []
         if not ok:
             defects.append(f"post-storm catalog mismatch: {cat_res.reason}")
-        if not resync_seen and missing_named:
+        if not arrived:
+            defects.append("post-operation sentinel or post-sentinel resync did not arrive on subscriber 1")
+        if not arrived2:
+            defects.append("post-operation sentinel or post-sentinel resync did not arrive on subscriber 2")
+        if not resync_seen_sub1 and missing_named:
             defects.append(
-                f"storm dropped {len(missing_named)} expected path(s) without scoped resync (named={len(named_paths)} expected={len(expected_paths)})"
+                f"subscriber 1 dropped {len(missing_named)} expected path(s) without post-sentinel resync (named={len(named_paths)} expected={len(expected_paths)})"
             )
-        if not arrived and not scoped_frames:
-            defects.append("no scoped source_changed SSE frames arrived for storm (subscriber 1)")
-        if not arrived2 and not scoped_frames2:
-            defects.append("no scoped source_changed SSE frames arrived for storm (subscriber 2)")
+        if not resync_seen_sub2 and missing_named_sub2:
+            defects.append(
+                f"subscriber 2 dropped {len(missing_named_sub2)} expected path(s) without post-sentinel resync (named={len(named_paths_sub2)} expected={len(expected_paths)})"
+            )
 
         # Decision 071: preserve honest resync attribution without assuming which limit fired
         overflow_coverage = (
@@ -610,19 +644,24 @@ def run_f02_instance(
                 "storm_kind": case.storm_kind,
                 "write_count": case.write_count,
                 "post_sentinel_rel": post_sentinel_rel,
+                "post_sentinel_utc": post_sentinel_utc.isoformat(),
                 "expected_paths_count": len(expected_paths),
                 "missing_named_sample": missing_named[:20],
+                "missing_named_sample_sub2": missing_named_sub2[:20],
                 "extra_named_sample": extra_named[:20],
                 "pre_storm_revision": pre_storm_revision,
                 "post_storm_revision": post_storm_revision,
                 "sse_arrived": arrived,
                 "sse_arrived_sub2": arrived2,
                 "resync_seen": resync_seen,
+                "resync_seen_sub1": resync_seen_sub1,
+                "resync_seen_sub2": resync_seen_sub2,
                 "resync_frame_count": len(resync_frames),
                 "resync_frame_count_sub2": len(resync_frames2),
                 "scoped_frame_count": len(scoped_frames),
                 "scoped_frame_count_sub2": len(scoped_frames2),
                 "scoped_named_paths_count": len(named_paths),
+                "scoped_named_paths_count_sub2": len(named_paths_sub2),
                 "overflow_coverage": overflow_coverage,
                 "sample_scoped_frames": scoped_frames[:5],
                 "sample_scoped_frames_sub2": scoped_frames2[:5],
