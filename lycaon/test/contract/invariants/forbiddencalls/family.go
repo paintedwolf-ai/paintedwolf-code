@@ -13,6 +13,7 @@ var Family = invariants.Family{Name: "forbidden-calls", Invariants: slices.Conca
 	testInfrastructure,
 	agentDoors,
 	commandDoors,
+	commandSettlement,
 	approvals,
 	concurrency,
 	debugCapture,
