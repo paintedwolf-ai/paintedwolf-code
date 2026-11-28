@@ -124,7 +124,7 @@ func newestCitableHandle(ev evidence.Ledger) string {
 	handles := evidence.HandlesSorted(ev)
 	for i := len(handles) - 1; i >= 0; i-- {
 		rec, ok := evidence.ResolveHandle(ev, handles[i])
-		if !ok || rec.SupersededBy != "" || rec.IsGate() || rec.Survey {
+		if !ok || rec.SupersededBy != "" || rec.IsGate() || rec.Survey || rec.BodyUnavailable {
 			continue
 		}
 		return handles[i]
