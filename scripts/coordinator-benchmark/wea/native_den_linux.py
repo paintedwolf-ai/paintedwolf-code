@@ -628,6 +628,8 @@ def run_linux_tauri_native(
     engine_bin: str | pathlib.Path | None = None,
     engine_manifest: str | pathlib.Path | None = None,
     startup_timeout_s: float = 45.0,
+    dismiss_onboarding: bool = False,
+    seed_store_db: str | pathlib.Path | None = None,
 ) -> dict[str, Any]:
     """Launch the actual Linux Tauri desktop binary under Xvfb+AT-SPI, drive xdotool Tab, and capture its owned window."""
     out = pathlib.Path(out_dir).resolve()
@@ -658,12 +660,32 @@ def run_linux_tauri_native(
         return receipt
 
     app_sha = hashlib.sha256(app_path.read_bytes()).hexdigest()
+    seeded_store_db = False
+    seeded_store_db_sha256 = ""
+    cfg_dir = profile / "config"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        cfg_dir.chmod(0o700)
+    except OSError:
+        pass
+    if seed_store_db:
+        src_db = pathlib.Path(seed_store_db).resolve()
+        if src_db.is_file():
+            dst_db = cfg_dir / "store.db"
+            shutil.copy2(src_db, dst_db)
+            for suffix in ("-wal", "-shm"):
+                side = src_db.parent / (src_db.name + suffix)
+                if side.is_file():
+                    shutil.copy2(side, cfg_dir / ("store.db" + suffix))
+            seeded_store_db = True
+            seeded_store_db_sha256 = hashlib.sha256(dst_db.read_bytes()).hexdigest()
+
     env = dict(os.environ)
     env["GTK_MODULES"] = "gail:atk-bridge"
     env["NO_AT_BRIDGE"] = "0"
     env["WEBKIT_DISABLE_DMABUF_RENDERER"] = "1"
     env["WEBKIT_DISABLE_COMPOSITING_MODE"] = "1"
-    env["LYCAON_CONFIG_DIR"] = str(profile / "config")
+    env["LYCAON_CONFIG_DIR"] = str(cfg_dir)
     env["XDG_CONFIG_HOME"] = str(profile / "xdg-config")
     env["XDG_DATA_HOME"] = str(profile / "xdg-data")
     if api_url:
@@ -722,10 +744,33 @@ def run_linux_tauri_native(
         # Activate the focused control via Return to produce an observable UI state transition.
         activate_ev = _send_x11_key(xid, "Return")
         keyboard_events.append(activate_ev)
-        time.sleep(0.6)
-        atspi_after_activate = _probe_atspi(proc.pid)
-        if atspi_after_activate.get("observed"):
-            atspi_after = atspi_after_activate
+        time.sleep(0.8)
+        atspi_after_step1 = _probe_atspi(proc.pid)
+        if atspi_after_step1.get("observed"):
+            atspi_after = atspi_after_step1
+
+        # When requested (e.g. TB10), advance past onboarding Step 2/2 ("Get started")
+        # via native keyboard events so the post-input screenshot renders the live Den workspace.
+        if dismiss_onboarding:
+            focused_l = (atspi_after.get("focused_name") or "").strip().lower()
+            if focused_l == "back":
+                keyboard_events.append(_send_x11_key(xid, "Tab"))
+                time.sleep(0.3)
+            keyboard_events.append(_send_x11_key(xid, "Return"))
+            time.sleep(2.0)
+            atspi_after_dismiss = _probe_atspi(proc.pid)
+            if atspi_after_dismiss.get("observed"):
+                atspi_after = atspi_after_dismiss
+            focused_l2 = (atspi_after.get("focused_name") or "").strip().lower()
+            if focused_l2 in {"get started", "continue", "back"}:
+                if focused_l2 == "back":
+                    keyboard_events.append(_send_x11_key(xid, "Tab"))
+                    time.sleep(0.3)
+                keyboard_events.append(_send_x11_key(xid, "Return"))
+                time.sleep(2.0)
+                atspi_after_retry = _probe_atspi(proc.pid)
+                if atspi_after_retry.get("observed"):
+                    atspi_after = atspi_after_retry
 
         atspi_focus_changed = bool(
             atspi_before.get("focused_key")
@@ -785,10 +830,14 @@ def run_linux_tauri_native(
             "host_processes": host_processes,
             "owned_window_id": xid,
             "isolated_profile_dir": str(profile),
+            "seeded_store_db": seeded_store_db,
+            "seeded_store_db_sha256": seeded_store_db_sha256,
+            "onboarding_dismiss_attempted": bool(dismiss_onboarding),
             "app_alive_after": app_alive_after,
             "keyboard_event": key_ev,
             "keyboard_events": keyboard_events,
             "atspi_before": atspi_before,
+            "atspi_after_step1": atspi_after_step1,
             "atspi_after": atspi_after,
             "atspi_observed": atspi_after,
             "atspi_focus_changed": atspi_focus_changed,

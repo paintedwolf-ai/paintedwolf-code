@@ -84,7 +84,10 @@ class TestTB10NativeRunner(unittest.TestCase):
             root = pathlib.Path(tmp)
             app_bin, eng_bin, man_path = self._make_verified_engine(root)
 
+            seen_native_kwargs: list[dict[str, object]] = []
+
             def fake_native(app_p, out_p, *, engine_bin=None, engine_manifest=None, **kwargs):
+                seen_native_kwargs.append(dict(kwargs))
                 out_p = pathlib.Path(out_p)
                 out_p.mkdir(parents=True, exist_ok=True)
                 prov = tb10.collect_provenance(engine_bin=engine_bin, engine_manifest=engine_manifest, lane="sidecar-native-den")
@@ -94,6 +97,8 @@ class TestTB10NativeRunner(unittest.TestCase):
                     "owned_window_id": 2097160,
                     "app_pid": 1234,
                     "engine_pid": 1235,
+                    "seeded_store_db": bool(kwargs.get("seed_store_db")),
+                    "onboarding_dismiss_attempted": bool(kwargs.get("dismiss_onboarding")),
                     "screenshot_before_sha256": "a" * 64,
                     "screenshot_sha256": "b" * 64,
                     "screenshot_changed": True,
@@ -112,6 +117,8 @@ class TestTB10NativeRunner(unittest.TestCase):
                 episode_fn=self._fake_episode,
             )
             self.assertTrue(manifest["all_passed"])
+            self.assertEqual(len(seen_native_kwargs), 9)
+            self.assertTrue(all(kw.get("dismiss_onboarding") is True for kw in seen_native_kwargs))
             self.assertEqual(manifest["planned_count"], 9)
             self.assertEqual(manifest["passed_count"], 9)
             self.assertTrue(manifest["provenance"]["product_source"]["verified"])

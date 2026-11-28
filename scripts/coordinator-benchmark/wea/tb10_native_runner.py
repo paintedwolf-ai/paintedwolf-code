@@ -565,6 +565,8 @@ def run_tb10_variant(
             profile_dir=profile_dir,
             engine_bin=engine_bin,
             engine_manifest=engine_manifest,
+            dismiss_onboarding=True,
+            seed_store_db=episode.get("db_path") or None,
         )
     finally:
         if engine_bin is not None:
