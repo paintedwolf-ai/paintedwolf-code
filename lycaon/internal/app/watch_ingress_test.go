@@ -67,18 +67,25 @@ func (p watchIngressProbe) checkInventory(t *testing.T, built *ServeApp) {
 	if len(vocabulary) == 0 {
 		t.Fatal("registered watch schema declares no condition kinds")
 	}
+	declared := make(map[string]bool, len(vocabulary))
 	for _, value := range vocabulary {
 		name, ok := value.(string)
 		if !ok {
 			t.Errorf("invalid condition kind %v", value)
 			continue
 		}
+		declared[name] = true
 		switch name {
 		case "timer", "http_ready", "port_ready":
 			continue
 		}
 		if !p.matched[name] {
 			t.Errorf("%s: missing durable match witness through startup wiring", name)
+		}
+	}
+	for name := range p.matched {
+		if !declared[name] {
+			t.Errorf("%s: matched by a producer but missing from the registered schema", name)
 		}
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/server"
 	"github.com/lycaon/lycaon/internal/app/sessions"
 	"github.com/lycaon/lycaon/internal/app/workerruntime"
+	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
@@ -169,9 +170,17 @@ func TestWatchProducersHooksAndOutcomeBridge(t *testing.T) {
 	bridge := &worker.SessionOutcomeBridge{}
 	bindWorkerOutcomeWatches(b, bridge)
 	bridge.OnJobRetired(t.Context(), "child-bridge-1", "job-1")
+	probe := watchIngressProbe{
+		store: ws, owner: watch.Owner{ProjectID: testdbseed.DefaultProjectID, SessionID: parent.ID},
+		matched: map[string]bool{},
+	}
+	failure := probe.register(t, awaitstore.Condition{Kind: "worker_failed", Handles: []string{"job-failed"}}, watch.Authority{})
 	for _, st := range []string{"complete", "failed", "needs_decision"} {
 		_ = bridge.OnWorkerWatchTerminal(t.Context(), parent.ID, "job-"+st, st, "done")
 	}
+
+	_ = bridge.OnWorkerWatchTerminal(t.Context(), parent.ID, "job-failed", "failed", "done")
+	probe.expectMatch(t, failure, "worker_failed")
 
 	repochange.Notify(t.Context(), repochange.Event{Kind: repochange.WorktreeChanged, ProjectDir: rootDir})
 	testutil.FailErr(t, "close resources", (&ServeApp{resources: res}).Close())

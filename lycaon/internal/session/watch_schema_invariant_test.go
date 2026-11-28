@@ -1,10 +1,12 @@
 package session_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -64,6 +66,10 @@ func TestWatchConditionSchemaMatchesRootAuthorityAcrossPreparationAndTurn(t *tes
 	fixture := setupContextualToolsFixtureWithLLM(t, api.SessionPostureBuild, recorder)
 	manager := fixture.Mgr
 	manager.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
+	board := &watchSchemaBoard{}
+	manager.Coordinator.Runtime.SetBoardInject(board, board, nil)
+	manager.Coordinator.Runtime.Board().SetInjectRenderer(nil)
+	manager.Coordinator.Assembly.Workflow.Orientation = board
 
 	// Register real watch tools + bundled tool schemas on a toolhost runtime
 	// so watch condition pruning runs through the production metadata path.
@@ -129,6 +135,9 @@ func TestWatchConditionSchemaMatchesRootAuthorityAcrossPreparationAndTurn(t *tes
 			testutil.FailErr(t, "select local model", fixture.Store.Sessions.UpdateSession(ctx, tc.sessionID, func(sess *api.Session) {
 				sess.Status = api.SessionStatusIdle
 				sess.ProviderID, sess.Model = "preparation-test", nativegen.DefaultModelID
+				if tc.wantRootedKinds {
+					sess.WorkspacePath = fixture.ProjectDir
+				}
 			}))
 
 			// Entry point 1: Context preparation (BuildPreparation / ProjectPreparationRequest).
@@ -148,10 +157,15 @@ func TestWatchConditionSchemaMatchesRootAuthorityAcrossPreparationAndTurn(t *tes
 			// Entry point 2: Normal coordinator turn / next provider input.
 			manager.Coordinator.Model.LLMService = nil
 			beforeCalls := len(recorder.AllRequests())
+			boardReadyBefore := board.oriented
+			manager.Coordinator.Runtime.Board().InvalidateOrientation(tc.sessionID)
 			_, err = manager.Submissions.Prompt(ctx, tc.sessionID, "check watch surface")
 			testutil.FailErr(t, "Submissions.Prompt", err)
 			if len(recorder.AllRequests()) <= beforeCalls {
 				t.Fatalf("normal coordinator turn did not issue a provider request for %s", tc.name)
+			}
+			if tc.wantRootedKinds && board.oriented == boardReadyBefore {
+				t.Fatal("rooted provider request did not exercise board orientation refresh")
 			}
 			turnReq := recorder.LastRequest()
 			turnKinds, turnStanding := extractWatchSchemaFacts(t, turnReq.Tools)
@@ -174,6 +188,23 @@ func TestWatchConditionSchemaMatchesRootAuthorityAcrossPreparationAndTurn(t *tes
 			}
 		})
 	}
+}
+
+type watchSchemaBoard struct {
+	oriented int
+}
+
+func (*watchSchemaBoard) BuildBoardSnapshot(context.Context, string, string, string, api.BoardDetailLevel, []projectroot.RootRef) (*api.BoardSnapshot, error) {
+	return &api.BoardSnapshot{PackContentHash: "watch-authority"}, nil
+}
+
+func (*watchSchemaBoard) FormatBoardInject(api.BoardSnapshot, bool, time.Time) (string, bool) {
+	return "Watch authority test board", true
+}
+
+func (b *watchSchemaBoard) RecordBoardOrientReady(context.Context, string, string) error {
+	b.oriented++
+	return nil
 }
 
 // The runtime profile catalog and the unpruned schema discover the subjects. The
