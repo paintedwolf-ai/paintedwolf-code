@@ -241,7 +241,7 @@ func serializePreservingMixedEOLWithStats(beforeRawText, draft, fallbackEOL stri
 		if dl.eol == "" {
 			continue
 		}
-		origIdx := -1
+		var origIdx int
 		switch {
 		case j < prefix:
 			origIdx = j
