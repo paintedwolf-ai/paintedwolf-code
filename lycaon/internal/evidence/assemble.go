@@ -50,7 +50,7 @@ func AssembleLedger(records []Record) Ledger {
 			continue
 		}
 		ev.observationOrder = append(ev.observationOrder, rec.Handle)
-		if rec.SupersededBy != "" {
+		if rec.SupersededBy != "" || rec.BodyUnavailable {
 			continue
 		}
 		for _, path := range IndexedPathsForRecord(rec) {
@@ -76,9 +76,22 @@ func AssembleLedger(records []Record) Ledger {
 		}
 		ev.Handles[handle] = rec
 		ev.handleOrder = append(ev.handleOrder, handle)
-		if rec.SupersededBy == "" {
+		if rec.SupersededBy == "" && !rec.BodyUnavailable {
 			indexRecordPaths(&ev, handle, rec)
 		}
 	}
 	return ev
+}
+
+// UnavailableBodyHandles returns handles in deterministic order whose persisted
+// body blobs could not be decoded.
+func (ev Ledger) UnavailableBodyHandles() []string {
+	var out []string
+	for handle, rec := range ev.Handles {
+		if rec.BodyUnavailable {
+			out = append(out, handle)
+		}
+	}
+	sort.Strings(out)
+	return out
 }

@@ -11,6 +11,11 @@ func ResolveObservation(roots CitationRoots, ev Ledger, handle string, triple Tr
 	if !ok {
 		return out
 	}
+	if rec.BodyUnavailable {
+		out.Path = rec.Path
+		out.Reason = VerifyReasonBodyUnavailable
+		return out
+	}
 	out.Reason = ""
 	out.Path = rec.Path
 	if strings.TrimSpace(triple.Path) != "" {

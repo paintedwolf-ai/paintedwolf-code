@@ -71,6 +71,20 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 	if err != nil {
 		return out, err
 	}
+	if !st.damagedEvidenceReported && len(observation.citations.UnavailableBodyHandles) > 0 {
+		st.damagedEvidenceReported = true
+		if l.Projection != nil && l.Projection.Deps.Events != nil {
+			l.Projection.Deps.Events.PublishGrounding(
+				ctx,
+				sess.ProjectID,
+				sessionID,
+				guidance.EvidenceBodyUnavailableCode,
+				strings.Join(observation.citations.UnavailableBodyHandles, ","),
+				"",
+				false,
+			)
+		}
+	}
 	if l.Deps.EvaluateCloseoutBlock == nil {
 		return out, fmt.Errorf("closeout OAR not configured")
 	}

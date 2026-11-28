@@ -20,7 +20,11 @@ type Record struct {
 	SupersededBy string `json:"-"`
 	Survey       bool   // true for survey-grade observations
 	Truncated    bool   // body capture exceeded EvidenceCaptureBodyCapBytes
-	Path         string // scope-relative when the tool touched a rooted path; normalized unrooted token otherwise
+	// BodyUnavailable is true when the persisted body blob could not be decoded.
+	// The record remains in Handles so the ledger stays non-empty and ordinals
+	// stay monotonic, but it can never ground any citation.
+	BodyUnavailable bool   `json:"-"`
+	Path            string // scope-relative when the tool touched a rooted path; normalized unrooted token otherwise
 	RootID       string // root ID of Path; empty for unrooted tokens
 	LineRanges   []LineRange
 	Body         []string // result lines for excerpt verification

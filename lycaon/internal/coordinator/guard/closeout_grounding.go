@@ -15,15 +15,16 @@ import (
 
 // CloseoutGroundingVerdict records citation observations before policy evaluation.
 type CloseoutGroundingVerdict struct {
-	Code                 string
-	CitationsRequired    bool
-	UnobservedHandles    []string
-	UnobservedURLs       []string
-	CitationUnverifiable bool
-	Offenders            []string
-	HintData             map[string]any
-	Grounding            *api.CitationGrounding
-	Resolved             guidance.DraftCitationResolution
+	Code                   string
+	CitationsRequired      bool
+	UnobservedHandles      []string
+	UnobservedURLs         []string
+	CitationUnverifiable   bool
+	Offenders              []string
+	UnavailableBodyHandles []string
+	HintData               map[string]any
+	Grounding              *api.CitationGrounding
+	Resolved               guidance.DraftCitationResolution
 }
 
 // EvaluateCoordinatorCloseoutGrounding validates every supplied reference, then
@@ -49,24 +50,28 @@ func EvaluateCoordinatorCloseoutGrounding(
 	eval := guidance.EvaluateDraftCitations(draft, resolved)
 	report := draft.Report()
 	report.CitedEvidence, report.CitedURLs, report.ArtifactIDs = guidance.AcceptedDraftReferences(draft, resolved)
+	unavailable := ev.Ledger.UnavailableBodyHandles()
 	if eval.Code == "" && draft.CitationCount() == 0 && len(report.CitedEvidence) == 0 {
 		if !CoordinatorEvidenceOptional(history, ev) && guidance.CloseoutLedgerHasCitableEvidence(ev) {
 			// Recorded sources permit host attachment when citations are omitted.
 			return CloseoutGroundingVerdict{
-				Code:              guidance.CloseoutCitationsRequiredCode(surfaceID),
-				CitationsRequired: true,
-				HintData:          guidance.CloseoutRepairHintData(roots, draft, resolved, ev, nil),
-				Resolved:          resolved,
+				Code:                   guidance.CloseoutCitationsRequiredCode(surfaceID),
+				CitationsRequired:      true,
+				UnavailableBodyHandles: unavailable,
+				HintData:               guidance.CloseoutRepairHintData(roots, draft, resolved, ev, nil),
+				Resolved:               resolved,
 			}, nil
 		}
 		return CloseoutGroundingVerdict{
-			Grounding: guidance.EvidenceOptionalGrounding(report),
-			HintData:  guidance.CloseoutRepairHintData(roots, draft, resolved, ev, nil),
-			Resolved:  resolved,
+			Grounding:              guidance.EvidenceOptionalGrounding(report),
+			UnavailableBodyHandles: unavailable,
+			HintData:               guidance.CloseoutRepairHintData(roots, draft, resolved, ev, nil),
+			Resolved:               resolved,
 		}, nil
 	}
 	grounding := guidance.BuildCloseoutCitationGrounding(roots, surfaceID, report, ev, eval)
 	verdict := closeoutVerdictFromEval(eval, ev.Ledger, grounding)
+	verdict.UnavailableBodyHandles = unavailable
 	verdict.Resolved = resolved
 	verdict.HintData = guidance.CloseoutRepairHintData(roots, draft, resolved, ev, verdict.Offenders)
 	return verdict, nil

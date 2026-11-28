@@ -57,6 +57,9 @@ func ledgerPaths(ev Ledger) map[string]struct{} {
 func ObservedURLsFromEvidence(ev Ledger) map[string]struct{} {
 	out := make(map[string]struct{})
 	for _, rec := range ev.Handles {
+		if rec.BodyUnavailable {
+			continue
+		}
 		for _, u := range ObservedURLsForRecord(rec) {
 			out[u] = struct{}{}
 		}
