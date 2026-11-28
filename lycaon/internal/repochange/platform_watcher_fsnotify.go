@@ -4,6 +4,7 @@ package repochange
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -36,6 +37,12 @@ type fsnotifyMux struct {
 	// routes maps each path the stream reports to the roots registered on it
 	// and the spelling each root registered.
 	routes map[string]map[*fsnotifyPlatformWatcher]string
+	// sentinelDir/sentinelStream/sentinels implement FIFO Flush barriers on
+	// the shared inotify fd without writing into any user tree.
+	sentinelDir    string
+	sentinelStream string
+	sentinelSeq    uint64
+	sentinels      map[string]chan struct{}
 }
 
 // fsnotifyPlatformWatcher is one root's view of the shared stream. Event names
@@ -173,12 +180,23 @@ func (w *fsnotifyPlatformWatcher) Close() error {
 	delete(m.roots, w)
 	fw := m.fw
 	last := len(m.roots) == 0
+	var sentinelDir string
 	if last {
+		sentinelDir = m.sentinelDir
+		for token, ch := range m.sentinels {
+			delete(m.sentinels, token)
+			close(ch)
+		}
 		m.fw, m.roots, m.routes = nil, nil, nil
+		m.sentinelDir, m.sentinelStream, m.sentinels = "", "", nil
 	}
 	m.mu.Unlock()
 	if last {
-		return fw.Close()
+		err := fw.Close()
+		if sentinelDir != "" {
+			_ = os.RemoveAll(sentinelDir)
+		}
+		return err
 	}
 	var errs []error
 	for _, stream := range released {
@@ -232,6 +250,9 @@ func (m *fsnotifyMux) dispatch(fw *fsnotify.Watcher) {
 func (m *fsnotifyMux) route(ev fsnotify.Event) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.handleSentinelEventLocked(ev.Name) {
+		return
+	}
 	delivered := map[*fsnotifyPlatformWatcher]struct{}{}
 	for _, stream := range []string{filepath.Dir(ev.Name), ev.Name} {
 		for w, path := range m.routes[stream] {
@@ -255,6 +276,10 @@ func (m *fsnotifyMux) route(ev fsnotify.Event) {
 func (m *fsnotifyMux) broadcast(err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	for token, ch := range m.sentinels {
+		delete(m.sentinels, token)
+		close(ch)
+	}
 	for w := range m.roots {
 		w.sendError(err)
 	}
