@@ -7,8 +7,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -19,7 +21,7 @@ type workspaceReceiptBinder interface {
 
 // Verify uses the ordinary confined verifier and evidence recorder
 // while the deterministic runner owns the worker's claim.
-func (m *Service) Verify(ctx context.Context, child *api.Session, job *api.WorkerTask, command string) (*tools.SourceRunCapture, error) {
+func (m *Service) Verify(ctx context.Context, child *api.Session, job *api.WorkerTask, command string) (_ *tools.SourceRunCapture, retErr error) {
 	if !configdir.IsHarnessChannel() {
 		return nil, fmt.Errorf("worker preparation requires an isolated harness")
 	}
@@ -39,7 +41,73 @@ func (m *Service) Verify(ctx context.Context, child *api.Session, job *api.Worke
 	tctx.Identity.ToolCallID = uuid.NewString()
 	tctx.Identity.MessageID = uuid.NewString()
 	tctx.Effects.Out = &tools.ToolInvocationOut{}
-	_, err = m.tools.Run(ctx, "verify", map[string]any{"command": command}, tctx)
+	args := map[string]any{"command": command}
+	if m.invocations != nil {
+		contract, _ := toolcontract.Lookup("verify")
+		argsDigest, digestErr := invocation.ArgsDigest(args)
+		if digestErr != nil {
+			return nil, digestErr
+		}
+		receipt, beginErr := m.invocations.Begin(ctx, invocation.Start{
+			ProjectID:  child.ProjectID,
+			SessionID:  child.ID,
+			ToolCallID: tctx.Identity.ToolCallID,
+			ToolName:   "verify",
+			Args:       args,
+			Contract:   contract,
+		})
+		if beginErr != nil {
+			return nil, beginErr
+		}
+		tctx.Invocation = tools.Invocation{
+			ID:             receipt.ID,
+			ProjectID:      child.ProjectID,
+			SessionID:      child.ID,
+			MessageID:      tctx.Identity.MessageID,
+			ToolCallID:     tctx.Identity.ToolCallID,
+			ToolName:       "verify",
+			ArgsDigest:     argsDigest,
+			ContractDigest: contract.Digest(),
+			Contract:       contract,
+		}
+		defer func() {
+			status := api.InvocationStatusCompleted
+			evidenceKind := "source_run"
+			var evidenceRef string
+			var failure *api.InvocationFailure
+			var rev, rootDigest, verdict string
+			if tctx.Effects.Out != nil && tctx.Effects.Out.SourceRun != nil {
+				rev = tctx.Effects.Out.SourceRun.SourceRevision
+				rootDigest = tctx.Effects.Out.SourceRun.SourceRootDigest
+				verdict = tctx.Effects.Out.SourceRun.Verdict
+				evidenceRef = tctx.Effects.Out.SourceRun.CheckID
+			}
+			if retErr != nil {
+				if ctx.Err() != nil {
+					status = api.InvocationStatusInterrupted
+					evidenceKind = "interrupted"
+					failure = &api.InvocationFailure{Code: "TOOL_OWNER_INTERRUPTED", Class: "interrupted"}
+				} else {
+					status = api.InvocationStatusError
+					evidenceKind = "error"
+					failure = &api.InvocationFailure{Code: "HARNESS_VERIFY_FAILED", Class: "execution_error"}
+				}
+			}
+			if _, settleErr := m.invocations.Settle(context.WithoutCancel(ctx), receipt.ID, invocation.Settlement{
+				Status:           status,
+				Invoked:          true,
+				EvidenceKind:     evidenceKind,
+				EvidenceRef:      evidenceRef,
+				Failure:          failure,
+				SourceRevision:   rev,
+				SourceRootDigest: rootDigest,
+				SourceVerdict:    verdict,
+			}); settleErr != nil && retErr == nil {
+				retErr = fmt.Errorf("settle child verification receipt: %w", settleErr)
+			}
+		}()
+	}
+	_, err = m.tools.Run(ctx, "verify", args, tctx)
 	if err != nil {
 		return nil, err
 	}

@@ -83,6 +83,145 @@ class CompletionWakeTests(unittest.TestCase):
             append(5, 'model', 'completion_report', role='assistant')
             self.assertFalse(completion_wake(db, 'session', allowed))
 
+    def test_progress_args_attaches_latest_revision_and_aligned_item_ids(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            with sqlite3.connect(root / 'store.db') as db:
+                db.execute('CREATE TABLE messages(session_id,ord,tool_result_json)')
+                snapshot = {
+                    'revision': 'a' * 64,
+                    'content': '## Progress\n- [ ] First leg\n- [ ] Second leg\n',
+                    'item_ids': ['item-1', 'item-2'],
+                }
+                result = {
+                    'outcome': 'completed',
+                    'invocation': {'tool': 'update_progress'},
+                    'content': json.dumps({'status': 'updated', 'snapshot': snapshot}),
+                }
+                db.execute('INSERT INTO messages VALUES(?,?,?)', ('sess', 1, json.dumps(result)))
+            app = Mock(directory=root)
+            token = 'b' * 64
+            request = {'messages': [{'role': 'system', 'content': json.dumps({'reconciliation': {'token': token}})}]}
+            updated = smoke_workers.progress_args(
+                app,
+                'sess',
+                {'content': '## Progress\n- [x] First leg\n- [ ] Second leg\n'},
+                request=request,
+            )
+            self.assertEqual(updated['expected_revision'], 'a' * 64)
+            self.assertEqual(updated['item_ids'], ['item-1', 'item-2'])
+            self.assertEqual(updated['reconciliation_token'], token)
+            fresh = smoke_workers.progress_args(app, 'other-sess', {'content': '- [ ] New\n'})
+            self.assertEqual(fresh, {'content': '- [ ] New\n'})
+
+    def test_progress_snapshot_from_request_and_reconciliation_variants(self):
+        rev_live = 'c' * 64
+        tok_live = 'd' * 64
+        init_req = {
+            'system': json.dumps({
+                'scope_session_id': 'sess',
+                'initialization_required': True,
+                'revision': rev_live,
+                'content': '',
+            }),
+        }
+        self.assertIsNone(smoke_workers._progress_snapshot_from_request(init_req))
+
+        live_req = {
+            'messages': [
+                {
+                    'role': 'system',
+                    'content': [
+                        {
+                            'type': 'text',
+                            'text': 'Header ' + json.dumps({
+                                'scope_session_id': 'sess',
+                                'initialization_required': False,
+                                'revision': rev_live,
+                                'content': '## Progress\n- [ ] Alpha\n- [ ] Beta\n',
+                                'item_ids': ['id-a', 'id-b'],
+                                'reconciliation': {'token': tok_live},
+                            }),
+                        }
+                    ],
+                }
+            ]
+        }
+        snap = smoke_workers._progress_snapshot_from_request(live_req)
+        self.assertEqual(snap['revision'], rev_live)
+        updated = smoke_workers.progress_args(
+            Mock(directory=None),
+            'sess',
+            {'content': '## Progress\n- [x] Alpha\n- [ ] Gamma\n- [ ] Extra\n'},
+            request=live_req,
+        )
+        self.assertEqual(updated['expected_revision'], rev_live)
+        self.assertEqual(updated['item_ids'], ['id-a', '', ''])
+        self.assertEqual(updated['reconciliation_token'], tok_live)
+
+        direct_tok = 'e' * 64
+        self.assertEqual(
+            smoke_workers._reconciliation_token_from_request({'prompt': f'{{"reconciliation_token":"{direct_tok}"}}'}),
+            direct_tok,
+        )
+        self.assertEqual(smoke_workers._reconciliation_token_from_request(None), '')
+
+    def test_worker_job_and_handle_lookups_scope_to_parent_session(self):
+        self.assertEqual(smoke_workers.worker_name({'content': '{"worker":"implementer-2"}'}), 'implementer-2')
+        self.assertEqual(smoke_workers.worker_name({'content': 'plain'}), '')
+        self.assertEqual(smoke_workers.job_id({'dispatch': {'job_id': 'direct-job'}}), 'direct-job')
+        with self.assertRaisesRegex(RuntimeError, 'did not return a job id'):
+            smoke_workers.job_id({'content': '{}'})
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            with sqlite3.connect(root / 'store.db') as db:
+                db.execute('CREATE TABLE worker_jobs(id, parent_session_id, child_session_id)')
+                db.execute('CREATE TABLE workers(name, child_session_id)')
+                db.execute('CREATE TABLE worker_results(id, worker_job_id)')
+                db.execute("INSERT INTO worker_jobs VALUES('job-other','sess-other','child-other')")
+                db.execute("INSERT INTO worker_jobs VALUES('job-1','sess-1','child-1')")
+                db.execute("INSERT INTO worker_jobs VALUES('job-2','sess-1','child-2')")
+                db.execute("INSERT INTO workers VALUES('implementer-1','child-1')")
+                db.execute("INSERT INTO worker_results VALUES('res-1','job-1')")
+            app = Mock(directory=root)
+            seen = set()
+            self.assertEqual(smoke_workers.job_id({}, app, seen, session='sess-1'), 'job-1')
+            self.assertEqual(smoke_workers.job_id({}, app, seen, session='sess-1'), 'job-2')
+            self.assertEqual(smoke_workers.job_id({}, app, session='sess-1'), 'job-2')
+            self.assertEqual(smoke_workers.worker_name_for_job(app, 'job-1', 'explicit'), 'explicit')
+            self.assertEqual(smoke_workers.worker_name_for_job(app, 'job-1'), 'implementer-1')
+            self.assertEqual(smoke_workers.worker_name_for_job(app, 'job-missing'), 'job-missing')
+            self.assertEqual(smoke_workers.result_handle_for_job(app, 'job-1'), 'res-1')
+            self.assertEqual(smoke_workers.result_handle_for_job(app, 'job-missing'), 'job-missing')
+
+    def test_respond_resolves_update_progress_args_from_live_request(self):
+        rev = 'f' * 64
+        tok = '1' * 64
+        req = {
+            'id': 'req-1',
+            'tools': ['update_progress'],
+            'messages': [{
+                'role': 'system',
+                'content': json.dumps({
+                    'scope_session_id': 'sess',
+                    'initialization_required': False,
+                    'revision': rev,
+                    'content': '## Progress\n- [ ] Step\n',
+                    'item_ids': ['item-1'],
+                    'reconciliation': {'token': tok},
+                }),
+            }],
+        }
+        app = Mock(directory=None)
+        app.wait_for.return_value = req
+        with patch.object(smoke_workers, 'terminal', return_value={'outcome': 'completed'}):
+            smoke_workers.invoke(app, 'sess', 'update_progress', {'content': '## Progress\n- [x] Step\n'})
+        sent = app.request.call_args.args[1]['tool_calls'][0]['args']
+        self.assertEqual(sent['expected_revision'], rev)
+        self.assertEqual(sent['item_ids'], ['item-1'])
+        self.assertEqual(sent['reconciliation_token'], tok)
+
 
 class OutcomeControlTests(unittest.TestCase):
     def test_every_control_executes_in_the_pinned_runtime(self):

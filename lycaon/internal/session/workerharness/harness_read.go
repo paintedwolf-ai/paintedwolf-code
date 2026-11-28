@@ -7,6 +7,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -14,7 +16,7 @@ import (
 // Read performs one ordinary read inside a scripted worker child so
 // the observation lands in the child's transcript and evidence ledger exactly as
 // a model-driven read would. It returns the minted evidence handle and content.
-func (m *Service) Read(ctx context.Context, child *api.Session, job *api.WorkerTask, path string) (string, string, error) {
+func (m *Service) Read(ctx context.Context, child *api.Session, job *api.WorkerTask, path string) (_ string, _ string, retErr error) {
 	if !configdir.IsHarnessChannel() {
 		return "", "", fmt.Errorf("worker preparation requires an isolated harness")
 	}
@@ -34,8 +36,61 @@ func (m *Service) Read(ctx context.Context, child *api.Session, job *api.WorkerT
 	tctx.Identity.ToolCallID = uuid.NewString()
 	tctx.Identity.MessageID = uuid.NewString()
 	tctx.Effects.Out = &tools.ToolInvocationOut{}
-	args := map[string]any{"path": path}
-	content, err := m.tools.Run(ctx, "read", args, tctx)
+	commandArgs := map[string]any{"command": fmt.Sprintf("cat %q", path)}
+	if m.invocations != nil {
+		contract, _ := toolcontract.Lookup("command")
+		argsDigest, digestErr := invocation.ArgsDigest(commandArgs)
+		if digestErr != nil {
+			return "", "", digestErr
+		}
+		receipt, beginErr := m.invocations.Begin(ctx, invocation.Start{
+			ProjectID:  child.ProjectID,
+			SessionID:  child.ID,
+			ToolCallID: tctx.Identity.ToolCallID,
+			ToolName:   "command",
+			Args:       commandArgs,
+			Contract:   contract,
+		})
+		if beginErr != nil {
+			return "", "", beginErr
+		}
+		tctx.Invocation = tools.Invocation{
+			ID:             receipt.ID,
+			ProjectID:      child.ProjectID,
+			SessionID:      child.ID,
+			MessageID:      tctx.Identity.MessageID,
+			ToolCallID:     tctx.Identity.ToolCallID,
+			ToolName:       "command",
+			ArgsDigest:     argsDigest,
+			ContractDigest: contract.Digest(),
+			Contract:       contract,
+		}
+		defer func() {
+			status := api.InvocationStatusCompleted
+			evidenceKind := "observation"
+			var failure *api.InvocationFailure
+			if retErr != nil {
+				if ctx.Err() != nil {
+					status = api.InvocationStatusInterrupted
+					evidenceKind = "interrupted"
+					failure = &api.InvocationFailure{Code: "TOOL_OWNER_INTERRUPTED", Class: "interrupted"}
+				} else {
+					status = api.InvocationStatusError
+					evidenceKind = "error"
+					failure = &api.InvocationFailure{Code: "HARNESS_READ_FAILED", Class: "execution_error"}
+				}
+			}
+			if _, settleErr := m.invocations.Settle(context.WithoutCancel(ctx), receipt.ID, invocation.Settlement{
+				Status:       status,
+				Invoked:      true,
+				EvidenceKind: evidenceKind,
+				Failure:      failure,
+			}); settleErr != nil && retErr == nil {
+				retErr = fmt.Errorf("settle child read receipt: %w", settleErr)
+			}
+		}()
+	}
+	content, err := m.tools.Run(ctx, "command", commandArgs, tctx)
 	if err != nil {
 		return "", "", err
 	}
@@ -43,6 +98,7 @@ func (m *Service) Read(ctx context.Context, child *api.Session, job *api.WorkerT
 	if err != nil {
 		return "", "", err
 	}
+	args := map[string]any{"path": path}
 	handle, patched, err := m.evidenceStore.CommitEvidenceToolResult(ctx, child.ID, projectDir, "read", args, content)
 	if err != nil {
 		return "", "", err
