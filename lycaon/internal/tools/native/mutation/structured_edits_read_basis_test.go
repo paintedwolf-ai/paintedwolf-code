@@ -351,19 +351,30 @@ func TestCodeRewriteEditorMoveRetryAlignsPinWithAppliedBasis(t *testing.T) {
 		t.Fatalf("loader baseTexts = %q, want [initial, moved]", adapter.baseTexts)
 	}
 
-	// Join: recorded execution revision pin MUST match attempt 2's applied transform basis (`moved`),
-	// NOT attempt 1's superseded basis (`initial`), and MUST be recorded exactly once.
+	// Join: pre-effect revision pins MUST record attempt 1 (`initial`) and attempt 2 (`moved`)
+	// in order, with the final pin matching the successfully applied transform basis (`moved`)
+	// and carrying the file's canonical identity.
 	var recorded []toolcontract.ExecutionRevision
 	for _, pins := range h.pins.pins {
 		recorded = append(recorded, pins...)
 	}
-	if len(recorded) != 1 {
-		t.Fatalf("recorded revision pins = %d, want exactly 1 (for the successful attempt)", len(recorded))
+	if len(recorded) != 2 {
+		t.Fatalf("recorded revision pins = %d, want 2 (attempt 1 pre-effect + attempt 2 pre-effect)", len(recorded))
 	}
+	wantInitialSHA := textfile.StringSHA256(initial)
+	if recorded[0].ContentSHA256 != wantInitialSHA || recorded[0].ContentBytes != int64(len(initial)) {
+		t.Fatalf("attempt 1 pin = (sha=%s bytes=%d), want initial (sha=%s bytes=%d)",
+			recorded[0].ContentSHA256, recorded[0].ContentBytes, wantInitialSHA, len(initial))
+	}
+	applied := recorded[len(recorded)-1]
 	wantBasisSHA := textfile.StringSHA256(moved)
-	if recorded[0].ContentSHA256 != wantBasisSHA || recorded[0].ContentBytes != int64(len(moved)) {
-		t.Fatalf("recorded pin = (sha=%s bytes=%d), want applied attempt basis (sha=%s bytes=%d); initial sha=%s",
-			recorded[0].ContentSHA256, recorded[0].ContentBytes, wantBasisSHA, len(moved), textfile.StringSHA256(initial))
+	if applied.ContentSHA256 != wantBasisSHA || applied.ContentBytes != int64(len(moved)) {
+		t.Fatalf("applied attempt pin = (sha=%s bytes=%d), want moved (sha=%s bytes=%d)",
+			applied.ContentSHA256, applied.ContentBytes, wantBasisSHA, len(moved))
+	}
+	if applied.Path != "main.go" || applied.RootID != h.project.Roots[0].ID {
+		t.Fatalf("applied pin identity = (root=%q path=%q), want (root=%q path=%q)",
+			applied.RootID, applied.Path, h.project.Roots[0].ID, "main.go")
 	}
 
 	// Join: accepted document and disk witness MUST match the rewritten moved text.
@@ -374,5 +385,50 @@ func TestCodeRewriteEditorMoveRetryAlignsPinWithAppliedBasis(t *testing.T) {
 	testutil.FailErr(t, "reopen main.go", err)
 	if !ok || finalDoc.Draft != wantAfter {
 		t.Fatalf("document witness = %q (ok=%v), want %q", finalDoc.Draft, ok, wantAfter)
+	}
+}
+
+type failingPinRecorder struct {
+	err   error
+	calls int
+}
+
+func (r *failingPinRecorder) AppendRevisionPin(context.Context, string, toolcontract.ExecutionRevision) error {
+	r.calls++
+	return r.err
+}
+
+func TestCodeRewriteRecorderFailureAbortsBeforeEffect(t *testing.T) {
+	initial := "package main\n\nfunc calc() int {\n\treturn 1 + 2\n}\n"
+	h := newHarness(t, map[string]string{
+		"main.go": initial,
+	})
+	svc, _ := wireRealEditorDocs(t, h)
+	doc, ok, err := svc.OpenText(t.Context(), h.project.ID, sourcebranch.Trunk, h.project.Roots[0].ID, "main.go")
+	testutil.FailErr(t, "open main.go", err)
+	if !ok {
+		t.Fatal("expected main.go")
+	}
+	svc.RememberAgentRead(h.project.ID, h.tc.Identity.SessionID, doc.ID, doc.Revision)
+
+	recorderErr := errors.New("revision pin store unavailable")
+	rec := &failingPinRecorder{err: recorderErr}
+	h.owners.Pins = rec
+
+	r := h.run("", "code-rewrite", "--path", "main.go", "--pattern", "return 1 + 2", "--rewrite", "return 3")
+	if !errors.Is(r.err, recorderErr) {
+		t.Fatalf("err = %v, want %v", r.err, recorderErr)
+	}
+	if rec.calls != 1 {
+		t.Fatalf("AppendRevisionPin calls = %d, want 1", rec.calls)
+	}
+	// Pre-effect admission invariant: recorder refusal MUST leave both disk and editor document untouched.
+	if got := h.read("main.go"); got != initial {
+		t.Fatalf("disk mutated despite recorder refusal: got=%q want=%q", got, initial)
+	}
+	afterDoc, ok, err := svc.OpenText(t.Context(), h.project.ID, sourcebranch.Trunk, h.project.Roots[0].ID, "main.go")
+	testutil.FailErr(t, "reopen main.go", err)
+	if !ok || afterDoc.Draft != initial || afterDoc.Revision != doc.Revision {
+		t.Fatalf("editor document mutated despite recorder refusal: rev=%d (want %d) draft=%q", afterDoc.Revision, doc.Revision, afterDoc.Draft)
 	}
 }

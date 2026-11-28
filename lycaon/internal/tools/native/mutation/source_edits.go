@@ -216,8 +216,8 @@ func runCodeRewrite(inv *invocation) error {
 			}
 			continue
 		}
-		var pinned bool
-		var appliedPin toolcontract.ExecutionRevision
+		var hasLastPin bool
+		var lastPin toolcontract.ExecutionRevision
 		result, err := inv.owners.Operations.Write.ApplyStructuredEdit(
 			ctx,
 			native.StructuredEditInput{
@@ -227,27 +227,28 @@ func runCodeRewrite(inv *invocation) error {
 			},
 			inv.tc,
 			func(resolved projectpaths.Resolved, source string, editor *tools.EditorDocumentText) (string, bool, error) {
-				if !pinned {
-					src, capErr := inv.owners.Revisions.CaptureSource(ctx, inv.tc, resolved.Abs)
-					if capErr != nil {
-						return "", false, capErr
+				rewritten, changed, rewriteErr := native.RewriteSource(ctx, resolved.DisplayPath, lang, pattern, rewrite, source)
+				if rewriteErr != nil || !changed {
+					return rewritten, changed, rewriteErr
+				}
+				src, capErr := inv.owners.Revisions.CaptureSource(ctx, inv.tc, resolved.Abs)
+				if capErr != nil {
+					return "", false, capErr
+				}
+				pin := src.Revision
+				pin.ContentSHA256, pin.ContentBytes = textfile.StringSHA256(source), int64(len(source))
+				if !hasLastPin || pin != lastPin {
+					if pinErr := inv.recordPin(pin); pinErr != nil {
+						return "", false, pinErr
 					}
-					appliedPin = src.Revision
-					pinned = true
+					lastPin = pin
+					hasLastPin = true
 				}
-				if editor != nil || source != "" {
-					appliedPin.ContentSHA256, appliedPin.ContentBytes = textfile.StringSHA256(source), int64(len(source))
-				}
-				return native.RewriteSource(ctx, resolved.DisplayPath, lang, pattern, rewrite, source)
+				return rewritten, changed, nil
 			},
 		)
 		if err != nil {
 			return err
-		}
-		if pinned {
-			if err := inv.recordPin(appliedPin); err != nil {
-				return err
-			}
 		}
 		if result.Accepted || result.Saved {
 			inv.effects++
