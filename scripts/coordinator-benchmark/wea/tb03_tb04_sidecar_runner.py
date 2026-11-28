@@ -901,7 +901,15 @@ def _slot_w06_01_cancel_mid_round(ctx: SlotContext) -> dict[str, Any]:
         _wait_pending(ctx.app, csid)
         # Worker is actively mid-round; coordinator cancels it directly via worker_cancel.
         _, cancel_res, cancel_code = _call_tool(ctx.app, sid, "worker_cancel", {"worker": "w06-live", "reason": "stop mid-round"})
-        jrow = _wait_job_status(ctx.app, ctx.db_path, job_id, sid, {"canceled"})
+        # CancelGraceful waits for any in-flight manual-model request on the child session to unwind.
+        def wait_canceled() -> dict[str, Any] | None:
+            p = ctx.app.request(f"/harness/llm/pending?session_id={urllib.parse.quote(csid)}")
+            if p.get("pending") and p.get("session_id") == csid:
+                ctx.app.request("/harness/llm/respond", {"id": p["id"], "content": "Stopping on cancel."})
+            row = _ro_one(ctx.db_path, "SELECT status, error FROM worker_jobs WHERE id=?", (job_id,))
+            return row if row and row.get("status") == "canceled" else None
+
+        jrow = ctx.app.wait_for(wait_canceled, f"job {job_id} canceled", sid)
         rrows = _ro_query(ctx.db_path, "SELECT id, status FROM worker_results WHERE worker_job_id=?", (job_id,))
         _check(checks, "worker_cancel_succeeded", cancel_code == "" and cancel_res.get("outcome") == "completed", {"code": cancel_code, "outcome": cancel_res.get("outcome")})
         _check(checks, "job_canceled", bool(jrow and jrow["status"] == "canceled"), jrow)
@@ -1769,7 +1777,10 @@ def _slot_w03_12_result_handle_unknown(ctx: SlotContext) -> dict[str, Any]:
         )
         codes: dict[str, str] = {}
         for tool in ("promote_overlay", "reject_overlay", "shelve_overlay"):
-            _, _, code = _call_tool(ctx.app, sid, tool, {"overlay_id": "result-nonexistent-tb04", "reason": "stale"})
+            tool_args: dict[str, Any] = {"overlay_id": "result-nonexistent-tb04"}
+            if tool != "promote_overlay":
+                tool_args["reason"] = "stale"
+            _, _, code = _call_tool(ctx.app, sid, tool, tool_args)
             codes[tool] = code
             _check(checks, f"{tool}_unknown_handle", code == "RESULT_HANDLE_UNKNOWN", code)
         return {"typed_result": {"codes": codes}, "independent_observation": {}, "checks": checks}
@@ -1929,11 +1940,11 @@ def _slot_w09_01_worker_verify_receipt_current(ctx: SlotContext) -> dict[str, An
 
 def _slot_w09_02_primary_verify_receipt(ctx: SlotContext) -> dict[str, Any]:
     proj, _ = ctx.make_project({"p.txt": "ok\n"})
-    sid, _, _ = _open_coordinator(ctx.app, proj, "Record verification command receipt on primary tree.", with_progress=False)
+    sid, _, _ = _open_coordinator(ctx.app, proj, "Record verification command receipt on primary tree.")
     checks: list[dict[str, Any]] = []
     try:
-        _, cmd_res, cmd_code = _call_tool(ctx.app, sid, "command", {"command": "true"})
-        receipts = _ro_query(ctx.db_path, "SELECT id, tool_name AS tool, status, source_revision, source_root_digest FROM invocation_receipts WHERE session_id=?", (sid,))
+        _, cmd_res, cmd_code = _call_tool(ctx.app, sid, "verify", {"command": "true"})
+        receipts = _ro_query(ctx.db_path, "SELECT id, tool_name AS tool, status, source_revision, source_root_digest FROM invocation_receipts WHERE session_id=? AND tool_name='verify'", (sid,))
         _check(checks, "primary_command_completed", cmd_code == "" and cmd_res.get("outcome") == "completed", cmd_code)
         _check(checks, "receipt_names_revision_and_digest", any(r.get("source_revision") and r.get("source_root_digest") for r in receipts), receipts[:2])
         return {"typed_result": {"receipts": receipts[:3]}, "independent_observation": {"count": len(receipts)}, "checks": checks}
@@ -1943,17 +1954,17 @@ def _slot_w09_02_primary_verify_receipt(ctx: SlotContext) -> dict[str, Any]:
 
 def _slot_w09_03_receipt_stale_after_person_edit(ctx: SlotContext) -> dict[str, Any]:
     proj, _ = ctx.make_project({"v.txt": "v1\n"})
-    sid, _, _ = _open_coordinator(ctx.app, proj, "Verify receipt revision changes after person edits primary file.", with_progress=False)
+    sid, _, _ = _open_coordinator(ctx.app, proj, "Verify receipt revision changes after person edits primary file.")
     checks: list[dict[str, Any]] = []
     try:
-        _call_tool(ctx.app, sid, "command", {"command": "true"})
-        r1 = _ro_query(ctx.db_path, "SELECT source_revision, source_root_digest FROM invocation_receipts WHERE session_id=? ORDER BY started_at ASC", (sid,))
+        _call_tool(ctx.app, sid, "verify", {"command": "true"})
+        r1 = _ro_query(ctx.db_path, "SELECT source_revision, source_root_digest FROM invocation_receipts WHERE session_id=? AND tool_name='verify' ORDER BY started_at ASC", (sid,))
         (proj / "v.txt").write_text("v2-person-edit\n", encoding="utf-8")
         _call_tool(ctx.app, sid, "command", {"command": "cat v.txt"})
         _call_tool(ctx.app, sid, "command", {"command": 'edit --path v.txt --old-string "v2-person-edit" --new-string "v3"'})
-        _call_tool(ctx.app, sid, "command", {"command": "true"})
-        r2 = _ro_query(ctx.db_path, "SELECT source_revision, source_root_digest FROM invocation_receipts WHERE session_id=? ORDER BY started_at ASC", (sid,))
-        rev_changed = bool(r1 and r2 and r1[0].get("source_revision") != r2[-1].get("source_revision"))
+        _call_tool(ctx.app, sid, "verify", {"command": "true"})
+        r2 = _ro_query(ctx.db_path, "SELECT source_revision, source_root_digest FROM invocation_receipts WHERE session_id=? AND tool_name='verify' ORDER BY started_at ASC", (sid,))
+        rev_changed = bool(r1 and r2 and r1[0].get("source_revision") and r2[-1].get("source_revision") and r1[0].get("source_revision") != r2[-1].get("source_revision"))
         _check(checks, "receipt_revision_advanced_after_edit", rev_changed, {"first": r1[0] if r1 else None, "last": r2[-1] if r2 else None})
         return {"typed_result": {"first": r1[0] if r1 else None, "last": r2[-1] if r2 else None}, "independent_observation": {"v_txt": (proj / "v.txt").read_text(encoding="utf-8")}, "checks": checks}
     finally:
@@ -1965,13 +1976,13 @@ def _slot_w09_04_receipt_stale_after_landing(ctx: SlotContext) -> dict[str, Any]
     sid, _, _ = _open_coordinator(ctx.app, proj, "Verify primary receipt revision advances after worker landing.")
     checks: list[dict[str, Any]] = []
     try:
-        _call_tool(ctx.app, sid, "command", {"command": "true"})
-        before = _ro_query(ctx.db_path, "SELECT source_revision FROM invocation_receipts WHERE session_id=? ORDER BY started_at ASC", (sid,))
+        _call_tool(ctx.app, sid, "verify", {"command": "true"})
+        before = _ro_query(ctx.db_path, "SELECT source_revision FROM invocation_receipts WHERE session_id=? AND tool_name='verify' ORDER BY started_at ASC", (sid,))
         run = _run_write_worker_edit(ctx.app, ctx.db_path, sid, goal="Edit l.txt", scope_paths=["l.txt"], commands=['cat l.txt', 'edit --path l.txt --old-string "l0" --new-string "l1"'])
         _call_tool(ctx.app, sid, "promote_overlay", {"overlay_id": run["result_handle"]})
-        _call_tool(ctx.app, sid, "command", {"command": "true"})
-        after = _ro_query(ctx.db_path, "SELECT source_revision FROM invocation_receipts WHERE session_id=? ORDER BY started_at ASC", (sid,))
-        _check(checks, "revision_advanced_after_landing", bool(before and after and before[0]["source_revision"] != after[-1]["source_revision"]), {"before": before[:1], "after": after[-1:]})
+        _call_tool(ctx.app, sid, "verify", {"command": "true"})
+        after = _ro_query(ctx.db_path, "SELECT source_revision FROM invocation_receipts WHERE session_id=? AND tool_name='verify' ORDER BY started_at ASC", (sid,))
+        _check(checks, "revision_advanced_after_landing", bool(before and after and before[0]["source_revision"] and after[-1]["source_revision"] and before[0]["source_revision"] != after[-1]["source_revision"]), {"before": before[:1], "after": after[-1:]})
         return {"typed_result": {"before": before[:1], "after": after[-1:]}, "independent_observation": {"l_txt": (proj / "l.txt").read_text(encoding="utf-8")}, "checks": checks}
     finally:
         _finish_session(ctx.app, sid)
@@ -1999,8 +2010,8 @@ def _w10_restart_helper(ctx: SlotContext, action: str) -> dict[str, Any]:
         handle = run["result_handle"]
         job_id = run["job_id"]
         child_sid = run["child_sid"]
-        _finish_session(app1, sid)
     finally:
+        # Terminate app1 directly to simulate a real sidecar OS restart with pending overlay.
         app1.close(cleanup=False)
 
     # Real OS process restart on the exact same app_dir / store.db!
@@ -2039,7 +2050,6 @@ def _w10_restart_helper(ctx: SlotContext, action: str) -> dict[str, Any]:
             _check(checks, "promote_succeeded_after_restart", code == "" and (proj / "restart.txt").read_text(encoding="utf-8") == "after-restart\n", code)
         result_rows = _ro_query(db_path, "SELECT id FROM worker_results WHERE worker_job_id=?", (job_id,))
         _check(checks, "exactly_one_result_handle", len(result_rows) == 1, result_rows)
-        _finish_session(app2, sid)
         return {
             "typed_result": {"job_id": job_id, "handle": handle, "action": action, "result_count": len(result_rows)},
             "independent_observation": {"pid_before": pid1, "pid_after": pid2, "outside_diff": outside_diff_dirs(snap, proj), "restart_txt": (proj / "restart.txt").read_text(encoding="utf-8")},
