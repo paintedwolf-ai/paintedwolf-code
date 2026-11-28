@@ -27,6 +27,7 @@ import { syncOnboardingPrefsFromSnapshot } from "../../settings/system/onboardin
 import { syncShortcutPrefsFromSnapshot } from "../../settings/system/shortcut-prefs.ts";
 import { syncWhatsNewFromSnapshot } from "../../settings/system/whats-new-prefs.ts";
 import { syncLayoutFromSnapshot } from "../../layout/layout-preferences.ts";
+import { syncHiddenProposalOverflowsFromSnapshot } from "../../watches/watches-store.ts";
 import { parseAppState } from "./app-state-parse.ts";
 import { isTauriRuntime } from "../runtime.ts";
 import {
@@ -56,6 +57,7 @@ export function applyDevicePrefsFromSnapshot(): void {
   syncProductTextScaleFromSnapshot();
   syncShortcutPrefsFromSnapshot();
   syncExternalOpenPrefsFromSnapshot();
+  syncHiddenProposalOverflowsFromSnapshot();
 }
 
 /** Apply the complete boot snapshot. */

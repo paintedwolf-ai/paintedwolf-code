@@ -28,6 +28,7 @@ const syncWhatsNewFromSnapshot = vi.hoisted(() => vi.fn());
 const syncShortcutPrefsFromSnapshot = vi.hoisted(() => vi.fn());
 const syncExternalOpenPrefsFromSnapshot = vi.hoisted(() => vi.fn());
 const syncFirstTimeTipsFromSnapshot = vi.hoisted(() => vi.fn());
+const syncHiddenProposalOverflowsFromSnapshot = vi.hoisted(() => vi.fn());
 const loadTranscriptRowHeightsFromSnapshot = vi.hoisted(() => vi.fn());
 const syncComposerDraftsFromSnapshot = vi.hoisted(() => vi.fn());
 const syncFilesHotExitFromSnapshot = vi.hoisted(() => vi.fn());
@@ -99,6 +100,10 @@ vi.mock("../../settings/system/first-time-tips-prefs.ts", () => ({
   syncFirstTimeTipsFromSnapshot: (...args: unknown[]) =>
     syncFirstTimeTipsFromSnapshot(...args),
 }));
+vi.mock("../../watches/watches-store.ts", () => ({
+  syncHiddenProposalOverflowsFromSnapshot: (...args: unknown[]) =>
+    syncHiddenProposalOverflowsFromSnapshot(...args),
+}));
 vi.mock("../../chat/transcript/layout/transcript-row-heights-persist.ts", () => ({
   loadTranscriptRowHeightsFromSnapshot: (...args: unknown[]) =>
     loadTranscriptRowHeightsFromSnapshot(...args),
@@ -150,6 +155,7 @@ function clearSyncMocks(): void {
   syncShortcutPrefsFromSnapshot.mockClear();
   syncExternalOpenPrefsFromSnapshot.mockClear();
   syncFirstTimeTipsFromSnapshot.mockClear();
+  syncHiddenProposalOverflowsFromSnapshot.mockClear();
   loadTranscriptRowHeightsFromSnapshot.mockClear();
   syncComposerDraftsFromSnapshot.mockClear();
   syncFilesHotExitFromSnapshot.mockClear();
@@ -178,6 +184,7 @@ describe("app-state-sync", () => {
     expect(syncLayoutFromSnapshot).toHaveBeenCalledOnce();
     expect(syncExternalOpenPrefsFromSnapshot).toHaveBeenCalledOnce();
     expect(syncFirstTimeTipsFromSnapshot).toHaveBeenCalledOnce();
+    expect(syncHiddenProposalOverflowsFromSnapshot).toHaveBeenCalledOnce();
     expect(loadTranscriptRowHeightsFromSnapshot).toHaveBeenCalledOnce();
     expect(syncComposerDraftsFromSnapshot).toHaveBeenCalledOnce();
     expect(syncFilesHotExitFromSnapshot).toHaveBeenCalledOnce();
@@ -189,6 +196,7 @@ describe("app-state-sync", () => {
   it("device prefs omit the surface-specific destructive syncs", () => {
     applyDevicePrefsFromSnapshot();
     expect(syncLayoutFromSnapshot).toHaveBeenCalledOnce();
+    expect(syncHiddenProposalOverflowsFromSnapshot).toHaveBeenCalledOnce();
     expect(loadTranscriptRowHeightsFromSnapshot).not.toHaveBeenCalled();
     expect(syncComposerDraftsFromSnapshot).not.toHaveBeenCalled();
     expect(syncFilesHotExitFromSnapshot).not.toHaveBeenCalled();
