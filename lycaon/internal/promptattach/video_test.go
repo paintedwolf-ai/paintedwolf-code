@@ -43,7 +43,8 @@ func stagedDirs(t *testing.T, root string) int {
 	}
 	n := 0
 	for _, e := range entries {
-		if e.IsDir() {
+		// .staging is long-lived blobstore infrastructure retained across writes.
+		if e.IsDir() && e.Name() != ".staging" {
 			n++
 		}
 	}

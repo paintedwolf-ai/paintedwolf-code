@@ -27,7 +27,8 @@ func TestUploadRejectsInvalidUTF8AfterDetectionWindow(t *testing.T) {
 		t.Fatalf("read attachment dir: %v", readErr)
 	}
 	for _, entry := range entries {
-		if entry.IsDir() {
+		// .staging is long-lived blobstore infrastructure retained across writes.
+		if entry.IsDir() && entry.Name() != ".staging" {
 			t.Fatalf("invalid text left staged blob %q", entry.Name())
 		}
 	}
@@ -47,7 +48,8 @@ func TestUploadTransportRejectionRemovesMaterializedBody(t *testing.T) {
 		t.Fatalf("read attachment dir: %v", readErr)
 	}
 	for _, entry := range entries {
-		if entry.IsDir() {
+		// .staging is long-lived blobstore infrastructure retained across writes.
+		if entry.IsDir() && entry.Name() != ".staging" {
 			t.Fatalf("transport rejection left staged blob %q", entry.Name())
 		}
 	}
