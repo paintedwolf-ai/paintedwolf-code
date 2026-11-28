@@ -402,7 +402,7 @@ func richKickEnvelopes(reg *anchor.Registry, kick string) []map[string]any {
 		"evidence_digest":              "[read#1] a.go:1",
 		"last_worker_decision_request": map[string]any{"worker": "impl-1", "options": []string{"opt-a", "opt-b"}},
 		"repair_targets": []map[string]any{
-			{"claim": "c1", "web_link": true, "candidates": []string{"web#1"}, "use": "web#1", "worker_output": true},
+			{"claim": "c1", "body_unavailable": true, "web_link": true, "candidates": []string{"web#1"}, "use": "web#1", "worker_output": true},
 			{"claim": "c2", "web_link": false},
 		},
 		"document_citation_targets": []map[string]any{{"section": "Risks", "claim": "ungrounded"}},
