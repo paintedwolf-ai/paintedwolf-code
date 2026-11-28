@@ -71,6 +71,17 @@ func (o documentOpener) openAbsentDocument(ctx context.Context, p *project.Proje
 	}
 	unlockDoc := s.docLocks.lock(documentLockKey(d.ID))
 	defer unlockDoc()
+	current, err := s.store.Get(ctx, d.ID)
+	if errors.Is(err, ErrNotFound) {
+		return nil, projectsource.ErrSourceNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if current.ProjectID != p.ID || current.BranchID != branch || current.RootID != rootID || current.Path != rel {
+		return nil, projectsource.ErrSourceNotFound
+	}
+	d = current
 	if err := s.markAbsent(ctx, d); err != nil {
 		return nil, err
 	}
@@ -90,7 +101,23 @@ func (o documentOpener) openObservedDocument(ctx context.Context, p *project.Pro
 	}
 	if d != nil {
 		unlockDoc := s.docLocks.lock(documentLockKey(d.ID))
-		defer unlockDoc()
+		current, getErr := s.store.Get(ctx, d.ID)
+		switch {
+		case errors.Is(getErr, ErrNotFound):
+			unlockDoc()
+			d = nil
+		case getErr != nil:
+			unlockDoc()
+			return nil, getErr
+		case current.ProjectID != p.ID || current.BranchID != branch || current.RootID != read.RootID || current.Path != read.Path:
+			unlockDoc()
+			d = nil
+		default:
+			defer unlockDoc()
+			d = current
+		}
+	}
+	if d != nil {
 		observation, err = projectsource.ObserveProjectSource(p, projectsource.SourceReadRequest{Path: read.Path, RootID: read.RootID, DecodeAs: decodeAs})
 		if errors.Is(err, projectsource.ErrSourceNotFound) {
 			if err := s.markAbsent(ctx, d); err != nil {
