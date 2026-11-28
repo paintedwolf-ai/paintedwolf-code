@@ -553,7 +553,9 @@ func FreezeTurnAuthorityWithResources(
 	assembled := assembleTurnAuthorityFromEntry(proj, reader)
 	if fullKey != "" {
 		frozenTurnMu.Lock()
-		frozenTurnCache[fullKey] = assembled
+		if len(frozenTurnCache) < 2048 {
+			frozenTurnCache[fullKey] = assembled
+		}
 		frozenTurnMu.Unlock()
 	}
 	return assembled, nil

@@ -128,7 +128,9 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 	reader = reader.WithVision(state.Vision)
 	assembled := assembleTurnAuthorityFromEntry(proj, reader)
 	frozenWorkerMu.Lock()
-	frozenWorkerCache[fullKey] = assembled
+	if len(frozenWorkerCache) < 1024 {
+		frozenWorkerCache[fullKey] = assembled
+	}
 	frozenWorkerMu.Unlock()
 	return assembled, nil
 }
