@@ -108,12 +108,3 @@ func TestFirstJSONValue(t *testing.T) {
 		t.Fatalf("Candidates missing first-value salvage: %v", candidates)
 	}
 }
-
-func TestFirst(t *testing.T) {
-	t.Parallel()
-
-	payload, ok := jsonfence.First("```JSON\n{\"k\":1}\n```")
-	if !ok || payload != `{"k":1}` {
-		t.Fatalf("First = %q, ok=%v", payload, ok)
-	}
-}

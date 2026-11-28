@@ -244,15 +244,6 @@ func ToolProfileFor(agentID string) (string, bool) {
 	return p.ToolProfile, true
 }
 
-// SystemPromptTemplateFor resolves one agent's template ref from the process catalog.
-func SystemPromptTemplateFor(agentID string) (string, bool) {
-	p, ok := lookup(agentID)
-	if !ok {
-		return "", false
-	}
-	return p.SystemPromptTemplate, true
-}
-
 // IsWorker reports whether agentID declares the worker topology role; only
 // workers are task() targets. An agent the catalog does not know is not a worker.
 func IsWorker(agentID string) bool {

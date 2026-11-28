@@ -28,7 +28,7 @@ func TestPromptPreviewTypedVariables(t *testing.T) {
 		t.Fatalf("typed vars = %#v, want %#v", flags.vars, want)
 	}
 	result, err := prompts.AuthorRender(t.Context(), prompts.AuthorRenderRequest{
-		ModuleRoot: configlayout.FindModuleRoot(), TemplateRef: flags.ref, Vars: flags.vars,
+		ModuleRoot: configlayout.FindModuleRoot(), Reader: prompts.PreviewReader("", ""), TemplateRef: flags.ref, Vars: flags.vars,
 	})
 	testutil.FailErr(t, "render typed preview", err)
 	if !strings.Contains(result.Output, "VERIFY_UNVERIFIABLE") {
@@ -36,7 +36,7 @@ func TestPromptPreviewTypedVariables(t *testing.T) {
 	}
 	flags.vars["profile_has_verify"] = false
 	result, err = prompts.AuthorRender(t.Context(), prompts.AuthorRenderRequest{
-		ModuleRoot: configlayout.FindModuleRoot(), TemplateRef: flags.ref, Vars: flags.vars,
+		ModuleRoot: configlayout.FindModuleRoot(), Reader: prompts.PreviewReader("", ""), TemplateRef: flags.ref, Vars: flags.vars,
 	})
 	testutil.FailErr(t, "render disabled preview", err)
 	if strings.TrimSpace(result.Output) != "" {
@@ -55,7 +55,7 @@ func TestPromptRenderSkillFlags(t *testing.T) {
 		t.Fatalf("flags = %#v", flags)
 	}
 	result, err := prompts.AuthorRender(t.Context(), prompts.AuthorRenderRequest{
-		ModuleRoot: configlayout.FindModuleRoot(), SkillName: flags.skillName,
+		ModuleRoot: configlayout.FindModuleRoot(), Reader: prompts.PreviewReader("", flags.surfaceID), SkillName: flags.skillName,
 		Resource: flags.resource, SurfaceID: flags.surfaceID, Check: flags.check,
 	})
 	testutil.FailErr(t, "render skill resource", err)

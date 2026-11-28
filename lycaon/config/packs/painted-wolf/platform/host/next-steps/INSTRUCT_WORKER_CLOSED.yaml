@@ -5,9 +5,9 @@ steps:
       scope:
         mode: "write"
         base_overlay_id: "{{ paintedwolf.overlay_id }}"
-    say: "To build on its last changes, start a new worker on them with {{ call }}."
+    say: "To build on its last changes, start a new worker on them with {% if load %}{{ load }}, then {% endif %}{{ call }}."
     otherwise: "A closed worker takes no instructions; its history stays readable."
   - when: "paintedwolf.overlay_id == ''"
     tool: "task"
-    say: "Start a new worker with {{ call }}."
+    say: "Start a new worker with {% if load %}{{ load }}, then {% endif %}{{ call }}."
     otherwise: "A closed worker takes no instructions; its history stays readable."

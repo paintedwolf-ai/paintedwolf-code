@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/toolreach"
 )
 
 var (
@@ -14,14 +15,19 @@ var (
 	guidanceRenderer   *prompts.GuidanceRenderer
 )
 
-// SetGuidanceRenderer installs the process-wide pongo guidance renderer.
+// SetGuidanceRenderer installs the process-wide pongo guidance and utility renderers.
 func SetGuidanceRenderer(renderer *prompts.GuidanceRenderer) {
 	guidanceRendererMu.Lock()
 	guidanceRenderer = renderer
 	guidanceRendererMu.Unlock()
+	if renderer != nil {
+		prompts.SetUtilityPromptRenderer(prompts.NewUtilityPromptRenderer(renderer.Engine()))
+	} else {
+		prompts.SetUtilityPromptRenderer(nil)
+	}
 }
 
-// RenderGuidance renders the pack guidance template guidance/{ref}.md.
+// RenderGuidance renders an allowlisted structural guidance template guidance/{ref}.md.
 func RenderGuidance(ctx context.Context, ref string, data map[string]any) (string, error) {
 	guidanceRendererMu.RLock()
 	renderer := guidanceRenderer
@@ -30,6 +36,21 @@ func RenderGuidance(ctx context.Context, ref string, data map[string]any) (strin
 		return "", fmt.Errorf("guidance renderer not configured")
 	}
 	block, err := renderer.Render(ctx, ref, data)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(block), nil
+}
+
+// RenderGuidanceWithReach renders guidance/{ref}.md against a frozen toolreach.Request.
+func RenderGuidanceWithReach(ctx context.Context, reach toolreach.Request, ref string, occurrence map[string]any) (string, error) {
+	guidanceRendererMu.RLock()
+	renderer := guidanceRenderer
+	guidanceRendererMu.RUnlock()
+	if renderer == nil {
+		return "", fmt.Errorf("guidance renderer not configured")
+	}
+	block, err := renderer.RenderWithReach(ctx, reach, ref, occurrence)
 	if err != nil {
 		return "", err
 	}

@@ -2,7 +2,7 @@
 
 Governing blueprint paths — `${overlay_dir}/blueprints/**`.
 
-- **Read paths:** {% for g in read_globs %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
-- **Write paths:** {% for g in write_globs %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
+- **Read paths:** `{{ read_globs|join:"`, `" }}`
+- **Write paths:** `{{ write_globs|join:"`, `" }}`
 
 Plan phases gate which tools are callable — follow the mode instructions for the current phase.

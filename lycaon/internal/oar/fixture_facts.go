@@ -10,6 +10,7 @@ import (
 // observations get their fields, and every fact is published by name.
 func factsToContext(facts map[string]any) *GuardContext {
 	gc := NewGuardContext()
+	gc.FromScenario = true
 	if facts == nil {
 		return gc
 	}

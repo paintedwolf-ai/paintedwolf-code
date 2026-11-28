@@ -71,8 +71,11 @@ func (m *Service) FillSessionFacts(ctx context.Context, gc *oar.GuardContext, se
 		gc.Session.SessionMode = string(sess.Mode)
 		gc.Session.Principal = sess.OwnerPersonID
 		gc.Session.WorkerLeg = sess.IsWorkerChild()
-		if sess.ParentSessionID == "" {
+		if !gc.Session.WorkerLeg {
 			gc.Session.Role = "coordinator"
+			if gc.Session.Surface == "" && m.surface != nil && sess.ID != "" {
+				gc.Session.Surface = m.surface.PromptTurnSurfaceID(sess.ID)
+			}
 		}
 		gc.RegisterProvider("profile", func(gc *oar.GuardContext) error {
 			profile, err := m.profiles.PromptToolProfile(ctx, sess)

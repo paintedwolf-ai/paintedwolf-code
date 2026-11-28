@@ -33,11 +33,18 @@ func (e *turnContextAssembler) appendWorkerLegInject(ctx context.Context, sess *
 	if deps.Injects == nil {
 		return nil, fmt.Errorf("worker-leg inject: inject renderer not configured")
 	}
+	if e.surface == nil {
+		return nil, fmt.Errorf("worker-leg inject: prompt surface not configured")
+	}
+	reader, err := e.surface.workerTurnReader(ctx, sess, inject.CoordinatorTurnFrame{}, turn)
+	if err != nil {
+		return nil, fmt.Errorf("worker-leg inject reader: %w", err)
+	}
 	var guidance []api.Message
 	if strings.TrimSpace(legCtx.AgentsMDMessage.Content) != "" {
 		guidance = append(guidance, legCtx.AgentsMDMessage)
 	}
-	block, err := inject.RenderWorkerLegInject(ctx, deps.Injects, sess.ID, legCtx)
+	block, err := inject.RenderWorkerLegInject(ctx, deps.Injects, reader, sess.ID, legCtx)
 	if err != nil {
 		return nil, fmt.Errorf("worker-leg inject: %w", err)
 	}
@@ -48,7 +55,7 @@ func (e *turnContextAssembler) appendWorkerLegInject(ctx context.Context, sess *
 	hostCtx.ScanDigest = nil
 	hostCtx.HasPeerFindings = len(legCtx.SiblingNotes) > 0
 	hostCtx.SiblingNotes = nil
-	hostBlock, err := inject.RenderWorkerLegInject(ctx, deps.Injects, sess.ID, hostCtx)
+	hostBlock, err := inject.RenderWorkerLegInject(ctx, deps.Injects, reader, sess.ID, hostCtx)
 	if err != nil {
 		return nil, fmt.Errorf("worker-leg host projection: %w", err)
 	}

@@ -170,7 +170,7 @@ func (p *GuardPipeline) evaluateMatched(ctx context.Context, holder *evalHolder,
 				continue
 			}
 			res.Trace.Add(TraceEntry{Rule: r.Qualified(), Stage: stage, Outcome: TraceErrored, Error: err.Error()})
-			d, stop, applyErr := p.applyOnError(r, gc, err)
+			d, stop, applyErr := p.applyOnError(ctx, r, gc, err)
 			if applyErr != nil {
 				return applyErr
 			}
@@ -183,13 +183,18 @@ func (p *GuardPipeline) evaluateMatched(ctx context.Context, holder *evalHolder,
 			}
 			continue
 		}
-		res.Trace.Add(TraceEntry{Rule: r.Qualified(), Stage: stage, Outcome: outcome, Effect: r.Effect})
 		if observedOnly(outcome) {
+			res.Trace.Add(TraceEntry{Rule: r.Qualified(), Stage: stage, Outcome: outcome, Effect: r.Effect})
 			restoreRuleDetector()
 			continue
 		}
-		d := decisionFromRule(r, gc, nil)
+		d := decisionFromRule(ctx, r, gc, nil)
 		restoreRuleDetector()
+		fired := TraceEntry{Rule: r.Qualified(), Stage: stage, Outcome: outcome, Effect: r.Effect}
+		if d.NextStepsErr != nil {
+			fired.Error = d.NextStepsErr.Error()
+		}
+		res.Trace.Add(fired)
 		event := OnFireEvent{
 			SessionID: gc.Session.SessionID,
 			Rule:      r.Qualified(),
@@ -336,7 +341,7 @@ func observedOnly(o TraceOutcome) bool {
 	return o == TracePassed || o == TraceMonitoredPassed || o == TraceMonitoredFired
 }
 
-func (p *GuardPipeline) applyOnError(r *Rule, gc *GuardContext, evalErr error) (d *Decision, stop bool, err error) {
+func (p *GuardPipeline) applyOnError(ctx context.Context, r *Rule, gc *GuardContext, evalErr error) (d *Decision, stop bool, err error) {
 	// [OAR-OPS-1] A monitor rule's on_error is never applied.
 	if r.Enforcement == "monitor" {
 		return nil, false, nil
@@ -347,7 +352,7 @@ func (p *GuardPipeline) applyOnError(r *Rule, gc *GuardContext, evalErr error) (
 	case "fail_closed", "":
 		// [OAR-OPS-2] fired block.
 		data := map[string]any{"error": evalErr.Error()}
-		dec := decisionFromRule(r, gc, data)
+		dec := decisionFromRule(ctx, r, gc, data)
 		dec.Effect = EffectBlock
 		return &dec, true, nil
 	default:
@@ -357,7 +362,7 @@ func (p *GuardPipeline) applyOnError(r *Rule, gc *GuardContext, evalErr error) (
 		if r.errorTarget == nil {
 			return nil, false, fmt.Errorf("[OAR-OPS-4] rule %s on_error names %s, which is not loaded", r.Qualified(), r.OnError)
 		}
-		dec := decisionFromRule(r.errorTarget, gc, data)
+		dec := decisionFromRule(ctx, r.errorTarget, gc, data)
 		dec.Effect = EffectBlock
 		dec.OnFire = nil
 		return &dec, true, nil

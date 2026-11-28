@@ -27,8 +27,10 @@ func fatLangSnapshot() api.BoardSnapshot {
 func TestBoardOrientationInjectRenderRespectsCharBudget(t *testing.T) {
 	t.Parallel()
 	renderer := prompts.NewInjectRenderer(contractcheck.BundledPromptEngineForRoot(t))
+	reader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
+	contractcheck.FailErr(t, "DeclaredReader coordinator", err)
 	now := time.Date(2026, 5, 31, 14, 0, 0, 0, time.UTC)
-	block, err := inject.RenderBoardOrientationInject(context.Background(), renderer, "sess-inject-test", fatLangSnapshot(), packboard.InjectScopeFull, false, true, now)
+	block, err := inject.RenderBoardOrientationInject(context.Background(), renderer, reader, "sess-inject-test", fatLangSnapshot(), packboard.InjectScopeFull, false, true, now)
 	contractcheck.FailErr(t, "inject.RenderBoardOrientationInject failed", err)
 	if !strings.Contains(block, inject.BoardOrientationInjectSentinel) {
 		t.Fatal("missing lycaon-board-orientation sentinel")

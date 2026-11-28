@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/platform"
@@ -19,6 +20,7 @@ type ProgramSurface struct {
 	selection NativeOperationSelection
 	allowed   toolcontract.CommandEffects
 	profile   string
+	table     *frozenProgramTable
 }
 
 // Effects returns the command effects admitted on this program surface.
@@ -37,6 +39,28 @@ func (s ProgramSurface) ReadOnly() ProgramSurface {
 // Reached operations still require full native admission.
 func (s ProgramSurface) AllowsEffects(effects toolcontract.CommandEffects) bool {
 	return s.allowed.Allows(effects)
+}
+
+// ProgramTable returns the program and effect-mode admission the turn guard
+// computes for this surface's profile and surface, built once per surface.
+func (s ProgramSurface) ProgramTable(ctx context.Context) (*toolreach.ProgramTable, error) {
+	if s.table == nil {
+		return nil, fmt.Errorf("program surface has no frozen admission")
+	}
+	return s.table.get(ctx)
+}
+
+// frozenProgramTable builds a surface's admission table at most once.
+type frozenProgramTable struct {
+	once  sync.Once
+	build func(context.Context) (*toolreach.ProgramTable, error)
+	table *toolreach.ProgramTable
+	err   error
+}
+
+func (f *frozenProgramTable) get(ctx context.Context) (*toolreach.ProgramTable, error) {
+	f.once.Do(func() { f.table, f.err = f.build(ctx) })
+	return f.table, f.err
 }
 
 // ValidateOperation admits already compiled immutable effect metadata. It is
@@ -94,50 +118,82 @@ func (e *Metadata) FreezeProgramSurface(ctx context.Context, filter platform.Too
 	if err != nil {
 		return ProgramSurface{}, err
 	}
-	return ProgramSurface{selection: selection, allowed: allowed, profile: filter.ProfileID}, nil
+	table := &frozenProgramTable{build: func(ctx context.Context) (*toolreach.ProgramTable, error) {
+		return e.ProgramTable(ctx, filter)
+	}}
+	return ProgramSurface{selection: selection, allowed: allowed, profile: filter.ProfileID, table: table}, nil
 }
 
-// ProgramReach freezes which native programs a profile and surface can run: the
-// catalog entry's effects fit the restriction and no profile deny names it.
+// ProgramReach freezes which native programs a profile and surface admit.
 func (e *Metadata) ProgramReach(ctx context.Context, filter platform.ToolFilter) (toolreach.Programs, error) {
+	reachable, _, err := e.catalogProgramAdmission(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	return func(name string) bool { return reachable[name] }, nil
+}
+
+// ProgramTable freezes program and effect-mode admission for one profile and surface.
+func (e *Metadata) ProgramTable(ctx context.Context, filter platform.ToolFilter) (*toolreach.ProgramTable, error) {
+	reachable, modes, err := e.catalogProgramAdmission(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	return toolreach.NewProgramTable(reachable, modes), nil
+}
+
+func (e *Metadata) catalogProgramAdmission(ctx context.Context, filter platform.ToolFilter) (map[string]bool, map[string]map[string]bool, error) {
 	if e == nil {
-		return nil, fmt.Errorf("command metadata required")
+		return nil, nil, fmt.Errorf("command metadata required")
 	}
 	policy, ok := e.policy.(interface {
 		FreezeCommandProfile(context.Context, string) (context.Context, toolcontract.CommandEffects, error)
 		CommandOperationAllowed(context.Context, string, string, string) (bool, error)
 	})
 	if !ok {
-		return nil, fmt.Errorf("command profile effect boundary required")
+		return nil, nil, fmt.Errorf("command profile effect boundary required")
 	}
 	frozen, allowed, err := policy.FreezeCommandProfile(ctx, filter.ProfileID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	allowed, err = surfacecatalog.RestrictCommandEffects(allowed, filter.SurfaceID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	surfaceTools, err := surfaceCommandFormTools(filter.SurfaceID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	reachable := map[string]bool{}
+	reachable := make(map[string]bool, len(catalog.Commands))
+	modeReach := make(map[string]map[string]bool, len(catalog.Commands))
 	for _, spec := range catalog.Commands {
 		permitted, err := policy.CommandOperationAllowed(frozen, filter.ProfileID, spec.Name, spec.Name)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if !surfaceAllowsCommandForm(surfaceTools, spec.Name) {
 			permitted = false
 		}
-		reachable[spec.Name] = permitted && anyModeAllowed(spec, allowed)
+		if e.externalHidden && spec.Name == "external" {
+			permitted = false
+		}
+		admittedModes := make(map[string]bool, len(spec.Effects))
+		anyAllowed := false
+		for _, requirement := range spec.Effects {
+			effects, err := requirement.CommandEffects(&allowed)
+			modeOK := permitted && err == nil && allowed.Allows(effects)
+			admittedModes[requirement.Mode] = modeOK
+			anyAllowed = anyAllowed || modeOK
+		}
+		modeReach[spec.Name] = admittedModes
+		reachable[spec.Name] = anyAllowed
 	}
-	return func(name string) bool { return reachable[name] }, nil
+	return reachable, modeReach, nil
 }
 
 func surfaceCommandFormTools(surfaceID string) (map[string]bool, error) {
@@ -176,17 +232,6 @@ func surfaceAllowsCommandForm(surfaceTools map[string]bool, command string) bool
 		}
 	}
 	return true
-}
-
-func anyModeAllowed(spec toolcontract.CommandSpecification, allowed toolcontract.CommandEffects) bool {
-	for _, requirement := range spec.Effects {
-		// A wrapper's effects depend on its child, which is checked when it runs.
-		effects, err := requirement.CommandEffects(&allowed)
-		if err == nil && allowed.Allows(effects) {
-			return true
-		}
-	}
-	return false
 }
 
 // ValidateBound checks a binder-selected exact catalog mode. The adapter must

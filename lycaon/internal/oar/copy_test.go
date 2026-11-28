@@ -45,9 +45,9 @@ func TestCopyDoesNotChangeDecisionCode(t *testing.T) {
 	r := &Rule{ID: "X", Effect: EffectBlock, Copy: Copy{What: "blocked {{ tool }}"}}
 	gc := NewGuardContext()
 	gc.Invocation.Tool = "read"
-	a := decisionFromRule(r, gc, map[string]any{"tool": "read"})
+	a := decisionFromRule(t.Context(), r, gc, map[string]any{"tool": "read"})
 	r.Copy.What = "different {{ tool }}"
-	b := decisionFromRule(r, gc, map[string]any{"tool": "read"})
+	b := decisionFromRule(t.Context(), r, gc, map[string]any{"tool": "read"})
 	if a.Code != b.Code || a.Effect != b.Effect {
 		t.Fatalf("copy changed the decision: %#v vs %#v", a, b)
 	}

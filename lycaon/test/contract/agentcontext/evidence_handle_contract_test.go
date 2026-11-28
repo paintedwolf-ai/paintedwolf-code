@@ -49,21 +49,20 @@ func TestInstructionUnitsNameOnlyReachableToolsAndHandles(t *testing.T) {
 		if state.host == promptunit.HostCoordinator {
 			profileID = prompts.CoordinatorProfileID
 		}
-		reader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: profileID,
-			Mode:      state.mode,
+		reader, err := prompts.NewReader(prompts.HostFacts{
 			Profiles: []sandbox.ToolProfile{{
 				ID:             profileID,
 				Tools:          allTools,
 				DeferredTools:  deferred,
 				CommandEffects: toolcontract.AllCommandEffects(),
 			}},
-			Plan:      toolsurface.Compile(state.offered, state.requestable),
-			Loaded:    offered,
-			Visible:   slices.Concat(state.offered, state.requestable),
 			RootCount: 1,
 			HasGit:    true,
 			WebSearch: true,
+		}, prompts.TurnProjection{
+			ProfileID: profileID,
+			Plan:      readerLoadedPlan(toolsurface.Compile(state.offered, state.requestable), offered),
+			Offered:   readerLoadedOffer(toolsurface.Compile(state.offered, state.requestable), slices.Concat(state.offered, state.requestable), offered),
 		})
 		contractcheck.FailErr(t, "build state reader", err)
 		vars, err := prompts.Vars(reader, maps.Clone(base))

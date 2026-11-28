@@ -45,9 +45,7 @@ func assertLocalRequired(t *testing.T, value any) {
 	switch node := value.(type) {
 	case map[string]any:
 		props, _ := node["properties"].(map[string]any)
-		required, _ := copySchemaList(node["required"])
-		for _, raw := range required {
-			name, _ := raw.(string)
+		for _, name := range schemaRequiredNames(node["required"]) {
 			if _, ok := props[name]; !ok {
 				t.Fatalf("required %q has no local property: %v", name, node)
 			}
@@ -59,6 +57,23 @@ func assertLocalRequired(t *testing.T, value any) {
 		for _, child := range node {
 			assertLocalRequired(t, child)
 		}
+	}
+}
+
+func schemaRequiredNames(raw any) []string {
+	switch values := raw.(type) {
+	case []any:
+		out := make([]string, 0, len(values))
+		for _, v := range values {
+			if s, ok := v.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	case []string:
+		return slices.Clone(values)
+	default:
+		return nil
 	}
 }
 

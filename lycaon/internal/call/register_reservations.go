@@ -3,7 +3,6 @@ package call
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
@@ -11,26 +10,6 @@ import (
 )
 
 func registerHandoffReservationTools(reg *tools.DefaultRegistry, deps HandoffToolDeps) error {
-	if err := reg.Register("handoff_init", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		sessionID := handoffSessionID(args, tctx)
-		agent := handoffAgentID(args, tctx)
-		if sessionID == "" {
-			return "", fmt.Errorf("session_id required")
-		}
-		projectDir, err := handoffDelegationProjectDir(ctx, deps, sessionID)
-		if err != nil {
-			return "", err
-		}
-		out, err := deps.Calls.Init(ctx, CallInitRequest{SessionID: sessionID, ProjectDir: projectDir, Agent: agent})
-		if err != nil {
-			return "", err
-		}
-		raw, _ := json.Marshal(out)
-		return string(raw), nil
-	}); err != nil {
-		return err
-	}
-
 	if err := reg.Register("handoff_reserve", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		sessionID := handoffSessionID(args, tctx)
 		agent := handoffAgentID(args, tctx)
@@ -69,7 +48,7 @@ func registerHandoffReservationTools(reg *tools.DefaultRegistry, deps HandoffToo
 		return err
 	}
 
-	if err := reg.Register("handoff_release_all", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
+	return reg.Register("handoff_release_all", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		sessionID := handoffSessionID(args, tctx)
 		agent := handoffAgentID(args, tctx)
 		if err := deps.Calls.ReleaseAll(ctx, sessionID, agent); err != nil {
@@ -79,37 +58,7 @@ func registerHandoffReservationTools(reg *tools.DefaultRegistry, deps HandoffToo
 			tctx.Effects.Presence.Released(nil)
 		}
 		return `{"released_all":true}`, nil
-	}); err != nil {
-		return err
-	}
-
-	return reg.Register("handoff_health", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		sessionID := handoffSessionID(args, tctx)
-		out, err := deps.Calls.Health(ctx, sessionID)
-		if err != nil {
-			return "", err
-		}
-		raw, _ := json.Marshal(out)
-		return string(raw), nil
 	})
-}
-
-func handoffDelegationProjectDir(ctx context.Context, deps HandoffToolDeps, sessionID string) (string, error) {
-	if deps.Sessions == nil {
-		return "", fmt.Errorf("session store required")
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return "", fmt.Errorf("session_id required")
-	}
-	dir, err := deps.Sessions.ProjectDir(ctx, sessionID)
-	if err != nil {
-		return "", err
-	}
-	if d := strings.TrimSpace(dir); d != "" {
-		return d, nil
-	}
-	return "", fmt.Errorf("project_dir required")
 }
 
 // reservationTargets places reserved paths in the session's active root. Only

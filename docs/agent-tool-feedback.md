@@ -272,18 +272,21 @@ policy lists the calls:
 steps:
   - when: paintedwolf.process_running
     tool: command_stop
-    say: "If this job is no longer needed, request {{ call }} once."
+    say: "If this job is no longer needed, request {% if load %}{{ load }}, then {% endif %}{{ call }} once."
     otherwise: "Report that the job needs stopping."
   - program: ["ls", "{{ paintedwolf.path }}"]
     complete: true
-    say: "List one level with {{ call }}."
+    say: "List one level with {% if load %}{{ load }}, then {% endif %}{{ call }}."
 ```
 
 `internal/toolreach` answers each step against the request the reader is on: its
-frozen offered tools, its plan and its native programs. A deferred target renders
-with its loader first. An unreachable step is replaced by the first reachable
+frozen offered tools, its plan and its native programs. The host binds `{{ call }}`
+to the step's exact call and `{{ load }}` to the loader call a deferred target needs
+first, or to nothing. Whether a call needs loading depends on the reader, so every
+`say` shows `{{ load }}` only inside `{% if load %}` and reads true either way; the
+pack sentence, not the host, joins the two calls. An unreachable step is replaced by the first reachable
 step under `or`, then by `otherwise`, or is dropped, so a rule's copy must read
-correctly with the fact empty. `{{ call }}` is rendered by the host. The calls behind the text go in the
+correctly with the fact empty. The calls behind the text go in the
 feedback's `next_calls` details for replay and reporting, and the model reads only
 the rendered copy. Rule documents stay portable: no condition may read the fact,
 and the catalog cannot change a decision.

@@ -5,7 +5,7 @@ on: tool.rejected
 selector:
   tools:
     - ask_user
-requires_facts: [paintedwolf.rejection_code]
+requires_facts: [paintedwolf.can_ask_user, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "ASK_USER_PROMPT_REQUIRED"
 effect: block
 x-paintedwolf-category: recoverable
@@ -14,7 +14,7 @@ message: prompt is required
 what: ask_user was called with an empty prompt.
 cause: The prompt argument was missing or whitespace-only after trim.
 why: The feedback card has nothing to show the user.
-fix: Call ask_user again with a non-empty prompt string.
+fix: '{% if paintedwolf.can_ask_user %}Call ask_user again with a non-empty prompt string.{% else %}Supply a non-empty prompt when a feedback card tool is offered.{% endif %}'
 instead: Branch on Code ASK_USER_PROMPT_REQUIRED; supply a non-empty prompt
 x-paintedwolf-scenarios:
   - id: default

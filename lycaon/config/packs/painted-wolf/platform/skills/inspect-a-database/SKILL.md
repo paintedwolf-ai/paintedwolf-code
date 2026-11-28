@@ -7,7 +7,7 @@ metadata:
 
 # Inspect a database
 
-Run the engine's client in `command` and declare its id in `capability_request.host_resources`. A loopback server also needs `capability_request.loopback_connect` for its port; for a remote one follow reach-a-network-service.
+Run the engine's client in `command` and declare its id in `capability_request.host_resources`. {% if "command" in runner_loopback_connect_tools %}A loopback server also needs `capability_request.loopback_connect` for its port; for a remote one{% else %}For a remote server,{% endif %} follow reach-a-network-service.
 
 ## Rules for every engine
 

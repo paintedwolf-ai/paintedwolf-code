@@ -1,6 +1,8 @@
 ---
 name: write-extension-pack
 description: Create and validate extension packs containing supported catalog policy, guidance, workflows, agents, or skills.
+metadata:
+  authoring_reference: "true"
 ---
 
 # Write an extension pack

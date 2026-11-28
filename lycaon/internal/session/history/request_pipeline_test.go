@@ -33,6 +33,9 @@ func (w wireRequest) render(t *testing.T) ([]api.Message, []string) {
 	testutil.FailErr(t, "load", err)
 	assembled, _ := w.svc.Assemble(ctx, w.sess, loaded, "")
 	req := requestFor(w.sess, w.frame, transcript.Project(api.FilterPromptHistory(assembled)))
+	if w.svc != nil && w.svc.recallAvailable != nil && w.svc.recallAvailable(ctx, w.sess) {
+		req = requestForWithRecall(t, w.sess, w.frame, transcript.Project(api.FilterPromptHistory(assembled)))
+	}
 	req.Model = "fixture-model"
 	fitted, err := w.svc.FitRequest(ctx, w.sess, assembled, req, w.budgets, nil)
 	testutil.FailErr(t, "fit", err)

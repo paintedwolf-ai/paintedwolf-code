@@ -105,8 +105,6 @@ var noneClassifiedPathArgs = map[string]bool{
 	"promote_overlay/resolutions.path":                             false,
 	"scan_query/selector.paths":                                    false,
 	"scan_query/path":                                              false,
-	"state_query/path":                                             false,
-	"state_update/path":                                            false,
 	"submit_verdict/cited_evidence.path":                           false,
 	"task/scope.paths":                                             false,
 	"http_request/capture_tokens.from":                             false,

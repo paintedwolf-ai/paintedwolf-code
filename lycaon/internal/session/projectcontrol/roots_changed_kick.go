@@ -149,18 +149,14 @@ func (m *Service) ObserveSessionPosture(ctx context.Context, sessionID string, c
 			}
 			return
 		}
-		data := prompts.PostureChangedKickData(current)
-		curExt, _ := m.lastSessionExternalHidden.Load(sessionID)
-		data["command_external_changed"] = true
-		data["command_external_hidden"] = curExt.(bool)
+		data := map[string]any{"command_external_changed": true}
 		m.anchors.Emit(ctx, sessionID, anchor.ProjectPostureChanged, anchor.Envelope{Vars: data})
 		return
 	}
-	data := prompts.PostureChangedKickData(current)
+	data := map[string]any{}
 	if savedExt, ok := m.pendingExternalBaselines.Load(sessionID); ok {
 		if curExt, ok := m.lastSessionExternalHidden.Load(sessionID); ok && savedExt.(bool) != curExt.(bool) {
 			data["command_external_changed"] = true
-			data["command_external_hidden"] = curExt.(bool)
 		}
 	}
 	m.anchors.Emit(ctx, sessionID, anchor.ProjectPostureChanged, anchor.Envelope{Vars: data})
@@ -211,10 +207,9 @@ func (m *Service) ObserveSessionCommandExternal(ctx context.Context, sessionID s
 		}
 		return
 	}
-	data := prompts.PostureChangedKickData(currentPosture)
+	data := map[string]any{}
 	if baselineHidden != currentHidden {
 		data["command_external_changed"] = true
-		data["command_external_hidden"] = currentHidden
 	}
 	m.anchors.Emit(ctx, sessionID, anchor.ProjectPostureChanged, anchor.Envelope{Vars: data})
 }
