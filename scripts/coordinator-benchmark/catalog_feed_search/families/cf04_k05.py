@@ -347,20 +347,20 @@ def run_k05_suite(
 
     with tempfile.TemporaryDirectory(prefix="cf04-k05-") as tmp_str:
         tmp = Path(tmp_str)
-        # Materialize one 50k tree and one 500k tree (reused across pairs in fresh sidecar/project attaches)
-        unique_sizes = sorted(set(sizes))
-        trees: dict[int, tuple[Path, ScaleTreeShape]] = {}
-        for sz in unique_sizes:
-            tdir = tmp / f"scale-{sz}"
-            shape = write_scalefixture_tree(tdir, sz)
-            trees[sz] = (tdir, shape)
-
         other_dir = tmp / "other-project"
         other_dir.mkdir(parents=True, exist_ok=True)
         (other_dir / "ping.txt").write_bytes(b"K05OtherProjectPingToken responsive\n")
 
-        sidecar = start_sidecar(engine_bin, tmp / "sidecar", cwd=d1_worktree)
+        # Boot sidecar before 500k tree materialization so APFS/ext4 flush doesn't delay /health startup.
+        sidecar = start_sidecar(engine_bin, tmp / "sidecar", cwd=d1_worktree, ready_timeout_s=90.0)
         try:
+            # Materialize one 50k tree and one 500k tree (reused across pairs in fresh project attaches)
+            unique_sizes = sorted(set(sizes))
+            trees: dict[int, tuple[Path, ScaleTreeShape]] = {}
+            for sz in unique_sizes:
+                tdir = tmp / f"scale-{sz}"
+                shape = write_scalefixture_tree(tdir, sz)
+                trees[sz] = (tdir, shape)
             launch_receipt = sidecar.launch_receipt()
             receipt_path = out / "launch_receipt.json"
             receipt_path.write_text(json.dumps(launch_receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")

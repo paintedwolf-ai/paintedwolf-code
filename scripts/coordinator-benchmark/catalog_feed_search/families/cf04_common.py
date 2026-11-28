@@ -100,7 +100,7 @@ def start_sidecar(
     work_dir: Path,
     *,
     cwd: Path | None = None,
-    ready_timeout_s: float = 25.0,
+    ready_timeout_s: float = 90.0,
     extra_env: dict[str, str] | None = None,
 ) -> SidecarHandle:
     """Launch an isolated real D1 lycaon-dev sidecar (never touches 8787 or ~/.config/paintedwolf-dev)."""
