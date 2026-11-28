@@ -31,22 +31,24 @@ func TestWorkerResultNoticeRendersEveryShape(t *testing.T) {
 	for _, tool := range named {
 		namedLoaded[tool] = true
 	}
-	withNamed, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
+	withNamed, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Visible:   named,
-		Loaded:    namedLoaded,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Offered:   readerDeclaredOffer(profiles, prompts.CoordinatorProfileID, named, namedLoaded),
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader withNamed", err)
-	withoutNamed, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
+	withoutNamed, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Visible:   []string{"recall"},
-		Loaded:    map[string]bool{"recall": true},
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Offered:   readerDeclaredOffer(profiles, prompts.CoordinatorProfileID, []string{"recall"}, map[string]bool{"recall": true}),
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader withoutNamed", err)
 	shapes := map[string]map[string]any{
@@ -66,7 +68,7 @@ func TestWorkerResultNoticeRendersEveryShape(t *testing.T) {
 			}
 			data := map[string]any{"worker_result": notice}
 			prompts.MergeCoordinatorKickVarsForTools(data, reader)
-			out, err := engine.RenderKick(t.Context(), "coordinator-worker-task-finished", data)
+			out, err := engine.RenderKick(t.Context(), reader, "coordinator-worker-task-finished", data)
 			testutil.FailErr(t, name, err)
 			for _, want := range []string{"`fixer`", notice["leg_status"].(string)} {
 				if !strings.Contains(out, want) {

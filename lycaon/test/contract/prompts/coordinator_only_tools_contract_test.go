@@ -26,7 +26,6 @@ var coordinatorOnlyTools = []string{
 	"workflow_compose",
 	"workflow_compose_from_template",
 	"workflow_persist",
-	"workflow_user_feedback",
 	"ask_user",
 }
 

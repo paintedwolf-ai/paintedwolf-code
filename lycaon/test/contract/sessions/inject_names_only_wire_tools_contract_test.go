@@ -20,7 +20,7 @@ func TestInjectToolSurfaceNamesOnlyCatalogTools(t *testing.T) {
 
 	named := 0
 	for _, profile := range profiles {
-		surface, err := prompts.LoadAgentToolSurface(profile.ID, nil, nil, prompts.ReaderInput{}, profiles)
+		surface, err := prompts.LoadAgentToolSurface(profile.ID, nil, nil, nil, nil, profiles)
 		contractcheck.FailErr(t, "load inject tool surface for "+profile.ID, err)
 
 		var undeclared []string

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/spawn"
 )
 
 // KicksTemplatePrefix identifies kick templates.
@@ -23,6 +24,16 @@ func validateSubRef(ref, prefix string) (string, error) {
 		return "", fmt.Errorf("template ref %q must use prefix %q", ref, prefix)
 	}
 	return name, nil
+}
+
+func mergeOccurrenceWithReader(reader Reader, data map[string]any) (map[string]any, error) {
+	occurrence := make(map[string]any, len(data))
+	for k, v := range data {
+		if !IsDeclaredOrReservedReaderFact(k) {
+			occurrence[k] = v
+		}
+	}
+	return Vars(reader, occurrence)
 }
 
 // RenderInject executes inject/{ref}.md with a full DTO map.
@@ -55,8 +66,9 @@ func (e *FileTemplateEngine) RenderGuidance(ctx context.Context, ref string, dat
 	return e.Render(ctx, path, data)
 }
 
-// RenderKick executes kicks/{name}.md (name includes coordinator- or worker- prefix).
-func (e *FileTemplateEngine) RenderKick(ctx context.Context, name string, data map[string]any) (string, error) {
+// RenderKick executes kicks/{name}.md (name includes coordinator- or worker- prefix)
+// against a validated Reader merged with occurrence data.
+func (e *FileTemplateEngine) RenderKick(ctx context.Context, reader Reader, name string, data map[string]any) (string, error) {
 	if e == nil {
 		return "", fmt.Errorf("template engine not configured")
 	}
@@ -64,6 +76,16 @@ func (e *FileTemplateEngine) RenderKick(ctx context.Context, name string, data m
 	if err != nil {
 		return "", err
 	}
+	if !reader.Valid() {
+		return "", fmt.Errorf("render kick %q requires a valid reader", kickName)
+	}
+	merged, err := mergeOccurrenceWithReader(reader, data)
+	if err != nil {
+		return "", err
+	}
+	if reader.ProfileID() == CoordinatorProfileID {
+		spawn.RefreshSizingHintVars(merged)
+	}
 	path := KicksTemplatePrefix + kickName + ".md"
-	return e.Render(ctx, path, data)
+	return e.Render(ctx, path, merged)
 }

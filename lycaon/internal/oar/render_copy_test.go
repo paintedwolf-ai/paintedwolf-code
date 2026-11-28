@@ -52,7 +52,7 @@ func TestHostPresentationPreservesOmittedAndEmptyCopyMembers(t *testing.T) {
 func TestEvaluatedRuleWithoutCopyDoesNotConsultFallbackCatalog(t *testing.T) {
 	setupAuthorCheckRenderer(t)
 	rule := &Rule{ID: "FIXTURE", Effect: EffectBlock}
-	decision := decisionFromRule(rule, NewGuardContext(), nil)
+	decision := decisionFromRule(t.Context(), rule, NewGuardContext(), nil)
 	if decision.Copy == nil || len(decision.Copy) != 0 {
 		t.Fatalf("omitted rule copy was not frozen: %#v", decision.Copy)
 	}

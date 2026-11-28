@@ -8,7 +8,7 @@ when: '!paintedwolf.batch_closed && paintedwolf.is_host_cycle_turn && size(paint
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
-message: 'Host cycle turn ended with prose only — call `wait()` or actionable work'
+message: 'Host cycle turn ended with prose only and no tool action'
 what: A host cycle turn ([host:loop-wake], or a turn the host opened to report a worker finished) ended with assistant prose and no tool calls
 cause: 'The host cycle still has open checklist work, a worker working or asking, an unaccounted complete result, unresolved changes, or a surface that requires a tool action; shelved changes and waiting workers do not count as open work'
 why: 'Finishing one wave does not settle the remaining batch. An explicit action keeps progress and wake conditions aligned'

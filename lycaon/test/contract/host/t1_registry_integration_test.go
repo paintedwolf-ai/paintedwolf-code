@@ -34,9 +34,9 @@ func TestPostureDenyUsesRegisteredToolName(t *testing.T) {
 		t.Fatal("expected structured deny code")
 	}
 
-	allow, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureBuild, ToolName: "state_query"}})
+	allow, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureBuild, ToolName: "state_start"}})
 	contractcheck.FailErr(t, "engine.Evaluate failed", err)
 	if !allow.Allowed {
-		t.Fatalf("expected state_query allowed in build posture, code=%q", allow.Code)
+		t.Fatalf("expected state_start allowed in build posture, code=%q", allow.Code)
 	}
 }

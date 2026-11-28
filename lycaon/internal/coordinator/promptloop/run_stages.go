@@ -3,16 +3,17 @@ package promptloop
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolreach"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/workerprogress"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -67,6 +68,9 @@ type turnStreamState struct {
 	offeredToolNames      []string
 	offeredToolSchemas    map[string]map[string]any
 	coordinatorFrameReady bool
+	// reader projects the last request; it is invalid when its host facts
+	// could not be established.
+	reader prompts.Reader
 }
 
 type turnBatchState struct {
@@ -80,7 +84,7 @@ type turnBatchState struct {
 	statusCursorPaths      []string
 	statusCursorGroupDepth int
 	turnToolPlan           toolsurface.Plan
-	turnPrograms           toolreach.Programs
+	turnPrograms           *toolreach.ProgramTable
 	deliveryCoverage       map[string]string
 }
 
@@ -341,8 +345,8 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		return out, nil
 	}
 
-	if st != nil && !tools.CallReach(ctx).Known() {
-		ctx = tools.WithCallReach(ctx, st.requestReach())
+	if st != nil && !toolreach.FromContext(ctx).Known() {
+		ctx = toolreach.WithRequest(ctx, st.requestReach())
 	}
 	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, st.history, surfaceID, assistantMsg)
 	if err != nil {

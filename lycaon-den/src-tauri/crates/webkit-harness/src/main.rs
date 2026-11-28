@@ -14,9 +14,11 @@ mod probe;
 #[cfg(target_os = "macos")]
 mod scroll_invariants;
 #[cfg(target_os = "macos")]
+mod wea_native_probe;
+#[cfg(target_os = "macos")]
 mod wheel_glide;
 
-const USAGE: &str = "usage: webkit-harness probe | scroll-invariants <harness URL> | wheel-glide";
+const USAGE: &str = "usage: webkit-harness probe | scroll-invariants <harness URL> | wheel-glide | wea-native-probe <harness URL> <screenshot PNG>";
 
 #[cfg(target_os = "macos")]
 fn main() {
@@ -25,6 +27,7 @@ fn main() {
         ["probe"] => probe::run(),
         ["scroll-invariants", url] => scroll_invariants::run(url),
         ["wheel-glide"] => wheel_glide::run(),
+        ["wea-native-probe", url, screenshot_path] => wea_native_probe::run(url, screenshot_path),
         _ => {
             eprintln!("{USAGE}");
             2

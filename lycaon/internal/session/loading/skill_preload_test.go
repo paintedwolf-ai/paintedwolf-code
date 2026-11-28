@@ -49,7 +49,7 @@ func TestSkillPreloadRequiresOneQualifiedCatalogMatch(t *testing.T) {
 
 func TestSkillPreloadRecordsOnlySuccessfulRendering(t *testing.T) {
 	for _, fail := range []bool{false, true} {
-		m := &Service{Ledger: turnload.NewLedger()}
+		m := &Service{Ledger: turnload.NewLedger(), hostFacts: testHostFacts}
 		m.SetSkillBodyRenderer(func(_ context.Context, _ tools.ToolContext, sk skills.Skill) (string, error) {
 			if fail {
 				return "", errors.New("render failed")
@@ -97,8 +97,9 @@ func TestSelectSkillPreloadGatesStockSkillsByTurnOfferedTools(t *testing.T) {
 
 	// Absent required tools exclude the stock skill.
 	m := &Service{
-		Ledger:  turnload.NewLedger(),
-		decider: &decidetest.Fake{Scores: []float64{3.8}},
+		hostFacts: testHostFacts,
+		Ledger:    turnload.NewLedger(),
+		decider:   &decidetest.Fake{Scores: []float64{3.8}},
 		skills: func(context.Context, *api.Session, string, []string) ([]skills.Skill, []extpacks.Diagnostic) {
 			return roster[:1], nil
 		},
@@ -152,14 +153,16 @@ func preloadRenderService(t *testing.T) *Service {
 			surfaceID := strings.TrimSpace(tctx.Turn.TurnSurfaceID)
 			plan, err := prompts.CompileSurfacePlan(surfaceID, 1)
 			testutil.FailErr(t, "compile surface plan", err)
-			reader, err := prompts.NewReader(prompts.ReaderInput{
-				ProfileID: prompts.CoordinatorProfileID,
-				SurfaceID: surfaceID,
+			reader, err := prompts.NewReader(prompts.HostFacts{
 				Profiles:  profiles,
-				Plan:      plan,
 				RootCount: 1,
 				HasGit:    true,
 				WebSearch: true,
+			}, prompts.TurnProjection{
+				ProfileID: prompts.CoordinatorProfileID,
+				SurfaceID: surfaceID,
+				Plan:      plan,
+				Offered:   (plan).ImmediateNames(),
 			})
 			testutil.FailErr(t, "new reader", err)
 			vars, err := prompts.SkillVars(reader)
@@ -170,7 +173,7 @@ func preloadRenderService(t *testing.T) *Service {
 			return map[string]any{"mode": "bounded"}
 		},
 	}
-	m := &Service{Ledger: turnload.NewLedger()}
+	m := &Service{Ledger: turnload.NewLedger(), hostFacts: testHostFacts}
 	m.SetSkillBodyRenderer(read.RenderBody)
 	return m
 }
@@ -215,8 +218,9 @@ func TestRenderSkillPreloadKeepsProjectSkillLiteral(t *testing.T) {
 func TestTurnDecisionHoldsEnginePriorityAcrossBothCalls(t *testing.T) {
 	fake := &decidetest.Fake{Scores: []float64{3.8}}
 	m := &Service{
-		Ledger:  turnload.NewLedger(),
-		decider: fake,
+		hostFacts: testHostFacts,
+		Ledger:    turnload.NewLedger(),
+		decider:   fake,
 		skills: func(context.Context, *api.Session, string, []string) ([]skills.Skill, []extpacks.Diagnostic) {
 			return []skills.Skill{{Name: "user-skill", Description: "Custom project skill.", Body: "Do the work.", UserProvided: true}}, nil
 		},
@@ -239,4 +243,13 @@ func TestTurnDecisionHoldsEnginePriorityAcrossBothCalls(t *testing.T) {
 			t.Fatalf("calls=%v want %v", fake.Calls, want)
 		}
 	}
+}
+
+// testHostFacts is a one-root session with the shipped profiles.
+func testHostFacts(context.Context, *api.Session) (prompts.HostFacts, error) {
+	profiles, err := sandbox.LoadToolProfiles()
+	if err != nil {
+		return prompts.HostFacts{}, err
+	}
+	return prompts.HostFacts{Profiles: profiles, RootCount: 1, WebSearch: true}, nil
 }

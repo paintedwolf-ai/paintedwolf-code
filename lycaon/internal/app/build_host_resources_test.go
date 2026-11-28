@@ -2,9 +2,10 @@ package app
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/app/configuration"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/app/configuration"
 
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/llm"

@@ -3,9 +3,10 @@ package promptloop
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/agentpresence"

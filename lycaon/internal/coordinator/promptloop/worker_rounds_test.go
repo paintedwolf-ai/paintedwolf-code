@@ -32,7 +32,7 @@ func TestApplySpendCeilingFencesWorkerRound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("applySpendCeiling: %v", err)
 	}
-	if decision.WindDown || st.spendSoftStopGranted {
+	if !decision.WindDown.Empty() || st.spendSoftStopGranted {
 		t.Fatalf("worker got a wind-down round: decision=%+v", decision)
 	}
 	if decision.Finished == nil || decision.Finished.Outcome != promptresult.OutcomeSpendLimit || !st.turnEndedGuidanceReject {
