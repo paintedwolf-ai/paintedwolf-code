@@ -168,6 +168,12 @@ func splitRawLines(s string) []rawLine {
 // all-rewritten interiors stay strictly linear in line count.
 const maxMixedEOLLCSCells = 65536
 
+// maxMixedEOLMyersD bounds the shortest-edit-script distance explored by
+// alignGapMyers. Any gap within this edit distance (even across thousands of
+// identical repeated interior lines with no unique anchors) aligns exactly in
+// O((m+n)*D) time, while large all-rewritten gaps stay bounded in O(maxD^2).
+const maxMixedEOLMyersD = 128
+
 // SerializePreservingMixedEOL serializes LF-normalized draft text while keeping
 // the exact original per-line terminators ("\r\n" vs "\n") of untouched lines
 // from beforeRawText. Modified or newly inserted lines take fallbackEOL.
@@ -336,7 +342,15 @@ func alignGapBounded(beforeMid, draftMid []rawLine, bLo, bHi, dLo, dHi, baseOffs
 	if m <= 0 || n <= 0 {
 		return steps
 	}
-	// Strictly bound DP work: if m*n exceeds maxMixedEOLLCSCells, skip DP in O(1).
+	// First try bounded Myers O(ND) shortest-edit-script alignment so large
+	// gaps with repeated bodies and small edit distance preserve every
+	// unchanged line's exact terminator.
+	if aligned, myersSteps := alignGapMyers(beforeMid, draftMid, bLo, bHi, dLo, dHi, baseOffset, out); aligned {
+		return steps + myersSteps
+	} else {
+		steps += myersSteps
+	}
+	// Strictly bound fallback DP work: if m*n exceeds maxMixedEOLLCSCells, skip DP in O(1).
 	if int64(m)*int64(n) > maxMixedEOLLCSCells {
 		return steps
 	}
@@ -368,6 +382,85 @@ func alignGapBounded(beforeMid, draftMid []rawLine, bLo, bHi, dLo, dHi, baseOffs
 		}
 	}
 	return steps
+}
+
+// alignGapMyers computes an exact shortest-edit-script alignment for
+// beforeMid[bLo:bHi] vs draftMid[dLo:dHi] when the edit distance is at most
+// maxMixedEOLMyersD. It returns false without modifying out if the edit
+// distance exceeds the cap.
+func alignGapMyers(beforeMid, draftMid []rawLine, bLo, bHi, dLo, dHi, baseOffset int, out []int) (bool, int) {
+	m := bHi - bLo
+	n := dHi - dLo
+	maxD := maxMixedEOLMyersD
+	if m+n < maxD {
+		maxD = m + n
+	}
+	offset := maxD
+	v := make([]int, 2*maxD+1)
+	trace := make([][]int, 0, maxD+1)
+	steps := 0
+	foundD := -1
+
+	for d := 0; d <= maxD; d++ {
+		snap := make([]int, len(v))
+		copy(snap, v)
+		trace = append(trace, snap)
+
+		for k := -d; k <= d; k += 2 {
+			steps++
+			var x int
+			if k == -d || (k != d && v[offset+k-1] < v[offset+k+1]) {
+				x = v[offset+k+1]
+			} else {
+				x = v[offset+k-1] + 1
+			}
+			y := x - k
+			for x < m && y < n && beforeMid[bLo+x].body == draftMid[dLo+y].body {
+				x++
+				y++
+				steps++
+			}
+			v[offset+k] = x
+			if x == m && y == n {
+				foundD = d
+				break
+			}
+		}
+		if foundD >= 0 {
+			break
+		}
+	}
+	if foundD < 0 {
+		return false, steps
+	}
+
+	x, y := m, n
+	for d := foundD; d > 0; d-- {
+		prev := trace[d]
+		k := x - y
+		var prevK int
+		if k == -d || (k != d && prev[offset+k-1] < prev[offset+k+1]) {
+			prevK = k + 1
+		} else {
+			prevK = k - 1
+		}
+		prevX := prev[offset+prevK]
+		prevY := prevX - prevK
+		for x > prevX && y > prevY {
+			x--
+			y--
+			out[dLo+y] = baseOffset + bLo + x
+			steps++
+		}
+		x, y = prevX, prevY
+	}
+	for x > 0 && y > 0 {
+		x--
+		y--
+		out[dLo+y] = baseOffset + bLo + x
+		steps++
+	}
+	return true, steps
 }
 
 // EncodeDocument returns the bytes a save of LF-normalized text writes in its

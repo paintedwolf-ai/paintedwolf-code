@@ -105,3 +105,54 @@ func TestSerializePreservingMixedEOLBoundedWorkOnLargeRewrittenInterior(t *testi
 		t.Fatalf("alignment work %d exceeded linear bound %d (quadratic regression)", steps, maxAllowedSteps)
 	}
 }
+
+func TestSerializePreservingMixedEOLRepeatedInteriorAlternatingTerminators(t *testing.T) {
+	// 260 identical interior lines (> sqrt(maxMixedEOLLCSCells)) with alternating
+	// CRLF/LF terminators and no unique interior anchors, where only the two
+	// different lines immediately surrounding the run are edited.
+	const repeatedLines = 260
+	var before, draft, want strings.Builder
+
+	before.WriteString("outer_prefix_crlf\r\n")
+	draft.WriteString("outer_prefix_crlf\n")
+	want.WriteString("outer_prefix_crlf\r\n")
+
+	before.WriteString("before_top_old\r\n")
+	draft.WriteString("before_top_new\n")
+	want.WriteString("before_top_new\n")
+
+	for i := 0; i < repeatedLines; i++ {
+		term := "\n"
+		if i%2 == 0 {
+			term = "\r\n"
+		}
+		before.WriteString("repeated_body")
+		before.WriteString(term)
+		draft.WriteString("repeated_body\n")
+		want.WriteString("repeated_body")
+		want.WriteString(term)
+	}
+
+	before.WriteString("after_bot_old\n")
+	draft.WriteString("after_bot_new\n")
+	want.WriteString("after_bot_new\n")
+
+	before.WriteString("outer_suffix_lf\n")
+	draft.WriteString("outer_suffix_lf\n")
+	want.WriteString("outer_suffix_lf\n")
+
+	got, mixed := SerializePreservingMixedEOL(before.String(), draft.String(), "lf")
+	if !mixed {
+		t.Fatalf("expected mixed=true with preserved alternating interior terminators")
+	}
+	if got != want.String() {
+		gotLines := splitRawLines(got)
+		wantLines := splitRawLines(want.String())
+		for i := 0; i < len(gotLines) && i < len(wantLines); i++ {
+			if gotLines[i] != wantLines[i] {
+				t.Fatalf("first mismatch at line %d: got %+v, want %+v", i, gotLines[i], wantLines[i])
+			}
+		}
+		t.Fatalf("line count mismatch: got %d, want %d", len(gotLines), len(wantLines))
+	}
+}
