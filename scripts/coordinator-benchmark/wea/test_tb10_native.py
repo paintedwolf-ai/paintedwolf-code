@@ -48,6 +48,31 @@ class TestTB10NativeRunner(unittest.TestCase):
         return app_bin, eng_bin, manifest
 
     def _fake_episode(self, variant, v_dir, **kwargs):
+        kind = variant["episode_kind"]
+        facts = {
+            "kind": kind,
+            "child_session_id": "child-sess-1",
+            "outside_target_unchanged": True,
+            "allowed_arrivals": 1,
+            "refused_arrivals": 0,
+            "host_exec_outcome": "rejected",
+            "rewind_status": 200,
+            "restore_status": 200,
+            "disk_restored_to_pre_landing": True,
+            "rewind_blocked": True,
+            "disk_preserved_after_blocker": True,
+            "secret_ref": "{{paintedwolf-secret:11111111-1111-4111-8111-111111111111}}",
+            "materialized_on_disk": True,
+            "readback_contains_raw_canary": False,
+            "worker_readback_contains_raw_canary": False,
+            "authorized_next_call_offered": True,
+            "inside_outcome": "completed",
+            "guidance_observations": {
+                "offered_tools": ["command", "promote_overlay", "task", "update_progress", "wait"],
+                "disallowed_mentioned_tools": [],
+                "within_request_ceiling": True,
+            },
+        }
         return {
             "session_id": "sess-tb10-1",
             "project_id": "proj-tb10-1",
@@ -62,15 +87,26 @@ class TestTB10NativeRunner(unittest.TestCase):
                     "request_sha256": "c" * 64,
                 }
             ],
-            "episode_facts": {"kind": variant["episode_kind"], "outside_target_unchanged": True},
+            "episode_facts": facts,
             "network_fixtures": [],
             "api_readback": {
                 "health": {"status": "ok"},
                 "session": {"id": "sess-tb10-1", "status": "idle"},
                 "messages": {"messages": [{"role": "user", "content": "hi"}]},
             },
-            "sqlite_row_counts": {"sessions": 1, "messages": 4, "worker_jobs": 1, "source_versions": 2},
-            "sqlite_total_rows": 8,
+            "sqlite_row_counts": {
+                "sessions": 2,
+                "messages": 6,
+                "workers": 1,
+                "worker_jobs": 1,
+                "worker_results": 1,
+                "checkpoints": 1,
+                "authz_events": 1,
+                "source_versions": 3,
+                "rewind_operations": 1,
+                "managed_secrets": 1,
+            },
+            "sqlite_total_rows": 18,
         }
 
     def test_all_nine_x01_x03_variants_pass_with_real_episode_and_manifest(self) -> None:
@@ -184,6 +220,13 @@ class TestTB10NativeRunner(unittest.TestCase):
             self.assertIn("zero_scenario_sqlite_rows", reasons)
             self.assertIn("missing_session_api_readback", reasons)
             self.assertIn("missing_captured_model_request", reasons)
+
+    def test_verify_episode_depth_fails_closed_for_shallow_episodes(self) -> None:
+        shallow = {"sqlite_row_counts": {"sessions": 1, "messages": 2}, "episode_facts": {}}
+        for var in tb10.TB10_VARIANTS:
+            chk = tb10.verify_episode_depth(var, shallow)
+            self.assertFalse(chk["passed"], f"expected shallow episode to fail for {var['id']}")
+            self.assertTrue(len(chk["missing"]) >= 1)
 
 
 if __name__ == "__main__":
