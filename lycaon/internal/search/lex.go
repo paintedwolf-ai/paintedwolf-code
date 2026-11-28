@@ -29,13 +29,20 @@ type token struct {
 
 // lex tokenizes a query. Unknown punctuation separates words, an open quote
 // runs to the end, a stray ')' is dropped; only a recognized filter can error.
+// When a query contains no word or quoted text terms, bare non-grammar
+// punctuation runs (such as "==" or "!=") are preserved as literal text terms.
 func lex(query string) ([]token, error) {
 	var out []token
+	var skippedPunct []token
+	hasText := false
 	i := 0
 	depth := 0
 	for {
 		i = skipSpace(query, i)
 		if i >= len(query) {
+			if !hasText && len(skippedPunct) > 0 {
+				out = mergeTokensByPos(out, skippedPunct)
+			}
 			out = append(out, token{kind: tokEOF, pos: i})
 			return out, nil
 		}
@@ -56,6 +63,7 @@ func lex(query string) ([]token, error) {
 		case '"', '\'':
 			text, next := readQuoted(query, i)
 			if strings.TrimSpace(text) != "" {
+				hasText = true
 				out = append(out, token{kind: tokText, text: text, pos: pos, quoted: true})
 			}
 			i = next
@@ -63,12 +71,24 @@ func lex(query string) ([]token, error) {
 		}
 		word, next := readWord(query, i)
 		if word == "" {
-			_, w := utf8.DecodeRuneInString(query[i:])
-			i += w
+			punct, pNext := readPunctRun(query, i)
+			if punct != "" {
+				if isBareOperatorToken(punct) {
+					skippedPunct = append(skippedPunct, token{kind: tokText, text: punct, pos: pos})
+				}
+				i = pNext
+			} else {
+				_, w := utf8.DecodeRuneInString(query[i:])
+				i += w
+			}
 			continue
 		}
 		// A dot ending a bare word is sentence punctuation, not part of it.
+		rawWord := word
 		if word = strings.TrimRight(word, "."); word == "" {
+			if isBareOperatorToken(rawWord) {
+				skippedPunct = append(skippedPunct, token{kind: tokText, text: rawWord, pos: pos})
+			}
 			i = next
 			continue
 		}
@@ -92,6 +112,7 @@ func lex(query string) ([]token, error) {
 			if !isAllowlistedField(field) {
 				// Field-like prose remains searchable text.
 				text, end := readProseFieldRun(query, pos, next)
+				hasText = true
 				out = append(out, token{kind: tokText, text: text, pos: pos})
 				i = end
 				continue
@@ -115,9 +136,57 @@ func lex(query string) ([]token, error) {
 			out = append(out, token{kind: tokFilter, field: field, text: value, pos: pos})
 			continue
 		}
+		hasText = true
 		out = append(out, token{kind: tokText, text: word, pos: pos})
 		i = next
 	}
+}
+
+func isWordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-' ||
+		r == '.' || r == '/' || r == '*' || r == '#' || r == '\''
+}
+
+func readPunctRun(s string, i int) (punct string, next int) {
+	start := i
+	for i < len(s) {
+		r, w := utf8.DecodeRuneInString(s[i:])
+		if unicode.IsSpace(r) || r == '(' || r == ')' || r == '"' || r == '\'' || isWordRune(r) {
+			break
+		}
+		i += w
+	}
+	return s[start:i], i
+}
+
+// isBareOperatorToken reports whether s is a recognized source-code punctuation
+// operator (composed of non-word punctuation runes) that should remain
+// searchable when pasted without word terms, while keeping arbitrary stray
+// delimiters (such as "[", "{}", "!?+") rejected.
+func isBareOperatorToken(s string) bool {
+	switch s {
+	case "==", "===", "!=", "!==", "<=", ">=", "::", ":=", "=>", "&&", "||", "??", "<<", ">>", "+=", "%=", "...":
+		return true
+	default:
+		return false
+	}
+}
+
+func mergeTokensByPos(a, b []token) []token {
+	merged := make([]token, 0, len(a)+len(b))
+	i, j := 0, 0
+	for i < len(a) && j < len(b) {
+		if a[i].pos <= b[j].pos {
+			merged = append(merged, a[i])
+			i++
+		} else {
+			merged = append(merged, b[j])
+			j++
+		}
+	}
+	merged = append(merged, a[i:]...)
+	merged = append(merged, b[j:]...)
+	return merged
 }
 
 func isFieldName(s string) bool {
@@ -149,8 +218,7 @@ func readWord(s string, i int) (word string, next int) {
 	for i < len(s) {
 		r, w := utf8.DecodeRuneInString(s[i:])
 		// Apostrophe keeps contractions ("don't") as one free-text token.
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-' ||
-			r == '.' || r == '/' || r == '*' || r == '#' || r == '\'' {
+		if isWordRune(r) {
 			i += w
 			continue
 		}
