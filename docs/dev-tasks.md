@@ -8,7 +8,7 @@ Toolchain setup, local dev stacks, debug capture, and the `./task` targets with 
 
 ## Prerequisites
 
-- macOS on Apple Silicon at or above the floor in `lycaon/internal/platformfloor/macos_floor.txt`, with Xcode Command Line Tools (`xcode-select --install`), or Linux on x86-64 or ARM64 with the native build dependencies listed in `.github/actions/setup-linux-native/packages.txt`
+- macOS on Apple Silicon at or above the floor in `lycaon/internal/platformfloor/macos_floor.txt`, with Xcode Command Line Tools (`xcode-select --install`), or Linux on x86-64 or ARM64 with a C/C++ toolchain, pkg-config, OpenSSL headers, and the native build dependencies listed in `.github/actions/setup-linux-native/packages.txt`
 - Go at the `go` directive in `lycaon/go.mod`
 - [Bun](https://bun.sh) at `.bun-version` for `lycaon-den/`
 - Node at `.node-version` for OpenAPI lint, bundle, and codegen
