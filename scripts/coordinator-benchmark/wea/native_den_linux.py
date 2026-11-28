@@ -1088,6 +1088,52 @@ def run_linux_tauri_native(
                 time.sleep(2.5)
                 chat_opened = bool(sess_match.get("found"))
                 _capture_x11_window_png(xid, out / "linux-native-den-tauri-chat.png")
+                # Dismiss the normal tip popover ("Disable tips" / "Got it") so the
+                # worker card is unobstructed, then capture the Workers and Saved approvals surfaces.
+                tip_dismiss = _activate_atspi_button(proc.pid, "Disable tips", invoke=True)
+                if not tip_dismiss.get("found"):
+                    tip_dismiss = _activate_atspi_button(proc.pid, "Got it", invoke=True)
+                navigation_events.append({"step": "dismiss_tips", **tip_dismiss})
+                if tip_dismiss.get("found"):
+                    if not tip_dismiss.get("invoked") and isinstance(tip_dismiss.get("center"), list):
+                        cx, cy = tip_dismiss["center"]
+                        navigation_events.append({"step": "dismiss_tips_click", **_click_x11_window_point(xid, cx, cy)})
+                    time.sleep(1.0)
+                _capture_x11_window_png(xid, out / "linux-native-den-tauri-chat-unobstructed.png")
+
+                workers_btn = _activate_atspi_button(proc.pid, "Workers", invoke=True)
+                navigation_events.append({"step": "open_workers", **workers_btn})
+                if workers_btn.get("found"):
+                    if not workers_btn.get("invoked") and isinstance(workers_btn.get("center"), list):
+                        cx, cy = workers_btn["center"]
+                        navigation_events.append({"step": "open_workers_click", **_click_x11_window_point(xid, cx, cy)})
+                    time.sleep(1.2)
+                    _capture_x11_window_png(xid, out / "linux-native-den-tauri-workers.png")
+
+                approvals_trigger = _activate_atspi_button(proc.pid, "Balanced", invoke=True)
+                if not approvals_trigger.get("found"):
+                    approvals_trigger = _activate_atspi_button(proc.pid, "Settings", invoke=True)
+                navigation_events.append({"step": "open_approvals_entry", **approvals_trigger})
+                if approvals_trigger.get("found"):
+                    if not approvals_trigger.get("invoked") and isinstance(approvals_trigger.get("center"), list):
+                        cx, cy = approvals_trigger["center"]
+                        navigation_events.append({"step": "open_approvals_entry_click", **_click_x11_window_point(xid, cx, cy)})
+                    time.sleep(1.2)
+                    approvals_nav = _activate_atspi_match(proc.pid, ["Approvals"], invoke=True)
+                    navigation_events.append({"step": "open_approvals_nav", **approvals_nav})
+                    if approvals_nav.get("found"):
+                        if not approvals_nav.get("invoked") and isinstance(approvals_nav.get("center"), list):
+                            cx, cy = approvals_nav["center"]
+                            navigation_events.append({"step": "open_approvals_nav_click", **_click_x11_window_point(xid, cx, cy)})
+                        time.sleep(1.2)
+                    saved_tab = _activate_atspi_match(proc.pid, ["Saved approvals"], invoke=True)
+                    navigation_events.append({"step": "open_saved_approvals", **saved_tab})
+                    if saved_tab.get("found"):
+                        if not saved_tab.get("invoked") and isinstance(saved_tab.get("center"), list):
+                            cx, cy = saved_tab["center"]
+                            navigation_events.append({"step": "open_saved_approvals_click", **_click_x11_window_point(xid, cx, cy)})
+                        time.sleep(1.2)
+                    _capture_x11_window_png(xid, out / "linux-native-den-tauri-saved-approvals.png")
             atspi_chat_nodes = _collect_atspi_nodes(proc.pid, max_nodes=400)
             atspi_after_nav = _probe_atspi(proc.pid)
             if atspi_after_nav.get("observed"):
@@ -1138,6 +1184,10 @@ def run_linux_tauri_native(
                         api_readback["messages"] = _api_readback(eff_url, eff_token, f"/v1/sessions/{session_id}/messages")
                     except Exception as exc:  # noqa: BLE001
                         api_readback["messages_error"] = str(exc)
+                    try:
+                        api_readback["checkpoints"] = _api_readback(eff_url, eff_token, f"/v1/sessions/{session_id}/checkpoints")
+                    except Exception as exc:  # noqa: BLE001
+                        api_readback["checkpoints_error"] = str(exc)
 
         atspi_ok = bool(atspi_after.get("observed")) if atspi_after.get("available") else True
         passed = bool(
