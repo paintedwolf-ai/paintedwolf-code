@@ -47,12 +47,14 @@ from wea.provenance import REPO_ROOT, collect_provenance, resolve_engine_binary
 from wea.runner import (
     _create_application,
     _extract_edit_records_from_db,
+    _extract_refusal_code,
     _init_git_repo,
     _open_session,
     _resolve_engine_root,
     _save_json,
     _send_tool_call,
     _wait_pending,
+    _wait_tool_result,
 )
 from wea.tb06_history import (
     observe_attribution_state,
@@ -356,39 +358,211 @@ def _run_agent_edit_turn(
     return read_res, write_res, msg_id
 
 
-def _query_latest_file_version_ro(db_path: pathlib.Path, project_id: str, rel_path: str) -> dict[str, Any]:
-    """Read latest source_versions + source_operations row for rel_path via `?mode=ro`."""
+def _ro_query(db_path: pathlib.Path, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+    if not db_path.is_file():
+        return []
     with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
         conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            """
-            SELECT v.id AS version_id, v.file_id, v.root_id, v.path, v.state, v.content_sha256,
-                   v.seq, o.branch_id, o.origin, o.job_id, o.cause, o.command_window_id
-            FROM source_versions v
-            JOIN source_operations o ON o.id = v.operation_id
-            WHERE v.project_id = ? AND v.path = ?
-            ORDER BY v.seq DESC LIMIT 1
-            """,
-            (project_id, rel_path),
-        ).fetchone()
-        return dict(row) if row else {}
+        return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
+def _ro_one(db_path: pathlib.Path, sql: str, params: tuple[Any, ...] = ()) -> dict[str, Any] | None:
+    rows = _ro_query(db_path, sql, params)
+    return rows[0] if rows else None
+
+
+def _finish_session(app: Any, sid: str) -> None:
+    try:
+        pend = app.request(f"/harness/llm/pending?session_id={urllib.parse.quote(sid)}")
+        if pend.get("pending") and pend.get("session_id") == sid:
+            app.request("/harness/llm/respond", {"id": pend["id"], "content": "Slot complete."})
+    except Exception:
+        pass
+    try:
+        app.request(f"/v1/sessions/{sid}/abort", {})
+    except Exception:
+        pass
+
+
+def _extract_job_id(task_res: dict[str, Any]) -> str:
+    return str(
+        (task_res.get("dispatch") or {}).get("worker_id")
+        or ((task_res.get("invocation") or {}).get("evidence") or {}).get("owner_ref")
+        or (task_res.get("dispatch") or {}).get("job_id")
+        or task_res.get("job_id")
+        or ""
+    )
+
+
+def _park_wait(app: Any, sid: str, *, kind: str = "next_worker_done", timeout_ms: int = 60000) -> str:
+    req = _wait_pending(app, sid)
+    if "wait" not in (req.get("tools") or ()) and "request_tools" in (req.get("tools") or ()):
+        load_id = str(uuid.uuid4())
+        app.request(
+            "/harness/llm/respond",
+            {"id": req["id"], "tool_calls": [{"id": load_id, "name": "request_tools", "args": {"need": "wait"}}]},
+        )
+        _wait_tool_result(app, sid, load_id)
+        req = _wait_pending(app, sid)
+    call_id = str(uuid.uuid4())
+    app.request(
+        "/harness/llm/respond",
+        {
+            "id": req["id"],
+            "tool_calls": [
+                {"id": call_id, "name": "wait", "args": {"timeout_ms": timeout_ms, "conditions": [{"kind": kind}]}}
+            ],
+        },
+    )
+    return call_id
+
+
+def _wait_child_sid(app: Any, db_path: pathlib.Path, job_id: str, parent_sid: str) -> str:
+    def poll() -> str | None:
+        row = _ro_one(db_path, "SELECT child_session_id, status, error FROM worker_jobs WHERE id=?", (job_id,))
+        if not row:
+            return None
+        if row["status"] in {"failed", "canceled", "aborted"}:
+            raise RuntimeError(f"worker job {job_id} ended early in {row['status']}: {row['error']!r}")
+        return str(row["child_session_id"]) if row["child_session_id"] else None
+
+    return app.wait_for(poll, f"child session for {job_id}", parent_sid)
+
+
+def _settle_child_leg(
+    app: Any,
+    db_path: pathlib.Path,
+    child_sid: str,
+    job_id: str,
+    parent_sid: str,
+    *,
+    brief: str,
+) -> dict[str, Any]:
+    pend = _wait_pending(app, child_sid)
+    leg_res: dict[str, Any] = {}
+    if "complete_leg" in (pend.get("tools") or ()):
+        _, leg_res, _ = _send_tool_call(
+            app,
+            child_sid,
+            "complete_leg",
+            {"leg_status": "complete", "brief": brief, "objectives_met": [brief]},
+        )
+    else:
+        app.request("/harness/llm/respond", {"id": pend["id"], "content": brief})
+
+    def settled() -> bool:
+        p = app.request(f"/harness/llm/pending?session_id={urllib.parse.quote(child_sid)}")
+        if p.get("pending") and p.get("session_id") == child_sid:
+            app.request("/harness/llm/respond", {"id": p["id"], "content": brief})
+        row = _ro_one(db_path, "SELECT status, error FROM worker_jobs WHERE id=?", (job_id,))
+        if not row:
+            return False
+        if row["status"] == "complete":
+            return True
+        if row["status"] in {"failed", "canceled", "aborted"}:
+            raise RuntimeError(f"worker job {job_id} ended in {row['status']}: {row['error']!r}")
+        return False
+
+    app.wait_for(settled, f"worker {job_id} settled", parent_sid)
+    return leg_res
+
+
+def _run_write_worker_edit(
+    app: Any,
+    db_path: pathlib.Path,
+    parent_sid: str,
+    *,
+    goal: str,
+    scope_paths: list[str],
+    commands: list[str],
+    worker_name: str,
+    brief: str = "Applied requested workspace update.",
+    checkpoint_policy: str | None = None,
+) -> dict[str, Any]:
+    _, task_res, _ = _send_tool_call(
+        app,
+        parent_sid,
+        "task",
+        {
+            "agent_type": "implementer",
+            "name": worker_name,
+            "brief": {"goal": goal, "done_when": [goal]},
+            "scope": {"mode": "write", "paths": scope_paths},
+        },
+    )
+    job_id = _extract_job_id(task_res)
+    task_code = _extract_refusal_code(task_res)
+    if not job_id:
+        return {"job_id": "", "task_res": task_res, "task_code": task_code}
+    wait_id = _park_wait(app, parent_sid)
+    child_sid = _wait_child_sid(app, db_path, job_id, parent_sid)
+    cmd_results: list[dict[str, Any]] = []
+    for cmd in commands:
+        _, cres, _ = _send_tool_call(
+            app,
+            child_sid,
+            "command",
+            {"command": cmd},
+            checkpoint_policy=checkpoint_policy,
+        )
+        cmd_results.append({"command": cmd, "outcome": cres.get("outcome"), "code": _extract_refusal_code(cres), "result": cres})
+    leg_res = _settle_child_leg(app, db_path, child_sid, job_id, parent_sid, brief=brief)
+    _wait_tool_result(app, parent_sid, wait_id)
+    hrow = _ro_one(db_path, "SELECT id FROM worker_results WHERE worker_job_id=? ORDER BY created_at DESC LIMIT 1", (job_id,))
+    handle = str(hrow["id"]) if hrow and hrow.get("id") else ""
+    return {
+        "job_id": job_id,
+        "child_sid": child_sid,
+        "worker_name": worker_name,
+        "result_handle": handle,
+        "task_res": task_res,
+        "cmd_results": cmd_results,
+        "leg_res": leg_res,
+    }
+
+
+def _query_file_versions_with_effects_ro(
+    db_path: pathlib.Path,
+    project_id: str,
+    rel_path: str,
+    *,
+    branch_id: str | None = None,
+    job_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Read source_versions + source_operations + latest source_effects id for rel_path via `?mode=ro`."""
+    if not db_path.is_file():
+        return []
+    clauses = ["v.project_id = ?", "v.path = ?"]
+    params: list[Any] = [project_id, rel_path]
+    if branch_id is not None:
+        clauses.append("o.branch_id = ?")
+        params.append(branch_id)
+    if job_id is not None:
+        clauses.append("o.job_id = ?")
+        params.append(job_id)
+    sql = f"""
+        SELECT v.id AS version_id, v.file_id, v.root_id, v.path, v.state, v.content_sha256,
+               v.seq, o.id AS operation_id, o.branch_id, o.origin, o.job_id, o.cause,
+               o.command_window_id, o.tool_name,
+               (SELECT e.id FROM source_effects e
+                WHERE e.project_id = v.project_id AND e.operation_id = v.operation_id AND e.file_id = v.file_id
+                ORDER BY e.ordinal DESC LIMIT 1) AS effect_id
+        FROM source_versions v
+        JOIN source_operations o ON o.id = v.operation_id
+        WHERE {' AND '.join(clauses)}
+        ORDER BY v.seq ASC
+    """
+    return _ro_query(db_path, sql, tuple(params))
+
+
+def _query_latest_file_version_ro(db_path: pathlib.Path, project_id: str, rel_path: str) -> dict[str, Any]:
+    """Read latest source_versions + source_operations row for rel_path via `?mode=ro`."""
+    rows = _query_file_versions_with_effects_ro(db_path, project_id, rel_path)
+    return rows[-1] if rows else {}
 
 
 def _list_file_versions_ro(db_path: pathlib.Path, project_id: str, rel_path: str) -> list[dict[str, Any]]:
-    with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            """
-            SELECT v.id AS version_id, v.file_id, v.root_id, v.path, v.state, v.content_sha256,
-                   v.seq, o.branch_id, o.origin, o.job_id, o.cause
-            FROM source_versions v
-            JOIN source_operations o ON o.id = v.operation_id
-            WHERE v.project_id = ? AND v.path = ?
-            ORDER BY v.seq ASC
-            """,
-            (project_id, rel_path),
-        ).fetchall()
-        return [dict(r) for r in rows]
+    return _query_file_versions_with_effects_ro(db_path, project_id, rel_path)
 
 
 def _drive_e04_slot(app: Any, slot: SidecarSlotSpec, slot_dir: pathlib.Path) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
@@ -413,89 +587,431 @@ def _drive_e04_slot(app: Any, slot: SidecarSlotSpec, slot_dir: pathlib.Path) -> 
     obs.capture_pre(["target.txt"])
     pre_sha = sha256_bytes((active_root / "target.txt").read_bytes())
 
-    typed_result: dict[str, Any] = {"branch": branch, "author": author, "project_id": project_id, "root_id": active_root_id}
+    typed_result: dict[str, Any] = {
+        "branch": branch,
+        "author": author,
+        "project_id": project_id,
+        "root_id": active_root_id,
+    }
     failures: list[str] = []
 
-    if author == "person":
-        new_text = "line1-base\nline2-person\n"
-        status, resp = _http_call(
-            app,
-            f"/v1/projects/{project_id}/source",
-            {
-                "operation_id": str(uuid.uuid4()),
-                "root_id": active_root_id,
-                "path": "target.txt",
-                "content": new_text,
-                "encoding": "utf-8",
-                "base_sha256": pre_sha,
-            },
-            method="PUT",
-        )
-        typed_result.update({"http_status": status, "response": resp, "expected_origin": "user"})
-        if status != 200:
-            failures.append("e04_person_write_failed")
-    elif author in {"agent", "worker", "landed_worker"}:
-        read_res, write_res, _ = _run_agent_edit_turn(
-            app,
-            session_id,
-            "target.txt",
-            "line2-base",
-            f"line2-{author}",
-            f"Update target.txt for {slot.slot_id}.",
-        )
-        typed_result.update({
-            "read_result": read_res,
-            "write_result": write_res,
-            "expected_origin": "agent",
-        })
-    elif author == "command":
+    def _start_coordinator_turn(prompt_text: str) -> None:
         app.request(
             f"/v1/sessions/{session_id}/prompts",
-            {"operation_id": str(uuid.uuid4()), "text": "Append a line via shell command."},
+            {"operation_id": str(uuid.uuid4()), "text": prompt_text},
         )
-        _, prog_res, _ = _send_tool_call(
+        _send_tool_call(
             app,
             session_id,
             "update_progress",
-            {"content": "## Progress\n- [ ] Update target.txt via command\n"},
+            {"content": f"## Progress\n- [ ] Execute {slot.slot_id}\n"},
         )
-        _send_tool_call(app, session_id, "command", {"command": "cat target.txt"})
-        _, cmd_res, _ = _send_tool_call(
+
+    def _run_external_reconciled_edit(new_text: str) -> dict[str, Any]:
+        # Open editor document first so target.txt is tracked at pre_sha, then mutate on disk and observe.
+        st_open, open_resp = _http_call(
             app,
-            session_id,
-            "command",
-            {"command": "edit --path target.txt --old-string line2-base --new-string line2-command"},
-            checkpoint_policy="approve_once",
+            f"/v1/projects/{project_id}/editor-documents",
+            {"path": "target.txt", "root_id": active_root_id, "client_id": f"wea-{slot.slot_id}"},
+            method="POST",
         )
-        _complete_progress(app, session_id, prog_res, "## Progress\n- [x] Update target.txt via command\n")
-        _finish_turn_text(app, session_id)
-        typed_result.update({"command_result": cmd_res, "expected_origin": "agent"})
-    else:  # external
-        (active_root / "target.txt").write_text("line1-base\nline2-external\n", encoding="utf-8")
-        # Trigger ledger reconciliation via source read/walk.
-        status, resp = _http_call(
-            app,
-            f"/v1/projects/{project_id}/source/walk?baseline=presentation",
-            method="GET",
-        )
-        typed_result.update({"http_status": status, "walk": resp, "expected_origin": "external"})
+        doc_id = str((open_resp or {}).get("id") or "") if isinstance(open_resp, dict) else ""
+        (active_root / "target.txt").write_text(new_text, encoding="utf-8")
+        st_obs, obs_resp = (0, {})
+        if doc_id:
+            st_obs, obs_resp = _http_call(
+                app,
+                f"/v1/projects/{project_id}/editor-documents/{urllib.parse.quote(doc_id)}/observe",
+                {"client_id": f"wea-{slot.slot_id}"},
+                method="POST",
+            )
+        return {
+            "open_status": st_open,
+            "document_id": doc_id,
+            "observe_status": st_obs,
+            "observe_resp": obs_resp,
+        }
+
+    worker_run: dict[str, Any] | None = None
+    worker_latest: dict[str, Any] = {}
+    target_latest: dict[str, Any] = {}
+    expected_worker_sha = ""
+    expected_disk_sha = ""
+
+    try:
+        if author == "person":
+            if branch == "worker_branch":
+                # Person PUT targets the project branch (trunk); spawn a live worker branch in parallel
+                # to witness that person edits on trunk remain isolated from the worker branch.
+                _start_coordinator_turn(f"Spawn worker for {slot.slot_id} isolation witness.")
+                worker_bytes = b"line1-base\nline2-worker-iso\n"
+                expected_worker_sha = sha256_bytes(worker_bytes)
+                worker_run = _run_write_worker_edit(
+                    app,
+                    db_path,
+                    session_id,
+                    goal="Edit target.txt on isolated worker branch",
+                    scope_paths=["target.txt"],
+                    worker_name=f"e04-{slot.slot_id.lower()}",
+                    commands=[
+                        "cat target.txt",
+                        'edit --path target.txt --old-string "line2-base" --new-string "line2-worker-iso"',
+                    ],
+                )
+                typed_result["worker_branch_semantics"] = (
+                    "PUT /v1/projects/{id}/source targets project branch; worker branch remains isolated"
+                )
+            new_text = "line1-base\nline2-person\n"
+            expected_disk_sha = sha256_bytes(new_text.encode("utf-8"))
+            status, resp = _http_call(
+                app,
+                f"/v1/projects/{project_id}/source",
+                {
+                    "operation_id": str(uuid.uuid4()),
+                    "root_id": active_root_id,
+                    "path": "target.txt",
+                    "content": new_text,
+                    "encoding": "utf-8",
+                    "base_sha256": pre_sha,
+                },
+                method="PUT",
+            )
+            typed_result.update({"http_status": status, "response": resp, "expected_origin": "user"})
+            if status != 200:
+                failures.append("e04_person_write_failed")
+
+        elif author == "agent":
+            if branch == "worker_branch":
+                # On a worker branch, the authoring agent is a worker executing on its own branch_id.
+                _start_coordinator_turn(f"Spawn worker-agent for {slot.slot_id}.")
+                worker_bytes = b"line1-base\nline2-agent-wb\n"
+                expected_worker_sha = sha256_bytes(worker_bytes)
+                worker_run = _run_write_worker_edit(
+                    app,
+                    db_path,
+                    session_id,
+                    goal="Edit target.txt as agent on worker branch",
+                    scope_paths=["target.txt"],
+                    worker_name=f"e04-{slot.slot_id.lower()}",
+                    commands=[
+                        "cat target.txt",
+                        'edit --path target.txt --old-string "line2-base" --new-string "line2-agent-wb"',
+                    ],
+                )
+                typed_result.update({
+                    "job_id": worker_run.get("job_id", ""),
+                    "result_handle": worker_run.get("result_handle", ""),
+                    "expected_origin": "agent",
+                })
+            else:
+                new_text = "line1-base\nline2-agent\n"
+                expected_disk_sha = sha256_bytes(new_text.encode("utf-8"))
+                read_res, write_res, _ = _run_agent_edit_turn(
+                    app,
+                    session_id,
+                    "target.txt",
+                    "line2-base",
+                    "line2-agent",
+                    f"Update target.txt for {slot.slot_id}.",
+                )
+                typed_result.update({
+                    "read_result": read_res,
+                    "write_result": write_res,
+                    "expected_origin": "agent",
+                })
+
+        elif author == "worker":
+            _start_coordinator_turn(f"Spawn real write worker for {slot.slot_id}.")
+            worker_bytes = b"line1-base\nline2-worker\n"
+            expected_worker_sha = sha256_bytes(worker_bytes)
+            worker_run = _run_write_worker_edit(
+                app,
+                db_path,
+                session_id,
+                goal="Edit target.txt on isolated worker branch",
+                scope_paths=["target.txt"],
+                worker_name=f"e04-{slot.slot_id.lower()}",
+                commands=[
+                    "cat target.txt",
+                    'edit --path target.txt --old-string "line2-base" --new-string "line2-worker"',
+                ],
+            )
+            typed_result.update({
+                "job_id": worker_run.get("job_id", ""),
+                "child_sid": worker_run.get("child_sid", ""),
+                "result_handle": worker_run.get("result_handle", ""),
+                "cmd_outcomes": [c.get("outcome") for c in (worker_run.get("cmd_results") or [])],
+                "expected_origin": "agent",
+            })
+
+        elif author == "landed_worker":
+            _start_coordinator_turn(f"Spawn write worker and promote overlay for {slot.slot_id}.")
+            worker_bytes = b"line1-base\nline2-landed_worker\n"
+            expected_worker_sha = sha256_bytes(worker_bytes)
+            expected_disk_sha = expected_worker_sha
+            worker_run = _run_write_worker_edit(
+                app,
+                db_path,
+                session_id,
+                goal="Edit target.txt then land overlay",
+                scope_paths=["target.txt"],
+                worker_name=f"e04-{slot.slot_id.lower()}",
+                commands=[
+                    "cat target.txt",
+                    'edit --path target.txt --old-string "line2-base" --new-string "line2-landed_worker"',
+                ],
+            )
+            handle = worker_run.get("result_handle", "")
+            _, prom_res, _ = _send_tool_call(
+                app,
+                session_id,
+                "promote_overlay",
+                {"overlay_id": handle},
+            )
+            prom_code = _extract_refusal_code(prom_res)
+            typed_result.update({
+                "job_id": worker_run.get("job_id", ""),
+                "result_handle": handle,
+                "promote_outcome": prom_res.get("outcome"),
+                "promote_code": prom_code,
+                "expected_origin": "agent",
+                "expected_cause": "overlay_promote",
+            })
+            if prom_code or prom_res.get("outcome") != "completed":
+                failures.append("e04_landed_worker_promote_failed")
+
+        elif author == "command":
+            shell_cmd = "sh -c \"printf 'line1-base\\nline2-command\\n' > target.txt\""
+            cmd_bytes = b"line1-base\nline2-command\n"
+            if branch == "worker_branch":
+                _start_coordinator_turn(f"Spawn worker running shell command for {slot.slot_id}.")
+                expected_worker_sha = sha256_bytes(cmd_bytes)
+                worker_run = _run_write_worker_edit(
+                    app,
+                    db_path,
+                    session_id,
+                    goal="Update target.txt via shell command on worker branch",
+                    scope_paths=["target.txt"],
+                    worker_name=f"e04-{slot.slot_id.lower()}",
+                    commands=[shell_cmd],
+                    checkpoint_policy="approve_once",
+                )
+                typed_result.update({
+                    "job_id": worker_run.get("job_id", ""),
+                    "result_handle": worker_run.get("result_handle", ""),
+                    "cmd_results": worker_run.get("cmd_results", []),
+                    "expected_origin": "external",
+                })
+            else:
+                expected_disk_sha = sha256_bytes(cmd_bytes)
+                # Ensure target.txt is tracked before shell command runs so command window records drift cleanly.
+                _http_call(
+                    app,
+                    f"/v1/projects/{project_id}/editor-documents",
+                    {"path": "target.txt", "root_id": active_root_id, "client_id": f"wea-{slot.slot_id}"},
+                    method="POST",
+                )
+                app.request(
+                    f"/v1/sessions/{session_id}/prompts",
+                    {"operation_id": str(uuid.uuid4()), "text": "Update target.txt via genuine shell command."},
+                )
+                _, prog_res, _ = _send_tool_call(
+                    app,
+                    session_id,
+                    "update_progress",
+                    {"content": "## Progress\n- [ ] Update target.txt via shell command\n"},
+                )
+                _, cmd_res, _ = _send_tool_call(
+                    app,
+                    session_id,
+                    "command",
+                    {"command": shell_cmd},
+                    checkpoint_policy="approve_once",
+                )
+                _complete_progress(app, session_id, prog_res, "## Progress\n- [x] Update target.txt via shell command\n")
+                _finish_turn_text(app, session_id)
+                typed_result.update({
+                    "shell_command": shell_cmd,
+                    "command_result": cmd_res,
+                    "expected_origin": "external",
+                    "expected_cause": "command_window",
+                })
+
+        else:  # external
+            if branch == "worker_branch":
+                _start_coordinator_turn(f"Spawn worker for {slot.slot_id} external isolation witness.")
+                worker_bytes = b"line1-base\nline2-worker-ext-iso\n"
+                expected_worker_sha = sha256_bytes(worker_bytes)
+                worker_run = _run_write_worker_edit(
+                    app,
+                    db_path,
+                    session_id,
+                    goal="Edit target.txt on worker branch while external disk edit occurs on trunk",
+                    scope_paths=["target.txt"],
+                    worker_name=f"e04-{slot.slot_id.lower()}",
+                    commands=[
+                        "cat target.txt",
+                        'edit --path target.txt --old-string "line2-base" --new-string "line2-worker-ext-iso"',
+                    ],
+                )
+                typed_result["worker_branch_semantics"] = (
+                    "external disk edit reconciled on project branch while worker branch remains isolated"
+                )
+            new_text = "line1-base\nline2-external\n"
+            expected_disk_sha = sha256_bytes(new_text.encode("utf-8"))
+            ext_info = _run_external_reconciled_edit(new_text)
+            typed_result.update({"external_reconcile": ext_info, "expected_origin": "external"})
+    finally:
+        if worker_run is not None:
+            _finish_session(app, session_id)
 
     post_obs = obs.capture_post(["target.txt"], session_id=session_id)
     attr_state = observe_attribution_state(db_path, project_id)
-    latest = _query_latest_file_version_ro(db_path, project_id, "target.txt")
     post_disk_sha = str(hash_file(active_root / "target.txt").get("sha256") or "")
 
-    if post_disk_sha == pre_sha:
-        failures.append("e04_disk_unchanged")
-    if author != "external" and latest and latest.get("content_sha256") and latest["content_sha256"] != post_disk_sha:
-        failures.append("e04_ledger_sha_mismatch")
-    if author == "person" and latest and latest.get("origin") != "user":
-        failures.append("e04_wrong_origin")
+    job_id = str((worker_run or {}).get("job_id") or "")
+    trunk_versions = _query_file_versions_with_effects_ro(db_path, project_id, "target.txt", branch_id="")
+    worker_versions = (
+        _query_file_versions_with_effects_ro(db_path, project_id, "target.txt", branch_id=job_id)
+        if job_id
+        else []
+    )
+    target_latest = trunk_versions[-1] if trunk_versions else {}
+    worker_latest = worker_versions[-1] if worker_versions else {}
 
+    # Assertions per author & branch semantics.
+    if author == "person":
+        if post_disk_sha != expected_disk_sha:
+            failures.append("e04_disk_sha_mismatch")
+        if not target_latest.get("version_id"):
+            failures.append("e04_missing_version_id")
+        if target_latest.get("origin") != "user":
+            failures.append("e04_wrong_origin")
+        if target_latest.get("branch_id") != "":
+            failures.append("e04_wrong_branch")
+        if target_latest.get("content_sha256") != post_disk_sha:
+            failures.append("e04_ledger_sha_mismatch")
+        if branch == "worker_branch":
+            if not job_id or not worker_latest.get("version_id") or worker_latest.get("branch_id") != job_id:
+                failures.append("e04_worker_branch_missing")
+
+    elif author == "agent":
+        if branch == "worker_branch":
+            if post_disk_sha != pre_sha:
+                failures.append("e04_worker_moved_trunk_head")
+            if not job_id:
+                failures.append("e04_missing_job_id")
+            if not worker_latest.get("version_id"):
+                failures.append("e04_missing_version_id")
+            if not worker_latest.get("effect_id"):
+                failures.append("e04_missing_effect_id")
+            if worker_latest.get("branch_id") != job_id:
+                failures.append("e04_wrong_branch")
+            if worker_latest.get("origin") != "agent":
+                failures.append("e04_wrong_origin")
+            if worker_latest.get("content_sha256") != expected_worker_sha:
+                failures.append("e04_ledger_sha_mismatch")
+        else:
+            if post_disk_sha != expected_disk_sha:
+                failures.append("e04_disk_sha_mismatch")
+            if not target_latest.get("version_id"):
+                failures.append("e04_missing_version_id")
+            if target_latest.get("origin") != "agent":
+                failures.append("e04_wrong_origin")
+            if (target_latest.get("job_id") or "") != "":
+                failures.append("e04_unexpected_job_id")
+            if target_latest.get("branch_id") != "":
+                failures.append("e04_wrong_branch")
+            if target_latest.get("content_sha256") != post_disk_sha:
+                failures.append("e04_ledger_sha_mismatch")
+
+    elif author == "worker":
+        if post_disk_sha != pre_sha:
+            failures.append("e04_worker_moved_trunk_head")
+        if not job_id:
+            failures.append("e04_missing_job_id")
+        if not worker_latest.get("version_id"):
+            failures.append("e04_missing_version_id")
+        if not worker_latest.get("effect_id"):
+            failures.append("e04_missing_effect_id")
+        if worker_latest.get("job_id") != job_id:
+            failures.append("e04_lost_worker_job_id")
+        if not worker_latest.get("branch_id") or worker_latest.get("branch_id") == "":
+            failures.append("e04_wrong_branch")
+        if worker_latest.get("origin") != "agent":
+            failures.append("e04_wrong_origin")
+        if worker_latest.get("content_sha256") != expected_worker_sha:
+            failures.append("e04_ledger_sha_mismatch")
+
+    elif author == "landed_worker":
+        if post_disk_sha != expected_disk_sha:
+            failures.append("e04_disk_sha_mismatch")
+        if not job_id:
+            failures.append("e04_missing_job_id")
+        if not target_latest.get("version_id"):
+            failures.append("e04_missing_version_id")
+        if target_latest.get("branch_id") != "":
+            failures.append("e04_wrong_branch")
+        if target_latest.get("content_sha256") != post_disk_sha:
+            failures.append("e04_ledger_sha_mismatch")
+        if target_latest.get("origin") != "agent":
+            failures.append("e04_wrong_origin")
+        if target_latest.get("job_id") != job_id:
+            failures.append("e04_lost_worker_job_id")
+        if target_latest.get("cause") != "overlay_promote":
+            failures.append("e04_wrong_cause")
+        if branch == "worker_branch" and not worker_latest.get("version_id"):
+            failures.append("e04_worker_branch_missing")
+
+    elif author == "command":
+        if branch == "worker_branch":
+            if post_disk_sha != pre_sha:
+                failures.append("e04_worker_moved_trunk_head")
+            if not job_id:
+                failures.append("e04_missing_job_id")
+            if not worker_latest.get("version_id"):
+                failures.append("e04_missing_version_id")
+            if worker_latest.get("branch_id") != job_id:
+                failures.append("e04_wrong_branch")
+            if worker_latest.get("content_sha256") != expected_worker_sha:
+                failures.append("e04_ledger_sha_mismatch")
+            if not (worker_latest.get("command_window_id") or worker_latest.get("origin") == "external"):
+                failures.append("e04_missing_command_attribution")
+        else:
+            if post_disk_sha != expected_disk_sha:
+                failures.append("e04_disk_sha_mismatch")
+            if not target_latest.get("version_id"):
+                failures.append("e04_missing_version_id")
+            if target_latest.get("content_sha256") != post_disk_sha:
+                failures.append("e04_ledger_sha_mismatch")
+            if target_latest.get("origin") != "external":
+                failures.append("e04_wrong_origin")
+            if not target_latest.get("command_window_id"):
+                failures.append("e04_missing_command_window_id")
+
+    else:  # external
+        if post_disk_sha != expected_disk_sha:
+            failures.append("e04_disk_sha_mismatch")
+        if not target_latest.get("version_id"):
+            failures.append("e04_missing_external_version")
+        if target_latest.get("origin") != "external":
+            failures.append("e04_wrong_origin")
+        if target_latest.get("content_sha256") != post_disk_sha:
+            failures.append("e04_ledger_sha_mismatch")
+        if branch == "worker_branch":
+            if not job_id or not worker_latest.get("version_id") or worker_latest.get("branch_id") != job_id:
+                failures.append("e04_worker_branch_missing")
+
+    latest = worker_latest if (author == "worker" or (branch == "worker_branch" and author in {"agent", "command"})) else target_latest
     ind_obs = {
         "pre_sha256": pre_sha,
         "post_sha256": post_disk_sha,
+        "expected_disk_sha256": expected_disk_sha,
+        "expected_worker_sha256": expected_worker_sha,
+        "job_id": job_id,
         "latest_version": latest,
+        "trunk_latest_version": target_latest,
+        "worker_latest_version": worker_latest,
         "operations_count": len(attr_state.get("operations") or []),
         "versions_count": len(attr_state.get("versions") or []),
         "edits_observer": {"post_files": post_obs["post_files"]},
@@ -843,73 +1359,170 @@ def _drive_e07_slot(app: Any, slot: SidecarSlotSpec, slot_dir: pathlib.Path) -> 
     session_id, project_id, _ = _open_session(app, proj)
     _run_agent_edit_turn(app, session_id, "a.txt", "one", "one-ai", "Edit a.txt.")
 
+    def _walk_ids(resp: Any) -> list[str]:
+        files = (resp.get("files") or []) if isinstance(resp, dict) else []
+        return sorted(str(f.get("file_id") or "") for f in files if f.get("file_id"))
+
     st_walk, walk_resp = _http_call(
         app, f"/v1/projects/{project_id}/source/walk?baseline=presentation", method="GET"
     )
-    ind = observe_files_marks_counts(db_path, project_id)
+    ind_before = observe_files_marks_counts(db_path, project_id)
     walk_files = (walk_resp.get("files") or []) if isinstance(walk_resp, dict) else []
-    walk_ids = sorted(str(f.get("file_id") or "") for f in walk_files if f.get("file_id"))
+    walk_ids = _walk_ids(walk_resp)
 
     failures: list[str] = []
     typed_result: dict[str, Any] = {"variant": var, "walk_status": st_walk, "walk_file_ids": walk_ids}
+    ind_obs: dict[str, Any] = {"independent_counts": ind_before}
 
-    if st_walk != 200 or walk_ids != ind["marked_file_ids"]:
+    if st_walk != 200 or walk_ids != ind_before["marked_file_ids"]:
         failures.append("e07_marked_files_mismatch")
 
-    if var == "open_marked_file_comparison" and walk_files:
-        fid = walk_files[0].get("file_id", "")
-        st_cmp, cmp_resp = _http_call(
-            app,
-            f"/v1/projects/{project_id}/source/comparison?file_id={urllib.parse.quote(fid)}&baseline=presentation",
-            method="GET",
-        )
-        typed_result.update({"comparison_status": st_cmp, "in_range": (cmp_resp or {}).get("in_range")})
-        if st_cmp != 200 or not (isinstance(cmp_resp, dict) and cmp_resp.get("in_range") is True):
-            failures.append("e07_comparison_not_in_range")
-    elif var in {"complete_presentation_clears_mark", "withdraw_presentation_restores_mark"} and walk_files:
-        f0 = walk_files[0]
-        fid = f0.get("file_id", "")
-        eff_id = f0.get("presentation_effect_id", "")
-        ordinal = int(f0.get("presentation_ordinal") or f0.get("ordinal") or 0)
-        if ordinal <= 0 and eff_id and db_path.is_file():
-            with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
-                row = conn.execute("SELECT ordinal FROM source_effects WHERE id = ?", (eff_id,)).fetchone()
-                if row:
-                    ordinal = int(row[0])
-        st_seen, seen_resp = _http_call(
-            app,
-            f"/v1/projects/{project_id}/source/seen",
-            {"file_id": fid, "effect_id": eff_id, "ordinal": ordinal},
-            method="POST",
-        )
-        typed_result.update({"complete_status": st_seen, "complete_resp": seen_resp, "ordinal": ordinal})
-        if st_seen not in {200, 204}:
-            failures.append("e07_complete_presentation_failed")
-        ind_after = observe_files_marks_counts(db_path, project_id)
-        if var == "withdraw_presentation_restores_mark":
-            st_wd, wd_resp = _http_call(
+    if var == "open_marked_file_comparison":
+        if not walk_files:
+            failures.append("e07_no_marked_files")
+        else:
+            fid = walk_files[0].get("file_id", "")
+            st_cmp, cmp_resp = _http_call(
                 app,
-                f"/v1/projects/{project_id}/source/seen/{urllib.parse.quote(fid)}?through_ordinal={ordinal}",
-                method="DELETE",
+                f"/v1/projects/{project_id}/source/comparison?file_id={urllib.parse.quote(fid)}&baseline=presentation",
+                method="GET",
             )
-            typed_result.update({"withdraw_status": st_wd, "withdraw_resp": wd_resp})
-            if st_wd not in {200, 204}:
-                failures.append("e07_withdraw_presentation_failed")
-        ind = ind_after
+            typed_result.update({"comparison_status": st_cmp, "in_range": (cmp_resp or {}).get("in_range")})
+            if st_cmp != 200 or not (isinstance(cmp_resp, dict) and cmp_resp.get("in_range") is True):
+                failures.append("e07_comparison_not_in_range")
+
+    elif var in {"complete_presentation_clears_mark", "withdraw_presentation_restores_mark"}:
+        if not walk_files:
+            failures.append("e07_no_marked_files")
+        else:
+            f0 = walk_files[0]
+            fid = str(f0.get("file_id") or "")
+            eff_id = str(f0.get("presentation_effect_id") or "")
+            ordinal = int(f0.get("presentation_ordinal") or f0.get("ordinal") or 0)
+            if ordinal <= 0 and eff_id and db_path.is_file():
+                with contextlib.closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+                    row = conn.execute("SELECT ordinal FROM source_effects WHERE id = ?", (eff_id,)).fetchone()
+                    if row:
+                        ordinal = int(row[0])
+
+            # Pre-clear witness: fid must be marked and unpresented AI count >= 1.
+            if fid not in ind_before["marked_file_ids"] or ind_before["unpresented_agent_file_count"] < 1:
+                failures.append("e07_pre_clear_mark_missing")
+
+            st_seen, seen_resp = _http_call(
+                app,
+                f"/v1/projects/{project_id}/source/seen",
+                {"file_id": fid, "effect_id": eff_id, "ordinal": ordinal},
+                method="POST",
+            )
+            ind_after_clear = observe_files_marks_counts(db_path, project_id)
+            st_walk_clear, walk_resp_clear = _http_call(
+                app, f"/v1/projects/{project_id}/source/walk?baseline=presentation", method="GET"
+            )
+            walk_ids_after_clear = _walk_ids(walk_resp_clear)
+
+            typed_result.update({
+                "file_id": fid,
+                "effect_id": eff_id,
+                "ordinal": ordinal,
+                "complete_status": st_seen,
+                "complete_resp": seen_resp,
+                "walk_after_clear_status": st_walk_clear,
+                "walk_file_ids_after_clear": walk_ids_after_clear,
+            })
+            ind_obs = {
+                "independent_counts_before": ind_before,
+                "independent_counts_after_clear": ind_after_clear,
+                "independent_counts": ind_after_clear,
+            }
+
+            if st_seen not in {200, 204}:
+                failures.append("e07_complete_presentation_failed")
+            if st_walk_clear != 200 or fid in walk_ids_after_clear:
+                failures.append("e07_clear_did_not_remove_walk_mark")
+            if fid in ind_after_clear["marked_file_ids"]:
+                failures.append("e07_clear_did_not_remove_db_mark")
+            if ind_after_clear["marked_file_count"] >= ind_before["marked_file_count"]:
+                failures.append("e07_clear_did_not_decrease_mark_count")
+            if ind_after_clear["unpresented_agent_file_count"] >= ind_before["unpresented_agent_file_count"]:
+                failures.append("e07_clear_did_not_decrease_ai_count")
+
+            if var == "withdraw_presentation_restores_mark":
+                st_wd, wd_resp = _http_call(
+                    app,
+                    f"/v1/projects/{project_id}/source/seen/{urllib.parse.quote(fid)}?through_ordinal={ordinal}",
+                    method="DELETE",
+                )
+                ind_after_withdraw = observe_files_marks_counts(db_path, project_id)
+                st_walk_wd, walk_resp_wd = _http_call(
+                    app, f"/v1/projects/{project_id}/source/walk?baseline=presentation", method="GET"
+                )
+                walk_ids_after_withdraw = _walk_ids(walk_resp_wd)
+
+                typed_result.update({
+                    "withdraw_status": st_wd,
+                    "withdraw_resp": wd_resp,
+                    "walk_after_withdraw_status": st_walk_wd,
+                    "walk_file_ids_after_withdraw": walk_ids_after_withdraw,
+                })
+                ind_obs["independent_counts_after_withdraw"] = ind_after_withdraw
+                ind_obs["independent_counts"] = ind_after_withdraw
+
+                if st_wd not in {200, 204}:
+                    failures.append("e07_withdraw_presentation_failed")
+                if st_walk_wd != 200 or fid not in walk_ids_after_withdraw:
+                    failures.append("e07_withdraw_did_not_restore_walk_mark")
+                if fid not in ind_after_withdraw["marked_file_ids"]:
+                    failures.append("e07_withdraw_did_not_restore_db_mark")
+                if ind_after_withdraw["marked_file_count"] != ind_before["marked_file_count"]:
+                    failures.append("e07_withdraw_mark_count_mismatch")
+                if ind_after_withdraw["unpresented_agent_file_count"] != ind_before["unpresented_agent_file_count"]:
+                    failures.append("e07_withdraw_ai_count_mismatch")
+
     elif var == "deterministic_reresolve_worker_isolated":
+        effects_before = [
+            str(r["id"])
+            for r in _ro_query(
+                db_path,
+                "SELECT id FROM source_effects WHERE project_id = ? ORDER BY ordinal ASC, id ASC",
+                (project_id,),
+            )
+        ]
         st_walk2, walk_resp2 = _http_call(
             app, f"/v1/projects/{project_id}/source/walk?baseline=presentation", method="GET"
         )
-        walk_ids2 = sorted(
-            str(f.get("file_id") or "")
-            for f in ((walk_resp2.get("files") or []) if isinstance(walk_resp2, dict) else [])
-            if f.get("file_id")
-        )
-        typed_result["walk2_status"] = st_walk2
-        if walk_ids2 != walk_ids:
+        walk_ids2 = _walk_ids(walk_resp2)
+        effects_after = [
+            str(r["id"])
+            for r in _ro_query(
+                db_path,
+                "SELECT id FROM source_effects WHERE project_id = ? ORDER BY ordinal ASC, id ASC",
+                (project_id,),
+            )
+        ]
+        ind_after = observe_files_marks_counts(db_path, project_id)
+        typed_result.update({
+            "walk2_status": st_walk2,
+            "walk2_file_ids": walk_ids2,
+            "effects_count_before": len(effects_before),
+            "effects_count_after": len(effects_after),
+            "effect_ids_before": effects_before,
+            "effect_ids_after": effects_after,
+        })
+        ind_obs = {
+            "independent_counts_before": ind_before,
+            "independent_counts_after": ind_after,
+            "independent_counts": ind_after,
+            "source_effects_count_before": len(effects_before),
+            "source_effects_count_after": len(effects_after),
+            "source_effect_ids": effects_after,
+        }
+        if st_walk2 != 200 or walk_ids2 != walk_ids:
             failures.append("e07_nondeterministic_reresolve")
+        if len(effects_after) != len(effects_before) or effects_after != effects_before:
+            failures.append("e07_reresolve_mutated_source_effects")
 
-    return typed_result, {"independent_counts": ind}, failures
+    return typed_result, ind_obs, failures
 
 
 def _drive_e09_slot(app: Any, slot: SidecarSlotSpec, slot_dir: pathlib.Path) -> tuple[dict[str, Any], dict[str, Any], list[str]]:

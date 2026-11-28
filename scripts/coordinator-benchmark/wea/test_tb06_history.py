@@ -332,6 +332,15 @@ class TestTB06InprocManifestAndSidecarRunner(unittest.TestCase):
         self.assertIn('"update_progress"', src)
         self.assertIn("def _restart_application(", src)
         self.assertIn("smoke.Application.__new__(smoke.Application)", src)
+        # E04 MUST dispatch real workers, promote_overlay, genuine shell command, and external observe reconciliation.
+        self.assertIn('"promote_overlay"', src)
+        self.assertIn("def _run_write_worker_edit(", src)
+        self.assertIn("sh -c", src)
+        self.assertIn("/editor-documents/{urllib.parse.quote(doc_id)}/observe", src)
+        # E07 MUST assert post-clear and post-withdraw mark/count transitions and source_effects stability.
+        self.assertIn("e07_clear_did_not_remove_walk_mark", src)
+        self.assertIn("e07_withdraw_did_not_restore_walk_mark", src)
+        self.assertIn("e07_reresolve_mutated_source_effects", src)
 
     def test_extract_attached_root_id_from_project_response(self) -> None:
         from wea.tb06_sidecar_runner import _extract_attached_root_id
