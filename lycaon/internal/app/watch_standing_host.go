@@ -337,6 +337,7 @@ func dispatchStandingWatchRun(
 			})
 			if linkErr := engine.LinkRunSession(ctx, run.RunID, sessionID); linkErr != nil {
 				slog.WarnContext(ctx, "link standing watch run session before dispatch", "run_id", run.RunID, "session_id", sessionID, "err", linkErr)
+				return watch.StandingRunDispatchOutcome{SessionID: sessionID}, linkErr
 			}
 		}
 	} else {
@@ -368,13 +369,31 @@ func dispatchStandingWatchRun(
 		},
 	}
 	runCtx := people.WithoutCaller(context.WithoutCancel(ctx))
+	existingChat := sw.Target.Kind == "existing_chat"
 	tracker.enter(sessionID)
 	wg.Add(1)
 	go func(runID, sid string) {
 		defer wg.Done()
 		defer tracker.leave(sid)
+		turnCtx := runCtx
+		if existingChat {
+			var unlockDispatch func()
+			turnCtx, unlockDispatch = b.sessions.Manager.Submissions.LockDispatch(runCtx, sid)
+			eligible, retryable := b.sessions.Manager.Submissions.AmbientWakeEligible(turnCtx, sid)
+			if !eligible {
+				unlockDispatch()
+				if retryable {
+					_ = engine.RequeueBusyRunByID(runCtx, runID)
+					return
+				}
+				slog.WarnContext(runCtx, "standing watch existing_chat target ineligible at admission", "run_id", runID, "session_id", sid)
+				_ = engine.SettleRunByID(runCtx, runID, sid, watch.RunFailed)
+				return
+			}
+			defer unlockDispatch()
+		}
 		admitted := false
-		resp, runErr := b.sessions.Manager.Submissions.HostTurnWithAdmission(runCtx, sid, sessionstore.PromptSubmissionOriginLoopWake, in, func() error {
+		resp, runErr := b.sessions.Manager.Submissions.HostTurnWithAdmission(turnCtx, sid, sessionstore.PromptSubmissionOriginLoopWake, in, func() error {
 			admitted = true
 			return nil
 		})

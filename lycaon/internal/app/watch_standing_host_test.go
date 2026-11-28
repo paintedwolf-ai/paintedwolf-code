@@ -639,3 +639,203 @@ func TestStandingWatchIdleEventDuringFailingTurnDoesNotMisSettleCompleted(t *tes
 		t.Fatalf("run.Status = %q, want failed (idle event during in-flight failing turn must not mis-settle as completed)", run.Status)
 	}
 }
+
+func TestStandingWatchLinkRunSessionFailureAbortsTurnLaunch(t *testing.T) {
+	ctx := t.Context()
+	database := testdbfixture.Open(t, "watch_standing_link_failure.db")
+	rootDir := t.TempDir()
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, rootDir)
+	repos := sessionstore.NewSQL(database)
+	ownerPerson, err := repos.People.HostOwner(ctx)
+	testutil.FailErr(t, "host owner", err)
+
+	// Fail only the pre-dispatch LinkRunSession UPDATE (running row with NULL session_id),
+	// while still allowing invokeStandingDispatcher's terminal RunFailed settlement UPDATE.
+	_, err = database.ExecContext(ctx, `
+		CREATE TRIGGER fail_standing_link_for_test
+		BEFORE UPDATE OF session_id ON watch_runs
+		WHEN OLD.session_id IS NULL AND NEW.session_id IS NOT NULL AND NEW.status = 'running'
+		BEGIN
+			SELECT RAISE(ABORT, 'injected link failure');
+		END;`)
+	testutil.FailErr(t, "create link failure trigger", err)
+
+	clock := testutil.NewFakeClock(time.Date(2026, 5, 1, 18, 0, 0, 0, time.UTC))
+	ws := watch.NewStore(database, clock)
+	engine := ws.Standing()
+
+	var (
+		mu       sync.Mutex
+		executed bool
+	)
+	subs := submissions.New(
+		repos.Sessions, repos.Submissions, repos.People, queue.New(),
+		lifecycle.New(repos.Sessions), nil, nil, nil,
+		&submissionstate.Service{}, &promptstate.MutexRegistry{},
+		func(_ context.Context, _ string, _ promptinput.Input, lock *promptstate.Lock) (*promptresult.Result, error) {
+			defer lock.Unlock()
+			mu.Lock()
+			executed = true
+			mu.Unlock()
+			return &promptresult.Result{}, nil
+		},
+		nil, nil, func(context.Context, string) bool { return false },
+	)
+	b := &serveBuilder{
+		startup: startupBootstrap{ctx: ctx},
+		storage: persistence.Runtime{Database: database, Sessions: repos},
+		sessions: &sessions.Runtime{
+			Manager: &session.Host{Submissions: subs},
+		},
+	}
+
+	var wg sync.WaitGroup
+	tracker := &standingDispatchTracker{}
+	var dispatchedSessionID string
+	engine.SetCallbacks(watch.StandingCallbacks{
+		RunDispatcher: func(dCtx context.Context, sw watch.StandingWatch, run watch.WatchRun, promptText string) (watch.StandingRunDispatchOutcome, error) {
+			out, dErr := dispatchStandingWatchRun(b, dCtx, &wg, engine, tracker, sw, run, promptText)
+			dispatchedSessionID = out.SessionID
+			wg.Wait()
+			return out, dErr
+		},
+	})
+
+	sw, err := engine.Create(ctx, ownerPerson.ID, watch.StandingWatchInput{
+		ProjectID:  testdbseed.DefaultProjectID,
+		Name:       "link-failure-abort",
+		Prompt:     "must not launch when session link fails",
+		Conditions: []awaitstore.Condition{{Kind: "timer", EveryMinutes: 60}},
+		Target:     &watch.StandingTarget{Kind: "new_chat"},
+	})
+	testutil.FailErr(t, "create standing watch", err)
+
+	run, err := engine.RunNow(ctx, ownerPerson.ID, testdbseed.DefaultProjectID, sw.WatchID)
+	testutil.FailErr(t, "run standing watch now", err)
+
+	mu.Lock()
+	gotExecuted := executed
+	mu.Unlock()
+	if gotExecuted {
+		t.Fatal("standing watch turn executed despite LinkRunSession failure")
+	}
+	if tracker.isActive(dispatchedSessionID) {
+		t.Fatalf("tracker still active for session %q after LinkRunSession failure", dispatchedSessionID)
+	}
+	if run.Status != watch.RunFailed {
+		t.Fatalf("run.Status = %q, want failed", run.Status)
+	}
+	if run.EndedAt == nil {
+		t.Fatal("run.EndedAt = nil, want non-nil on failed settlement")
+	}
+}
+
+func TestStandingWatchExistingChatBecomesBusyBetweenEligibilityAndAdmission(t *testing.T) {
+	ctx := t.Context()
+	database := testdbfixture.Open(t, "watch_standing_existing_busy_race.db")
+	rootDir := t.TempDir()
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, rootDir)
+	repos := sessionstore.NewSQL(database)
+	ownerPerson, err := repos.People.HostOwner(ctx)
+	testutil.FailErr(t, "host owner", err)
+	sess, err := repos.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create target session", err)
+
+	clock := testutil.NewFakeClock(time.Date(2026, 5, 1, 19, 0, 0, 0, time.UTC))
+	ws := watch.NewStore(database, clock)
+	engine := ws.Standing()
+
+	var (
+		mu        sync.Mutex
+		execCount int
+	)
+	subs := submissions.New(
+		repos.Sessions, repos.Submissions, repos.People, queue.New(),
+		lifecycle.New(repos.Sessions), nil, nil, nil,
+		&submissionstate.Service{}, &promptstate.MutexRegistry{},
+		func(_ context.Context, _ string, _ promptinput.Input, lock *promptstate.Lock) (*promptresult.Result, error) {
+			defer lock.Unlock()
+			mu.Lock()
+			execCount++
+			mu.Unlock()
+			return &promptresult.Result{}, nil
+		},
+		nil, nil, func(context.Context, string) bool { return false },
+	)
+	b := &serveBuilder{
+		startup: startupBootstrap{ctx: ctx},
+		storage: persistence.Runtime{Database: database, Sessions: repos},
+		sessions: &sessions.Runtime{
+			Manager: &session.Host{Submissions: subs},
+		},
+	}
+
+	var wg sync.WaitGroup
+	tracker := &standingDispatchTracker{}
+	engine.SetCallbacks(watch.StandingCallbacks{
+		RunDispatcher: func(dCtx context.Context, sw watch.StandingWatch, run watch.WatchRun, promptText string) (watch.StandingRunDispatchOutcome, error) {
+			return dispatchStandingWatchRun(b, dCtx, &wg, engine, tracker, sw, run, promptText)
+		},
+	})
+
+	sw, err := engine.Create(ctx, ownerPerson.ID, watch.StandingWatchInput{
+		ProjectID:  testdbseed.DefaultProjectID,
+		Name:       "existing-chat-busy-race",
+		Prompt:     "defer when target chat becomes busy",
+		Conditions: []awaitstore.Condition{{Kind: "timer", EveryMinutes: 60}},
+		Target:     &watch.StandingTarget{Kind: "existing_chat", SessionID: sess.ID},
+	})
+	testutil.FailErr(t, "create standing watch", err)
+
+	// Hold the session's dispatch lane so AmbientWakeEligible succeeds while the session is idle,
+	// then mark the session busy before the async goroutine can acquire LockDispatch and admit.
+	dispatchLock := subs.DispatchLock(sess.ID)
+	dispatchLock.Lock()
+	run, err := engine.RunNow(ctx, ownerPerson.ID, testdbseed.DefaultProjectID, sw.WatchID)
+	testutil.FailErr(t, "run standing watch now", err)
+	testutil.FailErr(t, "mark session busy before admission", repos.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	dispatchLock.Unlock()
+	wg.Wait()
+
+	mu.Lock()
+	firstExec := execCount
+	mu.Unlock()
+	if firstExec != 0 {
+		t.Fatalf("execCount = %d while target chat was busy, want 0", firstExec)
+	}
+	if tracker.isActive(sess.ID) {
+		t.Fatalf("tracker still active for session %q after busy requeue", sess.ID)
+	}
+	var statusAfterBusy, startedAtAfterBusy string
+	testutil.FailErr(t, "query requeued run", database.QueryRowContext(ctx,
+		`SELECT status, COALESCE(started_at, '') FROM watch_runs WHERE run_id = ?`, run.RunID).Scan(&statusAfterBusy, &startedAtAfterBusy))
+	if watch.WatchRunStatus(statusAfterBusy) != watch.RunPending || startedAtAfterBusy != "" {
+		t.Fatalf("after busy race: status=%q started_at=%q, want pending and empty started_at", statusAfterBusy, startedAtAfterBusy)
+	}
+
+	// Once the target chat returns to idle, observeStandingWatchEvent triggers SettleRun -> DispatchProjectRuns
+	// and the requeued pending run executes and completes cleanly.
+	testutil.FailErr(t, "mark session idle", repos.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusIdle))
+	idleEv, err := json.Marshal(api.SessionEvent{
+		ID:              sess.ID,
+		Action:          api.SessionEventActionUpdated,
+		Status:          api.SessionStatusIdle,
+		IdleDisposition: api.SessionIdleDispositionCompleted,
+	})
+	testutil.FailErr(t, "marshal idle event", err)
+	observeStandingWatchEvent(ctx, b, engine, tracker, api.EventEnvelope{Topic: api.EventTopicSession, Data: idleEv})
+	wg.Wait()
+
+	mu.Lock()
+	secondExec := execCount
+	mu.Unlock()
+	if secondExec != 1 {
+		t.Fatalf("execCount after idle retry = %d, want 1", secondExec)
+	}
+	var finalStatus string
+	testutil.FailErr(t, "query final retried run", database.QueryRowContext(ctx,
+		`SELECT status FROM watch_runs WHERE run_id = ?`, run.RunID).Scan(&finalStatus))
+	if watch.WatchRunStatus(finalStatus) != watch.RunCompleted {
+		t.Fatalf("final status after idle retry = %q, want completed", finalStatus)
+	}
+}

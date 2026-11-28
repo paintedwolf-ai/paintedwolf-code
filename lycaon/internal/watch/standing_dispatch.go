@@ -183,8 +183,7 @@ func invokeStandingDispatcher(ctx context.Context, e *StandingEngine, sw Standin
 	}
 	out, err := dispatcher(ctx, sw, run, BuildStandingRunPrompt(sw, run))
 	if out.BusyRetry {
-		_, rErr := e.store.db.ExecContext(ctx, `UPDATE watch_runs SET status = 'pending', started_at = NULL WHERE run_id = ? AND status = 'running'`, run.RunID)
-		return rErr
+		return e.RequeueBusyRunByID(ctx, run.RunID)
 	}
 	if out.SessionID != "" && out.SessionID != run.SessionID {
 		if uErr := e.LinkRunSession(ctx, run.RunID, out.SessionID); uErr != nil {
@@ -245,6 +244,17 @@ func (e *StandingEngine) LinkRunSession(ctx context.Context, runID, sessionID st
 	_, err := e.store.db.ExecContext(ctx,
 		`UPDATE watch_runs SET session_id = ? WHERE run_id = ? AND COALESCE(session_id, '') = ''`,
 		strings.TrimSpace(sessionID), strings.TrimSpace(runID))
+	return err
+}
+
+// RequeueBusyRunByID returns a running watch_runs row to pending when its target chat became busy before admission.
+func (e *StandingEngine) RequeueBusyRunByID(ctx context.Context, runID string) error {
+	if e == nil || !e.store.Configured() || strings.TrimSpace(runID) == "" {
+		return nil
+	}
+	_, err := e.store.db.ExecContext(ctx,
+		`UPDATE watch_runs SET status = 'pending', started_at = NULL WHERE run_id = ? AND status = 'running'`,
+		strings.TrimSpace(runID))
 	return err
 }
 
