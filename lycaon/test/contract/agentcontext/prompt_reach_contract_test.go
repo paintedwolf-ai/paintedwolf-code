@@ -27,6 +27,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
+	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
 )
 
 func promptNameCatalog(t *testing.T) (*toolvocab.Catalog, []sandbox.ToolProfile) {
@@ -166,8 +167,11 @@ func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
 		}
 
 		vars := buildStandingVarsForState(t, baseSpawnVars, st, auth.Reader)
-		unitIDs := unitIDsForSelection(unitCatalog, auth.Reader.Selection())
-		rKey := hoststate.RenderCacheKey("ac-standing:"+st.TurnProfile.SurfaceID, st.Overlay.Catalog.Revision, unitIDs, vars)
+		unitIDs, unitRefs := unitIDsAndRefsForSelection(unitCatalog, auth.Reader.Selection())
+		standingRefs := append([]string{"agents/coordinator-core.md", st.TurnProfile.SurfaceTemplate}, modeTemplateRefs(st.TurnProfile)...)
+		standingRefs = append(standingRefs, unitRefs...)
+		keyVars := promptrender.ProjectRenderVars(st.Overlay.Catalog, vars, standingRefs...)
+		rKey := hoststate.RenderCacheKey("ac-standing:"+st.TurnProfile.SurfaceID, st.Overlay.Catalog.Revision, unitIDs, keyVars)
 		standingCorpus, _, rErr := cache.RenderOrReuse(rKey, func() (string, error) {
 			return renderStandingWithUnits(ctx, engine, unitCatalog, st.TurnProfile, auth.Reader.Selection(), vars)
 		})
@@ -180,12 +184,15 @@ func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
 		procUnits, pErr := inject.ToolProcedureUnits(injRenderer, auth.Reader)
 		contractcheck.FailErr(t, "ToolProcedureUnits "+st.ID, pErr)
 		procIDs := make([]string, len(procUnits))
+		procRefs := make([]string, len(procUnits))
 		for i, u := range procUnits {
 			procIDs[i] = u.ID
+			procRefs[i] = u.Ref
 		}
 		procVars, pvErr := prompts.Vars(auth.Reader, map[string]any{"offered_tools": auth.Reader.Offered()})
 		contractcheck.FailErr(t, "proc Vars "+st.ID, pvErr)
-		pKey := hoststate.RenderCacheKey("ac-proc", st.Overlay.Catalog.Revision, procIDs, procVars)
+		procKeyVars := promptrender.ProjectRenderVars(st.Overlay.Catalog, procVars, procRefs...)
+		pKey := hoststate.RenderCacheKey("ac-proc", st.Overlay.Catalog.Revision, procIDs, procKeyVars)
 		procBlock, _, pbErr := cache.RenderOrReuse(pKey, func() (string, error) {
 			return inject.RenderToolProceduresBlock(ctx, injRenderer, "sess-ac", auth.Reader)
 		})
@@ -264,15 +271,16 @@ func buildStandingVarsForState(t *testing.T, baseSpawnVars map[string]any, st ho
 	return vars
 }
 
-func unitIDsForSelection(cat promptunit.Catalog, sel promptunit.Selection) []string {
+func unitIDsAndRefsForSelection(cat promptunit.Catalog, sel promptunit.Selection) ([]string, []string) {
 	rendered := cat.Rendered(sel)
-	var ids []string
+	var ids, refs []string
 	for _, slot := range promptunit.Slots() {
 		for _, u := range rendered[slot] {
 			ids = append(ids, u.ID)
+			refs = append(refs, u.Ref)
 		}
 	}
-	return ids
+	return ids, refs
 }
 
 func renderStandingWithUnits(

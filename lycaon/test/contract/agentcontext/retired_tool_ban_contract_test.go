@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/toolvocab"
@@ -190,11 +189,21 @@ func TestRenderedPhaseKicksNeverNameFullyRetiredTools(t *testing.T) {
 
 func TestRenderedSkillsAndHintsNeverNameFullyRetiredTools(t *testing.T) {
 	retired := retiredToolMention(t)
-	forEachStockSkillRender(t, func(t *testing.T, _ skills.Skill, reader string, _ prompts.Reader, _ map[string]any, parts []promptrender.Text) {
-		for _, part := range parts {
-			checkBannedMention(t, retired, fmt.Sprintf("skill %s for %s", part.Label, reader), part.Text)
+	stock, err := promptrender.LoadStock(t.Context())
+	contractcheck.FailErr(t, "load the stock catalog", err)
+	renders, err := promptrender.RenderStockSkills(stock)
+	contractcheck.FailErr(t, "render the stock skills", err)
+	seenText := map[string]bool{}
+	for _, sr := range renders {
+		for _, part := range sr.Parts {
+			key := part.Label + "\x00" + part.Text
+			if seenText[key] {
+				continue
+			}
+			seenText[key] = true
+			checkBannedMention(t, retired, fmt.Sprintf("skill %s for %s", part.Label, sr.Reader), part.Text)
 		}
-	})
+	}
 	hints, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "load hint config", err)
 	for code, entry := range hints.HintCodes {
