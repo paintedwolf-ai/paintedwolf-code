@@ -9,6 +9,7 @@ import (
 )
 
 func TestHostStateEnumeratesAllPosturesSurfacesAndAgents(t *testing.T) {
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	overlays, err := hoststate.DiscoverPackOverlays(t.Context())
 	contractcheck.FailErr(t, "DiscoverPackOverlays", err)
 	if len(overlays) < 5 || overlays[0].ID != "stock" {
