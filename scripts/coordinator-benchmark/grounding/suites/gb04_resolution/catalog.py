@@ -194,8 +194,8 @@ R02_SLOTS: tuple[GB04SlotSpec, ...] = (
         citation_types=("handle",),
         assertions=("exact_verdict_matched",),
         expected_verdicts=("matched",),
-        contract_refs=("R02", "D4", "D018"),
-        summary="Exact handle and line-numbered coordinate yields exact verdict `matched`.",
+        contract_refs=("R02", "D4", "D018", "D047", "D066"),
+        summary="Exact handle and line-numbered coordinate (in-process excerpt-free citation expects `traced` per Decisions 047 & 066).",
     ),
     GB04SlotSpec(
         selector="R02-02-verdict-traced",

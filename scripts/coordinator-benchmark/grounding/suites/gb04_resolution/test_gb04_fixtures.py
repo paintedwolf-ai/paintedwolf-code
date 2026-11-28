@@ -339,7 +339,7 @@ class TestGB04RunnersSerializationAndSharding(unittest.TestCase):
         self.assertTrue(meta["R02-01-verdict-matched"].assert_exact_verdicts)
         self.assertTrue(meta["R03-01-multiline-contiguous-blank-lines-clipping"].assert_exact_verdicts)
 
-        # Evaluator detects exact verdict mismatch on R02-01
+        # Evaluator detects exact verdict mismatch on R02-01 (expects traced per Decisions 047 & 066)
         divs_exact = evaluate_resolve_result(
             meta["R02-01-verdict-matched"],
             {
@@ -347,7 +347,7 @@ class TestGB04RunnersSerializationAndSharding(unittest.TestCase):
                     {
                         "citation_id": "c1",
                         "outcome": "grounded",
-                        "verdict": "traced",
+                        "verdict": "matched",
                         "grounded": True,
                     }
                 ]

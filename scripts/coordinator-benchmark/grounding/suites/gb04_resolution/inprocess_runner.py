@@ -157,7 +157,13 @@ def build_inprocess_cases(
             {
                 "citation_id": cit.citation_id,
                 "raw": cit.raw,
-                "expected_exact_verdict": v.expected_exact_verdict,
+                # Decisions 047 & 066: R02-01 cites [read#1:11] without an excerpt,
+                # so the exact verdict is `traced` (not `matched`).
+                "expected_exact_verdict": (
+                    "traced"
+                    if slot.selector == "R02-01-verdict-matched" and not cit.excerpt
+                    else v.expected_exact_verdict
+                ),
                 "expected_verdict_class": v.verdict_class,
                 "contract_reading_verdict": v.contract_reading_verdict,
                 "disputed_expectation": v.disputed_expectation,
