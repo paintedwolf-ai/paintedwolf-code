@@ -164,51 +164,56 @@ func splitRawLines(s string) []rawLine {
 	return out
 }
 
+// maxMixedEOLLCSCells bounds interior LCS dynamic programming work so large
+// all-rewritten interiors stay strictly linear in line count.
+const maxMixedEOLLCSCells = 65536
+
 // SerializePreservingMixedEOL serializes LF-normalized draft text while keeping
 // the exact original per-line terminators ("\r\n" vs "\n") of untouched lines
 // from beforeRawText. Modified or newly inserted lines take fallbackEOL.
 func SerializePreservingMixedEOL(beforeRawText, draft, fallbackEOL string) (string, bool) {
+	serialized, mixed, _ := serializePreservingMixedEOLWithStats(beforeRawText, draft, fallbackEOL)
+	return serialized, mixed
+}
+
+func serializePreservingMixedEOLWithStats(beforeRawText, draft, fallbackEOL string) (string, bool, int) {
 	if beforeRawText == "" || !HasMixedEOL(beforeRawText) {
 		serialized := SerializeEOL(draft, fallbackEOL)
-		return serialized, false
+		return serialized, false, 0
 	}
 	beforeLines := splitRawLines(beforeRawText)
 	draftLines := splitRawLines(strings.ReplaceAll(draft, "\r\n", "\n"))
 	if len(draftLines) == 0 {
-		return "", false
+		return "", false, 0
 	}
 	fallbackTerm := "\n"
 	if fallbackEOL == "crlf" {
 		fallbackTerm = "\r\n"
 	}
 
+	steps := 0
 	// Match common unchanged prefix and suffix lines by exact body.
 	prefix := 0
 	for prefix < len(beforeLines) && prefix < len(draftLines) && beforeLines[prefix].body == draftLines[prefix].body {
 		prefix++
+		steps++
 	}
 	beforeEnd := len(beforeLines)
 	draftEnd := len(draftLines)
 	for beforeEnd > prefix && draftEnd > prefix && beforeLines[beforeEnd-1].body == draftLines[draftEnd-1].body {
 		beforeEnd--
 		draftEnd--
+		steps++
 	}
 
-	// Map each draft line index in [prefix, draftEnd) to an original before line
-	// when unchanged interior lines survive between multiple edit hunks.
+	// Align interior [prefix:draftEnd) against [prefix:beforeEnd) using bounded
+	// patience anchoring (unique lines + LIS) with bounded per-gap LCS DP.
 	midMatch := make([]int, draftEnd-prefix)
 	for i := range midMatch {
 		midMatch[i] = -1
 	}
-	cursor := prefix
-	for j := prefix; j < draftEnd; j++ {
-		for k := cursor; k < beforeEnd; k++ {
-			if beforeLines[k].body == draftLines[j].body {
-				midMatch[j-prefix] = k
-				cursor = k + 1
-				break
-			}
-		}
+	if beforeEnd > prefix && draftEnd > prefix {
+		steps += alignInteriorBounded(beforeLines[prefix:beforeEnd], draftLines[prefix:draftEnd], prefix, midMatch)
 	}
 
 	var b strings.Builder
@@ -234,7 +239,135 @@ func SerializePreservingMixedEOL(beforeRawText, draft, fallbackEOL string) (stri
 		}
 	}
 	serialized := b.String()
-	return serialized, HasMixedEOL(serialized)
+	return serialized, HasMixedEOL(serialized), steps
+}
+
+// alignInteriorBounded maps unchanged interior draft lines to their original
+// indices (offset by baseOffset) using O(N log N) patience anchors on unique
+// lines plus bounded LCS DP inside small gaps. Large rewritten gaps skip DP so
+// total work is strictly bounded.
+func alignInteriorBounded(beforeMid, draftMid []rawLine, baseOffset int, out []int) int {
+	steps := 0
+	bCount := make(map[string]int, len(beforeMid))
+	bPos := make(map[string]int, len(beforeMid))
+	for i, l := range beforeMid {
+		bCount[l.body]++
+		bPos[l.body] = i
+		steps++
+	}
+	dCount := make(map[string]int, len(draftMid))
+	for _, l := range draftMid {
+		dCount[l.body]++
+		steps++
+	}
+
+	type anchor struct{ bIdx, dIdx int }
+	var candidates []anchor
+	for j, l := range draftMid {
+		if dCount[l.body] == 1 && bCount[l.body] == 1 {
+			candidates = append(candidates, anchor{bIdx: bPos[l.body], dIdx: j})
+		}
+		steps++
+	}
+
+	// Longest increasing subsequence on bIdx in O(U log U).
+	var anchors []anchor
+	if len(candidates) > 0 {
+		tails := make([]int, 0, len(candidates))
+		prev := make([]int, len(candidates))
+		for i, c := range candidates {
+			lo, hi := 0, len(tails)
+			for lo < hi {
+				mid := lo + (hi-lo)/2
+				steps++
+				if candidates[tails[mid]].bIdx < c.bIdx {
+					lo = mid + 1
+				} else {
+					hi = mid
+				}
+			}
+			if lo > 0 {
+				prev[i] = tails[lo-1]
+			} else {
+				prev[i] = -1
+			}
+			if lo == len(tails) {
+				tails = append(tails, i)
+			} else {
+				tails[lo] = i
+			}
+		}
+		anchors = make([]anchor, len(tails))
+		for idx, k := tails[len(tails)-1], len(tails)-1; k >= 0; k-- {
+			anchors[k] = candidates[idx]
+			idx = prev[idx]
+		}
+	}
+
+	// Process each gap between consecutive anchors, plus leading and trailing gaps.
+	bLo, dLo := 0, 0
+	for _, a := range anchors {
+		out[a.dIdx] = baseOffset + a.bIdx
+		steps += alignGapBounded(beforeMid, draftMid, bLo, a.bIdx, dLo, a.dIdx, baseOffset, out)
+		bLo = a.bIdx + 1
+		dLo = a.dIdx + 1
+	}
+	steps += alignGapBounded(beforeMid, draftMid, bLo, len(beforeMid), dLo, len(draftMid), baseOffset, out)
+	return steps
+}
+
+func alignGapBounded(beforeMid, draftMid []rawLine, bLo, bHi, dLo, dHi, baseOffset int, out []int) int {
+	steps := 0
+	// Trim matching prefix and suffix inside the gap (handles unchanged repeated lines adjacent to anchors).
+	for bLo < bHi && dLo < dHi && beforeMid[bLo].body == draftMid[dLo].body {
+		out[dLo] = baseOffset + bLo
+		bLo++
+		dLo++
+		steps++
+	}
+	for bHi > bLo && dHi > dLo && beforeMid[bHi-1].body == draftMid[dHi-1].body {
+		bHi--
+		dHi--
+		out[dHi] = baseOffset + bHi
+		steps++
+	}
+	m := bHi - bLo
+	n := dHi - dLo
+	if m <= 0 || n <= 0 {
+		return steps
+	}
+	// Strictly bound DP work: if m*n exceeds maxMixedEOLLCSCells, skip DP in O(1).
+	if int64(m)*int64(n) > maxMixedEOLLCSCells {
+		return steps
+	}
+	cols := n + 1
+	dp := make([]int, (m+1)*cols)
+	for i := m - 1; i >= 0; i-- {
+		for j := n - 1; j >= 0; j-- {
+			steps++
+			if beforeMid[bLo+i].body == draftMid[dLo+j].body {
+				dp[i*cols+j] = dp[(i+1)*cols+(j+1)] + 1
+			} else if dp[(i+1)*cols+j] >= dp[i*cols+(j+1)] {
+				dp[i*cols+j] = dp[(i+1)*cols+j]
+			} else {
+				dp[i*cols+j] = dp[i*cols+(j+1)]
+			}
+		}
+	}
+	i, j := 0, 0
+	for i < m && j < n {
+		steps++
+		if beforeMid[bLo+i].body == draftMid[dLo+j].body {
+			out[dLo+j] = baseOffset + bLo + i
+			i++
+			j++
+		} else if dp[(i+1)*cols+j] >= dp[i*cols+(j+1)] {
+			i++
+		} else {
+			j++
+		}
+	}
+	return steps
 }
 
 // EncodeDocument returns the bytes a save of LF-normalized text writes in its

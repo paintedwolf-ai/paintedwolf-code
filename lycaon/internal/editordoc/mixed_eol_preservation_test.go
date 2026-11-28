@@ -3,9 +3,11 @@ package editordoc
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -116,5 +118,33 @@ func TestExplicitUserEOLNormalizationStillConvertsMixedEOL(t *testing.T) {
 	}
 	if saved.MixedEOL || saved.BaseMixedEOL || saved.Dirty {
 		t.Fatalf("expected uniform clean doc after normalization save, got mixed=%v baseMixed=%v dirty=%v", saved.MixedEOL, saved.BaseMixedEOL, saved.Dirty)
+	}
+}
+
+func TestMixedEOLPreviewAndSaveFailClosedWhenPreimageChangedOnDisk(t *testing.T) {
+	initial := "L1_crlf\r\nTARGET\nL3_lf\n"
+	outside := "L1_crlf\r\nOUTSIDE_CHANGED\nL3_lf\n"
+	outsideSHA := sha256String(outside)
+
+	f := newAgentFixture(t, map[string]string{"mixed.txt": initial})
+	doc, ok, err := f.service.OpenText(t.Context(), f.project.ID, sourcebranch.Trunk, f.rootID, "mixed.txt")
+	testutil.FailErr(t, "open mixed", err)
+	if !ok || !doc.MixedEOL {
+		t.Fatalf("expected mixed-EOL document, ok=%v mixed=%v", ok, doc.MixedEOL)
+	}
+	// Mutate disk underneath so the authorized BaseSHA256 preimage no longer matches disk.
+	f.write(t, "mixed.txt", outside)
+
+	// Preview MUST fail closed with ErrSourceWriteConflict (never silently fall back to uniform EOL).
+	edit := agentEdit(doc, "L1_crlf\nEDITED\nL3_lf\n")
+	if _, err := f.service.PreviewAgentEdits(t.Context(), []AgentEdit{edit}); !errors.Is(err, projectsource.ErrSourceWriteConflict) {
+		t.Fatalf("PreviewAgentEdits on changed mixed-EOL preimage = %v, want ErrSourceWriteConflict", err)
+	}
+	// Save MUST also fail closed and leave disk bytes untouched.
+	if _, err := f.service.Save(t.Context(), f.project, doc.ID, "window", uuid.NewString(), "", 0, doc.Revision); !errors.Is(err, projectsource.ErrSourceWriteConflict) {
+		t.Fatalf("Save on changed mixed-EOL preimage = %v, want ErrSourceWriteConflict", err)
+	}
+	if got := sha256String(f.disk(t, "mixed.txt")); got != outsideSHA {
+		t.Fatalf("failed mixed-EOL save mutated disk: got=%s want=%s", got, outsideSHA)
 	}
 }

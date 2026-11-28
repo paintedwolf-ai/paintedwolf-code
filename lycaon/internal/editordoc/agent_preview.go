@@ -40,12 +40,18 @@ func (a *AgentService) PreviewAgentEdits(ctx context.Context, inputs []AgentEdit
 			return nil, err
 		}
 		limits := textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes)
-		beforeContent, _ := s.serializeDocumentContent(ctx, d, d.Draft, nil)
+		beforeContent, _, err := s.serializeDocumentContent(ctx, d, d.Draft, nil)
+		if err != nil {
+			return nil, err
+		}
 		before, err := textfile.EncodeBounded(beforeContent, d.Encoding, limits)
 		if err != nil {
 			return nil, err
 		}
-		afterContent, _ := s.serializeDocumentContent(ctx, d, plan.content, nil)
+		afterContent, _, err := s.serializeDocumentContent(ctx, d, plan.content, nil)
+		if err != nil {
+			return nil, err
+		}
 		after, err := textfile.EncodeBounded(afterContent, d.Encoding, limits)
 		if err != nil {
 			return nil, err
