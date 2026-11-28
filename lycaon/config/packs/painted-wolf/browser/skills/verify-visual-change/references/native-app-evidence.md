@@ -116,7 +116,7 @@ int main(int argc, char *argv[]) {
 
 ## Execution options
 
-1. **One-shot via `command`**:
+{% if profile_command_external_exec %}1. **One-shot via `command`**:
    ```json
    {
      "name": "command",
@@ -142,4 +142,4 @@ int main(int argc, char *argv[]) {
        "path": "build/preview.png"
      }
    }
-   ```
+   ```{% else %}On a read-only surface without external command execution, inspect a pre-generated `APP_SNAPSHOT` PNG directly with `view_image` (`{"path": "build/preview.png"}`); launching the native binary requires external command execution.{% endif %}

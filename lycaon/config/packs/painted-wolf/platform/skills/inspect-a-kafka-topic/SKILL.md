@@ -7,7 +7,7 @@ metadata:
 
 # Inspect a Kafka topic
 
-Use this workflow to answer streaming questions without leaving fingerprints on the cluster. On a process start that connects to a broker, declare the resolved id (`kcat` or `rpk`) in `capability_request.host_resources`. A loopback broker also needs `loopback_connect` with its ports. For a remote broker follow reach-a-network-service: try `socks_proxy: true`; if the client ignores `ALL_PROXY`, use `direct_ip` with `declared_destinations` listing every advertised broker `tcp://host:port` from the metadata, not only the bootstrap.
+Use this workflow to answer streaming questions without leaving fingerprints on the cluster. On a process start that connects to a broker, declare the resolved id (`kcat` or `rpk`) in `capability_request.host_resources`.{% if runner_loopback_connect_tools %} A loopback broker also needs `loopback_connect` with its ports.{% endif %} For a remote broker follow reach-a-network-service:{% if runner_socks_proxy_tools %} try `socks_proxy: true`;{% endif %}{% if runner_direct_ip_tools %} if the client ignores `ALL_PROXY`, use `direct_ip` with `declared_destinations` listing every advertised broker `tcp://host:port` from the metadata, not only the bootstrap.{% elif not runner_socks_proxy_tools %} report the remote broker route for a network-capable run.{% endif %}
 
 ## Workflow
 

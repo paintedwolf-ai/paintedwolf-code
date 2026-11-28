@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -15,14 +16,31 @@ import (
 func TestRenderSystemPromptUnknownAgentFallsBack(t *testing.T) {
 	root := filepath.Join("..", "..", "..")
 	engine := &AssemblyEngine{}
-	engine.SetDeps(AssemblyDeps{
+	engine.SetDeps(withTestTurnReader(AssemblyDeps{
 		Prompts: prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root}),
-	})
+	}))
 	sess := &api.Session{AgentType: "nonexistent-agent-xyz", WorkspacePath: t.TempDir()}
 	pe, _, err := testPromptSurface(engine).projectPromptsSnapshot(context.Background(), sess)
 	testutil.FailErr(t, "engine.projectPromptsSnapshot failed", err)
+	toolProfiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles failed", err)
+	plan, err := prompts.CompileSurfacePlan("implement_routing", 1)
+	testutil.FailErr(t, "CompileSurfacePlan failed", err)
+	reader, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  toolProfiles,
+		RootCount: 1,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_routing",
+		Plan:      plan,
+		Offered:   (plan).ImmediateNames(),
+	})
+	testutil.FailErr(t, "NewReader failed", err)
+	fallbackVars, err := prompts.Vars(reader, map[string]any{"project_dir": t.TempDir()})
+	testutil.FailErr(t, "Vars failed", err)
 	out, err := testPromptSurface(engine).renderSystemPromptWithEngine(context.Background(), pe, sess,
-		"agents/coordinator-core.md", map[string]any{"project_dir": t.TempDir()})
+		inject.CoordinatorTurnFrame{}, nil, "agents/coordinator-core.md", fallbackVars)
 	testutil.FailErr(t, "engine.renderSystemPromptWithEngine failed", err)
 	if strings.TrimSpace(out) == "" {
 		t.Fatal("expected fallback template render")
@@ -32,7 +50,7 @@ func TestRenderSystemPromptUnknownAgentFallsBack(t *testing.T) {
 func TestReviewEvidenceUnitsRenderOnTheReviewSurface(t *testing.T) {
 	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: kickTestRoot(t)})
 	engine := &AssemblyEngine{}
-	engine.SetDeps(AssemblyDeps{Prompts: pe, Selection: &selectionFixture{}})
+	engine.SetDeps(withTestTurnReader(AssemblyDeps{Prompts: pe, Selection: &selectionFixture{}}))
 	sess := &api.Session{ID: "review", AgentType: "coordinator", Posture: api.SessionPostureVet, WorkspacePath: t.TempDir()}
 	frame := inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{
 		PhaseCoordinatorSurface: "review_adjudicate",
@@ -51,11 +69,11 @@ func TestCoordinatorUnitsKeepLoadedToolsAndWebGate(t *testing.T) {
 	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: kickTestRoot(t)})
 	for _, webEnabled := range []bool{false, true} {
 		engine := &AssemblyEngine{}
-		engine.SetDeps(AssemblyDeps{
+		engine.SetDeps(withTestTurnReader(AssemblyDeps{
 			Prompts:          pe,
 			WebSearchEnabled: func() bool { return webEnabled },
 			Selection:        &selectionFixture{loaded: map[string]bool{"secret_generate": true, "fetch_url": true}},
-		})
+		}))
 		sess := &api.Session{ID: "loaded", AgentType: "coordinator", Posture: api.SessionPostureBuild, WorkspacePath: t.TempDir()}
 		frame := inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{PhaseCoordinatorSurface: "implement_investigate"}}
 		out, err := testPromptSurface(engine).renderCoordinatorStablePrompt(t.Context(), pe, "", sess, frame, nil, nil,

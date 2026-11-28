@@ -166,6 +166,8 @@ type Decision struct {
 	// carries ([OAR-COPY-7]). Substitution does not change the decision
 	// ([OAR-COPY-6], [OAR-DOC-18]).
 	Copy map[string]string
+	// NextStepsErr reports steps left out because their facts could not be assembled.
+	NextStepsErr error
 }
 
 // RuleSet is the loaded + validated rules indexed for Emit ordering.

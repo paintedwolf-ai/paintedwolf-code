@@ -38,6 +38,7 @@ func TestRenderWorkerTaskAssignmentIncludesFileOrientation(t *testing.T) {
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "game.py"), []byte(body), 0o644))
 
 	out, err := RenderWorkerTaskAssignment(ctx, testInjectRenderer(t), WorkerTaskAssignmentInput{
+		Reader:      testWorkerReader(t),
 		SessionID:   "sess-inject-test",
 		ProjectDir:  dir,
 		Charter:     testWorkerCharter("Tune velocity integration in game.py"),
@@ -83,6 +84,7 @@ func TestRenderWorkerTaskAssignmentSurvivesSymbolRichScopeFile(t *testing.T) {
 	}
 
 	out, err := RenderWorkerTaskAssignment(t.Context(), testInjectRenderer(t), WorkerTaskAssignmentInput{
+		Reader:      testWorkerReader(t),
 		SessionID:   "sess-bounded",
 		ProjectDir:  dir,
 		Charter:     testWorkerCharter("Audit the lockfile"),
@@ -128,6 +130,7 @@ func TestBuildWorkerTaskAssignmentDataBoundsModelAuthoredLists(t *testing.T) {
 // The leg must be able to read the record its brief names.
 func TestRenderWorkerTaskAssignmentCarriesRecordedVerdicts(t *testing.T) {
 	out, err := RenderWorkerTaskAssignment(t.Context(), testInjectRenderer(t), WorkerTaskAssignmentInput{
+		Reader:      testWorkerReader(t),
 		SessionID:   "sess-verdicts",
 		ProjectDir:  t.TempDir(),
 		Charter:     testWorkerCharter("Challenge the claims recorded under evidence_key survey_claims"),
@@ -154,6 +157,7 @@ func TestRenderWorkerTaskAssignmentCarriesRecordedVerdicts(t *testing.T) {
 // An early-phase leg has no stamped verdict; the block stays out entirely.
 func TestRenderWorkerTaskAssignmentOmitsTheVerdictBlockWhenNoneRecorded(t *testing.T) {
 	_, err := RenderWorkerTaskAssignment(t.Context(), testInjectRenderer(t), WorkerTaskAssignmentInput{
+		Reader:      testWorkerReader(t),
 		SessionID:   "sess-no-verdicts",
 		ProjectDir:  t.TempDir(),
 		Charter:     testWorkerCharter("Survey the attack surface"),

@@ -3,9 +3,10 @@ package promptloop
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"

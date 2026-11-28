@@ -3,4 +3,4 @@ steps:
     tool: "recall"
     args:
       query: "handle:<handle>"
-    say: "To recover a result no longer in context, call {{ call }} with its exact handle, or a `path:` query, and cite the handle it returns."
+    say: "To recover a result no longer in context, call {% if load %}{{ load }}, then {% endif %}{{ call }} with its exact handle, or a `path:` query, and cite the handle it returns."

@@ -1,10 +1,5 @@
 [
   {
-    "tool": "handoff_init",
-    "args": { "agent": "worker-opaque", "session_id": "session-opaque" },
-    "title": "Worker coordination"
-  },
-  {
     "tool": "command_output",
     "args": {
       "handle": "7441efdd-29d7-4cd9-899e-3c542d62d8ba",

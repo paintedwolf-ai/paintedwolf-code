@@ -1,4 +1,4 @@
 steps:
   - tool: "update_progress"
-    say: "Account for the result on the checklist with {{ call }}."
+    say: "Account for the result on the checklist with {% if load %}{{ load }}, then {% endif %}{{ call }}."
     otherwise: "There is nothing to shelve for this result."

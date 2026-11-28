@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -24,7 +23,7 @@ func TestSessionOccurrencesPreserveOfferedRecoverySnapshot(t *testing.T) {
 			if offered {
 				names = append(names, name)
 			}
-			ctx := tools.WithCallReach(t.Context(), toolreach.Offered(names))
+			ctx := toolreach.WithRequest(t.Context(), toolreach.Offered(names))
 			gc := oar.NewGuardContext()
 			manager.FillSessionFacts(ctx, gc, &api.Session{ID: "fixture"}, "read", nil)
 			if len(gc.ObservationData) != 0 {

@@ -18,6 +18,7 @@ import (
 var (
 	contractOAROnce     sync.Once
 	contractOARPipeline *oar.GuardPipeline
+	contractOARRules    *oar.RuleSet
 	contractOARErr      error
 )
 
@@ -32,6 +33,14 @@ func WireContractBlockPlane(t *testing.T, rt *toolhost.Runtime, rejectFmt *guida
 	renderer := oar.NewRenderer(rejectFmt, nil)
 	bp := &toolfeedback.BlockPlane{Pipeline: p, Renderer: renderer}
 	rt.Executor.Rejections.SetBlockPlane(bp)
+}
+
+// StockOARRules returns the effective stock OAR rule set the contract block
+// plane evaluates.
+func StockOARRules(t *testing.T) *oar.RuleSet {
+	t.Helper()
+	contractStockOARPipeline(t)
+	return contractOARRules
 }
 
 func contractStockOARPipeline(t *testing.T) *oar.GuardPipeline {
@@ -61,6 +70,7 @@ func contractStockOARPipeline(t *testing.T) *oar.GuardPipeline {
 			contractOARErr = err
 			return
 		}
+		contractOARRules = rs
 		p := oar.NewGuardPipeline(rs, loader, oar.NewCounterStore())
 		p.EnableAnchor(oar.AnchorToolHandler)
 		p.EnableAnchor(oar.AnchorToolRejected)

@@ -69,5 +69,6 @@ func (e *FileTemplateEngine) compileTemplate(ref string) (*pongo2.Template, int,
 		return nil, 0, err
 	}
 	tpl, err := set.FromCache(ref)
+	pongoplain.NameTemplate(tpl, ref)
 	return tpl, size, err
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -101,4 +102,71 @@ func TestRuntimeBuildCompletionMessagesPassthrough(t *testing.T) {
 	if msgs[1].Role != api.MessageRoleUser || msgs[1].Content != "hi" {
 		t.Fatalf("history not passed through: %+v", msgs[1])
 	}
+}
+
+func TestRuntimeBetweenTurnAskToAgentUpgradeEmitsAgentEnabledOnce(t *testing.T) {
+	client := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
+	st := storetest.New(t, testdbseed.DefaultProjectID)
+	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{
+		LoopDeps: func() promptloop.PromptLoopDeps {
+			return promptloop.PromptLoopDeps{
+				Context: promptloop.ContextDeps{
+					Limits:               func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+					ResolveEffectiveMode: st.ResolveEffectiveMode,
+					BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+						return history, nil
+					},
+				},
+				Model: promptloop.ModelDeps{LLM: client},
+				Closeout: promptloop.CloseoutDeps{
+					CloseoutTrackingDeps: promptloop.CloseoutTrackingDeps{
+						RenderHostKick: func(context.Context, prompts.Reader, string, map[string]any) (string, error) {
+							return "The user switched this session to Agent mode.", nil
+						},
+					},
+					EvaluateCloseoutBlock: func(context.Context, *api.Session, *oar.GuardContext) (*oar.Decision, error) { return nil, nil },
+				},
+				Projection: promptloop.ProjectionDeps{
+					AppendMessages: st.Transcript.AppendMessages,
+					UpdateMessage: func(ctx context.Context, sessionID, messageID string, msg api.Message) error {
+						_, err := st.Transcript.UpdateMessage(ctx, sessionID, messageID, msg)
+						return err
+					},
+				},
+			}
+		},
+	})
+	ctx := context.Background()
+	ask := api.SessionModeAsk
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Mode: &ask, Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create Ask session", err)
+
+	_, err = rt.RunPrompt(ctx, promptloop.PromptRunInput{
+		SessionID: sess.ID, Session: sess,
+		History: []api.Message{{Role: api.MessageRoleUser, Content: "inspect"}}, ProfileID: "coordinator",
+	})
+	testutil.FailErr(t, "Ask turn", err)
+
+	sess, err = st.Sessions.SetMode(ctx, sess.ID, api.SessionModeAgent)
+	testutil.FailErr(t, "between-turn SetMode(Agent)", err)
+	hist, err := st.Transcript.GetMessages(ctx, sess.ID)
+	testutil.FailErr(t, "read history", err)
+	_, err = rt.RunPrompt(ctx, promptloop.PromptRunInput{
+		SessionID: sess.ID, Session: sess,
+		History: append(hist, api.Message{Role: api.MessageRoleUser, Content: "act"}), ProfileID: "coordinator",
+	})
+	testutil.FailErr(t, "Agent turn", err)
+
+	msgs, err := st.Transcript.GetMessages(ctx, sess.ID)
+	testutil.FailErr(t, "final transcript", err)
+	notices := 0
+	for _, m := range msgs {
+		if m.HostSignalID == "session.mode.agent_enabled" {
+			notices++
+		}
+	}
+	if notices != 1 {
+		t.Fatalf("session.mode.agent_enabled count = %d, want 1", notices)
+	}
+	rt.ForgetSession(ctx, sess.ID)
 }

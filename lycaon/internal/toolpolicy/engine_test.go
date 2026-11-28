@@ -289,7 +289,7 @@ func TestPromptListingDoesNotFireRejectionRules(t *testing.T) {
 	rule, _ := bp.Pipeline.Rules().Get(code)
 	rule.OnFire = []oar.OnFireAction{oar.OnFireIncrementCounter}
 	eng := NewEngine(EngineDeps{
-		ToolLister: listInvoker{metas: []tools.ToolMeta{{Name: "state_update"}}},
+		ToolLister: listInvoker{metas: []tools.ToolMeta{{Name: "state_start"}}},
 		Rules:      staticRuleEvaluator{outcome: &rules.RuleOutcome{Code: code}},
 		BlockPlane: bp,
 	})
@@ -300,7 +300,7 @@ func TestPromptListingDoesNotFireRejectionRules(t *testing.T) {
 	if got := bp.Pipeline.Counters().Report(""); len(got) != 0 {
 		t.Fatalf("listing invented an occurrence: %v", got)
 	}
-	err := eng.EvaluateInvoke(t.Context(), sess, "state_update", nil)
+	err := eng.EvaluateInvoke(t.Context(), sess, "state_start", nil)
 	refusal, ok := guidance.RefusalFromError(err)
 	if !ok || refusal.Code() != code || refusal.Copy == nil {
 		t.Fatalf("actual refusal lost OAR copy: %v", err)

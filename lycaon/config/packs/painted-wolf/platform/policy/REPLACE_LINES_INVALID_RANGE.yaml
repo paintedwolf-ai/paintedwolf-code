@@ -3,7 +3,7 @@ id: REPLACE_LINES_INVALID_RANGE
 kind: schema
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.end_line, paintedwolf.native_operation, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.rejection_reason, paintedwolf.start_line]
+requires_facts: [paintedwolf.admitted_range_read_forms, paintedwolf.command_loader_call, paintedwolf.end_line, paintedwolf.native_operation, paintedwolf.operation, paintedwolf.path, paintedwolf.range_read_forms_loadable_without_schema, paintedwolf.rejection_code, paintedwolf.rejection_reason, paintedwolf.start_line]
 when: paintedwolf.operation == "replace_lines" && paintedwolf.rejection_code == "REPLACE_LINES_INVALID_RANGE"
 effect: block
 x-paintedwolf-category: recoverable
@@ -12,7 +12,7 @@ message: replace_lines line range is invalid
 what: The line-range replacement on {{ paintedwolf.path }} rejected range {{ paintedwolf.start_line }}–{{ paintedwolf.end_line }} — {{ paintedwolf.rejection_reason }}.
 cause: start_line and end_line are 1-based inclusive; end_line must be >= start_line.
 why: Line-range edits need a valid window before splicing file content.
-fix: '{% if paintedwolf.native_operation %}Re-read the intended span with `sed -n ''A,Bp''` or `cat -n` inside command, then pass --start and --end from that line range.{% else %}Re-read the intended span, then pass start_line and end_line from that block''s line range.{% endif %}'
+fix: '{% if paintedwolf.native_operation %}Re-read the intended span{% if paintedwolf.admitted_range_read_forms %} inside command{% if paintedwolf.command_loader_call %} after loading it with {{ paintedwolf.command_loader_call }}{% endif %} ({{ paintedwolf.admitted_range_read_forms }}){% else %}{% if paintedwolf.range_read_forms_loadable_without_schema %} after calling {{ paintedwolf.command_loader_call }} to inspect its projected schema{% endif %}{% endif %}, then pass --start and --end from that line range.{% else %}Re-read the intended span, then pass start_line and end_line from that block''s line range.{% endif %}'
 instead: Branch on Code; fix the line range and retry with a valid 1-based range
 x-paintedwolf-scenarios:
   - id: default
@@ -25,6 +25,7 @@ x-paintedwolf-scenarios:
       tool: replace_lines
   - id: command-leg
     vars:
+      admitted_range_read_forms: ['sed -n 1,10p FILE', cat -n FILE]
       end_line: 10
       native_operation: replace_lines
       path: internal/foo.go

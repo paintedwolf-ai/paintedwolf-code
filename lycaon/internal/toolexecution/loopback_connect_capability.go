@@ -4,6 +4,7 @@ import (
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 
 	"context"
+
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 
@@ -68,13 +69,8 @@ func (e *Capabilities) preflightLoopbackConnectCapability(
 		return nil, e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, err)
 	}
 	if result.Denied {
-		data := map[string]any{}
-		if result.UserGuidance != "" {
-			data[toolrejection.UserGuidanceKey] = result.UserGuidance
-		}
-		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
-			Code: isolation.CodeLoopbackConnectDenied, Data: data,
-		})
+		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args,
+			approvalRefusalReject(isolation.CodeLoopbackConnectDenied, result.DenialCause, result.ApprovalResolvedBy, result.UserGuidance))
 	}
 	if !result.Authorized {
 		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{

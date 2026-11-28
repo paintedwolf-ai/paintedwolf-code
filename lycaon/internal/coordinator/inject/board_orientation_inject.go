@@ -16,6 +16,7 @@ import (
 func RenderBoardOrientationInject(
 	ctx context.Context,
 	renderer *prompts.InjectRenderer,
+	reader prompts.Reader,
 	sessionID string,
 	snap api.BoardSnapshot,
 	scope packboard.InjectScope,
@@ -26,8 +27,12 @@ func RenderBoardOrientationInject(
 	if renderer == nil {
 		return "", fmt.Errorf("inject renderer not configured")
 	}
-	data := BuildBoardInjectData(snap, scope, omitDelegation, includeScanLegend, now)
-	block, err := anchor.RenderInform(ctx, anchor.BoardChanged, anchor.MatchContext{Surface: "coordinator", SessionID: sessionID}, renderer, BoardInjectToMap(data))
+	data := BuildBoardInjectData(reader, snap, scope, omitDelegation, includeScanLegend, now)
+	vars, err := BoardInjectToMap(data)
+	if err != nil {
+		return "", err
+	}
+	block, err := anchor.RenderInformWithReader(ctx, anchor.BoardChanged, anchor.MatchContext{Surface: "coordinator", SessionID: sessionID}, renderer, reader, vars)
 	if err != nil {
 		return "", err
 	}
@@ -45,6 +50,7 @@ func RenderBoardOrientationInject(
 func RenderWorkerBoardInject(
 	ctx context.Context,
 	renderer *prompts.InjectRenderer,
+	reader prompts.Reader,
 	sessionID string,
 	snap api.BoardSnapshot,
 	scope packboard.InjectScope,
@@ -55,12 +61,15 @@ func RenderWorkerBoardInject(
 	if renderer == nil {
 		return "", fmt.Errorf("inject renderer not configured")
 	}
-	data := BuildBoardInjectData(snap, scope, omitDelegation, includeScanLegend, now)
-	vars := BoardInjectToMap(data)
+	data := BuildBoardInjectData(reader, snap, scope, omitDelegation, includeScanLegend, now)
+	vars, err := BoardInjectToMap(data)
+	if err != nil {
+		return "", err
+	}
 	if !snap.Repo.GeneratedAt.IsZero() {
 		vars["inventory_at"] = snap.Repo.GeneratedAt.UTC().Format(time.RFC3339)
 	}
-	block, err := anchor.RenderInform(ctx, anchor.InjectWorkerBoard, anchor.MatchContext{Surface: "worker", SessionID: sessionID}, renderer, vars)
+	block, err := anchor.RenderInformWithReader(ctx, anchor.InjectWorkerBoard, anchor.MatchContext{Surface: "worker", SessionID: sessionID}, renderer, reader, vars)
 	if err != nil {
 		return "", err
 	}

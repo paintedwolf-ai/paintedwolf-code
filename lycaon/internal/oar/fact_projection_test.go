@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolreach"
 )
 
 func bindNativeOperation(t *testing.T, operation string) toolcontract.BoundOperation {
@@ -107,5 +108,35 @@ func TestPublishedWriteRefusalsPreserveSharedTempObservations(t *testing.T) {
 		if !ok || !slices.Equal(got, want) {
 			t.Errorf("%s = %#v, want %v", name, facts[name], want)
 		}
+	}
+}
+
+func TestProjectedSchemaNarrowsCapabilityRecoveryFacts(t *testing.T) {
+	gc := NewGuardContext()
+	gc.ObserveToolCall("command", map[string]any{"command": "ls"})
+	gc.Reach = toolreach.Offered([]string{"command"}).WithSchemas(map[string]map[string]any{
+		"command": {
+			"properties": map[string]any{
+				"command": map[string]any{"type": "string"},
+				"capability_request": map[string]any{
+					"properties": map[string]any{
+						"read_path": map[string]any{"type": "array"},
+					},
+				},
+			},
+		},
+	})
+	facts := activation(gc)
+	if facts["paintedwolf.supports_read_path"] != true || facts["paintedwolf.missing_capability_read_path"] != true {
+		t.Fatalf("expected projected read_path to remain supported/missing, got %v / %v", facts["paintedwolf.supports_read_path"], facts["paintedwolf.missing_capability_read_path"])
+	}
+	for _, stripped := range []string{"credential_store", "host_execution", "process_control"} {
+		if facts["paintedwolf.supports_"+stripped] != false || facts["paintedwolf.missing_capability_"+stripped] != false {
+			t.Fatalf("expected stripped %s capability to be false, got supports=%v missing=%v", stripped, facts["paintedwolf.supports_"+stripped], facts["paintedwolf.missing_capability_"+stripped])
+		}
+	}
+	admitted, _ := facts["paintedwolf.capability_request_fields"].([]string)
+	if !slices.Equal(admitted, []string{"read_path"}) {
+		t.Fatalf("capability_request_fields = %v, want [read_path]", admitted)
 	}
 }

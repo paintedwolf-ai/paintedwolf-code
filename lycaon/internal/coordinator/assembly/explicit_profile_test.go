@@ -2,6 +2,7 @@ package assembly
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -18,21 +19,20 @@ func TestExplicitToolProfilesDoNotAdvertiseCoordinatorReportProtocol(t *testing.
 			engine := &AssemblyEngine{}
 			workflow := &advancingTurnFrameSource{phase: "boot", revision: 1}
 			var listed []string
-			engine.SetDeps(AssemblyDeps{
+			engine.SetDeps(withListedTurnReader(AssemblyDeps{
 				Board: advancingBoard{}, BoardOrientReady: advancingOrientRecorder{source: workflow},
 				CoordinatorFrame: workflow,
 				Prompts:          prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: kickTestRoot(t)}),
-				PromptToolLister: func(_ context.Context, _ *api.Session, id string) ([]tools.ToolMeta, error) {
-					listed = append(listed, id)
-					return []tools.ToolMeta{{Name: "read"}, {Name: "summarize"}}, nil
-				},
-			})
+			}, func(_ context.Context, _ *api.Session, id string) ([]tools.ToolMeta, error) {
+				listed = append(listed, id)
+				return []tools.ToolMeta{{Name: "read"}, {Name: "summarize"}}, nil
+			}))
 			sess := &api.Session{ID: "selection", AgentType: "coordinator", Posture: api.SessionPostureBuild}
 			frame := inject.CoordinatorTurnFrame{Machine: inject.Machine{ProfileID: profile}}
 			history := []api.Message{{Role: api.MessageRoleUser, Content: "Explain this selection."}}
 			messages, err := engine.BuildCompletionMessages(t.Context(), sess, history, &frame)
 			testutil.FailErr(t, "assemble explicit profile prompt", err)
-			if len(listed) != 1 || listed[0] != profile {
+			if len(listed) == 0 || slices.ContainsFunc(listed, func(id string) bool { return id != profile }) {
 				t.Fatalf("tool listing profiles = %v, want only %s", listed, profile)
 			}
 			if workflow.phase != "work" || frame.Machine.ProfileID != profile {

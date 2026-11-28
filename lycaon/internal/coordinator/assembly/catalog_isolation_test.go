@@ -24,13 +24,13 @@ func TestProjectPromptCatalogIsolation(t *testing.T) {
 	}
 	base := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
 	engine := &AssemblyEngine{}
-	engine.SetDeps(AssemblyDeps{
+	engine.SetDeps(withTestTurnReader(AssemblyDeps{
 		Prompts: base,
 		SessionView: func(_ context.Context, sess *api.Session) *catalogview.View {
 			return &catalogview.View{Catalog: catalogs[sess.ProjectID]}
 		},
 		ProjectOverlayRootPaths: func(context.Context, *api.Session) []string { return nil },
-	})
+	}))
 	for _, projectID := range []string{"a", "b", "a"} {
 		sess := &api.Session{ID: "session-" + projectID, ProjectID: projectID}
 		derived, ok := testPromptSurface(engine).projectPrompts(t.Context(), sess).(*prompts.FileTemplateEngine)

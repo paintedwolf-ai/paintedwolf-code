@@ -28,7 +28,7 @@ var Family = invariants.Family{Name: "prompt-render", Invariants: append([]invar
 	{Name: "templates-render-no-host-paths", Anchors: []invariants.Anchor{invariants.Dir("lycaon/config/packs/painted-wolf/platform/guidance")}, Exempt: []invariants.Exemption{
 		{Key: "config/packs/painted-wolf/platform/guidance/curator/user.md: c.path", Reason: "the curator's evidence path is a display path, not a host root"},
 	}, Check: templatesRenderNoHostPaths},
-}, reachInvariants...)}
+}, append(reachInvariants, cartesianInvariants...)...)}
 
 var (
 	personaRenderer = invariants.Func("internal/prompts", "RenderPersona")
@@ -46,9 +46,20 @@ func stock(r *invariants.Run) *Stock {
 	})
 }
 
-// skillRenders is every stock skill rendered for every reader, once per
-// corpus.
-func skillRenders(r *invariants.Run) []SkillRender {
+// skillRenders is every stock skill's text for every reader, once per
+// corpus. The host-state matrix's skill audit is that render set for the
+// stock templates and reports the audit's violations; a checkout's prompt
+// overlay changes the renders, so it renders afresh.
+func skillRenders(r *invariants.Run) []SkillText {
+	if !hasSiteOverlayFiles(stock(r).Site) {
+		return cartesianSummary(r).SkillTexts
+	}
+	return skillTexts(overlaySkillRenders(r))
+}
+
+// overlaySkillRenders renders every skill of a checkout's prompt overlay for
+// every reader, with the reader's authority.
+func overlaySkillRenders(r *invariants.Run) []SkillRender {
 	return invariants.Part(r.Corpus, "stock skill renders", func() ([]SkillRender, error) { return RenderStockSkills(stock(r)) })
 }
 
@@ -134,9 +145,15 @@ func CoordinatorReader(stock *Stock, surfaceID string, roots int) (prompts.Reade
 	if err != nil {
 		return prompts.Reader{}, err
 	}
-	return prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID, SurfaceID: surfaceID, Plan: plan,
-		Profiles: stock.Profiles, RootCount: roots, WebSearch: true,
+	return prompts.NewReader(prompts.HostFacts{
+		Profiles:  stock.Profiles,
+		RootCount: roots,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: surfaceID,
+		Plan:      plan,
+		Offered:   (plan).ImmediateNames(),
 	})
 }
 
@@ -149,8 +166,8 @@ func coordinatorKicksRenderNonEmpty(r *invariants.Run) {
 	r.Must(err)
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	full, minimal := KickFixture(), map[string]any{}
-	prompts.MergeCoordinatorKickVarsForTools(full, reader)
-	prompts.MergeCoordinatorKickVarsForTools(minimal, reader)
+	r.Must(prompts.MergeCoordinatorKickVarsForTools(full, reader))
+	r.Must(prompts.MergeCoordinatorKickVarsForTools(minimal, reader))
 	checked := 0
 	for _, id := range ids {
 		if !strings.HasPrefix(id, "coordinator-") {
@@ -158,7 +175,7 @@ func coordinatorKicksRenderNonEmpty(r *invariants.Run) {
 		}
 		checked++
 		for label, data := range map[string]map[string]any{"every field": full, "no event fields": minimal} {
-			out, err := engine.RenderKick(context.Background(), id, data)
+			out, err := engine.RenderKick(context.Background(), reader, id, data)
 			switch {
 			case err != nil:
 				r.Report("%s with %s: %v", id, label, err)
@@ -219,14 +236,17 @@ func readOnlyProfilesNeverNameMutations(r *invariants.Run) {
 					reachable = append(reachable, name)
 				}
 			}
-			reader, err := prompts.NewReader(prompts.ReaderInput{
-				ProfileID: pid, Plan: toolsurface.Compile(reachable, nil), Visible: reachable,
-				Profiles: []sandbox.ToolProfile{profile}, RootCount: 1, WebSearch: true,
+			reader, err := prompts.NewReader(prompts.HostFacts{
+				Profiles:  []sandbox.ToolProfile{profile},
+				RootCount: 1,
+				WebSearch: true,
+			}, prompts.TurnProjection{
+				ProfileID: pid,
+				Plan:      toolsurface.Compile(reachable, nil),
+				Offered:   reachable,
 			})
 			r.Must(err)
-			data, err := prompts.Vars(reader, KickFixture())
-			r.Must(err)
-			text, err := kicks.RenderKick(context.Background(), id, data)
+			text, err := kicks.RenderKick(context.Background(), reader, id, KickFixture())
 			r.Must(err)
 			reportMention(r, fmt.Sprintf("kick %s on read-only profile %s", id, pid), text)
 		}

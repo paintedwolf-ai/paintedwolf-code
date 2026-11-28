@@ -56,6 +56,21 @@ func (l BundledLayout) ReadBundled(ref string) ([]byte, extpacks.Source, error) 
 	return findInKind(kind, rel, eff)
 }
 
+// TemplateUnitID names the loaded catalog unit a template ref reads, by the
+// resolution ReadBundled applies.
+func TemplateUnitID(eff *extpacks.EffectiveCatalog, ref string) (string, bool) {
+	kind, rel, ok := kindForRef(path.Clean(strings.TrimSpace(ref)))
+	if !ok || eff == nil {
+		return "", false
+	}
+	for _, candidate := range unitRelCandidates(kind, strings.TrimPrefix(path.Clean(rel), "/")) {
+		if id := extpacks.UnitIDFor("", candidate); id != "" && eff.HasLoaded(id) {
+			return id, true
+		}
+	}
+	return "", false
+}
+
 // findInKind resolves captured bytes for one catalog unit.
 func findInKind(kind, rel string, eff *extpacks.EffectiveCatalog) ([]byte, extpacks.Source, error) {
 	rel = strings.TrimPrefix(path.Clean(rel), "/")

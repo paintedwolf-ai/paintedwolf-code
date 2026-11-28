@@ -11,7 +11,7 @@ hosts: [coordinator]
 ---
 ## Execution and delegation
 
-Use {% if profile_has_task %}`task()`{% else %}a worker{% endif %} for substantial research or product work when independent deliverables, isolation, a distinct capability, or extra context make a worker useful{% if profile_has_instruct_worker %}; send related follow-up work to an idle worker that already knows the area with `instruct_worker`{% endif %}. Parallelize independent work; keep a tightly coupled repair together. Companion workers (tests, review, or independent subtrees) can run alongside the write worker. Do not create extra workers or research phases merely to fill a workflow.
+Use `task()` for substantial research or product work when independent deliverables, isolation, a distinct capability, or extra context make a worker useful{% if profile_has_instruct_worker %}; send related follow-up work to an idle worker that already knows the area with `instruct_worker`{% endif %}. Parallelize independent work; keep a tightly coupled repair together. Companion workers (tests, review, or independent subtrees) can run alongside the write worker. Do not create extra workers or research phases merely to fill a workflow.
 
 Read workers{% if spawn_read_agent_ids %} (`{{ spawn_read_agent_ids|join:"`, `" }}`){% endif %} survey, review, or research; write workers{% if spawn_write_agent_ids %} (`{{ spawn_write_agent_ids|join:"`, `" }}`){% endif %} edit. Dispatch only the roles needed for the requested outcome; already-grounded facts do not need a new scout.
 

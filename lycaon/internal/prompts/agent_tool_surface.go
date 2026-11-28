@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -92,12 +93,6 @@ func AgentPromptSurfaceTemplateVars(surface AgentPromptSurface) map[string]any {
 		"agent_host_resources":         groupHostResources(surface.HostResources),
 		"agent_host_resources_omitted": surface.HostResourcesOmitted,
 		"prompt_surface_fingerprint":   surface.Fingerprint,
-		"shared_temp_writable":         len(surface.SharedTempLocations) > 0,
-		"shared_temp_locations":        surface.SharedTempLocations,
-		"session_scratch_dir":          surface.SessionScratchDir,
-		"reviews_confined_writes":      surface.Posture.ReviewsConfinedWrites(),
-		"command_external_hidden":      surface.CommandExternalHidden,
-		"command_external_shown":       !surface.CommandExternalHidden,
 	}
 }
 
@@ -132,11 +127,11 @@ func groupHostResources(resources []AgentHostResourceView) []map[string]any {
 	return groups
 }
 
-// LoadAgentToolSurface builds one profile's prompt surface. in.Loaded names
-// the profile's deferred tools the session ledger has loaded; they are offered
-// on this call like sticky ones, and the rest list as requestable with the
-// description in.Schemas holds for them.
-func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes map[string]hintCodeRow, in ReaderInput, profiles []sandbox.ToolProfile) (AgentToolSurfaceData, error) {
+// LoadAgentToolSurface builds one profile's prompt surface. loaded names the
+// profile's deferred tools the session ledger has loaded; they are offered on
+// this call like sticky ones, and the rest list as requestable with the
+// description schemas holds for them.
+func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes map[string]hintCodeRow, loaded map[string]bool, schemas *toolschema.Config, profiles []sandbox.ToolProfile) (AgentToolSurfaceData, error) {
 	profileID := strings.TrimSpace(toolProfileID)
 	if profileID == "" {
 		return AgentToolSurfaceData{}, fmt.Errorf("tool profile id required")
@@ -155,23 +150,23 @@ func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes
 		return AgentToolSurfaceData{}, fmt.Errorf("tool profile %q not found", profileID)
 	}
 
-	toolNames := availableToolsInPlan(visibleToolNames(profile, visibleTools), in.Plan)
+	toolNames := visibleToolNames(profile, visibleTools)
 	toolViews := make([]AgentToolArgView, 0, len(toolNames))
 	var requestable []string
 	for _, name := range toolNames {
-		if (profile.ToolDeferred(name) && !in.Loaded[name]) || !profile.ToolAllowed(name) {
+		if (profile.ToolDeferred(name) && !loaded[name]) || !profile.ToolAllowed(name) {
 			requestable = append(requestable, name)
 			continue
 		}
 		view := AgentToolArgView{Name: name}
-		if in.Schemas != nil {
-			if meta, ok := in.Schemas.ToolMeta(name); ok {
+		if schemas != nil {
+			if meta, ok := schemas.ToolMeta(name); ok {
 				view.RequiredArgs, _ = toolschema.ArgFieldSummary(meta.ArgsSchema)
 			}
 		}
 		toolViews = append(toolViews, view)
 	}
-	roster, err := RequestableTools(requestable, in.Schemas)
+	roster, err := RequestableTools(requestable, schemas)
 	if err != nil {
 		return AgentToolSurfaceData{}, err
 	}
@@ -307,17 +302,24 @@ func filterToolName(names []string, drop string) []string {
 	return out
 }
 
-// TemplateRefForAgent resolves the persona template file agentID renders.
-func TemplateRefForAgent(agentID string) (string, error) {
+// TemplateRefForAgent resolves the persona template file agentID renders from
+// the catalog that renders it.
+func TemplateRefForAgent(eff *extpacks.EffectiveCatalog, agentID string) (string, error) {
 	agentID = strings.TrimSpace(agentID)
-	ref, ok := agentdef.SystemPromptTemplateFor(agentID)
-	if !ok {
-		return "", fmt.Errorf("%w: agent %q is not registered", ErrUnknownAgent, agentID)
+	defs, err := agentdef.LoadEffectiveWithCatalog(eff)
+	if err != nil {
+		return "", err
 	}
-	if ref = strings.TrimSpace(ref); ref == "" {
+	for _, p := range defs {
+		if p.ID != agentID {
+			continue
+		}
+		if ref := strings.TrimSpace(p.SystemPromptTemplate); ref != "" {
+			return ref, nil
+		}
 		return "", fmt.Errorf("agent %q: missing system_prompt_template", agentID)
 	}
-	return ref, nil
+	return "", fmt.Errorf("%w: agent %q is not registered", ErrUnknownAgent, agentID)
 }
 
 // ToolProfileForAgent resolves the tool profile agentID runs under.

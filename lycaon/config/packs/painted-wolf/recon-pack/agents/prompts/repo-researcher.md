@@ -12,7 +12,7 @@ Gather **repository metadata** for the coordinator: lockfiles, configs, layout, 
 
 ## Survey effort
 
-- Keep the survey proportionate and stop once the question is answered. Follow the persona survey playbook when layout is unknown.{% if not profile_has_command %} **Never `command`** for survey.{% endif %} If blocked, return **Unknowns**.
+- Keep the survey proportionate and stop once the question is answered. Follow the persona survey playbook when layout is unknown.{% if profile_has_command %} **Never `command`** for survey.{% endif %} If blocked, return **Unknowns**.
 
 ## Output (required headings)
 

@@ -80,7 +80,7 @@ func TestKickEngineQueueAndTake(t *testing.T) {
 	if id := engine.TakePendingKickIDUnless("sess-1", nil); id != anchor.InformRender(anchor.ComposeDone) {
 		t.Fatalf("kick id = %q", id)
 	}
-	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{})
+	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)})
 	if !ok || !strings.Contains(text, "Compose") {
 		t.Fatalf("nudge = %q ok=%v", text, ok)
 	}
@@ -92,7 +92,7 @@ func TestKickEngineWorkerTaskFinishedIncludesDigest(t *testing.T) {
 	if id := engine.TakePendingKickIDUnless("sess-1", nil); id != anchor.InformRender(anchor.WorkerTaskFinished) {
 		t.Fatalf("kick id = %q", id)
 	}
-	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{})
+	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)})
 	if !ok || !strings.Contains(text, "Host worker digest") {
 		t.Fatalf("nudge = %q ok=%v", text, ok)
 	}
@@ -104,7 +104,7 @@ func TestKickEngineWorkerTaskFinishedNudge(t *testing.T) {
 	if id := engine.TakePendingKickIDUnless("sess-1", nil); id != anchor.InformRender(anchor.WorkerTaskFinished) {
 		t.Fatalf("kick id = %q", id)
 	}
-	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{})
+	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)})
 	if !ok || !strings.Contains(text, "host digest") {
 		t.Fatalf("nudge = %q ok=%v", text, ok)
 	}
@@ -117,7 +117,7 @@ func TestKickEngineClearPending(t *testing.T) {
 	if id := engine.TakePendingKickIDUnless("sess-1", nil); id != "" {
 		t.Fatalf("kick id = %q want empty", id)
 	}
-	if text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{}); ok || text != "" {
+	if text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)}); ok || text != "" {
 		t.Fatalf("nudge = %q ok=%v want cleared", text, ok)
 	}
 }
@@ -129,7 +129,7 @@ func TestKickEngineQueuesMultipleCoordinatorKicksFIFO(t *testing.T) {
 	if id := engine.TakePendingKickIDUnless("sess-race", nil); id != anchor.InformRender(anchor.WorkerTaskFinished) {
 		t.Fatalf("first kick id = %q want %q", id, anchor.InformRender(anchor.WorkerTaskFinished))
 	}
-	text, lease, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-race", kick.CoordinatorKickRenderContext{})
+	text, lease, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-race", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)})
 	if !ok || !strings.Contains(text, "host digest") {
 		t.Fatalf("first nudge = %q ok=%v want worker-task-finished", text, ok)
 	}
@@ -146,7 +146,7 @@ func TestKickEngineLegFinishedRelativeAgo(t *testing.T) {
 	if id := engine.TakePendingKickIDUnless("sess-2", nil); id != anchor.InformRender(anchor.LegFinished) {
 		t.Fatalf("kick id = %q", id)
 	}
-	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-2", kick.CoordinatorKickRenderContext{})
+	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-2", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)})
 	if !ok || !strings.Contains(text, "finished") {
 		t.Fatalf("nudge = %q", text)
 	}
@@ -158,7 +158,7 @@ func TestKickEngineRawNudge(t *testing.T) {
 	if id := engine.TakePendingKickIDUnless("sess-3", nil); id != anchor.InformRender(anchor.GateBlocked) {
 		t.Fatalf("kick id = %q", id)
 	}
-	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-3", kick.CoordinatorKickRenderContext{})
+	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-3", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)})
 	if !ok || text != "custom nudge" {
 		t.Fatalf("nudge = %q", text)
 	}
@@ -170,7 +170,7 @@ func TestRenderKickMissingEngine(t *testing.T) {
 	if id := engine.TakePendingKickIDUnless("sess-x", nil); id != anchor.InformRender(anchor.GateBlocked) {
 		t.Fatalf("kick id = %q want %s", id, anchor.InformRender(anchor.GateBlocked))
 	}
-	if text, _, ok, err := engine.RenderPendingNudge(t.Context(), "sess-x", kick.CoordinatorKickRenderContext{}); ok || text != "" || err == nil {
+	if text, _, ok, err := engine.RenderPendingNudge(t.Context(), "sess-x", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)}); ok || text != "" || err == nil {
 		t.Fatalf("missing engine = %q, ok %v, err %v", text, ok, err)
 	}
 }
@@ -189,18 +189,35 @@ func (stubBoardFormatter) FormatBoardInject(_ api.BoardSnapshot, _ bool, _ time.
 	return "pack-board:v1\nbody", true
 }
 
+func integrationCoordReader(t *testing.T) prompts.Reader {
+	t.Helper()
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	r, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Declared:  true,
+	})
+	testutil.FailErr(t, "NewReader coordinator", err)
+	return r
+}
+
 func TestBoardEnginePrependOnFirstTurn(t *testing.T) {
 	engine := assembly.NewBoardEngine(stubBoardBuilder{hash: "abc"}, stubBoardFormatter{}, nil)
 	ctx := context.Background()
+	reader := integrationCoordReader(t)
 	sess := &api.Session{ID: "s1", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: t.TempDir(), AgentType: "coordinator"}
 	if err := os.WriteFile(filepath.Join(sess.WorkspacePath, "go.mod"), []byte("module x\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	block, ok := engine.PrependBoardIfChanged(ctx, sess, api.CoordinatorRunContext{CurrentPhase: "plan"})
+	block, ok := engine.PrependBoardIfChanged(ctx, sess, reader, api.CoordinatorRunContext{CurrentPhase: "plan"})
 	if !ok || !strings.Contains(block, "Pack board") {
 		t.Fatalf("block = %q ok=%v", block, ok)
 	}
-	block2, ok2 := engine.PrependBoardIfChanged(ctx, sess, api.CoordinatorRunContext{CurrentPhase: "plan"})
+	block2, ok2 := engine.PrependBoardIfChanged(ctx, sess, reader, api.CoordinatorRunContext{CurrentPhase: "plan"})
 	if ok2 {
 		t.Fatalf("expected no reinject on stable hash/phase, got %q", block2)
 	}
@@ -209,11 +226,12 @@ func TestBoardEnginePrependOnFirstTurn(t *testing.T) {
 func TestBoardWillForceInjectOnPhaseChange(t *testing.T) {
 	engine := assembly.NewBoardEngine(stubBoardBuilder{hash: "abc"}, stubBoardFormatter{}, nil)
 	ctx := context.Background()
+	reader := integrationCoordReader(t)
 	sess := &api.Session{ID: "s2", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: t.TempDir(), AgentType: "coordinator"}
 	if err := os.WriteFile(filepath.Join(sess.WorkspacePath, "go.mod"), []byte("module x\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	_, _ = engine.PrependBoardIfChanged(ctx, sess, api.CoordinatorRunContext{CurrentPhase: "plan"})
+	_, _ = engine.PrependBoardIfChanged(ctx, sess, reader, api.CoordinatorRunContext{CurrentPhase: "plan"})
 	if !engine.BoardWillForceInject(ctx, sess, api.CoordinatorRunContext{CurrentPhase: "implement"}) {
 		t.Fatal("phase change should force inject")
 	}
@@ -229,11 +247,12 @@ func TestRuntimeSetKickAndBoard(t *testing.T) {
 	}
 
 	// The first turn prepends the wired board.
+	reader := integrationCoordReader(t)
 	sess := &api.Session{ID: "s1", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: t.TempDir(), AgentType: "coordinator"}
 	if err := os.WriteFile(filepath.Join(sess.WorkspacePath, "go.mod"), []byte("module x\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	block, ok := rt.Board().PrependBoardIfChanged(context.Background(), sess, api.CoordinatorRunContext{CurrentPhase: "plan"})
+	block, ok := rt.Board().PrependBoardIfChanged(context.Background(), sess, reader, api.CoordinatorRunContext{CurrentPhase: "plan"})
 	if !ok || !strings.Contains(block, "Pack board") {
 		t.Fatalf("board block = %q ok=%v want injected board", block, ok)
 	}
@@ -280,7 +299,7 @@ func TestBuildCompletionMessagesWorkerLeg(t *testing.T) {
 		Limits:  func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		Workers: assembly.Workers{Leg: stubWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg-1", Checklist: []string{"step"}}}},
 	}
-	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
+	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withFixtureReader(deps) }})
 	msgs, err := rt.BuildCompletionMessages(context.Background(), &api.Session{
 		ID: "child", ParentSessionID: "parent", WorkspacePath: t.TempDir(),
 	}, []api.Message{{Role: api.MessageRoleUser, Content: "work"}}, nil)
@@ -311,13 +330,15 @@ func TestRenderCoordinatorTripartiteComposeDraft(t *testing.T) {
 	testutil.FailErr(t, "LoadToolProfiles", err)
 	plans, err := surface.CompileToolPlans(1)
 	testutil.FailErr(t, "CompileToolPlans", err)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: "implement_synthesis",
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Plan:      plans["implement_synthesis"],
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_synthesis",
+		Plan:      plans["implement_synthesis"],
+		Offered:   (plans["implement_synthesis"]).ImmediateNames(),
 	})
 	testutil.FailErr(t, "NewReader", err)
 	vars := reader.Facts()
@@ -345,9 +366,8 @@ func TestSessionPromptCacheSecondIterationKeepsRunContext(t *testing.T) {
 		Injects:          prompts.NewInjectRenderer(pe),
 		Limits:           func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		CoordinatorFrame: stubCoordCtx{ctx: api.CoordinatorRunContext{WorkflowID: "wf-1", CoordinatorBrief: "b"}},
-		PromptToolLister: prompttest.CoordinatorTools,
 	}
-	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
+	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withListedFixtureReader(deps, prompttest.CoordinatorTools) }})
 	sess := &api.Session{ID: "s1", AgentType: orchestration.ProfileCoordinator, Posture: api.SessionPostureSpec, WorkspacePath: t.TempDir()}
 	ctx := context.Background()
 	rt.BeginPromptTurn("s1", "")
@@ -374,11 +394,10 @@ func TestAssemblyImplementSpawnInjectWithoutWorkflow(t *testing.T) {
 		CoordinatorFrame: stubCoordCtx{ctx: api.CoordinatorRunContext{
 			AllowedAgents: spawn.AmbientAllowedAgents(),
 		}},
-		PromptToolLister: prompttest.CoordinatorTools,
-		WorkspaceRoots:   stubWorkspaceRootsOne(),
-		Selection:        workerToolSelection{},
+		WorkspaceRoots: stubWorkspaceRootsOne(),
+		Selection:      workerToolSelection{},
 	}
-	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
+	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withListedFixtureReader(deps, prompttest.CoordinatorTools) }})
 	workspace := t.TempDir()
 	testutil.FailErr(t, "write project fixture", os.WriteFile(filepath.Join(workspace, "README.md"), []byte("# fixture\n"), 0o600))
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild, AgentType: orchestration.ProfileCoordinator, WorkspacePath: workspace}
@@ -411,11 +430,10 @@ func TestAssemblyWorkflowSessionIncludesSpawnRoster(t *testing.T) {
 			CurrentPhase:  "work",
 			AllowedAgents: spawn.AmbientAllowedAgents(),
 		}},
-		PromptToolLister: prompttest.CoordinatorTools,
-		WorkspaceRoots:   stubWorkspaceRootsOne(),
-		Selection:        workerToolSelection{},
+		WorkspaceRoots: stubWorkspaceRootsOne(),
+		Selection:      workerToolSelection{},
 	}
-	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
+	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withListedFixtureReader(deps, prompttest.CoordinatorTools) }})
 	workspace := t.TempDir()
 	testutil.FailErr(t, "write project fixture", os.WriteFile(filepath.Join(workspace, "README.md"), []byte("# fixture\n"), 0o600))
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild, AgentType: orchestration.ProfileCoordinator, WorkspacePath: workspace}
@@ -453,11 +471,10 @@ func TestAssemblyImplementSpawnInjectEveryIteration(t *testing.T) {
 		CoordinatorFrame: stubCoordCtx{ctx: api.CoordinatorRunContext{
 			AllowedAgents: spawn.AmbientAllowedAgents(),
 		}},
-		PromptToolLister: prompttest.CoordinatorTools,
-		WorkspaceRoots:   stubWorkspaceRootsOne(),
-		Selection:        workerToolSelection{},
+		WorkspaceRoots: stubWorkspaceRootsOne(),
+		Selection:      workerToolSelection{},
 	}
-	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
+	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withListedFixtureReader(deps, prompttest.CoordinatorTools) }})
 	workspace := t.TempDir()
 	testutil.FailErr(t, "write project fixture", os.WriteFile(filepath.Join(workspace, "README.md"), []byte("# fixture\n"), 0o600))
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild, AgentType: orchestration.ProfileCoordinator, WorkspacePath: workspace}
@@ -514,7 +531,7 @@ func TestAssemblyWorkerLegInjectUsesRenderer(t *testing.T) {
 		Workers: assembly.Workers{Leg: stubWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg-1", PhaseID: "implement", Checklist: []string{"step"}}}},
 		Board:   boardEng,
 	}
-	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
+	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withFixtureReader(deps) }})
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module x\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
@@ -553,7 +570,7 @@ func TestQueueEagerDelivery(t *testing.T) {
 	bus := anchor.NewBus(engine)
 	bus.SetRegistry(reg)
 	bus.EmitEager(t.Context(), "child-1", anchor.WorkerTaskStarted, map[string]string{"agent_type": "implementer"})
-	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "child-1", kick.CoordinatorKickRenderContext{})
+	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "child-1", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)})
 	if !ok || !strings.Contains(text, "implementer") {
 		t.Fatalf("nudge=%q ok=%v", text, ok)
 	}
@@ -569,9 +586,8 @@ func TestBoardInjectHashViaAssembly(t *testing.T) {
 		Limits:           func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		CoordinatorFrame: stubCoordCtx{ctx: api.CoordinatorRunContext{WorkflowID: "plan", CurrentPhase: "stub"}},
 		Board:            boardEng,
-		PromptToolLister: prompttest.CoordinatorTools,
 	}
-	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
+	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withListedFixtureReader(deps, prompttest.CoordinatorTools) }})
 	sess := &api.Session{ID: "s1", ProjectID: testdbseed.DefaultProjectID, Posture: api.SessionPostureSpec, WorkspacePath: t.TempDir(), AgentType: "coordinator"}
 	if err := os.WriteFile(filepath.Join(sess.WorkspacePath, "go.mod"), []byte("module x\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
@@ -681,9 +697,8 @@ func TestTransitionInjectOncePerPromptTurn(t *testing.T) {
 		ImplementSessionState: func(context.Context, *api.Session) surface.ImplementSessionState {
 			return surface.ImplementSessionState{WorkersInFlight: 1, PendingOverlayIDs: []string{}}
 		},
-		PromptToolLister: prompttest.CoordinatorTools,
 	}
-	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
+	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withListedFixtureReader(deps, prompttest.CoordinatorTools) }})
 	// AgentType enables coordinator tail injects.
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild, WorkspacePath: t.TempDir(), AgentType: "coordinator"}
 	ctx := context.Background()
