@@ -192,7 +192,9 @@ func (s *MergeService) applyPromoteOverlayPlans(ctx context.Context, work promot
 		s.Captures.RecordPromotedPrimaryPaths(ctx, work.sessionID, promoteMutationIdentities(plans.all))
 	}
 	promote := PromoteRootsForTask(work.task, work.roots)
-	tx, err := beginPromoteTransaction(s.hostDataDirFor(work.task), work.overlayID, plans.direct)
+	tx, err := beginPromoteTransactionWith(s.hostDataDirFor(work.task), work.overlayID, plans.direct, checkpoint.TransactionConfig{
+		AuthorizedGitDirs: authorizedPromoteGitDirs(work.task, work.roots),
+	})
 	if err != nil {
 		return api.WorkerMergeResult{}, errors.Join(err, revertPending())
 	}
@@ -327,7 +329,9 @@ func (s *MergeService) finalizeEmptyPromote(ctx context.Context, work promoteWor
 	if err := session.RevalidateTaskCheckpointPreview(claimCtx, work.task, work.roots, work.review); err != nil {
 		return out, errors.Join(err, s.releaseMergeClaim(ctx, claim))
 	}
-	zeroTx, err := beginPromoteTransaction(s.hostDataDirFor(work.task), work.overlayID, nil)
+	zeroTx, err := beginPromoteTransactionWith(s.hostDataDirFor(work.task), work.overlayID, nil, checkpoint.TransactionConfig{
+		AuthorizedGitDirs: authorizedPromoteGitDirs(work.task, work.roots),
+	})
 	if err != nil {
 		return out, errors.Join(err, s.releaseMergeClaim(ctx, claim))
 	}
