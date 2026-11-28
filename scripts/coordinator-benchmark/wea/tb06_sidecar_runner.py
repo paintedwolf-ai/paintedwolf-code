@@ -274,6 +274,26 @@ def _extract_attached_root_id(
     return ""
 
 
+def _complete_progress(app: Any, session_id: str, prog_res: dict[str, Any], done_content: str) -> None:
+    """Mark the active progress checklist complete so the host allows turn settlement to idle."""
+    args: dict[str, Any] = {"content": done_content}
+    raw = str(prog_res.get("content") or "")
+    for line in raw.splitlines():
+        line = line.strip()
+        if line.startswith("{") and line.endswith("}"):
+            try:
+                parsed = json.loads(line)
+                if isinstance(parsed, dict):
+                    if parsed.get("revision"):
+                        args["expected_revision"] = parsed["revision"]
+                    if parsed.get("item_ids"):
+                        args["item_ids"] = parsed["item_ids"]
+                    break
+            except Exception:
+                pass
+    _send_tool_call(app, session_id, "update_progress", args)
+
+
 def _finish_turn_text(app: Any, session_id: str, text: str = "Done.") -> None:
     req = _wait_pending(app, session_id)
     app.request("/harness/llm/respond", {"id": req["id"], "content": text})
@@ -292,13 +312,13 @@ def _run_agent_edit_turn(
     new_str: str,
     prompt_text: str,
 ) -> tuple[dict[str, Any], dict[str, Any], str]:
-    """Run one complete zero-model agent turn: prompt -> update_progress -> cat -> edit -> finish text."""
+    """Run one complete zero-model agent turn: prompt -> update_progress -> cat -> edit -> complete progress -> finish text."""
     prompt_resp = app.request(
         f"/v1/sessions/{session_id}/prompts",
         {"operation_id": str(uuid.uuid4()), "text": prompt_text},
     )
     msg_id = str(prompt_resp.get("message_id") or prompt_resp.get("id") or "")
-    _send_tool_call(
+    _, prog_res, _ = _send_tool_call(
         app,
         session_id,
         "update_progress",
@@ -311,6 +331,7 @@ def _run_agent_edit_turn(
         "command",
         {"command": f"edit --path {rel_path} --old-string {old_str} --new-string {new_str}"},
     )
+    _complete_progress(app, session_id, prog_res, f"## Progress\n- [x] Read and edit {rel_path}\n")
     _finish_turn_text(app, session_id)
     if not msg_id:
         st_m, msgs_resp = _http_call(app, f"/v1/sessions/{session_id}/messages", method="GET")
@@ -428,7 +449,7 @@ def _drive_e04_slot(app: Any, slot: SidecarSlotSpec, slot_dir: pathlib.Path) -> 
             f"/v1/sessions/{session_id}/prompts",
             {"operation_id": str(uuid.uuid4()), "text": "Append a line via shell command."},
         )
-        _send_tool_call(
+        _, prog_res, _ = _send_tool_call(
             app,
             session_id,
             "update_progress",
@@ -442,6 +463,7 @@ def _drive_e04_slot(app: Any, slot: SidecarSlotSpec, slot_dir: pathlib.Path) -> 
             {"command": "edit --path target.txt --old-string line2-base --new-string line2-command"},
             checkpoint_policy="approve_once",
         )
+        _complete_progress(app, session_id, prog_res, "## Progress\n- [x] Update target.txt via command\n")
         _finish_turn_text(app, session_id)
         typed_result.update({"command_result": cmd_res, "expected_origin": "agent"})
     else:  # external
