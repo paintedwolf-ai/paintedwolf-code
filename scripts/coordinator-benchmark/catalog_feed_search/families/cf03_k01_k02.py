@@ -474,7 +474,12 @@ def run_k02_sidecar(
                     pid, rids = driver.attach_project([wdir])
                     primary_rid = rids[0]
                     earlier_index = driver.get_source_index(pid)
-                    ans = driver.walk_catalog_index(pid, primary_rid)
+                    try:
+                        ans = driver.walk_catalog_index(pid, primary_rid)
+                    except urllib.error.HTTPError as err:
+                        if err.code != 409:
+                            raise
+                        ans = driver.walk_catalog_index(pid, primary_rid)
                     ans_gaps = _root_scoped_gaps(ans, primary_rid)
                     ref_entries = [
                         e for e in reference_walk(wdir, boundary_config=boundary_config, include_hidden=True) if e.kind == "file"
