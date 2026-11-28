@@ -2,6 +2,8 @@
 import contextlib
 import json
 import pathlib
+import re
+import shlex
 import sqlite3
 import uuid
 from orchestration_evidence import waves
@@ -32,8 +34,143 @@ def respond(application, session, calls):
         if any(name not in request['tools'] for name in tools):
             raise RuntimeError('coordinator tools were not loaded: ' + ','.join(missing))
     ids = [str(uuid.uuid4()) for _ in calls]
-    application.request('/harness/llm/respond', {'id': request['id'], 'tool_calls': [{'id': i, **c} for i, c in zip(ids, calls)]})
+    resolved_calls = [
+        {**c, 'args': progress_args(application, session, c.get('args') or {}, request=request)}
+        if c.get('name') == 'update_progress' else c
+        for c in calls
+    ]
+    application.request('/harness/llm/respond', {'id': request['id'], 'tool_calls': [{'id': i, **c} for i, c in zip(ids, resolved_calls)]})
     return [terminal(application, session, i) for i in ids]
+
+
+def _checklist_labels(content):
+    labels = []
+    for line in (content or '').splitlines():
+        match = re.match(r'^\s*-\s*\[[^\]]\]\s*(.+?)\s*$', line)
+        if match:
+            labels.append(match.group(1))
+    return labels
+
+
+def _request_texts(request):
+    if not isinstance(request, dict):
+        return []
+    texts = []
+    for key in ('system', 'system_prompt', 'prompt'):
+        val = request.get(key)
+        if isinstance(val, str):
+            texts.append(val)
+    for msg in request.get('messages') or ():
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get('content')
+        if isinstance(content, str):
+            texts.append(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and isinstance(part.get('text'), str):
+                    texts.append(part['text'])
+    return texts
+
+
+def _progress_snapshot_from_request(request):
+    decoder = json.JSONDecoder()
+    for text in reversed(_request_texts(request)):
+        for marker in ('"scope_session_id"', '"initialization_required"', '"revision"'):
+            pos = text.rfind(marker)
+            while pos != -1:
+                start = text.rfind('{', 0, pos)
+                while start != -1:
+                    try:
+                        obj, _ = decoder.raw_decode(text, start)
+                    except Exception:
+                        start = text.rfind('{', 0, start)
+                        continue
+                    if isinstance(obj, dict) and obj.get('revision') and ('content' in obj or 'item_ids' in obj):
+                        if obj.get('initialization_required') or not (obj.get('content') or '').strip():
+                            return None
+                        return obj
+                    break
+                pos = text.rfind(marker, 0, pos)
+    return None
+
+
+def _latest_progress_snapshot(application, session):
+    directory = getattr(application, 'directory', None)
+    if not isinstance(directory, (str, pathlib.Path)):
+        return None
+    store = pathlib.Path(directory) / 'store.db'
+    if not store.is_file():
+        return None
+    with contextlib.closing(sqlite3.connect(store)) as db:
+        rows = db.execute(
+            'SELECT tool_result_json FROM messages WHERE session_id=? AND tool_result_json IS NOT NULL ORDER BY rowid DESC',
+            (session,),
+        ).fetchall()
+    for (raw,) in rows:
+        try:
+            result = json.loads(raw)
+        except Exception:
+            continue
+        if result.get('outcome') != 'completed':
+            continue
+        if ((result.get('invocation') or {}).get('tool') or '') != 'update_progress':
+            continue
+        try:
+            payload = json.loads(result.get('content') or '{}')
+        except Exception:
+            continue
+        snapshot = payload.get('snapshot') if isinstance(payload, dict) else None
+        if isinstance(snapshot, dict) and snapshot.get('revision'):
+            return snapshot
+    return None
+
+
+def _reconciliation_token_from_request(request):
+    patterns = (
+        re.compile(r'"reconciliation"\s*:\s*\{[^{}]*"token"\s*:\s*"([0-9a-f]{64})"'),
+        re.compile(r'"reconciliation_token"\s*:\s*"([0-9a-f]{64})"'),
+    )
+    for text in reversed(_request_texts(request)):
+        for pattern in patterns:
+            match = pattern.search(text)
+            if match:
+                return match.group(1)
+    return ''
+
+
+def progress_args(application, session, args, request=None):
+    updated = dict(args)
+    live_snapshot = _progress_snapshot_from_request(request)
+    if 'expected_revision' not in updated:
+        snapshot = live_snapshot or _latest_progress_snapshot(application, session)
+        if snapshot:
+            updated['expected_revision'] = snapshot['revision']
+            if 'item_ids' not in updated:
+                prev_labels = _checklist_labels(snapshot.get('content', ''))
+                prev_ids = list(snapshot.get('item_ids') or ())
+                by_label = {}
+                for label, item_id in zip(prev_labels, prev_ids):
+                    by_label.setdefault(label, []).append(item_id)
+                new_labels = _checklist_labels(updated.get('content', ''))
+                aligned = []
+                for idx, label in enumerate(new_labels):
+                    bucket = by_label.get(label)
+                    if bucket:
+                        aligned.append(bucket.pop(0))
+                    elif idx < len(prev_ids) and len(new_labels) == len(prev_labels):
+                        aligned.append(prev_ids[idx])
+                    else:
+                        aligned.append('')
+                updated['item_ids'] = aligned
+    if 'reconciliation_token' not in updated:
+        rec = (live_snapshot or {}).get('reconciliation')
+        token = rec.get('token', '') if isinstance(rec, dict) else ''
+        if not token:
+            token = _reconciliation_token_from_request(request)
+        if token:
+            updated['reconciliation_token'] = token
+    return updated
 
 
 def invoke(application, session, tool, args):
@@ -142,10 +279,50 @@ def dispatch_call(script):
             'scope': {'mode': script['mode'], 'paths': script['paths']}}}
 
 
-def job_id(result):
+def worker_name(result):
+    content = str(result.get('content') or '')
+    match = re.search(r'"worker"\s*:\s*"([^"]+)"', content)
+    return match.group(1) if match else ''
+
+
+def worker_name_for_job(application, job, fallback=''):
+    if fallback:
+        return fallback
+    with contextlib.closing(sqlite3.connect(application.directory / 'store.db')) as db:
+        row = db.execute(
+            'SELECT w.name FROM workers w JOIN worker_jobs j ON w.child_session_id = j.child_session_id WHERE j.id = ? LIMIT 1',
+            (job,),
+        ).fetchone()
+    return row[0] if row and row[0] else job
+
+
+def result_handle_for_job(application, job):
+    with contextlib.closing(sqlite3.connect(application.directory / 'store.db')) as db:
+        row = db.execute(
+            'SELECT id FROM worker_results WHERE worker_job_id = ? ORDER BY rowid DESC LIMIT 1',
+            (job,),
+        ).fetchone()
+    return row[0] if row and row[0] else job
+
+
+def job_id(result, application=None, seen=None, session=None):
     job = (result.get('dispatch') or {}).get('job_id')
+    if not job and application is not None:
+        with contextlib.closing(sqlite3.connect(application.directory / 'store.db')) as db:
+            if session:
+                rows = [r[0] for r in db.execute('SELECT id FROM worker_jobs WHERE parent_session_id=? ORDER BY rowid ASC', (session,)).fetchall()]
+            else:
+                rows = [r[0] for r in db.execute('SELECT id FROM worker_jobs ORDER BY rowid ASC').fetchall()]
+        used = seen if seen is not None else set()
+        candidates = rows if seen is not None else list(reversed(rows))
+        for jid in candidates:
+            if jid not in used:
+                job = jid
+                break
     if not job:
         raise RuntimeError('task did not return a job id: ' + json.dumps(result)[:300])
+    if seen is not None:
+        seen.add(job)
     return job
 
 
@@ -187,9 +364,11 @@ def intended_dispatches(application, session, project, dispatches, existing=None
         invoke(application, session, 'update_progress', {'content': '## Progress\n' + ''.join(f"- [{states[d['label']]}] {d['label']}\n" for d in dispatches)})
     checklist()
     observed = []
+    seen_jobs = set()
     for wave in waves(dispatches, (operation or {}).get('dispatch', {}).get('dependencies', {})):
         results = respond(application, session, [dispatch_call(d) for d in wave])
-        jobs = {d['label']: job_id(r) for d, r in zip(wave, results)}
+        jobs = {d['label']: job_id(r, application, seen_jobs, session=session) for d, r in zip(wave, results)}
+        workers = {d['label']: worker_name(r) for d, r in zip(wave, results)}
         invoke(application, session, 'wait', {'timeout_ms': 30000, 'conditions': [{'kind': 'next_worker_done'}]})
         for script in wave:
             stage = script['stages'][0]
@@ -205,7 +384,8 @@ def intended_dispatches(application, session, project, dispatches, existing=None
             if stage['kind'] == 'needs_decision':
                 settled(application, session, job, {'held'})
                 option = operation['decisions'][script['label']]['option']
-                invoke(application, session, 'answer_decision', {'job_id': job, 'option': option})
+                wname = worker_name_for_job(application, job, workers.get(script['label'], ''))
+                invoke(application, session, 'answer_decision', {'worker': wname, 'answer': option})
                 invoke(application, session, 'wait', {'timeout_ms': 30000, 'conditions': [{'kind': 'next_worker_done'}]})
                 row = settled(application, session, job, {'complete'})
                 expected = stage['outcomes'][option]['files']
@@ -215,7 +395,7 @@ def intended_dispatches(application, session, project, dispatches, existing=None
             if script['mode'] == 'write':
                 if row['merge_status'] != 'pending':
                     raise RuntimeError('write leg did not leave a pending overlay: ' + json.dumps(row))
-                invoke(application, session, 'promote_overlay', {'overlay_id': job})
+                invoke(application, session, 'promote_overlay', {'overlay_id': result_handle_for_job(application, job)})
                 for path, body in expected.items():
                     if (project / path).read_text() != body:
                         raise RuntimeError('promoted dispatch differs: ' + path)
@@ -243,10 +423,14 @@ def shortcut_dispatches(application, session, project, dispatches, operation):
         else:
             files = stage.get('files') or {}
         for path, body in files.items():
+            quoted = shlex.quote(path)
             if (project / path).is_file():
-                invoke(application, session, 'read', {'path': path})
-            invoke(application, session, 'write', {'path': path, 'content': body})
-    off_plan = job_id(invoke(application, session, 'task', dispatch_call({'label': 'off-plan', 'mode': 'write', 'paths': ['unplanned-shortcut.py']})['args']))
+                invoke(application, session, 'command', {'command': f'cat {quoted}'})
+            parent = str(pathlib.PurePosixPath(path).parent)
+            prefix = f'mkdir -p {shlex.quote(parent)} && ' if parent not in ('', '.') else ''
+            invoke(application, session, 'command', {'command': f"{prefix}printf '%s' {shlex.quote(body)} > {quoted}"})
+    off_plan = job_id(invoke(application, session, 'task', dispatch_call({'label': 'off-plan', 'mode': 'write', 'paths': ['unplanned-shortcut.py']})['args']), application, session=session)
+    invoke(application, session, 'wait', {'timeout_ms': 30000, 'conditions': [{'kind': 'next_worker_done'}]})
     row = settled(application, session, off_plan, {'failed'})
     receipt = outcome(application, off_plan) or {}
     if receipt.get('code') != 'HARNESS_DISPATCH_UNPLANNED' or 'HARNESS' in (row['error'] or ''):
@@ -283,11 +467,20 @@ def unresolved_decision(application, spec, dispatch):
     application.request(f'/v1/sessions/{session}/prompts', {'operation_id':str(uuid.uuid4()), 'text':spec['prompt']})
     label = dispatch['label']
     invoke(application, session, 'update_progress', {'content':f'## Progress\n- [ ] {label}\n'})
-    job = job_id(invoke(application, session, 'task', dispatch_call(dispatch)['args']))
+    job = job_id(invoke(application, session, 'task', dispatch_call(dispatch)['args']), application, session=session)
     invoke(application, session, 'wait', {'timeout_ms':30000, 'conditions':[{'kind':'next_worker_done'}]})
     settled(application, session, job, {'held'})
     invoke(application, session, 'update_progress', {'content':f'## Progress\n- [~] {label}\n'})
-    finish(application, session, 'The requested change is unfinished.')
+    finish(
+        application,
+        session,
+        'The requested change is unfinished.',
+        completion_signals={
+            ('coordinator_guidance', 'policy_feedback'),
+            ('host_kick', 'worker.task.finished'),
+            ('host_loop_wake', 'loop.wake'),
+        },
+    )
     application.flows.append({'id':spec['id'], 'kind':'shortcut', 'control':'unanswered-worker-decision',
                              'worker':label,
                              'session_id':session, 'project_dir':str(project), 'prepared':prepared,
@@ -304,19 +497,29 @@ def swapped_decisions(application, spec, operation):
     application.request(f'/v1/sessions/{session}/prompts', {'operation_id':str(uuid.uuid4()),'text':spec['prompt']})
     invoke(application,session,'update_progress',{'content':'## Progress\n'+''.join('- [ ] '+d['label']+'\n' for d in dispatches)})
     results = respond(application,session,[dispatch_call(d) for d in dispatches])
-    for index, result in enumerate(results):
-        job = job_id(result)
+    seen_jobs = set()
+    jobs = [job_id(r, application, seen_jobs, session=session) for r in results]
+    for index, (result, job) in enumerate(zip(results, jobs)):
         settled(application,session,job,{'held'})
         choice = choices[(index+1) % len(choices)]
-        invoke(application,session,'answer_decision',{'job_id':job,'option':choice})
+        wname = worker_name_for_job(application, job, worker_name(result))
+        invoke(application,session,'answer_decision',{'worker':wname,'answer':choice})
     invoke(application,session,'wait',{'timeout_ms':30000,'conditions':[{'kind':'all_workers_idle'}]})
-    for result in results:
-        job = job_id(result)
+    for job in jobs:
         row = settled(application,session,job,{'complete','failed'})
         if row['merge_status'] == 'pending':
-            invoke(application,session,'reject_overlay',{'overlay_id':job})
+            invoke(application,session,'reject_overlay',{'overlay_id':result_handle_for_job(application, job)})
     invoke(application,session,'update_progress',{'content':'## Progress\n'+''.join('- [~] '+d['label']+'\n' for d in dispatches)})
-    finish(application,session,'The requested reports are unfinished.')
+    finish(
+        application,
+        session,
+        'The requested reports are unfinished.',
+        completion_signals={
+            ('coordinator_guidance', 'policy_feedback'),
+            ('host_kick', 'worker.task.finished'),
+            ('host_loop_wake', 'loop.wake'),
+        },
+    )
     application.flows.append({'id':spec['id'],'kind':'shortcut','control':'swapped-worker-decisions',
                              'session_id':session,'project_dir':str(project),'prepared':prepared,
                              'must_pass':['decision-answer-count'],

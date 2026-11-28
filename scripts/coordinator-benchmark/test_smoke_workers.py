@@ -83,6 +83,37 @@ class CompletionWakeTests(unittest.TestCase):
             append(5, 'model', 'completion_report', role='assistant')
             self.assertFalse(completion_wake(db, 'session', allowed))
 
+    def test_progress_args_attaches_latest_revision_and_aligned_item_ids(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            with sqlite3.connect(root / 'store.db') as db:
+                db.execute('CREATE TABLE messages(session_id,ord,tool_result_json)')
+                snapshot = {
+                    'revision': 'a' * 64,
+                    'content': '## Progress\n- [ ] First leg\n- [ ] Second leg\n',
+                    'item_ids': ['item-1', 'item-2'],
+                }
+                result = {
+                    'outcome': 'completed',
+                    'invocation': {'tool': 'update_progress'},
+                    'content': json.dumps({'status': 'updated', 'snapshot': snapshot}),
+                }
+                db.execute('INSERT INTO messages VALUES(?,?,?)', ('sess', 1, json.dumps(result)))
+            app = Mock(directory=root)
+            token = 'b' * 64
+            request = {'messages': [{'role': 'system', 'content': json.dumps({'reconciliation': {'token': token}})}]}
+            updated = smoke_workers.progress_args(
+                app,
+                'sess',
+                {'content': '## Progress\n- [x] First leg\n- [ ] Second leg\n'},
+                request=request,
+            )
+            self.assertEqual(updated['expected_revision'], 'a' * 64)
+            self.assertEqual(updated['item_ids'], ['item-1', 'item-2'])
+            self.assertEqual(updated['reconciliation_token'], token)
+            fresh = smoke_workers.progress_args(app, 'other-sess', {'content': '- [ ] New\n'})
+            self.assertEqual(fresh, {'content': '- [ ] New\n'})
+
 
 class OutcomeControlTests(unittest.TestCase):
     def test_every_control_executes_in_the_pinned_runtime(self):

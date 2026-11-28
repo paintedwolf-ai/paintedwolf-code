@@ -20,6 +20,9 @@ func (m *Host) SetInvocationRecorder(recorder invocation.Recorder) {
 	m.Coordinator.Tools.Invocations = recorder
 
 	m.Stops.Recovery.SetRecorder(recorder)
+	if m.Workers.Harness != nil {
+		m.Workers.Harness.SetInvocations(recorder)
+	}
 }
 
 // SetDoomLoopGuard wires identical tool-call repetition blocking.
