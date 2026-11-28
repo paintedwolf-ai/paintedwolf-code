@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/toolreach"
@@ -68,13 +69,20 @@ func (r *Runtime) workerReportInput(ctx context.Context, task *wire.WorkerTask, 
 	if err != nil {
 		return workercompletion.WorkerSummaryEvalInput{}, err
 	}
+	projectRoots := manager.Workspace.ProjectRoots(ctx, task.ProjectID)
+	var workspaceChanges *workercompletion.WorkspaceChangeObservation
+	if session.OverlayWorkspaceAvailable(task) {
+		changed, changeErr := session.InspectOverlayChanges(ctx, task, projectRoots, "")
+		workspaceChanges = &workercompletion.WorkspaceChangeObservation{Paths: changed, Err: changeErr}
+	}
 	bounds := manager.Workers.WorkerSummaryFinalizeOpts(ctx, child)
 	return workercompletion.WorkerSummaryEvalInput{
 		AgentType: task.AgentType, MaxChars: bounds.MaxChars, Report: report,
 		ChildSessionID: child.ID, ChildMessages: messages, ProjectDir: projectDir,
 		BaseRevision: r.workerBaseRevision(ctx, task, child.ID),
-		ProjectRoots: manager.Workspace.ProjectRoots(ctx, task.ProjectID), ActiveRootID: child.WorkspaceRootID,
-		WorkspaceCheck: bounds.WorkspaceCheck, Ledger: workercloseout.LedgerForMessages(bounds.Ledger, messages),
+		ProjectRoots: projectRoots, ActiveRootID: child.WorkspaceRootID,
+		WorkspaceChanges: workspaceChanges,
+		WorkspaceCheck:   bounds.WorkspaceCheck, Ledger: workercloseout.LedgerForMessages(bounds.Ledger, messages),
 		Hints: bounds.WorkflowHints, Pipeline: bounds.Pipeline, Reach: toolreach.FromContext(ctx),
 	}, nil
 }
