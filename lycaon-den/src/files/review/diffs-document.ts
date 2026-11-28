@@ -4,7 +4,7 @@ import { wholeFileChange, type SourceReaderChange } from "../../components/sourc
 import { digestIsBinary, digestIsNoop, digestStat } from "./diffs-digests.ts";
 
 /** A page header reserves this much before its block renders. */
-export const PAGE_HEADER_RESERVE_PX = 148;
+export const PAGE_HEADER_RESERVE_PX = 126;
 /** Reserved vertical space for a section header block prior to layout. */
 export const SECTION_HEADER_RESERVE_PX = 70;
 /** The page's own heading is a section with no comparison behind it. */
