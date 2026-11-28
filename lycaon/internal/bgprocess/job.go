@@ -67,6 +67,37 @@ func (r TerminationReason) DeliversToSession() bool {
 
 type terminationReasonKey struct{}
 
+type causeTerminationReason struct {
+	err    error
+	reason TerminationReason
+}
+
+func (e causeTerminationReason) Error() string {
+	if e.err != nil {
+		return e.err.Error()
+	}
+	return string(e.reason)
+}
+
+func (e causeTerminationReason) Unwrap() error { return e.err }
+
+// WithCauseReason attaches a typed termination reason to a cancellation cause.
+func WithCauseReason(cause error, reason TerminationReason) error {
+	if reason == "" {
+		return cause
+	}
+	return causeTerminationReason{err: cause, reason: reason}
+}
+
+// TerminationReasonOf returns the typed termination reason carried by err, if any.
+func TerminationReasonOf(err error) TerminationReason {
+	var typed causeTerminationReason
+	if errors.As(err, &typed) {
+		return typed.reason
+	}
+	return ""
+}
+
 // WithTerminationReason records the outer teardown reason on ctx when none is already set.
 func WithTerminationReason(ctx context.Context, reason TerminationReason) context.Context {
 	if ctx == nil || reason == "" {
@@ -82,6 +113,9 @@ func WithTerminationReason(ctx context.Context, reason TerminationReason) contex
 func TerminationReasonFromContext(ctx context.Context, fallback TerminationReason) TerminationReason {
 	if ctx != nil {
 		if reason, ok := ctx.Value(terminationReasonKey{}).(TerminationReason); ok && reason != "" {
+			return reason
+		}
+		if reason := TerminationReasonOf(context.Cause(ctx)); reason != "" {
 			return reason
 		}
 	}
