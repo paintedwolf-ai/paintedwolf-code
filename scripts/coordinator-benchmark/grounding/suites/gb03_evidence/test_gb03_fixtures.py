@@ -5,7 +5,8 @@ import pathlib
 import tempfile
 import unittest
 
-from grounding.checker import check_slot
+from grounding.checker import ProductRecord, check_slot
+from grounding.delivery_log import LineRange
 from grounding.reference_resolver import resolve_citation
 from grounding.suites.gb03_evidence import (
     D16_RAW_SECRET_CANARY,
@@ -27,6 +28,11 @@ from grounding.suites.gb03_evidence import (
 from grounding.suites.gb03_evidence.full_runner import (
     FIXED_SIDECAR_SELECTORS,
     SIDECAR_SLOT_HANDLERS,
+    _decompress_zstd_fallback,
+    _normalize_product_records,
+    _run_v01_03,
+    _run_v03_01,
+    _run_v03_07,
     parse_families_arg,
     select_gb03_work_items,
 )
@@ -206,6 +212,143 @@ class TestGB03RunnerCoverageAndSharding(unittest.TestCase):
             select_gb03_work_items(shard=2, shards=2)
         with self.assertRaises(ValueError):
             select_gb03_work_items(shard=0, shards=0)
+
+    def test_normalize_product_records_decompresses_zstd_and_is_noop_on_plaintext(self) -> None:
+        import hashlib
+        import json
+        import shutil
+        import subprocess
+
+        plain_src = b"package app\n\nfunc Alpha() int {\n    return 42\n}\n"
+        src_sha = hashlib.sha256(plain_src).hexdigest()
+        plain_rec = ProductRecord(
+            handle="read#1",
+            kind="read",
+            session_id="s1",
+            worker_leg="",
+            source_revision=src_sha,
+            delivered_ranges=(LineRange(1, 5),),
+            body_sha256=src_sha,
+            raw_bytes=plain_src,
+            path="internal/a.go",
+            shape="file_region",
+        )
+        # Already-decompressed record is returned unchanged
+        self.assertEqual(_normalize_product_records((plain_rec,)), (plain_rec,))
+
+        # Zstd-framed JSON []string blob is transparently decompressed when zstd is available
+        payload = json.dumps(
+            [
+                "     1\tpackage app",
+                "     2\t",
+                "     3\tfunc Alpha() int {",
+                "     4\t    return 42",
+                "     5\t}",
+            ]
+        ).encode("utf-8")
+        zstd_bin = shutil.which("zstd")
+        if zstd_bin:
+            compressed = subprocess.run(
+                [zstd_bin, "-c"], input=payload, capture_output=True, check=True
+            ).stdout
+            if _decompress_zstd_fallback(compressed) is not None:
+                zstd_rec = ProductRecord(
+                    handle="read#1",
+                    kind="read",
+                    session_id="s1",
+                    worker_leg="",
+                    source_revision=src_sha,
+                    delivered_ranges=(LineRange(1, 5),),
+                    body_sha256=hashlib.sha256(compressed).hexdigest(),
+                    raw_bytes=compressed,
+                    path="internal/a.go",
+                    shape="file_region",
+                )
+                norm = _normalize_product_records((zstd_rec,))
+                self.assertEqual(norm[0].raw_bytes, plain_src)
+                self.assertEqual(norm[0].body_sha256, src_sha)
+
+    def test_two_phase_supersession_mutates_workspace_between_prompts_without_pending_progress(self) -> None:
+        from types import SimpleNamespace
+
+        with tempfile.TemporaryDirectory(prefix="gb03-two-phase-") as tmp:
+            ws = pathlib.Path(tmp)
+            (ws / "internal").mkdir(parents=True, exist_ok=True)
+            calls: list[dict] = []
+
+            class FakeCtx:
+                workspace = ws
+
+                def run_session(self, **kwargs):
+                    sid = kwargs.get("session_id") or f"sess-{len(calls) + 1}"
+                    # Verify no unclosed update_progress tool call is scripted
+                    for t in kwargs["turns"]:
+                        for tc in t.tool_calls:
+                            self.assert_not_progress(tc)
+                    rel_files = {
+                        p.name: p.read_text(encoding="utf-8")
+                        for p in (ws / "internal").glob("*.go")
+                    }
+                    calls.append({"sid": sid, "kwargs": kwargs, "files": rel_files})
+                    r1 = ProductRecord(
+                        handle="read#1",
+                        kind="read",
+                        session_id=sid,
+                        worker_leg="",
+                        source_revision="",
+                        body_sha256="a" * 64,
+                        raw_bytes=b"package app\n\nfunc Val() int { return 100 }\n",
+                        path="internal/v03_01.go",
+                        shape="file_region",
+                        superseded_by="read#2",
+                    )
+                    r2 = ProductRecord(
+                        handle="read#2",
+                        kind="read",
+                        session_id=sid,
+                        worker_leg="",
+                        source_revision="",
+                        body_sha256="b" * 64,
+                        raw_bytes=b"package app\n\nfunc Val() int { return 200 }\n",
+                        path="internal/v03_01.go",
+                        shape="file_region",
+                    )
+                    art = SimpleNamespace(session_id=sid, product_records=(r1, r2))
+                    info = {
+                        "minted_handles": ["command#1", "read#1", "command#2", "read#2"],
+                        "refused": False,
+                        "cited_evidence_count": 2,
+                        "minting_parity_defects": [],
+                    }
+                    return art, info, {}, {}, {}
+
+                def assert_not_progress(self, tc):
+                    if tc["name"] == "update_progress":
+                        raise AssertionError("Unexpected update_progress call")
+
+            ctx = FakeCtx()
+            rep01, div01 = _run_v03_01(ctx)  # type: ignore[arg-type]
+            self.assertTrue(rep01["passed"], div01)
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(calls[0]["sid"], calls[1]["sid"])
+            self.assertIn("return 100", calls[0]["files"]["v03_01.go"])
+            self.assertIn("return 200", calls[1]["files"]["v03_01.go"])
+
+            calls.clear()
+            rep03, div03 = _run_v01_03(ctx)  # type: ignore[arg-type]
+            self.assertTrue(rep03["passed"], div03)
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(calls[0]["sid"], calls[1]["sid"])
+            self.assertIn("const V = 1", calls[0]["files"]["mut03.go"])
+            self.assertIn("const V = 2", calls[1]["files"]["mut03.go"])
+
+            calls.clear()
+            rep07, div07 = _run_v03_07(ctx)  # type: ignore[arg-type]
+            self.assertTrue(rep07["passed"], div07)
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(calls[0]["sid"], calls[1]["sid"])
+            self.assertIn("return 100", calls[0]["files"]["v03_07.go"])
+            self.assertIn("return 200", calls[1]["files"]["v03_07.go"])
 
 
 if __name__ == "__main__":

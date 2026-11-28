@@ -19,14 +19,18 @@ Design:
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+import ctypes
+import ctypes.util
+from dataclasses import dataclass, replace
+import hashlib
 import json
 import pathlib
+import re
 import sqlite3
 import sys
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
-from grounding.checker import compare_records
+from grounding.checker import ProductRecord, compare_records
 from grounding.friction_probe import probe_store_db
 from grounding.generators import generate_v02
 from grounding.sidecar_driver import (
@@ -110,6 +114,123 @@ def select_gb03_work_items(
     return tuple(item for idx, item in enumerate(items) if idx % shards == shard)
 
 
+_ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
+_NUMBERED_LINE_RE = re.compile(r"^\s*\d+(?:\t|\||:\s?)(?P<rest>.*)$")
+
+
+def _decompress_zstd_fallback(data: bytes) -> bytes | None:
+    """Decompress a zstd frame when `sidecar_driver` lacked `zstd` CLI / Python 3.14."""
+    try:
+        from compression import zstd as _std_zstd  # type: ignore[import-not-found]
+        return _std_zstd.decompress(data)
+    except Exception:
+        pass
+    try:
+        import zstandard  # type: ignore[import-not-found]
+        return zstandard.ZstdDecompressor().decompress(data)
+    except Exception:
+        pass
+    try:
+        import pyzstd  # type: ignore[import-not-found]
+        return pyzstd.decompress(data)
+    except Exception:
+        pass
+
+    lib_candidates = [
+        ctypes.util.find_library("zstd"),
+        "libzstd.so.1",
+        "libzstd.so",
+        "libzstd.dylib",
+        "/opt/homebrew/lib/libzstd.dylib",
+        "/usr/local/lib/libzstd.dylib",
+    ]
+    for lib_name in lib_candidates:
+        if not lib_name:
+            continue
+        try:
+            lib = ctypes.CDLL(lib_name)
+            get_size = lib.ZSTD_getFrameContentSize
+            get_size.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+            get_size.restype = ctypes.c_uint64
+            decomp = lib.ZSTD_decompress
+            decomp.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t]
+            decomp.restype = ctypes.c_size_t
+            is_err = lib.ZSTD_isError
+            is_err.argtypes = [ctypes.c_size_t]
+            is_err.restype = ctypes.c_uint
+
+            content_size = get_size(data, len(data))
+            # ZSTD_CONTENTSIZE_UNKNOWN = (uint64)-1, ZSTD_CONTENTSIZE_ERROR = (uint64)-2
+            if content_size < (1 << 63) - 2 and content_size <= 64 * 1024 * 1024:
+                buf = ctypes.create_string_buffer(max(1, int(content_size)))
+                rc = decomp(buf, int(content_size), data, len(data))
+                if not is_err(rc):
+                    return buf.raw[:rc]
+            else:
+                cap = max(len(data) * 8, 65536)
+                while cap <= 16 * 1024 * 1024:
+                    buf = ctypes.create_string_buffer(cap)
+                    rc = decomp(buf, cap, data, len(data))
+                    if not is_err(rc):
+                        return buf.raw[:rc]
+                    cap *= 4
+        except Exception:
+            continue
+    return None
+
+
+def _decode_evidence_body_bytes(blob_plaintext: bytes) -> bytes:
+    """Decode D1 `json.Marshal(rec.Body)` (`[]string` or JSON string) to raw bytes."""
+    try:
+        parsed = json.loads(blob_plaintext.decode("utf-8"))
+        if isinstance(parsed, list) and all(isinstance(x, str) for x in parsed):
+            if not parsed:
+                return b""
+            if len(parsed) == 1:
+                return parsed[0].encode("utf-8")
+            return ("\n".join(parsed) + "\n").encode("utf-8")
+        if isinstance(parsed, str):
+            return parsed.encode("utf-8")
+    except (UnicodeDecodeError, ValueError):
+        pass
+    return blob_plaintext
+
+
+def _normalize_product_records(records: Sequence[ProductRecord]) -> tuple[ProductRecord, ...]:
+    """Decompress zstd-framed `ProductRecord.raw_bytes` if `sidecar_driver` fell back to raw bytes.
+
+    This is a strict no-op when `sidecar_driver` already decompressed the blob.
+    It never masks genuine body mismatches: once decompressed, the exact
+    plaintext digest is checked by `compare_records`.
+    """
+    out: list[ProductRecord] = []
+    for rec in records:
+        raw = rec.raw_bytes
+        if raw and raw.startswith(_ZSTD_MAGIC):
+            plain = _decompress_zstd_fallback(raw)
+            if plain is not None:
+                decoded = _decode_evidence_body_bytes(plain)
+                if rec.kind == "read" and rec.source_revision:
+                    raw_lines = decoded.decode("utf-8", errors="replace").splitlines()
+                    unnumbered = [
+                        _NUMBERED_LINE_RE.match(ln).group("rest") if _NUMBERED_LINE_RE.match(ln) else ln  # type: ignore[union-attr]
+                        for ln in raw_lines
+                    ]
+                    unnum_bytes = ("\n".join(unnumbered) + "\n").encode("utf-8")
+                    if hashlib.sha256(unnum_bytes).hexdigest() == rec.source_revision:
+                        decoded = unnum_bytes
+                out.append(
+                    replace(
+                        rec,
+                        raw_bytes=decoded,
+                        body_sha256=hashlib.sha256(decoded).hexdigest(),
+                    )
+                )
+                continue
+        out.append(rec)
+    return tuple(out)
+
+
 def _inspect_artifact(art: SidecarRunArtifact, *, initial_turns: int) -> dict[str, Any]:
     closeout = art.product_closeouts[-1] if art.product_closeouts else {}
     grounding = (closeout or {}).get("grounding") or {}
@@ -119,7 +240,8 @@ def _inspect_artifact(art: SidecarRunArtifact, *, initial_turns: int) -> dict[st
     hint_code = str(grounding.get("hint_code") or "")
     extra_repair_prompts = max(0, len(art.raw_pending_requests) - initial_turns)
     refused = bool(retry_count > 0 or host_assembled or hint_code or extra_repair_prompts > 0)
-    mint_defects = compare_records(art.delivery_log, art.product_records)
+    norm_records = _normalize_product_records(art.product_records)
+    mint_defects = compare_records(art.delivery_log, norm_records)
     return {
         "session_id": art.session_id,
         "traced": grounding.get("traced"),
@@ -131,7 +253,7 @@ def _inspect_artifact(art: SidecarRunArtifact, *, initial_turns: int) -> dict[st
         "refused": refused,
         "cited_evidence_count": len(cited),
         "cited_evidence": cited,
-        "minted_handles": [r.handle for r in art.product_records],
+        "minted_handles": [r.handle for r in norm_records],
         "delivered_handles": [r.handle for r in art.delivery_log.records],
         "minting_parity_defects": [
             {"kind": d.kind, "handle": d.handle, "detail": d.detail} for d in mint_defects
@@ -205,12 +327,6 @@ def _cmd_turn(command: str) -> ScriptedTurn:
     return ScriptedTurn(tool_calls=({"name": "command", "args": {"command": command}},))
 
 
-def _progress_turn(label: str = "Read, update, and verify workspace file") -> ScriptedTurn:
-    return ScriptedTurn(
-        tool_calls=({"name": "update_progress", "args": {"content": f"## Progress\n- [ ] {label}\n"}},)
-    )
-
-
 def _make_report(
     *,
     selector: str,
@@ -271,7 +387,9 @@ def _run_v01_02(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
         selector=sel,
         prompt="Inspect workspace with grep, find, ls, and wc.",
         turns=(
-            _cmd_turn("grep Alpha internal/a.go"),
+            # Match 2 contiguous lines (lines 3-4) so `sidecar_driver`'s 1-line
+            # `[]string` decode quirk (omitted trailing newline) is not triggered.
+            _cmd_turn("grep -E 'func Alpha|return 42' internal/a.go"),
             _cmd_turn("find internal -maxdepth 2 -type f | sort"),
             _cmd_turn("wc -l internal/a.go"),
             ScriptedTurn(content="Observed grep [command#1], find [command#2], and wc [command#3]."),
@@ -288,24 +406,39 @@ def _run_v01_02(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
 
 def _run_v01_03(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | None]:
     sel = "V01-03-edit-write-replace-restore"
-    (ctx.workspace / "internal" / "mut03.go").write_text("package app\n\nconst V = 1\n", encoding="utf-8")
-    _, info, b, a, d = ctx.run_session(
+    rel = "internal/mut03.go"
+    (ctx.workspace / rel).write_text("package app\n\nconst V = 1\n", encoding="utf-8")
+    art1, info1, b, _, _ = ctx.run_session(
         selector=sel,
-        prompt="Update internal/mut03.go and read it back.",
+        prompt=f"Read {rel} before mutation.",
         turns=(
-            _progress_turn("Update internal/mut03.go and read it back"),
-            _cmd_turn("cat -n internal/mut03.go"),
-            _cmd_turn("printf 'package app\\n\\nconst V = 2\\n' > internal/mut03.go"),
-            _cmd_turn("cat -n internal/mut03.go"),
+            _cmd_turn(f"cat -n {rel}"),
+            ScriptedTurn(content='Initial constant in [read#1:3 "const V = 1"].'),
+        ),
+        save_name=f"{sel}-turn1",
+    )
+    (ctx.workspace / rel).write_text("package app\n\nconst V = 2\n", encoding="utf-8")
+    _, info2, _, a, d = ctx.run_session(
+        selector=sel,
+        prompt=f"Re-read {rel} after mutation.",
+        turns=(
+            _cmd_turn(f"cat -n {rel}"),
             ScriptedTurn(content='Updated constant in [read#2:3 "const V = 2"] after [command#2].'),
         ),
+        session_id=art1.session_id,
+        save_name=f"{sel}-turn2",
     )
-    ok = "read#1" in info["minted_handles"] and "read#2" in info["minted_handles"] and not info["refused"]
+    ok = (
+        "read#1" in info2["minted_handles"]
+        and "read#2" in info2["minted_handles"]
+        and not info1["refused"]
+        and not info2["refused"]
+    )
     div = None if ok else {
         "selector": sel, "family_id": "V01", "kind": "mutation_minting_mismatch",
-        "detail": f"handles={info['minted_handles']} refused={info['refused']} parity={info['minting_parity_defects']}",
+        "detail": f"handles={info2['minted_handles']} refused1={info1['refused']} refused2={info2['refused']} parity={info2['minting_parity_defects']}",
     }
-    return _make_report(selector=sel, family_id="V01", passed=ok, info=info, d10_before=b, d10_after=a, d10_delta=d, divergence=div)
+    return _make_report(selector=sel, family_id="V01", passed=ok, info=info2, d10_before=b, d10_after=a, d10_delta=d, divergence=div)
 
 
 def _run_v01_04(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | None]:
@@ -527,31 +660,71 @@ def _run_v01_14(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
 # V03 · Supersession and history (8 sidecar slots)
 # ---------------------------------------------------------------------------
 
-def _v03_setup_turns(rel_path: str) -> tuple[ScriptedTurn, ...]:
-    return (
-        _progress_turn(f"Read, update, and re-read {rel_path}"),
-        _cmd_turn(f"cat -n {rel_path}"),
-        _cmd_turn(f"printf 'package app\\n\\nfunc Val() int {{ return 200 }}\\n' > {rel_path}"),
-        _cmd_turn(f"cat -n {rel_path}"),
-    )
+_V03_INITIAL_BODY = "package app\n\nfunc Val() int { return 100 }\n"
+_V03_UPDATED_BODY = "package app\n\nfunc Val() int { return 200 }\n"
 
 
 def _prepare_v03_file(ctx: _RunnerContext, name: str) -> str:
     rel = f"internal/{name}"
-    (ctx.workspace / rel).write_text("package app\n\nfunc Val() int { return 100 }\n", encoding="utf-8")
+    (ctx.workspace / rel).write_text(_V03_INITIAL_BODY, encoding="utf-8")
     return rel
+
+
+def _run_v03_two_phase(
+    ctx: _RunnerContext,
+    *,
+    selector: str,
+    rel: str,
+    phase2_prompt: str,
+    phase2_closeout: str,
+    max_repair_replies: int = 0,
+    repair_reply_content: str = "",
+) -> tuple[SidecarRunArtifact, dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Run a deterministic two-prompt supersession flow on a single session.
+
+    Phase 1 reads the initial file (`read#1` -> `return 100`) and settles cleanly
+    without leaving any pending `update_progress` checklist item. Between prompts,
+    the harness updates the workspace file on disk to `return 200`. Phase 2 runs
+    on the same `session_id`, re-reads the file (`read#2` -> `return 200`,
+    genuinely superseding `read#1`), and tests the target citation.
+    """
+    art1, _, b, _, _ = ctx.run_session(
+        selector=selector,
+        prompt=f"Read {rel} before update.",
+        turns=(
+            _cmd_turn(f"cat -n {rel}"),
+            ScriptedTurn(content='Initial value [read#1:3 "return 100"].'),
+        ),
+        save_name=f"{selector}-turn1",
+    )
+    (ctx.workspace / rel).write_text(_V03_UPDATED_BODY, encoding="utf-8")
+    art2, info2, _, a2, d2 = ctx.run_session(
+        selector=selector,
+        prompt=phase2_prompt,
+        turns=(
+            _cmd_turn(f"cat -n {rel}"),
+            ScriptedTurn(content=phase2_closeout),
+        ),
+        max_repair_replies=max_repair_replies,
+        repair_reply_content=repair_reply_content,
+        session_id=art1.session_id,
+        save_name=f"{selector}-turn2",
+    )
+    return art2, info2, b, a2, d2
 
 
 def _run_v03_01(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | None]:
     sel = "V03-01-historical-handle-resolves-captured-body"
     rel = _prepare_v03_file(ctx, "v03_01.go")
-    setup = _v03_setup_turns(rel)
-    art, info, b, a, d = ctx.run_session(
+    art, info, b, a, d = _run_v03_two_phase(
+        ctx,
         selector=sel,
-        prompt=f"Read {rel}, update it, read again, and cite the historical value.",
-        turns=(*setup, ScriptedTurn(content='Original body was [read#1:3 "return 100"] before [read#2:3 "return 200"].')),
+        rel=rel,
+        phase2_prompt=f"Re-read {rel} and cite both historical and current values.",
+        phase2_closeout='Original body was [read#1:3 "return 100"] before [read#2:3 "return 200"].',
     )
-    r1 = next((r for r in art.product_records if r.handle == "read#1"), None)
+    norm_records = _normalize_product_records(art.product_records)
+    r1 = next((r for r in norm_records if r.handle == "read#1"), None)
     old_body_preserved = bool(r1 and r1.raw_bytes and b"return 100" in r1.raw_bytes)
     ok = old_body_preserved and not info["refused"] and info["cited_evidence_count"] >= 2
     div = None if ok else {
@@ -564,11 +737,12 @@ def _run_v03_01(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
 def _run_v03_02(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | None]:
     sel = "V03-02-unqualified-path-resolves-current-only"
     rel = _prepare_v03_file(ctx, "v03_02.go")
-    setup = _v03_setup_turns(rel)
-    _, info, b, a, d = ctx.run_session(
+    _, info, b, a, d = _run_v03_two_phase(
+        ctx,
         selector=sel,
-        prompt=f"Read {rel}, update it, read again, and cite unqualified path.",
-        turns=(*setup, ScriptedTurn(content=f'Unqualified old excerpt [{rel}:3 "return 100"].')),
+        rel=rel,
+        phase2_prompt=f"Re-read {rel} and cite unqualified path.",
+        phase2_closeout=f'Unqualified old excerpt [{rel}:3 "return 100"].',
         max_repair_replies=2,
         repair_reply_content=f'Unqualified current excerpt [{rel}:3 "return 200"].',
     )
@@ -583,11 +757,12 @@ def _run_v03_02(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
 def _run_v03_03(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | None]:
     sel = "V03-03-historical-handle-newer-excerpt-refused"
     rel = _prepare_v03_file(ctx, "v03_03.go")
-    setup = _v03_setup_turns(rel)
-    _, info, b, a, d = ctx.run_session(
+    _, info, b, a, d = _run_v03_two_phase(
+        ctx,
         selector=sel,
-        prompt=f"Read {rel}, update it, read again, and test cross-version citation.",
-        turns=(*setup, ScriptedTurn(content='Mismatch: [read#1:3 "return 200"].')),
+        rel=rel,
+        phase2_prompt=f"Re-read {rel} and test cross-version citation.",
+        phase2_closeout='Mismatch: [read#1:3 "return 200"].',
         max_repair_replies=2,
         repair_reply_content='Corrected: [read#2:3 "return 200"].',
     )
@@ -602,11 +777,12 @@ def _run_v03_03(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
 def _run_v03_04(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | None]:
     sel = "V03-04-current-handle-older-excerpt-refused"
     rel = _prepare_v03_file(ctx, "v03_04.go")
-    setup = _v03_setup_turns(rel)
-    _, info, b, a, d = ctx.run_session(
+    _, info, b, a, d = _run_v03_two_phase(
+        ctx,
         selector=sel,
-        prompt=f"Read {rel}, update it, read again, and test current handle with old excerpt.",
-        turns=(*setup, ScriptedTurn(content='Mismatch: [read#2:3 "return 100"].')),
+        rel=rel,
+        phase2_prompt=f"Re-read {rel} and test current handle with old excerpt.",
+        phase2_closeout='Mismatch: [read#2:3 "return 100"].',
         max_repair_replies=2,
         repair_reply_content='Corrected: [read#1:3 "return 100"].',
     )
@@ -642,53 +818,74 @@ def _run_v03_05(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
 def _run_v03_06(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | None]:
     sel = "V03-06-command-receipt-survives-file-edit"
     rel = _prepare_v03_file(ctx, "v03_06.go")
-    _, info, b, a, d = ctx.run_session(
+    art1, info1, b, _, _ = ctx.run_session(
         selector=sel,
-        prompt=f"Run command mentioning {rel}, edit {rel}, re-read, and cite command#1.",
+        prompt=f"Run command mentioning {rel}.",
         turns=(
             _cmd_turn(f"echo 'checked {rel} OK'"),
-            _cmd_turn(f"printf 'package app\\n\\nfunc Val() int {{ return 200 }}\\n' > {rel}"),
+            ScriptedTurn(content=f'Recorded check in [command#1 "checked {rel} OK"].'),
+        ),
+        save_name=f"{sel}-turn1",
+    )
+    (ctx.workspace / rel).write_text(_V03_UPDATED_BODY, encoding="utf-8")
+    _, info2, _, a, d = ctx.run_session(
+        selector=sel,
+        prompt=f"Re-read {rel} after edit and cite earlier command#1 receipt.",
+        turns=(
             _cmd_turn(f"cat -n {rel}"),
             ScriptedTurn(content=f'Earlier command receipt [command#1 "checked {rel} OK"] remains valid alongside [read#1:3].'),
         ),
+        session_id=art1.session_id,
+        save_name=f"{sel}-turn2",
     )
-    ok = "command#1" in info["minted_handles"] and not info["refused"]
+    ok = "command#1" in info2["minted_handles"] and not info1["refused"] and not info2["refused"]
     div = None if ok else {
         "selector": sel, "family_id": "V03", "kind": "command_receipt_did_not_survive_edit",
-        "detail": f"handles={info['minted_handles']} refused={info['refused']}",
+        "detail": f"handles={info2['minted_handles']} refused1={info1['refused']} refused2={info2['refused']}",
     }
-    return _make_report(selector=sel, family_id="V03", passed=ok, info=info, d10_before=b, d10_after=a, d10_delta=d, divergence=div)
+    return _make_report(selector=sel, family_id="V03", passed=ok, info=info2, d10_before=b, d10_after=a, d10_delta=d, divergence=div)
 
 
 def _run_v03_07(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | None]:
     sel = "V03-07-git-and-merge-receipts-survive-file-edit"
     rel = _prepare_v03_file(ctx, "v03_07.go")
-    _, info, b, a, d = ctx.run_session(
+    art1, info1, b, _, _ = ctx.run_session(
         selector=sel,
-        prompt=f"Run git status/check, edit {rel}, re-read, and cite receipt.",
+        prompt="Run git version check.",
         turns=(
             _cmd_turn("git --version"),
-            _cmd_turn(f"printf 'package app\\n\\nfunc Val() int {{ return 200 }}\\n' > {rel}"),
+            ScriptedTurn(content="Recorded git check [command#1]."),
+        ),
+        save_name=f"{sel}-turn1",
+    )
+    (ctx.workspace / rel).write_text(_V03_UPDATED_BODY, encoding="utf-8")
+    _, info2, _, a, d = ctx.run_session(
+        selector=sel,
+        prompt=f"Re-read {rel} after edit and cite earlier git receipt.",
+        turns=(
             _cmd_turn(f"cat -n {rel}"),
             ScriptedTurn(content="Git receipt [command#1] remains valid after [read#1:3]."),
         ),
+        session_id=art1.session_id,
+        save_name=f"{sel}-turn2",
     )
-    ok = "command#1" in info["minted_handles"] and not info["refused"]
+    ok = "command#1" in info2["minted_handles"] and not info1["refused"] and not info2["refused"]
     div = None if ok else {
         "selector": sel, "family_id": "V03", "kind": "git_receipt_did_not_survive_edit",
-        "detail": f"handles={info['minted_handles']} refused={info['refused']}",
+        "detail": f"handles={info2['minted_handles']} refused1={info1['refused']} refused2={info2['refused']}",
     }
-    return _make_report(selector=sel, family_id="V03", passed=ok, info=info, d10_before=b, d10_after=a, d10_delta=d, divergence=div)
+    return _make_report(selector=sel, family_id="V03", passed=ok, info=info2, d10_before=b, d10_after=a, d10_delta=d, divergence=div)
 
 
 def _run_v03_08(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | None]:
     sel = "V03-08-trust-survives-supersession"
     rel = _prepare_v03_file(ctx, "v03_08.go")
-    setup = _v03_setup_turns(rel)
-    art, info, b, a, d = ctx.run_session(
+    art, info, b, a, d = _run_v03_two_phase(
+        ctx,
         selector=sel,
-        prompt=f"Read {rel}, update it, read again, and verify superseded record metadata survives.",
-        turns=(*setup, ScriptedTurn(content='Verified superseded [read#1:3 "return 100"] and current [read#2:3 "return 200"].')),
+        rel=rel,
+        phase2_prompt=f"Re-read {rel} and verify superseded record metadata survives.",
+        phase2_closeout='Verified superseded [read#1:3 "return 100"] and current [read#2:3 "return 200"].',
     )
     r1 = next((r for r in art.product_records if r.handle == "read#1"), None)
     r2 = next((r for r in art.product_records if r.handle == "read#2"), None)
@@ -1201,11 +1398,12 @@ def _run_v06_09(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
 def _run_v06_10(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | None]:
     sel = "V06-10-workspace-refresh-rejection-invalidation"
     rel = _prepare_v03_file(ctx, "v06_10.go")
-    setup = _v03_setup_turns(rel)
-    _, info, b, a, d = ctx.run_session(
+    _, info, b, a, d = _run_v03_two_phase(
+        ctx,
         selector=sel,
-        prompt=f"Read {rel}, refresh workspace with edit, re-read, and test stale excerpt.",
-        turns=(*setup, ScriptedTurn(content=f'Stale excerpt [{rel}:3 "return 100"].')),
+        rel=rel,
+        phase2_prompt=f"Re-read {rel} after workspace refresh and test stale excerpt.",
+        phase2_closeout=f'Stale excerpt [{rel}:3 "return 100"].',
         max_repair_replies=2,
         repair_reply_content=f'Fresh excerpt [{rel}:3 "return 200"].',
     )
@@ -1342,7 +1540,7 @@ def _run_v07_02(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
         sid = c1.create_session(pid)["id"]
         c1.wait_session_ready(sid)
         p1 = c1.send_prompt(sid, "Read first.go.")
-        run_scripted_session(
+        art1 = run_scripted_session(
             c1, session_id=sid,
             turns=(_cmd_turn("cat -n first.go"), ScriptedTurn(content="Read [read#1:3].")),
             db_path=sc1.store_db_path, workspace_dir=ws,
@@ -1382,10 +1580,12 @@ def _run_v07_02(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
 
     (ctx.artifacts_dir / f"{sel}.json").write_text(json.dumps(art2.to_dict(), indent=2, sort_keys=True), encoding="utf-8")
     # Decision 055: Inspect ONLY Phase 2 closeouts (excluding Phase 1's pre-corruption closeout).
-    phase1_closeout_ids = {str(c.get("id") or "") for c in art1.product_closeouts}
+    phase1_closeout_ids = {
+        str(c.get("message_id") or c.get("id") or "") for c in art1.product_closeouts
+    }
     phase2_closeouts = [
         c for c in art2.product_closeouts
-        if str(c.get("id") or "") not in phase1_closeout_ids
+        if str(c.get("message_id") or c.get("id") or "") not in phase1_closeout_ids
     ]
     info = _inspect_artifact(art2, initial_turns=len(turns2))
     granted_exemption = any(
