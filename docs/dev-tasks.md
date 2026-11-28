@@ -13,6 +13,7 @@ Toolchain setup, local dev stacks, debug capture, and the `./task` targets with 
 - [Bun](https://bun.sh) at `.bun-version` for `lycaon-den/`
 - Node at `.node-version` for OpenAPI lint, bundle, and codegen
 - Rust with Cargo for the Tauri shell, installed through [rustup](https://rustup.rs) so `rust-toolchain.toml` selects the version
+- The matching Bialy head artifacts, restored to the shared artifact bin's `decide-heads/` directory or selected with `BIALY_HEADS_DIR`; see [decision dependencies](dependencies.md). Without them, the development engine build and managed browser provisioning cannot complete.
 
 `./task setup-dev` checks each of these. Current pins and upstream versions are linked from the [dependency inventory](operations/dependency-inventory.md).
 
