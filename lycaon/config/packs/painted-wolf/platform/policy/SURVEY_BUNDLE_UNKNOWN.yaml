@@ -3,7 +3,7 @@ id: SURVEY_BUNDLE_UNKNOWN
 kind: schema
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.available, paintedwolf.bundle, paintedwolf.command_form, paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.unknown_target]
+requires_facts: [paintedwolf.available, paintedwolf.bundle, paintedwolf.can_survey_repo, paintedwolf.command_form, paintedwolf.command_repo_map_reachable, paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.unknown_target]
 when: paintedwolf.operation == "survey_repo" && paintedwolf.rejection_code == "SURVEY_BUNDLE_UNKNOWN"
 effect: block
 x-paintedwolf-category: recoverable
@@ -12,7 +12,7 @@ message: survey_repo bundle not in catalog
 what: '{% if paintedwolf.command_form %}{{ paintedwolf.command_form }} bundle {{ paintedwolf.bundle }} is not in the catalog.{% else %}survey_repo bundle {{ paintedwolf.bundle }} is not in the catalog.{% endif %}'
 cause: 'The merged host/project catalog offers: {{ paintedwolf.available }}.'
 why: Bundle ids are catalog-defined probe patterns; unknown ids cannot run.
-fix: '{% if paintedwolf.command_form %}Retry `{{ paintedwolf.command_form }} --bundle` with a catalog bundle id from the reject list.{% else %}Retry survey_repo with a catalog bundle id from the reject list or tool schema.{% endif %}'
+fix: '{% if paintedwolf.command_form %}{% if paintedwolf.command_repo_map_reachable %}Retry `{{ paintedwolf.command_form }} --bundle` with a catalog bundle id from the reject list.{% else %}Choose a catalog bundle id from the reject list: {{ paintedwolf.available }}.{% endif %}{% else %}{% if paintedwolf.can_survey_repo %}Retry survey_repo with a catalog bundle id from the reject list or tool schema.{% else %}Choose a catalog bundle id from the reject list: {{ paintedwolf.available }}.{% endif %}{% endif %}'
 instead: Choose an intended listed bundle, or an offered scoped search tool for an ad-hoc query
 x-paintedwolf-scenarios:
   - id: default
@@ -22,6 +22,7 @@ x-paintedwolf-scenarios:
         - ssot_drift
         - api_routes
       bundle: missing_bundle
+      can_survey_repo: true
       profile: explore_readonly
       tool: survey_repo
   - id: command-leg
@@ -32,6 +33,7 @@ x-paintedwolf-scenarios:
         - api_routes
       bundle: missing_bundle
       command_form: repo-map
+      command_repo_map_reachable: true
       native_operation: survey_repo
       profile: explore_readonly
       tool: command

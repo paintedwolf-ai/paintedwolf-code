@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/commandmode"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -65,12 +66,13 @@ func TestSelectModeNamesWhatPrepareSelects(t *testing.T) {
 		"curl -o /dev/null https://example.test/":                                                  "request",
 		"curl -o page.html https://example.test/":                                                  "-o--D--c-to-file",
 
-		"tar -tf a.tar":  "listing-or-stream-decode",
-		"tar -xf a.tar":  "create-extract-compress-decompress-to-path",
-		"unzip -l a.zip": "listing-or-stream-decode",
-		"gzip -dc a.gz":  "listing-or-stream-decode",
-		"gzip -d a.gz":   "create-extract-compress-decompress-to-path",
-		"gunzip":         "listing-or-stream-decode",
+		"tar -tf a.tar":    "listing-or-stream-decode",
+		"tar -xf a.tar":    "create-extract-compress-decompress-to-path",
+		"unzip -l a.zip":   "listing-or-stream-decode",
+		"unzip -p a.zip b": "listing-or-stream-decode",
+		"gzip -dc a.gz":    "listing-or-stream-decode",
+		"gzip -d a.gz":     "create-extract-compress-decompress-to-path",
+		"gunzip":           "listing-or-stream-decode",
 
 		"yq .a f.yaml":      "query",
 		"yq -i .a=1 f.yaml": "-i",
@@ -81,20 +83,26 @@ func TestSelectModeNamesWhatPrepareSelects(t *testing.T) {
 		"uniq in out":                   "OUTPUT-supplied",
 		"iconv -f latin1 -t utf-8 file": "always",
 		"iconv -o out file":             "-o",
+		"sed p":                         "stream-script",
 		"sed s/a/b/":                    "stream-script",
 		"sed -i s/a/b/ f":               "-i",
 		"sed -Ei s/a/b/ f":              "-i",
 		"sed -i.bak s/a/b/ f":           "-i",
+		"sed -i .bak s/a/b/ f":          "-i",
 		"sed --in-place s/a/b/ f":       "-i",
 		"sed w\tout":                    "w-command",
-		// A script read from a file cannot be classified from argv.
-		"sed -f script.sed": "",
+		// A script read from a file cannot be classified from argv unless -i fixes in-place mode.
+		"sed -f script.sed f":    "",
+		"sed -i -f script.sed f": "-i",
 
 		"find . -name x -delete": "-delete",
 	} {
 		var argv commandprogram.Fields
+		var words []string
 		for _, word := range strings.Split(source, " ") {
-			argv = append(argv, commandprogram.Field{Value: strings.ReplaceAll(word, "\t", " ")})
+			val := strings.ReplaceAll(word, "\t", " ")
+			argv = append(argv, commandprogram.Field{Value: val})
+			words = append(words, val)
 		}
 		native := natives[argv[0].Value]
 		if native.SelectMode == nil {
@@ -104,6 +112,10 @@ func TestSelectModeNamesWhatPrepareSelects(t *testing.T) {
 		got, known := native.SelectMode(t.Context(), argv)
 		if known != (want != "") || got != want {
 			t.Errorf("%s: mode %q (known %v), want %q", source, got, known, want)
+		}
+		resolved, resolvedOK := commandmode.Resolve(t.Context(), words)
+		if resolvedOK != (want != "") || resolved.Mode != want {
+			t.Errorf("%s: commandmode.Resolve = %+v (ok %v), want %q", source, resolved, resolvedOK, want)
 		}
 	}
 }

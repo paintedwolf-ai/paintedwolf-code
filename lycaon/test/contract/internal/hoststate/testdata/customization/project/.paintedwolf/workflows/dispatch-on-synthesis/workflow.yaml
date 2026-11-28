@@ -1,0 +1,12 @@
+id: fixture-dispatch-on-synthesis
+version: 1.0.0
+name: Fixture dispatch on synthesis
+trigger: /fixture-dispatch-on-synthesis
+request:
+  question: What should this phase work on?
+phases:
+  - id: bound
+    activity_label: Working
+    coordinator_surface: implement_synthesis
+    surface_template: agents/coordinator-surface-orchestrate.md
+    mode_refs: [implement-dispatch]

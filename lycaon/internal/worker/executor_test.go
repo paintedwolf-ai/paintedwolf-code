@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/stream"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
@@ -466,4 +467,18 @@ func TestLocalExecutorAbortUsesChildRuntime(t *testing.T) {
 			t.Fatal("unstarted task stopped another runtime")
 		}
 	}
+}
+
+// WorkerRequestReader is the worker agent's declared request on one root.
+func (r *fakePromptRunner) WorkerRequestReader(_ context.Context, _, _, agentType string) (prompts.Reader, error) {
+	profiles, err := sandbox.LoadToolProfiles()
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	profileID, err := prompts.ToolProfileForAgent(agentType)
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	return prompts.NewReader(prompts.HostFacts{Profiles: profiles, RootCount: 1, WebSearch: true},
+		prompts.TurnProjection{ProfileID: profileID, Declared: true})
 }

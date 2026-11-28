@@ -3,7 +3,7 @@ id: REPLACE_LINES_BEYOND_EOF
 kind: schema
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.beyond_eof, paintedwolf.can_command, paintedwolf.end_line, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.start_line, paintedwolf.total_lines]
+requires_facts: [paintedwolf.beyond_eof, paintedwolf.command_wc_reachable, paintedwolf.end_line, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.start_line, paintedwolf.total_lines]
 when: paintedwolf.operation == "replace_lines" && paintedwolf.rejection_code == "REPLACE_LINES_BEYOND_EOF"
 effect: block
 x-paintedwolf-category: recoverable
@@ -12,7 +12,7 @@ message: replace_lines range past end of file
 what: The line-range replacement on {{ paintedwolf.path }} range {{ paintedwolf.start_line }}–{{ paintedwolf.end_line }} exceeds file length ({{ paintedwolf.total_lines }} lines).
 cause: Line numbers must fall within the file; check the file's line count before replacing a range.
 why: Splicing past EOF would corrupt file structure — narrow the range from a fresh read.
-fix: '{% if paintedwolf.can_command %}Check the current line count with `wc -l {{ paintedwolf.path }}` (0 also handles an empty file){% else %}Re-read {{ paintedwolf.path }} to get its current line count (an empty file has none){% endif %} and select the intended replacement within it. Do not retry at the rejected out-of-range start or use zero as a line number.'
+fix: '{% if paintedwolf.command_wc_reachable %}Check the current line count with `wc -l {{ paintedwolf.path }}` in command (0 also handles an empty file){% else %}Re-read {{ paintedwolf.path }} to get its current line count (an empty file has none){% endif %} and select the intended replacement within it. Do not retry at the rejected out-of-range start or use zero as a line number.'
 instead: Branch on Code; lower the line range or re-read total_lines
 x-paintedwolf-scenarios:
   - id: default
@@ -25,7 +25,7 @@ x-paintedwolf-scenarios:
       total_lines: 120
   - id: command-leg
     vars:
-      can_command: true
+      command_wc_reachable: true
       end_line: 200
       path: internal/foo.go
       profile: implement

@@ -4,11 +4,15 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
+	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
+	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func (e *Boundary) preflightWriteRoot(ctx context.Context, tool string, args map[string]any, tc *tools.ToolContext) error {
@@ -52,23 +56,52 @@ func (e *Boundary) reviewWriteRoot(ctx context.Context, tool string, args map[st
 			Data: map[string]any{"reason": "write-root approval is not configured"},
 		})
 	}
-	authorized, denied, guidance, err := e.writeRootPreflight(ctx, tool, args, tc, root)
+	res, err := e.writeRootPreflight(ctx, tool, args, tc, root)
 	if err != nil {
 		return e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, err)
 	}
-	if !authorized {
-		data := map[string]any{"path": root}
-		if guidance != "" {
-			data[toolrejection.UserGuidanceKey] = guidance
-		}
-		code := isolation.CodeWriteRootDenied
-		if !denied {
-			code = isolation.CodeApprovalUnavailable
-			data["reason"] = "approval did not install authority"
-		}
-		return e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
-			Code: code, Data: data,
-		})
+	if !res.Authorized {
+		return e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args,
+			pathPreflightReject(tool, args, tc, "write_root", root, isolation.CodeWriteRootDenied, res))
 	}
 	return nil
+}
+
+func approvalRuleDeniedReject(tool, profileID, path, cmd string, rules []hitl.ApprovalRuleMatch) *toolrejection.ToolReject {
+	data := denyRejectData(platform.PolicyContext{ToolName: tool, ProfileID: profileID}, &hitl.ApprovalResult{DenySubject: path, MatchedRules: rules})
+	if _, ruleCommand := data["command"]; !ruleCommand && cmd != "" {
+		data["command"] = cmd
+	}
+	return &toolrejection.ToolReject{
+		Code:         hitl.CodeApprovalRuleDenied,
+		Data:         data,
+		FailureClass: api.FailureClassPolicyRejection,
+	}
+}
+
+func pathPreflightReject(
+	tool string,
+	args map[string]any,
+	tc tools.ToolContext,
+	capability, path, deniedCode string,
+	res PathPreflightResult,
+) *toolrejection.ToolReject {
+	switch res.DenialCause {
+	case isolation.PathDenialApprovalRule:
+		return approvalRuleDeniedReject(tool, tc.Identity.Agent, path, commandsurface.PrimaryCommandLine(args, nil), res.DeniedRules)
+	case isolation.PathDenialControlPlanePolicy:
+		return &toolrejection.ToolReject{
+			Code: isolation.CodeControlPlaneDenied,
+			Data: map[string]any{"path": path, "capability": capability},
+		}
+	case isolation.PathDenialUserDeclined, isolation.PathDenialPriorUserDeclined, isolation.PathDenialNonHumanRejected:
+		reject := approvalRefusalReject(deniedCode, res.DenialCause, res.ApprovalResolvedBy, res.UserGuidance)
+		reject.Data["path"] = path
+		return reject
+	default:
+		return &toolrejection.ToolReject{
+			Code: isolation.CodeApprovalUnavailable,
+			Data: map[string]any{"path": path, "reason": "approval did not install authority"},
+		}
+	}
 }

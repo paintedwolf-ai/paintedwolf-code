@@ -1,0 +1,83 @@
+{
+  "schema": "wea-inproc-manifest-v1",
+  "card": "TB06",
+  "family": "E06",
+  "lane": "in-process",
+  "slot_count": 8,
+  "product_owner_source": {
+    "git_head": "bbeb46e72ce3d1cfc052259cadcce29185bb40bd",
+    "git_short_head": "bbeb46e72c",
+    "git_tree": "1830e4d60ed640d4ecf386653377498788fa9320",
+    "go_package": "github.com/lycaon/lycaon/test/wea"
+  },
+  "test_only_overlay_files": [
+    "lycaon/test/wea/tb06_history_test.go"
+  ],
+  "run_all_command": "cd lycaon && go test -v -race -count=1 -run '^TestWEATB06E06RewindBlockersAndBoundaries$' ./test/wea",
+  "slots": [
+    {
+      "slot_id": "E06-inproc-01",
+      "family": "E06",
+      "lane": "in-process",
+      "variant": "blocker_working_file_changed",
+      "go_test_selector": "^TestWEATB06E06RewindBlockersAndBoundaries$/^blocker_working_file_changed$",
+      "description": "Unobserved disk modification blocks rewind with working_file_changed and leaves tree + SQLite untouched."
+    },
+    {
+      "slot_id": "E06-inproc-02",
+      "family": "E06",
+      "lane": "in-process",
+      "variant": "blocker_later_change",
+      "go_test_selector": "^TestWEATB06E06RewindBlockersAndBoundaries$/^blocker_later_change$",
+      "description": "Later external/human recorded edit blocks rewind with later_change and leaves tree + SQLite untouched."
+    },
+    {
+      "slot_id": "E06-inproc-03",
+      "family": "E06",
+      "lane": "in-process",
+      "variant": "blocker_intervening_change",
+      "go_test_selector": "^TestWEATB06E06RewindBlockersAndBoundaries$/^blocker_intervening_change$",
+      "description": "Intervening independent edit between agent turns blocks rewind with intervening_change and leaves tree + SQLite untouched."
+    },
+    {
+      "slot_id": "E06-inproc-04",
+      "family": "E06",
+      "lane": "in-process",
+      "variant": "blocker_command_authorship_unavailable",
+      "go_test_selector": "^TestWEATB06E06RewindBlockersAndBoundaries$/^blocker_command_authorship_unavailable$",
+      "description": "Command-window external edit blocks rewind with command_authorship_unavailable and leaves tree + SQLite untouched."
+    },
+    {
+      "slot_id": "E06-inproc-05",
+      "family": "E06",
+      "lane": "in-process",
+      "variant": "blocker_unsaved_agent_change",
+      "go_test_selector": "^TestWEATB06E06RewindBlockersAndBoundaries$/^blocker_unsaved_agent_change$",
+      "description": "Unsaved editor-document agent change blocks rewind with unsaved_agent_change and leaves tree + SQLite untouched."
+    },
+    {
+      "slot_id": "E06-inproc-06",
+      "family": "E06",
+      "lane": "in-process",
+      "variant": "blocker_version_unavailable",
+      "go_test_selector": "^TestWEATB06E06RewindBlockersAndBoundaries$/^blocker_version_unavailable$",
+      "description": "Missing/evicted retained content blob blocks rewind with version_unavailable and leaves tree + SQLite untouched."
+    },
+    {
+      "slot_id": "E06-inproc-07",
+      "family": "E06",
+      "lane": "in-process",
+      "variant": "failed_rewind_midway_compensates_without_partial_suffix",
+      "go_test_selector": "^TestWEATB06E06RewindBlockersAndBoundaries$/^failed_rewind_midway_compensates_without_partial_suffix$",
+      "description": "Mid-apply persistence failure triggers rollback compensation so completed file 0 returns to exact pre-rewind SHA-256 with no partial suffix."
+    },
+    {
+      "slot_id": "E06-inproc-08",
+      "family": "E06",
+      "lane": "in-process",
+      "variant": "restarted_rewind_mid_apply_no_duplicate_version",
+      "go_test_selector": "^TestWEATB06E06RewindBlockersAndBoundaries$/^restarted_rewind_mid_apply_no_duplicate_version$",
+      "description": "Crash/restart recovery from persisted mid-apply cursor resumes cleanly with zero duplicate source_versions or source_effects."
+    }
+  ]
+}

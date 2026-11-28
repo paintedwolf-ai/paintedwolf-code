@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/runeclamp"
 )
 
@@ -130,11 +131,11 @@ func PurposeSection(ctx context.Context, ev ActionEvidence) (SectionPlan, error)
 	if strings.TrimSpace(ev.PhaseScope) != "" {
 		add("phase_scope", RoleAction, "activity", "", ev.PhaseScope, sectionRunes, "")
 	}
-	system, err := guidance.RenderCatalog(ctx, guidance.UtilityRationaleSystemRef, nil)
+	system, err := prompts.RenderUtilityPrompt(ctx, guidance.UtilityRationaleSystemRef, nil)
 	if err != nil {
 		return SectionPlan{}, err
 	}
-	user, err := guidance.RenderCatalog(ctx, guidance.UtilityRationaleUserRef, vars)
+	user, err := prompts.RenderUtilityPrompt(ctx, guidance.UtilityRationaleUserRef, vars)
 	if err != nil {
 		return SectionPlan{}, err
 	}

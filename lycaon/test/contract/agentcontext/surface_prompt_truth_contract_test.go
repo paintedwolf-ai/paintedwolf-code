@@ -4,7 +4,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -95,13 +94,14 @@ func TestCoordinatorPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 				execEffects := programSurface.Effects()
 				plan, err := prompts.CompileSurfacePlan(surfaceID, 1)
 				contractcheck.FailErr(t, "compile surface plan", err)
-				reader, err := prompts.NewReader(prompts.ReaderInput{
-					Mode:      surface.ExecutionModeFamily(surfaceID),
+				reader, err := prompts.NewReader(prompts.HostFacts{
+					Profiles:  profiles,
+					RootCount: 1,
+				}, prompts.TurnProjection{
 					ProfileID: prompts.CoordinatorProfileID,
 					SurfaceID: surfaceID,
 					Plan:      plan,
-					Profiles:  profiles,
-					RootCount: 1,
+					Offered:   (plan).ImmediateNames(),
 				})
 				contractcheck.FailErr(t, "new reader", err)
 				if reader.Effects() != execEffects || reader.Effects() != admitted {
@@ -169,11 +169,13 @@ func TestWorkerPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 					ProfileID: profile.ID,
 				}, nil)
 				contractcheck.FailErr(t, "freeze worker program surface", err)
-				reader, err := prompts.NewReader(prompts.ReaderInput{
-					ProfileID: profile.ID,
+				reader, err := prompts.NewReader(prompts.HostFacts{
 					Profiles:  profiles,
 					RootCount: 1,
 					WebSearch: true,
+				}, prompts.TurnProjection{
+					ProfileID: profile.ID,
+					Declared:  true,
 				})
 				contractcheck.FailErr(t, "new worker reader", err)
 				if reader.Effects() != programSurface.Effects() || reader.Effects() != profile.CommandEffects {

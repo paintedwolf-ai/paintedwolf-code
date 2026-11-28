@@ -53,8 +53,10 @@ func TestStampFanoutExecuteOutputMergesTopology(t *testing.T) {
 
 func TestKickRenderIncludesEvidenceDigest(t *testing.T) {
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	reader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
+	testutil.FailErr(t, "DeclaredReader coordinator", err)
 	digest := "## Evidence digest (curated)\n[grep#1] routes.go:4 — GET /health\nselected/total: 1/2"
-	rendered, err := engine.RenderKick(context.Background(), "coordinator-topology-synthesis", map[string]any{
+	rendered, err := engine.RenderKick(context.Background(), reader, "coordinator-topology-synthesis", map[string]any{
 		"evidence_digest": digest,
 		"topology_output": "raw worker block",
 	})

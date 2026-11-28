@@ -34,13 +34,15 @@ func TestCoordinatorPolicyGuidanceTracksOfferedTools(t *testing.T) {
 	sticky := make([]string, 1, 4)
 	sticky[0] = "recall"
 	deferred := []string{"command", "capture_page", "summarize"}
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: "implement_investigate",
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  toolProfiles(t),
-		Plan:      toolsurface.Compile(sticky, deferred),
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_investigate",
+		Plan:      toolsurface.Compile(sticky, deferred),
+		Offered:   (toolsurface.Compile(sticky, deferred)).ImmediateNames(),
 	})
 	testutil.FailErr(t, "NewReader", err)
 	vars := reader.Facts()

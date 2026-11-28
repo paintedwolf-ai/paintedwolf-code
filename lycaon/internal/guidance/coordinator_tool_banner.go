@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // RenderOverlayRebaseConflictBanners renders one OVERLAY_REBASE_CONFLICT block
 // for each stacked child whose rebase conflicted after its parent overlay
 // promoted.
-func RenderOverlayRebaseConflictBanners(ctx context.Context, parentOverlayID string, rebased []api.OverlayRebaseOutcome) (string, error) {
+func RenderOverlayRebaseConflictBanners(ctx context.Context, reach toolreach.Request, parentOverlayID string, rebased []api.OverlayRebaseOutcome) (string, error) {
 	if len(rebased) == 0 {
 		return "", nil
 	}
@@ -20,7 +21,7 @@ func RenderOverlayRebaseConflictBanners(ctx context.Context, parentOverlayID str
 		if child.Status != api.WorkerMergeStatusRebasing || len(child.Conflicts) == 0 {
 			continue
 		}
-		block, err := RenderGuidance(ctx, "enrich/overlay-rebase-conflict", map[string]any{
+		block, err := RenderGuidanceWithReach(ctx, reach, "enrich/overlay-rebase-conflict", map[string]any{
 			"overlay_id":      child.OverlayID,
 			"base_overlay_id": parentOverlayID,
 			"conflict_count":  len(child.Conflicts),

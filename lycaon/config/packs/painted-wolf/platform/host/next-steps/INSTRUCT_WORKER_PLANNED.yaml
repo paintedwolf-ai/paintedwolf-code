@@ -4,5 +4,5 @@ steps:
     args:
       workflow_work_id: "{{ paintedwolf.workflow_work_id }}"
     complete: true
-    say: "Start the planned leg with {{ call }}."
+    say: "Start the planned leg with {% if load %}{{ load }}, then {% endif %}{{ call }}."
     otherwise: "It starts when its planned leg is started."

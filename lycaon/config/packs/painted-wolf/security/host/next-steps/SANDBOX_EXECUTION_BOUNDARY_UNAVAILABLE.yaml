@@ -1,6 +1,6 @@
 steps:
   - program: ["ps"]
     complete: true
-    say: "Inspect processes with {{ call }}."
+    say: "Inspect processes with {% if load %}{{ load }}, then {% endif %}{{ call }}."
   - program: ["kill", "REFERENCE"]
-    say: "Signal one with {{ call }}."
+    say: "Signal one with {% if load %}{{ load }}, then {% endif %}{{ call }}."

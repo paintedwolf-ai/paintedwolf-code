@@ -1,0 +1,9 @@
+manifest_version: 1
+id: fixture/schemas-without-local-listen
+name: Process schemas without local_listen
+version: 1.0.0
+compatibility:
+  extension_api: "^1.2.0"
+dependencies:
+  painted-wolf/platform:
+    version: "^1.2.0"

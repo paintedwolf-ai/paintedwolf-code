@@ -1,7 +1,7 @@
 steps:
   - tool: "pack_board"
     complete: true
-    say: "Find the worker's name on the roster with {{ call }}."
+    say: "Find the worker's name on the roster with {% if load %}{{ load }}, then {% endif %}{{ call }}."
     otherwise: "Use a worker name from the roster."
   - tool: "task"
-    say: "Start a new worker with {{ call }} when none fits."
+    say: "Start a new worker with {% if load %}{{ load }}, then {% endif %}{{ call }} when none fits."

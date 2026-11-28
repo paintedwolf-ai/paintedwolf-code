@@ -27,7 +27,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/turnguards"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workerworkspace"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -80,7 +79,7 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		Agents:                m.Profiles.Agents,
 		Workflows:             m.Workflow.Manifests,
 		CoordinatorFrame:      m.Frame,
-		Workers:               assembly.Workers{Leg: m.WorkerContext, Roster: m.WorkerRoster},
+		Workers:               assembly.Workers{Leg: m.WorkerContext, Roster: m.WorkerRoster, Branch: m.Workspaces.OnWorkerBranch},
 		Deliveries:            assembly.Deliveries{SiblingNotes: m.Notes, Messages: m.MessageDelivery},
 		PeerReservations:      m.Workspaces,
 		ImplementSessionState: m.State.ForSession,
@@ -100,7 +99,6 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 			return toolpresentation.EnrichHistory(sessionID, history, m.Stash)
 		},
 		ReadMessageWindow:       m.Messages,
-		PromptToolLister:        m.PromptTools,
 		Selection:               m.Loading,
 		SkillPreload:            m.Loading.SkillPreload,
 		SkillPointer:            m.Loading.SkillPointer,
@@ -142,14 +140,6 @@ func (m *Assembly) PromptSurface(ctx context.Context, sess *api.Session) prompts
 		surface.Fingerprint = surface.CacheFingerprint()
 	}
 	return surface
-}
-func (m *Assembly) PromptTools(ctx context.Context, sess *api.Session, profileID string) ([]tools.ToolMeta, error) {
-	if m == nil || sess == nil {
-		return nil, nil
-	}
-	machine := m.Profiles.ProjectMachine(ctx, sess, profileID)
-	metas := m.Guards.Policy().ListForPrompt(ctx, sess, machine.ProfileID)
-	return tools.HideSkillsReadWhenEmpty(metas, machine.SkillCount), nil
 }
 
 func (m *Assembly) WebSearchEnabled() bool {

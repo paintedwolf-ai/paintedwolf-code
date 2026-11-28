@@ -1,0 +1,464 @@
+package promptrender
+
+import (
+	"context"
+	"fmt"
+	"slices"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/pongoplain"
+	"github.com/lycaon/lycaon/test/contract/internal/casegen"
+	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
+	"github.com/lycaon/lycaon/test/contract/internal/independence"
+	"github.com/lycaon/lycaon/test/contract/internal/interactions"
+	"github.com/lycaon/lycaon/test/contract/internal/oarproducers"
+)
+
+const unscopedRecipient = oarproducers.RecipientUnscoped
+
+// renderRecipient names a render's recipient by its reader's is_coordinator
+// fact; a render with no reader is unscoped.
+func renderRecipient(scope map[string]any) string {
+	switch v, ok := scope["is_coordinator"].(bool); {
+	case !ok:
+		return unscopedRecipient
+	case v:
+		return interactions.RecipientCoordinator
+	default:
+		return interactions.RecipientWorker
+	}
+}
+
+// occurrenceRecipient names an OAR occurrence's recipient by the session role
+// its producer sets.
+func occurrenceRecipient(gc *oar.GuardContext) string {
+	if gc == nil || gc.Session.Role == "" {
+		return unscopedRecipient
+	}
+	return gc.Session.Role
+}
+
+// conditionConstraints are the production invariants that hold guard atoms
+// constant or coupled on a recipient.
+var conditionConstraints = []interactions.AtomConstraint{
+	{Atom: "is_coordinator", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.True,
+		Source: "test/contract/invariants/promptrender/condition_ledger.go:renderRecipient partitions renders by is_coordinator"},
+	{Atom: "is_coordinator", Recipient: interactions.RecipientWorker, Fixed: true, Value: independence.False,
+		Source: "test/contract/invariants/promptrender/condition_ledger.go:renderRecipient partitions renders by is_coordinator"},
+	{Atom: "has_git", Implies: "has_any_git_root", Recipient: interactions.RecipientCoordinator, Source: srcGitFacts},
+	{Atom: "has_git", Implies: "has_any_git_root", Recipient: interactions.RecipientWorker, Source: srcGitFacts},
+	{Atom: "paintedwolf.command_loadable_without_schema", Implies: admittedProcessFieldsEmpty, Recipient: interactions.RecipientCoordinator, Source: srcLoaderOnly},
+	{Atom: "paintedwolf.command_loadable_without_schema", Implies: admittedProcessFieldsEmpty, Recipient: interactions.RecipientWorker, Source: srcLoaderOnly},
+	{Atom: mcpServerCodeAtom, Implies: mcpToolAtom, Recipient: interactions.RecipientCoordinator, Source: srcMCPCode},
+	{Atom: mcpServerCodeAtom, Implies: mcpToolAtom, Recipient: interactions.RecipientWorker, Source: srcMCPCode},
+	{Atom: mcpServerCodeAtom, Implies: mcpToolAtom, Recipient: unscopedRecipient, Source: srcMCPCode},
+	// A coordinator's requestable tools are its surface's loadable tools.
+	{Atom: "profile_can_request.command", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "command")},
+	{Atom: "can_request_command_verify", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "command")},
+	{Atom: "can_request_git_read", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "command")},
+	{Atom: "can_request_git_commit", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "command")},
+	{Atom: "can_request_git_bisect", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "command")},
+	{Atom: "profile_can_request.source_history", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "source_history")},
+	{Atom: "profile_can_request.terminal_open", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "terminal_open")},
+	{Atom: "visual_show_terminal_needs_request", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "terminal_open")},
+	// Every runner tool's schema accepts capability_request.
+	{Atom: "profile_has_command", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientCoordinator, Source: srcRunnerCapability},
+	{Atom: "profile_has_command", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientWorker, Source: srcRunnerCapability},
+	{Atom: "can_command_verify", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientCoordinator, Source: srcRunnerCapability},
+	{Atom: "can_command_verify", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientWorker, Source: srcRunnerCapability},
+	{Atom: "runner_socks_proxy_tools", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientCoordinator, Source: srcRunnerCapability},
+	{Atom: "runner_socks_proxy_tools", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientWorker, Source: srcRunnerCapability},
+}
+
+const (
+	srcCoordinatorFloors = "config/packs/painted-wolf/platform/host/coordinator-surfaces.yaml lists %s only on surface floors, and prompts.NewReader makes only a surface's loadable tools requestable"
+	srcRunnerCapability  = "native-tools.yaml: command and verify, the runner tools, each declare capability_request, so runner_capability_request_tools lists every offered runner"
+)
+
+const (
+	mcpServerCodeAtom = `starts_with(mcp_error_code, "MCP_SERVER_")`
+	mcpToolAtom       = `starts_with(tool, "mcp_")`
+	srcMCPCode        = "oar/mcp_catalog.go and toolfeedback/block_plane.go:ApplyToolRejectObservations publish an MCP machine code only for an mcp_ tool"
+)
+
+const (
+	admittedProcessFieldsEmpty = "size(paintedwolf.admitted_process_capability_fields) == 0"
+	srcLoaderOnly              = "internal/tools/recovery_form_facts.go:registerCommandFormRecoveryFacts admits capability fields only when command accepts its command field, which a loader-only command without a schema does not"
+)
+
+const srcGitFacts = "internal/session/readerfacts/resolver.go:gitFacts starts hasAnyGit at hasGit, so the any-root fact includes the primary root"
+
+// occurrenceRoleFacts are the session facts each recipient's occurrences
+// carry: occurrenceRecipient partitions by session_role, and every producer
+// that names a role names the worker exactly for a worker leg. An unscoped
+// occurrence is a worker leg through policyfacts or one without a session.
+var occurrenceRoleFacts = map[string]map[string]any{
+	interactions.RecipientCoordinator: {"paintedwolf.session_role": "coordinator", "paintedwolf.worker_leg": false},
+	interactions.RecipientWorker:      {"paintedwolf.session_role": "worker", "paintedwolf.worker_leg": true},
+	unscopedRecipient:                 {"paintedwolf.session_role": ""},
+}
+
+const (
+	srcOccurrenceRole = "occurrenceRecipient partitions occurrences by session_role; toolfeedback/block_plane.go:fillOccurrenceIdentity, " +
+		"session/policyfacts/service.go:FillSessionFacts (coordinator only), session/workercompletion/worker_summary.go and " +
+		"session/workeroutcomes/delivery_policy.go set the worker role exactly with worker_leg"
+	srcConfine               = "internal/session/policyfacts/oar_observe.go:ObserveConfine publishes execution facts only for an applied confinement"
+	srcMCPRejected           = "toolfeedback/block_plane.go:ApplyToolRejectObservations and oar/mcp_catalog.go:ObserveMCPStructuralPre set mcp_call_ok false on every rejection; only ObserveMCPStructuralPost (tool.post_invoke) publishes a successful call"
+	srcWorkerDeferredSchemas = "coordinator/promptloop/worker_tool_plan.go:deferredToolSchemas gives every deferred worker tool its provider schema, and turn_request.go:stampTurnToolSchemas stamps them on the request, so a worker never loads command without its schema"
+	srcDoomBlockPlane        = "the doom-loop counts come only from policyfacts (loopguard.ObserveDoomLoopRepeat in FormatDoomLoopReject, ObserveDeferredUnactivated); the block plane publishes none, and a policyfacts worker leg is unscoped"
+	srcDeferredSurface       = "session/policyfacts/oar_observe.go:DeferredUnactivatedCount is 0 without a turn surface, which only a coordinator turn records (coordinator/runtime.go:PromptTurnSurfaceID)"
+	srcDoomUnscoped          = "a rule reading only doom-loop counts fires on an unscoped occurrence only through policyfacts.FormatDoomLoopReject for a worker leg; the block plane without a session publishes no counts"
+	// Only the block plane evaluates occurrences without a session.
+	srcUnscopedWorkerLeg = "session/policyfacts/service.go:FillSessionFacts names every non-worker session coordinator, so a policyfacts occurrence without a role is a worker leg"
+)
+
+// maxGenerationRounds bounds the OAR generation rounds.
+const maxGenerationRounds = 3
+
+// caseBudget and templateCaseBudget bound targeted generation: runs per gap
+// and in total.
+var (
+	caseBudget         = casegen.Budget{PerTarget: 240, Total: 15000}
+	templateCaseBudget = casegen.Budget{PerTarget: 60, Total: 6000}
+)
+
+// StockConditionLedger discovers every stock guard, joins it with the atom
+// observations of the host-state matrix, then generates targeted OAR cases
+// for the gaps through the production hook producers and joins again.
+func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.ObservedCondition) (*interactions.ConditionLedger, error) {
+	defer holdRecipients()()
+	sum, err := RunCartesianMatrix(ctx, s)
+	if err != nil {
+		return nil, err
+	}
+	sites, err := interactions.DiscoverConditionSites(s.Catalog, s.Schemas)
+	if err != nil {
+		return nil, err
+	}
+	gen, err := newOARCaseGenerator(ctx, s)
+	if err != nil {
+		return nil, err
+	}
+	skillGen, err := newSkillCaseProducer(s, sites)
+	if err != nil {
+		return nil, err
+	}
+	in := interactions.LedgerInput{
+		Sites: sites, Observed: interactions.MergeObservations(append([][]hoststate.ObservedCondition{sum.Conditions}, extra...)...),
+		Constraints: slices.Concat(conditionConstraints, standingConstraints), Derived: withSkillDerived(skillGen, gen.derived),
+	}
+	first, err := interactions.BuildConditionLedger(in)
+	if err != nil {
+		return nil, err
+	}
+	targets, gapRecipients := gen.targets(first)
+	skillTargets, skillGapRecipients := skillGen.targets(first)
+	started := time.Now()
+	defer gen.producer.Close()
+	outcomes, err := casegen.Generate(ctx, gen.producer, targets, caseBudget)
+	if err != nil {
+		return nil, err
+	}
+	// Generated observations can reach guards and recipients the matrix did
+	// not; their gaps get further rounds.
+	searched := map[string]bool{}
+	for _, t := range targets {
+		searched[interactions.SearchKey(t.Site, t.Recipient, t.Input)] = true
+	}
+	for range maxGenerationRounds - 1 {
+		in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations())
+		next, err := interactions.BuildConditionLedger(in)
+		if err != nil {
+			return nil, err
+		}
+		more, moreRecipients := gen.targets(next)
+		var fresh []casegen.Target
+		for i, t := range more {
+			if key := interactions.SearchKey(t.Site, t.Recipient, t.Input); !searched[key] {
+				searched[key] = true
+				fresh, gapRecipients = append(fresh, t), append(gapRecipients, moreRecipients[i])
+			}
+		}
+		if len(fresh) == 0 {
+			break
+		}
+		freshOutcomes, err := casegen.Generate(ctx, gen.producer, fresh, caseBudget)
+		if err != nil {
+			return nil, err
+		}
+		targets, outcomes = append(targets, fresh...), append(outcomes, freshOutcomes...)
+	}
+	kicks, err := newKickCaseProducer(s, sites)
+	if err != nil {
+		return nil, err
+	}
+	tTargets, tRecipients := templateTargets(first)
+	tOutcomes, err := casegen.Generate(ctx, kicks, tTargets, templateCaseBudget)
+	if err != nil {
+		return nil, err
+	}
+	skillOutcomes, err := casegen.Generate(ctx, skillGen, skillTargets, skillCaseBudget)
+	if err != nil {
+		return nil, err
+	}
+	standing, sOutcomes, sRecipients, sRuns, err := generateStandingCases(ctx, s, first)
+	if err != nil {
+		return nil, err
+	}
+	profiles, err := newProfileCaseProducer(s, sites)
+	if err != nil {
+		return nil, err
+	}
+	pTargets, pRecipients := profiles.targets(first)
+	pOutcomes, err := casegen.Generate(ctx, profiles, pTargets, profileCaseBudget)
+	if err != nil {
+		return nil, err
+	}
+	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations(), kicks.Observations(), skillGen.Observations(), standing, profiles.Observations())
+	in.Searches = searchesOf(slices.Concat(outcomes, tOutcomes, skillOutcomes, sOutcomes, pOutcomes), slices.Concat(gapRecipients, tRecipients, skillGapRecipients, sRecipients, pRecipients))
+	guided, err := generateGuidanceCases(ctx, s, first, &in)
+	if err != nil {
+		return nil, err
+	}
+	l, err := interactions.BuildConditionLedger(in)
+	if err != nil {
+		return nil, err
+	}
+	l.Generation = interactions.GenerationSummary{
+		Targets: len(targets) + len(tTargets) + len(skillTargets) + len(sOutcomes) + len(pTargets), Runs: gen.producer.Runs() + kicks.runs + skillGen.Runs() + sRuns + profiles.runs, Seconds: time.Since(started).Seconds(),
+	}
+	for _, o := range slices.Concat(outcomes, tOutcomes, skillOutcomes, sOutcomes, pOutcomes) {
+		if o.Found {
+			l.Generation.Found++
+		}
+	}
+	addGuidanceGeneration(&l.Generation, guided)
+	return l, nil
+}
+
+// templateTargets turns each gap of a composed template guard into
+// generation targets; a guard nobody evaluated is searched on both
+// recipients.
+func templateTargets(l *interactions.ConditionLedger) ([]casegen.Target, []string) {
+	byID := map[string]interactions.ConditionSite{}
+	for _, s := range l.Sites {
+		byID[s.ID] = s
+	}
+	var out []casegen.Target
+	var gapRecipients []string
+	for _, gap := range l.Gaps {
+		site := byID[gap.Site]
+		if site.Family != "template" {
+			continue
+		}
+		needs := gap.Needs
+		if len(needs) == 0 {
+			if expr, err := pongoplain.ParseExpression(site.Source); err == nil {
+				needs = casegen.Needs(distinctAtoms(site.Atoms), gap.Atom, expr.Decide, 16)
+			}
+		}
+		recipients := []string{gap.Recipient}
+		if gap.Recipient == interactions.RecipientAny {
+			recipients = []string{interactions.RecipientCoordinator, interactions.RecipientWorker}
+		}
+		for _, r := range recipients {
+			out = append(out, casegen.Target{Site: gap.Site, Recipient: r, Input: gap.Atom, Needs: needs, References: templateReferences})
+			gapRecipients = append(gapRecipients, gap.Recipient)
+		}
+	}
+	return out, gapRecipients
+}
+
+// NewConditionTracker returns a tracker that attributes stock template and
+// OAR guard evaluations to the ledger's sites and recipients.
+func NewConditionTracker(s *Stock) (*hoststate.CoverageTracker, error) {
+	tracker := hoststate.NewCoverageTracker()
+	if err := registerStockTemplatesInTracker(s, tracker); err != nil {
+		return nil, err
+	}
+	tracker.ObserveConditions(renderRecipient, occurrenceRecipient)
+	return tracker, nil
+}
+
+type oarCaseGenerator struct {
+	producer *oarproducers.CaseProducer
+}
+
+func newOARCaseGenerator(ctx context.Context, s *Stock) (*oarCaseGenerator, error) {
+	coordStates, err := hoststate.CoordinatorStates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	workerStates, err := hoststate.WorkerStates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cells, err := buildOARAuthorityCells(ctx, s, coordStates, workerStates)
+	if err != nil {
+		return nil, err
+	}
+	harness, err := oarproducers.NewHarness(s.Catalog, s.Schemas, s.Engine())
+	if err != nil {
+		return nil, err
+	}
+	p, err := oarproducers.NewCaseProducer(harness, cells, occurrenceRecipient)
+	if err != nil {
+		return nil, err
+	}
+	p.SetDisabledCatalog(func(units []string) (*oarproducers.Harness, error) {
+		return harnessWithoutUnits(ctx, s, units)
+	})
+	return &oarCaseGenerator{producer: p}, nil
+}
+
+// harnessWithoutUnits resolves the stock catalog with units disabled in the
+// device desired state, as a person disabling a policy does, and wires the
+// production hook producers to it.
+func harnessWithoutUnits(ctx context.Context, s *Stock, units []string) (*oarproducers.Harness, error) {
+	content, err := extpacks.DiscoverStockContent()
+	if err != nil {
+		return nil, err
+	}
+	desired := extpacks.EmptyDesired()
+	desired.Disabled = slices.Clone(units)
+	eff := extpacks.Resolve(ctx, extpacks.ResolveInput{Packs: content, Desired: desired})
+	for _, u := range units {
+		if _, loaded := eff.Loaded[u]; loaded {
+			return nil, fmt.Errorf("resolve kept %s loaded", u)
+		}
+		if _, known := eff.Units[u]; !known {
+			return nil, fmt.Errorf("no unit %s to disable", u)
+		}
+	}
+	return oarproducers.NewHarness(eff, s.Schemas, s.Engine())
+}
+
+// derived returns what an OAR guard's own expression and its producer fix:
+// atoms reading one fact can only take the truths that fact's values
+// realise, the recipient fixes the session role facts, confinement facts
+// stay zero unless confinement applied, shared temp guards run only on a
+// refusal, a tool selector fixes the tool-derived facts, and a block rule
+// evaluated earlier hides the vectors under which it fires.
+func (g *oarCaseGenerator) derived(site interactions.ConditionSite, recipient string) independence.Constraints {
+	var c independence.Constraints
+	if site.Family != "oar" {
+		return guidanceDerived(site, recipient)
+	}
+	logic := g.producer.Logic(site.ID)
+	if logic == nil {
+		return c
+	}
+	c.Joints = append(casegen.SharedFactJoints(site.Atoms, logic), g.producer.ShadowJoints(site.ID, site.Atoms)...)
+	if fixed, ok := occurrenceRoleFacts[recipient]; ok {
+		c.Fixed = casegen.FixedFacts(site.Atoms, logic, fixed, srcOccurrenceRole)
+	}
+	if g.producer.Anchor(site.ID) == oar.AnchorToolRejected && slices.Contains(site.Atoms, "mcp_call_ok") {
+		c.Fixed = append(c.Fixed, independence.Fixed{Atom: "mcp_call_ok", Value: independence.False, Source: srcMCPRejected})
+	}
+	anchor := g.producer.Anchor(site.ID)
+	if recipient == interactions.RecipientWorker {
+		c.Fixed = append(c.Fixed, casegen.FixedFacts(site.Atoms, logic, map[string]any{"paintedwolf.command_loadable_without_schema": false}, srcWorkerDeferredSchemas)...)
+		if anchor == oar.AnchorToolRejected {
+			c.Fixed = append(c.Fixed, casegen.FixedFacts(site.Atoms, logic, doomZeros, srcDoomBlockPlane)...)
+		}
+	}
+	if recipient == unscopedRecipient {
+		c.Fixed = append(c.Fixed, casegen.FixedFacts(site.Atoms, logic, map[string]any{"paintedwolf.deferred_unactivated": int64(0)}, srcDeferredSurface)...)
+		if anchor == oar.AnchorToolRejected && readsOnly(g.producer.WhenReferences(site.ID), oarproducers.DoomFacts) {
+			c.Fixed = append(c.Fixed, casegen.FixedFacts(site.Atoms, logic, map[string]any{"paintedwolf.worker_leg": true}, srcDoomUnscoped)...)
+		}
+	}
+	if recipient == unscopedRecipient && g.producer.Anchor(site.ID) != oar.AnchorToolRejected {
+		c.Fixed = append(c.Fixed, casegen.FixedFacts(site.Atoms, logic, map[string]any{"paintedwolf.worker_leg": true}, srcUnscopedWorkerLeg)...)
+	}
+	switch g.producer.Anchor(site.ID) {
+	case oar.AnchorToolPost:
+		c.Joints = append(c.Joints, casegen.ZeroUnless(site.Atoms, logic, "paintedwolf.confine_applied", oarproducers.ConfineFacts(), srcConfine)...)
+	case oar.AnchorSharedTemp:
+		if slices.Contains(site.Atoms, sharedTempRefusedAtom) {
+			c.Fixed = append(c.Fixed, independence.Fixed{Atom: sharedTempRefusedAtom, Value: independence.True, Source: srcSharedTemp})
+		}
+	}
+	c.Fixed = append(c.Fixed, g.producer.SelectorFixed(site.ID, site.Atoms)...)
+	return c
+}
+
+const (
+	sharedTempRefusedAtom = "size(paintedwolf.refused_shared_temp) > 0"
+	srcSharedTemp         = "internal/session/policyfacts/oar_block.go:AfterTool evaluates sandbox.shared_temp only when the settlement refused a shared temp root"
+)
+
+// targets turns each OAR gap into generation targets: a guard nobody
+// evaluated is searched on every recipient its producer reaches.
+func (g *oarCaseGenerator) targets(l *interactions.ConditionLedger) ([]casegen.Target, []string) {
+	byID := map[string]interactions.ConditionSite{}
+	for _, s := range l.Sites {
+		byID[s.ID] = s
+	}
+	var out []casegen.Target
+	var gapRecipients []string
+	for _, gap := range l.Gaps {
+		site := byID[gap.Site]
+		logic := g.producer.Logic(gap.Site)
+		if site.Family != "oar" || logic == nil {
+			continue
+		}
+		needs := gap.Needs
+		if len(needs) == 0 {
+			if decide := g.producer.Decide(gap.Site); decide != nil {
+				needs = casegen.Needs(distinctAtoms(site.Atoms), gap.Atom, decide, 16)
+			}
+		}
+		recipients := []string{gap.Recipient}
+		if gap.Recipient == interactions.RecipientAny {
+			recipients = []string{interactions.RecipientCoordinator, interactions.RecipientWorker, unscopedRecipient}
+		}
+		for _, r := range recipients {
+			out = append(out, casegen.Target{Site: gap.Site, Recipient: r, Input: gap.Atom, Needs: needs, References: logic.References})
+			gapRecipients = append(gapRecipients, gap.Recipient)
+		}
+	}
+	return out, gapRecipients
+}
+
+// searchesOf keys each unwitnessed outcome's reason by its gap; a gap
+// searched on several recipients lists each.
+func searchesOf(outcomes []casegen.Outcome, gapRecipients []string) map[string]string {
+	out := map[string]string{}
+	for i, o := range outcomes {
+		if o.Found {
+			continue
+		}
+		key := interactions.SearchKey(o.Site, gapRecipients[i], o.Input)
+		reason := o.Reason
+		if gapRecipients[i] != o.Recipient {
+			reason = o.Recipient + ": " + reason
+		}
+		if prev := out[key]; prev != "" {
+			reason = prev + "; " + reason
+		}
+		out[key] = reason
+	}
+	return out
+}
+
+// doomZeros are the doom-loop facts at their declared zero values.
+var doomZeros = map[string]any{
+	"paintedwolf.repeat_count": int64(0), "paintedwolf.repeated_rejection_code": "", "paintedwolf.deferred_unactivated": int64(0),
+}
+
+func readsOnly(refs, facts []string) bool {
+	return len(refs) > 0 && !slices.ContainsFunc(refs, func(f string) bool { return !slices.Contains(facts, f) })
+}
+
+func distinctAtoms(atoms []string) []string {
+	var out []string
+	for _, a := range atoms {
+		if !slices.Contains(out, a) {
+			out = append(out, a)
+		}
+	}
+	return out
+}

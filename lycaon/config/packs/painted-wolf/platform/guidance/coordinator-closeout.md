@@ -1,6 +1,6 @@
 [host:coordinator-closeout]
 
-This is a forced final turn{% if reason_text %} — {{ reason_text }}{% endif %}.
+This is a forced final turn — {{ reason_text }}.
 {% if llm_timeout %}
 The timed-out turn was discarded: no text or tool calls were kept, and it did not change files. If it was composing a large write, report that and recommend smaller write chunks.
 {% endif %}

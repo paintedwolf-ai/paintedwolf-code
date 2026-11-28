@@ -397,6 +397,7 @@ func TestQuietRoundsReadsQueueProgressAndPendingApprovals(t *testing.T) {
 		nil,
 		app.Boards,
 		app.Workers,
+		app.Sessions.Manager.Workers,
 		tools.ToolContext{
 			Identity: tools.InvocationIdentity{SessionID: parentSess.ID, ProjectID: testdbseed.DefaultProjectID},
 			Source:   tools.InvocationSource{ActiveRootID: "r1", Roots: []projectroot.RootRef{{ID: "r1", Path: projectDir, IsPrimary: true}}},

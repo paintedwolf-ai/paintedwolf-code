@@ -12,8 +12,12 @@ schema:
       description: "Live or recent command handle returned by command/verify."
       type: string
     cursor:
-      type: integer
-      minimum: 0
       description: "Output offset: 0 initially, then exact next_cursor from the prior result."
+      anyOf:
+        - type: integer
+          minimum: 0
+        - type: string
+          pattern: "^(0|[1-9][0-9]*)$"
+          maxLength: 19
   required: [handle, cursor]
   additionalProperties: false

@@ -1,0 +1,15 @@
+id: coordinator
+description: Coordinator with survey_repo and scan_query but no summarize, scan_summary or command
+command_effects: [read_only]
+tools:
+  recall: sticky
+  survey_repo: sticky
+  scan_query: sticky
+  fanout_plan: sticky
+  workflow_advance: sticky
+  ask_user: sticky
+deny_tools:
+  - command
+read_scope: coordinator_product_read
+write_scope: coordinator_orchestration
+wait_conditions: []
