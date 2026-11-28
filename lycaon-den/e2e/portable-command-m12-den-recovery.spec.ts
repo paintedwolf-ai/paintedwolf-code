@@ -45,7 +45,7 @@ webE2e("M12 Den recovery: rendered approval-no denies outside write_root, allowe
   const suffix = crypto.randomUUID().slice(0, 10);
   const left = "m12-allowed-";
   const expectedMarker = `${left}${suffix}`;
-  const allowedRel = `m12-allowed-${suffix}.txt`;
+  const allowedRel = `m12-file-${suffix}.txt`;
   const allowedFull = path.join(projectDir!, allowedRel);
 
   await apiJson(request, "POST", "/harness/llm/auto", { enabled: false });
