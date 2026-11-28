@@ -186,12 +186,25 @@ func rangeExcerptShift(rec evidence.Record, res evidence.Resolution, finding Wor
 	return 0, true
 }
 
+// formatOffenderSubject renders the subject prefix of a citation offender.
+// When a handle was supplied, it leads (preserving any worker prefix), followed
+// by the path when present; path-only citations keep path alone.
+func formatOffenderSubject(handle, path string) string {
+	handle = strings.TrimSpace(handle)
+	path = strings.TrimSpace(path)
+	switch {
+	case handle != "" && path != "":
+		return handle + " " + path
+	case handle != "":
+		return handle
+	default:
+		return path
+	}
+}
+
 // formatRangeOffender renders a ranged citation for reject and audit tokens.
 func formatRangeOffender(path, handle string, line, endLine int, excerpt string) string {
-	subject := path
-	if subject == "" {
-		subject = strings.TrimSpace(handle)
-	}
+	subject := formatOffenderSubject(handle, path)
 	token := fmt.Sprintf("%s:%d", subject, line)
 	if endLine > line {
 		token = fmt.Sprintf("%s-%d", token, endLine)
