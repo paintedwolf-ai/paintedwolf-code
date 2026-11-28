@@ -858,7 +858,9 @@ def _read_long_file(
             if not output_path or not output.get("complete"):
                 raise RuntimeError("long-file read has no complete retained prefix")
             command = f"tail -c {end - start} {shlex.quote(output_path)}"
-            _, result, _ = _send_tool_call(app, session_id, "command", {"command": command})
+            _, result, _ = _send_tool_call(
+                app, session_id, "command", {"command": command}, checkpoint_policy="approve_once"
+            )
             delivered_start = start
         else:
             command, result, delivered_start = prefix_cmd, prefix, 0
