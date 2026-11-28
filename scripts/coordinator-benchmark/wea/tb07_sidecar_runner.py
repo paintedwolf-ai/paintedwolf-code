@@ -928,11 +928,9 @@ def _run_warmed_slots(
                 never_ask=False,
             )
             proj_marker_name = "a02_project_grant_marker.txt"
-            proj_cmd = (
-                "python3 -B -c "
-                f"\"from pathlib import Path; Path({proj_marker_name!r}).write_text('a02-project-grant-exact\\n')\""
-            )
+            proj_cmd = f"cp notes.txt {proj_marker_name}"
             s_p1, pid_p1 = open_prompted_session(proj_main, "Grant project-scoped tool approval.")
+            _call_with_checkpoint_inspect(app, s_p1, "update_progress", {"content": "- [ ] Copy project grant marker\n"}, action=None, timeout_s=30.0)
             c_proj = _call_with_checkpoint_inspect(
                 app, s_p1, "command",
                 {"command": proj_cmd},
@@ -945,13 +943,14 @@ def _run_warmed_slots(
                 if marker_main.exists():
                     marker_main.unlink()
                 s_p2 = open_prompted_session_in_project(pid_p1, "Reuse project grant in fresh session of SAME project_id.")
+                _call_with_checkpoint_inspect(app, s_p2, "update_progress", {"content": "- [ ] Reuse project grant marker\n"}, action=None, timeout_s=30.0)
                 c_reuse = _call_with_checkpoint_inspect(
                     app, s_p2, "command",
                     {"command": proj_cmd},
                     action=None, timeout_s=60.0,
                 )
                 abort_session(s_p2)
-                marker_written = marker_main.exists() and "a02-project-grant-exact" in marker_main.read_text(encoding="utf-8", errors="replace")
+                marker_written = marker_main.exists() and "alpha" in marker_main.read_text(encoding="utf-8", errors="replace")
                 ok = c_proj["checkpoint"]["asked"] and c_proj["checkpoint"]["rung"] == "project" and (not c_reuse["checkpoint"]["asked"]) and marker_written
                 receipts.append(_build_receipt(
                     spec=spec_map["A02-09-scope-project-in-project-reuse"], prov=prov,
