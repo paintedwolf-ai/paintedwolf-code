@@ -49,9 +49,7 @@ func (r *Runtime) configureWorkflow(deps Dependencies) error {
 	} else {
 		evidence.SetBinding(evidenceBinding)
 	}
-	deps.Sessions.Manager.SetWorkspaceChecker(&workercompletion.CompositeWorkspaceChangeChecker{
-		Git: &workercompletion.GitWorkspaceChangeChecker{Git: deps.Git},
-	})
+	deps.Sessions.Manager.SetWorkspaceChecker(&workercompletion.GitWorkspaceChangeChecker{Git: deps.Git})
 	if err := deps.Sessions.Manager.Coordinator.Guidance.InstallAnchorRegistry(); err != nil {
 		return fmt.Errorf("anchor registry: %w", err)
 	}

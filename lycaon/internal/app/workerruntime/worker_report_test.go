@@ -168,3 +168,49 @@ func TestReviewSubjectNamesResolvesSubjectWorkerAndResult(t *testing.T) {
 		t.Fatalf("review subject names mismatch: worker=%q result=%q ok=%v", workerName, resultID, ok)
 	}
 }
+
+func TestWorkerBaseRevisionLookup(t *testing.T) {
+	database := testdbfixture.Open(t, "worker-base-revision.db")
+	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
+	testdbseed.InsertChildSession(t, database, "child-self", "parent")
+	testdbseed.InsertChildSession(t, database, "child-round", "parent")
+	runtime := New(database, nil, worker.WorkersConfig{})
+	records := workerrecords.New(database)
+	runtime.Records = records
+	actor := workerrecords.Actor{SessionID: "parent", Role: workerrecords.RoleCoordinator, PrincipalID: "parent"}
+
+	const (
+		selfSHA  = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		roundSHA = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	)
+
+	_, err := records.CreateWorker(t.Context(), actor, workerrecords.Op{ID: "op-self"}, workerrecords.WorkerSpec{
+		Name: "self-worker", AgentType: "implementer", ScopeMode: workerrecords.ScopeWrite,
+		Brief: "Self lookup", ChildSessionID: "child-self", BaseSHA: selfSHA,
+	})
+	testutil.FailErr(t, "create self worker", err)
+	if got := runtime.workerBaseRevision(t.Context(), &api.WorkerTask{ParentSessionID: "parent"}, "child-self"); got != selfSHA {
+		t.Fatalf("self base revision = %q, want %q", got, selfSHA)
+	}
+
+	jobID, err := runtime.Queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
+		ParentSessionID: "parent", AgentType: "implementer", Prompt: "Round lookup", Brief: "Round lookup", ExecutionTarget: api.ExecutionTargetLocal,
+	})
+	testutil.FailErr(t, "enqueue round worker", err)
+	roundWorker, err := records.CreateWorker(t.Context(), actor, workerrecords.Op{ID: "op-round"}, workerrecords.WorkerSpec{
+		Name: "round-worker", AgentType: "implementer", ScopeMode: workerrecords.ScopeWrite,
+		Brief: "Round lookup", BaseSHA: roundSHA,
+	})
+	testutil.FailErr(t, "create round worker", err)
+	_, err = records.AdmitRound(t.Context(), actor, workerrecords.Op{ID: "op-round-r1"}, roundWorker.WorkerID, workerrecords.RoundSpec{
+		JobID: jobID, ExecutionTarget: "local",
+	})
+	testutil.FailErr(t, "admit round", err)
+
+	if got := runtime.workerBaseRevision(t.Context(), &api.WorkerTask{ID: jobID, ParentSessionID: "parent"}, "child-round"); got != roundSHA {
+		t.Fatalf("round fallback base revision = %q, want %q", got, roundSHA)
+	}
+	if got := runtime.workerBaseRevision(t.Context(), &api.WorkerTask{ID: "unknown-job", ParentSessionID: "parent"}, "child-round"); got != "" {
+		t.Fatalf("unknown job base revision = %q, want empty", got)
+	}
+}

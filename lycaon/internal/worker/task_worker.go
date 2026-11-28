@@ -146,8 +146,17 @@ func createTaskWorker(ctx context.Context, deps TaskToolDeps, tctx tools.ToolCon
 	if task.EffectiveScope().IsWrite() {
 		mode = workerrecords.ScopeWrite
 	}
+	var baseSHA string
+	if deps.HeadSHA != nil {
+		if root := strings.TrimSpace(task.PrimaryRootPath()); root != "" {
+			if sha, shaErr := deps.HeadSHA.HeadSHA(ctx, root); shaErr == nil {
+				baseSHA = strings.TrimSpace(sha)
+			}
+		}
+	}
 	receipt, err := deps.WorkerRecords.CreateWorker(ctx, coordinatorActor(tctx), taskWorkerOp(tctx, "worker"), workerrecords.WorkerSpec{
 		Name: name, AgentType: task.AgentType, ScopeMode: mode, Brief: brief,
+		BaseSHA:       baseSHA,
 		WorkflowRunID: task.WorkflowRunID, WorkflowPhase: task.WorkflowPhase, WorkflowWorkID: task.WorkflowWorkID,
 	})
 	if errors.Is(err, workerrecords.ErrNameTaken) {

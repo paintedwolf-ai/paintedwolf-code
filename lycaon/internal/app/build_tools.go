@@ -179,6 +179,7 @@ func taskToolDeps(b *serveBuilder) worker.TaskToolDeps {
 		TaskReceipt:      b.workerRuntime.Queue.TaskReceipt,
 		WorkerRecords:    b.boards.WorkerRecords,
 		Plan:             b.workerRuntime.Plan,
+		HeadSHA:          b.git.mgr,
 		ComposePrompt:    b.composeWorkerAssignment,
 		WebSearchEnabled: func() bool {
 			if b.boards == nil || b.boards.WebRuntime.Config == nil {

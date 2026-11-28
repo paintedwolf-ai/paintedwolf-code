@@ -3,12 +3,16 @@ package workercompletion_test
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/testutil"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -18,7 +22,7 @@ type stubWorkspaceChecker struct {
 	err     error
 }
 
-func (s stubWorkspaceChecker) HasChanges(context.Context, string) (bool, error) {
+func (s stubWorkspaceChecker) HasChanges(context.Context, string, string) (bool, error) {
 	return s.changed, s.err
 }
 
@@ -138,5 +142,233 @@ func TestWorkerArtifactUsesObservedBaselineInsteadOfPrimaryDirt(t *testing.T) {
 				t.Fatalf("artifact check=%+v code=%s, want %s/%s", check, eval.HintCode, tc.want, tc.code)
 			}
 		})
+	}
+}
+
+type fakeArtifactGit struct {
+	git.GitManager
+	status      *git.GitStatus
+	statusErr   error
+	compare     git.GitComparison
+	compareErr  error
+	compareBase string
+	compareHead string
+	requireAuth bool
+}
+
+func (f *fakeArtifactGit) Status(ctx context.Context, _ string) (*git.GitStatus, error) {
+	if f.requireAuth {
+		dir, err := gitexec.MakeScratch(ctx, "artifact-probe-status-*")
+		if err != nil {
+			return nil, err
+		}
+		_ = os.RemoveAll(dir)
+	}
+	return f.status, f.statusErr
+}
+
+func (f *fakeArtifactGit) Compare(ctx context.Context, _, base, head string) (git.GitComparison, error) {
+	if f.requireAuth {
+		dir, err := gitexec.MakeScratch(ctx, "artifact-probe-compare-*")
+		if err != nil {
+			return git.GitComparison{}, err
+		}
+		_ = os.RemoveAll(dir)
+	}
+	f.compareBase = base
+	f.compareHead = head
+	return f.compare, f.compareErr
+}
+
+func mutationReceiptMessages() []api.Message {
+	return []api.Message{
+		{
+			Role: api.MessageRoleAssistant,
+			ToolCalls: []api.ToolCall{
+				{ID: "tc-edit", Name: "edit", Args: map[string]any{"path": "main.go"}},
+			},
+		},
+		{
+			Role:       api.MessageRoleTool,
+			Content:    "edited main.go",
+			ToolResult: &api.ToolResult{ToolCallID: "tc-edit", Outcome: api.ToolResultOutcomeCompleted},
+		},
+	}
+}
+
+// TestImplementerArtifactProofInvariant verifies the three-valued artifact proof
+// contract across all six decision cases plus missing base revision.
+func TestImplementerArtifactProofInvariant(t *testing.T) {
+	const (
+		baseOID = "1111111111111111111111111111111111111111"
+		headOID = "2222222222222222222222222222222222222222"
+	)
+	nonEmptyDir := t.TempDir()
+	testutil.FailErr(t, "seed non-empty workspace file", os.WriteFile(filepath.Join(nonEmptyDir, "existing.go"), []byte("package existing\n"), 0o644))
+
+	cases := []struct {
+		name            string
+		msgs            []api.Message
+		baseRevision    string
+		gitStub         *fakeArtifactGit
+		wantStatus      string
+		wantHintCode    string
+		wantCheckStatus api.CitationGroundingCheckStatus
+		wantCompareBase string
+	}{
+		{
+			name:         "clean with no receipts",
+			msgs:         commandRanMessages(),
+			baseRevision: baseOID,
+			gitStub: &fakeArtifactGit{
+				status:  &git.GitStatus{Dirty: false},
+				compare: git.GitComparison{BaseOID: baseOID, HeadOID: baseOID},
+			},
+			wantStatus:      "partial",
+			wantHintCode:    workercompletion.WorkerSummaryNoArtifactCode,
+			wantCheckStatus: api.CitationGroundingCheckStatusFailed,
+			wantCompareBase: baseOID,
+		},
+		{
+			name:         "uncommitted edit",
+			msgs:         commandRanMessages(),
+			baseRevision: baseOID,
+			gitStub: &fakeArtifactGit{
+				status: &git.GitStatus{Dirty: true},
+			},
+			wantStatus:      "complete",
+			wantHintCode:    "",
+			wantCheckStatus: api.CitationGroundingCheckStatusPassed,
+		},
+		{
+			name:         "commit since base",
+			msgs:         commandRanMessages(),
+			baseRevision: baseOID,
+			gitStub: &fakeArtifactGit{
+				status:  &git.GitStatus{Dirty: false},
+				compare: git.GitComparison{BaseOID: baseOID, HeadOID: headOID, Ahead: 1},
+			},
+			wantStatus:      "complete",
+			wantHintCode:    "",
+			wantCheckStatus: api.CitationGroundingCheckStatusPassed,
+			wantCompareBase: baseOID,
+		},
+		{
+			name:         "mutation receipt with clean tree",
+			msgs:         mutationReceiptMessages(),
+			baseRevision: baseOID,
+			gitStub: &fakeArtifactGit{
+				status:  &git.GitStatus{Dirty: false},
+				compare: git.GitComparison{BaseOID: baseOID, HeadOID: baseOID},
+			},
+			wantStatus:      "complete",
+			wantHintCode:    "",
+			wantCheckStatus: api.CitationGroundingCheckStatusPassed,
+		},
+		{
+			name:         "not a git repository",
+			msgs:         commandRanMessages(),
+			baseRevision: "",
+			gitStub: &fakeArtifactGit{
+				statusErr: git.ErrNotRepository,
+			},
+			wantStatus:      "complete",
+			wantHintCode:    "",
+			wantCheckStatus: api.CitationGroundingCheckStatusAdvisory,
+		},
+		{
+			name:         "git failing on status",
+			msgs:         commandRanMessages(),
+			baseRevision: baseOID,
+			gitStub: &fakeArtifactGit{
+				statusErr: errors.New("git status: subprocess failed"),
+			},
+			wantStatus:      "complete",
+			wantHintCode:    "",
+			wantCheckStatus: api.CitationGroundingCheckStatusAdvisory,
+		},
+		{
+			name:         "git failing on compare",
+			msgs:         commandRanMessages(),
+			baseRevision: baseOID,
+			gitStub: &fakeArtifactGit{
+				status:     &git.GitStatus{Dirty: false},
+				compareErr: errors.New("git rev-list failed"),
+			},
+			wantStatus:      "complete",
+			wantHintCode:    "",
+			wantCheckStatus: api.CitationGroundingCheckStatusAdvisory,
+			wantCompareBase: baseOID,
+		},
+		{
+			name:         "clean git tree with no recorded base",
+			msgs:         commandRanMessages(),
+			baseRevision: "",
+			gitStub: &fakeArtifactGit{
+				status: &git.GitStatus{Dirty: false},
+			},
+			wantStatus:      "complete",
+			wantHintCode:    "",
+			wantCheckStatus: api.CitationGroundingCheckStatusAdvisory,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			checker := &workercompletion.GitWorkspaceChangeChecker{Git: tc.gitStub}
+			eval, err := workercompletion.EvaluateWorkerSummary(t.Context(), workerSummaryEval(t, workercompletion.WorkerSummaryEvalInput{
+				AgentType:      orchestration.ProfileImplementer,
+				Report:         workercompletion.WorkerCompletionReport{LegStatus: "complete", Brief: "Completed requested change."},
+				ChildMessages:  tc.msgs,
+				ProjectDir:     nonEmptyDir,
+				BaseRevision:   tc.baseRevision,
+				WorkspaceCheck: checker,
+			}))
+			testutil.FailErr(t, "evaluate implementer artifact proof", err)
+
+			if eval.Status != tc.wantStatus || eval.HintCode != tc.wantHintCode {
+				t.Fatalf("status=%q hint=%q, want %q/%q (eval=%+v)", eval.Status, eval.HintCode, tc.wantStatus, tc.wantHintCode, eval)
+			}
+			if check := artifactCheck(t, eval.Grounding); check.Status != tc.wantCheckStatus {
+				t.Fatalf("implementer_artifact status=%q, want %q (check=%+v)", check.Status, tc.wantCheckStatus, check)
+			}
+			if tc.wantCompareBase != "" && (tc.gitStub.compareBase != tc.wantCompareBase || tc.gitStub.compareHead != "HEAD") {
+				t.Fatalf("Compare(%q, %q), want Compare(%q, \"HEAD\")", tc.gitStub.compareBase, tc.gitStub.compareHead, tc.wantCompareBase)
+			}
+		})
+	}
+}
+
+// TestGitWorkspaceChangeCheckerAuthorizesHostProbeUnderAgentEntry verifies that
+// evaluating complete_leg inside an agent tool-call context marks the host-side
+// Status and Compare calls with a named gitexec host purpose rather than
+// failing with ErrLaunchAuthorityRequired.
+func TestGitWorkspaceChangeCheckerAuthorizesHostProbeUnderAgentEntry(t *testing.T) {
+	const baseOID = "1111111111111111111111111111111111111111"
+	agentCtx := gitexec.AgentEntry(t.Context())
+	if _, err := gitexec.MakeScratch(agentCtx, "artifact-probe-raw-*"); !errors.Is(err, gitexec.ErrLaunchAuthorityRequired) {
+		t.Fatalf("raw AgentEntry MakeScratch err = %v, want ErrLaunchAuthorityRequired", err)
+	}
+
+	gitStub := &fakeArtifactGit{
+		status:      &git.GitStatus{Dirty: false},
+		compare:     git.GitComparison{BaseOID: baseOID, HeadOID: baseOID},
+		requireAuth: true,
+	}
+	checker := &workercompletion.GitWorkspaceChangeChecker{Git: gitStub}
+	eval, err := workercompletion.EvaluateWorkerSummary(agentCtx, workerSummaryEval(t, workercompletion.WorkerSummaryEvalInput{
+		AgentType:      orchestration.ProfileImplementer,
+		Report:         workercompletion.WorkerCompletionReport{LegStatus: "complete", Brief: "Completed without edits."},
+		ChildMessages:  commandRanMessages(),
+		ProjectDir:     t.TempDir(),
+		BaseRevision:   baseOID,
+		WorkspaceCheck: checker,
+	}))
+	testutil.FailErr(t, "evaluate implementer under AgentEntry", err)
+	if eval.Status != "partial" || eval.HintCode != workercompletion.WorkerSummaryNoArtifactCode {
+		t.Fatalf("status=%q hint=%q, want partial/%s", eval.Status, eval.HintCode, workercompletion.WorkerSummaryNoArtifactCode)
+	}
+	if check := artifactCheck(t, eval.Grounding); check.Status != api.CitationGroundingCheckStatusFailed {
+		t.Fatalf("implementer_artifact status=%q, want failed (check=%+v)", check.Status, check)
 	}
 }

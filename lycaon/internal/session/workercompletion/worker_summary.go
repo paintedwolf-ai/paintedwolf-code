@@ -38,6 +38,8 @@ type WorkerSummaryEvalInput struct {
 	ChildSessionID    string
 	ChildMessages     []api.Message
 	ProjectDir        string
+	// BaseRevision is the worker leg's recorded Git base revision, if any.
+	BaseRevision string
 	// ProjectRoots are the session's folder roots for @label citation keys.
 	ProjectRoots     []projectroot.RootRef
 	ActiveRootID     string
@@ -171,7 +173,7 @@ func EvaluateWorkerSummary(ctx context.Context, in WorkerSummaryEvalInput) (Work
 	}
 
 	if isImplementerAgent(in.AgentType) && report.LegStatus != "partial" && report.LegStatus != "blocked" {
-		proof := childHadImplementerArtifact(ctx, in.ProjectDir, in.ChildMessages, in.WorkspaceCheck, in.WorkspaceChanges)
+		proof := childHadImplementerArtifact(ctx, in.ProjectDir, in.BaseRevision, in.ChildMessages, in.WorkspaceCheck, in.WorkspaceChanges)
 		if !audit.recordImplementerArtifactCheck(proof) {
 			obs.NoArtifact = true
 			obs.RejectDataCodes = append(obs.RejectDataCodes, WorkerSummaryNoArtifactCode)
