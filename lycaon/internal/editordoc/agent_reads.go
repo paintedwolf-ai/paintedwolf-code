@@ -30,6 +30,7 @@ type agentReadBasis struct {
 	whole    bool
 	spans    []documentcore.LineSpan
 	used     uint64
+	pending  agentReadByteCoverage
 }
 type agentReadCache struct {
 	mu    sync.Mutex
@@ -87,13 +88,18 @@ func (a *AgentService) RememberAgentReadSpans(projectID, sessionID, documentID s
 				delete(c.bases, key)
 				return
 			}
-			c.bases[key] = agentReadBasis{revision: revision, spans: merged, used: c.clock}
+			previous.spans, previous.used = merged, c.clock
+			c.bases[key] = previous
 			return
 		}
 	}
 	c.evictIfNeededLocked(key)
 	c.clock++
-	c.bases[key] = agentReadBasis{revision: revision, spans: normalized, used: c.clock}
+	pending := c.bases[key].pending
+	if pending.revision < revision {
+		pending = agentReadByteCoverage{}
+	}
+	c.bases[key] = agentReadBasis{revision: revision, spans: normalized, used: c.clock, pending: pending}
 }
 
 func (c *agentReadCache) ensureMapLocked() {
@@ -122,10 +128,16 @@ func (c *agentReadCache) replaceRevision(projectID, documentID string, fromRevis
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for key, basis := range c.bases {
-		if key.project == projectID && key.document == documentID && basis.revision == fromRevision {
-			basis.revision = toRevision
-			c.bases[key] = basis
+		if key.project != projectID || key.document != documentID {
+			continue
 		}
+		if basis.revision == fromRevision {
+			basis.revision = toRevision
+		}
+		if basis.pending.revision <= fromRevision {
+			basis.pending = agentReadByteCoverage{}
+		}
+		c.bases[key] = basis
 	}
 }
 
@@ -217,7 +229,7 @@ func (a *AgentService) FreezeAgentReads(projectID, sessionID string) map[string]
 	defer c.mu.Unlock()
 	out := make(map[string]documentcore.ReadBasis)
 	for key, basis := range c.bases {
-		if key.project == projectID && key.session == sessionID {
+		if key.project == projectID && key.session == sessionID && basis.revision > 0 {
 			out[key.document] = documentcore.ReadBasis{Revision: basis.revision, Whole: basis.whole, Spans: append([]documentcore.LineSpan(nil), basis.spans...)}
 		}
 	}

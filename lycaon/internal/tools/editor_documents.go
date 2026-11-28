@@ -171,6 +171,7 @@ type EditorDocuments interface {
 	FreezeAgentReads(projectID, sessionID string) map[string]documentcore.ReadBasis
 	RememberAgentRead(projectID, sessionID string, document EditorDocumentText)
 	RememberAgentReadSpans(projectID, sessionID string, document EditorDocumentText, spans []documentcore.LineSpan)
+	RememberAgentReadBytes(projectID, sessionID string, document EditorDocumentText, source documentcore.ReadSource, start, end int64)
 	// AdvanceAgentRead moves the basis to a result that is exactly the proposed
 	// text, in the chat's cache and this response's frozen set, and withdraws
 	// it for any other result.

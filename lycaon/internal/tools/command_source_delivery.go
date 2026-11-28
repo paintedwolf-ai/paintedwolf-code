@@ -11,8 +11,8 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// RememberCommandSourceDelivery credits only complete source lines whose exact
-// saved bytes were delivered. Transformed, screened or omitted bytes grant no read.
+// RememberCommandSourceDelivery credits complete lines and whole documents whose
+// exact saved bytes were delivered. Transformed, screened or omitted bytes grant no read.
 func RememberCommandSourceDelivery(ctx context.Context, tc ToolContext, memory *toolcontract.ProgramMemory, mapping toolcontract.StreamSourceMapping, delivered []byte) {
 	documents, ok := ProjectDocuments(tc)
 	if !ok {
@@ -74,6 +74,16 @@ func RememberCommandSourceDelivery(ctx context.Context, tc ToolContext, memory *
 	if start < 0 || end <= start || end > int64(len(raw)) || !bytes.Equal(raw[start:end], delivered) {
 		return
 	}
+	if start == 0 && end == int64(len(raw)) {
+		documents.RememberAgentRead(tc.Identity.ProjectID, tc.Identity.SessionID, doc)
+		return
+	}
+	if mapping.Source.StartByte == 0 && mapping.Source.EndByte == int64(len(raw)) {
+		documents.RememberAgentReadBytes(tc.Identity.ProjectID, tc.Identity.SessionID, doc, documentcore.ReadSource{
+			ID: mapping.Source.SourceID, SHA256: mapping.Source.SHA256,
+			Representation: string(mapping.Source.Representation), Bytes: int64(len(raw)),
+		}, start, end)
+	}
 	// Discard partial boundary lines; seeing a fragment never authorizes replacing
 	// the rest of that line.
 	first := start
@@ -93,10 +103,6 @@ func RememberCommandSourceDelivery(ctx context.Context, tc ToolContext, memory *
 		last = first + int64(n+1)
 	}
 	if last <= first {
-		return
-	}
-	if first == 0 && last == int64(len(raw)) {
-		documents.RememberAgentRead(tc.Identity.ProjectID, tc.Identity.SessionID, doc)
 		return
 	}
 	line := 1 + bytes.Count(raw[:first], []byte{'\n'})

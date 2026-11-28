@@ -59,6 +59,10 @@ func (f *fakeEditorDocuments) RememberAgentReadSpans(_ string, sessionID string,
 	f.reads[sessionID+"/"+document.ID] = document
 }
 
+func (*fakeEditorDocuments) RememberAgentReadBytes(string, string, tools.EditorDocumentText, documentcore.ReadSource, int64, int64) {
+	// Byte coverage aggregation belongs to the editor document service.
+}
+
 func (f *fakeEditorDocuments) VisitAgentPublications(context.Context, string, sourcebranch.ID, string, int, string, func(tools.EditorDocumentPublicationCandidate) error) error {
 	return nil
 }
