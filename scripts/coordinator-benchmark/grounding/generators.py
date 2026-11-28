@@ -386,13 +386,10 @@ def generate_r06(
             call_id="call-target",
             fixture_provenance="host",
         )
-        # On case-insensitive darwin/macos APFS, path-case variation is valid;
-        # on case-sensitive linux ext4, normalize dot-segments preserving case.
-        cited_path = (
-            "./Internal/Core/../Core/Engine.go"
-            if scope.case_insensitive_paths
-            else "./internal/core/../core/engine.go"
-        )
+        # Decision 064: path matching stays case-sensitive on every platform;
+        # R06 path_normalization exercises lexical root-contained dot-segments
+        # identically on Linux and macOS for equal seeds.
+        cited_path = "./internal/core/../core/engine.go"
         citation = Citation(
             citation_type="path_coord",
             raw=f"[{cited_path}:11]",
