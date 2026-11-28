@@ -52,7 +52,7 @@ func TestHistoricalCitationKeepsExactObservationAndNamespace(t *testing.T) {
 	}{
 		{"historical", "worker:read#1", "<<<<<<< HEAD", ""},
 		{"current", "worker:read#2", "resolved cards", ""},
-		{"paraphrase", "worker:read#1", "the earlier merge-conflict marker", ""},
+		{"paraphrase", "worker:read#1", "the earlier merge-conflict marker", InvestCitationUnverifiableCode},
 		{"contradiction", "worker:read#1", "resolved cards", InvestCitationUnverifiableCode},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -685,7 +685,7 @@
    "source": "[a/b.go:1 , c/d.go:2]"
   },
   {
-   "present": "[a.go](a.go)",
+   "present": "",
    "source": "[read#1 \"quoted\" , read#2]"
   },
   {
