@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"reflect"
 	"slices"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -45,6 +44,18 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 		state.AgentID, state.ToolProfile, state.RootCount,
 		state.WebSearch, state.CommandExternalHidden, sortedBoolKeys(state.Loaded),
 	)
+	fullKey := fmt.Sprintf(
+		"%s|bv=%s|sec=%t|git=%t/%t|on=%t|appr=%s|scratch=%s|temp=%+v|vision=%t",
+		cacheKey, state.BranchView, state.SecondaryRootGit, state.HasGit, state.HasAnyGitRoot,
+		state.OnWorkerBranch, state.ApprovalPosture, state.SessionScratchDir, state.SharedTempLocations, state.Vision,
+	)
+	frozenWorkerMu.RLock()
+	if cachedAuth, ok := frozenWorkerCache[fullKey]; ok {
+		frozenWorkerMu.RUnlock()
+		return cachedAuth, nil
+	}
+	frozenWorkerMu.RUnlock()
+
 	projTurnMu.Lock()
 	proj, hit := projTurnCache[cacheKey]
 	projTurnMu.Unlock()
@@ -83,7 +94,7 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 		postLoadSchemas := turn.DeferredSchemas
 		offered := toolMetaNames(offeredMetas)
 		projectedSchemas := toolMetaSchemas(offeredMetas)
-		encSchemas, encErr := encodeAdmittedValue(reflect.ValueOf(projectedSchemas), map[ptrVisit]bool{})
+		schemasDigest, encErr := digestAdmittedValue(projectedSchemas)
 		proj = projectedTurnToolsEntry{
 			metas:            offeredMetas,
 			plan:             plan,
@@ -92,7 +103,7 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 			postLoadSchemas:  postLoadSchemas,
 			offered:          offered,
 			projectedSchemas: projectedSchemas,
-			encodedSchemas:   encSchemas,
+			schemasDigest:    schemasDigest,
 			schemasOK:        encErr == nil,
 			programs:         computeProgramsList(progReach),
 		}
@@ -115,7 +126,11 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 		return TurnAuthority{}, fmt.Errorf("worker NewReader: %w", err)
 	}
 	reader = reader.WithVision(state.Vision)
-	return assembleTurnAuthorityFromEntry(proj, reader), nil
+	assembled := assembleTurnAuthorityFromEntry(proj, reader)
+	frozenWorkerMu.Lock()
+	frozenWorkerCache[fullKey] = assembled
+	frozenWorkerMu.Unlock()
+	return assembled, nil
 }
 
 // worker fixture paths; the branch checkout is a Git repository.

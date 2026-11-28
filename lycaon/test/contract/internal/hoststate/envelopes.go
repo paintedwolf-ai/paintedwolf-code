@@ -3,7 +3,6 @@ package hoststate
 import (
 	"fmt"
 	"maps"
-	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -180,8 +179,7 @@ func dedupeEnvelopeMaps(in []map[string]any) []map[string]any {
 	seen := make(map[string]bool, len(in))
 	out := make([]map[string]any, 0, len(in))
 	for _, m := range in {
-		enc, _ := encodeAdmittedValue(reflect.ValueOf(m), map[ptrVisit]bool{})
-		digest := sha256CanonicalJSON(enc)
+		digest, _ := digestAdmittedValue(m)
 		if seen[digest] {
 			continue
 		}

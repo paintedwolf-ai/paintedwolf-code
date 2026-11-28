@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -89,7 +88,7 @@ type projectedTurnToolsEntry struct {
 	postLoadSchemas  map[string]map[string]any
 	offered          []string
 	projectedSchemas map[string]map[string]any
-	encodedSchemas   any
+	schemasDigest    string
 	schemasOK        bool
 	programs         []string
 }
@@ -102,6 +101,8 @@ var (
 	projTurnCache     = map[string]projectedTurnToolsEntry{}
 	frozenTurnMu      sync.RWMutex
 	frozenTurnCache   = map[string]TurnAuthority{}
+	frozenWorkerMu    sync.RWMutex
+	frozenWorkerCache = map[string]TurnAuthority{}
 
 	authorityMemoMu    sync.Mutex
 	authorityMemoHolds int
@@ -133,6 +134,9 @@ func HoldAuthorityMemos() (release func()) {
 		frozenTurnMu.Lock()
 		frozenTurnCache = map[string]TurnAuthority{}
 		frozenTurnMu.Unlock()
+		frozenWorkerMu.Lock()
+		frozenWorkerCache = map[string]TurnAuthority{}
+		frozenWorkerMu.Unlock()
 	})
 }
 
@@ -484,7 +488,7 @@ func FreezeTurnAuthorityWithResources(
 		postLoadSchemas := turn.DeferredSchemas
 		offered := toolMetaNames(metas)
 		projectedSchemas := toolMetaSchemas(metas)
-		encSchemas, encErr := encodeAdmittedValue(reflect.ValueOf(projectedSchemas), map[ptrVisit]bool{})
+		schemasDigest, encErr := digestAdmittedValue(projectedSchemas)
 		proj = projectedTurnToolsEntry{
 			metas:            metas,
 			plan:             plan,
@@ -494,7 +498,7 @@ func FreezeTurnAuthorityWithResources(
 			postLoadSchemas:  postLoadSchemas,
 			offered:          offered,
 			projectedSchemas: projectedSchemas,
-			encodedSchemas:   encSchemas,
+			schemasDigest:    schemasDigest,
 			schemasOK:        encErr == nil,
 			programs:         computeProgramsList(progReach),
 		}
@@ -720,7 +724,7 @@ func assembleTurnAuthorityFromEntry(proj projectedTurnToolsEntry, reader prompts
 	}
 	digest := ""
 	if proj.schemasOK {
-		digest = authorityDigestPrecomputed(proj.offered, proj.encodedSchemas, proj.programs, reader.Mints(), reader)
+		digest = authorityDigestPrecomputed(proj.offered, proj.schemasDigest, proj.programs, reader.Mints(), reader)
 	}
 	return TurnAuthority{
 		Metas:           proj.metas,

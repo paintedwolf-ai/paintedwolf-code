@@ -4,6 +4,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/ingestion"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/progress"
@@ -336,13 +337,50 @@ func loadAgentSurfaceForCheck(agentType string) (AgentToolSurfaceData, []sandbox
 	return surface, profiles, profileID, true
 }
 
+type agentSurfaceCheckEntry struct {
+	mutationCapable    bool
+	surveysProjectTree bool
+	ok                 bool
+}
+
+var (
+	agentSurfaceCheckMu    sync.RWMutex
+	agentSurfaceCheckCache = map[string]agentSurfaceCheckEntry{}
+)
+
+func cachedAgentSurfaceChecks(agentType string) agentSurfaceCheckEntry {
+	agentType = strings.TrimSpace(agentType)
+	if agentType == "" {
+		return agentSurfaceCheckEntry{}
+	}
+	catalog, _ := extpacks.CatalogForConsumers()
+	key := catalogRevisionKey(catalog) + "\x00" + agentType
+	agentSurfaceCheckMu.RLock()
+	if entry, found := agentSurfaceCheckCache[key]; found {
+		agentSurfaceCheckMu.RUnlock()
+		return entry
+	}
+	agentSurfaceCheckMu.RUnlock()
+
+	surface, _, _, ok := loadAgentSurfaceForCheck(agentType)
+	entry := agentSurfaceCheckEntry{ok: ok}
+	if ok {
+		entry.mutationCapable = ProfileMutationCapable(surface)
+		entry.surveysProjectTree = ProfileSurveysProjectTree(surface)
+	}
+	agentSurfaceCheckMu.Lock()
+	if len(agentSurfaceCheckCache) >= 256 {
+		agentSurfaceCheckCache = map[string]agentSurfaceCheckEntry{}
+	}
+	agentSurfaceCheckCache[key] = entry
+	agentSurfaceCheckMu.Unlock()
+	return entry
+}
+
 // AgentMutationCapable resolves an agent's mutation capability.
 func AgentMutationCapable(agentType string) (capable bool, ok bool) {
-	surface, _, _, ok := loadAgentSurfaceForCheck(agentType)
-	if !ok {
-		return false, false
-	}
-	return ProfileMutationCapable(surface), true
+	entry := cachedAgentSurfaceChecks(agentType)
+	return entry.mutationCapable, entry.ok
 }
 
 // ToolProfileMutationCapable reports ProfileMutationCapable for one tool profile.
@@ -362,25 +400,20 @@ func ProfileSurveysProjectTree(data AgentToolSurfaceData) bool {
 
 // AgentSurveysProjectTree resolves an agent's tree-survey capability.
 func AgentSurveysProjectTree(agentType string) (surveys bool, ok bool) {
-	surface, _, _, ok := loadAgentSurfaceForCheck(agentType)
-	if !ok {
-		return false, false
-	}
-	return ProfileSurveysProjectTree(surface), true
+	entry := cachedAgentSurfaceChecks(agentType)
+	return entry.surveysProjectTree, entry.ok
 }
 
 // AgentRunsWithoutWorkspace accepts agents with no tree capability.
 func AgentRunsWithoutWorkspace(agentType string) bool {
-	capable, okCap := AgentMutationCapable(agentType)
-	surveys, okSur := AgentSurveysProjectTree(agentType)
-	return !okCap || !okSur || (!capable && !surveys)
+	entry := cachedAgentSurfaceChecks(agentType)
+	return !entry.ok || (!entry.mutationCapable && !entry.surveysProjectTree)
 }
 
 // KeepSpawnAgentOnEmptyRepo filters survey-only workers from empty projects.
 func KeepSpawnAgentOnEmptyRepo(agentType string) bool {
-	capable, okCap := AgentMutationCapable(agentType)
-	surveys, okSur := AgentSurveysProjectTree(agentType)
-	return !okCap || !okSur || capable || !surveys
+	entry := cachedAgentSurfaceChecks(agentType)
+	return !entry.ok || entry.mutationCapable || !entry.surveysProjectTree
 }
 
 func verifyToolsForCheck(enabled map[string]bool, commandRuns bool) []string {
