@@ -3,17 +3,25 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { EMPTY_APP_STATE_V1 } from "../../shared/app-state-types.ts";
 import type { AgentWatch } from "../api/types.ts";
 import { loadAppState } from "../platform/persistence/app-state.ts";
-import { applyBootAppStateSnapshot } from "../platform/persistence/app-state-sync.ts";
+import { parseAppState } from "../platform/persistence/app-state-parse.ts";
 import {
+  applyBootAppStateSnapshot,
+  applyDevicePrefsFromSnapshot,
+} from "../platform/persistence/app-state-sync.ts";
+import {
+  appStateUnwritten,
   flushAppState,
   getAppStateSnapshot,
   loadSharedAppState,
+  persistAppState,
   resetAppStateSnapshotForTests,
+  setAppStateSnapshot,
 } from "../store/app-state-snapshot.ts";
 import {
   hideProposalOverflow,
   isProposalOverflowHidden,
   retainProjectWatchesProject,
+  syncHiddenProposalOverflowsFromSnapshot,
 } from "./watches-store.ts";
 
 const PROJ_ID = "00000000-0000-4000-8000-000000000001";
@@ -88,5 +96,52 @@ describe("watches-store hiddenProposalOverflows persistence and hydration", () =
     // Watermark change (oldest hidden proposal changes) also causes overflow to reappear.
     const shiftedProposals = [1, 2, 4, 5].map(makeProposal);
     expect(isProposalOverflowHidden(SESS_ID, shiftedProposals)).toBe(false);
+  });
+
+  it("leaves a local hide in effect across an unrelated peer app-state apply", async () => {
+    const fiveProposals = [1, 2, 3, 4, 5].map(makeProposal);
+
+    hideProposalOverflow(SESS_ID, fiveProposals);
+    await flushAppState();
+    expect(isProposalOverflowHidden(SESS_ID, fiveProposals)).toBe(true);
+
+    // Simulate an unrelated peer-window preference patch arriving and applying device prefs.
+    setAppStateSnapshot(
+      parseAppState({
+        ...getAppStateSnapshot(),
+        display: { diffWordWrap: true },
+      }),
+    );
+    applyDevicePrefsFromSnapshot();
+
+    expect(getAppStateSnapshot().hiddenProposalOverflows).toEqual({
+      [SESS_ID]: "watch-3:watch-5",
+    });
+    expect(isProposalOverflowHidden(SESS_ID, fiveProposals)).toBe(true);
+  });
+
+  it("does not roll back a pending local hide when snapshot sync runs while unwritten", async () => {
+    const fiveProposals = [1, 2, 3, 4, 5].map(makeProposal);
+
+    hideProposalOverflow(SESS_ID, fiveProposals);
+    await flushAppState();
+
+    // Queue a pending/unwritten hiddenProposalOverflows write and simulate an older snapshot.
+    const pending = persistAppState({
+      hiddenProposalOverflows: { [SESS_ID]: "watch-3:watch-5" },
+    });
+    expect(appStateUnwritten("hiddenProposalOverflows")).toBe(true);
+
+    setAppStateSnapshot(
+      parseAppState({
+        ...EMPTY_APP_STATE_V1,
+        hiddenProposalOverflows: { "other-sess": "watch-3:watch-4" },
+      }),
+    );
+    syncHiddenProposalOverflowsFromSnapshot();
+
+    expect(isProposalOverflowHidden(SESS_ID, fiveProposals)).toBe(true);
+    await flushAppState();
+    await pending;
   });
 });

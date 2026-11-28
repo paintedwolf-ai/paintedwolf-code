@@ -13,6 +13,7 @@ import type {
 } from "../api/types.ts";
 import { persistAppStateInBackground } from "../store/app-state-background-write.ts";
 import {
+  appStateUnwritten,
   flushAppState,
   getAppStateSnapshot,
 } from "../store/app-state-snapshot.ts";
@@ -571,6 +572,7 @@ export function isProposalOverflowHidden(
 }
 
 export function syncHiddenProposalOverflowsFromSnapshot(): void {
+  if (appStateUnwritten("hiddenProposalOverflows")) return;
   setHiddenOverflows({
     ...(getAppStateSnapshot().hiddenProposalOverflows ?? {}),
   });

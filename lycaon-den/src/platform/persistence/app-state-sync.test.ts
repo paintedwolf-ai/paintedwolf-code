@@ -36,6 +36,10 @@ const syncSessionFidelityFromSnapshot = vi.hoisted(() => vi.fn());
 const syncFilesTreeViewFromSnapshot = vi.hoisted(() => vi.fn());
 const syncReviewPaneFromSnapshot = vi.hoisted(() => vi.fn());
 const setAppStateSnapshot = vi.hoisted(() => vi.fn());
+const snapshotState = vi.hoisted(() => ({
+  current: { version: 1 } as Record<string, unknown>,
+  unwrittenKeys: new Set<string>(),
+}));
 const parseAppState = vi.hoisted(() =>
   vi.fn((raw: unknown) => ({
     version: 1,
@@ -129,8 +133,9 @@ vi.mock("../../files/review/review-pane.ts", () => ({
     syncReviewPaneFromSnapshot(...args),
 }));
 vi.mock("../../store/app-state-snapshot.ts", () => ({
+  appStateUnwritten: (key: string) => snapshotState.unwrittenKeys.has(key),
   setAppStateSnapshot: (...args: unknown[]) => setAppStateSnapshot(...args),
-  getAppStateSnapshot: () => ({ version: 1 }),
+  getAppStateSnapshot: () => snapshotState.current,
 }));
 
 vi.mock("./app-state-parse.ts", () => ({
@@ -163,6 +168,8 @@ function clearSyncMocks(): void {
   syncFilesTreeViewFromSnapshot.mockClear();
   syncReviewPaneFromSnapshot.mockClear();
   setAppStateSnapshot.mockClear();
+  snapshotState.current = { version: 1 };
+  snapshotState.unwrittenKeys.clear();
   parseAppState.mockClear();
   listenMock.mockClear();
   unlistenMock.mockClear();
@@ -196,7 +203,7 @@ describe("app-state-sync", () => {
   it("device prefs omit the surface-specific destructive syncs", () => {
     applyDevicePrefsFromSnapshot();
     expect(syncLayoutFromSnapshot).toHaveBeenCalledOnce();
-    expect(syncHiddenProposalOverflowsFromSnapshot).toHaveBeenCalledOnce();
+    expect(syncHiddenProposalOverflowsFromSnapshot).not.toHaveBeenCalled();
     expect(loadTranscriptRowHeightsFromSnapshot).not.toHaveBeenCalled();
     expect(syncComposerDraftsFromSnapshot).not.toHaveBeenCalled();
     expect(syncFilesHotExitFromSnapshot).not.toHaveBeenCalled();
@@ -270,6 +277,65 @@ describe("app-state-sync", () => {
     expect(syncSessionFidelityFromSnapshot).not.toHaveBeenCalled();
     expect(syncFilesTreeViewFromSnapshot).not.toHaveBeenCalled();
     expect(syncReviewPaneFromSnapshot).not.toHaveBeenCalled();
+    expect(syncHiddenProposalOverflowsFromSnapshot).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it("unrelated peer broadcast preserves local hiddenProposalOverflows", async () => {
+    runtime.tauri = true;
+    snapshotState.current = {
+      version: 1,
+      hiddenProposalOverflows: { "sess-local": "watch-3:watch-5" },
+    };
+    const stop = subscribeAppStateBroadcast();
+    await vi.waitFor(() => expect(listenMock).toHaveBeenCalledOnce());
+    listenHandler!({
+      payload: {
+        originLabel: "other",
+        patch: { display: { diffWordWrap: true } },
+      },
+    });
+    expect(setAppStateSnapshot).toHaveBeenCalledOnce();
+    expect(setAppStateSnapshot.mock.calls[0]![0]).toMatchObject({
+      display: { diffWordWrap: true },
+      hiddenProposalOverflows: { "sess-local": "watch-3:watch-5" },
+    });
+    expect(syncHiddenProposalOverflowsFromSnapshot).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it("older peer hiddenProposalOverflows slice cannot roll back an unwritten local hide", async () => {
+    runtime.tauri = true;
+    snapshotState.current = {
+      version: 1,
+      hiddenProposalOverflows: { "sess-local": "watch-3:watch-5" },
+    };
+    snapshotState.unwrittenKeys.add("hiddenProposalOverflows");
+    const stop = subscribeAppStateBroadcast();
+    await vi.waitFor(() => expect(listenMock).toHaveBeenCalledOnce());
+
+    listenHandler!({
+      payload: {
+        originLabel: "other",
+        patch: { hiddenProposalOverflows: { "sess-peer": "watch-3:watch-4" } },
+      },
+    });
+    expect(setAppStateSnapshot).toHaveBeenCalledTimes(1);
+    expect(setAppStateSnapshot.mock.calls[0]![0]).toMatchObject({
+      hiddenProposalOverflows: { "sess-local": "watch-3:watch-5" },
+    });
+
+    listenHandler!({
+      payload: {
+        originLabel: "other",
+        patch: { hiddenProposalOverflows: null },
+      },
+    });
+    expect(setAppStateSnapshot).toHaveBeenCalledTimes(2);
+    expect(setAppStateSnapshot.mock.calls[1]![0]).toMatchObject({
+      hiddenProposalOverflows: { "sess-local": "watch-3:watch-5" },
+    });
+    expect(syncHiddenProposalOverflowsFromSnapshot).not.toHaveBeenCalled();
     stop();
   });
 
