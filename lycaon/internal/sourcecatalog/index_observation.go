@@ -14,6 +14,72 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
+// symlinkBoundaryPrefix returns the shallowest symlink prefix of rel (including rel itself)
+// when any path component along rel is a symlink.
+func symlinkBoundaryPrefix(root *os.Root, rel string) (string, os.FileInfo, bool, error) {
+	if rel == "" || rel == "." {
+		return "", nil, false, nil
+	}
+	parts := strings.Split(rel, "/")
+	prefix := ""
+	for _, part := range parts {
+		if prefix == "" {
+			prefix = part
+		} else {
+			prefix = prefix + "/" + part
+		}
+		info, err := root.Lstat(filepath.FromSlash(prefix))
+		if err != nil {
+			return "", nil, false, err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return prefix, info, true, nil
+		}
+	}
+	return "", nil, false, nil
+}
+
+// enforceDirectoryLinkBoundary ensures a symlink (or descendant of a symlink) is never
+// observed or published as a traversed directory, converging any stale alias rows.
+func (w *indexWalk) enforceDirectoryLinkBoundary(ctx context.Context, dir string) (os.FileInfo, bool, error) {
+	if dir == "." {
+		info, err := w.root.Lstat(".")
+		return info, false, err
+	}
+	symPrefix, symInfo, isSym, statErr := symlinkBoundaryPrefix(w.root, dir)
+	if statErr != nil {
+		if errors.Is(statErr, os.ErrNotExist) {
+			if _, parentErr := w.store.stores.Directories.observeUntil(ctx, w.store, normalizeDir(path.Dir(dir)), 0, backgroundwork.PriorityProactive); parentErr != nil {
+				return nil, true, w.faultDir(ctx, dir, parentErr)
+			}
+			return nil, true, w.removeSubtree(ctx, dir, true)
+		}
+		return nil, true, w.faultDir(ctx, dir, statErr)
+	}
+	if isSym {
+		if dir != symPrefix {
+			if err := w.removeSubtree(ctx, dir, true); err != nil {
+				return nil, true, err
+			}
+		}
+		if _, parentErr := w.store.stores.Directories.observeUntil(ctx, w.store, normalizeDir(path.Dir(symPrefix)), 0, backgroundwork.PriorityProactive); parentErr != nil {
+			return nil, true, w.faultDir(ctx, symPrefix, parentErr)
+		}
+		return nil, true, w.writeLeaf(ctx, symPrefix, symInfo)
+	}
+	info, err := w.root.Lstat(filepath.FromSlash(dir))
+	if err != nil {
+		return nil, true, w.faultDir(ctx, dir, err)
+	}
+	if !info.IsDir() {
+		if _, parentErr := w.store.stores.Directories.observeUntil(ctx, w.store, normalizeDir(path.Dir(dir)), 0, backgroundwork.PriorityProactive); parentErr != nil {
+			return nil, true, w.faultDir(ctx, dir, parentErr)
+		}
+		return nil, true, w.writeLeaf(ctx, dir, info)
+	}
+	return info, false, nil
+}
+
 // Filesystem waits release the writer transaction.
 func (w *indexWalk) visitDir(ctx context.Context, dir string) error {
 	if reason := w.store.policy.boundaryPath(dir, true); reason != "" {
@@ -21,6 +87,9 @@ func (w *indexWalk) visitDir(ctx context.Context, dir string) error {
 			return err
 		}
 		return w.cut(ctx, indexCut{Dir: dir, Reason: sandbox.BoundaryLazy})
+	}
+	if _, handled, err := w.enforceDirectoryLinkBoundary(ctx, dir); handled || err != nil {
+		return err
 	}
 	if err := w.begin(ctx); err != nil {
 		return err
@@ -54,9 +123,9 @@ func (w *indexWalk) visitDir(ctx context.Context, dir string) error {
 	if !observation.Complete && !bounded {
 		return errors.New("directory discovery ended before its publication completed")
 	}
-	info, err := w.root.Lstat(filepath.FromSlash(dir))
-	if err != nil {
-		return w.faultDir(ctx, dir, err)
+	info, handled, err := w.enforceDirectoryLinkBoundary(ctx, dir)
+	if handled || err != nil {
+		return err
 	}
 	if err := w.begin(ctx); err != nil {
 		return err

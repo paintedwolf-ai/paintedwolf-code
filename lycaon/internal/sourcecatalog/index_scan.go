@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -338,7 +339,15 @@ func (w *indexWalk) writeLeaf(ctx context.Context, rel string, info os.FileInfo)
 		return err
 	}
 	defer writer.close()
-	if err := writer.write(ctx, w.node(rel, info)); err != nil {
+	node := w.node(rel, info)
+	if node.isSymlink {
+		if targetPath, targetErr := observationPath(w.root, rel); targetErr == nil {
+			if target, statErr := w.root.Stat(filepath.FromSlash(targetPath)); statErr == nil {
+				node.isDir = target.IsDir()
+			}
+		}
+	}
+	if err := writer.write(ctx, node); err != nil {
 		return err
 	}
 	if _, err := w.tx.ExecContext(ctx, "DELETE FROM faults WHERE path=?", rel); err != nil {
