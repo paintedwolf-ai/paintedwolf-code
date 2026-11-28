@@ -212,6 +212,10 @@ func (c *TreeStores) ReleaseTreeRoot(ctx context.Context, rootPath string) error
 			if done := index.checkpoint.Drain(); done != nil {
 				pending = append(pending, done)
 			}
+			if index.diagCancel != nil {
+				index.diagCancel()
+				pending = append(pending, index.diagDone)
+			}
 			index.pins.drained = true
 			if index.structure != nil && index.pins.held[index.structure.id] == nil {
 				index.structure.close()
@@ -425,6 +429,10 @@ func (c *TreeStores) Drain(ctx context.Context) error {
 			if done := index.checkpoint.Drain(); done != nil {
 				pending = append(pending, done)
 			}
+			if index.diagCancel != nil {
+				index.diagCancel()
+				pending = append(pending, index.diagDone)
+			}
 			index.pins.drained = true
 			index.releaseCompletedStructureLocked()
 			if index.structure != nil && index.pins.held[index.structure.id] == nil {
@@ -465,6 +473,9 @@ type TreeStores struct {
 	treeLifecycle sync.RWMutex
 	broker        *backgroundwork.Broker
 	Directories   *Directories
-	scopesMu      sync.RWMutex
-	scopes        ScopeProvider
+	scopesMu    sync.RWMutex
+	scopes      ScopeProvider
+	diagMu      sync.Mutex
+	diagSampler *DiagnosticSampler
+	diagActive  bool
 }
