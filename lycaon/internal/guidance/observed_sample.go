@@ -111,7 +111,7 @@ func SelectObservedHandleSample(ev evidence.Ledger) []string {
 	var out []string
 	for _, handle := range evidence.HandlesSorted(ev) {
 		rec, ok := ev.Handles[handle]
-		if !ok || strings.TrimSpace(handle) == "" || rec.IsGate() {
+		if !ok || strings.TrimSpace(handle) == "" || rec.IsGate() || ev.BodyUnavailable(handle) {
 			continue
 		}
 		out = append(out, handle)

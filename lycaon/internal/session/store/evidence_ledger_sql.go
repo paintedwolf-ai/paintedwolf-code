@@ -96,10 +96,10 @@ func unmarshalEvidenceLineRanges(raw string, rec *evidence.Record) error {
 
 // unmarshalEvidenceBody restores rec.Body from its content blob. Missing blob files
 // are tolerated so lost files do not break later turns.
-func (s *sqlCore) unmarshalEvidenceBody(projectID, sha string, rec *evidence.Record) error {
+func (s *sqlCore) unmarshalEvidenceBody(projectID, sha string, rec *evidence.Record) bool {
 	sha = strings.TrimSpace(sha)
 	if sha == "" {
-		return nil
+		return false
 	}
 	blobStore := contentblob.StoreFor(s.dataDir, projectID)
 	raw, err := contentblob.Read(blobStore, sha)
@@ -108,12 +108,25 @@ func (s *sqlCore) unmarshalEvidenceBody(projectID, sha string, rec *evidence.Rec
 			slog.Error("evidence body file is missing; the record loads without its body",
 				"project_id", projectID, "handle", rec.Handle, "sha256", sha)
 		}
-		return nil
+		return false
 	}
 	if err != nil {
-		return fmt.Errorf("read evidence body blob: %w", err)
+		rec.Body = nil
+		if _, reported := s.lostBodies.LoadOrStore("damaged:"+sha, struct{}{}); !reported {
+			slog.Error("evidence body blob is damaged; record loaded with unavailable body",
+				"project_id", projectID, "handle", rec.Handle, "sha256", sha, "error", err)
+		}
+		return true
 	}
-	return json.Unmarshal(raw, &rec.Body)
+	if err := json.Unmarshal(raw, &rec.Body); err != nil {
+		rec.Body = nil
+		if _, reported := s.lostBodies.LoadOrStore("damaged:"+sha, struct{}{}); !reported {
+			slog.Error("evidence body payload is damaged; record loaded with unavailable body",
+				"project_id", projectID, "handle", rec.Handle, "sha256", sha, "error", err)
+		}
+		return true
+	}
+	return false
 }
 
 func evidenceOrdinalFromHandle(handle string) int {
@@ -142,6 +155,7 @@ func loadLedger(ctx context.Context, s *sqlCore, q *db.Queries, sessionID string
 		return evidence.Ledger{}, fmt.Errorf("load evidence ledger: %w", err)
 	}
 	records := make([]evidence.Record, 0, len(rows))
+	var unavailable map[string]struct{}
 	for _, r := range rows {
 		rec := evidence.Record{
 			Handle:       r.Handle,
@@ -159,13 +173,16 @@ func loadLedger(ctx context.Context, s *sqlCore, q *db.Queries, sessionID string
 		if err := unmarshalEvidenceLineRanges(r.LineRanges, &rec); err != nil {
 			return evidence.Ledger{}, fmt.Errorf("decode line_ranges for %s: %w", rec.Handle, err)
 		}
-		if err := s.unmarshalEvidenceBody(r.ProjectID, r.ContentBlobSha256, &rec); err != nil {
-			return evidence.Ledger{}, fmt.Errorf("decode body for %s: %w", rec.Handle, err)
+		if s.unmarshalEvidenceBody(r.ProjectID, r.ContentBlobSha256, &rec) {
+			if unavailable == nil {
+				unavailable = make(map[string]struct{})
+			}
+			unavailable[rec.Handle] = struct{}{}
 		}
 		evidence.StampDisplayKeys(roots, &rec)
 		records = append(records, rec)
 	}
-	return evidence.AssembleLedger(records), nil
+	return evidence.AssembleLedgerWithUnavailable(records, unavailable), nil
 }
 
 func (ev *sqlEvidence) UpsertEvidenceRecord(ctx context.Context, sessionID string, rec evidence.Record) error {

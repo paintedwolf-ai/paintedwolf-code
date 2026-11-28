@@ -89,6 +89,9 @@ func VerifyHandle(ev Ledger, handle string, claim Claim) (bool, string) {
 	if !ok {
 		return false, ""
 	}
+	if ev.BodyUnavailable(handle) {
+		return false, VerifyReasonBodyUnavailable
+	}
 	if strings.TrimSpace(claim.Handle) == "" {
 		claim.Handle = handle
 	}

@@ -56,7 +56,10 @@ func ledgerPaths(ev Ledger) map[string]struct{} {
 // plus every URL the result body named, so a citation of any search result grounds.
 func ObservedURLsFromEvidence(ev Ledger) map[string]struct{} {
 	out := make(map[string]struct{})
-	for _, rec := range ev.Handles {
+	for handle, rec := range ev.Handles {
+		if ev.BodyUnavailable(handle) {
+			continue
+		}
 		for _, u := range ObservedURLsForRecord(rec) {
 			out[u] = struct{}{}
 		}

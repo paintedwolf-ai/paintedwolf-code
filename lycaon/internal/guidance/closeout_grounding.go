@@ -19,9 +19,12 @@ const (
 	InvestURLNotObservedCode       = "INVEST_URL_NOT_OBSERVED"
 	InvestCitationsRequiredCode    = "INVEST_CITATIONS_REQUIRED"
 	InvestCitationUnverifiableCode = "INVEST_CITATION_UNVERIFIABLE"
-	InvestNoNewEvidenceCode        = "INVEST_NO_NEW_EVIDENCE"
-	CitationRepairInvalidCode      = "CITATION_REPAIR_INVALID"
-	CitationSyntaxInvalidCode      = "CITATION_SYNTAX_INVALID"
+	// EvidenceBodyUnavailableCode is emitted as a typed grounding diagnostic when
+	// a turn encounters an evidence record whose persisted body blob could not be decoded.
+	EvidenceBodyUnavailableCode = "EVIDENCE_BODY_UNAVAILABLE"
+	InvestNoNewEvidenceCode     = "INVEST_NO_NEW_EVIDENCE"
+	CitationRepairInvalidCode   = "CITATION_REPAIR_INVALID"
+	CitationSyntaxInvalidCode   = "CITATION_SYNTAX_INVALID"
 )
 
 // CloseoutLedgerHasCitableEvidence excludes gate records.
