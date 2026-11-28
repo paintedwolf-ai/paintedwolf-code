@@ -248,10 +248,11 @@ func (w *worktreeWatcher) verifyRootHealth() bool {
 		return true
 	}
 	w.mu.Lock()
-	if w.closed || w.faulted {
+	if w.closed || (w.faulted && (w.faultedInfo != nil || w.rootInfo == nil)) {
 		w.mu.Unlock()
 		return false
 	}
+	alreadyFaulted := w.faulted
 	_, watched := w.watched[w.root]
 	rootWatchRemoved := w.rootWatchRemoved
 	rootInfo := w.rootInfo
@@ -263,22 +264,22 @@ func (w *worktreeWatcher) verifyRootHealth() bool {
 	currentInfo, statErr := os.Stat(w.root)
 	rootMissing := statErr != nil || !currentInfo.IsDir()
 	identityChanged := !rootMissing && rootInfo != nil && !os.SameFile(rootInfo, currentInfo)
-	if !watchLost && !rootMissing && !identityChanged {
+	if !alreadyFaulted && !watchLost && !rootMissing && !identityChanged {
 		return true
 	}
 	transitioned := false
 	w.mu.Lock()
-	if !w.closed && !w.faulted {
-		w.faulted = true
-		// Record faultedInfo only when a different directory identity now
-		// occupies the path (e.g. an unmounted mountpoint), not when only the
-		// watch registration disappeared on the still-current live root.
-		if identityChanged {
+	if !w.closed {
+		// The underlying mountpoint can become visible after the native
+		// event has already faulted the missing root. Keep that identity
+		// fenced until a remount changes it again.
+		if identityChanged && w.faultedInfo == nil {
 			w.faultedInfo = currentInfo
-		} else {
-			w.faultedInfo = nil
 		}
-		transitioned = true
+		if !w.faulted {
+			w.faulted = true
+			transitioned = true
+		}
 	}
 	w.mu.Unlock()
 	if transitioned {
