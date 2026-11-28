@@ -98,12 +98,18 @@ func defaultConnectionSupport(platform string, connection Connection) bool {
 		ConnectionBaselineLoopback, ConnectionDynamic, ConnectionCredentialStore:
 		return true
 	case ConnectionLocalService:
-		return platform == "macos" && connection.Transport == LocalServiceUnixSocket
+		return confinesSockets(platform) && connection.Transport == LocalServiceUnixSocket
 	case ConnectionDirectIP:
-		return platform == "macos"
+		return confinesSockets(platform)
 	default:
 		return false
 	}
+}
+
+// confinesSockets reports platforms whose confinement admits exact Unix socket
+// grants and direct IP; Windows builds have no subprocess confinement.
+func confinesSockets(platform string) bool {
+	return platform == "macos" || platform == "linux"
 }
 
 // SetPolicyBinder sets the effective access policy binder.
