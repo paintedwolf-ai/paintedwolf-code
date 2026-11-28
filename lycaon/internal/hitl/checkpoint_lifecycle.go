@@ -14,9 +14,17 @@ type Checkpoints struct {
 	Sessions        *SessionCoupling
 	events          EventPublisher
 	expiryFor       func() time.Duration
+	invocationEnded func(ctx context.Context, sessionID string, toolCallIDs []string) (bool, error)
 	resolutionLocks keyedMutex
 	expiries        expiryTimers
 	socketOwners    checkpointSocketOwners
+}
+
+// SetInvocationTerminalCheck configures the durable invocation-owner check used
+// by RestorePending to settle orphaned tool approvals whose owning invocations
+// have already durably ended (for example, interrupted across host restart).
+func (c *Checkpoints) SetInvocationTerminalCheck(fn func(ctx context.Context, sessionID string, toolCallIDs []string) (bool, error)) {
+	c.invocationEnded = fn
 }
 
 type checkpointSettlement interface {
