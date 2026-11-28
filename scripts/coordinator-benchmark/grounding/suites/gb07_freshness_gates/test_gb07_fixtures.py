@@ -21,6 +21,8 @@ from grounding.suites.gb07_freshness_gates.full_runner import (
     GB07_EXECUTION_SPECS_BY_SELECTOR,
     INPROCESS_OVERLAYS,
     INPROCESS_SLOTS,
+    _init_plain_workspace,
+    _unwrap_closeout_grounding,
     evaluate_wording_invariance,
     main,
     parse_and_validate_args,
@@ -213,6 +215,24 @@ class TestGB07CatalogAndFixtures(unittest.TestCase):
         divergent_rows[2] = dict(divergent_rows[2], passed=False)
         inv_div = evaluate_wording_invariance(divergent_rows)
         self.assertFalse(inv_div[0]["invariant"])
+
+    def test_unwrap_closeout_grounding_and_plain_workspace_helpers(self) -> None:
+        self.assertEqual(_unwrap_closeout_grounding([]), {})
+        wrapped = [{"message_id": "m1", "role": "assistant", "grounding": {"traced": True, "hint_code": "X"}}]
+        self.assertEqual(_unwrap_closeout_grounding(wrapped), {"traced": True, "hint_code": "X"})
+        unwrapped = [{"traced": False, "hint_code": "Y"}]
+        self.assertEqual(_unwrap_closeout_grounding(unwrapped), {"traced": False, "hint_code": "Y"})
+
+        with tempfile.TemporaryDirectory(prefix="gb07-plain-") as td:
+            ws = pathlib.Path(td) / "ws"
+            _init_plain_workspace(ws)
+            self.assertTrue((ws / "gate.go").is_file())
+            self.assertTrue((ws / "unrelated.go").is_file())
+            self.assertTrue((ws / "secret.go").is_file())
+            self.assertFalse((ws / ".git").exists())
+
+        g03_02 = GB07_EXECUTION_SPECS_BY_SELECTOR["G03-02-open-review-gate-blocks"]
+        self.assertIn("SUBMIT_VERDICT_REVIEWER_MISSING", g03_02.expected_codes)
 
 
 if __name__ == "__main__":

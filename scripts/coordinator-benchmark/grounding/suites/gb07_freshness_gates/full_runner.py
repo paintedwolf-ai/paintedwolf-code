@@ -200,7 +200,12 @@ GB07_EXECUTION_SPECS: tuple[GB07ExecutionSpec, ...] = (
         family_id="G03",
         mode="gate",
         expect_refusal=True,
-        expected_codes=("SUBMIT_VERDICT_UNAVAILABLE", "SUBMIT_VERDICT_CITATION_UNGROUNDED", "SUBMIT_VERDICT_CITATIONS_REQUIRED"),
+        expected_codes=(
+            "SUBMIT_VERDICT_REVIEWER_MISSING",
+            "SUBMIT_VERDICT_UNAVAILABLE",
+            "SUBMIT_VERDICT_CITATION_UNGROUNDED",
+            "SUBMIT_VERDICT_CITATIONS_REQUIRED",
+        ),
         notes="Open review gate blocks closeout with typed code.",
     ),
     GB07ExecutionSpec(
@@ -407,7 +412,7 @@ def select_gb07_runs(
     return runs
 
 
-def _init_git_workspace(workspace: pathlib.Path) -> None:
+def _init_plain_workspace(workspace: pathlib.Path) -> None:
     workspace.mkdir(parents=True, exist_ok=True)
     (workspace / "gate.go").write_text(
         "package gate\n\nfunc Verify() bool { return true }\n",
@@ -421,6 +426,10 @@ def _init_git_workspace(workspace: pathlib.Path) -> None:
         "package gate\n\nconst SecretToken = \"TOKEN_GB07_UNREAD\"\n",
         encoding="utf-8",
     )
+
+
+def _init_git_workspace(workspace: pathlib.Path) -> None:
+    _init_plain_workspace(workspace)
     for cmd in (
         ["git", "init", "-q"],
         ["git", "add", "."],
@@ -436,6 +445,18 @@ def _init_git_workspace(workspace: pathlib.Path) -> None:
         ],
     ):
         subprocess.run(cmd, cwd=workspace, check=True)
+
+
+def _unwrap_closeout_grounding(closeouts: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    if not closeouts:
+        return {}
+    last = closeouts[-1]
+    if isinstance(last, Mapping):
+        inner = last.get("grounding")
+        if isinstance(inner, Mapping):
+            return dict(inner)
+        return dict(last)
+    return {}
 
 
 def _extract_codes_from_blob(blob: str | None) -> list[str]:
@@ -592,6 +613,36 @@ def _answer_tool(
     return req
 
 
+def _wait_for_session_pending(
+    client: Any,
+    target_sid: str,
+    root_sid: str,
+    *,
+    timeout: float = 120.0,
+) -> dict[str, Any]:
+    """Wait for `target_sid` to become pending while keeping `root_sid` parked on `wait`."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        pend = client.request("/harness/llm/pending")
+        if isinstance(pend, dict) and pend.get("pending"):
+            psid = str(pend.get("session_id") or "")
+            if psid == target_sid:
+                return pend
+            if psid == root_sid:
+                client.respond(
+                    pend["id"],
+                    tool_calls=[
+                        {
+                            "id": str(uuid.uuid4()),
+                            "name": "wait",
+                            "args": {"timeout_ms": 15000, "conditions": [{"kind": "next_worker_done"}]},
+                        }
+                    ],
+                )
+        time.sleep(0.15)
+    raise TimeoutError(f"Timed out waiting for pending LLM request for {target_sid}")
+
+
 def _dispatch_worker_and_get_child(
     client: Any,
     *,
@@ -709,12 +760,7 @@ def _run_freshness_slot(
     after = probe_store_db(sidecar.store_db_path, sid, trace_log_path=trace_log)
     delta = after.delta_observed(before)
     _, closeouts = extract_product_observations(sidecar.store_db_path, sid)
-    last_closeout = closeouts[-1] if closeouts else {}
-    last_grounding = (
-        last_closeout.get("grounding")
-        if isinstance(last_closeout.get("grounding"), dict)
-        else last_closeout
-    ) or {}
+    last_grounding = _unwrap_closeout_grounding(closeouts)
     fu = delta.get("friction_units")
 
     divergences: list[str] = []
@@ -809,7 +855,7 @@ def _run_proof_layer_slot(
     after = probe_store_db(sidecar.store_db_path, sid, trace_log_path=trace_log)
     delta = after.delta_observed(before)
     _, closeouts = extract_product_observations(sidecar.store_db_path, sid)
-    last_grounding = closeouts[-1] if closeouts else {}
+    last_grounding = _unwrap_closeout_grounding(closeouts)
     fu = delta.get("friction_units")
 
     divergences: list[str] = []
@@ -879,9 +925,9 @@ def _run_gate_slot(
 
         if selector == "G03-03-open-worker-leg-gate-blocks":
             client.respond(child_req["id"], tool_calls=_complete_leg_call(f"{prefix} Closed without survey evidence.", []))
-            child_req2 = client.wait_pending(child_sid, timeout=120.0)
+            child_req2 = _wait_for_session_pending(client, child_sid, root_sid, timeout=120.0)
             client.respond(child_req2["id"], tool_calls=[{"id": str(uuid.uuid4()), "name": "command", "args": {"command": "cat -n gate.go"}}])
-            child_req3 = client.wait_pending(child_sid, timeout=120.0)
+            child_req3 = _wait_for_session_pending(client, child_sid, root_sid, timeout=120.0)
             client.respond(
                 child_req3["id"],
                 tool_calls=_complete_leg_call(
@@ -890,21 +936,20 @@ def _run_gate_slot(
                 ),
             )
         else:  # G03-07-open-artifact-gate-blocks
-            client.respond(child_req["id"], tool_calls=[{"id": str(uuid.uuid4()), "name": "command", "args": {"command": "cat -n gate.go"}}])
-            child_req2 = client.wait_pending(child_sid, timeout=120.0)
+            # Implementer attempts complete_leg(complete) with zero workspace mutation/artifact -> WORKER_SUMMARY_NO_ARTIFACT
+            client.respond(
+                child_req["id"],
+                tool_calls=_complete_leg_call(
+                    f"{prefix} Implementer finished without disk artifact.",
+                    [],
+                ),
+            )
+            child_req2 = _wait_for_session_pending(client, child_sid, root_sid, timeout=120.0)
             client.respond(
                 child_req2["id"],
                 tool_calls=_complete_leg_call(
-                    f"{prefix} Implementer finished without disk artifact.",
-                    [{"path": "gate.go", "line": 3, "evidence": "read#1", "note": "No edit applied."}],
-                ),
-            )
-            child_req3 = client.wait_pending(child_sid, timeout=120.0)
-            client.respond(
-                child_req3["id"],
-                tool_calls=_complete_leg_call(
                     f"{prefix} Partial leg after artifact gate refusal.",
-                    [{"path": "gate.go", "line": 3, "evidence": "read#1", "note": "Partial."}],
+                    [],
                     leg_status="partial",
                 ),
             )
@@ -944,30 +989,82 @@ def _run_gate_slot(
             "observed_codes": observed_codes,
         }
 
-    # Non-worker G03 gate slots
-    sid = client.create_session(project_id, posture="build")["id"]
-    client.wait_session_ready(sid)
-    before = probe_store_db(sidecar.store_db_path, sid, trace_log_path=trace_log)
-    p = client.send_prompt(sid, f"{prefix} Exercise closeout gate for {selector}.")
-    submission_id = str(p.get("submission_id") or p.get("id") or "")
-
-    observed_codes: list[str] = []
-    stored_findings_count = 0
-
     if selector == "G03-02-open-review-gate-blocks":
-        _answer_tool(client, sid, "command", {"command": "cat -n gate.go"})
-        _answer_tool(
-            client,
-            sid,
-            "submit_verdict",
+        # Start the `options` workflow so the coordinator enters the `judge` review_loop phase
+        # where `submit_verdict` is offered on `decision_adjudicate`, then attempt to submit a
+        # terminal verdict while the required `skeptic` review gate is still open.
+        sid = client.create_session(project_id, posture="build")["id"]
+        client.wait_session_ready(sid)
+        before = probe_store_db(sidecar.store_db_path, sid, trace_log_path=trace_log)
+        client.request(
+            f"/v1/sessions/{sid}/workflow-runs",
             {
-                "verdict": {"verdict": "approved", "summary": f"{prefix} Attempted closeout with open review gate."},
-                "cited_evidence": [{"handle": "read#1", "path": "gate.go", "line": 3}],
+                "operation_id": str(uuid.uuid4()),
+                "workflow_id": "options",
+                "workflow_version": "1.0.0",
+                "request": f"{prefix} Decide whether gate.go is ready for {selector}.",
             },
         )
-        close_req = client.wait_pending(sid, timeout=120.0)
-        client.respond(close_req["id"], content=f"{prefix} Review gate checked [read#1:3].")
-        client.wait_settled(sid, submission_id=submission_id, timeout=90.0)
+        deadline = time.monotonic() + 120.0
+        submitted = False
+        while time.monotonic() < deadline and not submitted:
+            pend = client.request("/harness/llm/pending")
+            if not (isinstance(pend, dict) and pend.get("pending")):
+                time.sleep(0.15)
+                continue
+            tools = pend.get("tools") or []
+            if "submit_verdict" in tools:
+                client.respond(
+                    pend["id"],
+                    tool_calls=[
+                        {
+                            "id": str(uuid.uuid4()),
+                            "name": "submit_verdict",
+                            "args": {
+                                "verdict": {
+                                    "verdict": "SELECTED",
+                                    "winner": "gate.go",
+                                    "rationale": f"{prefix} Attempted closeout with open review gate.",
+                                },
+                                "cited_evidence": [{"handle": "read#99", "path": "gate.go", "line": 3}],
+                            },
+                        }
+                    ],
+                )
+                submitted = True
+            elif "complete_leg" in tools:
+                msgs = pend.get("messages") or []
+                if "command" in tools and not any(m.get("role") == "tool" for m in msgs):
+                    client.respond(
+                        pend["id"],
+                        tool_calls=[{"id": str(uuid.uuid4()), "name": "command", "args": {"command": "cat -n gate.go"}}],
+                    )
+                else:
+                    client.respond(
+                        pend["id"],
+                        tool_calls=[
+                            {
+                                "id": str(uuid.uuid4()),
+                                "name": "complete_leg",
+                                "args": {
+                                    "leg_status": "complete",
+                                    "brief": f"{prefix} Surveyed gate.go.",
+                                    "findings": [{"path": "gate.go", "line": 3, "evidence": "read#1", "note": "Verify returns true."}],
+                                },
+                            }
+                        ],
+                    )
+            else:
+                client.respond(pend["id"], content=f"{prefix} Waiting for review gate.")
+
+        if submitted:
+            try:
+                close_req = client.wait_pending(sid, timeout=30.0)
+                client.respond(close_req["id"], content=f"{prefix} Review gate checked.")
+            except TimeoutError:
+                pass
+            time.sleep(0.5)
+
         trs = _query_tool_results(sidecar.store_db_path, sid, "submit_verdict")
         observed_codes = sorted({c for tr in trs for c in tr["codes"]})
         after = probe_store_db(sidecar.store_db_path, sid, trace_log_path=trace_log)
@@ -979,30 +1076,109 @@ def _run_gate_slot(
             divergences.append("open_review_gate_not_blocked")
         elif unit.exec_spec.expected_codes and not any(c in observed_codes for c in unit.exec_spec.expected_codes):
             divergences.append(f"unexpected_review_gate_code:expected={list(unit.exec_spec.expected_codes)},observed={observed_codes}")
-    elif selector == "G03-04-open-finding-resolution-gate-blocks":
-        _answer_tool(client, sid, "command", {"command": "cat -n gate.go"})
-        _answer_tool(
+        return {
+            "session_id": sid,
+            "child_session_id": None,
+            "passed": len(divergences) == 0,
+            "divergences": divergences,
+            "d10_before": before.to_dict(),
+            "d10_after": after.to_dict(),
+            "d10_delta": delta,
+            "worker_report_refusals": None,
+            "observed_codes": observed_codes,
+            "stored_findings_count": 0,
+        }
+
+    if selector == "G03-04-open-finding-resolution-gate-blocks":
+        # `record_finding` is a worker tool (offered on worker_readonly / repo-researcher, not coordinator).
+        root_sid = client.create_session(project_id, posture="build")["id"]
+        client.wait_session_ready(root_sid)
+        ignore_sessions = {root_sid}
+        before_root = probe_store_db(sidecar.store_db_path, "", root_id=root_sid, trace_log_path=trace_log)
+        child_sid, child_req = _dispatch_worker_and_get_child(
             client,
-            sid,
-            "record_finding",
-            {"summary": f"{prefix} Unresolved ungrounded finding.", "ref": "read#88:1"},
+            root_sid=root_sid,
+            agent_type="repo-researcher",
+            scope_mode="read",
+            scope_paths=("gate.go",),
+            goal=f"Inspect gate.go for {selector}",
+            ignore_sessions=ignore_sessions,
         )
-        close_req = client.wait_pending(sid, timeout=120.0)
-        client.respond(close_req["id"], content=f"{prefix} Finding gate checked [read#1:3].")
-        client.wait_settled(sid, submission_id=submission_id, timeout=90.0)
-        trs = _query_tool_results(sidecar.store_db_path, sid, "record_finding")
+        before_child = probe_store_db(sidecar.store_db_path, child_sid, trace_log_path=trace_log)
+        client.respond(
+            child_req["id"],
+            tool_calls=[{"id": str(uuid.uuid4()), "name": "command", "args": {"command": "cat -n gate.go"}}],
+        )
+        child_req2 = _wait_for_session_pending(client, child_sid, root_sid, timeout=120.0)
+        client.respond(
+            child_req2["id"],
+            tool_calls=[
+                {
+                    "id": str(uuid.uuid4()),
+                    "name": "record_finding",
+                    "args": {"summary": f"{prefix} Unresolved ungrounded finding.", "ref": "read#88:1"},
+                }
+            ],
+        )
+        child_req3 = _wait_for_session_pending(client, child_sid, root_sid, timeout=120.0)
+        client.respond(
+            child_req3["id"],
+            tool_calls=[
+                {
+                    "id": str(uuid.uuid4()),
+                    "name": "complete_leg",
+                    "args": {
+                        "leg_status": "complete",
+                        "brief": f"{prefix} Completed after finding gate check.",
+                        "findings": [{"path": "gate.go", "line": 3, "evidence": "read#1", "note": "Verify returns true."}],
+                    },
+                }
+            ],
+        )
+        try:
+            root_resume = client.wait_pending(root_sid, timeout=30.0)
+            client.respond(root_resume["id"], content=f"{prefix} Finding gate checked.")
+        except TimeoutError:
+            pass
+        trs = _query_tool_results(sidecar.store_db_path, child_sid, "record_finding")
         observed_codes = sorted({c for tr in trs for c in tr["codes"]})
-        stored_findings_count = len(_query_stored_findings(sidecar.store_db_path, sid))
-        after = probe_store_db(sidecar.store_db_path, sid, trace_log_path=trace_log)
-        delta = after.delta_observed(before)
+        stored_findings_count = len(_query_stored_findings(sidecar.store_db_path, child_sid))
+        after_root = probe_store_db(sidecar.store_db_path, "", root_id=root_sid, trace_log_path=trace_log)
+        after_child = probe_store_db(sidecar.store_db_path, child_sid, trace_log_path=trace_log)
+        delta_root = after_root.delta_observed(before_root)
+        delta_child = after_child.delta_observed(before_child)
         divergences = []
-        if not after.is_complete():
-            divergences.append(f"d10_incomplete:{after.unknown_counters()}")
+        if not after_root.is_complete() or not after_child.is_complete():
+            divergences.append(f"d10_incomplete:root={after_root.unknown_counters()},child={after_child.unknown_counters()}")
         if stored_findings_count != 0:
             divergences.append(f"ungrounded_finding_stored:count={stored_findings_count}")
         if unit.exec_spec.expected_codes and not any(c in observed_codes for c in unit.exec_spec.expected_codes):
             divergences.append(f"missing_finding_gate_code:expected={list(unit.exec_spec.expected_codes)},observed={observed_codes}")
-    else:
+        return {
+            "session_id": root_sid,
+            "child_session_id": child_sid,
+            "passed": len(divergences) == 0,
+            "divergences": divergences,
+            "d10_before": before_child.to_dict(),
+            "d10_after": after_child.to_dict(),
+            "d10_delta": delta_child,
+            "d10_root_delta": delta_root,
+            "worker_report_refusals": None,
+            "observed_codes": observed_codes,
+            "stored_findings_count": stored_findings_count,
+        }
+
+    # Remaining non-worker G03 gate slots
+    sid = client.create_session(project_id, posture="build")["id"]
+    client.wait_session_ready(sid)
+    before = probe_store_db(sidecar.store_db_path, sid, trace_log_path=trace_log)
+    p = client.send_prompt(sid, f"{prefix} Exercise closeout gate for {selector}.")
+    submission_id = str(p.get("submission_id") or p.get("id") or "")
+
+    observed_codes: list[str] = []
+    stored_findings_count = 0
+
+    if True:
         if selector == "G03-01-open-verification-gate-blocks":
             turns = (
                 ScriptedTurn(tool_calls=({"name": "command", "args": {"command": "cat -n gate.go"}},)),
@@ -1052,7 +1228,7 @@ def _run_gate_slot(
         after = probe_store_db(sidecar.store_db_path, sid, trace_log_path=trace_log)
         delta = after.delta_observed(before)
         _, closeouts = extract_product_observations(sidecar.store_db_path, sid)
-        last_grounding = closeouts[-1] if closeouts else {}
+        last_grounding = _unwrap_closeout_grounding(closeouts)
         if last_grounding.get("hint_code"):
             observed_codes = [str(last_grounding["hint_code"])]
         fu = delta.get("friction_units")
@@ -1247,7 +1423,7 @@ def _run_search_projection_slot(
         after = probe_store_db(sidecar.store_db_path, sid, trace_log_path=trace_log)
         delta = after.delta_observed(before)
         _, closeouts = extract_product_observations(sidecar.store_db_path, sid)
-        last_grounding = closeouts[-1] if closeouts else {}
+        last_grounding = _unwrap_closeout_grounding(closeouts)
         fu = delta.get("friction_units")
         if not after.is_complete():
             divergences.append(f"d10_incomplete:{after.unknown_counters()}")
@@ -1489,7 +1665,10 @@ def run_gb07_full_sidecar(
         case_dir = out_dir / "cases" / run_tag
         workspace = case_dir / "workspace"
         config_dir = case_dir / "config"
-        _init_git_workspace(workspace)
+        if run_unit.spec.selector == "G03-07-open-artifact-gate-blocks":
+            _init_plain_workspace(workspace)
+        else:
+            _init_git_workspace(workspace)
 
         sidecar = IsolatedSidecarProcess(
             engine_bin,
