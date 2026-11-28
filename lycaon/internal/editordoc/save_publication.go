@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"path/filepath"
 	"strings"
@@ -102,6 +103,64 @@ func (c savePublisher) saveLocked(ctx context.Context, p *project.Project, d *Do
 	return s.finishMutation(ctx, p, d, m)
 }
 
+// serializeDocumentContent serializes LF-normalized draft text for d. When
+// d.MixedEOL is true (the file has mixed line endings and the user has not
+// explicitly normalized them), untouched lines preserve their original
+// "\r\n" vs "\n" terminators from the authorized preimage on disk. If the
+// preimage is unavailable, changed on disk, or cannot be decoded, this fails
+// closed instead of silently converting mixed line endings to uniform EOL.
+func (s *Service) serializeDocumentContent(ctx context.Context, d *Document, draft string, preimage []byte) (string, error) {
+	if !d.MixedEOL {
+		return textfile.SerializeEOL(draft, d.EOL), nil
+	}
+	raw := preimage
+	if len(raw) == 0 {
+		if d.Absent {
+			return "", projectsource.ErrSourceWriteConflict
+		}
+		root, err := s.liveRootPath(ctx, d.ProjectID, d.BranchID, d.RootID)
+		if err != nil {
+			return "", fmt.Errorf("mixed-eol preimage root: %w", err)
+		}
+		parentIdentity, err := s.publicationParent(ctx, root, d)
+		if err != nil {
+			return "", fmt.Errorf("mixed-eol preimage parent: %w", err)
+		}
+		read, err := readPublicationPreimage(root, d.Path, parentIdentity)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return "", projectsource.ErrSourceWriteConflict
+			}
+			return "", fmt.Errorf("mixed-eol preimage read: %w", err)
+		}
+		raw = read
+	}
+	if d.BaseSHA256 != "" && textfile.SHA256(raw) != d.BaseSHA256 {
+		return "", projectsource.ErrSourceWriteConflict
+	}
+	limits := textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes)
+	var (
+		doc textfile.UntrustedDocument
+		err error
+	)
+	if d.Encoding == textfile.UTF16LE || d.Encoding == textfile.UTF16BE {
+		doc, _, err = textfile.OpenAsUTF16WithoutBOM(raw, d.Encoding, limits)
+	} else {
+		doc, _, err = textfile.Open(raw, limits)
+	}
+	if err != nil {
+		return "", fmt.Errorf("decode mixed-eol preimage: %w", err)
+	}
+	serialized, _, err := textfile.SerializePreservingMixedEOL(doc.Text(), draft, d.EOL)
+	if err != nil {
+		if errors.Is(err, textfile.ErrMixedEOLAlignmentUnresolved) {
+			return "", projectsource.ErrSourceWriteConflict
+		}
+		return "", fmt.Errorf("preserve mixed-eol terminators: %w", err)
+	}
+	return serialized, nil
+}
+
 // prepareSaveMutation journals the exact bytes one save will publish. An
 // absent document expects no file, so its mutation carries an empty hash.
 func (c savePublisher) prepareSaveMutation(ctx context.Context, d *Document, operationID string, actor saveActor) (*Mutation, error) {
@@ -111,11 +170,6 @@ func (c savePublisher) prepareSaveMutation(ctx context.Context, d *Document, ope
 		return nil, err
 	}
 	head, err := s.store.replicaHead(ctx, d.ID)
-	if err != nil {
-		return nil, err
-	}
-	content := textfile.SerializeEOL(d.Draft, d.EOL)
-	after, err := textfile.EncodeBounded(content, d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
 	if err != nil {
 		return nil, err
 	}
@@ -132,6 +186,14 @@ func (c savePublisher) prepareSaveMutation(ctx context.Context, d *Document, ope
 	if d.Absent {
 		expected = ""
 	} else if before, err = readPublicationPreimage(root, d.Path, parentIdentity); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	content, err := s.serializeDocumentContent(ctx, d, d.Draft, before)
+	if err != nil {
+		return nil, err
+	}
+	after, err := textfile.EncodeBounded(content, d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
+	if err != nil {
 		return nil, err
 	}
 	now := time.Now().UTC()
@@ -222,11 +284,12 @@ func (c saveCommitter) commit(ctx context.Context, p *project.Project, d *Docume
 	next.publishedCheckpoint = m.Checkpoint
 	next.BaseContent, next.BaseSHA256 = strings.ReplaceAll(m.Content, "\r\n", "\n"), m.AfterSHA256
 	next.SizeBytes = int64(len(m.AfterBytes))
-	next.BaseEOL, next.BaseMixedEOL = m.EOL, false
+	savedMixed := textfile.HasMixedEOL(m.Content)
+	next.BaseEOL, next.BaseMixedEOL = m.EOL, savedMixed
 	next.Diverged = !s.mutationMatchesDisk(ctx, m)
 	next.Absent = false
 	if d.Revision == m.DraftRevision {
-		next.MixedEOL = false
+		next.MixedEOL = savedMixed
 	}
 	next.Dirty = next.Draft != next.BaseContent || next.EOL != next.BaseEOL || next.MixedEOL != next.BaseMixedEOL
 	// The saved draft resolves the pending agent edit.
