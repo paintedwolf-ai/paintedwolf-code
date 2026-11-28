@@ -21,6 +21,7 @@ type preparationFixture struct {
 	receipts []workercompletion.WorkerInvocationReceipt
 	run      tools.SourceRunCapture
 	retain   bool
+	runErr   error
 }
 
 func (f *preparationFixture) PromptToolProfile(context.Context, *api.Session) (string, error) {
@@ -43,6 +44,9 @@ func (f *preparationFixture) Run(_ context.Context, name string, args map[string
 	f.call = c
 	if c.Identity.WorkerJobID != "job" || c.Identity.ToolCallID == "" || c.Identity.MessageID == "" || c.ActiveRootPath() != "/isolated/worker" || c.Effects.Out == nil {
 		f.t.Fatalf("unbound invocation=%+v", c)
+	}
+	if f.runErr != nil {
+		return "", f.runErr
 	}
 	if name == "verify" {
 		if args["command"] != "check" {
@@ -133,11 +137,15 @@ type fakeInvocationRecorder struct {
 	invocation.Recorder
 	started   []invocation.Start
 	settled   map[string]invocation.Settlement
+	beginErr  error
 	settleErr error
 }
 
 func (r *fakeInvocationRecorder) Begin(_ context.Context, start invocation.Start) (*api.InvocationReceipt, error) {
 	r.started = append(r.started, start)
+	if r.beginErr != nil {
+		return nil, r.beginErr
+	}
 	return &api.InvocationReceipt{ID: "child-inv-1", ToolCallID: start.ToolCallID, Tool: start.ToolName, Status: api.InvocationStatusRunning}, nil
 }
 
@@ -200,6 +208,106 @@ func TestVerifyOpensAndSettlesChildInvocationReceipt(t *testing.T) {
 		_, err := svc.Verify(t.Context(), &api.Session{ID: "child", ProjectID: "proj-1"}, &api.WorkerTask{ID: "job", WorkspaceRoot: "/isolated/worker"}, "check")
 		if err == nil || !strings.Contains(err.Error(), "settle child verification receipt") {
 			t.Fatalf("expected surfaced settlement error, got %v", err)
+		}
+	})
+
+	t.Run("canceled_context_settles_interrupted", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		f := &preparationFixture{t: t, runErr: context.Canceled}
+		rec := &fakeInvocationRecorder{}
+		svc := f.service()
+		svc.SetInvocations(rec)
+		_, err := svc.Verify(ctx, &api.Session{ID: "child", ProjectID: "proj-1"}, &api.WorkerTask{ID: "job", WorkspaceRoot: "/isolated/worker"}, "check")
+		if err == nil {
+			t.Fatal("expected error for canceled context")
+		}
+		st, ok := rec.settled["child-inv-1"]
+		if !ok || st.Status != api.InvocationStatusInterrupted || st.EvidenceKind != "interrupted" || st.Failure == nil || st.Failure.Code != "TOOL_OWNER_INTERRUPTED" {
+			t.Fatalf("unexpected interrupted settlement: ok=%v %+v", ok, st)
+		}
+	})
+
+	t.Run("begin_error_propagates", func(t *testing.T) {
+		f := &preparationFixture{t: t}
+		rec := &fakeInvocationRecorder{beginErr: context.DeadlineExceeded}
+		svc := f.service()
+		svc.SetInvocations(rec)
+		if _, err := svc.Verify(t.Context(), &api.Session{ID: "child", ProjectID: "proj-1"}, &api.WorkerTask{ID: "job", WorkspaceRoot: "/isolated/worker"}, "check"); err == nil {
+			t.Fatal("expected Begin error")
+		}
+	})
+}
+
+func TestReadOpensAndSettlesChildInvocationReceipt(t *testing.T) {
+	t.Setenv(configdir.EnvDev, "1")
+	t.Setenv(configdir.EnvHarness, "1")
+
+	t.Run("passed", func(t *testing.T) {
+		f := &preparationFixture{t: t}
+		rec := &fakeInvocationRecorder{}
+		svc := f.service()
+		svc.SetInvocations(rec)
+		handle, content, err := svc.Read(t.Context(), &api.Session{ID: "child", ProjectID: "proj-1"}, &api.WorkerTask{ID: "job"}, "material.txt")
+		if err != nil || handle != "evidence:retained" || content != "retained material" {
+			t.Fatalf("Read with invocation recorder failed: handle=%q content=%q err=%v", handle, content, err)
+		}
+		if len(rec.started) != 1 || rec.started[0].SessionID != "child" || rec.started[0].ToolName != "command" {
+			t.Fatalf("unexpected Begin calls: %+v", rec.started)
+		}
+		st, ok := rec.settled["child-inv-1"]
+		if !ok || st.Status != api.InvocationStatusCompleted || st.EvidenceKind != "observation" {
+			t.Fatalf("unexpected read settlement: ok=%v %+v", ok, st)
+		}
+	})
+
+	t.Run("run_error_settles_error", func(t *testing.T) {
+		f := &preparationFixture{t: t, runErr: context.DeadlineExceeded}
+		rec := &fakeInvocationRecorder{}
+		svc := f.service()
+		svc.SetInvocations(rec)
+		if _, _, err := svc.Read(t.Context(), &api.Session{ID: "child", ProjectID: "proj-1"}, &api.WorkerTask{ID: "job"}, "material.txt"); err == nil {
+			t.Fatal("expected error from failed Read")
+		}
+		st, ok := rec.settled["child-inv-1"]
+		if !ok || st.Status != api.InvocationStatusError || st.EvidenceKind != "error" || st.Failure == nil || st.Failure.Code != "HARNESS_READ_FAILED" {
+			t.Fatalf("unexpected error settlement: ok=%v %+v", ok, st)
+		}
+	})
+
+	t.Run("canceled_context_settles_interrupted", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		f := &preparationFixture{t: t, runErr: context.Canceled}
+		rec := &fakeInvocationRecorder{}
+		svc := f.service()
+		svc.SetInvocations(rec)
+		if _, _, err := svc.Read(ctx, &api.Session{ID: "child", ProjectID: "proj-1"}, &api.WorkerTask{ID: "job"}, "material.txt"); err == nil {
+			t.Fatal("expected error for canceled Read")
+		}
+		st, ok := rec.settled["child-inv-1"]
+		if !ok || st.Status != api.InvocationStatusInterrupted || st.EvidenceKind != "interrupted" || st.Failure == nil || st.Failure.Code != "TOOL_OWNER_INTERRUPTED" {
+			t.Fatalf("unexpected interrupted read settlement: ok=%v %+v", ok, st)
+		}
+	})
+
+	t.Run("begin_error_propagates", func(t *testing.T) {
+		f := &preparationFixture{t: t}
+		rec := &fakeInvocationRecorder{beginErr: context.DeadlineExceeded}
+		svc := f.service()
+		svc.SetInvocations(rec)
+		if _, _, err := svc.Read(t.Context(), &api.Session{ID: "child", ProjectID: "proj-1"}, &api.WorkerTask{ID: "job"}, "material.txt"); err == nil {
+			t.Fatal("expected Begin error")
+		}
+	})
+
+	t.Run("settlement_failure_surfaced", func(t *testing.T) {
+		f := &preparationFixture{t: t}
+		rec := &fakeInvocationRecorder{settleErr: context.DeadlineExceeded}
+		svc := f.service()
+		svc.SetInvocations(rec)
+		if _, _, err := svc.Read(t.Context(), &api.Session{ID: "child", ProjectID: "proj-1"}, &api.WorkerTask{ID: "job"}, "material.txt"); err == nil || !strings.Contains(err.Error(), "settle child read receipt") {
+			t.Fatalf("expected surfaced read settlement error, got %v", err)
 		}
 	})
 }
