@@ -27,9 +27,11 @@ import { syncOnboardingPrefsFromSnapshot } from "../../settings/system/onboardin
 import { syncShortcutPrefsFromSnapshot } from "../../settings/system/shortcut-prefs.ts";
 import { syncWhatsNewFromSnapshot } from "../../settings/system/whats-new-prefs.ts";
 import { syncLayoutFromSnapshot } from "../../layout/layout-preferences.ts";
+import { syncHiddenProposalOverflowsFromSnapshot } from "../../watches/watches-store.ts";
 import { parseAppState } from "./app-state-parse.ts";
 import { isTauriRuntime } from "../runtime.ts";
 import {
+  appStateUnwritten,
   getAppStateSnapshot,
   setAppStateSnapshot,
 } from "../../store/app-state-snapshot.ts";
@@ -67,6 +69,7 @@ export function applyBootAppStateSnapshot(): void {
   syncSessionFidelityFromSnapshot();
   syncFilesTreeViewFromSnapshot();
   syncReviewPaneFromSnapshot();
+  syncHiddenProposalOverflowsFromSnapshot();
   stopFramePreferenceSync?.();
   stopFramePreferenceSync = onContributionFrameChange((state) => {
     applyContributionThemeFrame(state);
@@ -106,6 +109,9 @@ export function subscribeAppStateBroadcast(): () => void {
           if (key === "version") continue;
           if (key === "filesTreeIntent") {
             next[key] = mergePeerTreeIntents(getAppStateSnapshot().filesTreeIntent, value, `window:${thisLabel}`);
+            continue;
+          }
+          if (key === "hiddenProposalOverflows" && appStateUnwritten("hiddenProposalOverflows")) {
             continue;
           }
           if (value === null) delete next[key];
