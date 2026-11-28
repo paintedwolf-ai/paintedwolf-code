@@ -48,6 +48,8 @@ type worktreeWatcher struct {
 	// rootInfo is the directory identity captured when the root bound; a stat
 	// failure or identity change (e.g. unmounted volume) marks the watcher faulted.
 	rootInfo os.FileInfo
+	// A native removal can erase the root registration before a health check.
+	rootWatchRemoved bool
 	// faultedInfo records the directory identity observed when an outage
 	// faulted an existing mountpoint path, so rebind waits for a new mount.
 	faultedInfo os.FileInfo
@@ -204,6 +206,9 @@ func (w *worktreeWatcher) forgetRemovedTree(path string) {
 		w.refs.forget(watched)
 		w.spent -= cost
 		w.budget.Give(cost)
+		if watched == w.root {
+			w.rootWatchRemoved = true
+		}
 	}
 }
 
@@ -248,12 +253,13 @@ func (w *worktreeWatcher) verifyRootHealth() bool {
 		return false
 	}
 	_, watched := w.watched[w.root]
+	rootWatchRemoved := w.rootWatchRemoved
 	rootInfo := w.rootInfo
 	w.mu.Unlock()
-	if !watched && rootInfo == nil {
+	if !watched && !rootWatchRemoved && rootInfo == nil {
 		return true
 	}
-	watchLost := watched && w.watcher != nil && !w.watcher.HasWatch(w.root)
+	watchLost := rootWatchRemoved || (watched && w.watcher != nil && !w.watcher.HasWatch(w.root))
 	currentInfo, statErr := os.Stat(w.root)
 	rootMissing := statErr != nil || !currentInfo.IsDir()
 	identityChanged := !rootMissing && rootInfo != nil && !os.SameFile(rootInfo, currentInfo)
@@ -297,6 +303,7 @@ func (w *worktreeWatcher) needsRebind() bool {
 	alreadyFaulted := w.faulted
 	faultedInfo := w.faultedInfo
 	rootInfo := w.rootInfo
+	rootWatchRemoved := w.rootWatchRemoved
 	_, watched := w.watched[w.root]
 	w.mu.Unlock()
 
@@ -311,7 +318,7 @@ func (w *worktreeWatcher) needsRebind() bool {
 		}
 		return true
 	}
-	watchLost := watched && w.watcher != nil && !w.watcher.HasWatch(w.root)
+	watchLost := rootWatchRemoved || (watched && w.watcher != nil && !w.watcher.HasWatch(w.root))
 	identityChanged := rootInfo != nil && !os.SameFile(rootInfo, currentInfo)
 	return watchLost || identityChanged
 }
@@ -405,6 +412,9 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 			}
 			if ev.Op&(fsnotify.Remove|fsnotify.Rename) != 0 {
 				w.forgetRemovedTree(ev.Name)
+				if ev.Name == w.root && !w.verifyRootHealth() {
+					continue
+				}
 			}
 			parent := filepath.Dir(ev.Name)
 			if watchfd.EntryDescriptors && ev.Op&(fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 && w.watchesDir(parent) {
