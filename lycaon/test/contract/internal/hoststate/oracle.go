@@ -429,17 +429,42 @@ func FreezeTurnAuthorityWithResources(
 	cacheKey := ""
 	fullKey := ""
 	if len(state.History) == 0 {
-		cacheKey = fmt.Sprintf(
-			"c|%s|%s|%s|%t|%t|%s|%d|%s|%t|%s|%s|%s|%s|%s|%t|%t|%s|%+v|%s|jobs=%t|held=%t",
-			overlay.Catalog.Revision, state.SessionMode, state.Posture,
-			state.WebSearch, state.CommandExternalHidden, state.MCPState, state.RootCount,
-			state.TurnProfile.SurfaceID, state.TurnProfile.WorkflowActive,
-			state.TurnProfile.AdvanceWhenGateMet, state.TurnProfile.PhaseCoordinatorSurface,
-			state.RunContext.RunID, state.RunContext.WorkflowID, state.RunContext.PhaseCoordinatorSurface,
-			state.RunContext.PhaseHostHeld, state.RunContext.HasComposeDraft,
-			strings.Join(state.SpawnAllowlist, ","), state.ImplementState, sortedBoolKeys(state.Loaded),
-			resources.CommandJobs, resources.HeldCalls,
-		)
+		if state.TurnProfile.SurfaceID != "" {
+			// ProjectTurnTools depends only on resolved SurfaceID, active-run presence
+			// (and PhaseCoordinatorSurface under Ask), root count, posture/mode/overlay,
+			// spawn allowlist, loaded tools, and live resource presence.
+			hasRun := state.RunContext.RunID != "" || state.TurnProfile.WorkflowActive
+			askPhaseSurf := ""
+			if state.SessionMode == api.SessionModeAsk && hasRun {
+				askPhaseSurf = state.RunContext.PhaseCoordinatorSurface
+				if askPhaseSurf == "" {
+					askPhaseSurf = state.TurnProfile.PhaseCoordinatorSurface
+				}
+				if askPhaseSurf == "" {
+					askPhaseSurf = state.TurnProfile.SurfaceID
+				}
+			}
+			cacheKey = fmt.Sprintf(
+				"cs|%s|%s|%s|%t|%t|%s|%d|%s|%t|%s|%s|%s|jobs=%t|held=%t",
+				overlay.Catalog.Revision, state.SessionMode, state.Posture,
+				state.WebSearch, state.CommandExternalHidden, state.MCPState, state.RootCount,
+				state.TurnProfile.SurfaceID, hasRun, askPhaseSurf,
+				strings.Join(state.SpawnAllowlist, ","), sortedBoolKeys(state.Loaded),
+				resources.CommandJobs, resources.HeldCalls,
+			)
+		} else {
+			cacheKey = fmt.Sprintf(
+				"c|%s|%s|%s|%t|%t|%s|%d|%s|%t|%s|%s|%s|%s|%s|%t|%t|%s|%+v|%s|jobs=%t|held=%t",
+				overlay.Catalog.Revision, state.SessionMode, state.Posture,
+				state.WebSearch, state.CommandExternalHidden, state.MCPState, state.RootCount,
+				state.TurnProfile.SurfaceID, state.TurnProfile.WorkflowActive,
+				state.TurnProfile.AdvanceWhenGateMet, state.TurnProfile.PhaseCoordinatorSurface,
+				state.RunContext.RunID, state.RunContext.WorkflowID, state.RunContext.PhaseCoordinatorSurface,
+				state.RunContext.PhaseHostHeld, state.RunContext.HasComposeDraft,
+				strings.Join(state.SpawnAllowlist, ","), state.ImplementState, sortedBoolKeys(state.Loaded),
+				resources.CommandJobs, resources.HeldCalls,
+			)
+		}
 		fullKey = fmt.Sprintf(
 			"%s|git=%t/%t|appr=%s|scratch=%s|temp=%+v|vision=%t|allowed=%s|roots=%+v",
 			cacheKey, state.HasGit, state.HasAnyGitRoot, state.ApprovalPosture,

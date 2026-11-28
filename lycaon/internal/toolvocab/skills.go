@@ -91,6 +91,7 @@ var profileHasIdentifier = regexp.MustCompile(`profile_has_([a-z0-9_]+)`)
 // UnreachableNames returns the tool, operation, command-program, and evidence
 // handle names (as "kind#") that corpus names but reachable cannot supply.
 func UnreachableNames(c *Catalog, corpus string, reachable map[string]bool) []string {
+	analysis := analyzeSkillText(c, corpus)
 	seen := map[string]bool{}
 	var out []string
 	add := func(name string) {
@@ -99,23 +100,29 @@ func UnreachableNames(c *Catalog, corpus string, reachable map[string]bool) []st
 			out = append(out, name)
 		}
 	}
-	for _, name := range ToolsIn(c, corpus) {
+	for _, name := range analysis.toolsIn {
 		if reachable[name] || toolcontract.CommandLanguageReachable(name, reachable) {
 			continue
 		}
 		add(name)
 	}
-	for _, name := range toolcontract.HyphenatedCommandFormsIn(corpus) {
-		if c.registered[name] || c.operations[name] {
-			continue
-		}
+	for _, name := range analysis.hyphenForms {
 		if reachable[name] || toolcontract.CommandLanguageReachable(name, reachable) {
 			continue
 		}
 		add(name)
 	}
-	for _, handle := range c.unmintableHandles(corpus, reachable) {
-		add(handle)
+	if analysis.hasEmptyHandle {
+		add("#")
+	}
+	if len(analysis.handleTokens) > 0 {
+		minted := c.mintFacts(reachable)
+		for _, name := range analysis.handleTokens {
+			ok, kind := minted[name]
+			if (kind && !ok) || (!kind && (c.registered[name] || c.operations[name])) {
+				add(name + "#")
+			}
+		}
 	}
 	sort.Strings(out)
 	return out
