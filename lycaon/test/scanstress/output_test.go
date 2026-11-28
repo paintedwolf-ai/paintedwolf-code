@@ -41,6 +41,9 @@ func TestLargeOutputStaysBounded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encode resource findings: %v", err)
 	}
+	if peakRunDir == 0 {
+		t.Fatal("no scanner workspace bytes observed during the dense scan")
+	}
 	const reportBudget = 32 << 20
 	if len(encoded) <= exec.DefaultMaxOutputBytes || len(encoded) > reportBudget || peakRunDir > reportBudget+projectBytes {
 		t.Errorf("dense output must cross console capture within its fixture budget: findings=%d console_cap=%d run_dir=%d report_budget=%d", len(encoded), exec.DefaultMaxOutputBytes, peakRunDir, reportBudget)
@@ -52,7 +55,7 @@ func TestLargeOutputStaysBounded(t *testing.T) {
 		peakRunDir, exec.DefaultMaxOutputBytes, float64(top.AggregateRSS)/1024, float64(top.SelfRSS)/1024)
 
 	awaitNoEngineProcesses(t)
-	if leaked := survivingDirs(obs.seenRunDirs()); len(leaked) > 0 {
+	if leaked := survivingDirs(t, obs.seenRunDirs()); len(leaked) > 0 {
 		t.Errorf("run directories leaked after a dense scan: %v", leaked)
 	}
 }

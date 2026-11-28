@@ -55,8 +55,8 @@ func TestBaselineScanCost(t *testing.T) {
 	if len(owned) == 0 {
 		t.Fatal("observer never attributed a run directory to this process")
 	}
-	if leaked := survivingDirs(owned); len(leaked) > 0 {
+	if leaked := survivingDirs(t, owned); len(leaked) > 0 {
 		t.Errorf("run directories leaked on the success path: %v", leaked)
 	}
-	reportf(t, "owned_run_dirs=%d leaked=%d engine_drain=%s", len(owned), len(survivingDirs(owned)), drain.Round(time.Millisecond))
+	reportf(t, "owned_run_dirs=%d leaked=%d engine_drain=%s", len(owned), len(survivingDirs(t, owned)), drain.Round(time.Millisecond))
 }

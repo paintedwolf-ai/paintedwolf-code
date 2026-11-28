@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -79,14 +80,18 @@ func TestRepeatedInterruptsStayBounded(t *testing.T) {
 			done <- err
 		}()
 		awaitEngineRunning(t)
-		awaitEngineWorking(t, os.Getpid())
+		workingDir := awaitEngineWorking(t, os.Getpid())
 		cancel()
 		if err := <-done; !errors.Is(err, context.Canceled) {
 			t.Errorf("iteration %d: canceled scan returned %v, want context.Canceled", i, err)
 		}
 		awaitNoEngineProcesses(t)
-		allRunDirs = append(allRunDirs, obs.seenRunDirs()...)
 		obs.finish()
+		owned := obs.seenRunDirs()
+		if !slices.Contains(owned, workingDir) {
+			owned = append(owned, workingDir)
+		}
+		allRunDirs = append(allRunDirs, owned...)
 	}
 
 	// Sampling goroutines wind down after their observers finish; a leak never does.
@@ -97,7 +102,7 @@ func TestRepeatedInterruptsStayBounded(t *testing.T) {
 		return endGoroutines-baseGoroutines < repeatCount() && endFDs-baseFDs < repeatCount()
 	})
 
-	leaked := survivingDirs(allRunDirs)
+	leaked := survivingDirs(t, allRunDirs)
 	if len(leaked) > 0 {
 		t.Errorf("run directories accumulated across %d interrupted scans: %v", repeatCount(), leaked)
 	}

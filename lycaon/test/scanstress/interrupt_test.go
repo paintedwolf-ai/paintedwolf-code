@@ -60,7 +60,7 @@ func TestCancellationTerminatesEngineTree(t *testing.T) {
 	if len(owned) == 0 {
 		t.Fatal("observer never attributed a run directory on the cancel path")
 	}
-	if leaked := survivingDirs(owned); len(leaked) > 0 {
+	if leaked := survivingDirs(t, owned); len(leaked) > 0 {
 		t.Errorf("run directories leaked on the cancel path: %v", leaked)
 	}
 	reportf(t, "engine_procs_at_cancel=%d ran_for=%s return_latency=%s drain=%s peak_rss_mib=%.1f owned_run_dirs=%d err=%v",
@@ -107,7 +107,7 @@ func TestHardLimitTimeoutTerminatesEngineTree(t *testing.T) {
 	if len(owned) == 0 {
 		t.Fatal("observer never attributed a run directory on the timeout path")
 	}
-	if leaked := survivingDirs(owned); len(leaked) > 0 {
+	if leaked := survivingDirs(t, owned); len(leaked) > 0 {
 		t.Errorf("run directories leaked on the timeout path: %v", leaked)
 	}
 	reportf(t, "hard_limit_sec=%d elapsed=%s overshoot=%s drain=%s owned_run_dirs=%d err=%v",
