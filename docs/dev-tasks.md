@@ -8,11 +8,14 @@ Toolchain setup, local dev stacks, debug capture, and the `./task` targets with 
 
 ## Prerequisites
 
-- macOS on Apple Silicon at or above the floor in `lycaon/internal/platformfloor/macos_floor.txt`, with Xcode Command Line Tools (`xcode-select --install`)
+- macOS on Apple Silicon at or above the floor in `lycaon/internal/platformfloor/macos_floor.txt`, with Xcode Command Line Tools (`xcode-select --install`), or Linux on x86-64 or ARM64 with a C/C++ toolchain, CMake, pkg-config, OpenSSL and Vulkan development libraries, and the native build dependencies listed in `.github/actions/setup-linux-native/packages.txt`
 - Go at the `go` directive in `lycaon/go.mod`
 - [Bun](https://bun.sh) at `.bun-version` for `lycaon-den/`
 - Node at `.node-version` for OpenAPI lint, bundle, and codegen
 - Rust with Cargo for the Tauri shell, installed through [rustup](https://rustup.rs) so `rust-toolchain.toml` selects the version
+- The matching Bialy head artifacts, restored to the shared artifact bin's `decide-heads/` directory or selected with `BIALY_HEADS_DIR`; see [decision dependencies](dependencies.md). Without them, the development engine build and managed browser provisioning cannot complete.
+
+Linux ARM64 also needs a compatible system `glslc` for the native generation runtime.
 
 `./task setup-dev` checks each of these. Current pins and upstream versions are linked from the [dependency inventory](operations/dependency-inventory.md).
 

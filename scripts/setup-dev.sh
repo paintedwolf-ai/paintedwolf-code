@@ -68,21 +68,23 @@ require_tool() {
 
 validate_toolchains() {
 	echo "==> Validating pinned toolchains"
-	if [[ "$(uname -s)" != "Darwin" || "$(uname -m)" != "arm64" ]]; then
-		echo "error: development setup supports macOS on Apple Silicon" >&2
-		exit 1
-	fi
-	local macos_version macos_floor
-	macos_version="$(sw_vers -productVersion)"
-	macos_floor="$(tr -d '[:space:]' < "${ROOT}/lycaon/internal/platformfloor/macos_floor.txt")"
-	if ! version_at_least "${macos_version}" "${macos_floor}"; then
-		echo "error: macOS ${macos_version} is unsupported; need macOS ${macos_floor}+" >&2
-		exit 1
-	fi
-	if ! command -v xcrun >/dev/null 2>&1 || ! xcrun --find clang >/dev/null 2>&1; then
-		echo "error: Xcode Command Line Tools are required — run: xcode-select --install" >&2
-		exit 1
-	fi
+	case "$(uname -s)/$(uname -m)" in
+		Darwin/arm64)
+			local macos_version macos_floor
+			macos_version="$(sw_vers -productVersion)"
+			macos_floor="$(tr -d '[:space:]' < "${ROOT}/lycaon/internal/platformfloor/macos_floor.txt")"
+			if ! version_at_least "${macos_version}" "${macos_floor}"; then
+				echo "error: macOS ${macos_version} is unsupported; need macOS ${macos_floor}+" >&2
+				exit 1
+			fi
+			if ! command -v xcrun >/dev/null 2>&1 || ! xcrun --find clang >/dev/null 2>&1; then
+				echo "error: Xcode Command Line Tools are required — run: xcode-select --install" >&2
+				exit 1
+			fi
+			;;
+		Linux/x86_64|Linux/aarch64) ;;
+		*) echo "error: development setup supports macOS on Apple Silicon and Linux on x86_64 or aarch64" >&2; exit 1 ;;
+	esac
 	require_tool go "$(awk '/^go /{print $2}' "${ROOT}/lycaon/go.mod")" "https://go.dev/dl/"
 	require_tool bun "$(tr -d '[:space:]' < "${ROOT}/.bun-version")" "https://bun.sh"
 	require_tool node "$(tr -d '[:space:]' < "${ROOT}/.node-version")" "https://nodejs.org/"
@@ -109,6 +111,11 @@ echo "==> Installing Den dependencies"
 	cd "${ROOT}/lycaon-den"
 	bun install --frozen-lockfile
 )
+
+if [[ "$(uname -s)" == "Linux" ]]; then
+  echo "==> Preparing native generation dependencies"
+  bash "${ROOT}/scripts/generation/run.sh" prepare --backend native
+fi
 
 echo "==> Provisioning managed development browser"
 # The sidecar retries provisioning at launch.
