@@ -2,7 +2,9 @@ package capability
 
 import (
 	"fmt"
+	"maps"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -41,8 +43,25 @@ type disclosurePolicyFile struct {
 	} `yaml:"exempt"`
 }
 
+var cachedDisclosureRegistry = sync.OnceValues(loadDisclosureRegistryUncached)
+
 // LoadDisclosureRegistry loads the bundled disclosure policy.
 func LoadDisclosureRegistry() (DisclosureRegistry, error) {
+	reg, err := cachedDisclosureRegistry()
+	if err != nil {
+		return DisclosureRegistry{}, err
+	}
+	return DisclosureRegistry{
+		DefaultAgents:  reg.DefaultAgents,
+		DefaultTools:   reg.DefaultTools,
+		AgentOverrides: maps.Clone(reg.AgentOverrides),
+		ToolOverrides:  maps.Clone(reg.ToolOverrides),
+		AgentExempt:    maps.Clone(reg.AgentExempt),
+		ToolExempt:     maps.Clone(reg.ToolExempt),
+	}, nil
+}
+
+func loadDisclosureRegistryUncached() (DisclosureRegistry, error) {
 	data, err := config.Read(config.DisclosurePolicy)
 	if err != nil {
 		return DisclosureRegistry{}, fmt.Errorf("read disclosure policy: %w", err)

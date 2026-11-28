@@ -388,8 +388,17 @@ func ToolProfileMutationCapable(profile sandbox.ToolProfile) bool {
 	if strings.TrimSpace(profile.ID) == "" {
 		return false
 	}
-	surface, err := LoadAgentToolSurface(profile.ID, nil, nil, nil, nil, []sandbox.ToolProfile{profile})
-	return err == nil && ProfileMutationCapable(surface)
+	loadNativeToolFamilies()
+	cmdMutates := commandEffectFlags(true, profile.CommandEffects).mutation
+	for _, name := range nativeMutationTools {
+		if name == "command" && !cmdMutates {
+			continue
+		}
+		if profile.Tools[name] && !strings.HasSuffix(name, "*") {
+			return true
+		}
+	}
+	return false
 }
 
 // ProfileSurveysProjectTree reports whether a surface can survey the tree.
