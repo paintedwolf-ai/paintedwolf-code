@@ -79,8 +79,9 @@ describe("SessionTranscript diffs of command edits", () => {
     const [group] = groups(container);
     expect(groups(container)).toHaveLength(1);
     expect(group!.getAttribute("data-files")).toBe("2");
-    expect(groupText(group!, "diff-group-files")).toBe("2 files changed");
+    expect(groupText(group!, "diff-group-files")).toBe("2 files edited");
     expect(groupText(group!, "diff-group-writes")).toBe("2 writes");
+    expect(groupText(group!, "diff-group-hint")).toBe("a.go · b.go");
   });
 
   it("composes later commands' writes to a file onto its first card", () => {
@@ -156,8 +157,67 @@ describe("SessionTranscript diffs of command edits", () => {
       ]} />
     ));
     expect(groups(container).map((group) => groupText(group, "diff-group-files"))).toEqual([
-      "1 file changed, 5 more changes in Review",
+      "1 file edited, 5 more changes in Review",
       "1 change in Review",
     ]);
+  });
+
+  it("folds edits interval-locally across agent_note boundaries and disambiguates duplicate basenames", () => {
+    const note: Message = {
+      id: "note-mid",
+      role: "assistant",
+      kind: "agent_note",
+      origin: "model",
+      authority: "none",
+      trust_tier: "trusted",
+      content: "First pass complete; updating second pass.",
+      grounding: { traced: true, host_assembled: false, observed_path_count: 1, observed_paths_sample: ["a.go"] },
+      ...at(5),
+    };
+    const { container } = render(() => (
+      <SessionTranscript
+        layout="chat"
+        sessionId="s-intervals"
+        rootRefs={[
+          { id: "r1", path: "/work/api" },
+          { id: "r2", path: "/work/web" },
+        ]}
+        messages={[
+          ...commandTurn("1", 1, [
+            { id: "c1", edits: [{ root_id: "r1", path: "README.md", before: "v0\n", after: "v1\n" }] },
+            { id: "c2", edits: [{ root_id: "r1", path: "README.md", before: "v1\n", after: "v2\n" }, { root_id: "r2", path: "README.md", before: "w0\n", after: "w1\n" }] },
+          ]),
+          note,
+          ...commandTurn("2", 6, [
+            { id: "c3", edits: [{ root_id: "r1", path: "README.md", before: "v2\n", after: "v3\n" }] },
+          ]),
+        ]}
+      />
+    ));
+    const rendered = groups(container);
+    expect(rendered).toHaveLength(2);
+    expect(groupText(rendered[0]!, "diff-group-writes")).toBe("3 writes");
+    expect(groupText(rendered[0]!, "diff-group-hint")).toBe("api/README.md · web/README.md");
+    expect(groupText(rendered[1]!, "diff-group-writes")).toBe("1 write");
+  });
+
+  it("bounds mounted file-edit-diff rows via VirtualCardList when 45 files are edited in one interval", () => {
+    const manyEdits = Array.from({ length: 45 }, (_, idx) => ({
+      path: `pkg/file_${idx}.go`,
+      before: "old\n",
+      after: `new ${idx}\n`,
+    }));
+    const { container } = render(() => (
+      <SessionTranscript
+        layout="chat"
+        sessionId="s-45-files"
+        messages={commandTurn("1", 1, [{ id: "c-bulk", edits: manyEdits }])}
+      />
+    ));
+    const [group] = groups(container);
+    expect(group!.getAttribute("data-files")).toBe("45");
+    group!.querySelector<HTMLButtonElement>("button.den-transcript-disclosure-toggle")!.click();
+    const mountedDiffs = group!.querySelectorAll('[data-testid="file-edit-diff"]');
+    expect(mountedDiffs.length).toBeLessThan(45);
   });
 });

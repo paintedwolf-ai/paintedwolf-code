@@ -47,6 +47,13 @@ type MeasurableRow = {
       argsMessageId?: string;
     };
   }[];
+  approvals?: readonly {
+    parentMessageId?: string;
+    call?: { resultMessageId?: string };
+  }[];
+  folds?: readonly {
+    steps: readonly { messageId?: string }[];
+  }[];
   parts?: readonly {
     assistantMessageId?: string;
     messageId?: string;
@@ -78,7 +85,7 @@ export function transcriptRowOrdSpan(
   const kind = item.kind;
   if (!kind) return 1;
   if (NON_ORDINAL_ROW_KINDS.has(kind)) return 0;
-  if (kind === "activity_span" && item.entries) {
+  if ((kind === "activity_span" || kind === "activity_group") && item.entries) {
     const ids = new Set<string>();
     let workEntries = 0;
     for (const entry of item.entries) {
@@ -97,6 +104,20 @@ export function transcriptRowOrdSpan(
       if (asstId && !proseKeys?.has(asstId)) ids.add(asstId);
       const argsId = part.argsMessageId?.trim();
       if (argsId) ids.add(argsId);
+    }
+    if (kind === "activity_group") {
+      for (const approval of item.approvals ?? []) {
+        const parentId = approval.parentMessageId?.trim();
+        if (parentId && !proseKeys?.has(parentId)) ids.add(parentId);
+        const resultId = approval.call?.resultMessageId?.trim();
+        if (resultId) ids.add(resultId);
+      }
+      for (const fold of item.folds ?? []) {
+        for (const step of fold.steps) {
+          const msgId = step.messageId?.trim();
+          if (msgId) ids.add(msgId);
+        }
+      }
     }
     return Math.max(1, ids.size, workEntries);
   }

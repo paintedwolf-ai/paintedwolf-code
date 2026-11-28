@@ -153,10 +153,17 @@ describe("retained transcript attachment", () => {
     ), host);
     try {
       await Promise.resolve();
-      viewport.disclosures.setUserOpen(transcriptDisclosureKey.activitySpan("a-call-1:call-1"), true);
+      viewport.disclosures.setUserOpen(
+        transcriptDisclosureKey.activityGroupActivities("activity-group:a-call-1:call-1"),
+        true,
+      );
       setMessages([...callPair(1, "call-0"), ...callPair(3, "call-1"), ...callPair(5, "call-2")]);
       await Promise.resolve();
-      expect(viewport.disclosures.isOpen(transcriptDisclosureKey.activitySpan("a-call-0:call-0"))).toBe(true);
+      expect(
+        viewport.disclosures.isOpen(
+          transcriptDisclosureKey.activityGroupActivities("activity-group:a-call-0:call-0"),
+        ),
+      ).toBe(true);
     } finally {
       dispose();
       viewport.attachStream(null);

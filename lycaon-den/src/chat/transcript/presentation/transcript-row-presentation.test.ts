@@ -152,4 +152,46 @@ describe("transcript row presentation", () => {
       TRANSCRIPT_ROW_COLLAPSED_PRESENTATION,
     );
   });
+
+  it("estimates collapsed and expanded activity_group sections deterministically", () => {
+    const snap = fileEditPreviewFixture({ path: "a.go", before: "", after: "pkg\n" });
+    const child = tool("a1:c1");
+    const group: Extract<TranscriptItem, { kind: "activity_group" }> = {
+      kind: "activity_group",
+      key: "activity-group:a1:c1",
+      sectionOrder: ["activities", "approvals", "files"],
+      headline: "editing files",
+      anchorMessageId: "a1",
+      approvals: [
+        { kind: "checkpoint", key: "checkpoint:cp1", parentMessageId: "a1", meta: { checkpoint_id: "cp1", kind: "tool_approval", status: "approved" } },
+        { kind: "checkpoint", key: "checkpoint:cp2", parentMessageId: "a1", meta: { checkpoint_id: "cp2", kind: "tool_approval", status: "rejected" } },
+      ],
+      folds: [
+        { path: "a.go", key: "activity-group:a1:c1\0a.go", net: snap, steps: [{ key: "a1:c1:0", snapshot: snap, tool: "write" }] },
+      ],
+      entries: [{ kind: "tool", part: child.part }],
+    };
+
+    const open = new Set<TranscriptDisclosureKey>();
+    const isOpen = (key: TranscriptDisclosureKey) => open.has(key);
+    expect(transcriptRowPresentation(group, isOpen)).toBe(TRANSCRIPT_ROW_COLLAPSED_PRESENTATION);
+    expect(transcriptRowPresentationEstimate(group, isOpen)).toBe(112);
+
+    const oneSection = { ...group, sectionOrder: ["activities" as const], approvals: [], folds: [] };
+    const twoSections = { ...group, sectionOrder: ["activities" as const, "files" as const], approvals: [] };
+    expect(transcriptRowPresentationEstimate(oneSection, isOpen)).toBe(38);
+    expect(transcriptRowPresentationEstimate(twoSections, isOpen)).toBe(75);
+
+    open.add(disclosure.activityGroupFiles(group.key));
+    open.add(disclosure.activityGroupActivities(group.key));
+    open.add(disclosure.tool("a1:c1"));
+    expect(transcriptRowPresentation(group, isOpen)).toBe(
+      JSON.stringify([
+        disclosure.activityGroupFiles(group.key),
+        disclosure.activityGroupActivities(group.key),
+        disclosure.tool("a1:c1"),
+      ]),
+    );
+    expect(transcriptRowPresentationEstimate(group, isOpen)).toBeGreaterThan(500);
+  });
 });

@@ -1,3 +1,4 @@
+import { createSignal } from "solid-js";
 import { matchInRoot } from "../../../find/find-match.ts";
 import {
   parseTranscriptDisclosureKey,
@@ -13,6 +14,15 @@ import type {
   TranscriptRevealTarget,
 } from "./transcript-reveal-target.ts";
 import { transcriptToolTarget } from "../projection/transcript-item-anchors.ts";
+
+type PinnedRevealTool = {
+  sessionId: string;
+  toolCallId: string;
+  path?: string;
+};
+
+const [pinnedTool, setPinnedTool] = createSignal<PinnedRevealTool | null>(null);
+export const pinnedRevealTool = pinnedTool;
 
 const DEFAULT_TIMEOUT_MS = 6000;
 
@@ -41,7 +51,7 @@ function revealElement(
   anchor: TranscriptRevealAnchor,
 ): HTMLElement | null {
   if (anchor.chicklet === "tool") {
-    return transcriptToolTarget(root, anchor.anchorId);
+    return transcriptToolTarget(root, anchor.anchorId, anchor.path);
   }
   const row = messageRow(root, anchor.anchorId);
   if (!row || anchor.chicklet === "message") return row;
@@ -138,7 +148,7 @@ function highlightMatchInRow(
 function waitForRevealController(sessionId: string, timeoutMs: number): Promise<TranscriptViewportController | null> {
   const current = transcriptViewportForSession(sessionId);
   if (current) return Promise.resolve(current);
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const observer = new MutationObserver(() => {
       const controller = transcriptViewportForSession(sessionId);
       if (!controller) return;
@@ -167,35 +177,79 @@ export async function revealChicklet(
     : transcriptViewportForSession(target.sessionId);
   if (!controller || opts.isCurrent?.() === false) return false;
   const controllerStillTargetsSession = () =>
-    opts.isCurrent?.() !== false && controller.sessionId() === target.sessionId &&
+    opts.isCurrent?.() !== false &&
+    controller.sessionId() === target.sessionId &&
     transcriptViewportForSession(target.sessionId) === controller;
 
-  if (!(await controller.revealAnchor(anchor, { align: "start" }))) return false;
-  if (!controllerStillTargetsSession()) return false;
-  const element = await waitForRevealElement(
+  const pinToken = anchor.chicklet === "tool"
+    ? { sessionId: target.sessionId, toolCallId: anchor.anchorId.trim(), path: anchor.path }
+    : null;
+  if (pinToken) setPinnedTool(pinToken);
+  const clearPin = () => {
+    if (pinToken && pinnedTool() === pinToken) setPinnedTool(null);
+  };
+
+  if (!(await controller.revealAnchor(anchor, { align: "start" }))) {
+    clearPin();
+    return false;
+  }
+  if (!controllerStillTargetsSession()) {
+    clearPin();
+    return false;
+  }
+  let element = await waitForRevealElement(
     container,
     anchor,
     opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
   );
-  if (!element || !controllerStillTargetsSession()) return false;
+  if (!element || !controllerStillTargetsSession()) {
+    clearPin();
+    return false;
+  }
 
-  controller.setNavigationDisclosures(disclosureKeys(element));
+  const applyDisclosures = (el: HTMLElement) => {
+    const keys = disclosureKeys(el);
+    controller.setNavigationDisclosures(keys);
+    if (anchor.persistExpansion) {
+      for (const key of keys) controller.disclosures.setUserOpen(key, true);
+    }
+  };
+  applyDisclosures(element);
   await nextPaint();
   if (!controllerStillTargetsSession()) {
+    clearPin();
     controller.clearNavigationDisclosures();
     return false;
+  }
+
+  if (anchor.chicklet === "tool") {
+    const root = typeof container === "function" ? container() : container;
+    const inner = root ? revealElement(root, anchor) : null;
+    if (inner && inner !== element) {
+      element = inner;
+      applyDisclosures(element);
+      await nextPaint();
+      if (!controllerStillTargetsSession()) {
+        clearPin();
+        controller.clearNavigationDisclosures();
+        return false;
+      }
+    }
   }
 
   flashRevealTarget(element);
   const row = element.closest<HTMLElement>("[data-msg-id]") ?? element;
   if (!highlightMatchInRow(controller, row, anchor.matchText)) {
     controller.ensureVisible(element, { align: "start", smooth: true });
-    setTimeout(
-      () => controller.clearNavigationDisclosures(),
-      REVEAL_FLASH_MS,
-    );
+    setTimeout(() => {
+      clearPin();
+      controller.clearNavigationDisclosures();
+    }, REVEAL_FLASH_MS);
   } else {
-    bindRevealHighlightCleanup(() => controller.clearNavigationDisclosures());
+    bindRevealHighlightCleanup(() => {
+      clearPin();
+      controller.clearNavigationDisclosures();
+    });
   }
   if (!element.matches("button, a, input, select, textarea, [tabindex]")) {
     element.tabIndex = -1;

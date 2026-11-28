@@ -4,7 +4,7 @@ import { transcriptRowSeams, transcriptSeamBelow } from "./transcript-row-seams.
 
 const messages = ["user", "pending_user", "assistant", "fallback"] as const;
 const cards = ["draft", "workflow_feedback", "workflow_explain", "progress_complete", "progress_update",
-  "tool", "activity_span", "worker_group", "worker_file_edit", "file_edit", "blueprint_card",
+  "tool", "activity_group", "activity_span", "worker_group", "worker_file_edit", "file_edit", "blueprint_card",
   "checkpoint", "workflow_boundary", "turn_tail"] as const;
 type Kind = DisplayTranscriptItem["kind"];
 const row = (kind: Kind, key: string) => ({ kind, key });

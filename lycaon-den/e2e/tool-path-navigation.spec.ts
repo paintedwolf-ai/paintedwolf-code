@@ -160,11 +160,13 @@ modelIndependentWebE2e(`command activities contain long text at narrow card widt
   const count = header.locator(".den-activity-span-count");
   if (width === "12rem") await expect(count).toBeHidden();
   else await expect(count).toBeVisible();
-  const title = await header.locator(".den-activity-span-name").boundingBox();
+  const chip = await header.locator(".den-activity-span-chip").boundingBox();
   const bounds = await header.boundingBox();
   const line = await sequence.boundingBox();
   expect(line!.height).toBeGreaterThan(0);
-  expect(line!.y).toBeGreaterThanOrEqual(title!.y + title!.height);
+  expect(line!.x).toBeGreaterThanOrEqual(chip!.x + chip!.width);
+  expect(line!.y).toBeGreaterThanOrEqual(bounds!.y);
+  expect(line!.y + line!.height).toBeLessThanOrEqual(bounds!.y + bounds!.height);
   expect(line!.x + line!.width).toBeLessThanOrEqual(bounds!.x + bounds!.width);
   if (mixed) {
    expect(await sequence.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(width === "12rem");

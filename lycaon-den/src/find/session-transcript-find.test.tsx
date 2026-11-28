@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
+import type { Message } from "../api/types.ts";
 import { ChatSpanBlocks } from "../components/transcript/transcript-viewport-test-harness.tsx";
+import { messagesToTranscriptItems } from "../chat/transcript/projection/transcript-items.ts";
+import { fileEditPreviewFixture } from "../test/file-edit-fixture.ts";
 import {
   findController,
   findNext,
@@ -74,5 +77,128 @@ describe("session transcript findable adapter", () => {
 
     fireEvent.click(screen.getByTestId("find-bar-close"));
     expect(document.querySelectorAll(`span[${FIND_MARK_ATTR}="1"]`)).toHaveLength(0);
+  });
+
+  it("discovers matches inside closed Approvals and Files edited sections of an activity group and cleans up temporary disclosures", async () => {
+    const messages: Message[] = [
+      {
+        id: "a-find",
+        ord: 1,
+        role: "assistant",
+        origin: "model",
+        authority: "none",
+        trust_tier: "trusted",
+        content: "",
+        tool_calls: [
+          { id: "call-1", name: "command", args: { command: "run gate-one" } },
+          { id: "call-2", name: "command", args: { command: "check secondary" } },
+        ],
+        created_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: "r-find-1",
+        ord: 2,
+        role: "tool",
+        origin: "tool",
+        authority: "none",
+        trust_tier: "untrusted",
+        content: "{}",
+        tool_result: {
+          assistant_message_id: "a-find",
+          tool_call_id: "call-1",
+          tool: "command",
+          content: "{}",
+          outcome: "completed",
+          checkpoint_decision: {
+            checkpoint_id: "cp-find-1",
+            kind: "tool_approval",
+            status: "approved",
+            tool: "command",
+            subject: "APPROVAL_ONLY_OMEGA",
+            grant_title: "Allow once",
+          },
+          file_edit_previews: [
+            fileEditPreviewFixture({ path: "src/mod_a.ts", before: "a\n", after: "b\n" }),
+            fileEditPreviewFixture({ path: "src/mod_b.ts", before: "a\n", after: "b\n" }),
+            fileEditPreviewFixture({
+              path: "src/DIFF_ONLY_OMEGA.ts",
+              before: "const oldVal = 1;\n",
+              after: "const nextVal = 2;\n",
+            }),
+          ],
+        },
+        created_at: "2026-01-01T00:00:01Z",
+      },
+      {
+        id: "r-find-2",
+        ord: 3,
+        role: "tool",
+        origin: "tool",
+        authority: "none",
+        trust_tier: "untrusted",
+        content: "denied",
+        tool_result: {
+          assistant_message_id: "a-find",
+          tool_call_id: "call-2",
+          tool: "command",
+          content: "denied",
+          outcome: "rejected",
+          checkpoint_decision: {
+            checkpoint_id: "cp-find-2",
+            kind: "tool_approval",
+            status: "rejected",
+            tool: "command",
+            subject: "secondary",
+          },
+        },
+        created_at: "2026-01-01T00:00:02Z",
+      },
+    ];
+    const blocks = [
+      {
+        kind: "run" as const,
+        runId: "ambient",
+        ambientSpan: true,
+        items: messagesToTranscriptItems(messages, { layout: "chat" }),
+      },
+    ];
+
+    const { container } = render(() => (
+      <>
+        <FindBar />
+        <ChatSpanBlocks
+          blocks={blocks}
+          sessionId="s-find-stack"
+          messages={messages}
+          workers={[]}
+          visibleTurnActive={false}
+        />
+      </>
+    ));
+
+    expect(await screen.findByTestId("message-stream")).toBeTruthy();
+    const approvalsToggle = container.querySelector<HTMLButtonElement>('[data-testid="activity-group-approvals-toggle"]');
+    const diffToggle = container.querySelector<HTMLButtonElement>('[data-testid="diff-group"] button.den-transcript-disclosure-toggle');
+    expect(approvalsToggle?.getAttribute("aria-expanded")).toBe("false");
+    expect(diffToggle?.getAttribute("aria-expanded")).toBe("false");
+
+    openFind();
+    setFindQuery("APPROVAL_ONLY_OMEGA");
+    expect(findController.matches().length).toBeGreaterThanOrEqual(1);
+    expect(approvalsToggle?.getAttribute("aria-expanded")).toBe("false");
+    findNext();
+    expect(approvalsToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(diffToggle?.getAttribute("aria-expanded")).toBe("false");
+
+    setFindQuery("DIFF_ONLY_OMEGA");
+    expect(findController.matches().length).toBe(1);
+    findNext();
+    expect(diffToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(approvalsToggle?.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(screen.getByTestId("find-bar-close"));
+    expect(document.querySelectorAll(`span[${FIND_MARK_ATTR}="1"]`)).toHaveLength(0);
+    expect(approvalsToggle?.getAttribute("aria-expanded")).toBe("false");
+    expect(diffToggle?.getAttribute("aria-expanded")).toBe("false");
   });
 });

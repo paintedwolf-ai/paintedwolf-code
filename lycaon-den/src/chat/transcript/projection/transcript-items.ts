@@ -5,6 +5,8 @@ import { hasLiveCommandActivities } from "../../tool/command-activity-live.ts";
 import { noteToolCallShownInFlight, PROGRAM_ACTIVITY_TOOLS, shouldOmitToolPartFromTranscript, wasToolCallShownInFlight } from "../../tool/tool-transcript-visibility.ts";
 import { foldFileEdits } from "../../file-edit/file-edit-fold.ts";
 import { omitIndexWarmingFromTranscript, projectActivitySpans } from "../../tool/activity-span-model.ts";
+import { projectActivityGroups } from "./activity-group-projection.ts";
+import { buildTranscriptOrder, sortItemsInOrder } from "./transcript-item-order.ts";
 import { shouldShowIndexWarmingInTranscript } from "./index-warming-copy.ts";
 import type { TranscriptLayout } from "../layout/transcript-layout.ts";
 import { toolPartFromCall, toolPartStableId } from "../../tool/tool-part-model.ts";
@@ -144,7 +146,8 @@ function appendToolResultRow(
       kind: "checkpoint",
       key: `checkpoint:${decision.checkpoint_id}`,
       parentMessageId: assistantMessageId,
-      call: { tool: toolName, index: Math.max(callIndex, 0), resultMessageId: msg.id },
+      call: { tool: toolName, index: Math.max(callIndex, 0), resultMessageId: msg.id, toolCallId },
+      toolCallId,
       meta: enrichCheckpointDecision(decision, call, msg.tool_result),
     });
   }
@@ -164,14 +167,26 @@ function applyVerboseTranscriptVisibility(
   return visible;
 }
 
-/** Apply visibility, then project raw activity into spans. */
-
+/** Apply visibility, then project raw activity into chat groups or worker spans. */
 export function finalizeTranscriptItems(
   items: readonly RawTranscriptItem[],
   opts?: TranscriptBuildOptions,
 ): DisplayTranscriptItem[] {
-  const visible = applyVerboseTranscriptVisibility(items, opts ?? {});
-  return projectActivitySpans(visible, { layout: opts?.layout, verboseMode: opts?.verboseMode });
+  const layout = opts?.layout ?? "chat";
+  let visible = applyVerboseTranscriptVisibility(items, opts ?? {});
+  if (layout === "worker") {
+    return projectActivitySpans(visible, { layout, verboseMode: opts?.verboseMode });
+  }
+  let order = opts?.order;
+  if (!order && opts?.messages) {
+    order = buildTranscriptOrder(opts.messages, { layout, verboseMode: opts.verboseMode });
+    visible = sortItemsInOrder(visible, order);
+  }
+  return projectActivityGroups(visible, {
+    verboseMode: opts?.verboseMode,
+    messages: opts?.messages,
+    order,
+  });
 }
 
 /** Pair tool results with assistant calls by durable parent and call identity. */

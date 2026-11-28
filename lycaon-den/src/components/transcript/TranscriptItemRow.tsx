@@ -18,6 +18,7 @@ import { ProgressSnapshot } from "./ProgressSnapshot.tsx";
 import { TranscriptTimeMarker, TranscriptUnreadMarker, TurnTail } from "./TranscriptTimeRows.tsx";
 import { TurnWalkCard } from "./TurnWalkCard.tsx";
 import { type MessageRecoveryHandlers, UserBubble } from "./UserBubble.tsx";
+import { ActivityGroupCard } from "./activity-group/ActivityGroupCard.tsx";
 import {
   WorkerTranscriptMessageRow,
   ActivityToolEntry,
@@ -25,6 +26,12 @@ import {
   WorkerGroupRow,
   FileEditFolds,
 } from "./WorkerTranscriptRows.tsx";
+
+function activityGroupItem(
+  item: DisplayTranscriptItem,
+): Extract<DisplayTranscriptItem, { kind: "activity_group" }> | null {
+  return item.kind === "activity_group" ? item : null;
+}
 
 function messageBubbleItem(
   item: DisplayTranscriptItem,
@@ -351,7 +358,25 @@ export function TranscriptItemRow(props: {
           />
         )}
       </Match>
-      <Match when={activitySpanItem(item())}>
+      <Match when={layout() === "chat" ? activityGroupItem(item()) : null}>
+        {(group) => (
+          <ActivityGroupCard
+            item={group()}
+            taskMatches={props.taskMatches()}
+            sessionWorkers={props.workers}
+            appStore={props.checkpointAppStore}
+            messages={props.messages}
+            workerTranscripts={props.workerTranscripts}
+            onOpenWorker={props.onOpenWorker}
+            sessionId={props.sessionId}
+            projectId={props.projectId}
+            rootRefs={props.rootRefs}
+            branchJobId={props.branchJobId}
+            checkpointClient={props.checkpointClient}
+          />
+        )}
+      </Match>
+      <Match when={layout() === "worker" ? activitySpanItem(item()) : null}>
         {(span) => (
           <ActivitySpanRow
             item={span()}
@@ -382,7 +407,7 @@ export function TranscriptItemRow(props: {
           />
         )}
       </Match>
-      <Match when={fileEditItem(item())}>
+      <Match when={layout() === "worker" ? fileEditItem(item()) : null}>
         {(editItem) => (
           <FileEditFolds
             folds={editItem().folds}
@@ -495,7 +520,7 @@ export function TranscriptItemRow(props: {
           );
         }}
       </Match>
-      <Match when={checkpointItem(item())} keyed>
+      <Match when={layout() === "worker" ? checkpointItem(item()) : null} keyed>
         {(checkpoint) => (
           <CheckpointDecisionChicklet
             projectId={props.projectId}

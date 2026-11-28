@@ -313,36 +313,48 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
     });
   }
   const rows = transcriptMessages(base);
-  const leadKeyBefore = `${base[60]!.id}:call-boundary-2`;
-  const leadKeyAfter = `${base[56]!.id}:call-boundary-0`;
+  const leadEntryKey = `${base[60]!.id}:call-boundary-2`;
+  const leadKeyBefore = `activity-group:${leadEntryKey}`;
+  const leadKeyAfter = `activity-group:${base[56]!.id}:call-boundary-0`;
 
   const olderPage = (url: URL) =>
     url.pathname.endsWith(`/v1/sessions/${sessionId}/messages`) && url.searchParams.has("before_message_id");
-  let releaseOlder = () => {};
-  let olderHeld = false;
+  let readyToScroll = false;
+  let released = false;
+  const releases: (() => void)[] = [];
   let markOlderHeld!: () => void;
   const olderRequested = new Promise<void>((resolve) => { markOlderHeld = resolve; });
   await page.route(olderPage, async (route: Route) => {
-    if (olderHeld) return route.continue();
-    olderHeld = true;
+    if (!readyToScroll) {
+      await route.abort();
+      return;
+    }
+    if (released) {
+      await route.continue();
+      return;
+    }
     markOlderHeld();
-    await new Promise<void>((release) => { releaseOlder = release; });
-    await route.continue();
+    await new Promise<void>((release) => { releases.push(release); });
+    await route.continue().catch(() => {});
   });
 
   await apiSeedSessionTranscript(page.request, sessionId, rows);
   await page.reload();
   await expect(liveChatStage(page).getByText("Step 160.", { exact: true })).toBeVisible({ timeout: 30_000 });
+  readyToScroll = true;
 
   const spanRow = scroller(page).locator(`.transcript-viewport-row[data-msg-id="${leadKeyBefore}"]`);
-  // Each wheel waits for the transcript to settle, so visibility is read from a resting layout.
-  while (!(await spanRow.isVisible())) await wheelTranscript(page, -1_500);
+  // Step inside viewport height so the top row enters view without a runway seek.
+  for (let step = 0; step < 40 && !(await spanRow.isVisible()); step++) {
+    await wheelTranscript(page, -400);
+  }
+  await expect(spanRow).toBeVisible();
   await olderRequested;
   const spanCard = spanRow.getByTestId("activity-span-card");
   await spanCard.locator(":scope > .den-transcript-disclosure-header").click();
   await expect(spanCard).toHaveAttribute("data-expanded", "true");
   await expect(spanCard).not.toHaveAttribute("data-animating", "true");
-  const entry = scroller(page).locator(`[data-activity-entry-key="${leadKeyBefore}"]`);
+  const entry = scroller(page).locator(`[data-activity-entry-key="${leadEntryKey}"]`);
   await expect(entry).toBeVisible();
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
@@ -351,7 +363,8 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
     return el.getBoundingClientRect().top - host.getBoundingClientRect().top;
   });
   const response = page.waitForResponse((res) => res.url().includes(`/v1/sessions/${sessionId}/messages`) && res.url().includes("before_message_id="));
-  releaseOlder();
+  released = true;
+  for (const release of releases) release();
   await response;
 
   const mergedSpan = scroller(page).locator(`.transcript-viewport-row[data-msg-id="${leadKeyAfter}"] [data-testid="activity-span-card"]`);

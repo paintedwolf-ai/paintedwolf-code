@@ -112,7 +112,7 @@ function leaves(items: readonly DisplayTranscriptItem[], messages: readonly Mess
   };
   const out: Leaf[] = [];
   for (const item of items) {
-    if (item.kind === "activity_span") {
+    if (item.kind === "activity_span" || item.kind === "activity_group") {
       for (const entry of item.entries) {
         if (entry.kind === "tool") out.push({ key: entry.part.id, kind: "call", step: entry.part.assistantMessageId });
       }

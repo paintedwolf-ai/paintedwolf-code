@@ -1,4 +1,4 @@
-import type { MessageContentPart, CheckpointDecisionMeta, IndexWarmingMeta, CitationGrounding, NavigationReference, BlueprintMeta, ProgressChange, ProgressStep, TurnLoad } from "../../../api/types.ts";
+import type { Message, MessageContentPart, CheckpointDecisionMeta, IndexWarmingMeta, CitationGrounding, NavigationReference, BlueprintMeta, ProgressChange, ProgressStep, TurnLoad } from "../../../api/types.ts";
 import type { PendingSend } from "../../send/pending-sends.ts";
 import type { FileEditFold } from "../../file-edit/file-edit-fold.ts";
 import type { TranscriptLayout } from "../layout/transcript-layout.ts";
@@ -23,6 +23,30 @@ export type ActivitySpanEntry =
 export function activitySpanEntryKey(entry: ActivitySpanEntry): string {
   return entry.kind === "tool" ? entry.part.id : entry.key;
 }
+
+export type ActivityGroupSection = "activities" | "approvals" | "files";
+
+export type ActivityGroupApproval = {
+  kind: "checkpoint";
+  key: string;
+  parentMessageId: string;
+  call?: { tool: string; index: number; resultMessageId?: string; toolCallId?: string };
+  toolCallId?: string;
+  meta: CheckpointDecisionMeta;
+};
+
+export type ActivityGroupItem = {
+  kind: "activity_group";
+  key: string;
+  /** Non-empty sections ordered by canonical first-visibility key. */
+  sectionOrder: ActivityGroupSection[];
+  approvals: ActivityGroupApproval[];
+  folds: FileEditFold[];
+  filesOmitted?: number;
+  headline: string;
+  entries: ActivitySpanEntry[];
+  anchorMessageId: string;
+};
 
 export type TranscriptItem =
   | {
@@ -92,6 +116,7 @@ export type TranscriptItem =
       key: string;
       row: TurnLoadRow;
     }
+  | ActivityGroupItem
   | {
       kind: "activity_span";
       key: string;
@@ -134,7 +159,10 @@ export type TranscriptItem =
       key: string;
       parentMessageId: string;
       /** The call it decides for, when this transcript holds it; the row follows that call's. */
-      call?: { tool: string; index: number; resultMessageId?: string };
+      call?: { tool: string; index: number; resultMessageId?: string; toolCallId?: string };
+      toolCallId?: string;
+      /** True when anchored from a delegated worker session rather than coordinator calls. */
+      childSession?: boolean;
       meta: CheckpointDecisionMeta;
     }
   | {
@@ -185,7 +213,7 @@ export type TranscriptTimeItem =
 
 export type RawTranscriptItem = Exclude<
   TranscriptItem,
-  { kind: "activity_span" | "worker_group" | "file_edit" | "pending_user" } | TranscriptTimeItem
+  { kind: "activity_group" | "activity_span" | "worker_group" | "file_edit" | "pending_user" } | TranscriptTimeItem
 >;
 
 export type DisplayTranscriptItem = Exclude<
@@ -201,4 +229,8 @@ export type TranscriptBuildOptions = {
   layout?: TranscriptLayout;
   /** Decision-engine receipts keyed by the user message that opened their turn. */
   turnLoads?: Readonly<Record<string, readonly TurnLoad[]>>;
+  /** Backing messages for ordinal and call resolution during projection. */
+  messages?: readonly Message[];
+  /** Precomputed transcript order when raw items are already sorted. */
+  order?: import("./transcript-item-order.ts").TranscriptOrder;
 };

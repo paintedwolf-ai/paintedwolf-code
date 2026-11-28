@@ -123,8 +123,8 @@ describe("index_warming transcript visibility", () => {
 
     const verbose = createTranscriptDisplayProjector()(messages, undefined, { verboseMode: true })[0]!;
     expect(verbose).toHaveLength(1);
-    expect(verbose[0]?.kind).toBe("activity_span");
-    if (verbose[0]?.kind === "activity_span") {
+    expect(verbose[0]?.kind).toBe("activity_group");
+    if (verbose[0]?.kind === "activity_group") {
       expect(verbose[0].entries.map((e) => e.kind)).toEqual([
         "tool",
         "index_warming",
@@ -133,6 +133,6 @@ describe("index_warming transcript visibility", () => {
 
     const quiet = createTranscriptDisplayProjector()(messages, undefined, { verboseMode: false })[0]!;
     expect(quiet).toHaveLength(1);
-    expect(quiet[0]?.kind).toBe("activity_span");
+    expect(quiet[0]?.kind).toBe("activity_group");
   });
 });

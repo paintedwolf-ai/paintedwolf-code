@@ -1,4 +1,5 @@
 import type { Message, SessionTranscriptPage } from "../../../api/types.ts";
+import { fileEditPreviewFixture } from "../../../test/file-edit-fixture.ts";
 import type { DisplayTranscriptItem } from "../projection/transcript-item-model.ts";
 import {
   DEFAULT_TRANSCRIPT_PAGE_LIMIT,
@@ -195,14 +196,18 @@ export function createByteBoundedTranscriptSession(
       const height = run * (22 + ((current.ord ?? 1) % 7));
       heightsByKey.set(key, height);
       items.push({
-        kind: "activity_span",
+        kind: "activity_group",
         key,
-        label: `activity (${run})`,
+        sectionOrder: ["activities"],
+        approvals: [],
+        folds: [],
+        headline: `activity (${run})`,
         entries: spanRows.map((row) => ({
           kind: "index_warming" as const,
           key: row.id,
           meta: { trigger: "turn" },
         })),
+        anchorMessageId: spanRows[0]!.id,
       });
       i += run;
     }
@@ -220,4 +225,59 @@ export function createByteBoundedTranscriptSession(
     projectItems,
     measuredRowHeight,
   };
+}
+
+/** Single-interval turn with hundreds of commands and dozens of file edits. */
+export function heavyActivityGroupMessages(
+  commandCount = 300,
+  fileCount = 45,
+): Message[] {
+  const assistantId = "a-heavy";
+  const assistant: Message = {
+    id: assistantId,
+    role: "assistant",
+    origin: "model",
+    authority: "none",
+    trust_tier: "trusted",
+    content: "",
+    ord: 1,
+    seq: 1,
+    created_at: "2026-01-01T00:00:00Z",
+    tool_calls: Array.from({ length: commandCount }, (_, i) => ({
+      id: `call-${i}`,
+      name: "command",
+      args: { command: `step ${i}` },
+    })),
+  };
+  const results: Message[] = Array.from({ length: commandCount }, (_, i) => ({
+    id: `res-${i}`,
+    role: "tool",
+    origin: "tool",
+    authority: "none",
+    trust_tier: "untrusted",
+    content: "{}",
+    ord: 2 + i,
+    seq: 2 + i,
+    created_at: "2026-01-01T00:00:01Z",
+    tool_result: {
+      tool_call_id: `call-${i}`,
+      tool: "command",
+      assistant_message_id: assistantId,
+      shown_in_flight: true,
+      content: "{}",
+      outcome: "completed",
+      ...(i < fileCount
+        ? {
+            file_edit_previews: [
+              fileEditPreviewFixture({
+                path: `pkg/mod_${i}.go`,
+                before: "package mod\n",
+                after: `package mod // ${i}\n`,
+              }),
+            ],
+          }
+        : {}),
+    },
+  }));
+  return [assistant, ...results];
 }

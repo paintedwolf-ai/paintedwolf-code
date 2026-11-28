@@ -8,7 +8,7 @@ import type { RawTranscriptItem, TranscriptBuildOptions, TranscriptItem } from "
  * Where rows sit. A row keeps the place it is first drawn at: the ordinal of the message that
  * first shows it, then its tier within that ordinal.
  */
-type TranscriptOrder = {
+export type TranscriptOrder = {
   ordById: ReadonlyMap<string, number>;
   /** Notes read above the calls of the assistant row they follow. */
   noteIds: ReadonlySet<string>;
@@ -38,7 +38,7 @@ export function buildTranscriptOrder(
 }
 
 /** Order within one ordinal. */
-const TIER = {
+export const TIER = {
   /** The message's own row. */
   row: 0,
   note: 1,
@@ -56,15 +56,15 @@ export type TranscriptOrdSortKey = {
   index: number;
 };
 
-const UNORDERED = Number.MAX_SAFE_INTEGER;
+export const UNORDERED = Number.MAX_SAFE_INTEGER;
 
 /** A call's row sits at its assistant row when drawn while running, otherwise at its result. */
-function callOrd(part: ToolPartView, order: TranscriptOrder): number {
+export function callOrd(part: ToolPartView, order: TranscriptOrder): number {
   const id = part.shownInFlight || order.drawsWhileRunning(part.tool) ? part.assistantMessageId : part.messageId;
   return order.ordById.get(id) ?? UNORDERED;
 }
 
-function transcriptItemOrdKey(item: RawTranscriptItem, order: TranscriptOrder): TranscriptOrdSortKey {
+export function transcriptItemOrdKey(item: RawTranscriptItem, order: TranscriptOrder): TranscriptOrdSortKey {
   const at = (id: string, tier: number, index = 0): TranscriptOrdSortKey => ({
     ord: order.ordById.get(id) ?? UNORDERED,
     tier,
@@ -111,6 +111,28 @@ export function transcriptRowMessageIds(item: TranscriptItem): string[] {
       return [item.part.messageId];
     case "checkpoint":
       return [item.parentMessageId];
+    case "activity_group": {
+      const ids = new Set<string>();
+      if (item.anchorMessageId) ids.add(item.anchorMessageId);
+      for (const entry of item.entries) {
+        if (entry.kind === "tool") {
+          ids.add(entry.part.messageId);
+          ids.add(entry.part.assistantMessageId);
+        } else if (entry.kind === "index_warming") {
+          ids.add(entry.key);
+        }
+      }
+      for (const approval of item.approvals) {
+        ids.add(approval.parentMessageId);
+        if (approval.call?.resultMessageId) ids.add(approval.call.resultMessageId);
+      }
+      for (const fold of item.folds) {
+        for (const step of fold.steps) {
+          if (step.messageId) ids.add(step.messageId);
+        }
+      }
+      return [...ids];
+    }
     case "activity_span":
       return activitySpanToolParts(item.entries).map((part) => part.messageId);
     case "worker_group":

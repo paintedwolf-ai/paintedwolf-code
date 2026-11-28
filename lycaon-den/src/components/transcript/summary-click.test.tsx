@@ -13,6 +13,7 @@ import { openSourceLocation } from "../../platform/navigation/open-source.ts";
 import { CheckpointDecisionChicklet } from "../checkpoint/CheckpointDecisionChicklet.tsx";
 import { ProgressSnapshot } from "./ProgressSnapshot.tsx";
 import { TranscriptDiffGroup } from "./TranscriptDiffGroup.tsx";
+import { ActivityGroupApprovals } from "./activity-group/ActivityGroupApprovals.tsx";
 
 const client = stubFilesClient();
 vi.mock("../../platform/connection/app-connection.ts", async (original) => ({
@@ -98,6 +99,34 @@ const CARDS: Card[] = [
           />
         ),
         "checkpoint-decision-chicklet",
+      ),
+  },
+  {
+    name: "a multi-approval section with an inline pending review action",
+    mount: () =>
+      mountCard(
+        () => (
+          <ActivityGroupApprovals
+            groupKey="activity-group:a1:c1"
+            sessionId="s1"
+            projectId="project"
+            approvals={[
+              {
+                kind: "checkpoint",
+                key: "checkpoint:cp-1",
+                parentMessageId: "a1",
+                meta: { checkpoint_id: "cp-1", kind: "tool_approval", status: "pending", tool: "command", subject: "git push" },
+              },
+              {
+                kind: "checkpoint",
+                key: "checkpoint:cp-2",
+                parentMessageId: "a1",
+                meta: { checkpoint_id: "cp-2", kind: "tool_approval", status: "approved", tool: "grep" },
+              },
+            ]}
+          />
+        ),
+        "activity-group-approvals",
       ),
   },
   { name: "a diff group", mount: () => mountCard(diffGroup, "diff-group") },

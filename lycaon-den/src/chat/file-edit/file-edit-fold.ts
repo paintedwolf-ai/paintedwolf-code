@@ -41,6 +41,21 @@ export function fileEditPathKey(snapshot: Pick<FileEditPreview, "root_id" | "pat
 export function foldFileEdits(
   steps: readonly FileEditStep[],
 ): FileEditFold[] {
+  return foldStepsByPath(steps, (_pathKey, pathSteps) => pathSteps[0]!.key);
+}
+
+/** Group interval writes by path under a group-scoped key that survives earlier-write prepends. */
+export function foldIntervalFileEdits(
+  groupKey: string,
+  steps: readonly FileEditStep[],
+): FileEditFold[] {
+  return foldStepsByPath(steps, (pathKey) => `${groupKey}\0${pathKey}`);
+}
+
+function foldStepsByPath(
+  steps: readonly FileEditStep[],
+  keyFor: (pathKey: string, pathSteps: readonly FileEditStep[]) => string,
+): FileEditFold[] {
   const order: string[] = [];
   const byPath = new Map<string, FileEditStep[]>();
   for (const step of steps) {
@@ -53,21 +68,22 @@ export function foldFileEdits(
     order.push(path);
     byPath.set(path, [step]);
   }
-  return order.map((path) => {
-    const pathSteps = byPath.get(path) ?? [];
-    return foldFromSteps(pathSteps[0]!.snapshot.path, pathSteps);
+  return order.map((pathKey) => {
+    const pathSteps = byPath.get(pathKey) ?? [];
+    return foldFromSteps(pathSteps[0]!.snapshot.path, pathSteps, keyFor(pathKey, pathSteps));
   });
 }
 
 function foldFromSteps(
   path: string,
   steps: readonly FileEditStep[],
+  key = steps[0]!.key,
 ): FileEditFold {
   const first = steps[0]!;
   const last = steps[steps.length - 1]!;
   return {
     path,
-    key: first.key,
+    key,
     net: {
       ...last.snapshot,
       path,

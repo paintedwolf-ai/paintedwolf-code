@@ -2,11 +2,11 @@ import { expect, type Page } from "@playwright/test";
 import { apiJson, apiPostPrompt, bootstrapChatSession, liveChatStage, settledChatSessionId, webE2e } from "../helpers.ts";
 import { manualHarnessTools } from "../manual-harness-tools.ts";
 
-const CARDS = '[data-testid="progress-strip-created"], [data-testid="activity-span-card"]';
+const CARDS = '[data-testid="progress-strip-created"], [data-testid="activity-group-card"]';
 
-type CardWidth = { card: string; width: number; row: number; cap: number };
+type CardWidth = { card: string; open: boolean; width: number; row: number; cap: number };
 
-/** Measures each closed card on screen with the row it sits in and the card width cap. */
+/** Measures each card on screen with its open state, row width, and width cap. */
 async function cardWidths(page: Page): Promise<CardWidth[]> {
   return page.evaluate((selector) => {
     const cap = 32 * Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
@@ -14,6 +14,7 @@ async function cardWidths(page: Page): Promise<CardWidth[]> {
       .filter((card) => card.getBoundingClientRect().width > 0)
       .map((card) => ({
         card: card.dataset.testid!,
+        open: card.querySelector('[data-expanded="true"]') !== null,
         width: card.getBoundingClientRect().width,
         row: card.closest<HTMLElement>(".transcript-viewport-row")!.getBoundingClientRect().width,
         cap,
@@ -22,7 +23,7 @@ async function cardWidths(page: Page): Promise<CardWidth[]> {
 }
 
 function expectBothCards(widths: CardWidth[]) {
-  expect(widths.map((entry) => entry.card).sort()).toEqual(["activity-span-card", "progress-strip-created"]);
+  expect([...new Set(widths.map((entry) => entry.card))].sort()).toEqual(["activity-group-card", "progress-strip-created"]);
 }
 
 webE2e("a progress box is as wide as an activity group in single and split view", async ({ page, request }) => {
@@ -40,9 +41,10 @@ webE2e("a progress box is as wide as an activity group in single and split view"
 
     const chat = liveChatStage(page);
     await expect(chat.getByTestId("progress-strip-created")).toBeVisible();
-    await expect(chat.getByTestId("activity-span-card")).toBeVisible();
+    const group = chat.getByTestId("activity-span-card").last();
+    await expect(group).toBeVisible();
 
-    // A wide chat column: both cards stop at the cap.
+    // A wide chat column: closed cards stop at the cap.
     const single = await cardWidths(page);
     expectBothCards(single);
     for (const entry of single) {
@@ -50,13 +52,12 @@ webE2e("a progress box is as wide as an activity group in single and split view"
       expect(entry.width, entry.card).toBeCloseTo(entry.cap, 0);
     }
 
-    // An open group takes the full row; the progress box beside it stays a card.
-    const group = chat.getByTestId("activity-span-card");
+    // An open group takes the full row; closed cards beside it stay capped.
     await group.locator("> .den-transcript-disclosure-toggle").click();
     await expect(group).toHaveAttribute("data-expanded", "true");
     const open = await cardWidths(page);
     for (const entry of open) {
-      const expected = entry.card === "activity-span-card" ? entry.row : entry.cap;
+      const expected = entry.open ? entry.row : entry.cap;
       expect(entry.width, entry.card).toBeCloseTo(expected, 0);
     }
     await group.locator("> .den-transcript-disclosure-toggle").click();

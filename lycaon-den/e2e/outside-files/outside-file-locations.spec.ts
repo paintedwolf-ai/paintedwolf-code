@@ -123,6 +123,8 @@ webE2e("An outside text edit opens the recorded file from chat", async ({ page, 
     await expect(disclosure).toHaveAttribute("aria-expanded", "true");
     await disclosure.click();
     await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    await disclosure.click();
+    await expect(disclosure).toHaveAttribute("aria-expanded", "true");
     const link = card.getByTestId("source-path-link");
     await expect(link).toBeVisible();
     const open = page.waitForResponse((response) => {

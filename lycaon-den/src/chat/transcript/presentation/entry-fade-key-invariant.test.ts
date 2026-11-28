@@ -61,6 +61,22 @@ function collectItemKeys(messages: readonly Message[]): Set<string> {
       keys.add(workerGroupEnterFadeKey(item.key));
       for (const part of item.parts) keys.add(part.id);
     }
+    if (item.kind === "activity_group") {
+      keys.add(activitySpanEnterFadeKey(item.key));
+      if (item.entries[0]) {
+        keys.add(activitySpanEnterFadeKey(item.entries[0].kind === "tool" ? item.entries[0].part.id : item.entries[0].key));
+      }
+      for (const entry of item.entries) {
+        if (entry.kind === "tool") {
+          keys.add(entry.part.id);
+          keys.add(`${entry.part.id}:file-edit`);
+        } else {
+          keys.add(entry.key);
+        }
+      }
+      for (const approval of item.approvals) keys.add(approval.key);
+      for (const fold of item.folds) keys.add(fold.key);
+    }
     if (item.kind === "activity_span") {
       keys.add(activitySpanEnterFadeKey(item.key));
       for (const entry of item.entries) {

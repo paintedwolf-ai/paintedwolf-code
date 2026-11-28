@@ -2,7 +2,11 @@ import { cancelScrollportFrame, scheduleScrollportFrame } from "../../platform/s
 import type { TranscriptRevealAnchor } from "../transcript/presentation/transcript-reveal-target.ts";
 import type { TranscriptDisclosureKey } from "../transcript/presentation/transcript-disclosure-key.ts";
 import type { TranscriptItem } from "../transcript/projection/transcript-item-model.ts";
-import { transcriptItemContainsMessage, transcriptItemToolCallIds } from "../transcript/projection/transcript-item-anchors.ts";
+import {
+  transcriptItemActionToolCallIds,
+  transcriptItemContainsMessage,
+  transcriptItemToolCallIds,
+} from "../transcript/projection/transcript-item-anchors.ts";
 import { commitStreamScroll, streamTailOffset } from "./stream-scroll.ts";
 type EnsureVisibleOptions = { align?: "start" | "center" | "end" | "nearest"; smooth?: boolean };
 type RevealOptions = { align?: "start" | "center" | "end" | "auto"; signal?: AbortSignal; element?: () => HTMLElement | null };
@@ -29,8 +33,7 @@ function resolveRevealIndex(
   if (!id) return -1;
   if (anchor.chicklet === "tool") {
     const actionIndex = items.findIndex((item) =>
-      item.kind !== "file_edit" && item.kind !== "worker_file_edit" &&
-      transcriptItemToolCallIds(item)?.split(" ").includes(id),
+      transcriptItemActionToolCallIds(item)?.split(" ").includes(id),
     );
     if (actionIndex >= 0) return actionIndex;
     return items.findIndex((item) => transcriptItemToolCallIds(item)?.split(" ").includes(id));

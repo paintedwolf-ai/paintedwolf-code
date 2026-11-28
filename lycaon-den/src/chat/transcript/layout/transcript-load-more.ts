@@ -174,11 +174,14 @@ function revealAnchorResident(
   const id = anchor.anchorId.trim();
   if (!id) return false;
   if (anchor.chicklet === "tool") {
-    return messages.some(
-      (msg) =>
-        (msg.tool_calls ?? []).some((call) => (call.id ?? "").trim() === id) ||
-        (msg.tool_result?.tool_call_id ?? "").trim() === id,
+    const hasCall = messages.some((msg) =>
+      (msg.tool_calls ?? []).some((call) => (call.id ?? "").trim() === id),
     );
+    if (hasCall) return true;
+    const resultMsg = messages.find((msg) => (msg.tool_result?.tool_call_id ?? "").trim() === id);
+    if (!resultMsg) return false;
+    const parentId = resultMsg.tool_result?.assistant_message_id?.trim();
+    return !parentId || messages.some((msg) => msg.id === parentId);
   }
   return messages.some((msg) => msg.id === id);
 }
@@ -287,6 +290,7 @@ export function createTranscriptPaging(
     appStore: AppStore;
     sessionId: () => string | undefined;
     geometry?: () => TranscriptHistoryGeometry | null;
+    following?: () => boolean;
   },
 ): { dispose(): void; readerInput(direction: "up" | "down"): void } {
   let inFlight = false;
@@ -313,7 +317,7 @@ export function createTranscriptPaging(
       opts.appStore.actions.trimTranscriptPages();
     }
     if (layout) {
-      const inBeforeRunway = bottom < layout.residentStartPx - reach;
+      const inBeforeRunway = !opts.following?.() && bottom < layout.residentStartPx - reach;
       const inAfterRunway = top > layout.residentEndPx + reach;
       if (inBeforeRunway || inAfterRunway) {
         const ord = ordInRunway(top, layout, streamTarget.scrollHeight);

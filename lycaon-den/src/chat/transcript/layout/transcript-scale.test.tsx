@@ -1,7 +1,9 @@
 import { DEFAULT_TRANSCRIPT_SPACING } from "./transcript-spacing.ts";
 import { describe, expect, it } from "vitest";
-import { render } from "@solidjs/testing-library";
+import { fireEvent, render } from "@solidjs/testing-library";
 import { SessionTranscript } from "../../../components/transcript/transcript-viewport-test-harness.tsx";
+import { transcriptRowOrdSpan } from "../history/transcript-runway.ts";
+import { createTranscriptDisplayProjector } from "../projection/transcript-display-projection.ts";
 import {
   DEFAULT_TRANSCRIPT_PAGE_LIMIT,
   TRANSCRIPT_RESIDENT_ORD_BUDGET,
@@ -10,8 +12,9 @@ import {
 import {
   TRANSCRIPT_VIRTUAL_BUFFER_VIEWPORTS,
   TRANSCRIPT_VIRTUAL_MIN_BUFFER_ROWS,
+  transcriptRowEstimatedHeight,
 } from "./transcript-virtualizer.ts";
-import { sparseWindowForSessionLength } from "./transcript-scale-fixture.ts";
+import { heavyActivityGroupMessages, sparseWindowForSessionLength } from "./transcript-scale-fixture.ts";
 
 const TRANSCRIPT_RESIDENT_MESSAGE_BUDGET =
   TRANSCRIPT_RESIDENT_ORD_BUDGET + DEFAULT_TRANSCRIPT_PAGE_LIMIT;
@@ -59,5 +62,34 @@ describe("transcript scale bounds", () => {
     expect(mounted).toBeLessThanOrEqual(max);
     expect(mounted).toBeLessThan(messages.length);
     expect(container.querySelector("[data-deferred]")).toBeNull();
+  });
+
+  it("bounds expanded 300-command 45-file activity groups, preserves proportional ord span, and avoids collapsed estimate misses", () => {
+    const heavy = heavyActivityGroupMessages(300, 45);
+    const items = createTranscriptDisplayProjector()(heavy, undefined, { layout: "chat" })[0] ?? [];
+    const group = items.find((item) => item.kind === "activity_group");
+    expect(group?.kind).toBe("activity_group");
+    expect(transcriptRowOrdSpan(group!)).toBeGreaterThanOrEqual(300);
+
+    // Collapsed 1-, 2-, and 3-section groups match the 30px row + 1px seam + 10px card/gap geometry within <24px.
+    expect(transcriptRowEstimatedHeight({ kind: "activity_group", sectionOrder: ["activities"] })).toBe(40);
+    expect(transcriptRowEstimatedHeight({ kind: "activity_group", sectionOrder: ["activities", "files"] })).toBe(71);
+    expect(transcriptRowEstimatedHeight({ kind: "activity_group", sectionOrder: ["activities", "approvals", "files"] })).toBe(102);
+
+    const { container } = render(() => (
+      <SessionTranscript layout="chat" sessionId="scale-heavy-group" messages={heavy} />
+    ));
+    const card = container.querySelector<HTMLElement>('[data-testid="activity-group-card"]');
+    expect(card).toBeTruthy();
+
+    fireEvent.click(card!.querySelector<HTMLButtonElement>('[data-testid="activity-span-card"] button')!);
+    fireEvent.click(card!.querySelector<HTMLButtonElement>('[data-testid="diff-group"] button.den-transcript-disclosure-toggle')!);
+
+    const mountedActivities = card!.querySelectorAll(".den-activity-span-item").length;
+    const mountedDiffs = card!.querySelectorAll('[data-testid="file-edit-diff"]').length;
+    expect(mountedActivities).toBeGreaterThan(0);
+    expect(mountedActivities).toBeLessThan(300);
+    expect(mountedDiffs).toBeGreaterThan(0);
+    expect(mountedDiffs).toBeLessThan(45);
   });
 });

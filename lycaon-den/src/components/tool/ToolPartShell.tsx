@@ -208,6 +208,7 @@ export function ToolPartShell(props: Props) {
       data-testid={props.testId ?? "tool-part-card"}
       data-tool={props.part.tool}
       data-command-activity={props.part.commandActivity ? "" : undefined}
+      data-activity-mutate-path={props.part.commandActivity?.fact.subject || undefined}
       data-tool-call-id={props.part.toolCallId}
       data-tool-part-id={props.part.id}
       data-invocation-owner={props.part.invocation?.owner}

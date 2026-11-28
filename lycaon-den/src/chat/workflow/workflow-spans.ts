@@ -185,12 +185,20 @@ function pendingCheckpointItems(
   messages: readonly Message[],
   workers: readonly WorkerTask[],
   checkpoints: readonly PendingCheckpoint[],
+  parentSessionId?: string,
 ): RawTranscriptItem[] {
   const items: RawTranscriptItem[] = [];
+  const normalizedParentSession = parentSessionId?.trim() ?? "";
   for (const checkpoint of checkpoints) {
     const toolCallId = checkpointToolCallId(checkpoint);
+    const childAnchor = parentAnchorForChildCheckpoint(messages, workers, checkpoint);
+    const childSession =
+      childAnchor !== undefined ||
+      (normalizedParentSession !== "" &&
+        checkpoint.sessionId.trim() !== "" &&
+        checkpoint.sessionId.trim() !== normalizedParentSession);
     let anchor =
-      parentAnchorForChildCheckpoint(messages, workers, checkpoint) ??
+      childAnchor ??
       (toolCallId
         ? assistantAnchorForToolCall(messages, toolCallId)
         : undefined);
@@ -204,12 +212,16 @@ function pendingCheckpointItems(
     const index = toolCallId
       ? (anchor.tool_calls ?? []).findIndex((c) => c.id?.trim() === toolCallId)
       : -1;
-    const call = anchor.tool_calls?.[index];
+    const call = index >= 0 ? anchor.tool_calls?.[index] : undefined;
     items.push({
       kind: "checkpoint",
       key: `checkpoint:${checkpoint.checkpointId}`,
       parentMessageId: anchor.id,
-      ...(call?.name ? { call: { tool: call.name, index } } : {}),
+      ...(call?.name
+        ? { call: { tool: call.name, index, ...(toolCallId ? { toolCallId } : {}) } }
+        : {}),
+      ...(toolCallId ? { toolCallId } : {}),
+      ...(childSession ? { childSession: true } : {}),
       meta: checkpointMetaFromPending(checkpoint, call),
     });
   }
@@ -222,6 +234,7 @@ function injectCheckpointItemsIntoSpanBlocks(
   workers: readonly WorkerTask[],
   checkpoints: readonly PendingCheckpoint[],
   verboseMode: boolean,
+  parentSessionId?: string,
 ): ChatSpanBlock[] {
   if (blocks.length === 0) return [...blocks];
   const existingKeys = new Set(
@@ -229,7 +242,7 @@ function injectCheckpointItemsIntoSpanBlocks(
   );
   const additionsByRun = new Map<string, RawTranscriptItem[]>();
   const unassignedAdditions: RawTranscriptItem[] = [];
-  const candidates = pendingCheckpointItems(messages, workers, checkpoints);
+  const candidates = pendingCheckpointItems(messages, workers, checkpoints, parentSessionId);
   const blockRunIds = new Set(blocks.map((b) => b.runId));
 
   for (const item of candidates) {
@@ -288,6 +301,7 @@ export function buildChatTranscriptBlocks(
       options.workers ?? [],
       options.pendingCheckpoints ?? [],
       options.verboseMode ?? false,
+      options.sessionId,
     );
   }
   // Empty buckets have no span chrome.

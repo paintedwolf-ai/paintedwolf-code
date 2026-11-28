@@ -139,7 +139,7 @@ webE2e(`transcript disclosures animate without moving the viewport${expandedSpac
 
   const activity = page.getByTestId("activity-span-card").last();
   const summary = activity.locator(":scope > .den-transcript-disclosure-header");
-  const caret = summary.locator(".den-tool-chicklet-caret");
+  const caret = summary.locator(".den-disclosure-chevron");
   const stream = page
     .locator(
       `${LIVE_CHAT_STAGE_SELECTOR} .den-chat-stream`,

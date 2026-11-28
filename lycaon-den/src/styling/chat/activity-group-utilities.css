@@ -1,0 +1,366 @@
+@utility den-activity-group {
+  container-type: inline-size;
+  container-name: den-activity-group;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius);
+  background: var(--den-surface);
+  overflow: hidden;
+
+  &:has([data-expanded="true"]:not([data-closing])) {
+    align-self: stretch;
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+@utility den-activity-group-section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+
+  & + & {
+    border-top: 1px solid color-mix(in srgb, var(--den-line) 75%, transparent);
+  }
+
+  & > * > .den-transcript-disclosure-header {
+    font-size: var(--text-den-compact);
+  }
+
+  & .den-transcript-disclosure-header .den-disclosure-chevron {
+    font-size: var(--text-den-label);
+    margin-inline-start: auto;
+  }
+
+  & [data-expanded="true"]:not([data-closing]) > .den-transcript-disclosure-header .den-disclosure-chevron {
+    transform: rotate(45deg) translate(-1px, -1px);
+  }
+
+  & .den-decision__label,
+  & .den-transcript-link-summary-label {
+    font-size: var(--text-den-compact);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--den-text);
+  }
+}
+
+@utility den-activity-span--section {
+  && {
+    width: 100%;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+
+  && > .den-transcript-disclosure-header {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    height: var(--den-transcript-card-row-h);
+    min-height: var(--den-transcript-card-row-h);
+  }
+}
+
+@utility den-activity-span-chicklet--section {
+  && {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    height: 100%;
+    min-height: 0;
+    padding: 0 var(--den-transcript-card-inset-x);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  && > .den-activity-span-chip {
+    flex: 0 1 auto;
+  }
+
+}
+
+@utility den-activity-span-hint--inline {
+  && {
+    flex: 1 1 0%;
+    grid-column: auto;
+    width: auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@utility den-diff-group--section {
+  && {
+    width: 100%;
+    margin: 0;
+    border-radius: 0;
+    background: transparent;
+    overflow: hidden;
+  }
+
+  && > .den-transcript-link-summary {
+    width: 100%;
+    height: var(--den-transcript-card-row-h);
+    min-height: var(--den-transcript-card-row-h);
+    padding: 0 var(--den-transcript-card-inset-x);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  && > .den-transcript-link-summary .den-transcript-link-summary-label {
+    flex: 0 0 auto;
+  }
+
+  && > .den-transcript-link-summary .den-diff-group-stat,
+  && > .den-transcript-link-summary .den-diff-group-writes {
+    flex: 0 0 auto;
+  }
+
+}
+
+@utility den-diff-group-hint {
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-den-compact);
+  font-weight: 400;
+  color: var(--den-text-muted);
+}
+
+@utility den-checkpoint-decision-chicklet--section {
+  && {
+    width: 100%;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+
+  && > .den-checkpoint-decision-chicklet__summary {
+    height: var(--den-transcript-card-row-h);
+    min-height: var(--den-transcript-card-row-h);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  && > .den-checkpoint-decision-chicklet__summary > .den-checkpoint-decision-chicklet__summary-main {
+    height: 100%;
+  }
+}
+
+@utility den-checkpoint-decision-chicklet--row {
+  && {
+    width: 100%;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+
+  && + && {
+    border-top: 1px solid color-mix(in srgb, var(--den-line) 45%, transparent);
+  }
+
+  && > .den-checkpoint-decision-chicklet__summary {
+    height: var(--den-transcript-card-row-h);
+    min-height: var(--den-transcript-card-row-h);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  && > .den-checkpoint-decision-chicklet__summary > .den-checkpoint-decision-chicklet__summary-main {
+    height: 100%;
+  }
+}
+
+@utility den-activity-group-approvals {
+  && {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  && > .den-checkpoint-decision-chicklet__summary {
+    height: var(--den-transcript-card-row-h);
+    min-height: var(--den-transcript-card-row-h);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  && > .den-checkpoint-decision-chicklet__summary > .den-checkpoint-decision-chicklet__summary-main {
+    height: 100%;
+  }
+
+}
+
+@utility den-activity-group-approvals__resolved {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+@utility den-activity-group-approvals__count {
+  flex: 0 0 auto;
+  font-size: var(--text-den-compact);
+  font-weight: 600;
+  color: var(--den-text);
+}
+
+@utility den-activity-group-approvals__hint {
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-den-compact);
+  font-weight: 400;
+  color: var(--den-text-muted);
+}
+
+@utility den-activity-group-approvals__list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+@utility den-file-edit-diff-footer-links {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
+}
+
+@utility den-file-edit-diff-activity-btn {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--den-text-muted);
+  font: inherit;
+  font-size: var(--text-den-caption);
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--den-text);
+    text-decoration: underline;
+  }
+}
+
+@utility den-checkpoint-decision-chicklet__activity-btn {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--den-text-muted);
+  font: inherit;
+  font-size: var(--text-den-caption);
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--den-text);
+    text-decoration: underline;
+  }
+}
+
+/* Rows inside an open section hang off a guide line; these rules outrank the shared row styles. */
+.den-activity-group-section :is(.den-activity-span-items, .den-activity-group-approvals__list, .den-diff-group-list) {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0 8px 8px 17px;
+  padding: 2px 0 2px 8px;
+  border-left: 1px solid var(--den-line);
+}
+
+.den-activity-group-section > [data-expanded="true"] > .den-transcript-disclosure-header {
+  border-bottom-color: transparent;
+}
+
+.den-activity-group-section > * > .den-transcript-disclosure-header .den-activity-span-count {
+  font-size: var(--text-den-compact);
+  font-weight: 500;
+  color: var(--den-text-muted);
+}
+
+.den-activity-group-section .den-tool-part[data-accordion-row],
+.den-activity-group-section .den-diff-group-list .den-file-edit-diff[data-chrome="row"],
+.den-activity-group-section .den-activity-group-approvals__list .den-checkpoint-decision-chicklet--row {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.den-activity-group-section .den-tool-part[data-accordion-row][data-expanded="true"],
+.den-activity-group-section .den-diff-group-list .den-file-edit-diff[data-chrome="row"][data-expanded="true"],
+.den-activity-group-section .den-activity-group-approvals__list .den-checkpoint-decision-chicklet--row[data-expanded="true"] {
+  margin-bottom: 6px;
+}
+
+.den-activity-group-section .den-tool-part[data-accordion-row] .den-tool-part-chicklet,
+.den-activity-group-section .den-diff-group-list .den-file-edit-diff[data-chrome="row"] > .den-file-edit-diff-header,
+.den-activity-group-section .den-activity-group-approvals__list .den-checkpoint-decision-chicklet--row > .den-checkpoint-decision-chicklet__summary {
+  padding-inline: 8px;
+  border-bottom-color: transparent;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.den-activity-group-section .den-tool-part[data-accordion-row]:is(:hover, [data-expanded="true"]) .den-tool-part-chicklet,
+.den-activity-group-section .den-diff-group-list .den-file-edit-diff[data-chrome="row"]:is(:hover, [data-expanded="true"]) > .den-file-edit-diff-header,
+.den-activity-group-section .den-activity-group-approvals__list .den-checkpoint-decision-chicklet--row:is(:hover, [data-expanded="true"]) > .den-checkpoint-decision-chicklet__summary {
+  background: color-mix(in srgb, var(--den-text) 5%, transparent);
+}
+
+.den-activity-group-section .den-tool-part[data-accordion-row][data-expanded="true"] > .den-tool-part-body {
+  padding-inline: 8px;
+}
+
+.den-activity-group-section .den-activity-span-items .den-tool-part-name,
+.den-activity-group-section .den-activity-group-approvals__list .den-decision__label {
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* Row marks stay faint until their row is hovered or open. */
+.den-activity-group-section :is(.den-activity-span-items, .den-activity-group-approvals__list, .den-diff-group-list) .den-row-mark {
+  opacity: 0.45;
+}
+
+.den-activity-group-section :is(.den-tool-part, .den-file-edit-diff, .den-checkpoint-decision-chicklet--row):hover > :first-child .den-row-mark,
+.den-activity-group-section :is(.den-tool-part, .den-file-edit-diff, .den-checkpoint-decision-chicklet--row)[data-expanded="true"] > :is(.den-transcript-disclosure-header, .den-file-edit-diff-header) .den-row-mark {
+  opacity: 1;
+}
+
+.den-activity-group-section .den-checkpoint-decision-chicklet--row > .den-transcript-disclosure-header .den-row-mark {
+  margin-inline-start: auto;
+}
+
+.den-activity-group-section .den-checkpoint-decision-chicklet--row[data-expanded="true"] > .den-transcript-disclosure-header .den-row-mark::after {
+  transform: scaleY(0);
+}
+
+/* A finished row's dot carries its status; the text stays for assistive technology. */
+.den-activity-group-section .den-tool-part[data-accordion-row][data-status="done"]:not([data-expanded="true"]) .den-tool-part-outcome {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

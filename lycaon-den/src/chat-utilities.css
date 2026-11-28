@@ -1,4 +1,5 @@
 @import "./styling/chat/transcript-layout-utilities.css";
+@import "./styling/chat/activity-group-utilities.css";
 @import "./styling/chat/composer-layout-utilities.css";
 @import "./styling/chat/attachments-utilities.css";
 @import "./styling/chat/suggestions-utilities.css";

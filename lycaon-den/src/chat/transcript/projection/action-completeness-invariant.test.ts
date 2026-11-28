@@ -97,7 +97,7 @@ function toolCards(
         ? item.parts
             .filter((part) => !tool || part.tool === tool)
             .map((part) => ({ kind: "tool" as const, part }))
-      : item.kind === "activity_span"
+      : item.kind === "activity_span" || item.kind === "activity_group"
       ? item.entries.filter(
           (
             entry,
@@ -236,7 +236,9 @@ describe("action completeness invariant", () => {
     for (const status of resolvedCheckpointStatuses()) {
       const msgs = toolWithCheckpointDecision(status);
       const items = createTranscriptDisplayProjector()(msgs, undefined, { verboseMode: true })[0]!;
-      const checkpoints = items.filter((i) => i.kind === "checkpoint");
+      const checkpoints = items.flatMap((i) =>
+        i.kind === "checkpoint" ? [i] : i.kind === "activity_group" ? i.approvals : [],
+      );
       expect(checkpoints, status).toHaveLength(1);
       expect(checkpoints[0]!.key).toBe("checkpoint:chk-1");
       const toolRows = msgs.filter((m) => m.role === "tool");

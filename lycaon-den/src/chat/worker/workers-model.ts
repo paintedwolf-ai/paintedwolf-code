@@ -707,7 +707,7 @@ export function taskWorkerMatchesForTranscript(
 				? [{ key: item.key, part: item.part }]
 				: item.kind === "worker_group"
 					? item.parts.map((part) => ({ key: part.id, part }))
-				: item.kind === "activity_span"
+				: item.kind === "activity_span" || item.kind === "activity_group"
 					? item.entries.flatMap((entry) =>
 							entry.kind === "tool"
 								? [{ key: entry.part.id, part: entry.part }]

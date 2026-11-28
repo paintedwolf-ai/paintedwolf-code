@@ -56,6 +56,15 @@ function rowFacts(item: TranscriptItem): string {
       return `${item.text}\u0001${item.draftStatus ?? ""}\u0001${item.draftVersionCount ?? 0}`;
     case "tool":
       return toolPartFacts(item.part);
+    case "activity_group":
+      return [
+        item.sectionOrder.join(","),
+        item.headline,
+        ...item.approvals.map((approval) => `${approval.key}\u0001${JSON.stringify(approval.meta)}`),
+        ...item.folds.map((fold) => `${fold.key}\u0001${fold.path}\u0001${fold.steps.length}\u0001${fold.net.after_sha256}\u0001${fold.net.added ?? ""}/${fold.net.removed ?? ""}`),
+        String(item.filesOmitted ?? 0),
+        ...item.entries.map(entryFacts),
+      ].join("\u0002");
     case "activity_span":
       return `${item.label}\u0002${item.entries.map(entryFacts).join("\u0002")}`;
     case "worker_group":

@@ -422,6 +422,79 @@ describe("createTranscriptPaging", () => {
     expect(listSessionMessages).toHaveBeenCalledTimes(1);
   });
 
+  it("pages older history for a tool anchor until its assistant parent or tool call is resident", async () => {
+    const appStore = createAppStore();
+    const orphanResult: Message = {
+      id: "res-1",
+      role: "tool",
+      origin: "tool",
+      authority: "none",
+      trust_tier: "untrusted",
+      content: "patched",
+      created_at: "2026-01-01T00:00:02Z",
+      ord: 50,
+      tool_result: {
+        tool_call_id: "call_1",
+        content: "patched",
+        assistant_message_id: "asst-1",
+      },
+    };
+    const unparentedResult: Message = {
+      ...orphanResult,
+      id: "res-2",
+      ord: 51,
+      tool_result: {
+        tool_call_id: "call_unparented",
+        content: "patched",
+      },
+    };
+    appStore.actions.installTranscriptBaseline("s-tool-anchor", [orphanResult, unparentedResult], 52, {
+      hasMoreBefore: true,
+      hasMoreAfter: false,
+    });
+    const parentAssistant: Message = {
+      id: "asst-1",
+      role: "assistant",
+      origin: "model",
+      authority: "none",
+      trust_tier: "trusted",
+      content: "",
+      created_at: "2026-01-01T00:00:01Z",
+      ord: 49,
+      tool_calls: [{ id: "call_1", name: "edit_file", args: { path: "a.ts" } }],
+    };
+    const listSessionMessages = vi.fn().mockResolvedValue({
+      messages: [parentAssistant],
+      turn_clocks: {},
+      turn_loads: {},
+    });
+    const client = stubClient({ listSessionMessages });
+
+    await expect(
+      ensureTranscriptRevealAnchorLoaded(client, appStore, "s-tool-anchor", {
+        chicklet: "tool",
+        anchorId: "call_unparented",
+      }),
+    ).resolves.toBe(true);
+    expect(listSessionMessages).not.toHaveBeenCalled();
+
+    await expect(
+      ensureTranscriptRevealAnchorLoaded(client, appStore, "s-tool-anchor", {
+        chicklet: "tool",
+        anchorId: "call_1",
+      }),
+    ).resolves.toBe(true);
+    expect(listSessionMessages).toHaveBeenCalledTimes(1);
+
+    await expect(
+      ensureTranscriptRevealAnchorLoaded(client, appStore, "s-tool-anchor", {
+        chicklet: "tool",
+        anchorId: "call_1",
+      }),
+    ).resolves.toBe(true);
+    expect(listSessionMessages).toHaveBeenCalledTimes(1);
+  });
+
   it("baselines an older page so scrolling back does not replay entry fades", () => {
     clearTranscriptEntryMemory("s-older");
     const appStore = createAppStore();

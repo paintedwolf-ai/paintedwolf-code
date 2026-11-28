@@ -5,7 +5,7 @@ import type { CommandActivity, CommandProgramReceipt } from "../../api/types.ts"
 import type { ActivitySpanEntry } from "../../chat/transcript/projection/transcript-item-model.ts";
 import { disclosureToggle, isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
 import { ToolPartShell } from "./ToolPartShell.tsx";
-import { CommandActivitySpan } from "./CommandActivitySpan.tsx";
+import { CommandActivitySpan, formatActivityCountChip } from "./CommandActivitySpan.tsx";
 import { ToolPartCard } from "./ToolPartCard.tsx";
 import { activityDecision, activityFact, activityProgram, activityTool } from "../../test/command-activity-fixtures.ts";
 import { registerOpenFilesSurfaceSink } from "../../platform/navigation/open-files-surface.ts";
@@ -185,4 +185,29 @@ it("keeps independently visible rows when a session's span remounts under a new 
   const remount = render(() => span(() => [first, second], "remount"));
   fireEvent.click(disclosureToggle(remount.getByTestId("activity-span-card")));
   expect(rowKeys(remount.container)).toEqual(["second", "first"]);
+});
+
+it("names the unit of a group section's count", () => {
+  const row = (id: string, tool: string, calls?: string[]): ActivitySpanEntry =>
+    ({
+      kind: "tool",
+      key: id,
+      part: {
+        id,
+        tool,
+        toolCallId: calls?.[0] ?? id,
+        ...(calls ? { commandActivity: { calls: calls.map((toolCallId) => ({ toolCallId })) } } : {}),
+      },
+    }) as unknown as ActivitySpanEntry;
+
+  const commands = [row("r1", "command", ["c1"]), row("r2", "command", ["c2"]), row("r3", "command", ["c3"])];
+  expect(formatActivityCountChip(commands, 0, true)).toBe("3 commands");
+  expect(formatActivityCountChip(commands, 0)).toBe("×3");
+  expect(formatActivityCountChip([...commands, row("w", "wait")], 1, true)).toBe("3 commands · 1 wait");
+  // Rows that split one call or fold several are counted as the rows shown.
+  expect(formatActivityCountChip([row("s1", "command", ["c1"]), row("s2", "command", ["c1"])], 0, true)).toBe("2 actions");
+  expect(formatActivityCountChip([row("f1", "command", ["c1", "c2"]), row("f2", "command", ["c3"])], 0, true)).toBe("2 actions");
+  expect(formatActivityCountChip([row("a", "read"), row("b", "command", ["c9"])], 0, true)).toBe("2 actions");
+  expect(formatActivityCountChip([row("only", "command", ["c1"])], 0, true)).toBeNull();
+  expect(formatActivityCountChip([row("w", "wait")], 1, true)).toBe("1 wait");
 });

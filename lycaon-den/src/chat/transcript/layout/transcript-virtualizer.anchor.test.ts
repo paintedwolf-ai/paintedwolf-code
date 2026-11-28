@@ -97,14 +97,16 @@ describe("createTranscriptVirtualizer lost anchor resolution", () => {
       ]);
       await Promise.resolve();
       expect(shifts.at(-1)).toBe(42);
+      // A stale runway landing is cleared when a regrouped anchor survives via resolveLostAnchor.
+      virtualizer.prepareLanding(0);
       measuredDelta = 90;
       setItems([
         ...users("x", 3),
-        spanItem("call-0", ["call-0", "call-a", "call-b", "call-c"]),
+        spanItem("call-pre", ["call-pre", "call-0", "call-a", "call-b", "call-c"]),
         ...users("after", 20),
       ]);
       await Promise.resolve();
-      expect(shifts.at(-1)).toBe(72);
+      expect(shifts.at(-1)).toBe(72 + 90);
 
       open = false;
       expect(

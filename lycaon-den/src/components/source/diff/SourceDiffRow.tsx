@@ -29,6 +29,7 @@ type Props = {
   reserve?: number;
   /** Transcript identity of this disclosure. */
   disclosureKey?: TranscriptDisclosureKey;
+  onShowActivity?: (target: { toolCallId: string; path: string }) => void;
 };
 
 type ActiveRevision = "net" | number;
@@ -307,18 +308,32 @@ export function SourceDiffRow(props: Props) {
           </div>
 
           <footer class="den-file-edit-diff-footer">
-            <Show when={openable() !== false}>
-              <SourcePathLink
-                label="Open in Files"
-                path={path()}
-                rootId={props.source.rootId(activeIndex())}
-                navigationTarget={navigationTarget() ?? undefined}
-                projectId={props.source.projectId}
-                jobId={props.source.jobId}
-                rootRefs={props.source.rootRefs}
-                chatDestination={props.source.chatDestination}
-              />
-            </Show>
+            <div class="den-file-edit-diff-footer-links">
+              <Show when={openable() !== false}>
+                <SourcePathLink
+                  label="Open in Files"
+                  path={path()}
+                  rootId={props.source.rootId(activeIndex())}
+                  navigationTarget={navigationTarget() ?? undefined}
+                  projectId={props.source.projectId}
+                  jobId={props.source.jobId}
+                  rootRefs={props.source.rootRefs}
+                  chatDestination={props.source.chatDestination}
+                />
+              </Show>
+              <Show when={props.onShowActivity && props.source.activityTarget?.(activeIndex())} keyed>
+                {(target) => (
+                  <button
+                    type="button"
+                    class="den-file-edit-diff-activity-btn"
+                    data-testid="file-edit-show-activity"
+                    onClick={() => props.onShowActivity?.(target)}
+                  >
+                    Show activity
+                  </button>
+                )}
+              </Show>
+            </div>
             <button
               type="button"
               class="den-file-edit-diff-fullscreen-btn den-inset-icon-btn"
