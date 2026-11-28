@@ -292,15 +292,25 @@ class SidecarSessionClient:
         url = f"{self.base_url}{path}"
         data = json.dumps(body).encode("utf-8") if body is not None else None
         req_method = method or ("POST" if data is not None else "GET")
-        req = urllib.request.Request(url, data=data, headers=self._headers(), method=req_method)
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                raw = resp.read().decode("utf-8")
-                return json.loads(raw) if raw.strip() else {}
-        except urllib.error.HTTPError as exc:
-            if missing and exc.code == 404:
-                return None
-            raise
+        max_attempts = 8
+        for attempt in range(max_attempts):
+            req = urllib.request.Request(url, data=data, headers=self._headers(), method=req_method)
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                    raw = resp.read().decode("utf-8")
+                    return json.loads(raw) if raw.strip() else {}
+            except urllib.error.HTTPError as exc:
+                if missing and exc.code == 404:
+                    return None
+                if exc.code == 429 and attempt + 1 < max_attempts:
+                    retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                    try:
+                        delay = float(retry_after) if retry_after else min(10.0, 1.5 * (attempt + 1))
+                    except ValueError:
+                        delay = min(10.0, 1.5 * (attempt + 1))
+                    time.sleep(max(0.5, min(delay, 30.0)))
+                    continue
+                raise
 
     def health(self) -> Any:
         return self.request("/health")
