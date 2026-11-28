@@ -57,13 +57,13 @@ def _slot(
 
 
 G01_SLOTS: tuple[GB07SlotSpec, ...] = (
-    _slot("G01-01-fresh-receipt-unchanged-content", "G01", "Verification receipt counts while content is unchanged", "Unmodified verified file keeps verification receipt fresh.", contract_refs=("G01", "D5")),
-    _slot("G01-02-stale-after-content-edit", "G01", "Editing verified file invalidates receipt", "Modifying content of verified file invalidates prior receipt.", contract_refs=("G01", "D5")),
-    _slot("G01-03-fresh-after-unrelated-file-edit", "G01", "Editing unrelated file preserves receipt freshness", "Editing an unrelated file keeps verified file's receipt fresh.", contract_refs=("G01", "D5")),
-    _slot("G01-04-fresh-after-noop-touch", "G01", "No-op rewrite with identical bytes preserves freshness", "Rewriting identical bytes preserves content-hash freshness.", contract_refs=("G01", "D5")),
-    _slot("G01-05-stale-after-revert-and-reedit", "G01", "Re-editing after verification requires new receipt", "Changing content invalidates prior receipt until re-verified.", contract_refs=("G01", "D5")),
-    _slot("G01-06-stale-after-delete", "G01", "Deleting verified file invalidates receipt", "Deleting verified file invalidates its receipt.", contract_refs=("G01", "D5")),
-    _slot("G01-07-reverify-restores-freshness", "G01", "Re-running verification after edit restores freshness", "Fresh post-edit verification receipt satisfies closeout gate.", contract_refs=("G01", "D5")),
+    _slot("G01-01-fresh-receipt-unchanged-content", "G01", "Verification receipt counts while content is unchanged", "Unmodified verified file keeps verification receipt fresh under required gate and default-session display.", contract_refs=("G01", "D5")),
+    _slot("G01-02-stale-after-content-edit", "G01", "Editing verified file invalidates receipt under required gate and display", "Modifying content of verified file refuses evidence_passed:verify gate and marks default-session verification evidence stale.", contract_refs=("G01", "D5")),
+    _slot("G01-03-fresh-after-unrelated-file-edit", "G01", "Editing unrelated file preserves receipt freshness", "Editing an unrelated file keeps verified file's receipt fresh under required gate and default-session display.", contract_refs=("G01", "D5")),
+    _slot("G01-04-fresh-after-noop-touch", "G01", "No-op rewrite with identical bytes preserves freshness", "Rewriting identical bytes preserves content-hash freshness under required gate and default-session display.", contract_refs=("G01", "D5")),
+    _slot("G01-05-stale-after-revert-and-reedit", "G01", "Re-editing after verification invalidates receipt under required gate and display", "Re-editing verified file refuses evidence_passed:verify gate and marks default-session verification evidence stale.", contract_refs=("G01", "D5")),
+    _slot("G01-06-stale-after-delete", "G01", "Deleting verified file invalidates receipt under required gate and display", "Deleting verified file refuses evidence_passed:verify gate and marks default-session verification evidence stale.", contract_refs=("G01", "D5")),
+    _slot("G01-07-reverify-restores-freshness", "G01", "Re-running verification after edit restores freshness", "Fresh post-edit verification receipt satisfies required gate and shows current in default-session display.", contract_refs=("G01", "D5")),
 )
 
 G02_SLOTS: tuple[GB07SlotSpec, ...] = (

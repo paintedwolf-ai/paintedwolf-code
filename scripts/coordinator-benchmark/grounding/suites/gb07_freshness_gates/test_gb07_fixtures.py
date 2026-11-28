@@ -21,7 +21,10 @@ from grounding.suites.gb07_freshness_gates.full_runner import (
     GB07_EXECUTION_SPECS_BY_SELECTOR,
     INPROCESS_OVERLAYS,
     INPROCESS_SLOTS,
+    _extract_source_checks_from_pending,
     _init_plain_workspace,
+    _install_verify_gate_workflow_overlay,
+    _parse_workflow_advance_result,
     _unwrap_closeout_grounding,
     evaluate_wording_invariance,
     main,
@@ -233,6 +236,50 @@ class TestGB07CatalogAndFixtures(unittest.TestCase):
 
         g03_02 = GB07_EXECUTION_SPECS_BY_SELECTOR["G03-02-open-review-gate-blocks"]
         self.assertIn("SUBMIT_VERDICT_REVIEWER_MISSING", g03_02.expected_codes)
+
+    def test_g01_verify_gate_overlay_and_observation_parsers(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="gb07-wf-") as td:
+            ws = pathlib.Path(td) / "ws"
+            wf_path = _install_verify_gate_workflow_overlay(ws)
+            self.assertTrue(wf_path.is_file())
+            self.assertEqual(
+                wf_path.relative_to(ws).as_posix(),
+                ".paintedwolf/workflows/gb07-verify-gate/workflow.yaml",
+            )
+            body = wf_path.read_text(encoding="utf-8")
+            self.assertIn("evidence_passed:verify", body)
+            self.assertIn("when_gate_met: coordinator", body)
+
+        pending = {
+            "messages": [
+                {"role": "user", "content": "check"},
+                {
+                    "role": "system",
+                    "content": (
+                        "Execution observations.\n"
+                        '{"source_checks":{"checks":[{"command":"echo VERIFY_OK gate.go",'
+                        '"cwd":".","recorded_verdict":"passed","source_match":"different_source",'
+                        '"prior_user_intent":false}],"older_checks_omitted":0,"required_by_workflow":false}}'
+                    ),
+                },
+            ]
+        }
+        sc = _extract_source_checks_from_pending(pending)
+        self.assertIsNotNone(sc)
+        assert sc is not None
+        self.assertEqual(sc["checks"][0]["source_match"], "different_source")
+        self.assertIsNone(_extract_source_checks_from_pending({"messages": [{"role": "user", "content": "hi"}]}))
+
+        adv = _parse_workflow_advance_result(
+            [
+                {
+                    "tool_name": "workflow_advance",
+                    "content": '{"error":"phase_gate_unmet","failed_leaves":["evidence_passed:verify"],"phase":"verify"}',
+                }
+            ]
+        )
+        self.assertEqual(adv["error"], "phase_gate_unmet")
+        self.assertEqual(adv["failed_leaves"], ["evidence_passed:verify"])
 
 
 if __name__ == "__main__":

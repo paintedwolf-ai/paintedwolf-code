@@ -412,6 +412,101 @@ def select_gb07_runs(
     return runs
 
 
+_VERIFY_GATE_WORKFLOW_ID: str = "gb07-verify-gate"
+_VERIFY_GATE_WORKFLOW_VERSION: str = "1.0.0"
+_VERIFY_GATE_WORKFLOW_YAML: str = """id: gb07-verify-gate
+version: 1.0.0
+name: GB07 Verify Gate
+description: Project overlay fixture requiring evidence_passed:verify for G01 freshness testing.
+trigger: /gb07-verify-gate
+request:
+  question: What should be verified?
+initial_posture: build
+phases:
+  - id: check
+    activity_label: Verifying source
+    complete_when: gates_satisfied
+    gates:
+      - evidence_passed:verify
+    advance:
+      when_gate_met: coordinator
+    next: done
+  - id: done
+    activity_label: Done
+    terminal: true
+"""
+
+
+def _install_verify_gate_workflow_overlay(workspace: pathlib.Path) -> pathlib.Path:
+    """Install a test-only `.paintedwolf/workflows/` overlay requiring `evidence_passed:verify`."""
+    wf_path = workspace / ".paintedwolf" / "workflows" / _VERIFY_GATE_WORKFLOW_ID / "workflow.yaml"
+    wf_path.parent.mkdir(parents=True, exist_ok=True)
+    wf_path.write_text(_VERIFY_GATE_WORKFLOW_YAML, encoding="utf-8")
+    return wf_path
+
+
+def _extract_source_checks_from_pending(req: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Extract host-injected `execution_observations.source_checks` from a `/harness/llm/pending` payload."""
+    blobs: list[str] = []
+    sys_prompt = req.get("system")
+    if isinstance(sys_prompt, str) and sys_prompt:
+        blobs.append(sys_prompt)
+    for msg in req.get("messages") or ():
+        if not isinstance(msg, Mapping):
+            continue
+        content = msg.get("content")
+        if isinstance(content, str) and content:
+            blobs.append(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, Mapping) and isinstance(part.get("text"), str):
+                    blobs.append(part["text"])
+
+    decoder = json.JSONDecoder()
+    for blob in reversed(blobs):
+        if '"source_checks"' not in blob:
+            continue
+        idx = 0
+        while True:
+            brace = blob.find("{", idx)
+            if brace == -1:
+                break
+            try:
+                parsed, end = decoder.raw_decode(blob, brace)
+            except ValueError:
+                idx = brace + 1
+                continue
+            if isinstance(parsed, Mapping) and isinstance(parsed.get("source_checks"), Mapping):
+                return dict(parsed["source_checks"])
+            idx = max(brace + 1, end)
+    return None
+
+
+def _parse_workflow_advance_result(tool_results: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Parse the latest `workflow_advance` JSON payload from stored tool results."""
+    for row in reversed(tool_results):
+        content = str(row.get("content") or "")
+        if not content.strip():
+            continue
+        decoder = json.JSONDecoder()
+        idx = 0
+        while True:
+            brace = content.find("{", idx)
+            if brace == -1:
+                break
+            try:
+                parsed, end = decoder.raw_decode(content, brace)
+            except ValueError:
+                idx = brace + 1
+                continue
+            if isinstance(parsed, Mapping) and (
+                "error" in parsed or "run" in parsed or "failed_leaves" in parsed or "already_advanced" in parsed
+            ):
+                return dict(parsed)
+            idx = max(brace + 1, end)
+    return {}
+
+
 def _init_plain_workspace(workspace: pathlib.Path) -> None:
     workspace.mkdir(parents=True, exist_ok=True)
     (workspace / "gate.go").write_text(
@@ -428,8 +523,10 @@ def _init_plain_workspace(workspace: pathlib.Path) -> None:
     )
 
 
-def _init_git_workspace(workspace: pathlib.Path) -> None:
+def _init_git_workspace(workspace: pathlib.Path, *, with_verify_gate_workflow: bool = False) -> None:
     _init_plain_workspace(workspace)
+    if with_verify_gate_workflow:
+        _install_verify_gate_workflow_overlay(workspace)
     for cmd in (
         ["git", "init", "-q"],
         ["git", "add", "."],
@@ -691,6 +788,53 @@ def _dispatch_worker_and_get_child(
     raise TimeoutError(f"Worker child session for {agent_type} never became pending")
 
 
+def _apply_g01_mutation_after_verify(
+    selector: str,
+    *,
+    workspace: pathlib.Path,
+    client: Any,
+    sid: str,
+    pending_after_verify: dict[str, Any],
+    prefix: str,
+) -> tuple[dict[str, Any], str]:
+    """Apply the G01 slot's file mutation strictly AFTER the initial verify command has settled.
+
+    Returns `(next_pending_request, close_text)` where `next_pending_request` is ready to be
+    answered by the caller (e.g. with `workflow_advance` or `close_text`).
+    """
+    gate_path = workspace / "gate.go"
+    original_bytes = gate_path.read_bytes()
+
+    if selector == "G01-01-fresh-receipt-unchanged-content":
+        return pending_after_verify, f"{prefix} gate.go verified [read#1:3].\n[verify: targeted - Verify passes] [command#1]"
+    if selector == "G01-02-stale-after-content-edit":
+        gate_path.write_text("package gate\n\nfunc Verify() bool { return false }\n", encoding="utf-8")
+        return pending_after_verify, f'{prefix} gate.go verified [read#1:3 "return true"].\n[verify: targeted - Verify passes] [command#1]'
+    if selector == "G01-03-fresh-after-unrelated-file-edit":
+        (workspace / "unrelated.go").write_text("package gate\n\nfunc Helper() int { return 99 }\n", encoding="utf-8")
+        return pending_after_verify, f"{prefix} gate.go verified [read#1:3].\n[verify: targeted - Verify passes] [command#1]"
+    if selector == "G01-04-fresh-after-noop-touch":
+        gate_path.write_bytes(original_bytes)
+        return pending_after_verify, f"{prefix} gate.go verified [read#1:3].\n[verify: targeted - Verify passes] [command#1]"
+    if selector == "G01-05-stale-after-revert-and-reedit":
+        gate_path.write_text("package gate\n\nfunc Verify() bool { return false }\n", encoding="utf-8")
+        gate_path.write_bytes(original_bytes)
+        gate_path.write_text("package gate\n\nfunc Verify() bool { return !true }\n", encoding="utf-8")
+        return pending_after_verify, f'{prefix} gate.go verified [read#1:3 "return true"].\n[verify: targeted - Verify passes] [command#1]'
+    if selector == "G01-06-stale-after-delete":
+        gate_path.unlink()
+        return pending_after_verify, f'{prefix} gate.go verified [read#1:3 "return true"].\n[verify: targeted - Verify passes] [command#1]'
+    # G01-07-reverify-restores-freshness: mutate, re-read, and re-verify (using pending_after_verify first)
+    gate_path.write_text("package gate\n\nfunc Verify() bool { return true /* rev2 */ }\n", encoding="utf-8")
+    client.respond(
+        pending_after_verify["id"],
+        tool_calls=[{"id": str(uuid.uuid4()), "name": "command", "args": {"command": "cat -n gate.go"}}],
+    )
+    _answer_tool(client, sid, "command", {"command": "echo VERIFY_OK_REV2 gate.go", "verification": True})
+    req_after_reverify = client.wait_pending(sid, timeout=120.0)
+    return req_after_reverify, f"{prefix} Re-verified gate.go [read#2:3].\n[verify: targeted - Re-verified] [command#2]"
+
+
 def _run_freshness_slot(
     client: Any,
     *,
@@ -700,84 +844,191 @@ def _run_freshness_slot(
     unit: GB07RunUnit,
     trace_log: pathlib.Path | None,
 ) -> dict[str, Any]:
+    """Run G01 freshness under BOTH halves of `docs/grounding.md` line 83 (Decision 074):
+
+    1. Required gate: `.paintedwolf/workflows/gb07-verify-gate/workflow.yaml` requiring
+       `evidence_passed:verify`. Stale receipts must be refused (`phase_gate_unmet`), while
+       fresh/unrelated/re-verified receipts must advance cleanly.
+    2. Default session (display side): no active workflow; closeout execution observations
+       must display `source_match == "different_source"` once verified content changed/deleted
+       and `source_match == "current"` when fresh.
+    """
     selector = unit.spec.selector
     prefix = WORDING_PREFIX[unit.wording]
-    sid = client.create_session(project_id, posture="build")["id"]
-    client.wait_session_ready(sid)
-    before = probe_store_db(sidecar.store_db_path, sid, trace_log_path=trace_log)
-    p = client.send_prompt(sid, f"{prefix} Check verification freshness for {selector}.")
-    submission_id = str(p.get("submission_id") or p.get("id") or "")
+    divergences: list[str] = []
+    observed_codes: set[str] = set()
 
-    # Initial read & verification command
-    _answer_tool(client, sid, "command", {"command": "cat -n gate.go"})
-    _answer_tool(client, sid, "command", {"command": "echo VERIFY_OK gate.go"})
+    # ── Half 1: Required `evidence_passed:verify` workflow gate ──
+    client.request(
+        f"/v1/projects/{project_id}/trust",
+        {"enabled": {"project_settings": True}},
+        method="PATCH",
+    )
+    sid_gate = client.create_session(project_id, posture="build")["id"]
+    client.wait_session_ready(sid_gate)
+    start_body: dict[str, Any] = {
+        "operation_id": str(uuid.uuid4()),
+        "workflow_id": _VERIFY_GATE_WORKFLOW_ID,
+        "workflow_version": _VERIFY_GATE_WORKFLOW_VERSION,
+    }
+    active_resp = client.request(f"/v1/sessions/{sid_gate}/workflow-runs/active", missing=True)
+    active_run = active_resp.get("run") if isinstance(active_resp, Mapping) else None
+    if isinstance(active_run, Mapping) and active_run.get("id") and active_run.get("revision"):
+        start_body["replace_run_id"] = str(active_run["id"])
+        start_body["expected_revision"] = int(active_run["revision"])
+    wf_run = client.request(f"/v1/sessions/{sid_gate}/workflow-runs", start_body)
+    wf_run_id = str(wf_run.get("id") or "")
+    p_gate = client.send_prompt(sid_gate, f"{prefix} Check required verify gate for {selector}.")
+    sub_gate = str(p_gate.get("submission_id") or p_gate.get("id") or "")
 
-    gate_path = workspace / "gate.go"
-    original_bytes = gate_path.read_bytes()
+    _answer_tool(client, sid_gate, "command", {"command": "cat -n gate.go"})
+    _answer_tool(client, sid_gate, "command", {"command": "echo VERIFY_OK gate.go", "verification": True})
+    # Wait for the verify command to finish and persist its receipt BEFORE mutating workspace files.
+    req_gate_after_verify = client.wait_pending(sid_gate, timeout=120.0)
+    req_gate_ready, gate_close_text = _apply_g01_mutation_after_verify(
+        selector,
+        workspace=workspace,
+        client=client,
+        sid=sid_gate,
+        pending_after_verify=req_gate_after_verify,
+        prefix=prefix,
+    )
+    if "workflow_advance" not in (req_gate_ready.get("tools") or []):
+        client.respond(
+            req_gate_ready["id"],
+            tool_calls=[{"id": str(uuid.uuid4()), "name": "request_tools", "args": {"need": "workflow_advance"}}],
+        )
+        req_gate_ready = client.wait_pending(sid_gate, timeout=120.0)
+    client.respond(
+        req_gate_ready["id"],
+        tool_calls=[{"id": str(uuid.uuid4()), "name": "workflow_advance", "args": {}}],
+    )
+    req_gate_close = client.wait_pending(sid_gate, timeout=120.0)
+    # `workflow_advance` has already executed and committed before the next pending LLM request.
+    # Read both the tool result and workflow run state now; an open required gate will keep
+    # nudging the coordinator if we wait for idle, so cancel/exit cleanly after recording.
+    adv_tool_results = _query_tool_results(sidecar.store_db_path, sid_gate, "workflow_advance")
+    adv_res = _parse_workflow_advance_result(adv_tool_results)
+    run_after = client.request(f"/v1/workflow-runs/{wf_run_id}") if wf_run_id else {}
+    if wf_run_id and str(run_after.get("status") or "") not in {"completed", "canceled", "exited"}:
+        with contextlib.suppress(Exception):
+            client.request(
+                f"/v1/workflow-runs/{wf_run_id}/cancel",
+                {"expected_revision": int(run_after.get("revision") or 1), "reason": "gb07 gate check recorded"},
+            )
+    with contextlib.suppress(Exception):
+        client.respond(req_gate_close["id"], content=gate_close_text)
+    failed_leaves = list(adv_res.get("failed_leaves") or ())
+    adv_error = str(adv_res.get("error") or "")
+    if adv_error:
+        observed_codes.add(adv_error)
+    for leaf in failed_leaves:
+        observed_codes.add(str(leaf))
 
-    if selector == "G01-01-fresh-receipt-unchanged-content":
-        close_text = f"{prefix} gate.go verified [read#1:3].\n[verify: targeted - Verify passes] [command#1]"
-        max_repairs = 0
-    elif selector == "G01-02-stale-after-content-edit":
-        gate_path.write_text("package gate\n\nfunc Verify() bool { return false }\n", encoding="utf-8")
-        close_text = f'{prefix} gate.go verified [read#1:3 "return true"].\n[verify: targeted - Verify passes] [command#1]'
-        max_repairs = 2
-    elif selector == "G01-03-fresh-after-unrelated-file-edit":
-        (workspace / "unrelated.go").write_text("package gate\n\nfunc Helper() int { return 99 }\n", encoding="utf-8")
-        close_text = f"{prefix} gate.go verified [read#1:3].\n[verify: targeted - Verify passes] [command#1]"
-        max_repairs = 0
-    elif selector == "G01-04-fresh-after-noop-touch":
-        gate_path.write_bytes(original_bytes)
-        close_text = f"{prefix} gate.go verified [read#1:3].\n[verify: targeted - Verify passes] [command#1]"
-        max_repairs = 0
-    elif selector == "G01-05-stale-after-revert-and-reedit":
-        gate_path.write_text("package gate\n\nfunc Verify() bool { return false }\n", encoding="utf-8")
-        gate_path.write_bytes(original_bytes)
-        gate_path.write_text("package gate\n\nfunc Verify() bool { return !true }\n", encoding="utf-8")
-        close_text = f'{prefix} gate.go verified [read#1:3 "return true"].\n[verify: targeted - Verify passes] [command#1]'
-        max_repairs = 2
-    elif selector == "G01-06-stale-after-delete":
-        gate_path.unlink()
-        close_text = f'{prefix} gate.go verified [read#1:3 "return true"].\n[verify: targeted - Verify passes] [command#1]'
-        max_repairs = 2
-    else:  # G01-07-reverify-restores-freshness
-        gate_path.write_text("package gate\n\nfunc Verify() bool { return true /* rev2 */ }\n", encoding="utf-8")
-        _answer_tool(client, sid, "command", {"command": "cat -n gate.go"})
-        _answer_tool(client, sid, "command", {"command": "echo VERIFY_OK_REV2 gate.go"})
-        close_text = f"{prefix} Re-verified gate.go [read#2:3].\n[verify: targeted - Re-verified] [command#2]"
-        max_repairs = 0
+    gate_refused = (
+        adv_error == "phase_gate_unmet"
+        and "evidence_passed:verify" in failed_leaves
+        and str(run_after.get("current_phase") or "") == "check"
+    )
+    gate_advanced = (
+        not adv_error
+        and str(run_after.get("current_phase") or "") == "done"
+    )
 
-    req = client.wait_pending(sid, timeout=120.0)
-    client.respond(req["id"], content=close_text)
-    for _ in range(max_repairs):
-        try:
-            rep = client.wait_pending(sid, timeout=8.0)
-        except TimeoutError:
-            break
-        client.respond(rep["id"], content=close_text)
-    client.wait_settled(sid, submission_id=submission_id, timeout=90.0)
+    if unit.exec_spec.expect_refusal:
+        if not gate_refused:
+            divergences.append(
+                f"required_verify_gate_did_not_refuse_stale:error={adv_error!r},"
+                f"failed_leaves={failed_leaves},phase={run_after.get('current_phase')!r}"
+            )
+    else:
+        if not gate_advanced:
+            if selector == "G01-03-fresh-after-unrelated-file-edit":
+                divergences.append(
+                    f"false_reject_unrelated_churn_under_verify_gate:error={adv_error!r},"
+                    f"failed_leaves={failed_leaves},phase={run_after.get('current_phase')!r}"
+                )
+            else:
+                divergences.append(
+                    f"required_verify_gate_refused_fresh_receipt:error={adv_error!r},"
+                    f"failed_leaves={failed_leaves},phase={run_after.get('current_phase')!r}"
+                )
 
-    after = probe_store_db(sidecar.store_db_path, sid, trace_log_path=trace_log)
+    # ── Half 2: Default session (no required workflow; evidence display side) ──
+    _init_plain_workspace(workspace)
+    sid_default = client.create_session(project_id, posture="build")["id"]
+    client.wait_session_ready(sid_default)
+    before = probe_store_db(sidecar.store_db_path, sid_default, trace_log_path=trace_log)
+    p_def = client.send_prompt(sid_default, f"{prefix} Check verification evidence display for {selector}.")
+    sub_def = str(p_def.get("submission_id") or p_def.get("id") or "")
+
+    _answer_tool(client, sid_default, "command", {"command": "cat -n gate.go"})
+    _answer_tool(client, sid_default, "command", {"command": "echo VERIFY_OK gate.go", "verification": True})
+    # Wait for the verify command to finish and persist its receipt BEFORE mutating workspace files.
+    req_def_after_verify = client.wait_pending(sid_default, timeout=120.0)
+    req_def_ready, default_close_text = _apply_g01_mutation_after_verify(
+        selector,
+        workspace=workspace,
+        client=client,
+        sid=sid_default,
+        pending_after_verify=req_def_after_verify,
+        prefix=prefix,
+    )
+    # Trigger one non-verification turn step after mutation so the host re-assembles the
+    # closeout turn's execution_observations against the post-mutation filesystem state.
+    if selector != "G01-07-reverify-restores-freshness":
+        client.respond(
+            req_def_ready["id"],
+            tool_calls=[{"id": str(uuid.uuid4()), "name": "command", "args": {"command": "true"}}],
+        )
+        req_def = client.wait_pending(sid_default, timeout=120.0)
+    else:
+        req_def = req_def_ready
+
+    source_checks = _extract_source_checks_from_pending(req_def)
+    checks_list = list(source_checks.get("checks") or ()) if isinstance(source_checks, Mapping) else []
+    latest_check = checks_list[0] if checks_list and isinstance(checks_list[0], Mapping) else None
+    observed_match = str(latest_check.get("source_match") or "") if latest_check else ""
+
+    client.respond(req_def["id"], content=default_close_text)
+    client.wait_settled(sid_default, submission_id=sub_def, timeout=90.0)
+
+    after = probe_store_db(sidecar.store_db_path, sid_default, trace_log_path=trace_log)
     delta = after.delta_observed(before)
-    _, closeouts = extract_product_observations(sidecar.store_db_path, sid)
+    _, closeouts = extract_product_observations(sidecar.store_db_path, sid_default)
     last_grounding = _unwrap_closeout_grounding(closeouts)
     fu = delta.get("friction_units")
+    if last_grounding.get("hint_code"):
+        observed_codes.add(str(last_grounding["hint_code"]))
 
-    divergences: list[str] = []
     if not after.is_complete():
         divergences.append(f"d10_incomplete:{after.unknown_counters()}")
-    if unit.exec_spec.expect_refusal:
-        # Stale receipt after content mutation/deletion should trigger refusal/friction or untrace
-        if (fu is None or fu < 1) and last_grounding.get("traced") is True:
-            divergences.append(f"stale_receipt_accepted_without_friction:friction_units={fu},traced={last_grounding.get('traced')}")
+
+    if source_checks is None or latest_check is None:
+        divergences.append("default_session_missing_verification_evidence_display")
+    elif unit.exec_spec.expect_refusal:
+        if observed_match != "different_source":
+            divergences.append(
+                f"default_session_display_not_stale:source_match={observed_match!r}"
+            )
     else:
+        if observed_match != "current":
+            if selector == "G01-03-fresh-after-unrelated-file-edit":
+                divergences.append(
+                    f"false_stale_display_unrelated_churn:source_match={observed_match!r}"
+                )
+            else:
+                divergences.append(
+                    f"default_session_display_not_current:source_match={observed_match!r}"
+                )
         if fu is None or fu != 0:
             divergences.append(f"fresh_receipt_incurred_friction:friction_units={fu}")
         if last_grounding.get("traced") is not True:
             divergences.append(f"fresh_receipt_not_traced:grounding={last_grounding}")
 
     return {
-        "session_id": sid,
+        "session_id": sid_default,
+        "gate_session_id": sid_gate,
         "child_session_id": None,
         "passed": len(divergences) == 0,
         "divergences": divergences,
@@ -785,8 +1036,21 @@ def _run_freshness_slot(
         "d10_after": after.to_dict(),
         "d10_delta": delta,
         "worker_report_refusals": None,
-        "observed_codes": [str(last_grounding.get("hint_code") or "")] if last_grounding.get("hint_code") else [],
+        "observed_codes": sorted(observed_codes),
         "last_grounding": last_grounding,
+        "required_gate": {
+            "session_id": sid_gate,
+            "workflow_run_id": wf_run_id,
+            "advance_result": adv_res,
+            "run_after": run_after,
+            "gate_refused": gate_refused,
+            "gate_advanced": gate_advanced,
+        },
+        "default_session_display": {
+            "session_id": sid_default,
+            "source_checks": source_checks,
+            "latest_source_match": observed_match,
+        },
     }
 
 
@@ -1668,7 +1932,10 @@ def run_gb07_full_sidecar(
         if run_unit.spec.selector == "G03-07-open-artifact-gate-blocks":
             _init_plain_workspace(workspace)
         else:
-            _init_git_workspace(workspace)
+            _init_git_workspace(
+                workspace,
+                with_verify_gate_workflow=(run_unit.exec_spec.mode == "freshness"),
+            )
 
         sidecar = IsolatedSidecarProcess(
             engine_bin,
