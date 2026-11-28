@@ -164,6 +164,9 @@ def _http_call(app: Any, path: str, body: dict[str, Any] | None = None, *, metho
     try:
         resp = app.request(path, body, method=method)
         return 200, resp
+    except json.JSONDecodeError:
+        # Endpoints such as DELETE/POST mark-complete return 204 No Content with an empty body.
+        return 204, {}
     except urllib.error.HTTPError as exc:
         raw = ""
         with contextlib.suppress(Exception):
@@ -521,8 +524,10 @@ def _drive_e05_slot(app: Any, slot: SidecarSlotSpec, slot_dir: pathlib.Path) -> 
     failures: list[str] = []
     typed_result: dict[str, Any] = {"variant": var, "project_id": project_id, "root_id": root_id}
 
-    # Produce v1 -> v2 via real agent edit or person PUT so ledger retains versions.
+    # Produce v1 -> v2 via real ledger writes so ledger retains both v1 and v2 versions.
     if var in {"text_restore_api", "text_restore_tool", "disk_change_conflict_refusal", "unavailable_bytes_refusal", "base_version_mismatch_refusal", "idempotent_restore_replay", "git_produced_version_restore"}:
+        _run_agent_edit_turn(app, session_id, "notes.txt", "beta", "beta-v0", "Seed intermediate version of notes.txt.")
+        _run_agent_edit_turn(app, session_id, "notes.txt", "beta-v0", "beta", "Record v1 of notes.txt in ledger.")
         _run_agent_edit_turn(app, session_id, "notes.txt", "beta", "beta-v2", "Modify notes.txt to beta-v2.")
         versions = _list_file_versions_ro(db_path, project_id, "notes.txt")
         v1_sha = sha256_bytes(v1_text)
