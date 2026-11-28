@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -223,14 +224,20 @@ func runCodeRewrite(inv *invocation) error {
 				Memory:    inv.owners.Revisions.Memory,
 			},
 			inv.tc,
-			func(resolved projectpaths.Resolved, source string, _ *tools.EditorDocumentText) (string, bool, error) {
+			func(resolved projectpaths.Resolved, source string, editor *tools.EditorDocumentText) (string, bool, error) {
 				if !pinned {
-					if src, capErr := inv.owners.Revisions.CaptureSource(ctx, inv.tc, resolved.Abs); capErr == nil {
-						if pinErr := inv.recordPin(src.Revision); pinErr != nil {
-							return "", false, pinErr
-						}
-						pinned = true
+					src, capErr := inv.owners.Revisions.CaptureSource(ctx, inv.tc, resolved.Abs)
+					if capErr != nil {
+						return "", false, capErr
 					}
+					rev := src.Revision
+					if editor != nil && source != src.Content {
+						rev.ContentSHA256, rev.ContentBytes = textfile.StringSHA256(source), int64(len(source))
+					}
+					if pinErr := inv.recordPin(rev); pinErr != nil {
+						return "", false, pinErr
+					}
+					pinned = true
 				}
 				return native.RewriteSource(ctx, resolved.DisplayPath, lang, pattern, rewrite, source)
 			},
