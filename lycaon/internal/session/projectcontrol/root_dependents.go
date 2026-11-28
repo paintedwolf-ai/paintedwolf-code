@@ -232,7 +232,7 @@ func (m *Service) ProjectDependents(ctx context.Context, projectID string) (Root
 	if projectID == "" {
 		return RootDependents{}, fmt.Errorf("project_id required")
 	}
-	p, err := m.projects.Get(ctx, projectID)
+	p, err := project.GetForRemoval(ctx, m.projects, projectID)
 	if err != nil {
 		return RootDependents{}, err
 	}
