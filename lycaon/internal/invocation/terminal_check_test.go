@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-func TestAllToolCallsEndedReflectsInterruptRunning(t *testing.T) {
+func TestAllToolCallsEndedReflectsInterruptRunningAndJoinedControls(t *testing.T) {
 	ctx := t.Context()
 	db := testdbfixture.Open(t, "terminal-check.db")
 	testdbseed.InsertSession(t, db, "sess-1", testdbseed.DefaultProjectID)
@@ -28,32 +28,55 @@ func TestAllToolCallsEndedReflectsInterruptRunning(t *testing.T) {
 		t.Fatal("expected false when no receipt exists")
 	}
 
-	_, err = rec.Begin(ctx, invocation.Start{
-		ProjectID:  testdbseed.DefaultProjectID,
-		SessionID:  "sess-1",
-		ToolCallID: "call-1",
-		ToolName:   "command",
-		Args:       map[string]any{"command": "echo hi"},
-		Contract:   contract,
-	})
-	testutil.FailErr(t, "begin call-1", err)
+	beginCall := func(id string) {
+		t.Helper()
+		_, err := rec.Begin(ctx, invocation.Start{
+			ProjectID:  testdbseed.DefaultProjectID,
+			SessionID:  "sess-1",
+			ToolCallID: id,
+			ToolName:   "command",
+			Args:       map[string]any{"command": "echo " + id},
+			Contract:   contract,
+		})
+		testutil.FailErr(t, "begin "+id, err)
+	}
 
-	// Running receipt must report ended=false.
+	beginCall("call-1")
+	beginCall("call-2")
+
+	// Running receipts must report ended=false.
 	ended, err = rec.AllToolCallsEnded(ctx, "sess-1", []string{"call-1"})
-	testutil.FailErr(t, "check running call", err)
+	testutil.FailErr(t, "check running call-1", err)
 	if ended {
 		t.Fatal("expected false while invocation receipt is still running")
 	}
 
-	// After InterruptRunning (host restart), receipt is durably ended.
+	// Interrupt both running calls (simulating host restart).
 	n, err := rec.InterruptRunning(ctx)
 	testutil.FailErr(t, "interrupt running", err)
-	if n != 1 {
-		t.Fatalf("expected 1 interrupted receipt, got %d", n)
+	if n != 2 {
+		t.Fatalf("expected 2 interrupted receipts, got %d", n)
 	}
-	ended, err = rec.AllToolCallsEnded(ctx, "sess-1", []string{"call-1"})
-	testutil.FailErr(t, "check interrupted call", err)
+
+	// Joined all-terminal: both distinct IDs have durable terminal evidence -> true.
+	ended, err = rec.AllToolCallsEnded(ctx, "sess-1", []string{"call-1", "call-2", "call-1"})
+	testutil.FailErr(t, "check joined all-terminal", err)
 	if !ended {
-		t.Fatal("expected true after InterruptRunning transitioned receipt to interrupted")
+		t.Fatal("expected true when all distinct joined tool call IDs are terminal")
+	}
+
+	// Joined partial-missing: one terminal ID + one ID with no durable receipt -> false.
+	ended, err = rec.AllToolCallsEnded(ctx, "sess-1", []string{"call-1", "call-missing"})
+	testutil.FailErr(t, "check joined terminal+missing", err)
+	if ended {
+		t.Fatal("expected false when a joined tool call ID has no durable receipt")
+	}
+
+	// Joined one-live-owner: one terminal ID + one running ID -> false.
+	beginCall("call-live")
+	ended, err = rec.AllToolCallsEnded(ctx, "sess-1", []string{"call-1", "call-live"})
+	testutil.FailErr(t, "check joined terminal+live", err)
+	if ended {
+		t.Fatal("expected false when one joined tool call ID is still running")
 	}
 }
