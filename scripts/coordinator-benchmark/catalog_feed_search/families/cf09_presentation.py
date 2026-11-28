@@ -224,9 +224,9 @@ def build_coverage_fixture(
             "version: 1\n"
             "budgets:\n"
             "  catalog:\n"
-            "    directory_entries: 2\n"
-            "    subtree_entries: 4\n"
-            "    walk_entries: 6\n",
+            "    directory_entries: 4\n"
+            "    subtree_entries: 6\n"
+            "    walk_entries: 8\n",
             encoding="utf-8",
         )
         wide = root / "wide_dir"

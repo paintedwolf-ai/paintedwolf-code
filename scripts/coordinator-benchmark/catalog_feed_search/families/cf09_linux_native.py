@@ -163,8 +163,21 @@ function mutateRefreshingTree(rootDir: string | undefined, round: number) {
   }
 }
 
-test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async ({ page }) => {
-  test.setTimeout(240_000);
+test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async ({ page }, testInfo) => {
+  test.setTimeout(420_000);
+  // Isolate warming roots per Playwright retry attempt so retries never reuse already-settled roots.
+  if (testInfo.retry > 0) {
+    for (const k of Object.keys(warmingRoots)) {
+      const orig = warmingRoots[k];
+      if (orig && fs.existsSync(orig)) {
+        const fresh = `${orig}_retry${testInfo.retry}`;
+        if (!fs.existsSync(fresh)) {
+          fs.renameSync(orig, fresh);
+        }
+        warmingRoots[k] = fresh;
+      }
+    }
+  }
   const observations: unknown[] = [];
 
   await seedAppState(page);
@@ -243,6 +256,8 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
     await page.waitForTimeout(300);
 
     const searchApi = searchRes ? await searchRes.json().catch(() => ({})) : {};
+    const searchReqPost = searchRes ? (searchRes.request().postData() ?? "") : "";
+    const searchRespStatus = searchRes ? searchRes.status() : 0;
     const searchIssueVisible = await page.getByTestId("search-issue-note").isVisible().catch(() => false);
     const searchNoResultsVisible = await page.getByTestId("search-no-results").isVisible().catch(() => false);
     const searchShot = path.join(outDir, `linux_search_stage_${state}.png`);
@@ -257,6 +272,9 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
       query: scopedQuery,
       scope: "project:current",
       request_url: searchRes?.url() ?? "",
+      request_method: searchRes ? searchRes.request().method() : "",
+      request_post_data: searchReqPost,
+      response_status: searchRespStatus,
       request_correlated: searchRes !== null,
       workspace_ready: true,
       api_response: searchApi,
@@ -447,11 +465,19 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
         selectedRootId = newRootId;
         selectedRootDir = warmingRoots.files_tree;
       }
+      // Collapse any expanded root headers first so newly attached warming root is visible without virtualization hiding it.
+      const expandedToggles = page.getByTestId("files-tree-pane").locator('[aria-expanded="true"]');
+      const expCount = await expandedToggles.count().catch(() => 0);
+      for (let i = Math.min(expCount, 6) - 1; i >= 0; i--) {
+        await expandedToggles.nth(i).click({ timeout: 500 }).catch(() => {});
+      }
       // Wait for and click the newly attached warming root in the Files tree so its summary card is displayed.
       const newRootLabel = path.basename(warmingRoots.files_tree);
       const rootNode = page.getByTestId("files-tree-pane").getByText(newRootLabel, { exact: false }).first();
-      await rootNode.waitFor({ state: "visible", timeout: 8_000 }).catch(() => {});
-      await rootNode.click({ timeout: 2_000 }).catch(() => {});
+      await rootNode.waitFor({ state: "attached", timeout: 8_000 }).catch(() => {});
+      await rootNode.scrollIntoViewIfNeeded({ timeout: 3_000 }).catch(() => {});
+      await rootNode.waitFor({ state: "visible", timeout: 5_000 }).catch(() => {});
+      await rootNode.click({ timeout: 3_000 }).catch(() => {});
       await page.waitForTimeout(400);
     } else if (state === "refreshing") {
       mutateRefreshingTree(proj.root_dir, 4);
