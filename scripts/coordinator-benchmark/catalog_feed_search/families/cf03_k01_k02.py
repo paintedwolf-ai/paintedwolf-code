@@ -416,12 +416,13 @@ def run_k02_sidecar(
 
                 if state == "over_budget":
                     # Establish real sidecar over-budget via .paintedwolf/source-scope.yaml.
+                    # Use 20 files in wide/ (> walk_entries: 12) so actual truncation occurs on both Linux and macOS.
                     pw_dir = wdir / ".paintedwolf"
                     pw_dir.mkdir(exist_ok=True)
                     (pw_dir / "source-scope.yaml").write_text(OVER_BUDGET_SCOPE_YAML, encoding="utf-8")
                     wide_dir = wdir / "wide"
                     wide_dir.mkdir(exist_ok=True)
-                    for wi in range(10):
+                    for wi in range(20):
                         (wide_dir / f"w_{wi:02d}.txt").write_text(f"wide {wi}\n", encoding="utf-8")
                     (wdir / "visible.txt").write_text("visible\n", encoding="utf-8")
                     pid, rids = driver.attach_project([wdir])
@@ -434,6 +435,7 @@ def run_k02_sidecar(
                     ]
                     ref_items = walk_entries_to_catalog_items(ref_entries, root_id=primary_rid)
                     lower_bound_ok = len(ans.items) <= len(ref_items)
+                    strict_truncation_observed = len(ans.items) < len(ref_items)
                     if not lower_bound_ok:
                         res = CheckResult(Verdict.DEFECT, "catalog", reason=f"over_budget count {len(ans.items)} exceeds truth {len(ref_items)}")
                     elif "catalog_bounded" not in ans_gaps:
@@ -455,6 +457,7 @@ def run_k02_sidecar(
                             "judged_items": len(ans.items),
                             "reference_items": len(ref_items),
                             "lower_bound_ok": lower_bound_ok,
+                            "strict_truncation_observed": strict_truncation_observed,
                             "judged_gaps": list(ans_gaps),
                             "verdict": res.verdict.value,
                         }
@@ -757,21 +760,32 @@ def run_k02_sidecar(
                     ok = sorted(i.path for i in ans.items) == ["README.md", "src/a.go"] and len(ans_gaps) == 0
                     report.record_edge(ename, ok, {"items": len(ans.items), "gaps": list(ans_gaps)})
                 elif emode == "over_budget":
+                    # Decision 107: controlled case with 20 files in wide/ (> walk_entries: 12) so actual truncation
+                    # (items < truth) is guaranteed alongside the honest lower bound (items <= truth).
                     (edir / ".paintedwolf").mkdir()
                     (edir / ".paintedwolf/source-scope.yaml").write_text(OVER_BUDGET_SCOPE_YAML, encoding="utf-8")
                     (edir / "wide").mkdir()
-                    for wi in range(10):
+                    for wi in range(20):
                         (edir / f"wide/f_{wi:02d}.txt").write_text("w\n", encoding="utf-8")
                     (edir / "keep.txt").write_text("k\n", encoding="utf-8")
+                    truth_count = 22  # 20 wide + keep.txt + .paintedwolf/source-scope.yaml
                     pid, rids = driver.attach_project([edir])
                     wait_catalog_settled(driver, pid, rids[0], max_wait_s=15.0)
                     ans = driver.walk_catalog_index(pid, rids[0])
                     ans_gaps = _root_scoped_gaps(ans, rids[0])
-                    ok = ("catalog_bounded" in ans_gaps) and (len(ans.items) < 12) and any(i.path == "keep.txt" for i in ans.items)
+                    lower_bound_ok = len(ans.items) <= truth_count
+                    strict_trunc = len(ans.items) < truth_count
+                    ok = ("catalog_bounded" in ans_gaps) and lower_bound_ok and strict_trunc and any(i.path == "keep.txt" for i in ans.items)
                     report.record_edge(
                         ename,
                         ok,
-                        {"items": len(ans.items), "truth": 12, "gaps": list(ans_gaps)},
+                        {
+                            "items": len(ans.items),
+                            "truth": truth_count,
+                            "lower_bound_ok": lower_bound_ok,
+                            "strict_truncation_observed": strict_trunc,
+                            "gaps": list(ans_gaps),
+                        },
                         gap="catalog_bounded" if ok else None,
                     )
                 elif emode == "healthy_beside":
@@ -805,6 +819,8 @@ def run_k02_sidecar(
                         gap="catalog_failed" if ok else None,
                     )
                 elif emode == "multi_root":
+                    # Decision 107: retain any transient refreshing snapshot AND separately prove a settled
+                    # combined healthy control (len(gaps) == 0) before labeling it a clean pass.
                     r2 = tmp_root / f"k02_edge_r2_{eidx}"
                     r2.mkdir()
                     (edir / "one.txt").write_text("1\n", encoding="utf-8")
@@ -813,13 +829,35 @@ def run_k02_sidecar(
                     wait_catalog_settled(driver, pid, rids[0], max_wait_s=15.0)
                     wait_catalog_settled(driver, pid, rids[1], max_wait_s=15.0)
                     comb, _ = walk_combined_catalog(driver, pid)
+                    retained_refreshing_snapshot: dict[str, object] | None = None
+                    if comb.declared_gaps:
+                        retained_refreshing_snapshot = {
+                            "revision": comb.generation_revision,
+                            "items": len(comb.items),
+                            "gaps": [g.reason for g in comb.declared_gaps],
+                        }
+                        # Wait for transient FSEvents/watcher refresh to settle cleanly, then re-verify.
+                        settle_deadline = time.monotonic() + 5.0
+                        while comb.declared_gaps and time.monotonic() < settle_deadline:
+                            time.sleep(0.1)
+                            wait_catalog_settled(driver, pid, rids[0], max_wait_s=5.0)
+                            wait_catalog_settled(driver, pid, rids[1], max_wait_s=5.0)
+                            comb, _ = walk_combined_catalog(driver, pid)
                     ok = (
                         any(i.root_id == rids[0] and i.path == "one.txt" for i in comb.items)
                         and any(i.root_id == rids[1] and i.path == "two.txt" for i in comb.items)
                         and len(comb.items) == 2
                         and len(comb.declared_gaps) == 0
                     )
-                    report.record_edge(ename, ok, {"combined_items": len(comb.items), "gaps": [g.reason for g in comb.declared_gaps]})
+                    report.record_edge(
+                        ename,
+                        ok,
+                        {
+                            "combined_items": len(comb.items),
+                            "settled_gaps": [g.reason for g in comb.declared_gaps],
+                            "retained_refreshing_snapshot": retained_refreshing_snapshot,
+                        },
+                    )
                 elif emode == "cold":
                     for i in range(40):
                         (edir / f"f_{i:03d}.txt").write_text(f"body {i}\n", encoding="utf-8")

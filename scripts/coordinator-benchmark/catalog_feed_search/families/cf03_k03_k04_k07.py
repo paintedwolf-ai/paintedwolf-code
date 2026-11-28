@@ -225,14 +225,19 @@ def run_k03_sidecar(
             "k03_edge_1_completed_gen_survives_restart",
             ok1,
             {
-                "before_rev": before.generation_revision,
+                "retained_readability_ok": ok1,
+                "prior_completed_generation_id": str(before.generation_revision) if before.generation_revision is not None else "",
                 "before_items": len(before.items),
                 "first_read_state": first_idx_e1.get("state"),
-                "first_read_rev": first_read_e1.generation_revision,
+                "first_read_generation_id": str(first_read_e1.generation_revision) if first_read_e1.generation_revision is not None else "",
                 "first_read_items": len(first_read_e1.items),
-                "after_settle_rev": after.generation_revision,
+                "after_settle_generation_id": str(after.generation_revision) if after.generation_revision is not None else "",
                 "after_settle_items": len(after.items),
-                "finished_dir_resume_lane": "verified zero re-read by count across 200 in-process instances in TestCF03_K03_GenerationsAndRestart mode 1",
+                "persisted_identity_proof_lane": (
+                    "sidecar restart credits retained readability (HTTP process revision counter is per-incarnation); "
+                    "persisted-generation identity retention and zero finished-dir re-read are proved in-process in "
+                    "TestCF03_K03_GenerationsAndRestart mode 1"
+                ),
             },
         )
 

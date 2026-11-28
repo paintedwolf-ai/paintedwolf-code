@@ -546,32 +546,52 @@ func TestCF03_K03_GenerationsAndRestart(t *testing.T) {
 		switch mode {
 		case 0:
 			// Completed generation stays readable while refresh is held at broker barrier.
+			// Decision 107 (K03-555): verify pinned gen1 reader never drifts AND join root + generation identity
+			// for any fresh OpenIndex read during refresh (must be exact gen1 or exact newly published gen2, never partial).
 			nFiles := 2 + rng.IntN(20)
 			for i := range nFiles {
 				writeIndexFile(t, rootDir, fmt.Sprintf("src/f_%03d.go", i), "v1")
 			}
 			gen1 := waitIndex(t, c, root)
+			gen1Rev := gen1.Status.Revision
+			gen1Inst := gen1.Status.Instance
 			gen1Files := cf03AllIndexedPaths(t, gen1, FileScope{Audience: HumanAudience, IncludeHidden: true})
 			if len(gen1Files) != nFiles {
-				t.Fatalf("K03[%d] gen1 count=%d want %d", idx, len(gen1Files), nFiles)
+				t.Fatalf("K03[%d] root=%s gen1(%d:%d) count=%d want %d", idx, root.ID, gen1Inst, gen1Rev, len(gen1Files), nFiles)
 			}
-			// Hold metadata lane so refresh cannot finish yet.
+			// Hold metadata lane so background refresh is blocked.
 			release, err := c.Trees.broker.Acquire(t.Context(), backgroundwork.Request{
 				Lane: root.Path, Resources: []backgroundwork.Resource{backgroundwork.ResourceMetadata},
 			})
 			testutil.FailErr(t, "hold refresh", err)
 			writeIndexFile(t, rootDir, "src/added_during_refresh.go", "v2")
 			c.InvalidateRoot(root.Path, "src/added_during_refresh.go")
+
+			// 1) Already-opened gen1 reader MUST remain pinned to gen1Files (zero drift).
+			pinnedFiles := cf03AllIndexedPaths(t, gen1, FileScope{Audience: HumanAudience, IncludeHidden: true})
+			if !slices.Equal(pinnedFiles, gen1Files) {
+				release()
+				t.Fatalf("K03[%d] root=%s pinned gen1(%d:%d) drifted: %d vs %d", idx, root.ID, gen1Inst, gen1Rev, len(pinnedFiles), len(gen1Files))
+			}
+
+			// 2) Fresh OpenIndex read must return a complete generation (either gen1 or newly published gen2 with rev != gen1Rev).
 			during, _, err := c.Trees.OpenIndex(t.Context(), "p", root, 0)
 			testutil.FailErr(t, "open during refresh", err)
 			if during == nil {
 				release()
-				t.Fatalf("K03[%d] completed generation became unreadable during refresh", idx)
+				t.Fatalf("K03[%d] root=%s completed generation became unreadable during refresh", idx, root.ID)
 			}
 			duringFiles := cf03AllIndexedPaths(t, during, FileScope{Audience: HumanAudience, IncludeHidden: true})
-			if !slices.Equal(duringFiles, gen1Files) {
+			wantGen2 := append(slices.Clone(gen1Files), "src/added_during_refresh.go")
+			sort.Strings(wantGen2)
+			if during.Status.Revision == gen1Rev && during.Status.Instance == gen1Inst {
+				if !slices.Equal(duringFiles, gen1Files) {
+					release()
+					t.Fatalf("K03[%d] root=%s same gen(%d:%d) drifted mid-refresh: %d vs %d", idx, root.ID, gen1Inst, gen1Rev, len(duringFiles), len(gen1Files))
+				}
+			} else if !slices.Equal(duringFiles, wantGen2) {
 				release()
-				t.Fatalf("K03[%d] generation drifted mid-refresh: %d vs %d", idx, len(duringFiles), len(gen1Files))
+				t.Fatalf("K03[%d] root=%s new gen(%d:%d) incomplete/corrupt: got=%d want=%d", idx, root.ID, during.Status.Instance, during.Status.Revision, len(duringFiles), len(wantGen2))
 			}
 			testutil.FailErr(t, "close during", during.Close())
 			testutil.FailErr(t, "close gen1", gen1.Close())
