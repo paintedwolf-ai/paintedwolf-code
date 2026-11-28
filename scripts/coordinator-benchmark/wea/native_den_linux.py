@@ -1079,7 +1079,7 @@ def run_linux_tauri_native(
                 time.sleep(2.0)
                 _capture_x11_window_png(xid, out / "linux-native-den-tauri-project.png")
             if open_session_hint:
-                sess_hints = [f"TB10 {open_session_hint}"]
+                sess_hints = [f"TB10 {open_session_hint}", f"TB10 {open_session_hint[:10]}", "TB10"]
                 sess_match = _activate_atspi_match(proc.pid, sess_hints, invoke=True)
                 navigation_events.append({"step": "open_session", **sess_match})
                 if not sess_match.get("invoked") and isinstance(sess_match.get("center"), list):
