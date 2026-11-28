@@ -377,6 +377,8 @@ func TestInotifyRealBackendLossFaultsRecoversAndPreservesSurvivor(t *testing.T) 
 
 	testutil.FailErr(t, "write surviving file", os.WriteFile(filepath.Join(surviving.root, "still-live.txt"), []byte("ok"), 0o644))
 	surviving.waitFor("still-live.txt", WorktreeChangeUnknown)
+}
+
 func TestInotifyNestedNewDirDeliversSurvivingChildAndResyncsUnderBudgetCap(t *testing.T) {
 	t.Run("ample budget delivers surviving child and subsequent writes", func(t *testing.T) {
 		fixture := newInotifyRoot(t, 64)
