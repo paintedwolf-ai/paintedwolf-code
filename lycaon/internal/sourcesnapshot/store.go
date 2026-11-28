@@ -204,6 +204,9 @@ func (s *Store) Ensure(ctx context.Context, req Request) (Snapshot, error) {
 	if req.Unwatched {
 		key += "\x00unwatched"
 	}
+	if req.Settle {
+		key += "\x00settle"
+	}
 
 admit:
 	if err := ctx.Err(); err != nil {
