@@ -13,7 +13,7 @@ export function recordChatLocations(projectId: string, locations: readonly Sourc
   setLocationsByProject(next);
 }
 
-export function chatLocations(projectId: string): readonly SourceChatLocation[] {
+function chatLocations(projectId: string): readonly SourceChatLocation[] {
   return locationsByProject().get(projectId) ?? [];
 }
 

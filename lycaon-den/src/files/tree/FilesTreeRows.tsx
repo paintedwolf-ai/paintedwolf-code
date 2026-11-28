@@ -1,5 +1,5 @@
 import { Match, Show, Switch, createMemo, onMount } from "solid-js";
-import { chatLocation, chatLocations } from "../source/chat-locations.ts";
+import { chatLocation } from "../source/chat-locations.ts";
 import { FilesScopeChangeMark } from "../components/FilesScopeChangeMark.tsx";
 import { type FlatTreeRow } from "./project-files-tree-flat.ts";
 import type { DisplayRow } from "./files-tree-display-model.ts";
@@ -77,6 +77,13 @@ export function SwitchDisplayRow(props: { row: DisplayRow }) {
           {props.row.message}
         </p>
       );
+    case "outside-section":
+      return (
+        <p class="den-files-tree__section" data-testid="files-tree-outside-section"
+          style={{ "padding-left": treeIndent(props.row.depth, ctx.fold()) }}>
+          Outside project
+        </p>
+      );
   }
 }
 
@@ -128,7 +135,6 @@ function DirEntryRow(props: {
   const sticky = () => props.surface === "sticky";
   const isRoot = () => row().isRoot;
   const location = () => chatLocation(ctx.props.projectId, row().rootId);
-  const firstLocation = () => isRoot() && location()?.id === chatLocations(ctx.props.projectId)[0]?.id && !!location();
   const access = () => location()?.access;
   const accessDetails = () => {
     const grant = access();
@@ -190,7 +196,6 @@ function DirEntryRow(props: {
         class="den-files-tree__row"
         classList={{
           "den-files-tree__row--root": isRoot(),
-          "den-files-tree__row--outside": firstLocation(),
           "den-files-tree__row--active": isSelected(),
           "den-files-tree__row--drop-target": isDropTarget(),
           "den-files-tree__row--drop-invalid": isInvalidDropTarget(),
@@ -268,9 +273,6 @@ function DirEntryRow(props: {
             data-tip={isRoot() ? location()?.path : undefined}>
             {isRoot() && !location() ? `@${row().name}` : row().name}
           </span>
-          <Show when={firstLocation()}>
-            <span class="den-files-tree__outside-tag" data-testid="files-tree-outside-tag">Outside project</span>
-          </Show>
           <Show when={isRoot() && location()}>
             <span class="den-files-tree__outside-tag" data-tip={accessDetails()}>
               {location()?.available === false ? "Unavailable" : access()?.mode === "write" ? "Agent write" : access()?.mode === "read" ? "Agent read" : "No saved access"}

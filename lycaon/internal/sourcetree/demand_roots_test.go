@@ -26,6 +26,9 @@ func TestSelectingOutsideRootsKeepsProjectDisclosures(t *testing.T) {
 	if len(frame.Rows) != 2 || frame.Rows[0].Expanded || frame.Rows[1].Expanded {
 		t.Fatalf("the project root should stay collapsed and the outside root should start closed: %+v", frame.Rows)
 	}
+	if frame.OutsideStart == nil || *frame.OutsideStart != 1 {
+		t.Fatalf("outside start = %v, want the outside root's row 1", frame.OutsideStart)
+	}
 	location := Address{Root: outside.ID, Path: "."}
 	err = view.Disclose(t.Context(), nil, IntentEntry{Address: location, Disclosure: Disclosure{Open: true, Recursive: true}})
 	if !errors.Is(err, ErrAddress) {
@@ -41,6 +44,11 @@ func TestSelectingOutsideRootsKeepsProjectDisclosures(t *testing.T) {
 	}
 	_, err = view.ReplaceOnDemandRoots(t.Context(), nil)
 	testutil.FailErr(t, "remove the outside location", err)
+	frame, err = frameForTest(t, view, t.Context(), FrameRequest{Limit: 10})
+	testutil.FailErr(t, "read the project alone", err)
+	if frame.OutsideStart != nil {
+		t.Fatalf("outside start = %d without an outside location", *frame.OutsideStart)
+	}
 	if intent := view.Intent(); len(intent) != 1 || intent[0].Address != closed || intent[0].Disclosure.Open {
 		t.Fatalf("project disclosure changed: %+v", intent)
 	}

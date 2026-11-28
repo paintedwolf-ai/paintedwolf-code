@@ -8248,12 +8248,14 @@ type SourceTreeFilter struct {
 
 // SourceTreeFrame
 type SourceTreeFrame struct {
-	Kind               string           `json:"kind"`
-	ViewID             string           `json:"view_id"`
-	IntentRevision     string           `json:"intent_revision"`
-	ProjectionRevision string           `json:"projection_revision"`
-	Extent             SourceViewExtent `json:"extent"`
-	Span               SourceViewSpan   `json:"span"`
+	Kind               string `json:"kind"`
+	ViewID             string `json:"view_id"`
+	IntentRevision     string `json:"intent_revision"`
+	ProjectionRevision string `json:"projection_revision"`
+	// Index of the first row outside the project, where the chat's locations begin. Omitted when the view has none, and on filtered frames.
+	OutsideStart *int64           `json:"outside_start,omitempty"`
+	Extent       SourceViewExtent `json:"extent"`
+	Span         SourceViewSpan   `json:"span"`
 	// Resolved anchor plus offset before subtracting before, in this snapshot. Present on anchored reads, including when leading context is clamped at the beginning.
 	Target *int64 `json:"target,omitempty"`
 	// Reusable prefix proof for this frame. May be absent for filtered or review projections.
