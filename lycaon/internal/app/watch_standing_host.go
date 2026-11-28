@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -129,8 +130,18 @@ func observeStandingWatchEvent(ctx context.Context, b *serveBuilder, engine *wat
 			_ = engine.NotifySessionClosedOrDeleted(ctx, ev.ID)
 			return
 		}
+		if ev.Action == api.SessionEventActionCreated {
+			return
+		}
 		if ev.Status == api.SessionStatusIdle && !sessionHasOpenCheckpoint(b, ctx, ev.ID) {
-			_ = engine.SettleRun(ctx, ev.ID, watch.RunCompleted)
+			status := watch.RunCompleted
+			switch ev.IdleDisposition {
+			case api.SessionIdleDispositionTurnError:
+				status = watch.RunFailed
+			case api.SessionIdleDispositionUserStopped, api.SessionIdleDispositionInterrupted:
+				status = watch.RunCanceled
+			}
+			_ = engine.SettleRun(ctx, ev.ID, status)
 		}
 	}
 }
@@ -281,6 +292,9 @@ func dispatchStandingWatchRun(
 				WatchName: sw.Name,
 				RunID:     run.RunID,
 			})
+			if linkErr := engine.LinkRunSession(ctx, run.RunID, sessionID); linkErr != nil {
+				slog.WarnContext(ctx, "link standing watch run session before dispatch", "run_id", run.RunID, "session_id", sessionID, "err", linkErr)
+			}
 		}
 	} else {
 		sessionID = strings.TrimSpace(sw.Target.SessionID)
@@ -302,25 +316,34 @@ func dispatchStandingWatchRun(
 			Kind:              api.MessageKindHostNudge,
 			ID:                "standing_watch_run:" + run.RunID,
 			TranscriptVisible: true,
+			AuthorPersonID:    sw.OwnerPersonID,
 		},
 	}
 	runCtx := people.WithoutCaller(context.WithoutCancel(ctx))
 	wg.Add(1)
-	go func(sid string) {
+	go func(runID, sid string) {
 		defer wg.Done()
-		resp, runErr := b.sessions.Manager.Submissions.HostTurnWithAdmission(runCtx, sid, sessionstore.PromptSubmissionOriginLoopWake, in, nil)
+		admitted := false
+		resp, runErr := b.sessions.Manager.Submissions.HostTurnWithAdmission(runCtx, sid, sessionstore.PromptSubmissionOriginLoopWake, in, func() error {
+			admitted = true
+			return nil
+		})
 		switch {
 		case errors.Is(runErr, spendguard.ErrCeiling) || (resp != nil && resp.Outcome == promptresult.OutcomeSpendLimit):
-			_ = engine.SettleRun(runCtx, sid, watch.RunFenced)
+			_ = engine.SettleRunByID(runCtx, runID, sid, watch.RunFenced)
 		case errors.Is(runErr, lifecycle.ErrStopping):
-			_ = engine.SettleRun(runCtx, sid, watch.RunCanceled)
+			_ = engine.SettleRunByID(runCtx, runID, sid, watch.RunCanceled)
 		case runErr != nil:
-			_ = engine.SettleRun(runCtx, sid, watch.RunFailed)
+			slog.WarnContext(runCtx, "standing watch run turn failed", "run_id", runID, "session_id", sid, "err", runErr)
+			_ = engine.SettleRunByID(runCtx, runID, sid, watch.RunFailed)
+		case !admitted:
+			slog.WarnContext(runCtx, "standing watch run turn blocked before admission", "run_id", runID, "session_id", sid)
+			_ = engine.SettleRunByID(runCtx, runID, sid, watch.RunFailed)
 		case sessionHasOpenCheckpoint(b, runCtx, sid):
-			_ = engine.MarkWaitingForOwner(runCtx, sid)
+			_ = engine.MarkWaitingForOwnerByID(runCtx, runID, sid)
 		default:
-			_ = engine.SettleRun(runCtx, sid, watch.RunCompleted)
+			_ = engine.SettleRunByID(runCtx, runID, sid, watch.RunCompleted)
 		}
-	}(sessionID)
+	}(run.RunID, sessionID)
 	return watch.StandingRunDispatchOutcome{SessionID: sessionID}, nil
 }

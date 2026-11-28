@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/providers"
 	"github.com/lycaon/lycaon/internal/app/server"
 	"github.com/lycaon/lycaon/internal/app/sessions"
+	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/db"
@@ -226,4 +227,256 @@ func TestStandingWatchHostEventsAndDispatch(t *testing.T) {
 		t.Fatal("expected created SessionID for new_chat run")
 	}
 	wg.Wait()
+}
+
+func TestStandingWatchRunSettlementBarrier(t *testing.T) {
+	type barrierCase struct {
+		name           string
+		hostBlocked    bool
+		execErr        error
+		openCheckpoint bool
+		wantExecuted   bool
+		wantStatus     watch.WatchRunStatus
+		wantEnded      bool
+		wantUnread     bool
+	}
+	cases := []barrierCase{
+		{
+			name:         "new_chat_completed",
+			wantExecuted: true,
+			wantStatus:   watch.RunCompleted,
+			wantEnded:    true,
+			wantUnread:   true,
+		},
+		{
+			name:         "new_chat_failed",
+			execErr:      errors.New("provider boom"),
+			wantExecuted: true,
+			wantStatus:   watch.RunFailed,
+			wantEnded:    true,
+		},
+		{
+			name:         "new_chat_fenced",
+			execErr:      spendguard.ErrCeiling,
+			wantExecuted: true,
+			wantStatus:   watch.RunFenced,
+			wantEnded:    true,
+		},
+		{
+			name:         "new_chat_canceled",
+			execErr:      lifecycle.ErrStopping,
+			wantExecuted: true,
+			wantStatus:   watch.RunCanceled,
+			wantEnded:    true,
+		},
+		{
+			name:           "new_chat_waiting_for_owner",
+			openCheckpoint: true,
+			wantExecuted:   true,
+			wantStatus:     watch.RunWaitingForOwner,
+			wantEnded:      false,
+		},
+		{
+			name:         "new_chat_host_blocked_no_request",
+			hostBlocked:  true,
+			wantExecuted: false,
+			wantStatus:   watch.RunFailed,
+			wantEnded:    true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
+			database := testdbfixture.Open(t, "watch_standing_barrier_"+tc.name+".db")
+			rootDir := t.TempDir()
+			testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, rootDir)
+			repos := sessionstore.NewSQL(database)
+
+			ownerPerson, err := repos.People.HostOwner(ctx)
+			testutil.FailErr(t, "host owner", err)
+
+			clock := testutil.NewFakeClock(time.Date(2026, 5, 1, 14, 0, 0, 0, time.UTC))
+			ws := watch.NewStore(database, clock)
+			engine := ws.Standing()
+
+			var (
+				mu             sync.Mutex
+				executed       bool
+				executedAuthor string
+				executedSessID string
+			)
+			subs := submissions.New(
+				repos.Sessions, repos.Submissions, repos.People, queue.New(),
+				lifecycle.New(repos.Sessions), nil, nil, nil,
+				&submissionstate.Service{}, &promptstate.MutexRegistry{},
+				func(_ context.Context, sid string, in promptinput.Input, lock *promptstate.Lock) (*promptresult.Result, error) {
+					defer lock.Unlock()
+					mu.Lock()
+					executed = true
+					executedAuthor = in.AuthorPersonID
+					executedSessID = sid
+					mu.Unlock()
+					if tc.openCheckpoint {
+						_, cpErr := database.ExecContext(ctx,
+							`INSERT INTO checkpoints (id, session_id, project_id, kind, status, created_at) VALUES (?, ?, ?, 'tool_approval', 'pending', ?)`,
+							uuid.NewString(), sid, testdbseed.DefaultProjectID, clock.Now().UTC().Format(time.RFC3339Nano))
+						testutil.FailErr(t, "insert pending checkpoint", cpErr)
+					}
+					return &promptresult.Result{}, tc.execErr
+				},
+				nil, nil, func(context.Context, string) bool { return tc.hostBlocked },
+			)
+			b := &serveBuilder{
+				startup: startupBootstrap{ctx: ctx},
+				storage: persistence.Runtime{Database: database, Sessions: repos},
+				sessions: &sessions.Runtime{
+					Manager: &session.Host{Submissions: subs},
+				},
+			}
+
+			var (
+				wg                       sync.WaitGroup
+				sessionIDAtBarrier       string
+				persistedLinkBeforeRet   string
+				statusAtBarrierBeforeRet string
+			)
+			engine.SetCallbacks(watch.StandingCallbacks{
+				RunDispatcher: func(dCtx context.Context, sw watch.StandingWatch, run watch.WatchRun, promptText string) (watch.StandingRunDispatchOutcome, error) {
+					out, dErr := dispatchStandingWatchRun(b, dCtx, &wg, engine, sw, run, promptText)
+					// Barrier: deliberately hold returning out.SessionID to invokeStandingDispatcher
+					// until the async HostTurnWithAdmission goroutine and its settlement have finished.
+					wg.Wait()
+					sessionIDAtBarrier = out.SessionID
+					_ = database.QueryRowContext(dCtx,
+						`SELECT COALESCE(session_id, ''), status FROM watch_runs WHERE run_id = ?`,
+						run.RunID).Scan(&persistedLinkBeforeRet, &statusAtBarrierBeforeRet)
+					return out, dErr
+				},
+			})
+
+			sw, err := engine.Create(ctx, ownerPerson.ID, watch.StandingWatchInput{
+				ProjectID: testdbseed.DefaultProjectID,
+				Name:      "barrier-" + tc.name,
+				Prompt:    "check standing run settlement",
+				Conditions: []awaitstore.Condition{{
+					Kind:         "timer",
+					EveryMinutes: 60,
+				}},
+				Target: &watch.StandingTarget{Kind: "new_chat"},
+			})
+			testutil.FailErr(t, "create standing watch", err)
+
+			run, err := engine.RunNow(ctx, ownerPerson.ID, testdbseed.DefaultProjectID, sw.WatchID)
+			testutil.FailErr(t, "run standing watch now", err)
+
+			mu.Lock()
+			gotExecuted := executed
+			gotAuthor := executedAuthor
+			gotExecSess := executedSessID
+			mu.Unlock()
+
+			t.Logf("run_id=%s session_id=%s executed=%v author=%q link_before_return=%q status_before_return=%q final_status=%q final_ended_at=%v",
+				run.RunID, sessionIDAtBarrier, gotExecuted, gotAuthor, persistedLinkBeforeRet, statusAtBarrierBeforeRet, run.Status, run.EndedAt)
+
+			if gotExecuted != tc.wantExecuted {
+				t.Fatalf("executed = %v, want %v (run_id=%s session_id=%s final_status=%q)",
+					gotExecuted, tc.wantExecuted, run.RunID, sessionIDAtBarrier, run.Status)
+			}
+			if tc.wantExecuted && gotAuthor != ownerPerson.ID {
+				t.Fatalf("executed AuthorPersonID = %q, want %q", gotAuthor, ownerPerson.ID)
+			}
+			if tc.wantExecuted && gotExecSess != sessionIDAtBarrier {
+				t.Fatalf("executed session = %q, want %q", gotExecSess, sessionIDAtBarrier)
+			}
+			if persistedLinkBeforeRet != sessionIDAtBarrier || sessionIDAtBarrier == "" {
+				t.Fatalf("watch_runs.session_id before dispatcher return = %q, want %q", persistedLinkBeforeRet, sessionIDAtBarrier)
+			}
+			if run.SessionID != sessionIDAtBarrier {
+				t.Fatalf("final run.SessionID = %q, want %q", run.SessionID, sessionIDAtBarrier)
+			}
+			if run.Status != tc.wantStatus {
+				t.Fatalf("final run.Status = %q, want %q (status_before_return=%q)", run.Status, tc.wantStatus, statusAtBarrierBeforeRet)
+			}
+			if tc.wantEnded && run.EndedAt == nil {
+				t.Fatalf("final run.EndedAt = nil, want non-nil for terminal status %q", run.Status)
+			}
+			if !tc.wantEnded && run.EndedAt != nil {
+				t.Fatalf("final run.EndedAt = %v, want nil for non-terminal status %q", run.EndedAt, run.Status)
+			}
+			if tc.wantUnread {
+				var seenAt any
+				testutil.FailErr(t, "query seen_at", database.QueryRowContext(ctx, `SELECT seen_at FROM sessions WHERE id = ?`, run.SessionID).Scan(&seenAt))
+				if seenAt != nil {
+					t.Fatalf("completed new_chat run session seen_at = %v, want NULL (unread)", seenAt)
+				}
+			}
+
+			// Non-resurrection check: once terminal, subsequent session/checkpoint events or settlement calls must not mutate the row.
+			if tc.wantEnded {
+				cpPending, _ := json.Marshal(api.CheckpointEvent{SessionID: run.SessionID, Status: api.CheckpointStatusPending})
+				observeStandingWatchEvent(ctx, b, engine, api.EventEnvelope{Topic: api.EventTopicCheckpoint, Data: cpPending})
+				sessIdle, _ := json.Marshal(api.SessionEvent{ID: run.SessionID, Status: api.SessionStatusIdle})
+				observeStandingWatchEvent(ctx, b, engine, api.EventEnvelope{Topic: api.EventTopicSession, Data: sessIdle})
+				_ = engine.MarkWaitingForOwner(ctx, run.SessionID)
+				_ = engine.SettleRun(ctx, run.SessionID, watch.RunCompleted)
+
+				var afterStatus string
+				testutil.FailErr(t, "re-read terminal run", database.QueryRowContext(ctx, `SELECT status FROM watch_runs WHERE run_id = ?`, run.RunID).Scan(&afterStatus))
+				if watch.WatchRunStatus(afterStatus) != tc.wantStatus {
+					t.Fatalf("terminal run resurrected/overwritten: status = %q, want %q", afterStatus, tc.wantStatus)
+				}
+			}
+		})
+	}
+}
+
+func TestObserveStandingWatchEventIgnoresSessionCreatedIdle(t *testing.T) {
+	ctx := t.Context()
+	database := testdbfixture.Open(t, "watch_standing_created_idle.db")
+	rootDir := t.TempDir()
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, rootDir)
+	repos := sessionstore.NewSQL(database)
+	ownerPerson, err := repos.People.HostOwner(ctx)
+	testutil.FailErr(t, "host owner", err)
+	sess, err := repos.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+
+	clock := testutil.NewFakeClock(time.Date(2026, 5, 1, 15, 0, 0, 0, time.UTC))
+	ws := watch.NewStore(database, clock)
+	engine := ws.Standing()
+	engine.SetCallbacks(watch.StandingCallbacks{
+		RunDispatcher: func(dCtx context.Context, _ watch.StandingWatch, run watch.WatchRun, _ string) (watch.StandingRunDispatchOutcome, error) {
+			_ = engine.LinkRunSession(dCtx, run.RunID, sess.ID)
+			return watch.StandingRunDispatchOutcome{SessionID: sess.ID}, nil
+		},
+	})
+	sw, err := engine.Create(ctx, ownerPerson.ID, watch.StandingWatchInput{
+		ProjectID:  testdbseed.DefaultProjectID,
+		Name:       "created-idle-guard",
+		Prompt:     "wait for real completion",
+		Conditions: []awaitstore.Condition{{Kind: "timer", EveryMinutes: 60}},
+		Target:     &watch.StandingTarget{Kind: "new_chat"},
+	})
+	testutil.FailErr(t, "create standing watch", err)
+	run, err := engine.RunNow(ctx, ownerPerson.ID, testdbseed.DefaultProjectID, sw.WatchID)
+	testutil.FailErr(t, "run now", err)
+	if run.Status != watch.RunRunning {
+		t.Fatalf("initial run status = %q, want running", run.Status)
+	}
+
+	b := &serveBuilder{storage: persistence.Runtime{Database: database, Sessions: repos}}
+	createdEv, err := json.Marshal(api.SessionEvent{
+		ID:     sess.ID,
+		Action: api.SessionEventActionCreated,
+		Status: api.SessionStatusIdle,
+	})
+	testutil.FailErr(t, "marshal created event", err)
+	observeStandingWatchEvent(ctx, b, engine, api.EventEnvelope{Topic: api.EventTopicSession, Data: createdEv})
+
+	var status string
+	testutil.FailErr(t, "query run status", database.QueryRowContext(ctx, `SELECT status FROM watch_runs WHERE run_id = ?`, run.RunID).Scan(&status))
+	if watch.WatchRunStatus(status) != watch.RunRunning {
+		t.Fatalf("session.created idle prematurely settled run to %q, want running", status)
+	}
 }

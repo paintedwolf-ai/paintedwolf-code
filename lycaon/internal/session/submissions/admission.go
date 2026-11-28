@@ -96,8 +96,6 @@ func (m *Service) admitPrompt(
 			return nil, false, err
 		}
 		submittedBy = sender.ID
-	} else if in.HostSignal != nil && in.HostSignal.TranscriptVisible {
-		submittedBy = strings.TrimSpace(in.AuthorPersonID)
 	}
 	var row *store.PromptSubmission
 	var created bool
@@ -383,7 +381,11 @@ func (m *Service) RunClaimedLocked(ctx context.Context, submissionID string, loc
 		}
 		return nil, errors.Join(err, drainErr)
 	}
-	in.AuthorPersonID = row.SubmittedBy
+	if row.SubmittedBy != "" {
+		in.AuthorPersonID = row.SubmittedBy
+	} else if in.HostSignal != nil && in.HostSignal.TranscriptVisible {
+		in.AuthorPersonID = strings.TrimSpace(in.HostSignal.AuthorPersonID)
+	}
 	runCtx := ctx
 	if row.Origin == store.PromptSubmissionOriginUser {
 		runCtx = context.WithValue(ctx, userPromptReceiptContextKey{}, true)

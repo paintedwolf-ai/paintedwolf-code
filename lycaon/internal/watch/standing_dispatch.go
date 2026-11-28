@@ -187,7 +187,7 @@ func invokeStandingDispatcher(ctx context.Context, e *StandingEngine, sw Standin
 		return rErr
 	}
 	if out.SessionID != "" && out.SessionID != run.SessionID {
-		if _, uErr := e.store.db.ExecContext(ctx, `UPDATE watch_runs SET session_id = ? WHERE run_id = ?`, out.SessionID, run.RunID); uErr != nil {
+		if uErr := e.LinkRunSession(ctx, run.RunID, out.SessionID); uErr != nil {
 			slog.WarnContext(ctx, "record standing watch run session", "run_id", run.RunID, "err", uErr)
 		}
 	}
@@ -237,33 +237,73 @@ func summarizeRunConditionDetail(detail map[string]any, scheduledFor time.Time) 
 	}
 }
 
+// LinkRunSession records the run's target session ID before asynchronous turn execution starts.
+func (e *StandingEngine) LinkRunSession(ctx context.Context, runID, sessionID string) error {
+	if e == nil || !e.store.Configured() || strings.TrimSpace(runID) == "" || strings.TrimSpace(sessionID) == "" {
+		return nil
+	}
+	_, err := e.store.db.ExecContext(ctx,
+		`UPDATE watch_runs SET session_id = ? WHERE run_id = ? AND COALESCE(session_id, '') = ''`,
+		strings.TrimSpace(sessionID), strings.TrimSpace(runID))
+	return err
+}
+
 func (e *StandingEngine) MarkWaitingForOwner(ctx context.Context, sessionID string) error {
 	if e == nil || !e.store.Configured() || strings.TrimSpace(sessionID) == "" {
 		return nil
 	}
-	var runID, watchID, projectID string
+	sessionID = strings.TrimSpace(sessionID)
+	var runID string
 	err := e.store.db.QueryRowContext(ctx,
-		`SELECT run_id, watch_id, project_id FROM watch_runs WHERE session_id = ? AND status = 'running' LIMIT 1`,
-		strings.TrimSpace(sessionID)).Scan(&runID, &watchID, &projectID)
+		`SELECT run_id FROM watch_runs WHERE session_id = ? AND status = 'running' LIMIT 1`,
+		sessionID).Scan(&runID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
+	return e.MarkWaitingForOwnerByID(ctx, runID, sessionID)
+}
+
+func (e *StandingEngine) MarkWaitingForOwnerByID(ctx context.Context, runID, sessionID string) error {
+	if e == nil || !e.store.Configured() || strings.TrimSpace(runID) == "" {
+		return nil
+	}
+	runID = strings.TrimSpace(runID)
+	sessionID = strings.TrimSpace(sessionID)
+	run, err := getWatchRunByID(ctx, e.store, runID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil || run.Status != RunRunning {
+		return err
+	}
+	if sessionID == "" {
+		sessionID = run.SessionID
+	}
 	tx, err := e.store.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `UPDATE watch_runs SET status = 'waiting_for_owner' WHERE run_id = ? AND status = 'running'`, runID); err != nil {
+	res, err := tx.ExecContext(ctx,
+		`UPDATE watch_runs
+		 SET status = 'waiting_for_owner',
+		     session_id = CASE WHEN ? != '' THEN ? ELSE session_id END
+		 WHERE run_id = ? AND status = 'running'`,
+		sessionID, sessionID, runID)
+	if err != nil {
 		return err
 	}
-	publishWatchEventTx(ctx, e, tx, "watch_run.updated", projectID, sessionID, watchID, runID, 0)
+	if n, rErr := res.RowsAffected(); rErr != nil || n == 0 {
+		return rErr
+	}
+	publishWatchEventTx(ctx, e, tx, "watch_run.updated", run.ProjectID, sessionID, run.WatchID, runID, 0)
 	if err := commitStandingTx(e, tx); err != nil {
 		return err
 	}
-	return e.DispatchProjectRuns(ctx, projectID)
+	return e.DispatchProjectRuns(ctx, run.ProjectID)
 }
 
 func (e *StandingEngine) MarkResumed(ctx context.Context, sessionID string) error {
@@ -285,8 +325,12 @@ func (e *StandingEngine) MarkResumed(ctx context.Context, sessionID string) erro
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `UPDATE watch_runs SET status = 'running' WHERE run_id = ? AND status = 'waiting_for_owner'`, runID); err != nil {
+	res, err := tx.ExecContext(ctx, `UPDATE watch_runs SET status = 'running' WHERE run_id = ? AND status = 'waiting_for_owner'`, runID)
+	if err != nil {
 		return err
+	}
+	if n, rErr := res.RowsAffected(); rErr != nil || n == 0 {
+		return rErr
 	}
 	publishWatchEventTx(ctx, e, tx, "watch_run.updated", projectID, sessionID, watchID, runID, 0)
 	return commitStandingTx(e, tx)
@@ -313,6 +357,13 @@ func (e *StandingEngine) SettleRun(ctx context.Context, sessionID string, status
 	return settleStandingRunByID(ctx, e, runID, sessionID, status, e.store.clock.Now())
 }
 
+func (e *StandingEngine) SettleRunByID(ctx context.Context, runID, sessionID string, status WatchRunStatus) error {
+	if e == nil || !e.store.Configured() || strings.TrimSpace(runID) == "" {
+		return nil
+	}
+	return settleStandingRunByID(ctx, e, strings.TrimSpace(runID), strings.TrimSpace(sessionID), status, e.store.clock.Now())
+}
+
 func settleStandingRunByID(ctx context.Context, e *StandingEngine, runID, sessionID string, status WatchRunStatus, now time.Time) error {
 	run, err := getWatchRunByID(ctx, e.store, runID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -329,10 +380,16 @@ func settleStandingRunByID(ctx context.Context, e *StandingEngine, runID, sessio
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE watch_runs SET status = ?, session_id = CASE WHEN ? != '' THEN ? ELSE session_id END, ended_at = ? WHERE run_id = ?`,
-		string(status), strings.TrimSpace(sessionID), strings.TrimSpace(sessionID), nowStr, runID); err != nil {
+	res, err := tx.ExecContext(ctx,
+		`UPDATE watch_runs
+		 SET status = ?, session_id = CASE WHEN ? != '' THEN ? ELSE session_id END, ended_at = ?
+		 WHERE run_id = ? AND status IN ('pending', 'queued', 'running', 'waiting_for_owner')`,
+		string(status), strings.TrimSpace(sessionID), strings.TrimSpace(sessionID), nowStr, runID)
+	if err != nil {
 		return err
+	}
+	if n, rErr := res.RowsAffected(); rErr != nil || n == 0 {
+		return rErr
 	}
 
 	pausedByFailures, completedOneShot, nextRev := false, false, sw.Revision
