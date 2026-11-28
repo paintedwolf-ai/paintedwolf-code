@@ -21,7 +21,7 @@ import (
 // GB07-F3): an authoritative verification gate must never pass a stale receipt
 // while watcher delivery is held back after an external edit, and must flip
 // cleanly once flushed.
-func TestGateStateWatcherLag(t *testing.T) {
+func TestGateStateWatcherLagInvariant(t *testing.T) {
 	ctx := t.Context()
 	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
