@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
@@ -31,6 +32,8 @@ type Catalog struct {
 	// its reader can hold.
 	evidence *evidence.Binding
 	schemas  *toolschema.Config
+	// textAnalysis lives and dies with this catalog, so no entry outlives it.
+	textAnalysis *scopedstore.LRU[skillTextAnalysis]
 }
 
 // NewCatalog builds the declared tool vocabulary.
@@ -61,6 +64,7 @@ func NewCatalog(
 		provenance:      prov,
 		operations:      map[string]bool{},
 		schemas:         schemas,
+		textAnalysis:    scopedstore.New[skillTextAnalysis](scopedstore.DefaultEntries),
 	}
 	for _, name := range cfg.AllOperations() {
 		c.operations[strings.TrimSpace(name)] = true

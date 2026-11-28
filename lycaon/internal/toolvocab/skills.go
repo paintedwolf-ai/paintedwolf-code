@@ -180,9 +180,9 @@ type skillRenderMemo struct {
 }
 
 var (
-	skillRenderCache           = scopedstore.New[skillRenderMemo](2048)
-	readerSkillVarsCache       = scopedstore.New[map[string]any](1024)
-	skillOfferedForReaderCache = scopedstore.New[bool](8192)
+	skillRenderCache           = scopedstore.New[skillRenderMemo](256)
+	readerSkillVarsCache       = scopedstore.New[map[string]any](256)
+	skillOfferedForReaderCache = scopedstore.New[bool](4096)
 )
 
 // guardSuggestion names the profile_has_ fact that gates name for readers: the

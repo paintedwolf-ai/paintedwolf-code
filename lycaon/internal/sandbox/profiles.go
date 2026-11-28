@@ -3,18 +3,21 @@ package sandbox
 import (
 	"fmt"
 	"maps"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
+	"weak"
 
 	"github.com/lycaon/lycaon/internal/extpacks"
 )
 
 const toolProfileUnitPrefix = "tools/profiles/"
 
+// toolProfilesCache holds catalogs weakly: an entry goes when its catalog is collected.
 var (
 	toolProfilesCacheMu sync.RWMutex
-	toolProfilesCache   = map[*extpacks.EffectiveCatalog][]ToolProfile{}
+	toolProfilesCache   = map[weak.Pointer[extpacks.EffectiveCatalog]][]ToolProfile{}
 )
 
 func cloneToolProfiles(in []ToolProfile) []ToolProfile {
@@ -54,8 +57,9 @@ func LoadToolProfilesWithCatalog(catalog *extpacks.EffectiveCatalog) ([]ToolProf
 	if catalog == nil {
 		return nil, fmt.Errorf("tool profiles: effective catalog required")
 	}
+	key := weak.Make(catalog)
 	toolProfilesCacheMu.RLock()
-	if cached, ok := toolProfilesCache[catalog]; ok {
+	if cached, ok := toolProfilesCache[key]; ok {
 		toolProfilesCacheMu.RUnlock()
 		return cloneToolProfiles(cached), nil
 	}
@@ -98,10 +102,15 @@ func LoadToolProfilesWithCatalog(catalog *extpacks.EffectiveCatalog) ([]ToolProf
 		profiles = append(profiles, p)
 	}
 	toolProfilesCacheMu.Lock()
-	if len(toolProfilesCache) >= 64 {
-		toolProfilesCache = make(map[*extpacks.EffectiveCatalog][]ToolProfile, 16)
-	}
-	toolProfilesCache[catalog] = profiles
+	_, existed := toolProfilesCache[key]
+	toolProfilesCache[key] = profiles
 	toolProfilesCacheMu.Unlock()
+	if !existed {
+		runtime.AddCleanup(catalog, func(k weak.Pointer[extpacks.EffectiveCatalog]) {
+			toolProfilesCacheMu.Lock()
+			delete(toolProfilesCache, k)
+			toolProfilesCacheMu.Unlock()
+		}, key)
+	}
 	return cloneToolProfiles(profiles), nil
 }

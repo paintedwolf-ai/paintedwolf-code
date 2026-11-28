@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
+	"weak"
 
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -147,17 +149,19 @@ type cachedCatalogProfiles struct {
 	byID     map[string]Profile
 }
 
+// effectiveCache holds catalogs weakly: an entry goes when its catalog is collected.
 var (
 	effectiveCacheMu sync.RWMutex
-	effectiveCache   = map[*extpacks.EffectiveCatalog]cachedCatalogProfiles{}
+	effectiveCache   = map[weak.Pointer[extpacks.EffectiveCatalog]]cachedCatalogProfiles{}
 )
 
 func loadEffectiveCached(catalog *extpacks.EffectiveCatalog) (cachedCatalogProfiles, error) {
 	if catalog == nil {
 		return cachedCatalogProfiles{}, fmt.Errorf("agent profiles: effective catalog required")
 	}
+	key := weak.Make(catalog)
 	effectiveCacheMu.RLock()
-	if cached, ok := effectiveCache[catalog]; ok {
+	if cached, ok := effectiveCache[key]; ok {
 		effectiveCacheMu.RUnlock()
 		return cached, nil
 	}
@@ -191,11 +195,16 @@ func loadEffectiveCached(catalog *extpacks.EffectiveCatalog) (cachedCatalogProfi
 	}
 	entry := cachedCatalogProfiles{profiles: profiles, byID: byID}
 	effectiveCacheMu.Lock()
-	if len(effectiveCache) >= 64 {
-		effectiveCache = make(map[*extpacks.EffectiveCatalog]cachedCatalogProfiles, 16)
-	}
-	effectiveCache[catalog] = entry
+	_, existed := effectiveCache[key]
+	effectiveCache[key] = entry
 	effectiveCacheMu.Unlock()
+	if !existed {
+		runtime.AddCleanup(catalog, func(k weak.Pointer[extpacks.EffectiveCatalog]) {
+			effectiveCacheMu.Lock()
+			delete(effectiveCache, k)
+			effectiveCacheMu.Unlock()
+		}, key)
+	}
 	return entry, nil
 }
 
