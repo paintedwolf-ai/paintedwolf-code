@@ -24,6 +24,7 @@ from dataclasses import dataclass
 import json
 import pathlib
 import re
+import shlex
 import sys
 import time
 from typing import Any
@@ -271,8 +272,11 @@ def _build_r04_plan(base_seed: str, idx: int, platform: str) -> SidecarSlotPlan:
     gen = generate_r04(base_seed, idx)
     sample_content = "package sample\n\nfunc Hello() string { return \"ok\" }\n"
     # Check whether the R04 markdown contains any citation attempt that won't be grounded
-    # against a single read of sample.go (most R04 cases reference [read#3], unobserved URLs, etc.).
-    has_ungrounded_attempt = any(s.is_citation_attempt for s in gen.spans)
+    # against a single read of sample.go (excluding valid [verify: ...] tags).
+    has_ungrounded_attempt = any(
+        s.is_citation_attempt and s.node_kind != "citation_verify"
+        for s in gen.spans
+    )
     return SidecarSlotPlan(
         selector=f"R04-gen-{base_seed}-{idx:04d}",
         family_id="R04",
@@ -294,7 +298,7 @@ def _build_r06_plan(base_seed: str, idx: int, platform: str) -> SidecarSlotPlan:
     target = gen.delivery_log.records[0]
     raw_text = target.raw_bytes.decode("utf-8", errors="replace")
     plain_content = _strip_line_prefix(raw_text)
-    setup_cmd = f"cat -n {json.dumps(target.path)}"
+    setup_cmd = f"cat -n {shlex.quote(target.path)}"
     return SidecarSlotPlan(
         selector=f"R06-gen-{base_seed}-{idx:04d}",
         family_id="R06",
@@ -316,10 +320,15 @@ def _build_r07_plan(base_seed: str, idx: int, platform: str) -> SidecarSlotPlan:
     files: list[tuple[str, str]] = []
     setup_cmds: list[str] = []
 
+    mutated_citation_raw = gen.citation.raw
     if gen.mutation in ("url_query_fragment_redirect_mismatch", "wrong_leg_or_chat_handle", "absent_artifact"):
         sample_content = "package sample\n\nfunc Hello() string { return \"ok\" }\n"
         files.append(("sample.go", sample_content))
         setup_cmds.append("cat -n sample.go")
+        if gen.mutation == "wrong_leg_or_chat_handle":
+            # In the coordinator sidecar, [read#1:1] is minted on the coordinator itself;
+            # use a cross-leg namespaced handle so the wrong-leg mutation actually reaches D1.
+            mutated_citation_raw = "[worker-other:read#1:1]"
     else:
         for rec in gen.delivery_log.records[:2]:
             if rec.path:
@@ -331,11 +340,17 @@ def _build_r07_plan(base_seed: str, idx: int, platform: str) -> SidecarSlotPlan:
                     )
                     plain = plain + extra + "\n"
                 files.append((rec.path, plain))
-                if gen.working_tree_only_lines and rec.delivered_ranges:
+                total_lines = len(plain.splitlines())
+                if rec.delivered_ranges and (
+                    gen.working_tree_only_lines
+                    or gen.mutation == "line_outside_range"
+                    or rec.delivered_ranges[0].start > 1
+                    or rec.delivered_ranges[-1].end < total_lines
+                ):
                     r0 = rec.delivered_ranges[0]
                     setup_cmds.append(_cat_range_cmd(rec.path, r0.start, r0.end))
                 else:
-                    setup_cmds.append(f"cat -n {json.dumps(rec.path)}")
+                    setup_cmds.append(f"cat -n {shlex.quote(rec.path)}")
 
     return SidecarSlotPlan(
         selector=f"R07-gen-{base_seed}-{idx:04d}",
@@ -347,7 +362,7 @@ def _build_r07_plan(base_seed: str, idx: int, platform: str) -> SidecarSlotPlan:
         expected_class="ungrounded",
         files=tuple(files),
         setup_commands=tuple(setup_cmds),
-        reply_text=f"Observed [read#1] and claimed {gen.citation.raw}.",
+        reply_text=f"Observed [read#1] and claimed {mutated_citation_raw}.",
         repair_text="Observed [read#1].",
         variation_or_mutation=gen.mutation,
     )
@@ -618,6 +633,31 @@ def run_gb04_sidecar(
 
             info = _inspect_sidecar_artifact(art, initial_turns=len(turns))
             slot_divs: list[dict[str, Any]] = []
+
+            # Decision 060 structural check: verify R07 near-truth mutation was actually realized
+            # against the delivered log so a broken generator cannot silently degrade to a valid citation.
+            if slot.family_id == "R07" and not slot.is_fixed:
+                claimed_m = re.search(r"and claimed (\[[^\]]+\])\.", slot.reply_text)
+                if claimed_m:
+                    claimed_tok = claimed_m.group(1)
+                    hm = re.match(r"^\[([a-zA-Z0-9_:-]+#\d+)(?::(\d+))?\]$", claimed_tok)
+                    if hm:
+                        ch, cl = hm.group(1), int(hm.group(2)) if hm.group(2) else None
+                        rec_match = next((r for r in art.delivery_log.records if r.handle == ch), None)
+                        if rec_match is not None and (
+                            cl is None or any(rng.start <= cl <= rng.end for rng in rec_match.delivered_ranges)
+                        ):
+                            slot_divs.append(
+                                {
+                                    "selector": slot.selector,
+                                    "family_id": slot.family_id,
+                                    "base_seed": slot.base_seed,
+                                    "instance_index": slot.instance_index,
+                                    "variation_or_mutation": slot.variation_or_mutation,
+                                    "kind": "harness_error:mutation_not_realized",
+                                    "detail": f"R07 claimed citation {claimed_tok!r} is validly covered by delivery_log handle {ch!r}",
+                                }
+                            )
 
             if slot.family_id == "R05":
                 slot_divs.extend(_check_r05_feedback(slot, info))
