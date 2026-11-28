@@ -1,6 +1,7 @@
 package prompts
 
 import (
+	"slices"
 	"strings"
 	"sync"
 
@@ -211,6 +212,7 @@ func resolveProjectedToolSchemas(
 		}
 		out[name] = toolschema.ProjectToolArgsSchema(name, meta.ArgsSchema, toolschema.ProjectOptions{
 			CommandReadOnly:     name == "command" && !commandExternalExec,
+			CommandHideProgress: !slices.Contains(offered, "update_progress"),
 			PruneWaitConditions: name == "wait",
 			WaitConditions:      profile.WaitConditions,
 			AskMode:             askMode,

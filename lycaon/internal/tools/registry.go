@@ -203,10 +203,11 @@ type InvocationSource struct {
 	ProjectRootBranches map[string]sourcebranch.ID
 	// ModelSourceContext is the source context of the request that proposed this call.
 	ModelSourceContext *api.SourceContext
-	// EditorReadBases freezes reads known before this response executes tools;
-	// the response's own accepted writes advance it.
+	// EditorReadBases freezes reads known before this response; accepted writes advance it.
 	EditorReadBases *AgentReadBases
-	Roots           []projectroot.RootRef
+	// StructuredFormTool marks an invocation from a top-level structured form tool.
+	StructuredFormTool bool
+	Roots              []projectroot.RootRef
 	// OutsideRoot is the project's namespace for files beyond every root.
 	OutsideRoot projectroot.RootRef
 	// RootHistory is the project's attachment generation when Roots was
@@ -240,8 +241,7 @@ type InvocationSource struct {
 	GitMutations    SourceGitMutations
 	Observations    *sourceledger.Inventory
 	SourceMutations sourceeffect.Journal
-	// EditorDocuments serves and lands text for files the person has open.
-	// Nil when the app runs without an editor host; tools then use the file.
+	// EditorDocuments serves and lands text for files the person has open; nil without an editor host.
 	EditorDocuments EditorDocuments
 	// RepoFileCount is the active root's observed file count.
 	RepoFileCount int

@@ -33,6 +33,7 @@ type ExternalStages struct {
 	Cwd             projectpaths.Resolved
 	BaseEnvironment []string
 	ObserveStage    func(tools.ToolContext, confine.StampedRefusal, []confine.EgressHost, bool)
+	DeclareLaunch   func(ctx context.Context, tc tools.ToolContext, executionID, cwd string, argv []string) error
 	// window observes the source changes of the program this launch belongs to.
 	window *programWindow
 }
@@ -78,8 +79,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	boundary := confine.BoundaryOf(bound.confinement)
 	report := CommandConfinementReport(boundary, "", tools.LocalNetworkGrantOf(tctx), tctx.Files.PackageExecution)
 	settleJob := attachJobStage(ctx, bgprocess.ProgramStage{Boundary: boundary, Report: report, Lease: bound.lease})
-	// A launch that never starts its process still detaches the stage.
-	defer settleJob(confine.SandboxRefusals{}, nil)
+	defer settleJob(confine.SandboxRefusals{}, nil) // Detach stage even if process never starts.
 	launch := agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine).WithTrustedEnvironment(l.BaseEnvironment)
 	opts, err := lycexec.AgentLaunchOptions(launch, cwd, request.Environment, tctx.Host.HostResourcePathExtra)
 	if err != nil {
@@ -115,13 +115,14 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		}
 		return externalLaunchFailure(err, refusedResult("TOOL_OWNER_FAILED")), err
 	}
-	// Open before the process starts, so earlier drift is not attributed to it,
-	// and stay held until it has exited, on every path out of this launch.
 	release, err := l.window.enter(ctx, tctx, boundary)
 	if err != nil {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, err
 	}
 	defer release()
+	if res, err := l.declareLaunchInputs(ctx, tctx, request.Invocation.Identity.ExecutionID, cwd, launchArgv); err != nil {
+		return res, err
+	}
 	opts.Started = func(pid int) { noteJobProcess(ctx, pid, launchArgv) }
 	async, err := lycexec.StartPipelineAsync(ctx, []lycexec.Stage{{Name: launchArgv[0], Args: launchArgv[1:]}}, opts, nonNilWriter(streams.Output), nonNilWriter(streams.Error))
 	if err != nil {
@@ -134,9 +135,8 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		}
 		return externalLaunchFailure(err, toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}), err
 	}
+	logExternalLaunchProvenance(ctx, request.Invocation.Identity.ExecutionID, async.ExecutablePath())
 	if bound.directIPApplied {
-		// Every return below follows the reap, including a program handed back
-		// as running whose launch settles later.
 		tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleStarted)
 		defer tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleCompleted)
 	}

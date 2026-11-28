@@ -126,6 +126,14 @@ func TestReachedRecoveryTravelsFromLedgerToModel(t *testing.T) {
 	receipt, err := f.Recorder.Settle(t.Context(), parentID, invocation.Settlement{Status: api.InvocationStatusCompleted, Invoked: true, EvidenceKind: "program", SourceVerdict: api.SourceVerdictFailed})
 	testutil.FailErr(t, "settle model invocation", err)
 	message := api.Message{ID: "retained-result", Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Content: body, ToolResult: &api.ToolResult{Tool: "command", ToolCallID: callID, Content: body, Invocation: receipt, CommandProgram: observed.CommandProgram}}
+	if transcript.CommandProvenance(message.ToolResult) == nil {
+		t.Fatalf("program receipt was not bound to the reached invocation: program=%+v invocation=%+v", observed.CommandProgram, receipt)
+	}
+	outcome := decodeOutcome(t, body)
+	program := observed.CommandProgram
+	if program.StatusCode == nil || *program.StatusCode != outcome.Status {
+		t.Fatalf("program receipt status disagrees with the returned outcome: receipt=%+v outcome status=%d", program, outcome.Status)
+	}
 	projected := transcript.Project([]api.Message{message})
 	text := projected[len(projected)-1].Content
 	for _, want := range []string{"COMMAND_SYNTAX_INVALID", "before"} {

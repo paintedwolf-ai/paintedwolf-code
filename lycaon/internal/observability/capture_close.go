@@ -4,8 +4,22 @@ import "sync"
 
 type captureRedactorRegistration struct{ fn CaptureRedactor }
 
-var captureRedactorMu sync.Mutex
-var activeCaptureRedactor *captureRedactorRegistration
+var (
+	captureRedactorMu     sync.Mutex
+	activeCaptureRedactor *captureRedactorRegistration
+	debugClosersMu        sync.Mutex
+	debugClosers          []func()
+)
+
+// RegisterDebugCloser registers a process-level debug capture closer invoked by CloseDebugCaptures.
+func RegisterDebugCloser(fn func()) {
+	if fn == nil {
+		return
+	}
+	debugClosersMu.Lock()
+	debugClosers = append(debugClosers, fn)
+	debugClosersMu.Unlock()
+}
 
 // SetCaptureRedactor sets runtime catalog redaction until its owner releases it.
 func SetCaptureRedactor(fn CaptureRedactor) func() {
@@ -85,5 +99,11 @@ func CloseDebugCaptures() {
 	CloseDenPerfDebug()
 	CloseSummarizeDebug()
 	closePerformance()
+	debugClosersMu.Lock()
+	closers := append(([]func())(nil), debugClosers...)
+	debugClosersMu.Unlock()
+	for _, fn := range closers {
+		fn()
+	}
 	closeServeLogFile()
 }

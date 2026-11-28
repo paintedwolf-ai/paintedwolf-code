@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress/progresstest"
+	"github.com/lycaon/lycaon/internal/session/progressclosure"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -43,5 +44,26 @@ func TestProgramProgressRejectsMissingIdentityAndCancellation(t *testing.T) {
 	cancel()
 	if _, err := (&Service{}).ProgramProgressState(ctx, "session"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation lost: %v", err)
+	}
+}
+
+type readOnlyProgramProgress struct{}
+
+func (readOnlyProgramProgress) Get(context.Context, string) string { return "- [ ] Read only" }
+
+func TestProgramProgressExposesOnlyInstalledMutationDependencies(t *testing.T) {
+	t.Parallel()
+
+	for _, svc := range []*Service{nil, {}, {progress: readOnlyProgramProgress{}}} {
+		if svc.ProgramProgressStore() != nil || svc.ProgramProgressReconciler() != nil {
+			t.Fatal("command envelope was given a missing or read-only mutation dependency")
+		}
+	}
+
+	store := progresstest.New(t, "session")
+	reconciler := progressclosure.New()
+	svc := &Service{progress: store, ProgressClosure: reconciler}
+	if svc.ProgramProgressStore() != store || svc.ProgramProgressReconciler() != reconciler {
+		t.Fatal("command envelope did not receive the installed mutation dependencies")
 	}
 }

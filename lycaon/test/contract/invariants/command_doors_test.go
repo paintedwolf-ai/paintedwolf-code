@@ -1,0 +1,132 @@
+package invariants_test
+
+import (
+	"testing"
+
+	"github.com/lycaon/lycaon/test/contract/invariants"
+	"github.com/lycaon/lycaon/test/contract/invariants/forbiddencalls"
+	"github.com/lycaon/lycaon/test/contract/invariants/invariantstest"
+)
+
+func TestBB10CommandDoorInvariants(t *testing.T) {
+	t.Parallel()
+
+	launchRule := invariantstest.Rule(t, forbiddencalls.Family, "command-external-starts-through-launch-door")
+	launchClean := map[string]string{
+		"lycaon/internal/exec/pipeline.go": "package exec\n\nfunc StartPipelineAsync() {}\n",
+		"lycaon/internal/tools/native/command/program_external.go": "package command\n\n" +
+			"import lycexec \"github.com/lycaon/lycaon/internal/exec\"\n\n" +
+			"type ExternalStages struct{}\n\n" +
+			"func (ExternalStages) Launch() { lycexec.StartPipelineAsync() }\n",
+	}
+
+	readRule := invariantstest.Rule(t, forbiddencalls.Family, "command-read-credit-through-delivery-bridge")
+	readClean := map[string]string{
+		"lycaon/internal/tools/editor_documents.go":        "package tools\n\ntype EditorDocuments interface {\n\tRememberAgentRead()\n\tRememberAgentReadSpans()\n}\n",
+		"lycaon/internal/tools/command_source_delivery.go": "package tools\n\nfunc RememberCommandSourceDelivery(d EditorDocuments) { d.RememberAgentRead() }\n",
+		"lycaon/internal/commandprogram/eval.go":           "package commandprogram\n\nfunc Eval() {}\n",
+		"lycaon/internal/tools/native/command/delivery.go": "package command\n\nimport \"github.com/lycaon/lycaon/internal/tools\"\n\n" +
+			"func deliver(d tools.EditorDocuments) { tools.RememberCommandSourceDelivery(d) }\n",
+	}
+
+	cases := []struct {
+		name      string
+		rule      invariants.Invariant
+		files     map[string]string
+		want      invariantstest.Outcome
+		wantCount int
+	}{
+		{
+			name:  "i11_clean",
+			rule:  launchRule,
+			files: launchClean,
+			want:  invariantstest.Passes,
+		},
+		{
+			name: "i11_seeded_second_dispatch_bypass",
+			rule: launchRule,
+			files: invariantstest.With(launchClean, map[string]string{
+				"lycaon/internal/tools/native/command/bypass.go": "package command\n\n" +
+					"import lycexec \"github.com/lycaon/lycaon/internal/exec\"\n\n" +
+					"func secondDispatch() { lycexec.StartPipelineAsync() }\n",
+			}),
+			want:      invariantstest.Violates,
+			wantCount: 1,
+		},
+		{
+			name: "i11_renamed_anchor_fails_closed",
+			rule: launchRule,
+			files: invariantstest.With(launchClean, map[string]string{
+				"lycaon/internal/tools/native/command/program_external.go": "package command\n\n" +
+					"type ExternalStages struct{}\n\n" +
+					"func (ExternalStages) Start() {}\n",
+			}),
+			want: invariantstest.MissesAnchor,
+		},
+		{
+			name:  "i11_empty_corpus_fails_closed",
+			rule:  launchRule,
+			files: nil,
+			want:  invariantstest.Fails,
+		},
+		{
+			name:  "i13_clean",
+			rule:  readRule,
+			files: readClean,
+			want:  invariantstest.Passes,
+		},
+		{
+			name: "i13_clean_unrelated_same_named_receiver",
+			rule: readRule,
+			files: invariantstest.With(readClean, map[string]string{
+				"lycaon/internal/commandprogram/eval.go": "package commandprogram\n\n" +
+					"type localTracker struct{}\n\n" +
+					"func (localTracker) RememberAgentRead() {}\n" +
+					"func (localTracker) RememberAgentReadSpans() {}\n\n" +
+					"func Eval(t localTracker) { t.RememberAgentRead(); t.RememberAgentReadSpans() }\n",
+			}),
+			want: invariantstest.Passes,
+		},
+		{
+			name: "i13_seeded_direct_read_credit_in_command_runtime",
+			rule: readRule,
+			files: invariantstest.With(readClean, map[string]string{
+				"lycaon/internal/tools/native/command/delivery.go": "package command\n\nimport \"github.com/lycaon/lycaon/internal/tools\"\n\n" +
+					"func deliver(d tools.EditorDocuments) { d.RememberAgentRead() }\n",
+			}),
+			want:      invariantstest.Violates,
+			wantCount: 1,
+		},
+		{
+			name: "i13_seeded_direct_read_spans_in_evaluator",
+			rule: readRule,
+			files: invariantstest.With(readClean, map[string]string{
+				"lycaon/internal/commandprogram/eval.go": "package commandprogram\n\nimport \"github.com/lycaon/lycaon/internal/tools\"\n\n" +
+					"func Eval(d tools.EditorDocuments) { d.RememberAgentReadSpans() }\n",
+			}),
+			want:      invariantstest.Violates,
+			wantCount: 1,
+		},
+		{
+			name: "i13_renamed_anchor_fails_closed",
+			rule: readRule,
+			files: invariantstest.With(readClean, map[string]string{
+				"lycaon/internal/tools/command_source_delivery.go": "package tools\n\nfunc RememberDelivery() {}\n",
+			}),
+			want: invariantstest.MissesAnchor,
+		},
+		{
+			name:  "i13_empty_corpus_fails_closed",
+			rule:  readRule,
+			files: nil,
+			want:  invariantstest.Fails,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			invariantstest.Expect(t, invariants.Evaluate(invariantstest.Fixture(t, tc.files), tc.rule), tc.want, tc.wantCount)
+		})
+	}
+}

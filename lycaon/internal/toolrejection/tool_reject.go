@@ -27,12 +27,15 @@ type ToolReject struct {
 	CapabilityContract *toolcontract.ToolCapabilitySnapshot `json:"-"`
 	ArgumentValidation bool                                 `json:"-"`
 	BeforeEffect       bool                                 `json:"-"`
-	Code               string
-	Observation        string // snake_case observation token (≠ Decision hint id)
-	Data               map[string]any
-	FailureClass       string
-	Retryable          bool
-	OwnerRef           string
+	// NoFallback marks a policy refusal that stays terminal instead of falling
+	// back to an installed external binary as a native gap.
+	NoFallback   bool `json:"-"`
+	Code         string
+	Observation  string // snake_case observation token (≠ Decision hint id)
+	Data         map[string]any
+	FailureClass string
+	Retryable    bool
+	OwnerRef     string
 }
 
 // CompleteFailureMetadata fills invocation failure fields.
