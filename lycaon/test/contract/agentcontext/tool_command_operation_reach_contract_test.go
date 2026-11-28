@@ -116,6 +116,7 @@ func TestToolCommandOperationRecoveryFollowsCommandReach(t *testing.T) {
 
 	var callableMutating, deferredNoLoader *hoststate.TurnAuthority
 	var forbiddenReadOnly []*hoststate.TurnAuthority
+	seenReadOnlyReach := map[string]bool{}
 	for _, st := range states {
 		if st.Excluded {
 			continue
@@ -131,8 +132,15 @@ func TestToolCommandOperationRecoveryFollowsCommandReach(t *testing.T) {
 			copied := auth
 			deferredNoLoader = &copied
 		case status == toolreach.Callable && !auth.Reach.Program("edit") && auth.Reach.Program("cat"):
-			copied := auth
-			forbiddenReadOnly = append(forbiddenReadOnly, &copied)
+			// renderCommandOpRefusal only inspects auth.Reach (command/loader reach and admitted programs).
+			rk := fmt.Sprintf("%d|%d|%s|%s",
+				status, auth.Reach.Status(toolreach.LoaderTool),
+				strings.Join(auth.Offered, ","), strings.Join(auth.Plan.DeferredNames(), ","))
+			if !seenReadOnlyReach[rk] {
+				seenReadOnlyReach[rk] = true
+				copied := auth
+				forbiddenReadOnly = append(forbiddenReadOnly, &copied)
+			}
 		}
 	}
 	if callableMutating == nil || deferredNoLoader == nil || len(forbiddenReadOnly) == 0 {

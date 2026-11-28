@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -90,7 +89,7 @@ type projectedTurnToolsEntry struct {
 	postLoadSchemas  map[string]map[string]any
 	offered          []string
 	projectedSchemas map[string]map[string]any
-	encodedSchemas   any
+	schemasDigest    string
 	schemasOK        bool
 	programs         []string
 }
@@ -108,13 +107,19 @@ type authorityMemoStore struct {
 
 	projTurnMu sync.Mutex
 	projTurns  map[string]projectedTurnToolsEntry
+
+	frozenMu      sync.RWMutex
+	frozenTurns   map[string]TurnAuthority
+	frozenWorkers map[string]TurnAuthority
 }
 
 func newAuthorityMemoStore() *authorityMemoStore {
 	return &authorityMemoStore{
-		executors:  map[executorCacheKey]executorBundle{},
-		registries: map[registryCacheKey]*tools.DefaultRegistry{},
-		projTurns:  map[string]projectedTurnToolsEntry{},
+		executors:     map[executorCacheKey]executorBundle{},
+		registries:    map[registryCacheKey]*tools.DefaultRegistry{},
+		projTurns:     map[string]projectedTurnToolsEntry{},
+		frozenTurns:   map[string]TurnAuthority{},
+		frozenWorkers: map[string]TurnAuthority{},
 	}
 }
 
@@ -463,18 +468,56 @@ func FreezeTurnAuthorityWithResources(
 
 	var proj projectedTurnToolsEntry
 	cacheKey := ""
+	fullKey := ""
 	if len(state.History) == 0 {
-		cacheKey = fmt.Sprintf(
-			"c|%s|%s|%s|%t|%t|%s|%d|%s|%t|%s|%s|%s|%s|%s|%t|%t|%s|%+v|%s|jobs=%t|held=%t",
-			overlay.Catalog.Revision, state.SessionMode, state.Posture,
-			state.WebSearch, state.CommandExternalHidden, state.MCPState, state.RootCount,
-			state.TurnProfile.SurfaceID, state.TurnProfile.WorkflowActive,
-			state.TurnProfile.AdvanceWhenGateMet, state.TurnProfile.PhaseCoordinatorSurface,
-			state.RunContext.RunID, state.RunContext.WorkflowID, state.RunContext.PhaseCoordinatorSurface,
-			state.RunContext.PhaseHostHeld, state.RunContext.HasComposeDraft,
-			strings.Join(state.SpawnAllowlist, ","), state.ImplementState, sortedBoolKeys(state.Loaded),
-			resources.CommandJobs, resources.HeldCalls,
+		if state.TurnProfile.SurfaceID != "" {
+			// ProjectTurnTools depends only on resolved SurfaceID, active-run presence
+			// (and PhaseCoordinatorSurface under Ask), root count, posture/mode/overlay,
+			// spawn allowlist, loaded tools, and live resource presence.
+			hasRun := state.RunContext.RunID != "" || state.TurnProfile.WorkflowActive
+			askPhaseSurf := ""
+			if state.SessionMode == api.SessionModeAsk && hasRun {
+				askPhaseSurf = state.RunContext.PhaseCoordinatorSurface
+				if askPhaseSurf == "" {
+					askPhaseSurf = state.TurnProfile.PhaseCoordinatorSurface
+				}
+				if askPhaseSurf == "" {
+					askPhaseSurf = state.TurnProfile.SurfaceID
+				}
+			}
+			cacheKey = fmt.Sprintf(
+				"cs|%s|%s|%s|%t|%t|%s|%d|%s|%t|%s|%s|%s|jobs=%t|held=%t",
+				overlay.Catalog.Revision, state.SessionMode, state.Posture,
+				state.WebSearch, state.CommandExternalHidden, state.MCPState, state.RootCount,
+				state.TurnProfile.SurfaceID, hasRun, askPhaseSurf,
+				strings.Join(state.SpawnAllowlist, ","), sortedBoolKeys(state.Loaded),
+				resources.CommandJobs, resources.HeldCalls,
+			)
+		} else {
+			cacheKey = fmt.Sprintf(
+				"c|%s|%s|%s|%t|%t|%s|%d|%s|%t|%s|%s|%s|%s|%s|%t|%t|%s|%+v|%s|jobs=%t|held=%t",
+				overlay.Catalog.Revision, state.SessionMode, state.Posture,
+				state.WebSearch, state.CommandExternalHidden, state.MCPState, state.RootCount,
+				state.TurnProfile.SurfaceID, state.TurnProfile.WorkflowActive,
+				state.TurnProfile.AdvanceWhenGateMet, state.TurnProfile.PhaseCoordinatorSurface,
+				state.RunContext.RunID, state.RunContext.WorkflowID, state.RunContext.PhaseCoordinatorSurface,
+				state.RunContext.PhaseHostHeld, state.RunContext.HasComposeDraft,
+				strings.Join(state.SpawnAllowlist, ","), state.ImplementState, sortedBoolKeys(state.Loaded),
+				resources.CommandJobs, resources.HeldCalls,
+			)
+		}
+		fullKey = fmt.Sprintf(
+			"%s|git=%t/%t|appr=%s|scratch=%s|temp=%+v|vision=%t|allowed=%s|roots=%+v",
+			cacheKey, state.HasGit, state.HasAnyGitRoot, state.ApprovalPosture,
+			state.SessionScratchDir, state.SharedTempLocations, state.Vision,
+			strings.Join(state.RunContext.AllowedAgents, ","), state.Roots,
 		)
+		store.frozenMu.RLock()
+		if cachedAuth, ok := store.frozenTurns[fullKey]; ok {
+			store.frozenMu.RUnlock()
+			return cachedAuth, nil
+		}
+		store.frozenMu.RUnlock()
 		store.projTurnMu.Lock()
 		cached, hit := store.projTurns[cacheKey]
 		store.projTurnMu.Unlock()
@@ -511,7 +554,7 @@ func FreezeTurnAuthorityWithResources(
 		postLoadSchemas := turn.DeferredSchemas
 		offered := toolMetaNames(metas)
 		projectedSchemas := toolMetaSchemas(metas)
-		encSchemas, encErr := encodeAdmittedValue(reflect.ValueOf(projectedSchemas), map[ptrVisit]bool{})
+		schemasDigest, encErr := digestAdmittedValue(projectedSchemas)
 		proj = projectedTurnToolsEntry{
 			metas:            metas,
 			plan:             plan,
@@ -521,7 +564,7 @@ func FreezeTurnAuthorityWithResources(
 			postLoadSchemas:  postLoadSchemas,
 			offered:          offered,
 			projectedSchemas: projectedSchemas,
-			encodedSchemas:   encSchemas,
+			schemasDigest:    schemasDigest,
 			schemasOK:        encErr == nil,
 			programs:         computeProgramsList(progReach),
 		}
@@ -548,7 +591,15 @@ func FreezeTurnAuthorityWithResources(
 	}
 	reader = reader.WithVision(state.Vision)
 
-	return assembleTurnAuthorityFromEntry(proj, reader), nil
+	assembled := assembleTurnAuthorityFromEntry(proj, reader)
+	if fullKey != "" {
+		store.frozenMu.Lock()
+		if len(store.frozenTurns) < 2048 {
+			store.frozenTurns[fullKey] = assembled
+		}
+		store.frozenMu.Unlock()
+	}
+	return assembled, nil
 }
 
 func buildCoordinatorTurnInputs(
@@ -741,7 +792,7 @@ func assembleTurnAuthorityFromEntry(proj projectedTurnToolsEntry, reader prompts
 	}
 	digest := ""
 	if proj.schemasOK {
-		digest = authorityDigestPrecomputed(proj.offered, proj.encodedSchemas, proj.programs, reader.Mints(), reader)
+		digest = authorityDigestPrecomputed(proj.offered, proj.schemasDigest, proj.programs, reader.Mints(), reader)
 	}
 	return TurnAuthority{
 		Metas:           proj.metas,

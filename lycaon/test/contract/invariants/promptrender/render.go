@@ -237,7 +237,6 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 			varsWithCfg[k] = v
 		}
 		varsWithCfg["configuration"] = map[string]any{}
-		varsDigest := renderCacheKeyForVars("skillvars", stock.Catalog.Revision, nil, varsWithCfg)
 
 		var admitted []skills.Skill
 		renderedBody := make(map[string]string, len(loaded))
@@ -272,7 +271,7 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 				audit.DeferredCommandImplementSkills[sk.Name] = true
 			}
 
-			parts, rErr := renderSkillCachedWithDigest(ctx, cache, varsDigest, sk, varsWithCfg)
+			parts, rErr := renderSkillCachedWithDigest(ctx, cache, stock.Catalog.Revision, sk, varsWithCfg)
 			if rErr != nil {
 				return rErr
 			}
@@ -375,19 +374,75 @@ func overlayProfiles(stock *Stock, overlay hoststate.PackOverlay) []sandbox.Tool
 	return overlay.Profiles
 }
 
-var compiledSkillTplCache sync.Map
+type compiledSkillUnit struct {
+	tpl   *pongo2.Template
+	roots []string
+}
 
-func compileSkillTemplateCached(unitID, text string) (*pongo2.Template, error) {
+type cachedSkillResource struct {
+	rel  string
+	text string
+}
+
+var (
+	compiledSkillTplCache sync.Map
+	skillResourcesCache   sync.Map
+)
+
+func compileSkillTemplateCached(unitID, text string) (compiledSkillUnit, error) {
 	cKey := unitID + "\x00" + pongoplain.InlineTemplateID(text)
 	if v, ok := compiledSkillTplCache.Load(cKey); ok {
-		return v.(*pongo2.Template), nil
+		return v.(compiledSkillUnit), nil
 	}
 	tpl, err := pongoplain.Compile(text)
 	if err != nil {
-		return nil, err
+		return compiledSkillUnit{}, err
 	}
-	compiledSkillTplCache.Store(cKey, tpl)
-	return tpl, nil
+	rootSet := map[string]bool{}
+	for _, sel := range pongoplain.VariableReferences(text) {
+		if root := selectorRoot(sel); root != "" {
+			rootSet[root] = true
+		}
+	}
+	for _, name := range alwaysKeyedInputs {
+		rootSet[name] = true
+	}
+	roots := make([]string, 0, len(rootSet))
+	for name := range rootSet {
+		roots = append(roots, name)
+	}
+	slices.Sort(roots)
+	entry := compiledSkillUnit{tpl: tpl, roots: roots}
+	compiledSkillTplCache.Store(cKey, entry)
+	return entry, nil
+}
+
+func skillMarkdownResourcesCached(sk skills.Skill) ([]cachedSkillResource, error) {
+	key := sk.Name + "\x00" + sk.PackID + "\x00" + sk.UnitID + "\x00" + sk.Dir
+	if v, ok := skillResourcesCache.Load(key); ok {
+		return v.([]cachedSkillResource), nil
+	}
+	rels := sk.MarkdownResources()
+	out := make([]cachedSkillResource, 0, len(rels))
+	for _, rel := range rels {
+		raw, err := sk.ReadResource(rel)
+		if err != nil {
+			return nil, fmt.Errorf("read %s/%s: %w", sk.Name, rel, err)
+		}
+		out = append(out, cachedSkillResource{rel: rel, text: string(raw)})
+	}
+	skillResourcesCache.Store(key, out)
+	return out, nil
+}
+
+func projectSkillUnitVars(full map[string]any, roots []string) map[string]any {
+	out := make(map[string]any, len(roots))
+	for _, name := range roots {
+		if v, ok := full[name]; ok {
+			out[name] = v
+		}
+	}
+	return out
 }
 
 func renderSkillCached(
@@ -402,28 +457,24 @@ func renderSkillCached(
 		data[name] = value
 	}
 	data["configuration"] = map[string]any{}
-	varsDigest := renderCacheKeyForVars("skillvars", catalogRev, nil, data)
-	return renderSkillCachedWithDigest(ctx, cache, varsDigest, sk, data)
+	return renderSkillCachedWithDigest(ctx, cache, catalogRev, sk, data)
 }
 
 func renderSkillCachedWithDigest(
 	ctx context.Context,
 	cache *hoststate.RenderCache,
-	varsDigest string,
+	catalogRev string,
 	sk skills.Skill,
 	data map[string]any,
 ) ([]Text, error) {
 	renderOne := func(text, unitID string, resource bool) (Text, error) {
-		var key string
-		if varsDigest != "" {
-			key = "skill:" + unitID + ":" + varsDigest
+		unit, cErr := compileSkillTemplateCached(unitID, text)
+		if cErr != nil {
+			return Text{}, fmt.Errorf("compile %s: %w", unitID, cErr)
 		}
+		key := renderCacheKeyForVars("skill:"+unitID, catalogRev, nil, projectSkillUnitVars(data, unit.roots))
 		out, _, err := cache.RenderOrReuse(key, func() (string, error) {
-			tpl, cErr := compileSkillTemplateCached(unitID, text)
-			if cErr != nil {
-				return "", fmt.Errorf("compile %s: %w", unitID, cErr)
-			}
-			rOut, eErr := pongoplain.Execute(ctx, tpl, data)
+			rOut, eErr := pongoplain.Execute(ctx, unit.tpl, data)
 			if eErr != nil {
 				return "", fmt.Errorf("render %s: %w", unitID, eErr)
 			}
@@ -439,13 +490,14 @@ func renderSkillCachedWithDigest(
 	if err != nil {
 		return nil, err
 	}
-	parts := []Text{body}
-	for _, rel := range sk.MarkdownResources() {
-		raw, rErr := sk.ReadResource(rel)
-		if rErr != nil {
-			return nil, fmt.Errorf("read %s/%s: %w", sk.Name, rel, rErr)
-		}
-		part, pErr := renderOne(string(raw), sk.Name+"/"+rel, true)
+	resources, err := skillMarkdownResourcesCached(sk)
+	if err != nil {
+		return nil, err
+	}
+	parts := make([]Text, 0, 1+len(resources))
+	parts = append(parts, body)
+	for _, res := range resources {
+		part, pErr := renderOne(res.text, sk.Name+"/"+res.rel, true)
 		if pErr != nil {
 			return nil, pErr
 		}

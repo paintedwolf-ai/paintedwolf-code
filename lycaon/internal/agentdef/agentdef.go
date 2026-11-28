@@ -5,8 +5,11 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
+	"weak"
 
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -141,22 +144,31 @@ func LoadDir(dir extpacks.Source) ([]Profile, error) {
 	return profiles, nil
 }
 
-// LoadEffective loads profiles from the process catalog.
-func LoadEffective() ([]Profile, error) {
-	catalog, err := extpacks.CatalogForConsumers()
-	if err != nil {
-		return nil, err
-	}
-	return LoadEffectiveWithCatalog(catalog)
+type cachedCatalogProfiles struct {
+	profiles []Profile
+	byID     map[string]Profile
 }
 
-// LoadEffectiveWithCatalog loads captured winning agent units.
-func LoadEffectiveWithCatalog(catalog *extpacks.EffectiveCatalog) ([]Profile, error) {
+// effectiveCache holds catalogs weakly: an entry goes when its catalog is collected.
+var (
+	effectiveCacheMu sync.RWMutex
+	effectiveCache   = map[weak.Pointer[extpacks.EffectiveCatalog]]cachedCatalogProfiles{}
+)
+
+func loadEffectiveCached(catalog *extpacks.EffectiveCatalog) (cachedCatalogProfiles, error) {
 	if catalog == nil {
-		return nil, fmt.Errorf("agent profiles: effective catalog required")
+		return cachedCatalogProfiles{}, fmt.Errorf("agent profiles: effective catalog required")
 	}
+	key := weak.Make(catalog)
+	effectiveCacheMu.RLock()
+	if cached, ok := effectiveCache[key]; ok {
+		effectiveCacheMu.RUnlock()
+		return cached, nil
+	}
+	effectiveCacheMu.RUnlock()
+
 	var profiles []Profile
-	seen := make(map[string]struct{})
+	byID := make(map[string]Profile)
 	for _, id := range catalog.LoadedUnitIDs() {
 		if !strings.HasPrefix(id, UnitPrefix) {
 			continue
@@ -172,16 +184,46 @@ func LoadEffectiveWithCatalog(catalog *extpacks.EffectiveCatalog) ([]Profile, er
 		}
 		p, err := Parse(content)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", id, err)
+			return cachedCatalogProfiles{}, fmt.Errorf("%s: %w", id, err)
 		}
 		// A duplicate body ID means its unit ID differs.
-		if _, dup := seen[p.ID]; dup {
-			return nil, fmt.Errorf("duplicate agent id %q across packs", p.ID)
+		if _, dup := byID[p.ID]; dup {
+			return cachedCatalogProfiles{}, fmt.Errorf("duplicate agent id %q across packs", p.ID)
 		}
-		seen[p.ID] = struct{}{}
+		byID[p.ID] = p
 		profiles = append(profiles, p)
 	}
-	return profiles, nil
+	entry := cachedCatalogProfiles{profiles: profiles, byID: byID}
+	effectiveCacheMu.Lock()
+	_, existed := effectiveCache[key]
+	effectiveCache[key] = entry
+	effectiveCacheMu.Unlock()
+	if !existed {
+		runtime.AddCleanup(catalog, func(k weak.Pointer[extpacks.EffectiveCatalog]) {
+			effectiveCacheMu.Lock()
+			delete(effectiveCache, k)
+			effectiveCacheMu.Unlock()
+		}, key)
+	}
+	return entry, nil
+}
+
+// LoadEffective loads profiles from the process catalog.
+func LoadEffective() ([]Profile, error) {
+	catalog, err := extpacks.CatalogForConsumers()
+	if err != nil {
+		return nil, err
+	}
+	return LoadEffectiveWithCatalog(catalog)
+}
+
+// LoadEffectiveWithCatalog loads captured winning agent units.
+func LoadEffectiveWithCatalog(catalog *extpacks.EffectiveCatalog) ([]Profile, error) {
+	entry, err := loadEffectiveCached(catalog)
+	if err != nil {
+		return nil, err
+	}
+	return slices.Clone(entry.profiles), nil
 }
 
 // Capabilities an agent may declare; dispatch classification reads them from
@@ -306,14 +348,14 @@ func FilterExternalSourceAgents(agents []string) []string {
 
 func lookup(agentID string) (Profile, bool) {
 	agentID = strings.TrimSpace(agentID)
-	profiles, err := LoadEffective()
+	catalog, err := extpacks.CatalogForConsumers()
 	if err != nil {
 		return Profile{}, false
 	}
-	for _, p := range profiles {
-		if p.ID == agentID {
-			return p, true
-		}
+	entry, err := loadEffectiveCached(catalog)
+	if err != nil {
+		return Profile{}, false
 	}
-	return Profile{}, false
+	p, ok := entry.byID[agentID]
+	return p, ok
 }

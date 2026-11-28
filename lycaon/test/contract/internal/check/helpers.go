@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -65,14 +66,22 @@ func ActivateStockCatalog(t *testing.T) {
 	t.Cleanup(func() { extpacks.SetActive(nil) })
 }
 
-func StockCatalog(t *testing.T) *extpacks.EffectiveCatalog {
-	t.Helper()
+var cachedStockCatalog = sync.OnceValues(func() (*extpacks.EffectiveCatalog, error) {
 	content, err := extpacks.DiscoverStockContent()
-	FailErr(t, "DiscoverStockContent", err)
-	return extpacks.Resolve(t.Context(), extpacks.ResolveInput{
+	if err != nil {
+		return nil, err
+	}
+	return extpacks.Resolve(context.Background(), extpacks.ResolveInput{
 		Packs:   content,
 		Desired: extpacks.EmptyDesired(),
-	})
+	}), nil
+})
+
+func StockCatalog(t *testing.T) *extpacks.EffectiveCatalog {
+	t.Helper()
+	cat, err := cachedStockCatalog()
+	FailErr(t, "DiscoverStockContent", err)
+	return cat
 }
 
 func DoJSON(t *testing.T, client *http.Client, method, url string, body any, wantStatus int, dest any) {

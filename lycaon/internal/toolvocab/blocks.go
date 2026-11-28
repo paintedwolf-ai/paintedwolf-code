@@ -163,13 +163,12 @@ func LoadedBefore(c *Catalog, calls []Call, tool string, offset int) bool {
 // UnheldCalls lists calls to tools in requestable that offered lacks and that
 // no earlier exact request_tools call in the same block loads.
 func UnheldCalls(c *Catalog, text string, offered map[string]bool, requestable []string) []Call {
-	loadable := map[string]bool{}
+	loadable := make(map[string]bool, len(requestable))
 	for _, name := range requestable {
 		loadable[name] = !offered[name]
 	}
 	var out []Call
-	for _, b := range Blocks(text) {
-		calls := Calls(c, b.Text)
+	for _, calls := range analyzeSkillText(c, text).blockCalls {
 		for _, call := range calls {
 			if loadable[call.Tool] && !LoadedBefore(c, calls, call.Tool, call.Start) {
 				out = append(out, call)

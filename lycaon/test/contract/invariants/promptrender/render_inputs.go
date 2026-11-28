@@ -41,6 +41,24 @@ func stockRenderInputs(s *Stock) *renderInputs {
 	return actual.(*renderInputs)
 }
 
+// ProjectRenderVars keeps the entries of full that refs (and their transitive
+// includes) can read in catalog, or returns full when any ref cannot be
+// resolved statically.
+func ProjectRenderVars(catalog *extpacks.EffectiveCatalog, full map[string]any, refs ...string) map[string]any {
+	if catalog == nil {
+		return full
+	}
+	var in *renderInputs
+	if cached, ok := stockRenderInputsMemo.Load(catalog.Revision); ok {
+		in = cached.(*renderInputs)
+	} else {
+		created := newRenderInputs(catalog)
+		actual, _ := stockRenderInputsMemo.LoadOrStore(catalog.Revision, created)
+		in = actual.(*renderInputs)
+	}
+	return in.project(full, refs...)
+}
+
 // overlayRenderInputs indexes the catalog that renders for overlay.
 func overlayRenderInputs(s *Stock, overlay hoststate.PackOverlay) *renderInputs {
 	if overlay.Catalog == nil {

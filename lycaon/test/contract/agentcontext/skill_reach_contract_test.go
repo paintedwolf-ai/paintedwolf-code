@@ -3,28 +3,10 @@ package contract
 import (
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/skills"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
 )
-
-// forEachStockSkillRender calls check for every stock skill rendered for
-// every reader that can select it.
-func forEachStockSkillRender(t *testing.T, check func(t *testing.T, sk skills.Skill, readerLabel string, reader prompts.Reader, vars map[string]any, parts []promptrender.Text)) {
-	t.Helper()
-	stock, err := promptrender.LoadStock(t.Context())
-	contractcheck.FailErr(t, "load the stock catalog", err)
-	renders, err := promptrender.RenderStockSkills(stock)
-	contractcheck.FailErr(t, "render the stock skills", err)
-	for _, sr := range renders {
-		t.Run(sr.Reader+"/"+sr.Skill.Name, func(t *testing.T) {
-			vars, err := prompts.SkillVars(sr.State)
-			contractcheck.FailErr(t, "skill vars", err)
-			check(t, sr.Skill, sr.Reader, sr.State, vars, sr.Parts)
-		})
-	}
-}
 
 // stockSkillCorpus loads the stock pack skills with their bundled resources.
 func stockSkillCorpus(t *testing.T) []skills.Skill {

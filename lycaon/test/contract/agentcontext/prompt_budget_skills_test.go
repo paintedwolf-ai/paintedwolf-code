@@ -2,6 +2,7 @@ package contract
 
 import (
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -59,12 +60,36 @@ func mergePromptBudgetSkillRoster(t *testing.T, vars map[string]any) {
 	)
 }
 
-func mergeReachableSkillRoster(t *testing.T, vars map[string]any, reader prompts.Reader) {
+var (
+	stockEffectiveSkillsCache sync.Map
+	reachableSkillRosterMemo  sync.Map
+)
+
+func cachedStockEffectiveSkills(t *testing.T) []skills.Skill {
 	t.Helper()
-	loaded, diagnostics := extpacks.LoadEffectiveSkills(contractcheck.StockCatalog(t))
+	cat := contractcheck.StockCatalog(t)
+	if v, ok := stockEffectiveSkillsCache.Load(cat.Revision); ok {
+		return v.([]skills.Skill)
+	}
+	loaded, diagnostics := extpacks.LoadEffectiveSkills(cat)
 	if len(diagnostics) != 0 {
 		t.Fatalf("stock skill diagnostics: %v", diagnostics)
 	}
+	stockEffectiveSkillsCache.Store(cat.Revision, loaded)
+	return loaded
+}
+
+func mergeReachableSkillRoster(t *testing.T, vars map[string]any, reader prompts.Reader) {
+	t.Helper()
+	cat := contractcheck.StockCatalog(t)
+	key := cat.Revision + "|" + reader.Fingerprint()
+	if v, ok := reachableSkillRosterMemo.Load(key); ok {
+		roster := v.(map[string]any)
+		vars["agent_skills"] = roster["agent_skills"]
+		vars["full_skill_catalog"] = roster["full_skill_catalog"]
+		return
+	}
+	loaded := cachedStockEffectiveSkills(t)
 	reachable := make([]skills.Skill, 0, len(loaded))
 	for _, skill := range loaded {
 		if toolvocab.SkillToolsOfferedForReader(skill, reader) {
@@ -72,6 +97,7 @@ func mergeReachableSkillRoster(t *testing.T, vars map[string]any, reader prompts
 		}
 	}
 	roster := skillRosterVars(reachable)
+	reachableSkillRosterMemo.Store(key, roster)
 	vars["agent_skills"] = roster["agent_skills"]
 	vars["full_skill_catalog"] = roster["full_skill_catalog"]
 }

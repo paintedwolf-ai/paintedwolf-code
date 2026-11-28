@@ -5,14 +5,14 @@ package hoststate
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"math"
 	"reflect"
 	"slices"
-	"strconv"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -37,21 +37,15 @@ func TryRenderCacheKey(
 	selectedUnits []string,
 	fullVars map[string]any,
 ) (string, error) {
-	encodedVars, err := encodeAdmittedValue(reflect.ValueOf(fullVars), map[ptrVisit]bool{})
-	if err != nil {
+	h := sha256.New()
+	writeHashString(h, "render-v2")
+	writeHashString(h, catalogRevision)
+	writeHashString(h, templateID)
+	writeHashStringSlice(h, selectedUnits)
+	if err := hashAdmittedValue(h, reflect.ValueOf(fullVars), map[ptrVisit]bool{}); err != nil {
 		return "", err
 	}
-	units := slices.Clone(selectedUnits)
-	if units == nil {
-		units = []string{}
-	}
-	payload := map[string]any{
-		"catalog_revision": catalogRevision,
-		"selected_units":   units,
-		"template_id":      templateID,
-		"vars":             encodedVars,
-	}
-	return sha256CanonicalJSON(payload), nil
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // RenderCacheKey returns the SHA-256 cache digest when fullVars fits the sound
@@ -93,50 +87,83 @@ func AuthorityDigest(
 	sortedOffered := slices.Clone(offered)
 	slices.Sort(sortedOffered)
 	programs := computeProgramsList(programReach)
-	encodedSchemas, err := encodeAdmittedValue(reflect.ValueOf(projectedSchemas), map[ptrVisit]bool{})
+	schemasDigest, err := digestAdmittedValue(projectedSchemas)
 	if err != nil {
 		return ""
 	}
-	return authorityDigestPrecomputed(sortedOffered, encodedSchemas, programs, mints, subjectReader)
+	return authorityDigestPrecomputed(sortedOffered, schemasDigest, programs, mints, subjectReader)
 }
 
 func authorityDigestPrecomputed(
 	sortedOffered []string,
-	encodedSchemas any,
+	schemasDigest string,
 	programs []string,
 	mints map[string]bool,
 	subjectReader prompts.Reader,
 ) string {
-	encodedMints, err := encodeAdmittedValue(reflect.ValueOf(mints), map[ptrVisit]bool{})
-	if err != nil {
-		return ""
-	}
-	encodedHeld, err := encodeAdmittedValue(reflect.ValueOf(subjectReader.Held()), map[ptrVisit]bool{})
-	if err != nil {
-		return ""
-	}
-
-	payload := map[string]any{
-		"mints":             encodedMints,
-		"offered":           sortedOffered,
-		"programs":          programs,
-		"projected_schemas": encodedSchemas,
-		"subject_held":      encodedHeld,
-		"subject_profile":   subjectReader.ProfileID(),
-		"subject_request":   subjectReader.Requestable(),
-		"subject_surface":   subjectReader.SurfaceID(),
-		"subject_valid":     subjectReader.Valid(),
-	}
-	return sha256CanonicalJSON(payload)
+	h := sha256.New()
+	writeHashString(h, "auth-v2")
+	writeHashBoolMap(h, mints)
+	writeHashStringSlice(h, sortedOffered)
+	writeHashStringSlice(h, programs)
+	writeHashString(h, schemasDigest)
+	writeHashBoolMap(h, subjectReader.Held())
+	writeHashString(h, subjectReader.ProfileID())
+	writeHashStringSlice(h, subjectReader.Requestable())
+	writeHashString(h, subjectReader.SurfaceID())
+	writeHashBool(h, subjectReader.Valid())
+	return hex.EncodeToString(h.Sum(nil))
 }
 
-func sha256CanonicalJSON(v any) string {
-	encoded, err := json.Marshal(v)
-	if err != nil {
-		panic(fmt.Sprintf("hoststate: marshal canonical cache payload: %v", err))
+func digestAdmittedValue(v any) (string, error) {
+	h := sha256.New()
+	if err := hashAdmittedValue(h, reflect.ValueOf(v), map[ptrVisit]bool{}); err != nil {
+		return "", err
 	}
-	sum := sha256.Sum256(encoded)
-	return hex.EncodeToString(sum[:])
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func writeHashUint64(h hash.Hash, n uint64) {
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], n)
+	_, _ = h.Write(buf[:])
+}
+
+func writeHashBool(h hash.Hash, b bool) {
+	if b {
+		_, _ = h.Write([]byte{1})
+	} else {
+		_, _ = h.Write([]byte{0})
+	}
+}
+
+func writeHashString(h hash.Hash, s string) {
+	writeHashUint64(h, uint64(len(s)))
+	_, _ = h.Write([]byte(s))
+}
+
+func writeHashStringSlice(h hash.Hash, items []string) {
+	writeHashUint64(h, uint64(len(items)))
+	for _, s := range items {
+		writeHashString(h, s)
+	}
+}
+
+func writeHashBoolMap(h hash.Hash, m map[string]bool) {
+	writeHashBool(h, m == nil)
+	writeHashUint64(h, uint64(len(m)))
+	if len(m) == 0 {
+		return
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		writeHashString(h, k)
+		writeHashBool(h, m[k])
+	}
 }
 
 func hasAnyMethods(t reflect.Type) bool {
@@ -149,125 +176,169 @@ func hasAnyMethods(t reflect.Type) bool {
 	return false
 }
 
-func encodeAdmittedValue(v reflect.Value, seen map[ptrVisit]bool) (any, error) {
+func hashAdmittedValue(h hash.Hash, v reflect.Value, seen map[ptrVisit]bool) error {
 	if !v.IsValid() {
-		return []any{"nil", ""}, nil
+		_, _ = h.Write([]byte{'N'})
+		return nil
 	}
 	for v.Kind() == reflect.Interface {
 		if v.IsNil() {
-			return []any{"nil", ""}, nil
+			_, _ = h.Write([]byte{'N'})
+			return nil
 		}
 		v = v.Elem()
 	}
 
 	typ := v.Type()
 	if hasAnyMethods(typ) {
-		return nil, fmt.Errorf("%w: type %s defines methods", ErrUncacheableRenderInput, typ)
+		return fmt.Errorf("%w: type %s defines methods", ErrUncacheableRenderInput, typ)
 	}
 	typeName := typ.String()
 
 	switch v.Kind() {
 	case reflect.Pointer:
+		_, _ = h.Write([]byte{'P'})
+		writeHashString(h, typeName)
 		if v.IsNil() {
-			return []any{"ptr", typeName, nil}, nil
+			_, _ = h.Write([]byte{0})
+			return nil
 		}
+		_, _ = h.Write([]byte{1})
 		key := ptrVisit{kind: reflect.Pointer, typ: typ, ptr: v.Pointer()}
 		if seen[key] {
-			return nil, fmt.Errorf("%w: cyclic pointer %s", ErrUncacheableRenderInput, typeName)
+			return fmt.Errorf("%w: cyclic pointer %s", ErrUncacheableRenderInput, typeName)
 		}
 		seen[key] = true
 		defer delete(seen, key)
-		elem, err := encodeAdmittedValue(v.Elem(), seen)
-		if err != nil {
-			return nil, err
-		}
-		return []any{"ptr", typeName, elem}, nil
+		return hashAdmittedValue(h, v.Elem(), seen)
 	case reflect.Bool:
-		return []any{"bool", typeName, v.Bool()}, nil
+		_, _ = h.Write([]byte{'B'})
+		writeHashString(h, typeName)
+		writeHashBool(h, v.Bool())
+		return nil
 	case reflect.String:
-		return []any{"string", typeName, v.String()}, nil
+		_, _ = h.Write([]byte{'S'})
+		writeHashString(h, typeName)
+		writeHashString(h, v.String())
+		return nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return []any{"int", typeName, strconv.FormatInt(v.Int(), 10)}, nil
+		_, _ = h.Write([]byte{'I'})
+		writeHashString(h, typeName)
+		writeHashUint64(h, uint64(v.Int()))
+		return nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return []any{"uint", typeName, strconv.FormatUint(v.Uint(), 10)}, nil
+		_, _ = h.Write([]byte{'U'})
+		writeHashString(h, typeName)
+		writeHashUint64(h, v.Uint())
+		return nil
 	case reflect.Float32, reflect.Float64:
 		f := v.Float()
 		if math.IsNaN(f) || math.IsInf(f, 0) {
-			return nil, fmt.Errorf("%w: non-finite float %v", ErrUncacheableRenderInput, f)
+			return fmt.Errorf("%w: non-finite float %v", ErrUncacheableRenderInput, f)
 		}
-		return []any{"float", typeName, strconv.FormatUint(math.Float64bits(f), 16)}, nil
+		_, _ = h.Write([]byte{'F'})
+		writeHashString(h, typeName)
+		writeHashUint64(h, math.Float64bits(f))
+		return nil
 	case reflect.Slice, reflect.Array:
-		return encodeAdmittedList(v, typeName, seen)
+		return hashAdmittedList(h, v, typeName, seen)
 	case reflect.Map:
-		return encodeAdmittedMap(v, typeName, seen)
+		return hashAdmittedMap(h, v, typeName, seen)
 	case reflect.Struct:
-		return encodeAdmittedStruct(v, typeName, seen)
+		return hashAdmittedStruct(h, v, typeName, seen)
 	default:
-		return nil, fmt.Errorf("%w: unsupported kind %s (%s)", ErrUncacheableRenderInput, v.Kind(), typeName)
+		return fmt.Errorf("%w: unsupported kind %s (%s)", ErrUncacheableRenderInput, v.Kind(), typeName)
 	}
 }
 
-func encodeAdmittedList(v reflect.Value, typeName string, seen map[ptrVisit]bool) (any, error) {
+func hashAdmittedList(h hash.Hash, v reflect.Value, typeName string, seen map[ptrVisit]bool) error {
 	isNil := v.Kind() == reflect.Slice && v.IsNil()
 	if v.Kind() == reflect.Slice && !isNil && v.Len() > 0 {
 		key := ptrVisit{kind: reflect.Slice, typ: v.Type(), ptr: v.Pointer(), length: v.Len()}
 		if seen[key] {
-			return nil, fmt.Errorf("%w: cyclic slice %s", ErrUncacheableRenderInput, typeName)
+			return fmt.Errorf("%w: cyclic slice %s", ErrUncacheableRenderInput, typeName)
 		}
 		seen[key] = true
 		defer delete(seen, key)
 	}
-	items := make([]any, v.Len())
-	for i := 0; i < v.Len(); i++ {
-		enc, err := encodeAdmittedValue(v.Index(i), seen)
-		if err != nil {
-			return nil, err
+	_, _ = h.Write([]byte{'L'})
+	writeHashString(h, typeName)
+	writeHashBool(h, isNil)
+	n := v.Len()
+	writeHashUint64(h, uint64(n))
+	for i := 0; i < n; i++ {
+		if err := hashAdmittedValue(h, v.Index(i), seen); err != nil {
+			return err
 		}
-		items[i] = enc
 	}
-	return []any{"list", typeName, isNil, items}, nil
+	return nil
 }
 
-func encodeAdmittedMap(v reflect.Value, typeName string, seen map[ptrVisit]bool) (any, error) {
+func hashAdmittedMap(h hash.Hash, v reflect.Value, typeName string, seen map[ptrVisit]bool) error {
 	if v.Type().Key().Kind() != reflect.String {
-		return nil, fmt.Errorf("%w: non-string map key type %s", ErrUncacheableRenderInput, v.Type().Key())
+		return fmt.Errorf("%w: non-string map key type %s", ErrUncacheableRenderInput, v.Type().Key())
 	}
 	isNil := v.IsNil()
 	if !isNil {
 		key := ptrVisit{kind: reflect.Map, typ: v.Type(), ptr: v.Pointer()}
 		if seen[key] {
-			return nil, fmt.Errorf("%w: cyclic map %s", ErrUncacheableRenderInput, typeName)
+			return fmt.Errorf("%w: cyclic map %s", ErrUncacheableRenderInput, typeName)
 		}
 		seen[key] = true
 		defer delete(seen, key)
 	}
-	out := make(map[string]any, v.Len())
+	_, _ = h.Write([]byte{'M'})
+	writeHashString(h, typeName)
+	writeHashBool(h, isNil)
+	n := v.Len()
+	writeHashUint64(h, uint64(n))
+	if n == 0 {
+		return nil
+	}
+	type mapKV struct {
+		k string
+		v reflect.Value
+	}
+	entries := make([]mapKV, 0, n)
 	iter := v.MapRange()
 	for iter.Next() {
-		enc, err := encodeAdmittedValue(iter.Value(), seen)
-		if err != nil {
-			return nil, err
-		}
-		out[iter.Key().String()] = enc
+		entries = append(entries, mapKV{k: iter.Key().String(), v: iter.Value()})
 	}
-	return []any{"map", typeName, isNil, out}, nil
+	slices.SortFunc(entries, func(a, b mapKV) int {
+		if a.k < b.k {
+			return -1
+		}
+		if a.k > b.k {
+			return 1
+		}
+		return 0
+	})
+	for _, e := range entries {
+		writeHashString(h, e.k)
+		if err := hashAdmittedValue(h, e.v, seen); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func encodeAdmittedStruct(v reflect.Value, typeName string, seen map[ptrVisit]bool) (any, error) {
+func hashAdmittedStruct(h hash.Hash, v reflect.Value, typeName string, seen map[ptrVisit]bool) error {
 	typ := v.Type()
-	fields := make(map[string]any, v.NumField())
-	for i := 0; i < v.NumField(); i++ {
+	_, _ = h.Write([]byte{'T'})
+	writeHashString(h, typeName)
+	n := v.NumField()
+	writeHashUint64(h, uint64(n))
+	for i := 0; i < n; i++ {
 		field := typ.Field(i)
 		if !field.IsExported() {
-			return nil, fmt.Errorf("%w: struct %s has unexported field %s", ErrUncacheableRenderInput, typeName, field.Name)
+			return fmt.Errorf("%w: struct %s has unexported field %s", ErrUncacheableRenderInput, typeName, field.Name)
 		}
-		enc, err := encodeAdmittedValue(v.Field(i), seen)
-		if err != nil {
-			return nil, err
+		writeHashString(h, field.Name)
+		if err := hashAdmittedValue(h, v.Field(i), seen); err != nil {
+			return err
 		}
-		fields[field.Name] = enc
 	}
-	return []any{"struct", typeName, fields}, nil
+	return nil
 }
 
 type authorityPair struct {

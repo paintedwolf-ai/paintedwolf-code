@@ -1,14 +1,45 @@
 package toolvocabtest
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"regexp"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 )
+
+type parsedClaimBlock struct {
+	block    toolvocab.Block
+	calls    []toolvocab.Call
+	examples []CallExample
+	spans    []BacktickSpan
+}
+
+var parsedClaimDocCache = scopedstore.New[[]parsedClaimBlock](2048)
+
+func parseClaimDocCached(cat *toolvocab.Catalog, text string) []parsedClaimBlock {
+	sum := sha256.Sum256([]byte(text))
+	key := fmt.Sprintf("%p\x00%s", cat, string(sum[:]))
+	if hit, ok := parsedClaimDocCache.Load(key); ok {
+		return hit
+	}
+	blocks := toolvocab.Blocks(text)
+	parsed := make([]parsedClaimBlock, len(blocks))
+	for i, b := range blocks {
+		parsed[i] = parsedClaimBlock{
+			block:    b,
+			calls:    toolvocab.Calls(cat, b.Text),
+			examples: ParseCallExamples(cat, b.Text),
+			spans:    ExtractInlineBackticks(b.Text),
+		}
+	}
+	parsedClaimDocCache.Store(key, parsed)
+	return parsed
+}
 
 // schemaPathSpanRe matches a dotted argument path, `a.b` or `a[].b`.
 var schemaPathSpanRe = regexp.MustCompile(`^[a-z][a-z0-9_]*(?:\[\])?(?:\.[a-z][a-z0-9_]*(?:\[\])?)+$`)
@@ -56,13 +87,14 @@ func (g claimGrammar) evaluate(block ClaimBlock) []SubjectViolation {
 		g.vocab = nil
 	}
 	var out []SubjectViolation
-	for _, b := range toolvocab.Blocks(block.Text) {
-		out = append(out, g.block(block, b)...)
+	for _, pb := range parseClaimDocCached(g.cat, block.Text) {
+		out = append(out, g.block(block, pb)...)
 	}
 	return deduplicateSubjectViolations(out)
 }
 
-func (g claimGrammar) block(block ClaimBlock, b toolvocab.Block) []SubjectViolation {
+func (g claimGrammar) block(block ClaimBlock, pb parsedClaimBlock) []SubjectViolation {
+	b := pb.block
 	lineAt := func(off int) int { return b.Line + strings.Count(b.Text[:max(off, 0)], "\n") }
 	var out []SubjectViolation
 	report := func(claim string, off int, reason string) {
@@ -71,14 +103,13 @@ func (g claimGrammar) block(block ClaimBlock, b toolvocab.Block) []SubjectViolat
 	for _, name := range toolvocab.UnreachableNames(g.cat, b.Text, g.reachable) {
 		report(name, strings.Index(b.Text, strings.TrimSuffix(name, "#")), fmt.Sprintf("names unreachable tool, operation, or handle %q", name))
 	}
-	calls := toolvocab.Calls(g.cat, b.Text)
-	for _, ex := range ParseCallExamples(g.cat, b.Text) {
-		g.checkCall(ex, calls, report)
+	for _, ex := range pb.examples {
+		g.checkCall(ex, pb.calls, report)
 	}
-	for _, bs := range ExtractInlineBackticks(b.Text) {
+	for _, bs := range pb.spans {
 		g.checkToolPath(bs, report)
 		g.checkSchemaPath(bs, report)
-		g.checkCommandSpan(bs, calls, report)
+		g.checkCommandSpan(bs, pb.calls, report)
 	}
 	return out
 }

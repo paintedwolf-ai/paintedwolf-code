@@ -155,27 +155,31 @@ func deriveSpawnFactFlags(
 				continue
 			}
 		}
-		var isExternal bool
+		var isExternal, isWorker, servesLane bool
 		if prof, ok := byID[name]; ok {
 			isExternal = slices.Contains(prof.Capabilities, agentdef.CapabilityExternal)
+			isWorker = slices.Contains(prof.TopologyRoles, agentdef.TopologyRoleWorker)
+			servesLane = !laneGated || len(prof.DispatchLanes) == 0 || slices.Contains(prof.DispatchLanes, strings.TrimSpace(lane))
 		} else {
 			isExternal = agentdef.DeclaresAny(name, agentdef.CapabilityExternal)
+			isWorker = agentdef.IsWorker(name)
+			servesLane = !laneGated || agentdef.ServesLane(name, lane)
 		}
-		if !agentdef.IsWorker(name) || (laneGated && !agentdef.ServesLane(name, lane)) {
+		if !isWorker || !servesLane {
 			continue
 		}
 		if !host.WebSearch && isExternal {
 			continue
 		}
-		mutCapable, okCap := AgentMutationCapable(name)
-		if host.SessionMode == "ask" && okCap && mutCapable {
+		caps := cachedAgentSurfaceChecks(name)
+		if host.SessionMode == "ask" && caps.ok && caps.mutationCapable {
 			continue
 		}
-		if host.RootCount == 0 && !AgentRunsWithoutWorkspace(name) {
+		if host.RootCount == 0 && caps.ok && (caps.mutationCapable || caps.surveysProjectTree) {
 			continue
 		}
 		kept++
-		if okCap && mutCapable {
+		if caps.ok && caps.mutationCapable {
 			canSpawnImplementer = true
 		}
 		if isExternal {
