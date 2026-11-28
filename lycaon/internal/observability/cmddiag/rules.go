@@ -13,25 +13,45 @@ func Evaluate(obs Observation, now time.Time) []Finding {
 		now = time.Now().UTC()
 	}
 	var out []Finding
-	if f, ok := checkObservationLoss(obs, now); ok {
-		out = append(out, sanitizeFinding(f))
+	if obs.WEA == nil || hasCommandFacts(obs) {
+		if f, ok := checkObservationLoss(obs, now); ok {
+			out = append(out, sanitizeFinding(f))
+		}
+		if f, ok := checkDupOrConflictingTerminal(obs, now); ok {
+			out = append(out, sanitizeFinding(f))
+		}
+		if f, ok := checkMissingChildTerminal(obs, now); ok {
+			out = append(out, sanitizeFinding(f))
+		}
+		if f, ok := checkStaleTerminalPresentation(obs, now); ok {
+			out = append(out, sanitizeFinding(f))
+		}
+		if f, ok := checkOperationSourceContradiction(obs, now); ok {
+			out = append(out, sanitizeFinding(f))
+		}
+		if f, ok := checkStopAdmissionAfterAck(obs, now); ok {
+			out = append(out, sanitizeFinding(f))
+		}
 	}
-	if f, ok := checkDupOrConflictingTerminal(obs, now); ok {
-		out = append(out, sanitizeFinding(f))
-	}
-	if f, ok := checkMissingChildTerminal(obs, now); ok {
-		out = append(out, sanitizeFinding(f))
-	}
-	if f, ok := checkStaleTerminalPresentation(obs, now); ok {
-		out = append(out, sanitizeFinding(f))
-	}
-	if f, ok := checkOperationSourceContradiction(obs, now); ok {
-		out = append(out, sanitizeFinding(f))
-	}
-	if f, ok := checkStopAdmissionAfterAck(obs, now); ok {
-		out = append(out, sanitizeFinding(f))
+	if obs.WEA != nil {
+		out = append(out, EvaluateWEA(*obs.WEA, now)...)
 	}
 	return out
+}
+
+func hasCommandFacts(obs Observation) bool {
+	return obs.ProgramState != "" ||
+		obs.ProgramSettled ||
+		obs.ProgramStatusCode != nil ||
+		obs.ProgramStopCode != "" ||
+		obs.PageInconsistent ||
+		len(obs.LookupFailedExecutions) > 0 ||
+		obs.Presentation != nil ||
+		obs.PresentationUnsupported ||
+		len(obs.Executions) > 0 ||
+		len(obs.TerminalRecords) > 0 ||
+		len(obs.LinkedOperations) > 0 ||
+		obs.StopAck != nil
 }
 
 func baseFinding(obs Observation, now time.Time, rule RuleID, disp Disposition) Finding {

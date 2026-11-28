@@ -151,6 +151,7 @@ func (e *Approvals) awaitActionApproval(ctx context.Context, action hitl.Propose
 	switch {
 	case hitl.CheckpointAuthorizes(final):
 		approveSecretPermission(tc.Effects.Secrets, permission)
+		recordAuthorizedCheckpoint(ctx, action, final)
 		return args, nil
 	case final.Status == hitl.DecisionStatusRejected || final.Status == hitl.DecisionStatusApproved:
 		return nil, e.approvalRefusal(approvaloutcome.CodeApprovalDenied)

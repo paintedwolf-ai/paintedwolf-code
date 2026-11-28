@@ -82,6 +82,7 @@ type Observation struct {
 	TerminalRecords         []TerminalFact        `json:"terminal_records,omitempty"`
 	LinkedOperations        []OperationSourceLink `json:"linked_operations,omitempty"`
 	StopAck                 *StopAckWitness       `json:"stop_ack,omitempty"`
+	WEA                     *WEAObservation       `json:"wea,omitempty"`
 }
 
 // ExecutionFact retains bounded metadata for one child execution receipt.
