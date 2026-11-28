@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -383,6 +384,13 @@ func (b feedBudgets) RequestBudget(ctx context.Context, _ string, req modelcall.
 	return catalog.RequestBudget(ctx, req)
 }
 
+func requestForWithRecall(t *testing.T, sess *api.Session, frame string, rows []api.Message) modelcall.CompletionRequest {
+	t.Helper()
+	req := requestFor(sess, frame, rows)
+	req.Tools = []tools.ToolMeta{recallToolMeta(t)}
+	return req
+}
+
 func requestFor(sess *api.Session, frame string, rows []api.Message) modelcall.CompletionRequest {
 	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, ContextPinned: true, Content: frame}
 	return modelcall.CompletionRequest{Model: sess.Model, Messages: append([]api.Message{standing}, rows...)}
@@ -462,7 +470,7 @@ func TestOneLiveConfigBoundsEveryRequestAC_KV_09(t *testing.T) {
 		history, err := svc.Load(t.Context(), sess)
 		testutil.FailErr(t, "load", err)
 		hard := svc.compactionConfig(t.Context(), sess).HardCeilingTokens
-		fitted, err := svc.FitRequest(t.Context(), sess, history, requestFor(sess, frame, history), feedBudgets{feed}, nil)
+		fitted, err := svc.FitRequest(t.Context(), sess, history, requestForWithRecall(t, sess, frame, history), feedBudgets{feed}, nil)
 		testutil.FailErr(t, "bounded representation", err)
 		if input := modelcall.EstimateRequestInput(fitted); input > hard {
 			t.Fatalf("input %d exceeds hard ceiling %d", input, hard)

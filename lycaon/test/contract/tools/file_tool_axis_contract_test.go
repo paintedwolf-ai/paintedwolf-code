@@ -6,17 +6,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolscope"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// "Can this turn reach project files" is one catalog fact read three ways: the
-// coordinator surface hides folder-requiring tools at zero roots, the no_folder
-// posture rule denies them, and prompt copy gates on has_file_tools. The
-// expectation comes from the catalog's no-folder allowlist itself.
 func TestFileToolFactHasOneSource(t *testing.T) {
 	t.Parallel()
 	allowlist, err := toolscope.NoFolderAllowlist()
@@ -25,30 +23,43 @@ func TestFileToolFactHasOneSource(t *testing.T) {
 		t.Fatal("no_folder_allowlist is empty")
 	}
 
-	// Every allowlisted tool works without a folder, so a surface built only from
-	// them must not claim file tools.
-	caps := capability.Derive(0, allowlist, nil)
-	if caps.HasFileTools {
-		t.Errorf("has_file_tools is true for a surface that is exactly the "+
-			"no-folder allowlist (%s)", strings.Join(allowlist, ", "))
+	for _, rootCount := range []int{0, 1} {
+		caps := fileFacts(t, rootCount, allowlist)
+		if caps.HasFileTools {
+			t.Errorf("has_file_tools is true at root_count=%d for no-folder allowlist (%s)",
+				rootCount, strings.Join(allowlist, ", "))
+		}
+		if caps.HasWorkspaceRoots != (rootCount > 0) {
+			t.Errorf("has_workspace_roots=%v at root_count=%d", caps.HasWorkspaceRoots, rootCount)
+		}
 	}
 
-	// A tool the allowlist omits flips it at any root count: a profile can
-	// withhold file tools with a folder attached.
 	cfg, loadErr := nativemanifest.Load()
 	contractcheck.FailErr(t, "load native manifest", loadErr)
 	folderRequiring := folderRequiringCatalogTools(cfg, allowlist)
 	if len(folderRequiring) == 0 {
 		t.Fatal("no catalog tool requires an attached folder — the axis is inert")
 	}
-	for _, tool := range folderRequiring {
-		for _, rootCount := range []int{0, 1} {
-			got := capability.Derive(rootCount, []string{tool}, nil)
-			if !got.HasFileTools {
-				t.Errorf("has_file_tools is false for %q at root_count=%d, but the "+
-					"catalog keeps it off the no-folder allowlist", tool, rootCount)
-			}
+	fileTools := 0
+	for _, tool := range cfg.AllTools() {
+		wantFileTool := prompts.IsProjectFileTool(tool)
+		if wantFileTool {
+			fileTools++
 		}
+		zero := fileFacts(t, 0, []string{tool})
+		if zero.HasWorkspaceRoots || zero.HasFileTools {
+			t.Errorf("root_count=0 set workspace/file flags for %q: %+v", tool, zero)
+		}
+		one := fileFacts(t, 1, []string{tool})
+		if !one.HasWorkspaceRoots {
+			t.Errorf("has_workspace_roots is false at root_count=1 for %q", tool)
+		}
+		if one.HasFileTools != wantFileTool {
+			t.Errorf("has_file_tools=%v want %v for %q at root_count=1", one.HasFileTools, wantFileTool, tool)
+		}
+	}
+	if fileTools == 0 {
+		t.Fatal("no catalog tool matched IsProjectFileTool — has_file_tools is inert")
 	}
 }
 
@@ -66,7 +77,7 @@ func TestZeroRootSurfaceNeverClaimsFileTools(t *testing.T) {
 	if len(kept) == 0 {
 		t.Fatal("zero-root filter kept nothing — the comparison is vacuous")
 	}
-	if caps := capability.Derive(0, kept, nil); caps.HasFileTools {
+	if caps := fileFacts(t, 0, kept); caps.HasFileTools {
 		t.Errorf("the zero-root surface sets has_file_tools; kept = %s",
 			strings.Join(kept, ", "))
 	}
@@ -81,4 +92,20 @@ func folderRequiringCatalogTools(cfg nativemanifest.Config, allowlist []string) 
 	}
 	sort.Strings(out)
 	return out
+}
+
+type workspaceFacts struct{ HasWorkspaceRoots, HasFileTools bool }
+
+// fileFacts reads the workspace facts of a request offering tools at rootCount.
+func fileFacts(t *testing.T, rootCount int, tools []string) workspaceFacts {
+	t.Helper()
+	profile := sandbox.ToolProfile{ID: "file_axis", Tools: map[string]bool{}}
+	for _, name := range tools {
+		profile.Tools[name] = true
+	}
+	reader, err := prompts.NewReader(prompts.HostFacts{Profiles: []sandbox.ToolProfile{profile}, RootCount: rootCount, WebSearch: true},
+		prompts.TurnProjection{ProfileID: profile.ID, Plan: toolsurface.Compile(tools, nil), Offered: tools})
+	contractcheck.FailErr(t, "reader", err)
+	facts := reader.Facts()
+	return workspaceFacts{HasWorkspaceRoots: facts["has_workspace_roots"] == true, HasFileTools: facts["has_file_tools"] == true}
 }

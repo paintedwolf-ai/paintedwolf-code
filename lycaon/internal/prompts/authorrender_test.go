@@ -13,9 +13,20 @@ import (
 	"github.com/lycaon/lycaon/internal/skills"
 )
 
+func TestAuthorRender_RequiresPreviewReader(t *testing.T) {
+	_, err := AuthorRender(context.Background(), AuthorRenderRequest{
+		ModuleRoot:  configlayout.FindModuleRoot(),
+		TemplateRef: "partials/finish-handoff.md",
+	})
+	if err == nil {
+		t.Fatal("AuthorRender rendered without a preview reader")
+	}
+}
+
 func TestAuthorRender_BundledPartial(t *testing.T) {
 	res, err := AuthorRender(context.Background(), AuthorRenderRequest{
 		ModuleRoot:  configlayout.FindModuleRoot(),
+		Reader:      PreviewReader("", ""),
 		TemplateRef: "partials/finish-handoff.md",
 	})
 	if err != nil {
@@ -30,6 +41,7 @@ func TestAuthorRender_PersonaHasRequiredHeadings(t *testing.T) {
 	root := configlayout.FindModuleRoot()
 	res, err := AuthorRender(context.Background(), AuthorRenderRequest{
 		ModuleRoot: root,
+		Reader:     PreviewReader("implementer", ""),
 		AgentID:    "implementer",
 		Check:      true,
 	})
@@ -63,6 +75,7 @@ func TestAuthorRender_ProjectOverlayWins(t *testing.T) {
 	res, err := AuthorRender(context.Background(), AuthorRenderRequest{
 		ModuleRoot:  configlayout.FindModuleRoot(),
 		ProjectDir:  project,
+		Reader:      PreviewReader("", ""),
 		TemplateRef: "partials/finish-handoff.md",
 	})
 	if err != nil {
@@ -123,6 +136,7 @@ func TestAuthorRender_OverlayParseErrorFailsClosed(t *testing.T) {
 	_, err := AuthorRender(context.Background(), AuthorRenderRequest{
 		ModuleRoot:  configlayout.FindModuleRoot(),
 		ProjectDir:  project,
+		Reader:      PreviewReader("", ""),
 		TemplateRef: "partials/finish-handoff.md",
 	})
 	if err == nil {
@@ -145,6 +159,7 @@ func TestAuthorRender_CheckCatchesStrippedHeadings(t *testing.T) {
 	res, err := AuthorRender(context.Background(), AuthorRenderRequest{
 		ModuleRoot: configlayout.FindModuleRoot(),
 		ProjectDir: project,
+		Reader:     PreviewReader("implementer", ""),
 		AgentID:    "implementer",
 		Check:      true,
 	})
@@ -177,6 +192,7 @@ func TestAuthorRender_VarsReachTemplate(t *testing.T) {
 	res, err := AuthorRender(context.Background(), AuthorRenderRequest{
 		ModuleRoot:  configlayout.FindModuleRoot(),
 		ProjectDir:  project,
+		Reader:      PreviewReader("", ""),
 		TemplateRef: "partials/finish-handoff.md",
 		Vars:        map[string]any{"focus": "triage"},
 	})
@@ -191,6 +207,7 @@ func TestAuthorRender_VarsReachTemplate(t *testing.T) {
 func TestAuthorRender_RefAndAgentAreExclusive(t *testing.T) {
 	_, err := AuthorRender(context.Background(), AuthorRenderRequest{
 		ModuleRoot:  configlayout.FindModuleRoot(),
+		Reader:      PreviewReader("implementer", ""),
 		TemplateRef: "partials/finish-handoff.md",
 		AgentID:     "implementer",
 	})
@@ -202,6 +219,7 @@ func TestAuthorRender_RefAndAgentAreExclusive(t *testing.T) {
 func TestAuthorRender_SkillBodyStock(t *testing.T) {
 	res, err := AuthorRender(t.Context(), AuthorRenderRequest{
 		ModuleRoot: configlayout.FindModuleRoot(),
+		Reader:     PreviewReader("", ""),
 		SkillName:  "write-a-skill",
 		Check:      true,
 	})
@@ -219,6 +237,7 @@ func TestAuthorRender_SkillBodyStock(t *testing.T) {
 func TestAuthorRender_SkillResource(t *testing.T) {
 	res, err := AuthorRender(t.Context(), AuthorRenderRequest{
 		ModuleRoot: configlayout.FindModuleRoot(),
+		Reader:     PreviewReader("", ""),
 		SkillName:  "write-a-skill",
 		Resource:   "references/FORMAT.md",
 		Check:      true,
@@ -237,6 +256,7 @@ func TestAuthorRender_SkillResource(t *testing.T) {
 func TestAuthorRender_SkillVarOverlay(t *testing.T) {
 	res, err := AuthorRender(t.Context(), AuthorRenderRequest{
 		ModuleRoot: configlayout.FindModuleRoot(),
+		Reader:     PreviewReader("", ""),
 		SkillName:  "orchestrate-a-large-task",
 		Vars:       map[string]any{"max_in_flight": 2},
 	})
@@ -251,6 +271,7 @@ func TestAuthorRender_SkillVarOverlay(t *testing.T) {
 func TestAuthorRender_SkillRefAndSkillAreExclusive(t *testing.T) {
 	_, err := AuthorRender(t.Context(), AuthorRenderRequest{
 		ModuleRoot:  configlayout.FindModuleRoot(),
+		Reader:      PreviewReader("", ""),
 		TemplateRef: "partials/finish-handoff.md",
 		SkillName:   "write-a-skill",
 	})
@@ -262,6 +283,7 @@ func TestAuthorRender_SkillRefAndSkillAreExclusive(t *testing.T) {
 func TestAuthorRender_SkillNotFound(t *testing.T) {
 	_, err := AuthorRender(t.Context(), AuthorRenderRequest{
 		ModuleRoot: configlayout.FindModuleRoot(),
+		Reader:     PreviewReader("", ""),
 		SkillName:  "no-such-skill-anywhere",
 	})
 	if err == nil || !strings.Contains(err.Error(), "not found in the effective catalog") {
@@ -282,6 +304,7 @@ func TestAuthorRender_SkillProjectLiteral(t *testing.T) {
 	res, err := AuthorRender(t.Context(), AuthorRenderRequest{
 		ModuleRoot: configlayout.FindModuleRoot(),
 		ProjectDir: project,
+		Reader:     PreviewReader("", ""),
 		SkillName:  "notes-dump",
 		Check:      true,
 	})
@@ -309,6 +332,7 @@ func TestAuthorRender_SkillBudgetViolation(t *testing.T) {
 	res, err := AuthorRender(t.Context(), AuthorRenderRequest{
 		ModuleRoot: configlayout.FindModuleRoot(),
 		ProjectDir: project,
+		Reader:     PreviewReader("", ""),
 		SkillName:  "big-notes",
 		Check:      true,
 	})

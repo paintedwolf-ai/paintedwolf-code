@@ -1,6 +1,7 @@
 package invariants_test
 
 import (
+	"github.com/lycaon/lycaon/test/contract/invariants/invariantstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/test/contract/invariants"
@@ -16,12 +17,12 @@ CREATE TABLE notes (
 CREATE INDEX idx_notes_author ON notes(author_person_id);
 `
 
-// The family fails on each kind of drift, shown on rows over the live
+// The family invariantstest.Fails on each kind of drift, shown on rows over the live
 // schema.
 func TestSQLSchemaFailsClosed(t *testing.T) {
 	t.Parallel()
-	columns := rule(t, sqlschema.Family, "person-columns-are-keyed-constrained-and-indexed")
-	actors := bare(rule(t, sqlschema.Family, "person-actor-vocabulary-names-the-person"))
+	columns := invariantstest.Rule(t, sqlschema.Family, "person-columns-are-keyed-constrained-and-indexed")
+	actors := invariantstest.Bare(invariantstest.Rule(t, sqlschema.Family, "person-actor-vocabulary-names-the-person"))
 	actors.Exempt = []invariants.Exemption{{Key: "retired_table", Reason: "fixture"}}
 	tree := func(schema string) map[string]string {
 		return map[string]string{invariants.SchemaPath: schema}
@@ -29,20 +30,20 @@ func TestSQLSchemaFailsClosed(t *testing.T) {
 	for name, tc := range map[string]struct {
 		rule  invariants.Invariant
 		files map[string]string
-		want  outcome
+		want  invariantstest.Outcome
 	}{
-		"clean": {rule: columns, files: tree(peopleSchema), want: passes},
+		"clean": {rule: columns, files: tree(peopleSchema), want: invariantstest.Passes},
 		"seeded violation": {rule: columns, files: tree(`CREATE TABLE people (id TEXT PRIMARY KEY) STRICT;
 CREATE TABLE notes (id TEXT PRIMARY KEY, author_person_id TEXT NOT NULL REFERENCES people(id)) STRICT;
-`), want: violates},
-		"renamed anchor":  {rule: columns, files: map[string]string{"lycaon/internal/db/store.sql": peopleSchema}, want: missesAnchor},
-		"stale exemption": {rule: actors, files: tree(peopleSchema), want: staleExemption},
-		"empty corpus":    {rule: columns, files: tree("PRAGMA foreign_keys = ON;\n"), want: fails},
-		"unparsable file": {rule: columns, files: tree("CREATE TABLE people (id TEXT PRIMARY KEY\n"), want: fails},
+`), want: invariantstest.Violates},
+		"renamed anchor":  {rule: columns, files: map[string]string{"lycaon/internal/db/store.sql": peopleSchema}, want: invariantstest.MissesAnchor},
+		"stale exemption": {rule: actors, files: tree(peopleSchema), want: invariantstest.StaleExemption},
+		"empty corpus":    {rule: columns, files: tree("PRAGMA foreign_keys = ON;\n"), want: invariantstest.Fails},
+		"unparsable file": {rule: columns, files: tree("CREATE TABLE people (id TEXT PRIMARY KEY\n"), want: invariantstest.Fails},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			expect(t, invariants.Evaluate(fixture(t, tc.files), tc.rule), tc.want, 1)
+			invariantstest.Expect(t, invariants.Evaluate(invariantstest.Fixture(t, tc.files), tc.rule), tc.want, 1)
 		})
 	}
 }

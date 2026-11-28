@@ -354,7 +354,7 @@ func (s convergeState) diff(folded convergeState) string {
 // settle waits until every committed event row reached the hub and every
 // debounced event was delivered.
 func (w *convergeWorld) settle() {
-	w.h.Server.WaitForBackground(w.t.Context())
+	testutil.FailErr(w.t, "wait for background", w.h.Server.WaitForBackground(w.t.Context()))
 	testutil.WaitFor(w.t, "outbox drained", func() bool { return w.outboxRows() == 0 })
 	w.h.MemoryHub().FlushDebounced()
 }

@@ -67,7 +67,7 @@ func mergeReachableSkillRoster(t *testing.T, vars map[string]any, reader prompts
 	}
 	reachable := make([]skills.Skill, 0, len(loaded))
 	for _, skill := range loaded {
-		if toolvocab.SkillToolsOffered(skill, reader.Held()) {
+		if toolvocab.SkillToolsOfferedForReader(skill, reader) {
 			reachable = append(reachable, skill)
 		}
 	}

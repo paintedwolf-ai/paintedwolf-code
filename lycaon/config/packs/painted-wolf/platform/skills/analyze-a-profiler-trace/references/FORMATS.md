@@ -2,7 +2,7 @@
 
 ## Identify by shape
 
-Query the top-level keys first (`jq 'keys' <trace>` in `command` for uncompressed files up to 64 MiB; otherwise print `sorted(d)` from the script), then the container's keys. Match the first row that fits.
+{% if profile_can_request.command %}Load `command` with `request_tools(need="command")` and query{% else %}Query{% endif %} the top-level keys first (`jq 'keys' <trace>` in `command` for uncompressed files up to 64 MiB; otherwise print `sorted(d)` from the script), then the container's keys. Match the first row that fits.
 
 | Shape you see | Format | Producer |
 |---|---|---|

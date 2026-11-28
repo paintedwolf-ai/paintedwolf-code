@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
@@ -104,14 +105,19 @@ type HostDependencies struct {
 	Events                 events.ReplayHub
 	EventHeartbeatInterval time.Duration
 	EventPublisher         *events.Publisher
-	Presence               *events.Presence
-	HostIdentity           hostidentity.Identity
-	HostResources          *hostresources.Service
-	HostPower              *hostpower.Controller
-	Pricing                *settings.PricingHost
-	Preview                *preview.Controller
-	PreflightEnv           preflight.Env
-	Attention              *attention.Source
+	EventOutbox            interface {
+		Wait(context.Context) error
+		Epoch() uint64
+		Busy() bool
+	}
+	Presence      *events.Presence
+	HostIdentity  hostidentity.Identity
+	HostResources *hostresources.Service
+	HostPower     *hostpower.Controller
+	Pricing       *settings.PricingHost
+	Preview       *preview.Controller
+	PreflightEnv  preflight.Env
+	Attention     *attention.Source
 }
 
 type StorageDependencies struct {

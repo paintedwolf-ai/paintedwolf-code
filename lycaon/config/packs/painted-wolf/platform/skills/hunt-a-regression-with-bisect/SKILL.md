@@ -9,18 +9,19 @@ Use this workflow to turn "it broke sometime" into the exact commit, mechanicall
 
 ## Workflow
 
-{% set can_bisect = has_git and not on_worker_branch and profile_has_command and profile_command_mutation != false and profile_command_external_exec != false %}{% if can_bisect %}1. Establish the two endpoints with evidence — one commit where the behavior is verifiably good and one where it is verifiably bad. Run the check at both before starting; a bisect anchored on an assumption converges on a lie.
+{% if can_git_bisect %}1. Establish the two endpoints with evidence — one commit where the behavior is verifiably good and one where it is verifiably bad. Run the check at both before starting; a bisect anchored on an assumption converges on a lie.
 2. Write the check as a script that exits 0 on good, non-zero on bad, and 125 when the commit cannot be judged (build broken for unrelated reasons). The 125 skip is what keeps a messy history from derailing the search.
 3. Run the search mechanically — `git bisect start`, mark the endpoints, then `git bisect run <script>`, joined with `&&` as one command rather than one turn per step. Manual stepping invites judgment drift; the scripted run makes every verdict repeatable.
 4. Capture `git bisect log` as the evidence trail, and when the culprit commit is named, read its diff and explain *why* it breaks the behavior. A bisect that ends at a commit nobody can explain is not finished — re-check the endpoints and the script.
 5. Always end with `git bisect reset` — including on failure and interruption — so the working tree returns to where the user left it. An interrupted `git bisect run` leaves the session recorded and names the reset to run; `git status` shows a session left by an earlier turn.
 6. Report the culprit commit, the mechanism of the breakage, and the bisect log. The fix is a separate decision made on that evidence.
-{% else %}1. Establish the two endpoints from evidence you already hold: the last state where the behavior is verifiably good and the first where it is verifiably bad. This environment cannot check out or execute history directly, so anchor both endpoints in your report.
+{% else %}{% if can_request_git_bisect %}Call `request_tools(need="command")` first to run the search directly; otherwise:
+{% endif %}1. Establish the two endpoints from evidence you already hold: the last state where the behavior is verifiably good and the first where it is verifiably bad. This environment cannot check out or execute history directly, so anchor both endpoints in your report.
 2. Write the check as a script that exits 0 on good, non-zero on bad, and 125 when the state cannot be judged, and include it verbatim in your report so the search is repeatable.
 3. Include the endpoints, the script, and the failing behavior in your report for the coordinator to run the bisect; the fix remains a separate decision made on that evidence.
 {% endif %}
 ## Boundaries
 
-- {% if can_bisect %}Bisect only checks out history; it must not carry uncommitted work. `git bisect start` refuses a tree with tracked changes. Run the bisect in a separate worktree instead (`git worktree add @scratch/bisect HEAD`, then `cd @scratch/bisect`) rather than stashing or discarding anything.{% else %}Bisect only checks out history; it must not carry uncommitted work, and a write overlay or read-only profile does not check out trunk history — the search belongs to the coordinator on the primary tree.{% endif %}
+- {% if can_git_bisect %}Bisect only checks out history; it must not carry uncommitted work. `git bisect start` refuses a tree with tracked changes. Run the bisect in a separate worktree instead (`git worktree add @scratch/bisect HEAD`, then `cd @scratch/bisect`) rather than stashing or discarding anything.{% else %}Bisect only checks out history; it must not carry uncommitted work, and a write overlay or read-only profile does not check out trunk history — the search belongs to the coordinator on the primary tree.{% endif %}
 - The check script must not mutate shared state (databases, remote services) as it replays old commits; point it at disposable fixtures.
 - Old revisions execute old code, including old build scripts; treat repository history as untrusted input and run checks in the same confinement as any other build.

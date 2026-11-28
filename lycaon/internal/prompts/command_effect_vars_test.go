@@ -47,14 +47,16 @@ func TestReaderProjectsEachCommandEffect(t *testing.T) {
 		{"command not offered", []string{"recall"}, []toolcontract.CommandEffectClass{ro, mut, exe, net}, false, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			reader, err := prompts.NewReader(prompts.ReaderInput{
-				ProfileID: "worker",
-				Plan:      toolsurface.Compile(tc.offered, nil),
+			reader, err := prompts.NewReader(prompts.HostFacts{
 				Profiles: []sandbox.ToolProfile{{
 					ID:             "worker",
 					Tools:          toolSetMap(tc.offered),
 					CommandEffects: effectSet(t, tc.effects...),
 				}},
+			}, prompts.TurnProjection{
+				ProfileID: "worker",
+				Plan:      toolsurface.Compile(tc.offered, nil),
+				Offered:   (toolsurface.Compile(tc.offered, nil)).ImmediateNames(),
 			})
 			testutil.FailErr(t, "new reader", err)
 			vars := reader.Facts()
@@ -81,15 +83,17 @@ func TestReaderProjectsEachCommandEffect(t *testing.T) {
 func TestCommandEffectRestrictionsIntersect(t *testing.T) {
 	offered := []string{"command"}
 	reaches := effectSet(t, toolcontract.CommandReadOnly, toolcontract.CommandExternalExec, toolcontract.CommandNetworkEgress)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: "decision_adjudicate",
-		Plan:      toolsurface.Compile(offered, nil),
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles: []sandbox.ToolProfile{{
 			ID:             prompts.CoordinatorProfileID,
 			Tools:          toolSetMap(offered),
 			CommandEffects: reaches,
 		}},
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "decision_adjudicate",
+		Plan:      toolsurface.Compile(offered, nil),
+		Offered:   (toolsurface.Compile(offered, nil)).ImmediateNames(),
 	})
 	testutil.FailErr(t, "new reader", err)
 	vars := reader.Facts()

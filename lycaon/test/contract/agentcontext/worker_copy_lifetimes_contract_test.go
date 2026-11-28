@@ -78,7 +78,9 @@ func TestWorkerCopyBranchCoverageAndMissingFacts(t *testing.T) {
 		}
 	}
 
-	if reader, err := prompts.NewReader(prompts.ReaderInput{}); err == nil || reader.Valid() {
+	if reader, err := prompts.NewReader(prompts.HostFacts{}, prompts.TurnProjection{
+		Declared: true,
+	}); err == nil || reader.Valid() {
 		t.Fatalf("withheld ProfileID succeeded: valid=%v err=%v", reader.Valid(), err)
 	}
 	outVars := map[string]any{}
@@ -173,11 +175,15 @@ func TestWorkerCopyLifetimesAndSkillHistory(t *testing.T) {
 		t.Fatal("standing coordinator prefix changed across volatile worker completion")
 	}
 
+	coordReader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
+	contractcheck.FailErr(t, "DeclaredReader coordinator", err)
 	tsWorking, err := inject.RenderTurnStateBlock(context.Background(), renderer, "s-life", inject.TurnStateInjectInput{
+		Reader:  coordReader,
 		Workers: []map[string]any{{"name": "w1", "agent": "implementer", "state": "working"}},
 	})
 	contractcheck.FailErr(t, "turn state working", err)
 	tsAsking, err := inject.RenderTurnStateBlock(context.Background(), renderer, "s-life", inject.TurnStateInjectInput{
+		Reader:  coordReader,
 		Workers: []map[string]any{{"name": "w1", "agent": "implementer", "state": "asking", "question": "Use v2?"}},
 	})
 	contractcheck.FailErr(t, "turn state asking", err)
@@ -199,15 +205,16 @@ func TestWorkerCopyLifetimesAndSkillHistory(t *testing.T) {
 	for _, name := range plan.AddressableNames() {
 		loaded[name] = true
 	}
-	readerA, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: surface.SurfaceImplementDispatch,
+	readerA, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Plan:      plan,
-		Loaded:    loaded,
 		HasGit:    true,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: surface.SurfaceImplementDispatch,
+		Plan:      readerLoadedPlan(plan, loaded),
+		Offered:   readerLoadedOffer(plan, nil, loaded),
 	})
 	contractcheck.FailErr(t, "skill reader A", err)
 	varsA, err := prompts.SkillVars(readerA)
@@ -230,7 +237,9 @@ func TestWorkerCopyAbsentStates(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	renderer := prompts.NewInjectRenderer(contractcheck.BundledPromptEngineForRoot(t))
 
-	emptyTurnState, err := inject.RenderTurnStateBlock(context.Background(), renderer, "s-empty", inject.TurnStateInjectInput{})
+	coordReader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
+	contractcheck.FailErr(t, "DeclaredReader coordinator", err)
+	emptyTurnState, err := inject.RenderTurnStateBlock(context.Background(), renderer, "s-empty", inject.TurnStateInjectInput{Reader: coordReader})
 	contractcheck.FailErr(t, "empty turn state", err)
 	if emptyTurnState != "" {
 		t.Fatalf("expected empty turn-state block with no workers or gates, got %q", emptyTurnState)

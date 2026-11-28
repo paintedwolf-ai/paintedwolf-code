@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 	"strings"
 
@@ -13,9 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/limits"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolreach"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -75,7 +74,7 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 	if l.Deps.EvaluateCloseoutBlock == nil {
 		return out, fmt.Errorf("closeout OAR not configured")
 	}
-	decision, err := l.Deps.EvaluateCloseoutBlock(tools.WithCallReach(ctx, st.requestReach()), sess, observation.facts)
+	decision, err := l.Deps.EvaluateCloseoutBlock(toolreach.WithRequest(ctx, st.requestReach()), sess, observation.facts)
 	if err != nil {
 		return out, err
 	}
@@ -123,8 +122,8 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 			break
 		}
 	}
-	if st != nil && !tools.CallReach(ctx).Known() {
-		ctx = tools.WithCallReach(ctx, st.requestReach())
+	if st != nil && !toolreach.FromContext(ctx).Known() {
+		ctx = toolreach.WithRequest(ctx, st.requestReach())
 	}
 	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, history, surfaceID, assistantMsg)
 	if err != nil {
@@ -236,40 +235,27 @@ func (l *turnCloseout) hostKickRenderer(ctx context.Context, st *promptLoopTurnS
 		return nil
 	}
 	render := l.Deps.RenderHostKick
-	reader := closeoutTurnReader(st)
+	reader := turnReader(st)
 	return func(kickID string, data map[string]any) string {
-		if reader.Valid() {
-			if merged, err := prompts.Vars(reader, data); err == nil {
-				data = merged
-			}
+		if !reader.Valid() {
+			slog.WarnContext(ctx, "closeout kick has no request reader", "kick", kickID)
+			return guard.HostKickMarker(kickID)
 		}
-		kick, err := render(ctx, kickID, data)
+		kick, err := render(ctx, reader, kickID, data)
 		if err != nil || strings.TrimSpace(kick) == "" {
+			slog.WarnContext(ctx, "closeout kick render", "kick", kickID, "error", err)
 			return guard.HostKickMarker(kickID)
 		}
 		return strings.TrimSpace(kick)
 	}
 }
 
-func closeoutTurnReader(st *promptLoopTurnState) prompts.Reader {
-	profiles, err := sandbox.LoadToolProfiles()
-	if err != nil {
+// turnReader is the Reader of the turn's last request.
+func turnReader(st *promptLoopTurnState) prompts.Reader {
+	if st == nil {
 		return prompts.Reader{}
 	}
-	offered := []string{}
-	if st != nil && len(st.offeredToolNames) > 0 {
-		offered = append(offered, st.offeredToolNames...)
-	}
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		Profiles:  profiles,
-		Visible:   offered,
-		WebSearch: true,
-	})
-	if err != nil {
-		return prompts.Reader{}
-	}
-	return reader
+	return st.reader
 }
 
 func closeoutDraftSlotID(st *promptLoopTurnState, assistantMessageID string) string {

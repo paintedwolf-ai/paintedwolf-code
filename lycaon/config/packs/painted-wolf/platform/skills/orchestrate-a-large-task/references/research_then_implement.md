@@ -8,7 +8,7 @@ The dispatch steps below are coordinator-only: a worker applies the matching res
 
 1. List the open decisions as questions with an assignee. Separate current external claims ("what does this API return in v3?") from repository questions ("where is this validated today?") — they need different researchers.
 2. Mark each question **blocking** or **supplemental**. Blocking means a dependent builder cannot start; supplemental means the builder has a safe default and can proceed while the answer arrives.
-3. Dispatch the narrowest matching researcher, choosing `agent_type` from the spawn roster in your prompt. Recommend `research-current-information` for external questions and {% if profile_has_summarize %}`summarize` or {% endif %}bounded search and line-inspection programs{% if profile_has_command and root_count %} in `command`{% endif %} for repository questions. When substantial blocking research informs a substantial build in the same area, finish the research round first;{% if profile_has_instruct_worker %} the researcher can then become the implementer in one `instruct_worker` call with `agent_type` and `scope` updated, or{% endif %} separate builders can fan out once the packet is ready.
+3. Dispatch the narrowest matching researcher, choosing `agent_type` from the spawn roster in your prompt. Recommend `research-current-information` for external questions and {% if profile_has_summarize %}`summarize` or {% endif %}bounded search and line-inspection programs{% if profile_has_command %} in `command`{% endif %} for repository questions. When substantial blocking research informs a substantial build in the same area, finish the research round first;{% if profile_has_instruct_worker %} the researcher can then become the implementer in one `instruct_worker` call with `agent_type` and `scope` updated, or{% endif %} separate builders can fan out once the packet is ready.
 4. Require each researcher to return facts with evidence handles or URLs, scope limits, conflicts found, and remaining uncertainty — not an implementation plan outside its assignment.
 5. Synthesize the answers into a decision packet, which is the artifact this skill exists to produce:
 
@@ -21,7 +21,7 @@ The dispatch steps below are coordinator-only: a worker applies the matching res
    Open (nonblocking): whether to adopt the new extractor syntax
    ```
 
-6. Put the material packet facts in each dependent task's `brief.known_facts`, bounds in `brief.constraints`, and sources in `brief.context_refs`. Workers never see the research transcript, so omitted facts do not reach them.
+6. {% if profile_has_task %}Put the material packet facts in each dependent task's `brief.known_facts`, bounds in `brief.constraints`, and sources in `brief.context_refs`.{% else %}Report the material packet facts, bounds, and sources each dependent assignment needs to the parent.{% endif %} Workers never see the research transcript, so omitted facts do not reach them.
 7. Recommend one implementation skill per brief when it fits, and keep goal, constraints, responsibility, and done criteria explicit regardless.
 8. Integrate, then verify against the researched constraints — not merely that the code builds. A build proves compilation, not that you honored the version bound you researched.
 

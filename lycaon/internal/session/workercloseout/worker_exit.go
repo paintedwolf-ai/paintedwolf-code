@@ -3,6 +3,7 @@ package workercloseout
 import (
 	"context"
 	"fmt"
+
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/pkg/api"
 )

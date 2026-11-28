@@ -1,0 +1,25 @@
+spec_version: "1.0"
+id: ORCHESTRATE_POSTURE_NO_PLAN_WRITER
+kind: policy
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "ORCHESTRATE_POSTURE_NO_PLAN_WRITER"
+effect: block
+x-paintedwolf-audience:
+  - coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:orchestrate
+message: Orchestrate sessions do not start the plan writer
+what: This orchestrate session cannot start the plan writer.
+cause: The orchestrate posture runs implementer and researcher workers; the plan writer belongs to plan sessions.
+why: An orchestrate session distributes planned work, so it has no step that writes the plan.
+fix: Start this work with an implementer or researcher agent.
+instead: Use an implementer or researcher agent.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      profile: coordinator
+      tool: task

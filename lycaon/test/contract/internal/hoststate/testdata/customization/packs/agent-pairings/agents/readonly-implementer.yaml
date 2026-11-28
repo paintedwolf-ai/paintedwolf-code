@@ -1,0 +1,12 @@
+id: readonly-implementer
+name: Read-only implementer
+description: Implementer persona on the read-only review profile
+tool_profile: worker_readonly
+exec_mode: none
+topology_roles:
+  - worker
+dispatch_lanes:
+  - read
+spawn:
+  misconfigure_code: SUBAGENT_MISCONFIGURED
+system_prompt_template: agents/implementer.md

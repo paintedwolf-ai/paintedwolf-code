@@ -205,21 +205,21 @@ func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResou
 			}
 			sess, _ := mgr.Chats.Get(ctx, tctx.Identity.SessionID)
 			loaded, _ := mgr.Profiles.EffectiveSkillsForProfile(ctx, sess, tctx.Identity.Agent, roots)
-			var held map[string]bool
-			if reader, err := skillToolReader(ctx, mgr, tctx); err == nil {
-				held = reader.Held()
+			reader := tctx.Turn.Reader
+			if !reader.Valid() {
+				return nil
 			}
 			reachable := make([]skills.Skill, 0, len(loaded))
 			for _, skill := range loaded {
-				if toolvocab.SkillToolsOffered(skill, held) {
+				if toolvocab.SkillToolsOfferedForReader(skill, reader) {
 					reachable = append(reachable, skill)
 				}
 			}
 			return reachable
 		})
 		host.Skills.SetSkillTemplateVars(func(ctx context.Context, tctx tools.ToolContext) map[string]any {
-			reader, err := skillToolReader(ctx, mgr, tctx)
-			if err != nil {
+			reader := tctx.Turn.Reader
+			if !reader.Valid() {
 				return spawn.PolicyTemplateVars()
 			}
 			vars, err := prompts.SkillVars(reader)

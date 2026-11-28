@@ -139,12 +139,12 @@ func TestSpendRunwayNudgeFiresOnce(t *testing.T) {
 	if !st.Low {
 		t.Fatalf("want Low at 82%% of ceiling, got %+v", st)
 	}
-	first := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, st.CeilingUSD)
+	first := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, sessionRequestReader(t, mgr, sess), st.CeilingUSD)
 	if first.Empty() {
 		t.Fatal("first crossing must fire")
 	}
 	for i := 0; i < 5; i++ {
-		if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, st.CeilingUSD); !got.Empty() {
+		if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, sessionRequestReader(t, mgr, sess), st.CeilingUSD); !got.Empty() {
 			t.Fatalf("iteration %d re-fired: %q", i, got.Content)
 		}
 	}
@@ -174,10 +174,10 @@ func TestSpendRunwayNudgeRearmsOnChangedCeiling(t *testing.T) {
 	mgr := spendRunwayMgr(t, tracker, 5, true)
 	sess := &api.Session{ID: "s1", ProjectID: "p1"}
 
-	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, 5); got.Empty() {
+	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, sessionRequestReader(t, mgr, sess), 5); got.Empty() {
 		t.Fatal("fire at $5")
 	}
-	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, 5); !got.Empty() {
+	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, sessionRequestReader(t, mgr, sess), 5); !got.Empty() {
 		t.Fatalf("same ceiling re-armed: %q", got.Content)
 	}
 
@@ -190,10 +190,10 @@ func TestSpendRunwayNudgeRearmsOnChangedCeiling(t *testing.T) {
 	if !st.Low || st.CeilingUSD != 20 {
 		t.Fatalf("state at $20 = %+v", st)
 	}
-	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, st.CeilingUSD); got.Empty() {
+	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, sessionRequestReader(t, mgr, sess), st.CeilingUSD); got.Empty() {
 		t.Fatal("changed ceiling must fire once more")
 	}
-	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, st.CeilingUSD); !got.Empty() {
+	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, sessionRequestReader(t, mgr, sess), st.CeilingUSD); !got.Empty() {
 		t.Fatalf("second fire at $20: %q", got.Content)
 	}
 
@@ -202,7 +202,7 @@ func TestSpendRunwayNudgeRearmsOnChangedCeiling(t *testing.T) {
 	recordSessionSpend(t, tracker2, "s2", 2.5)
 	mgr2 := spendRunwayMgr(t, tracker2, 5, true)
 	sess2 := &api.Session{ID: "s2", ProjectID: "p1"}
-	if got := mgr2.Coordinator.Nudges.SpendRunway(ctx, sess2, 5); got.Empty() {
+	if got := mgr2.Coordinator.Nudges.SpendRunway(ctx, sess2, sessionRequestReader(t, mgr2, sess2), 5); got.Empty() {
 		t.Fatal("fire at $5 on s2")
 	}
 	defaults2 := mgr2.Limits.Defaults()
@@ -213,7 +213,7 @@ func TestSpendRunwayNudgeRearmsOnChangedCeiling(t *testing.T) {
 	if !st.Low || st.Reached || st.CeilingUSD != 3 {
 		t.Fatalf("state at lower ceiling = %+v", st)
 	}
-	if got := mgr2.Coordinator.Nudges.SpendRunway(ctx, sess2, st.CeilingUSD); got.Empty() {
+	if got := mgr2.Coordinator.Nudges.SpendRunway(ctx, sess2, sessionRequestReader(t, mgr2, sess2), st.CeilingUSD); got.Empty() {
 		t.Fatal("lower positive ceiling must re-arm")
 	}
 }
@@ -243,10 +243,10 @@ func TestSpendRunwayNudgeNeverForWorker(t *testing.T) {
 	root := &api.Session{ID: "root", ProjectID: "p1"}
 	worker := &api.Session{ID: "child", ProjectID: "p1", ParentSessionID: "root"}
 
-	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, worker, 5); !got.Empty() {
+	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, worker, sessionRequestReader(t, mgr, worker), 5); !got.Empty() {
 		t.Fatalf("worker nudge = %q", got.Content)
 	}
-	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, root, 5); got.Empty() {
+	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, root, sessionRequestReader(t, mgr, root), 5); got.Empty() {
 		t.Fatal("coordinator must still be able to arm after worker no-op")
 	}
 }
@@ -308,7 +308,7 @@ func TestSpendRunwayRenderedTextHasNoFigure(t *testing.T) {
 	recordSessionSpend(t, tracker, "s1", 4.1)
 	mgr := spendRunwayMgr(t, tracker, 5, true)
 	sess := &api.Session{ID: "s1", ProjectID: "p1"}
-	msg := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, 5)
+	msg := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, sessionRequestReader(t, mgr, sess), 5)
 	if msg.Empty() {
 		t.Fatal("expected rendered message")
 	}
@@ -324,11 +324,22 @@ func TestSpendRunwayLatchReleasedOnForget(t *testing.T) {
 	mgr := spendRunwayMgr(t, tracker, 5, true)
 	sess := &api.Session{ID: "s1", ProjectID: "p1"}
 
-	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, 5); got.Empty() {
+	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, sessionRequestReader(t, mgr, sess), 5); got.Empty() {
 		t.Fatal("first fire")
 	}
 	mgr.Resources.Dispose(t.Context(), "s1")
-	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, 5); got.Empty() {
+	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, sessionRequestReader(t, mgr, sess), 5); got.Empty() {
 		t.Fatal("re-created session with same ceiling must arm again")
 	}
+}
+
+// sessionRequestReader projects sess's next request through the host; an
+// unprojectable session yields the invalid Reader production would pass.
+func sessionRequestReader(t *testing.T, mgr *Host, sess *api.Session) prompts.Reader {
+	t.Helper()
+	reader, err := mgr.Coordinator.Context.NextRequestReader(t.Context(), sess, nil)
+	if err != nil {
+		t.Logf("request reader for %s: %v", sess.ID, err)
+	}
+	return reader
 }

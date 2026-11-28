@@ -3,5 +3,5 @@ steps:
     args:
       view: "summary"
     complete: true
-    say: "Read {{ call }} and reconcile the changed inputs before using its revision."
+    say: "{% if load %}Call {{ load }}, then read{% else %}Read{% endif %} {{ call }} and reconcile the changed inputs before using its revision."
     otherwise: "Refresh the current review state and reconcile the changed inputs before submitting a verdict."

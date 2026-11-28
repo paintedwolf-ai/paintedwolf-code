@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/recall"
 	"github.com/lycaon/lycaon/internal/search"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
@@ -62,6 +63,9 @@ func runRecall(ctx context.Context, args map[string]any, tctx tools.ToolContext,
 		return "", recallReject(err)
 	}
 
+	if !toolreach.FromContext(ctx).Known() && (len(tctx.Turn.TurnOfferedToolNames) > 0 || len(tctx.Turn.TurnOfferedToolSchemas) > 0) {
+		ctx = toolreach.WithRequest(ctx, tools.TurnReach(tctx))
+	}
 	addRecallRecoveryAction(ctx, result)
 	if result.History == nil {
 		tctx.Effects.Out.StateCardFact(api.ActionFact{Kind: api.ActionFactFound, Count: len(result.Hits), Noun: "results"})

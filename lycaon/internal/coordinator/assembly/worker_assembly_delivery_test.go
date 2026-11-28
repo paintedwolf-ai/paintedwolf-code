@@ -58,7 +58,7 @@ func TestWorkerLegInjectRecordsDeliveredSiblingNotes(t *testing.T) {
 	}
 
 	eng := &AssemblyEngine{}
-	eng.SetDeps(deps)
+	eng.SetDeps(withTestTurnReader(deps))
 	eng.BeginPromptTurn(sess.ID, "")
 	if _, err := eng.BuildCompletionMessages(context.Background(), sess, []api.Message{
 		{Role: api.MessageRoleUser, Content: "continue"},
@@ -131,7 +131,7 @@ func TestWorkerLegInjectSkipsDeliveryWhenNoNotes(t *testing.T) {
 	}
 
 	eng := &AssemblyEngine{}
-	eng.SetDeps(deps)
+	eng.SetDeps(withTestTurnReader(deps))
 	eng.BeginPromptTurn(sess.ID, "")
 	if _, err := eng.BuildCompletionMessages(context.Background(), sess, []api.Message{
 		{Role: api.MessageRoleUser, Content: "continue"},
@@ -152,12 +152,12 @@ func TestWorkerGuidanceAppearsOnceOnStartAndResume(t *testing.T) {
 	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
 	policy := api.Message{Role: api.MessageRoleSystem, Content: "Project policy sentinel: use the managed task runner.", Origin: api.MessageOriginProject, Authority: api.ContentAuthorityDeveloper, TrustTier: api.ContentTrustTierTrusted}
 	eng := &AssemblyEngine{}
-	eng.SetDeps(AssemblyDeps{Prompts: pe, Injects: prompts.NewInjectRenderer(pe), Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+	eng.SetDeps(withTestTurnReader(AssemblyDeps{Prompts: pe, Injects: prompts.NewInjectRenderer(pe), Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		AgentsMDPolicies: func(context.Context, *api.Session, []api.Message) ([]api.Message, error) {
 			return []api.Message{policy}, nil
 		},
 		Workers: Workers{Leg: placementWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg", AgentsMDMessage: policy}}},
-	})
+	}))
 	sess := &api.Session{ID: "policy-worker", ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, Posture: api.SessionPostureBuild, AgentType: "implementer", WorkspacePath: t.TempDir()}
 	for _, resume := range []bool{false, false, true} {
 		if resume {

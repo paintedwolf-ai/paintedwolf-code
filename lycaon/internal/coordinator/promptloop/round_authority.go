@@ -2,8 +2,12 @@ package promptloop
 
 import (
 	"context"
+	"log/slog"
+	"slices"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/guard"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -63,16 +67,80 @@ func (a RoundAuthority) toolContext(base tools.ToolContext) tools.ToolContext {
 	return base
 }
 
-func (l *PromptLoop) appendAgentEnabledNudge(ctx context.Context, sessionID string, state *promptLoopTurnState) ([]api.Message, error) {
+// appendAgentEnabledNudge renders against the next request's projection, which
+// the upgraded mode widens; without that Reader it delivers the host marker.
+func (l *PromptLoop) appendAgentEnabledNudge(ctx context.Context, sess *api.Session, sessionID, profileID string, state *promptLoopTurnState) ([]api.Message, error) {
 	if l.Closeout.Deps.RenderHostKick == nil {
 		return state.history, nil
 	}
-	content, err := l.Closeout.Deps.RenderHostKick(ctx, "session-agent-enabled", nil)
+	const kickID = "session-agent-enabled"
+	content := guard.HostKickMarker(anchor.SessionAgentEnabled.String())
+	reader, err := l.nextRequestReader(ctx, sess, profileID, state)
 	if err != nil {
+		slog.WarnContext(ctx, "agent-enabled nudge has no request reader; delivering its marker", "session_id", sessionID, "error", err)
+	} else if content, err = l.Closeout.Deps.RenderHostKick(ctx, reader, kickID, nil); err != nil {
 		return nil, err
 	}
 	return l.Nudges.appendHostNudge(ctx, sessionID, state.history, HostNudge{
 		SignalID: anchor.SessionAgentEnabled.String(),
 		Content:  content,
 	}, "", state)
+}
+
+func (l *PromptLoop) nextRequestReader(ctx context.Context, sess *api.Session, profileID string, state *promptLoopTurnState) (prompts.Reader, error) {
+	turn, err := l.Context.coordinatorToolsForTurn(ctx, sess, profileID, state.history, 0, 0, state.coordinatorFrame, nil)
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	return l.Context.requestReader(ctx, sess, turn, turn.Metas)
+}
+
+func (l *promptContext) swapObservedMode(sessionID string, mode api.SessionMode) (api.SessionMode, bool) {
+	if sessionID == "" {
+		return "", false
+	}
+	if fn := l.Deps.SwapObservedSessionMode; fn != nil {
+		return fn(sessionID, mode)
+	}
+	return "", false
+}
+
+// observeModeUpgrade reports whether this coordinator round is the first round
+// observing that sessionID switched from Ask to Agent (mid-turn or between turns).
+func (l *promptContext) observeModeUpgrade(
+	sess *api.Session,
+	sessionID string,
+	previous api.SessionMode,
+	current api.SessionMode,
+	history []api.Message,
+) bool {
+	if sess == nil || sess.IsWorkerChild() {
+		return false
+	}
+	prevObserved, hadObserved := l.swapObservedMode(sessionID, current)
+	if current != api.SessionModeAgent {
+		return false
+	}
+	// An observed switch is authoritative, so each Ask->Agent switch is announced.
+	if previous == api.SessionModeAsk || (hadObserved && prevObserved == api.SessionModeAsk) {
+		return true
+	}
+	return !hadObserved && askRejectedSinceAgentEnabled(history)
+}
+
+// askRejectedSinceAgentEnabled reports an Ask-mode rejection newer than the
+// latest agent-enabled notice, which a process that observed no mode reads as
+// an unannounced upgrade.
+func askRejectedSinceAgentEnabled(history []api.Message) bool {
+	enabled := anchor.SessionAgentEnabled.String()
+	for i := len(history) - 1; i >= 0; i-- {
+		msg := history[i]
+		if msg.HostSignalID == enabled {
+			return false
+		}
+		if msg.ToolResult != nil && slices.Contains(msg.ToolResult.Codes, tools.AskModeActiveCode) {
+			return true
+		}
+	}
+	return false
 }

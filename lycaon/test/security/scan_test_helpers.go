@@ -180,8 +180,7 @@ func EnqueueSingleScanner(t *testing.T, srv *api.Server, projectID string, categ
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), BackgroundSettleBudget)
 	defer cancel()
-	srv.WaitForBackground(ctx)
-	testutil.FailErr(t, "settle project attachment", ctx.Err())
+	testutil.FailErr(t, "settle project attachment", srv.WaitForBackground(ctx))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, AuthedRequest(t, http.MethodGet, "/v1/projects/"+projectID+"/security", nil))
 	if w.Code != http.StatusOK {

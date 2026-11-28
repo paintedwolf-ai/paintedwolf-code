@@ -2,7 +2,7 @@
 
 Enter only when primary research material exists: interviews, observations, support feedback, usability sessions, task traces, or an explicit supplied dataset. If none exists, produce a research plan or discussion guide; never fabricate participants, quotes, session counts, or findings.
 
-1. Build an **evidence inventory** with `source id`, `participant or cohort`, `method`, `date`, `scope`, `artifact`, and `limitations`. Replace identifying participant details with stable labels unless the user explicitly requires attribution and has authority to use it.
+1. Build an **evidence inventory** with source id, participant or cohort, method, date, scope, artifact, and limitations. Replace identifying participant details with stable labels unless the user explicitly requires attribution and has authority to use it.
 2. Extract **atomic observations**. Each row contains one behavior or statement, source id, context, direct quote or paraphrase, and analyst note. Cap a first pass at 100 observations; if more exist, sample transparently by method or cohort and report what remains.
 3. Code observations into a **theme matrix**. A theme needs support from at least two independent sources unless labeled an anecdote. Record `theme`, `supporting sources`, `counterevidence`, `strength`, `affected workflow`, and `design implication`.
 4. Identify at least one **productive contradiction** when the evidence contains one: a pair of needs or behaviors that appear opposed but constrain a better design. Do not manufacture tension merely because the layout includes a contradiction card.

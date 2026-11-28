@@ -64,3 +64,19 @@ func (s *Service) Bind(runner Runner, settlement Settlement, submissions Submiss
 }
 func (s *Service) SetLoop(nudges Nudges, cycles Cycles) { s.nudges, s.cycles = nudges, cycles }
 func (s *Service) WaitDrains(ctx context.Context)       { s.roundEndDrains.wait(ctx) }
+
+// DrainEpoch increases each time a round-end drain is admitted.
+func (s *Service) DrainEpoch() uint64 {
+	if s == nil {
+		return 0
+	}
+	return s.roundEndDrains.epoch()
+}
+
+// DrainBusy reports whether any round-end drain is currently running.
+func (s *Service) DrainBusy() bool {
+	if s == nil {
+		return false
+	}
+	return s.roundEndDrains.busy()
+}

@@ -81,3 +81,17 @@ func (g *Group) Wait(ctx context.Context) error {
 		return ctx.Err()
 	}
 }
+
+// Epoch increases each time work is admitted via Begin.
+func (g *Group) Epoch() uint64 {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.next
+}
+
+// Busy reports whether any admitted work is currently active.
+func (g *Group) Busy() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return len(g.active) > 0
+}
