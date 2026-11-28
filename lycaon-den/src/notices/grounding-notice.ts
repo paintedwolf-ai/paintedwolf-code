@@ -3,7 +3,7 @@ import { CLIENT_NOTICES } from "./client-notices.generated.ts";
 import { publishNotice } from "./notice-store.ts";
 
 /** Host grounding event code emitted when a cited stored evidence body cannot be verified. */
-export const EVIDENCE_BODY_UNAVAILABLE_CODE = "EVIDENCE_BODY_UNAVAILABLE";
+const EVIDENCE_BODY_UNAVAILABLE_CODE = "EVIDENCE_BODY_UNAVAILABLE";
 
 /**
  * Publishes an actionable session notice when the host reports a grounding

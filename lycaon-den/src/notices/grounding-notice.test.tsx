@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { render } from "@solidjs/testing-library";
 import { NoticeRail } from "../components/NoticeRail.tsx";
-import {
-  EVIDENCE_BODY_UNAVAILABLE_CODE,
-  publishGroundingEventNotice,
-} from "./grounding-notice.ts";
+import { publishGroundingEventNotice } from "./grounding-notice.ts";
+
+const EVIDENCE_BODY_UNAVAILABLE_CODE = "EVIDENCE_BODY_UNAVAILABLE";
 import { noticeScopeKey } from "./notice-scope.ts";
 import {
   clearSessionHostErrorNotices,
