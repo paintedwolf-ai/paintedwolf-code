@@ -418,7 +418,7 @@ func compileSkillTemplateCached(unitID, text string) (compiledSkillUnit, error) 
 }
 
 func skillMarkdownResourcesCached(sk skills.Skill) ([]cachedSkillResource, error) {
-	key := sk.Name + "\x00" + sk.FilePath
+	key := sk.Name + "\x00" + sk.PackID + "\x00" + sk.UnitID + "\x00" + sk.Dir
 	if v, ok := skillResourcesCache.Load(key); ok {
 		return v.([]cachedSkillResource), nil
 	}
