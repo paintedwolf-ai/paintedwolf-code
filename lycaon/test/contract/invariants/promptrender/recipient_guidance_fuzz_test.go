@@ -138,6 +138,7 @@ func fuzzSeeds(tb testing.TB, d *hoststate.SeedDomains) [][]byte {
 // FuzzRecipientGuidanceAcrossHostStates fuzzes recipient guidance over
 // deterministic byte-decoded two-turn coordinator and worker states.
 func FuzzRecipientGuidanceAcrossHostStates(f *testing.F) {
+	f.Cleanup(hoststate.HoldAuthorityMemos())
 	env, err := loadFuzzEnvOnce()
 	if err != nil {
 		f.Fatalf("loadFuzzEnvOnce: %v", err)
@@ -174,6 +175,7 @@ func FuzzRecipientGuidanceAcrossHostStates(f *testing.F) {
 // A feasible coordinator state outside the enumerated matrix, resolved through
 // the same production identities, satisfies the recipient properties.
 func TestRecipientGuidanceOnOffMatrixCoordinatorState(t *testing.T) {
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	env, err := loadFuzzEnvOnce()
 	if err != nil {
 		t.Fatalf("loadFuzzEnvOnce: %v", err)
@@ -217,6 +219,7 @@ func TestRecipientGuidanceOnOffMatrixCoordinatorState(t *testing.T) {
 // Every stock tool.rejected rule delivers a true refusal to a coordinator and a
 // worker across a two-turn transition, warm and fresh.
 func TestRejectedRulesAcrossTwoTurnRecipients(t *testing.T) {
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	env, err := loadFuzzEnvOnce()
 	if err != nil {
 		t.Fatalf("loadFuzzEnvOnce: %v", err)

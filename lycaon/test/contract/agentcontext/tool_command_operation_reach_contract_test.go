@@ -109,6 +109,7 @@ func nextCallTools(ref *guidance.Refusal) []string {
 // the operation: directly when callable, after loading when loadable, and
 // never when command is out of reach or the operation's forms are forbidden.
 func TestToolCommandOperationRecoveryFollowsCommandReach(t *testing.T) {
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	rs, _, _, bp := effectiveOARBlockPlane(t)
 	states, err := hoststate.CoordinatorStates(t.Context())
 	contractcheck.FailErr(t, "CoordinatorStates", err)

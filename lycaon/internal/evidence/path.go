@@ -2,6 +2,7 @@ package evidence
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -69,10 +70,51 @@ func ResolveCitationAbs(projectDir, token string) (absPath, relPath string, ok b
 	return abs, rel, true
 }
 
+// lexicalRootContainedPath cleans a relative citation path lexically if and only if
+// every prefix stays within the project root and the cleaned result is a relative
+// path with no parent traversal. It never touches the filesystem.
+func lexicalRootContainedPath(token string) (string, bool) {
+	if token == "" || strings.HasPrefix(token, "/") || strings.HasPrefix(token, `\`) || strings.HasPrefix(token, "@") {
+		return "", false
+	}
+	if len(token) >= 2 && token[1] == ':' {
+		return "", false
+	}
+	depth := 0
+	for _, seg := range strings.Split(token, "/") {
+		switch seg {
+		case "", ".":
+			continue
+		case "..":
+			depth--
+			if depth < 0 {
+				return "", false
+			}
+		default:
+			depth++
+		}
+	}
+	cleaned := path.Clean(token)
+	if cleaned == "" || cleaned == "." || strings.HasPrefix(cleaned, "/") || sandbox.HasParentTraversal(cleaned) {
+		return "", false
+	}
+	return cleaned, true
+}
+
 // LedgerPathKey prefers an observed key for a citation token.
 func LedgerPathKey(roots CitationRoots, token string, byPath map[string][]string) string {
 	token = NormalizeLedgerPath(token)
-	if token == "" || sandbox.HasParentTraversal(token) {
+	if token == "" {
+		return ""
+	}
+	if sandbox.HasParentTraversal(token) {
+		// Lexical-only lookup against already-observed ledger keys; never passed
+		// to ResolveCitationAbs, ResolveCitationFile, or any filesystem check.
+		if byPath != nil {
+			if cleaned, ok := lexicalRootContainedPath(token); ok && len(byPath[cleaned]) > 0 {
+				return cleaned
+			}
+		}
 		return ""
 	}
 	if byPath != nil {

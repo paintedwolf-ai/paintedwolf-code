@@ -64,6 +64,7 @@ func linesNaming(corpus string, names []string) string {
 // Coordinator standing prompts, attached units and tool procedures name only
 // what each coordinator host state can reach.
 func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	ctx := t.Context()
 	catalog, _ := promptNameCatalog(t)
 	prunable, err := toolvocabtest.StockPrunableSchemaIndex()
@@ -357,6 +358,7 @@ func checkCorpusAgainstAuthority(
 }
 
 func TestRenderedAskModeCoordinatorPromptsMatchOfferedTools(t *testing.T) {
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	catalog, _ := promptNameCatalog(t)
 	prunable, err := toolvocabtest.StockPrunableSchemaIndex()
 	contractcheck.FailErr(t, "stock prunable index", err)

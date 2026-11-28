@@ -15,6 +15,7 @@ import (
 // what it names, built from production domain members, so a codec change that
 // moves a corpus byte to another row keeps the named condition and outcome.
 func TestFuzzCorpusSemanticWitnesses(t *testing.T) {
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	env, err := loadFuzzEnvOnce()
 	if err != nil {
 		t.Fatalf("loadFuzzEnvOnce: %v", err)

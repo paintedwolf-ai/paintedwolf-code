@@ -2,6 +2,7 @@ package hoststate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -93,51 +94,78 @@ type projectedTurnToolsEntry struct {
 	programs         []string
 }
 
-var (
-	executorCacheMu   sync.Mutex
-	executorCache     = map[executorCacheKey]executorBundle{}
-	cachedSandboxConf = sync.OnceValues(sandbox.LoadConfig)
-	projTurnMu        sync.Mutex
-	projTurnCache     = map[string]projectedTurnToolsEntry{}
-	frozenTurnMu      sync.RWMutex
-	frozenTurnCache   = map[string]TurnAuthority{}
-	frozenWorkerMu    sync.RWMutex
-	frozenWorkerCache = map[string]TurnAuthority{}
+// ErrAuthorityMemosNotHeld reports an authority accessor called outside an
+// active HoldAuthorityMemos span.
+var ErrAuthorityMemosNotHeld = errors.New("hoststate: authority memos accessed outside a hold")
 
-	authorityMemoMu    sync.Mutex
-	authorityMemoHolds int
+type authorityMemoStore struct {
+	executorMu sync.Mutex
+	executors  map[executorCacheKey]executorBundle
+
+	registryMu sync.Mutex
+	registries map[registryCacheKey]*tools.DefaultRegistry
+
+	projTurnMu sync.Mutex
+	projTurns  map[string]projectedTurnToolsEntry
+
+	frozenMu      sync.RWMutex
+	frozenTurns   map[string]TurnAuthority
+	frozenWorkers map[string]TurnAuthority
+}
+
+func newAuthorityMemoStore() *authorityMemoStore {
+	return &authorityMemoStore{
+		executors:     map[executorCacheKey]executorBundle{},
+		registries:    map[registryCacheKey]*tools.DefaultRegistry{},
+		projTurns:     map[string]projectedTurnToolsEntry{},
+		frozenTurns:   map[string]TurnAuthority{},
+		frozenWorkers: map[string]TurnAuthority{},
+	}
+}
+
+var (
+	cachedSandboxConf = sync.OnceValues(sandbox.LoadConfig)
+
+	authorityMemos struct {
+		mu         sync.Mutex
+		holds      int
+		generation uint64
+		store      *authorityMemoStore
+	}
 )
 
-// HoldAuthorityMemos keeps the executor, registry and turn-projection memos
-// that freezes share until the returned release runs; the last open hold's
-// release drops them. Freezes outside any hold still fill the memos.
+// HoldAuthorityMemos opens a hold on the executor, registry and
+// turn-projection memos that freezes share until the returned release runs.
+// Nested holds share one memo store; the last open hold's release drops it,
+// and a later hold starts fresh. Authority accessors called outside an active
+// hold return ErrAuthorityMemosNotHeld.
 func HoldAuthorityMemos() (release func()) {
-	authorityMemoMu.Lock()
-	authorityMemoHolds++
-	authorityMemoMu.Unlock()
+	authorityMemos.mu.Lock()
+	if authorityMemos.holds == 0 {
+		authorityMemos.generation++
+		authorityMemos.store = newAuthorityMemoStore()
+	}
+	authorityMemos.holds++
+	authorityMemos.mu.Unlock()
 	return sync.OnceFunc(func() {
-		authorityMemoMu.Lock()
-		defer authorityMemoMu.Unlock()
-		authorityMemoHolds--
-		if authorityMemoHolds > 0 {
+		authorityMemos.mu.Lock()
+		defer authorityMemos.mu.Unlock()
+		authorityMemos.holds--
+		if authorityMemos.holds > 0 {
 			return
 		}
-		executorCacheMu.Lock()
-		executorCache = map[executorCacheKey]executorBundle{}
-		executorCacheMu.Unlock()
-		registryCacheMu.Lock()
-		registryCache = map[registryCacheKey]*tools.DefaultRegistry{}
-		registryCacheMu.Unlock()
-		projTurnMu.Lock()
-		projTurnCache = map[string]projectedTurnToolsEntry{}
-		projTurnMu.Unlock()
-		frozenTurnMu.Lock()
-		frozenTurnCache = map[string]TurnAuthority{}
-		frozenTurnMu.Unlock()
-		frozenWorkerMu.Lock()
-		frozenWorkerCache = map[string]TurnAuthority{}
-		frozenWorkerMu.Unlock()
+		authorityMemos.store = nil
 	})
+}
+
+func heldAuthorityMemos() (*authorityMemoStore, error) {
+	authorityMemos.mu.Lock()
+	store := authorityMemos.store
+	authorityMemos.mu.Unlock()
+	if store == nil {
+		return nil, ErrAuthorityMemosNotHeld
+	}
+	return store, nil
 }
 
 func sortedBoolKeys(m map[string]bool) string {
@@ -226,6 +254,20 @@ func executorBundleForOverlay(
 	clampReadOnly, webSearch, externalHidden bool,
 	mcpState MCPState,
 ) (executorBundle, []sandbox.ToolProfile, error) {
+	store, err := heldAuthorityMemos()
+	if err != nil {
+		return executorBundle{}, nil, err
+	}
+	return executorBundleForOverlayWithStore(store, overlay, posture, clampReadOnly, webSearch, externalHidden, mcpState)
+}
+
+func executorBundleForOverlayWithStore(
+	store *authorityMemoStore,
+	overlay PackOverlay,
+	posture api.SessionPosture,
+	clampReadOnly, webSearch, externalHidden bool,
+	mcpState MCPState,
+) (executorBundle, []sandbox.ToolProfile, error) {
 	narrowed, err := NarrowProfilesForPosture(overlay.Profiles, posture, clampReadOnly)
 	if err != nil {
 		return executorBundle{}, nil, err
@@ -238,14 +280,14 @@ func executorBundleForOverlay(
 		externalHidden: externalHidden,
 		mcpState:       mcpState,
 	}
-	executorCacheMu.Lock()
-	if cached, ok := executorCache[key]; ok {
-		executorCacheMu.Unlock()
+	store.executorMu.Lock()
+	if cached, ok := store.executors[key]; ok {
+		store.executorMu.Unlock()
 		return cached, narrowed, nil
 	}
-	executorCacheMu.Unlock()
+	store.executorMu.Unlock()
 
-	reg, err := catalogRegistry(overlay.Catalog, mcpState)
+	reg, err := catalogRegistry(store, overlay.Catalog, mcpState)
 	if err != nil {
 		return executorBundle{}, nil, err
 	}
@@ -271,9 +313,9 @@ func executorBundleForOverlay(
 		tables:   make(map[programTableKey]*toolreach.ProgramTable),
 		reaches:  make(map[programTableKey]toolreach.Programs),
 	}
-	executorCacheMu.Lock()
-	executorCache[key] = bundle
-	executorCacheMu.Unlock()
+	store.executorMu.Lock()
+	store.executors[key] = bundle
+	store.executorMu.Unlock()
 	return bundle, narrowed, nil
 }
 
@@ -318,26 +360,21 @@ type registryCacheKey struct {
 	mcpState MCPState
 }
 
-var (
-	registryCacheMu sync.Mutex
-	registryCache   = map[registryCacheKey]*tools.DefaultRegistry{}
-)
-
 // catalogRegistry shares one registry per catalog and MCP fixture: posture,
 // web search and external hiding narrow the executor's policy, not the
 // registry, and executors only read it.
-func catalogRegistry(eff *extpacks.EffectiveCatalog, mcpState MCPState) (*tools.DefaultRegistry, error) {
+func catalogRegistry(store *authorityMemoStore, eff *extpacks.EffectiveCatalog, mcpState MCPState) (*tools.DefaultRegistry, error) {
 	key := registryCacheKey{revision: eff.Revision, mcpState: mcpState}
-	registryCacheMu.Lock()
-	defer registryCacheMu.Unlock()
-	if reg, ok := registryCache[key]; ok {
+	store.registryMu.Lock()
+	defer store.registryMu.Unlock()
+	if reg, ok := store.registries[key]; ok {
 		return reg, nil
 	}
 	reg, err := buildCatalogRegistry(eff, mcpState)
 	if err != nil {
 		return nil, err
 	}
-	registryCache[key] = reg
+	store.registries[key] = reg
 	return reg, nil
 }
 
@@ -410,6 +447,10 @@ func FreezeTurnAuthorityWithResources(
 	state CoordinatorState,
 	resources toolcontract.ResourcePresence,
 ) (TurnAuthority, error) {
+	store, err := heldAuthorityMemos()
+	if err != nil {
+		return TurnAuthority{}, err
+	}
 	overlay := state.Overlay
 	if overlay.Catalog == nil {
 		overlays, err := DiscoverPackOverlays(ctx)
@@ -418,8 +459,8 @@ func FreezeTurnAuthorityWithResources(
 		}
 		overlay = overlays[0]
 	}
-	bundle, narrowed, err := executorBundleForOverlay(
-		overlay, state.Posture, false, state.WebSearch, state.CommandExternalHidden, state.MCPState,
+	bundle, narrowed, err := executorBundleForOverlayWithStore(
+		store, overlay, state.Posture, false, state.WebSearch, state.CommandExternalHidden, state.MCPState,
 	)
 	if err != nil {
 		return TurnAuthority{}, err
@@ -471,15 +512,15 @@ func FreezeTurnAuthorityWithResources(
 			state.SessionScratchDir, state.SharedTempLocations, state.Vision,
 			strings.Join(state.RunContext.AllowedAgents, ","), state.Roots,
 		)
-		frozenTurnMu.RLock()
-		if cachedAuth, ok := frozenTurnCache[fullKey]; ok {
-			frozenTurnMu.RUnlock()
+		store.frozenMu.RLock()
+		if cachedAuth, ok := store.frozenTurns[fullKey]; ok {
+			store.frozenMu.RUnlock()
 			return cachedAuth, nil
 		}
-		frozenTurnMu.RUnlock()
-		projTurnMu.Lock()
-		cached, hit := projTurnCache[cacheKey]
-		projTurnMu.Unlock()
+		store.frozenMu.RUnlock()
+		store.projTurnMu.Lock()
+		cached, hit := store.projTurns[cacheKey]
+		store.projTurnMu.Unlock()
 		if hit {
 			proj = cached
 		}
@@ -528,9 +569,9 @@ func FreezeTurnAuthorityWithResources(
 			programs:         computeProgramsList(progReach),
 		}
 		if cacheKey != "" {
-			projTurnMu.Lock()
-			projTurnCache[cacheKey] = proj
-			projTurnMu.Unlock()
+			store.projTurnMu.Lock()
+			store.projTurns[cacheKey] = proj
+			store.projTurnMu.Unlock()
 		}
 	}
 
@@ -552,11 +593,11 @@ func FreezeTurnAuthorityWithResources(
 
 	assembled := assembleTurnAuthorityFromEntry(proj, reader)
 	if fullKey != "" {
-		frozenTurnMu.Lock()
-		if len(frozenTurnCache) < 2048 {
-			frozenTurnCache[fullKey] = assembled
+		store.frozenMu.Lock()
+		if len(store.frozenTurns) < 2048 {
+			store.frozenTurns[fullKey] = assembled
 		}
-		frozenTurnMu.Unlock()
+		store.frozenMu.Unlock()
 	}
 	return assembled, nil
 }

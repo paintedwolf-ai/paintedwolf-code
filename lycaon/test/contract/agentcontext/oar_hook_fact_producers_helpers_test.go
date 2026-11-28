@@ -157,6 +157,7 @@ type roleCell struct {
 
 func representativeHostStateCells(t *testing.T, h *hookProducerHarness) []roleCell {
 	t.Helper()
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	coordStates, err := hoststate.CoordinatorStates(t.Context())
 	contractcheck.FailErr(t, "CoordinatorStates", err)
 	workerStates, err := hoststate.WorkerStates(t.Context())
