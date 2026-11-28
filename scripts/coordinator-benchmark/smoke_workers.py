@@ -471,7 +471,16 @@ def unresolved_decision(application, spec, dispatch):
     invoke(application, session, 'wait', {'timeout_ms':30000, 'conditions':[{'kind':'next_worker_done'}]})
     settled(application, session, job, {'held'})
     invoke(application, session, 'update_progress', {'content':f'## Progress\n- [~] {label}\n'})
-    finish(application, session, 'The requested change is unfinished.')
+    finish(
+        application,
+        session,
+        'The requested change is unfinished.',
+        completion_signals={
+            ('coordinator_guidance', 'policy_feedback'),
+            ('host_kick', 'worker.task.finished'),
+            ('host_loop_wake', 'loop.wake'),
+        },
+    )
     application.flows.append({'id':spec['id'], 'kind':'shortcut', 'control':'unanswered-worker-decision',
                              'worker':label,
                              'session_id':session, 'project_dir':str(project), 'prepared':prepared,
@@ -501,7 +510,16 @@ def swapped_decisions(application, spec, operation):
         if row['merge_status'] == 'pending':
             invoke(application,session,'reject_overlay',{'overlay_id':result_handle_for_job(application, job)})
     invoke(application,session,'update_progress',{'content':'## Progress\n'+''.join('- [~] '+d['label']+'\n' for d in dispatches)})
-    finish(application,session,'The requested reports are unfinished.')
+    finish(
+        application,
+        session,
+        'The requested reports are unfinished.',
+        completion_signals={
+            ('coordinator_guidance', 'policy_feedback'),
+            ('host_kick', 'worker.task.finished'),
+            ('host_loop_wake', 'loop.wake'),
+        },
+    )
     application.flows.append({'id':spec['id'],'kind':'shortcut','control':'swapped-worker-decisions',
                              'session_id':session,'project_dir':str(project),'prepared':prepared,
                              'must_pass':['decision-answer-count'],
