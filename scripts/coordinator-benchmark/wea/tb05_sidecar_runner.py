@@ -16,6 +16,7 @@ import contextlib
 import json
 import os
 import pathlib
+import shlex
 import sqlite3
 import sys
 import time
@@ -836,6 +837,47 @@ def _run_e03_slot(
     )
 
 
+def _read_long_file(
+    app: Any, session_id: str, rel_path: str, raw: bytes
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Deliver exact source coverage through native head and retained output windows."""
+    window_size = 24 * 1024
+    receipts: list[dict[str, Any]] = []
+    result: dict[str, Any] = {}
+    for start in range(0, len(raw), window_size):
+        end = min(start + window_size, len(raw))
+        prefix_cmd = f"head -c {end} {shlex.quote(rel_path)}"
+        _, prefix, _ = _send_tool_call(app, session_id, "command", {"command": prefix_cmd})
+        output = next(
+            (row for row in prefix.get("command_program", {}).get("outputs", []) if row.get("stream") == "stdout"),
+            {},
+        )
+        if output.get("truncated"):
+            output_path = output.get("output_path")
+            if not output_path or not output.get("complete"):
+                raise RuntimeError("long-file read has no complete retained prefix")
+            command = f"tail -c {end - start} {shlex.quote(output_path)}"
+            _, result, _ = _send_tool_call(app, session_id, "command", {"command": command})
+            delivered_start = start
+        else:
+            command, result, delivered_start = prefix_cmd, prefix, 0
+        content = str(result.get("content") or "")
+        program, _ = json.JSONDecoder().raw_decode(content.split("\n", 1)[-1].lstrip())
+        delivered = program.get("stdout", "").encode("utf-8")
+        if result.get("outcome") != "completed" or delivered != raw[delivered_start:end]:
+            raise RuntimeError(f"long-file window [{delivered_start}, {end}) was not delivered exactly")
+        receipts.append(
+            {
+                "command": command,
+                "tool_call_id": result.get("tool_call_id"),
+                "start_byte": delivered_start,
+                "end_byte": end,
+                "sha256": sha256_bytes(delivered),
+            }
+        )
+    return result, receipts
+
+
 def _run_e08_slot(
     app: Any,
     app_dir: pathlib.Path,
@@ -877,10 +919,7 @@ def _run_e08_slot(
         raw = b"hdr\n\xff\xfe\x00binary\nTARGET\n"
         expect_refused = True
     elif scenario == "very_long_line":
-        # Deliver the relevant range (line 2: TARGET) directly so command output is not truncated
-        # by the 32 KiB inline budget; confirm delivery/coverage from the receipt and surface any
-        # whole-file read-basis limitation explicitly without faking a pass.
-        read_cmd = f"sed -n '2p' {rel_path}"
+        read_cmd = "bounded head and retained-output tail windows"
         long_line = ("A" * 65536).encode("ascii")
         raw = long_line + b"\nTARGET\n" + long_line + b"\n"
         expected_after_bytes = long_line + b"\nEDITED\n" + long_line + b"\n"
@@ -912,10 +951,14 @@ def _run_e08_slot(
         obs.capture_pre([rel_path])
     read_res: dict[str, Any] = {}
     write_res: dict[str, Any] = {}
+    delivery_receipts: list[dict[str, Any]] = []
     try:
         app.request(f"/v1/sessions/{session_id}/prompts", {"operation_id": str(uuid.uuid4()), "text": f"TB05 E08 {scenario}"})
         _send_tool_call(app, session_id, "update_progress", {"content": f"## Progress\n- [ ] {slot['slot_id']}\n"})
-        _, read_res, _ = _send_tool_call(app, session_id, "command", {"command": read_cmd})
+        if scenario == "very_long_line":
+            read_res, delivery_receipts = _read_long_file(app, session_id, rel_path, raw)
+        else:
+            _, read_res, _ = _send_tool_call(app, session_id, "command", {"command": read_cmd})
         _, write_res, _ = _send_tool_call(app, session_id, "command", {"command": edit_cmd}, checkpoint_policy="approve_chat")
     finally:
         with contextlib.suppress(Exception):
@@ -976,25 +1019,7 @@ def _run_e08_slot(
     if scenario == "utf16le_bom":
         indep_e08["utf16le_bom_preserved"] = post_bytes.startswith(b"\xff\xfe")
     if scenario == "very_long_line":
-        outputs = ((read_res or {}).get("command_program") or {}).get("outputs") or []
-        read_content = str((read_res or {}).get("content") or "")
-        indep_e08["range_delivery"] = {
-            "read_command": read_cmd,
-            "read_outcome": str((read_res or {}).get("outcome") or ""),
-            "outputs": outputs,
-            "delivered_target_line": "TARGET" in read_content,
-            "truncated": any(bool(o.get("truncated")) for o in outputs if isinstance(o, dict)),
-        }
-        if refusal_code == "EDITOR_DOCUMENT_READ_REQUIRED":
-            typed_e08["surface_limitation"] = {
-                "code": refusal_code,
-                "reason": (
-                    "Delivered range view of line 2 (TARGET) completed without truncation, "
-                    "but `edit` requires a whole-document read (`ReadWhole == true`) and no "
-                    "current product surface can deliver an inline whole-file read for a "
-                    f"{len(raw)}-byte file exceeding the inline command output budget."
-                ),
-            }
+        indep_e08["range_deliveries"] = delivery_receipts
     return _build_receipt(
         slot=slot,
         prov=prov,
