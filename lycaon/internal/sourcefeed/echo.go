@@ -8,14 +8,18 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/sourceblob"
 )
 
 type hostWriteTarget struct {
-	path, digest string
+	path, digest, gitOID string
+	preCaptured          *hostWriteState
 }
 
 type hostWriteState struct {
 	digest string
+	gitOID string
 	mode   os.FileMode
 	absent bool
 }
@@ -63,7 +67,11 @@ func noteHostWritePaths(paths []hostWriteTarget) {
 		if err != nil {
 			continue
 		}
-		if state, ok := readHostWriteState(key, target.digest); ok {
+		if target.preCaptured != nil {
+			observed[key] = hostWriteReceipt{at: time.Now(), hostWriteState: *target.preCaptured}
+			continue
+		}
+		if state, ok := readHostWriteState(key, target.digest, target.gitOID); ok {
 			observed[key] = hostWriteReceipt{at: time.Now(), hostWriteState: state}
 		}
 	}
@@ -85,18 +93,18 @@ func noteHostWritePaths(paths []hostWriteTarget) {
 	}
 }
 
-func readHostWriteState(path, digest string) (hostWriteState, bool) {
+func readHostWriteState(path, digest, gitOID string) (hostWriteState, bool) {
 	info, err := os.Lstat(path)
 	if os.IsNotExist(err) {
-		if digest != "" {
-			return hostWriteState{digest: digest}, true
+		if digest != "" || gitOID != "" {
+			return hostWriteState{digest: digest, gitOID: gitOID}, true
 		}
 		return hostWriteState{absent: true}, true
 	}
 	if err != nil || !info.Mode().IsRegular() {
 		return hostWriteState{}, false
 	}
-	if digest == "" {
+	if digest == "" && gitOID == "" {
 		file, err := os.Open(path) // #nosec G304 -- host-observed path; identity is checked before reading.
 		if err != nil {
 			return hostWriteState{}, false
@@ -112,7 +120,32 @@ func readHostWriteState(path, digest string) (hostWriteState, bool) {
 		}
 		digest = hex.EncodeToString(hash.Sum(nil))
 	}
-	return hostWriteState{digest: digest, mode: info.Mode()}, true
+	return hostWriteState{digest: digest, gitOID: gitOID, mode: info.Mode()}, true
+}
+
+func readHostWriteGitOIDState(path string) (hostWriteState, bool) {
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return hostWriteState{absent: true}, true
+	}
+	if err != nil || !info.Mode().IsRegular() {
+		return hostWriteState{}, false
+	}
+	file, err := os.Open(path) // #nosec G304 -- host-observed path; identity is checked before reading.
+	if err != nil {
+		return hostWriteState{}, false
+	}
+	defer func() { _ = file.Close() }()
+	opened, err := file.Stat()
+	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
+		return hostWriteState{}, false
+	}
+	hash := sourceblob.GitBlobSHA1(opened.Size())
+	written, err := io.Copy(hash, file)
+	if err != nil || written != opened.Size() {
+		return hostWriteState{}, false
+	}
+	return hostWriteState{gitOID: hex.EncodeToString(hash.Sum(nil)), mode: info.Mode()}, true
 }
 
 func expireHostWrites() {
@@ -147,6 +180,10 @@ func isRecentHostWrite(absPath string) bool {
 	if !ok || time.Since(receipt.at) > selfWriteWindow {
 		return false
 	}
-	current, ok := readHostWriteState(key, "")
+	if receipt.digest == "" && receipt.gitOID != "" {
+		current, ok := readHostWriteGitOIDState(key)
+		return ok && current == receipt.hostWriteState
+	}
+	current, ok := readHostWriteState(key, "", "")
 	return ok && current == receipt.hostWriteState
 }

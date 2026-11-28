@@ -344,7 +344,10 @@ func (c *TxBatchCache) Flush(ctx context.Context, tx *sql.Tx) error {
 
 type preparedRecord struct {
 	RecordInput
-	objects map[string]*db.UpsertSourceBlobObjectParams
+	objects        map[string]*db.UpsertSourceBlobObjectParams
+	snapshotSHA256 string
+	snapshotGitOID string
+	snapshotSize   int64
 }
 
 type preparedRecording struct {
@@ -424,9 +427,34 @@ func (s *Store) prepareWithCache(ctx context.Context, inputs []RecordInput, shar
 				}
 			}
 		}
+		if in.Op == api.SourceChangeOpRename && in.AfterSHA256 == "" && in.FromPath != "" && in.EntryKind == EntryKindFile && in.FromRootPath != "" {
+			if sha, gitOID, size, ok := s.lookupRenameSnapshotIdentity(ctx, in.ProjectID, in.BranchID.String(), in.FromRootPath, in.FromPath); ok {
+				in.snapshotSHA256, in.snapshotGitOID, in.snapshotSize = sha, gitOID, size
+			}
+		}
 		p.inputs = append(p.inputs, in)
 	}
 	return p, nil
+}
+
+func (s *Store) lookupRenameSnapshotIdentity(ctx context.Context, projectID, branchID, rootPath, rel string) (sha, gitOID string, size int64, ok bool) {
+	if s == nil || s.queries == nil || s.Snapshots == nil || strings.TrimSpace(projectID) == "" || strings.TrimSpace(rootPath) == "" || strings.TrimSpace(rel) == "" {
+		return "", "", 0, false
+	}
+	row, err := s.queries.GetSourceInventoryState(ctx, db.GetSourceInventoryStateParams{
+		ProjectID: projectID, BranchID: branchID,
+	})
+	if err != nil || row.SnapshotID == "" {
+		return "", "", 0, false
+	}
+	entry, found, err := s.Snapshots.Lookup(ctx, row.SnapshotID, cleanRootPath(rootPath), rel)
+	if err != nil || !found {
+		return "", "", 0, false
+	}
+	if entry.SHA256 == "" && entry.GitOID == "" {
+		return "", "", 0, false
+	}
+	return entry.SHA256, entry.GitOID, entry.Size, true
 }
 
 func cloneTextState(in *TextState) *TextState {

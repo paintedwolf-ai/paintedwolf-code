@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"os"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/sourcebranch"
@@ -105,7 +106,8 @@ type sourceMutationPlan struct {
 	EntryKind         SourceEntryKind      `json:"entry_kind,omitempty"`
 	Recursive         bool                 `json:"recursive,omitempty"`
 	Changed           bool                 `json:"changed"`
-	HistoryEntryID    string               `json:"history_entry_id,omitempty"`
+	HistoryEntryID    string      `json:"history_entry_id,omitempty"`
+	BeforeMode        os.FileMode `json:"-"`
 	HistoryTransition string               `json:"history_transition,omitempty"`
 	CreateParents     bool                 `json:"create_parents,omitempty"`
 	Writes            []sourceMutationPlan `json:"writes,omitempty"`
