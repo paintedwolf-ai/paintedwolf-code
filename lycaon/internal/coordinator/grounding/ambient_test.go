@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/grounding"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -158,7 +160,7 @@ func TestCloseoutBreakerCountsRepairExhaustedCloseoutsInFlagAndBlockModes(t *tes
 		LastAuditCode:          "INVEST_CITATIONS_REQUIRED",
 	}
 
-	t.Run("flag mode trips at 3 non-consecutive total (G04-03)", func(t *testing.T) {
+	t.Run("flag mode trips at 3 non-consecutive total (G04-03) without blocking", func(t *testing.T) {
 		cfg := grounding.DefaultGroundingConfig()
 		cfg.CircuitBreaker.EscalateMode = "flag"
 		coord := NewAmbientGroundingCoordinator(nil, nil, cfg, nil, nil)
@@ -173,16 +175,16 @@ func TestCloseoutBreakerCountsRepairExhaustedCloseoutsInFlagAndBlockModes(t *tes
 		testutil.FailErr(t, "turn 2 clean", coord.checkCloseoutEscalation(t.Context(), sid, cleanIn))
 		testutil.FailErr(t, "turn 3 exhausted", coord.checkCloseoutEscalation(t.Context(), sid, exhaustedIn))
 		testutil.FailErr(t, "turn 4 clean", coord.checkCloseoutEscalation(t.Context(), sid, cleanIn))
-		if coord.IsEscalated(sid) || len(notices) != 0 {
-			t.Fatalf("tripped too early: escalated=%v notices=%d", coord.IsEscalated(sid), len(notices))
+		if coord.IsTripped(sid) || coord.IsEscalated(sid) || len(notices) != 0 {
+			t.Fatalf("tripped too early: tripped=%v escalated=%v notices=%d", coord.IsTripped(sid), coord.IsEscalated(sid), len(notices))
 		}
 		testutil.FailErr(t, "turn 5 exhausted trips", coord.checkCloseoutEscalation(t.Context(), sid, exhaustedIn))
-		if !coord.IsEscalated(sid) || len(notices) != 1 || notices[0].Code != grounding.CoordinatorEscalatedCode {
-			t.Fatalf("expected flag escalation at 3 total: escalated=%v notices=%+v", coord.IsEscalated(sid), notices)
+		if !coord.IsTripped(sid) || coord.IsEscalated(sid) || len(notices) != 1 || notices[0].Code != grounding.CoordinatorEscalatedCode {
+			t.Fatalf("expected flag trip without block at 3 total: tripped=%v escalated=%v notices=%+v", coord.IsTripped(sid), coord.IsEscalated(sid), notices)
 		}
 	})
 
-	t.Run("flag mode trips at 2 consecutive and stays tripped after clean turn (G04-04/G04-05)", func(t *testing.T) {
+	t.Run("flag mode trips at 2 consecutive, emits advisory once, stays tripped, and keeps accepting turns (G04-04/G04-05)", func(t *testing.T) {
 		cfg := grounding.DefaultGroundingConfig()
 		cfg.CircuitBreaker.EscalateMode = "flag"
 		coord := NewAmbientGroundingCoordinator(nil, nil, cfg, nil, nil)
@@ -194,29 +196,66 @@ func TestCloseoutBreakerCountsRepairExhaustedCloseoutsInFlagAndBlockModes(t *tes
 		})
 		const sid = "g04-04-05-flag"
 		testutil.FailErr(t, "turn 1 exhausted", coord.checkCloseoutEscalation(t.Context(), sid, exhaustedIn))
-		if coord.IsEscalated(sid) || len(notices) != 0 {
-			t.Fatalf("tripped after 1 turn: escalated=%v notices=%d", coord.IsEscalated(sid), len(notices))
+		if coord.IsTripped(sid) || coord.IsEscalated(sid) || len(notices) != 0 {
+			t.Fatalf("tripped after 1 turn: tripped=%v escalated=%v notices=%d", coord.IsTripped(sid), coord.IsEscalated(sid), len(notices))
 		}
 		testutil.FailErr(t, "turn 2 exhausted trips", coord.checkCloseoutEscalation(t.Context(), sid, exhaustedIn))
-		if !coord.IsEscalated(sid) || len(notices) != 1 || notices[0].Code != grounding.CoordinatorEscalatedCode {
-			t.Fatalf("expected flag escalation at 2 consecutive: escalated=%v notices=%+v", coord.IsEscalated(sid), notices)
+		if !coord.IsTripped(sid) || coord.IsEscalated(sid) || len(notices) != 1 || notices[0].Code != grounding.CoordinatorEscalatedCode {
+			t.Fatalf("expected flag trip without block at 2 consecutive: tripped=%v escalated=%v notices=%+v", coord.IsTripped(sid), coord.IsEscalated(sid), notices)
 		}
+		// Turn 3 clean must proceed (IsEscalated == false), stay tripped, and not re-emit advisory.
 		testutil.FailErr(t, "turn 3 clean stays tripped", coord.checkCloseoutEscalation(t.Context(), sid, cleanIn))
-		if !coord.IsEscalated(sid) {
-			t.Fatal("breaker cleared on clean turn without explicit reset")
+		if !coord.IsTripped(sid) || coord.IsEscalated(sid) {
+			t.Fatalf("expected sticky tripped without blocking after clean turn: tripped=%v escalated=%v", coord.IsTripped(sid), coord.IsEscalated(sid))
+		}
+		if len(notices) != 1 {
+			t.Fatalf("expected advisory emitted once on crossing, got %d notices", len(notices))
 		}
 	})
 
-	t.Run("block mode returns ErrGroundingEscalated at 2 consecutive", func(t *testing.T) {
+	t.Run("block mode returns ErrGroundingEscalated and blocks subsequent turns at 2 consecutive", func(t *testing.T) {
 		cfg := grounding.DefaultGroundingConfig()
 		cfg.CircuitBreaker.EscalateMode = "block"
 		coord := NewAmbientGroundingCoordinator(nil, nil, cfg, nil, nil)
 		coord.Pipeline = groundingTestPipeline(t)
+		var notices []*oar.Decision
+		coord.Pipeline.SetAdvisorySink(func(_ context.Context, _ string, _ string, d *oar.Decision) error {
+			notices = append(notices, d)
+			return nil
+		})
 		const sid = "g04-block"
 		testutil.FailErr(t, "turn 1 exhausted", coord.checkCloseoutEscalation(t.Context(), sid, exhaustedIn))
 		err := coord.checkCloseoutEscalation(t.Context(), sid, exhaustedIn)
+		if !errors.Is(err, guidance.ErrGroundingEscalated) || !coord.IsTripped(sid) || !coord.IsEscalated(sid) {
+			t.Fatalf("expected ErrGroundingEscalated in block mode: err=%v tripped=%v escalated=%v", err, coord.IsTripped(sid), coord.IsEscalated(sid))
+		}
+		if len(notices) != 1 || notices[0].Code != grounding.CoordinatorEscalatedCode {
+			t.Fatalf("expected 1 escalated advisory on crossing, got %+v", notices)
+		}
+	})
+
+	t.Run("policy copy with escalate_mode block refuses at threshold", func(t *testing.T) {
+		raw, err := config.Read(config.Grounding)
+		testutil.FailErr(t, "read bundled grounding.yaml", err)
+		if !strings.Contains(string(raw), "escalate_mode: flag") {
+			t.Fatalf("expected bundled grounding.yaml to ship escalate_mode: flag")
+		}
+		blockPolicy := strings.Replace(string(raw), "escalate_mode: flag", "escalate_mode: block", 1)
+		var cfg grounding.GroundingConfig
+		testutil.FailErr(t, "decode block policy copy", config.DecodeYAML([]byte(blockPolicy), &cfg))
+		if cfg.CircuitBreaker.EscalateMode != "block" {
+			t.Fatalf("policy copy escalate_mode = %q, want block", cfg.CircuitBreaker.EscalateMode)
+		}
+		coord := NewAmbientGroundingCoordinator(nil, nil, cfg, nil, nil)
+		coord.Pipeline = groundingTestPipeline(t)
+		const sid = "g04-policy-copy-block"
+		testutil.FailErr(t, "turn 1 exhausted", coord.checkCloseoutEscalation(t.Context(), sid, exhaustedIn))
+		if coord.IsEscalated(sid) {
+			t.Fatal("blocked before reaching policy threshold")
+		}
+		err = coord.checkCloseoutEscalation(t.Context(), sid, exhaustedIn)
 		if !errors.Is(err, guidance.ErrGroundingEscalated) || !coord.IsEscalated(sid) {
-			t.Fatalf("expected ErrGroundingEscalated in block mode: err=%v escalated=%v", err, coord.IsEscalated(sid))
+			t.Fatalf("expected policy copy block mode refusal at threshold: err=%v escalated=%v", err, coord.IsEscalated(sid))
 		}
 	})
 
@@ -234,8 +273,8 @@ func TestCloseoutBreakerCountsRepairExhaustedCloseoutsInFlagAndBlockModes(t *tes
 		for range 5 {
 			testutil.FailErr(t, "s01-02 turn", coord.checkCloseoutEscalation(t.Context(), sid, s0102In))
 		}
-		if coord.IsEscalated(sid) || len(notices) != 0 {
-			t.Fatalf("S01-02 immediate host attach should not trip breaker: escalated=%v notices=%d", coord.IsEscalated(sid), len(notices))
+		if coord.IsTripped(sid) || coord.IsEscalated(sid) || len(notices) != 0 {
+			t.Fatalf("S01-02 immediate host attach should not trip breaker: tripped=%v escalated=%v notices=%d", coord.IsTripped(sid), coord.IsEscalated(sid), len(notices))
 		}
 	})
 }

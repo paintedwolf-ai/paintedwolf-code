@@ -160,9 +160,22 @@ func NewAmbientGroundingCoordinator(queue WorkerQueue, gate AmbientGroundingGate
 	}
 }
 
-// IsEscalated reports circuit-breaker escalation for the session.
+// IsTripped reports whether the circuit breaker has crossed its threshold
+// in any escalate_mode (sticky for advisory and display state).
+func (g *AmbientGroundingCoordinator) IsTripped(sessionID string) bool {
+	if g == nil || g.State == nil {
+		return false
+	}
+	return g.State.IsTripped(sessionID) || g.State.IsTripped(ambientStateKey(sessionID))
+}
+
+// IsEscalated reports whether the session is blocked by the circuit breaker
+// (only true when escalate_mode is "block").
 func (g *AmbientGroundingCoordinator) IsEscalated(sessionID string) bool {
 	if g == nil || g.State == nil {
+		return false
+	}
+	if g.Config.CircuitBreaker.EscalateMode != "block" {
 		return false
 	}
 	return g.State.IsEscalated(sessionID) || g.State.IsEscalated(ambientStateKey(sessionID))
@@ -209,13 +222,15 @@ func (g *AmbientGroundingCoordinator) checkCloseoutEscalation(ctx context.Contex
 	if g.Config.PostTurn.Mode == "off" || g.State == nil {
 		return nil
 	}
+	blockMode := g.Config.CircuitBreaker.EscalateMode == "block"
 	state := g.State.Get(sessionID)
+	wasTripped := state.Tripped || state.Escalated
 	if in.LastAuditRepairExhausted {
 		grounding.ApplyUngroundedWarning(
 			&state,
 			g.Config.CircuitBreaker.MaxUngroundedWarnings,
 			g.Config.CircuitBreaker.MaxConsecutiveUngrounded,
-			false,
+			blockMode,
 		)
 	} else if in.LastAuditTraced {
 		grounding.ResetUngroundedStreak(&state)
@@ -227,34 +242,38 @@ func (g *AmbientGroundingCoordinator) checkCloseoutEscalation(ctx context.Contex
 		}
 	}
 	if grounding.Flagged(state, g.Config) {
-		state.Escalated = true
+		state.Tripped = true
+		if blockMode {
+			state.Escalated = true
+		}
 	}
 	g.State.Set(sessionID, state)
-	if !state.Escalated {
+	if !state.Tripped {
 		return nil
 	}
-	blockMode := g.Config.CircuitBreaker.EscalateMode == "block"
 	if blockMode && g.Sessions != nil {
 		g.Sessions.Runner.Closeouts.RecordGroundingFriction(ctx, sessionID)
 	}
-	verdict := grounding.GroundingVerdict{
-		OK:     false,
-		Code:   grounding.CoordinatorEscalatedCode,
-		Reason: "repeated ungrounded completion claims",
-	}
-	if g.Pipeline != nil && g.Pipeline.AnchorEnforced(oar.AnchorCoordinatorPostTurn) {
-		gc := oar.NewGuardContext()
-		gc.Session.SessionID = sessionID
-		gc.Session.Role = "coordinator"
-		tools.RegisterRecoveryFacts(ctx, gc)
-		grounding.ObserveVerdict(gc, verdict)
-		gc.Grounding.GroundingEscalated = true
-		if _, err := g.Pipeline.EvaluateBlock(ctx, oar.AnchorCoordinatorPostTurn, gc); err != nil {
-			return err
+	if !wasTripped {
+		verdict := grounding.GroundingVerdict{
+			OK:     false,
+			Code:   grounding.CoordinatorEscalatedCode,
+			Reason: "repeated ungrounded completion claims",
 		}
-	}
-	if g.Events != nil && strings.TrimSpace(in.ProjectID) != "" {
-		g.Events.PublishGrounding(ctx, in.ProjectID, sessionID, verdict.Code, "", "", true)
+		if g.Pipeline != nil && g.Pipeline.AnchorEnforced(oar.AnchorCoordinatorPostTurn) {
+			gc := oar.NewGuardContext()
+			gc.Session.SessionID = sessionID
+			gc.Session.Role = "coordinator"
+			tools.RegisterRecoveryFacts(ctx, gc)
+			grounding.ObserveVerdict(gc, verdict)
+			gc.Grounding.GroundingEscalated = true
+			if _, err := g.Pipeline.EvaluateBlock(ctx, oar.AnchorCoordinatorPostTurn, gc); err != nil {
+				return err
+			}
+		}
+		if g.Events != nil && strings.TrimSpace(in.ProjectID) != "" {
+			g.Events.PublishGrounding(ctx, in.ProjectID, sessionID, verdict.Code, "", "", true)
+		}
 	}
 	if blockMode {
 		return guidance.ErrGroundingEscalated
