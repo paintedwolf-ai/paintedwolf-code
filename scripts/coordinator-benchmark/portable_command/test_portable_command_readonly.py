@@ -49,7 +49,7 @@ class PortableCommandReadonlyAuthorityTests(unittest.TestCase):
             self.assertEqual(audit['observation_gaps'], [])
             for fact in CASES['read-only-static-refusal']['required_evidence']:
                 self.assertTrue(obs['facts'][fact], fact)
-            # Negative control: leaked mutation tool 'write' in offered_tools -> readonly_profile & reachable_readonly_remedy MUST be False.
+            # Offering the write tool invalidates the read-only profile and remedy.
             obs_leak, _ = observe.build_observation(
                 CASES['read-only-static-refusal'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj,
                 db_path=db_path, sidecar_log=log_path, baseline_hashes=base, session_surface=self._surface('worker_readonly', ('command', 'write')),

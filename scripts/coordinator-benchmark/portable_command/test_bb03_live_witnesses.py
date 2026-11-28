@@ -126,7 +126,7 @@ class BB03LiveWitnessOracleTests(unittest.TestCase):
             obs_sub, _ = observe.build_observation(case, session_id='sess1234', identity=IDENT, project_dir=proj, db_path=dbp, sidecar_log=lp, baseline_hashes=base, turn_records=turns, prelude_records=[], witness_meta=sub_eid_wm)
             self.assertFalse(obs_sub['facts']['admission_closed'])
             self.assertFalse(grading.grade_case(case, obs_sub, proj, IDENT)['passed'])
-            # Pre-start cancellation control (started=0, invoked=0, certainty=unknown): distinct schedule MUST NOT pass active-child barrier or loosen authority.
+            # A pre-start cancellation cannot satisfy the active-child barrier.
             db = sqlite3.connect(dbp)
             db.execute("UPDATE invocation_program_executions SET effect_certainty='unknown' WHERE id='e3'")
             db.commit(); db.close()

@@ -246,7 +246,7 @@ class PortableCommandQSliceTests(unittest.TestCase):
                 obs_bad, _ = observe.build_observation(CASES['literal-delivery-edit'], session_id='sess1234', identity=ident, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes=base, turn_records=q5_turns, prelude_records=[])
                 self.assertFalse(obs_bad['facts']['anchored_edit'])
                 self.assertFalse(grading.grade_case(CASES['literal-delivery-edit'], obs_bad, proj, ident)['passed'])
-            # Q06 unseen-output-no-edit-base: truncated line-1 delivery + Turn 2 EDITOR_DOCUMENT_READ_REQUIRED refusal vs accepted unseen span.
+            # A truncated first-line delivery cannot authorize a rewrite of an unseen span.
             db_q6 = root / 'q6.db'
             create_audit_db(db_q6)
             db = sqlite3.connect(db_q6)
