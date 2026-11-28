@@ -225,6 +225,7 @@ func verifyJobGuidanceActions(
 // output-reader route and wait admission, delivers exactly the job actions the
 // recipient can take.
 func TestCommandJobGuidanceFollowsOutputRouteAndWaitAdmission(t *testing.T) {
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	s := mustStock(t)
 	coordStates, err := hoststate.CoordinatorStates(t.Context())
 	if err != nil {

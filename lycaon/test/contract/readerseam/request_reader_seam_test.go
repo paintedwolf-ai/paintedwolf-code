@@ -68,6 +68,7 @@ func visionFree(fingerprint string) string {
 // The coordinator's first request in a one-root Git project is read by the
 // Reader the hoststate oracle builds for that observed state.
 func TestCoordinatorRequestReaderMatchesOracle(t *testing.T) {
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	mock := &requests{}
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock))
 	h.Start(t)
@@ -166,6 +167,7 @@ func readerDiff(t *testing.T, host prompts.HostFacts, auth hoststate.TurnAuthori
 // A write-scope implementer's first request is read by the Reader the
 // hoststate worker oracle builds for that observed state.
 func TestWorkerRequestReaderMatchesOracle(t *testing.T) {
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	mock := &requests{}
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock))
 	ctx := context.Background()
