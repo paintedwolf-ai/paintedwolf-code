@@ -16,6 +16,10 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+func beginPromoteTransaction(dataDir, jobID string, plans []promoteMutation) (*promoteTransaction, error) {
+	return beginPromoteTransactionWith(dataDir, jobID, plans, checkpoint.TransactionConfig{})
+}
+
 func TestApplyHunkResolutionsRejectsInvalidRangesWithoutMutation(t *testing.T) {
 	original := []byte("one\ntwo\n")
 	for _, hunks := range [][]api.WorkerPromoteHunkResolution{
