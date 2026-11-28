@@ -40,6 +40,7 @@ func TestAdvisoryModesNeverRefuseAndFailedOutcomesCountedInvariant(t *testing.T)
 			grounding: &api.CitationGrounding{
 				Traced:        false,
 				HostAssembled: true,
+				RetryCount:    2,
 				HintCode:      guidance.InvestCitationUnverifiableCode,
 				Checks: []api.CitationGroundingCheck{{
 					ID:     "citations",
