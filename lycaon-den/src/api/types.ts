@@ -26223,8 +26223,8 @@ export interface operations {
     search: {
         parameters: {
             query?: {
-                /** @description Optional session whose bound checkout supplies the project roots */
-                session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional active workspace session used to scope unsaved editor draft overlays during search; search roots and scopes retain their normal selection. */
+                session_id?: string;
             };
             header?: never;
             path?: never;

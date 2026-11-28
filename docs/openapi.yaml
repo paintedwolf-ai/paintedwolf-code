@@ -8881,7 +8881,13 @@ paths:
       x-person-action: none
       summary: Global federated search across all projects
       parameters:
-        - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - name: session_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Optional active workspace session used to scope unsaved editor draft overlays during search; search roots and scopes retain their normal selection.
       requestBody:
         required: true
         content:
