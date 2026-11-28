@@ -356,6 +356,9 @@ class PresentationObservation:
     apply_all_disabled: bool | None = None
     screenshot_path: str = ""
     notes: str = ""
+    request_method: str = ""
+    request_post_data: str = ""
+    response_status: int = 0
     project_id: str = ""
     selected_root_id: str = ""
     query: str = ""
