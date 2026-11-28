@@ -795,16 +795,22 @@ def _run_v04_05(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
         ),
     )
     read_handles = [h for h in info["minted_handles"] if h.startswith("read#")]
-    emitted_tags = sum(len(m.get("delivery_tags") or ()) for m in art.delivered_tool_messages)
-    # command#1 plus at most 16 source delivery tags (<= 17 total tags or <= 16 read# handles)
-    ok = "command#1" in info["minted_handles"] and len(read_handles) <= 16 and not info["refused"]
+    all_tags = [t for m in art.delivered_tool_messages for t in (m.get("delivery_tags") or ())]
+    file_delivery_tags = [t for t in all_tags if str(t).startswith("[read#")]
+    # Decision 054: D1 mints all 20 read# records and caps emitted file delivery tags at 16
+    # (excluding the [command#1] receipt tag).
+    ok = (
+        "command#1" in info["minted_handles"]
+        and len(file_delivery_tags) <= 16
+        and not info["refused"]
+    )
     div = None if ok else {
         "selector": sel, "family_id": "V04", "kind": "delivery_tag_cap_exceeded",
-        "detail": f"read_handle_count={len(read_handles)} emitted_tags={emitted_tags} refused={info['refused']}",
+        "detail": f"read_handle_count={len(read_handles)} file_delivery_tags={len(file_delivery_tags)} all_tags={len(all_tags)} refused={info['refused']}",
     }
     return _make_report(
         selector=sel, family_id="V04", passed=ok, info=info, d10_before=b, d10_after=a, d10_delta=d,
-        extra={"read_handle_count": len(read_handles), "emitted_tags": emitted_tags},
+        extra={"read_handle_count": len(read_handles), "file_delivery_tags": len(file_delivery_tags), "emitted_tags": len(all_tags)},
         divergence=div,
     )
 
@@ -1367,22 +1373,32 @@ def _run_v07_02(ctx: _RunnerContext) -> tuple[dict[str, Any], dict[str, Any] | N
         a = probe_store_db(sc2.store_db_path, sid, trace_log_path=tl2)
 
     (ctx.artifacts_dir / f"{sel}.json").write_text(json.dumps(art2.to_dict(), indent=2, sort_keys=True), encoding="utf-8")
+    # Decision 055: Inspect ONLY Phase 2 closeouts (excluding Phase 1's pre-corruption closeout).
+    phase1_closeout_ids = {str(c.get("id") or "") for c in art1.product_closeouts}
+    phase2_closeouts = [
+        c for c in art2.product_closeouts
+        if str(c.get("id") or "") not in phase1_closeout_ids
+    ]
     info = _inspect_artifact(art2, initial_turns=len(turns2))
-    # Unreadable ledger MUST NEVER grant evidence_optional=True exemption or ground read#1
-    granted_exemption = info.get("evidence_optional") is True
+    granted_exemption = any(
+        isinstance(c.get("grounding"), dict) and c["grounding"].get("evidence_optional") is True
+        for c in phase2_closeouts
+    )
     grounded_read1 = any(
         isinstance(e, dict) and e.get("handle") == "read#1" and e.get("verdict") in {"matched", "traced", "bound"}
-        for e in (info.get("cited_evidence") or [])
+        for c in phase2_closeouts
+        if isinstance(c.get("grounding"), dict)
+        for e in (c["grounding"].get("cited_evidence") or [])
     )
     ok = corrupted and (not granted_exemption) and (not grounded_read1)
     div = None if ok else {
         "selector": sel, "family_id": "V07", "kind": "unreadable_ledger_exemption_or_false_accept",
-        "detail": f"corrupted={corrupted} evidence_optional={granted_exemption} grounded_read1={grounded_read1}",
+        "detail": f"corrupted={corrupted} phase2_closeouts={len(phase2_closeouts)} evidence_optional={granted_exemption} grounded_read1={grounded_read1}",
     }
     return _make_report(
         selector=sel, family_id="V07", passed=ok, info=info,
         d10_before=b.to_dict(), d10_after=a.to_dict(), d10_delta=a.delta_observed(b),
-        extra={"blob_corrupted": corrupted, "granted_exemption": granted_exemption},
+        extra={"blob_corrupted": corrupted, "phase2_closeout_count": len(phase2_closeouts), "granted_exemption": granted_exemption},
         divergence=div,
     )
 
