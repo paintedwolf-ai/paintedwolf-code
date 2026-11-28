@@ -184,6 +184,10 @@ func (a editorDocumentsAdapter) RememberAgentReadSpans(projectID, sessionID stri
 	a.service.RememberAgentReadSpans(projectID, sessionID, document.ID, document.Revision, converted)
 }
 
+func (a editorDocumentsAdapter) RememberAgentReadBytes(projectID, sessionID string, document tools.EditorDocumentText, source documentcore.ReadSource, start, end int64) {
+	a.service.RememberAgentReadBytes(projectID, sessionID, document.ID, document.Revision, source, start, end)
+}
+
 func (a editorDocumentsAdapter) VisitAgentPublications(ctx context.Context, projectID string, branch sourcebranch.ID, sessionID string, turn int, toolCallID string, visit func(tools.EditorDocumentPublicationCandidate) error) error {
 	return a.service.VisitAgentPublications(ctx, projectID, branch, sessionID, turn, toolCallID, func(state editordoc.DocumentPathState, load func(context.Context) (*editordoc.Document, func(context.Context) (*editordoc.Document, error), error)) error {
 		return visit(tools.EditorDocumentPublicationCandidate{DraftBytes: state.DraftBytes, BaseBytes: state.BaseBytes, Load: func(ctx context.Context) (tools.EditorDocumentPublication, error) {

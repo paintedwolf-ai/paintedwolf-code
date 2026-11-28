@@ -116,3 +116,69 @@ func TestFrozenPartialReadNeverWidensToLaterCoverage(t *testing.T) {
 		t.Fatal("completed whole read was lost")
 	}
 }
+
+func TestAgentReadByteCoverageRequiresOneCompleteSource(t *testing.T) {
+	f := newAgentFixture(t, map[string]string{"a.txt": "0123456789\n"})
+	doc := f.open(t, "a.txt")
+	const chat = "chat-a"
+	source := documentcore.ReadSource{ID: "a.txt", SHA256: "original", Representation: "utf8-no-bom", Bytes: 11}
+	remember := func(s documentcore.ReadSource, start, end int64) {
+		f.service.RememberAgentReadBytes(f.project.ID, chat, doc.ID, doc.Revision, s, start, end)
+	}
+	wantUnread := func(lookup ReadBasisLookup) {
+		t.Helper()
+		if _, err := f.service.AgentReadBase(t.Context(), f.project.ID, chat, doc.ID, lookup); !errors.Is(err, ErrAgentReadRequired) {
+			t.Fatalf("incomplete delivery granted a basis: %v", err)
+		}
+	}
+
+	remember(source, 0, 5)
+	other := source
+	other.Representation = "logical-utf8-lf"
+	remember(other, 5, 11)
+	wantUnread(nil)
+
+	remember(source, 8, 11)
+	remember(source, 0, 4)
+	wantUnread(nil)
+	frozen := frozenBases(f.service.FreezeAgentReads(f.project.ID, chat))
+	remember(source, 3, 9)
+	wantUnread(frozen)
+
+	basis, err := f.service.AgentReadBase(t.Context(), f.project.ID, chat, doc.ID, nil)
+	testutil.FailErr(t, "load fully delivered read", err)
+	if !basis.ReadWhole || basis.Revision != doc.Revision || basis.Draft != doc.Draft {
+		t.Fatalf("whole basis does not match the delivered document: %+v", basis)
+	}
+	if _, err := f.service.AgentReadBase(t.Context(), f.project.ID, "chat-b", doc.ID, nil); !errors.Is(err, ErrAgentReadRequired) {
+		t.Fatalf("another chat borrowed the delivered range: %v", err)
+	}
+}
+
+func TestAgentReadByteCoverageDoesNotCarryAcrossRevisions(t *testing.T) {
+	f := newAgentFixture(t, map[string]string{"a.txt": "0123456789\n"})
+	doc := f.open(t, "a.txt")
+	const chat = "chat-a"
+	source := documentcore.ReadSource{ID: "a.txt", SHA256: "same-bytes", Representation: "utf8-no-bom", Bytes: 11}
+	f.service.RememberAgentReadBytes(f.project.ID, chat, doc.ID, doc.Revision, source, 0, 5)
+	f.service.RememberAgentReadBytes(f.project.ID, chat, doc.ID, doc.Revision+1, source, 5, 11)
+	f.service.RememberAgentReadBytes(f.project.ID, chat, doc.ID, doc.Revision, source, 5, 11)
+	if _, ok := f.service.FreezeAgentReads(f.project.ID, chat)[doc.ID]; ok {
+		t.Fatal("ranges from different revisions granted a basis")
+	}
+}
+
+func TestAgentReadByteCoverageDropsExcessDisjointRanges(t *testing.T) {
+	f := newAgentFixture(t, map[string]string{"a.txt": "0123456789\n"})
+	doc := f.open(t, "a.txt")
+	const chat = "chat-a"
+	limit := int64(maxAgentReadByteRanges)
+	source := documentcore.ReadSource{ID: "a.txt", SHA256: "source", Representation: "utf8-no-bom", Bytes: 2*limit + 1}
+	for i := int64(0); i <= limit; i++ {
+		f.service.RememberAgentReadBytes(f.project.ID, chat, doc.ID, doc.Revision, source, 2*i, 2*i+1)
+	}
+	key := agentReadKey{project: f.project.ID, session: chat, document: doc.ID}
+	if ranges := f.service.agentReads.bases[key].pending.ranges; len(ranges) != 0 {
+		t.Fatalf("too many disjoint ranges were retained: %d", len(ranges))
+	}
+}
