@@ -877,8 +877,10 @@ def run_f05_instance(
                     _git(root_dir, "checkout", target)
                     executed_moves += 1
                 elif move == "commit":
-                    (root_dir / "commit_log.txt").write_bytes(f"commit step {step_idx}\n".encode("utf-8"))
-                    _git(root_dir, "add", "commit_log.txt")
+                    # Independent commits on both branches must remain rebaseable.
+                    path = f"commit_log_{step_idx}.txt"
+                    (root_dir / path).write_bytes(f"commit step {step_idx}\n".encode("utf-8"))
+                    _git(root_dir, "add", path)
                     _git(root_dir, "commit", "-m", f"commit step {step_idx}")
                     executed_moves += 1
                 elif move == "empty_commit":
