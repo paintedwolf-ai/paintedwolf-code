@@ -31,13 +31,14 @@ func TestWorkerBoardUsesCurrentBranchInventory(t *testing.T) {
 	engine.SetWorkerRoots(func(context.Context, *api.Session) ([]projectroot.RootRef, error) {
 		return []projectroot.RootRef{{ID: "root", Path: branch, Label: "workspace", IsPrimary: true}}, nil
 	})
+	reader := assemblyTestReader(t, "implement")
 	sess := &api.Session{ID: "worker", ParentSessionID: "parent", ProjectID: "project", WorkspaceRootID: "root", WorkspacePath: t.TempDir()}
-	first, ok := engine.WorkerBoard(t.Context(), sess)
+	first, ok := engine.WorkerBoard(t.Context(), sess, reader)
 	if !ok || !strings.Contains(first, "Repo: 2 files") {
 		t.Fatalf("initial board = %q", first)
 	}
 	builder.files = 3
-	second, ok := engine.WorkerBoard(t.Context(), sess)
+	second, ok := engine.WorkerBoard(t.Context(), sess, reader)
 	if !ok || !strings.Contains(second, "Repo: 3 files") || strings.Contains(second, "Repo: 2 files") {
 		t.Fatalf("board retained inventory from before the write: %q", second)
 	}

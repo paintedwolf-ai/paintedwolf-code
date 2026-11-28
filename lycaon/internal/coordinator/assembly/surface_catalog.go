@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/catalogview"
-	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -89,7 +88,15 @@ func (e *promptSurface) sessionCatalogView(ctx context.Context, sess *api.Sessio
 	}
 	return nil
 }
-func (e *promptSurface) renderSystemPromptWithEngine(ctx context.Context, pe prompts.PromptTemplateEngine, sess *api.Session, templateRef string, vars map[string]any) (string, error) {
+func (e *promptSurface) renderSystemPromptWithEngine(
+	ctx context.Context,
+	pe prompts.PromptTemplateEngine,
+	sess *api.Session,
+	frame inject.CoordinatorTurnFrame,
+	turn *TurnAssemblyScratch,
+	templateRef string,
+	vars map[string]any,
+) (string, error) {
 	if e == nil || pe == nil {
 		return "", errPromptEngineNotConfigured
 	}
@@ -98,9 +105,14 @@ func (e *promptSurface) renderSystemPromptWithEngine(ctx context.Context, pe pro
 		agentType = strings.TrimSpace(sess.AgentType)
 	}
 	if fe, ok := pe.(*prompts.FileTemplateEngine); ok && agentType != "" {
-		reader, err := e.workerReader(ctx, sess, fe, agentType, vars)
+		reader, err := e.workerTurnReader(ctx, sess, frame, turn)
 		if err == nil {
-			out, renderErr := prompts.RenderPersona(ctx, fe, agentType, reader, vars)
+			workerVars := vars
+			if vars != nil && vars["agent_skills"] != nil {
+				workerVars = maps.Clone(vars)
+				filterOccurrenceSkillsForReader(fe, reader, workerVars)
+			}
+			out, renderErr := prompts.RenderPersona(ctx, fe, agentType, reader, workerVars)
 			if renderErr == nil {
 				return out, nil
 			}
@@ -114,70 +126,64 @@ func (e *promptSurface) renderSystemPromptWithEngine(ctx context.Context, pe pro
 	return pe.Render(ctx, templateRef, vars)
 }
 
-func (e *promptSurface) workerReader(ctx context.Context, sess *api.Session, fe *prompts.FileTemplateEngine, agentType string, vars map[string]any) (prompts.Reader, error) {
-	profileID := ""
+// workerTurnReader is the Reader of the worker request this assembly precedes,
+// under the tool profile the session catalog gives the worker's agent.
+func (e *promptSurface) workerTurnReader(
+	ctx context.Context,
+	sess *api.Session,
+	frame inject.CoordinatorTurnFrame,
+	turn *TurnAssemblyScratch,
+) (prompts.Reader, error) {
+	if strings.TrimSpace(frame.Machine.ProfileID) == "" {
+		profileID, err := e.workerProfileID(ctx, sess)
+		if err != nil {
+			return prompts.Reader{}, err
+		}
+		frame.Machine = inject.Machine{ProfileID: profileID}
+	}
+	return e.requestReader(ctx, sess, nil, frame)
+}
+
+func (e *promptSurface) workerProfileID(ctx context.Context, sess *api.Session) (string, error) {
+	agentType := ""
+	if sess != nil {
+		agentType = strings.TrimSpace(sess.AgentType)
+	}
+	if agentType == "" {
+		agentType = "implementer"
+	}
 	if agents := e.agentsForSession(ctx, sess); agents != nil {
-		if profile, err := agents.Get(agentType); err == nil {
-			profileID = strings.TrimSpace(profile.ToolProfile)
+		if profile, err := agents.Get(agentType); err == nil && strings.TrimSpace(profile.ToolProfile) != "" {
+			return strings.TrimSpace(profile.ToolProfile), nil
 		}
 	}
-	if profileID == "" {
-		var err error
-		profileID, err = prompts.ToolProfileForAgent(agentType)
-		if err != nil {
-			return prompts.Reader{}, err
-		}
-	}
+	return prompts.ToolProfileForAgent(agentType)
+}
+
+// commandJobsReader is the request Reader the command-jobs ledger renders
+// against, with the wait schema that request carries.
+func (e *promptSurface) commandJobsReader(
+	ctx context.Context,
+	sess *api.Session,
+	coordinator bool,
+	frame inject.CoordinatorTurnFrame,
+	history []api.Message,
+	turn *TurnAssemblyScratch,
+) (prompts.Reader, map[string]any, error) {
 	var (
-		profiles []sandbox.ToolProfile
-		schemas  *toolschema.Config
-		catalog  *extpacks.EffectiveCatalog
+		reader prompts.Reader
+		err    error
 	)
-	if view := e.sessionCatalogView(ctx, sess); view != nil {
-		profiles = view.ToolProfiles
-		schemas = view.ToolSchemas
-		catalog = view.Catalog
-	}
-	if catalog == nil && fe != nil {
-		catalog = fe.Layers().Catalog
-	}
-	if len(profiles) == 0 {
-		loaded, err := sandbox.LoadToolProfilesWithCatalog(catalog)
-		if err != nil {
-			return prompts.Reader{}, err
+	if coordinator {
+		if frame.Roster == nil {
+			frame.Roster = e.resolveTurnRoster(ctx, sess, frame, history, turn)
 		}
-		profiles = loaded
+		reader, err = e.turnReader(ctx, sess, frame, history, turn)
+	} else {
+		reader, err = e.workerTurnReader(ctx, sess, frame, turn)
 	}
-	var visible []string
-	var loaded map[string]bool
-	_, rootCount, _, _, ok := e.workspaceRootsForTurn(ctx, sess, nil)
-	if !ok {
-		rootCount = 1
-	}
-	if vars != nil {
-		if raw, ok := vars["visible_tools"].([]string); ok {
-			visible = raw
-		}
-		if raw, ok := vars["loaded_tools"].(map[string]bool); ok {
-			loaded = raw
-		}
-	}
-	webSearchEnabled := true
-	if fn := e.deps.WebSearchEnabled; fn != nil {
-		webSearchEnabled = fn()
-	}
-	visionEnabled := e.deps.ModelVision != nil && e.deps.ModelVision(ctx, sess)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: profileID,
-		Profiles:  profiles,
-		Loaded:    loaded,
-		Visible:   visible,
-		Schemas:   schemas,
-		RootCount: rootCount,
-		WebSearch: webSearchEnabled,
-	})
 	if err != nil {
-		return prompts.Reader{}, err
+		return prompts.Reader{}, nil, err
 	}
-	return reader.WithVision(visionEnabled), nil
+	return reader, reader.ProjectedSchema("wait"), nil
 }

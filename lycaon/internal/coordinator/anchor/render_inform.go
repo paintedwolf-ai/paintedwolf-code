@@ -50,7 +50,7 @@ func InformRenderFor(ctx context.Context, id ID, match MatchContext) string {
 	return strings.TrimSpace(b.Render)
 }
 
-// RenderInform resolves and renders an inform binding.
+// RenderInform resolves and renders a reader-free inform binding.
 func RenderInform(
 	ctx context.Context,
 	id ID,
@@ -68,6 +68,25 @@ func RenderInform(
 	return inj.Render(ctx, stem, vars)
 }
 
+// RenderInformWithReader resolves and renders an inform binding against a validated Reader.
+func RenderInformWithReader(
+	ctx context.Context,
+	id ID,
+	match MatchContext,
+	inj *prompts.InjectRenderer,
+	reader prompts.Reader,
+	occurrence map[string]any,
+) (string, error) {
+	if inj == nil {
+		return "", fmt.Errorf("anchor: inject renderer not configured")
+	}
+	stem, err := ResolveInformRender(ctx, id, match)
+	if err != nil {
+		return "", err
+	}
+	return inj.RenderWithReader(ctx, reader, stem, occurrence)
+}
+
 // SetInjectRenderer installs synchronous inject rendering.
 func (b *Bus) SetInjectRenderer(r *prompts.InjectRenderer) {
 	if b != nil {
@@ -75,10 +94,18 @@ func (b *Bus) SetInjectRenderer(r *prompts.InjectRenderer) {
 	}
 }
 
-// RenderInform renders an inform through this bus.
+// RenderInform renders a reader-free inform through this bus.
 func (b *Bus) RenderInform(ctx context.Context, id ID, match MatchContext, vars map[string]any) (string, error) {
 	if b == nil {
 		return "", fmt.Errorf("anchor: nil bus")
 	}
 	return RenderInform(ctx, id, match, b.inject, vars)
+}
+
+// RenderInformWithReader renders a reader-bound inform through this bus.
+func (b *Bus) RenderInformWithReader(ctx context.Context, id ID, match MatchContext, reader prompts.Reader, occurrence map[string]any) (string, error) {
+	if b == nil {
+		return "", fmt.Errorf("anchor: nil bus")
+	}
+	return RenderInformWithReader(ctx, id, match, b.inject, reader, occurrence)
 }

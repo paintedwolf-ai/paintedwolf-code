@@ -105,8 +105,7 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: workflowMgr.Store.Runs, Policy: workflowMgr.Policy, Ambient: workflowMgr.Ambient, Blueprints: workflowMgr.Blueprints, Batch: workflowMgr.Batch, Slash: workflowMgr.Slash, Requests: workflowMgr.Requests, Feedback: workflowMgr.Feedback, Transcript: workflowMgr.Transcript, Asks: workflowMgr.Asks, Fanout: workflowMgr.Fanout, Phases: workflowMgr.Phases, Reports: workflowMgr.Reports, Recovery: workflowMgr.Recovery, Cleanup: workflowMgr})
 	mgr.SetCoordinatorTurnFrameSource(&workflowruntime.CoordinatorFrames{Runs: workflowMgr.Store.Runs, Resolver: &workflowMgr.Resolver, Snapshots: workflowMgr.Snapshots, Policy: workflowMgr.Policy, Obligations: workflowMgr.Obligations, SessionStore: sessionWF, ConfigRoot: configRoot})
 	if err := workflowstatetools.RegisterStateTools(rt.Registry, workflowstatetools.StateToolDeps{
-		Runs: workflowMgr.Store.Runs, Vars: workflowMgr.Phases.Vars, Journal: workflowMgr.Phases.Journal,
-		Resolver: &workflowMgr.Resolver, Starts: workflowMgr.Starts, Controls: workflowMgr.Controls,
+		Resolver: &workflowMgr.Resolver, Starts: workflowMgr.Starts,
 		Scaffold: workflowMgr.Blueprints.Scaffold, Sessions: store.Sessions,
 	}); err != nil {
 		testutil.FailErr(t, "workflowstatetools.RegisterStateTools failed", err)
@@ -116,9 +115,6 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	}
 	if err := workflowphases.RegisterTransitionTool(rt.Registry, workflowMgr.Phases); err != nil {
 		testutil.FailErr(t, "workflowphases.RegisterTransitionTool failed", err)
-	}
-	if err := workflowinputs.RegisterFeedbackTool(rt.Registry, workflowMgr.Feedback); err != nil {
-		testutil.FailErr(t, "workflowinputs.RegisterFeedbackTool failed", err)
 	}
 	if err := workflowinputs.RegisterAskUserTool(rt.Registry, workflowMgr.Asks, rt.Boundary); err != nil {
 		testutil.FailErr(t, "workflowinputs.RegisterAskUserTool failed", err)

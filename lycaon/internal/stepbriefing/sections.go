@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -125,11 +126,11 @@ func (p *Profile) changeSection(ctx context.Context, projectID string, s step) (
 	if len(vars) == 0 {
 		return briefing.SectionPlan{}, false, nil
 	}
-	system, err := guidance.RenderCatalog(ctx, guidance.UtilityStepChangeSystemRef, nil)
+	system, err := prompts.RenderUtilityPrompt(ctx, guidance.UtilityStepChangeSystemRef, nil)
 	if err != nil {
 		return briefing.SectionPlan{}, false, err
 	}
-	user, err := guidance.RenderCatalog(ctx, guidance.UtilityStepChangeUserRef, vars)
+	user, err := prompts.RenderUtilityPrompt(ctx, guidance.UtilityStepChangeUserRef, vars)
 	if err != nil {
 		return briefing.SectionPlan{}, false, err
 	}

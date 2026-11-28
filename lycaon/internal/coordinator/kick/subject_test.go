@@ -17,7 +17,7 @@ func TestKicksForDifferentSubjectsQueueSeparately(t *testing.T) {
 	}
 	var rendered []string
 	for kicks.TakePendingKickIDUnless("s1", nil) != "" {
-		text, lease, ok, err := kicks.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{})
+		text, lease, ok, err := kicks.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{Reader: kickTestReader(t)})
 		if err != nil || !ok {
 			t.Fatalf("render = %v %v", ok, err)
 		}
@@ -82,7 +82,7 @@ func TestProcessFinishedKicksQueuePerHandleAndSurviveClearPendingOnTurnAbort(t *
 
 	var rendered []string
 	for kicks.TakePendingKickIDUnless("s1", nil) != "" {
-		text, lease, ok, err := kicks.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{})
+		text, lease, ok, err := kicks.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{Reader: kickTestReader(t)})
 		if err != nil || !ok {
 			t.Fatalf("render = %v %v", ok, err)
 		}

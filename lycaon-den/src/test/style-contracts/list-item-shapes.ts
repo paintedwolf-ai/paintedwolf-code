@@ -1,7 +1,8 @@
 import { dirname, relative, resolve } from "node:path";
-import { parse, type Container, type Rule } from "postcss";
+import type { Container, Rule } from "postcss";
 import * as ts from "typescript";
 import { loadSourceCorpus, loadTypeScriptCorpus, type TypeScriptSourceFile } from "../source-corpus.ts";
+import { parseStylesheet } from "./parsed-stylesheets.ts";
 import { splitTopLevel, subjectCompound } from "./stylesheet-parser.ts";
 
 const WORKAROUND_ATTRIBUTE = "data-den-webkit-atspi-workaround";
@@ -38,7 +39,7 @@ export function buildDisplayIndex(denSrc: string): DisplayIndex {
   const index: DisplayIndex = { hidden: new Map(), grid: new Map() };
   const sheets = loadSourceCorpus(denSrc, { extensions: [".css"] }).files;
   for (const sheet of sheets) {
-    const root = parse(sheet.text, { from: sheet.path });
+    const root = parseStylesheet(sheet);
     root.walkDecls("display", (decl) => {
       const value = decl.value.toLowerCase();
       const shape = /\bnone\b/.test(value) ? "hidden" : /\b(?:inline-)?grid\b/.test(value) ? "grid" : null;
@@ -257,7 +258,7 @@ export function findListItemShapes(denSrc: string): ListItemShapeFinding[] {
 export function findListItemGridRules(denSrc: string): string[] {
   const out: string[] = [];
   for (const sheet of loadSourceCorpus(denSrc, { extensions: [".css"] }).files) {
-    parse(sheet.text).walkDecls("display", (decl) => {
+    parseStylesheet(sheet).walkDecls("display", (decl) => {
       if (!/\b(?:inline-)?grid\b/.test(decl.value) || decl.parent?.type !== "rule") return;
       for (const selector of fullSelectors(decl.parent as Rule)) {
         const subject = subjectCompound(selector);

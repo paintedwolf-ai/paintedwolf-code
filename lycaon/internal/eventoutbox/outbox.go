@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,25 +38,47 @@ type DeliveredEvent struct {
 
 // Outbox persists and delivers events.
 type Outbox struct {
-	db   db.Handle
-	hub  events.EventHub
-	wake chan struct{}
+	db     db.Handle
+	hub    events.EventHub
+	wake   chan struct{}
+	syncCh chan chan error
 	// idle bounds how long delivery waits for a wake before sweeping anyway, so a
 	// lost Notify is a delay rather than a stall.
 	idle time.Duration
-	// lifecycleMu guards cancel between concurrent Start and Close calls.
+	// lifecycleMu guards cancel and stopped between concurrent Start, Wait, and Close calls.
 	lifecycleMu sync.Mutex
+	drainMu     sync.Mutex
 	cancel      context.CancelFunc
+	stopped     chan struct{}
 	wg          sync.WaitGroup
+	epoch       atomic.Uint64
+	draining    atomic.Bool
 	// OnDelivered runs after a row reaches the hub.
 	OnDelivered func(context.Context, DeliveredEvent)
+}
+
+// Epoch increases whenever a row is enqueued or processed by the outbox, so a
+// fixed-point drain can tell whether a pass produced or delivered outbox work.
+func (o *Outbox) Epoch() uint64 {
+	if o == nil {
+		return 0
+	}
+	return o.epoch.Load()
+}
+
+// Busy reports whether the outbox is currently draining rows.
+func (o *Outbox) Busy() bool {
+	if o == nil {
+		return false
+	}
+	return o.draining.Load()
 }
 
 // idleSweep is the delivery sweep every host runs without a wake.
 const idleSweep = time.Second
 
 func New(database db.Handle, hub events.EventHub) *Outbox {
-	return &Outbox{db: database, hub: hub, wake: make(chan struct{}, 1)}
+	return &Outbox{db: database, hub: hub, wake: make(chan struct{}, 1), syncCh: make(chan chan error)}
 }
 
 // ErrNotWired reports an enqueue against an outbox that was never constructed.
@@ -88,6 +111,9 @@ func (o *Outbox) EnqueueTx(ctx context.Context, tx *sql.Tx, topic api.EventTopic
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO event_outbox(event_id, topic, project_id, session_id, facet, entity_revision, data_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		eventID, string(topic), key.Project, key.Session, key.Facet, key.EntityRevision, string(raw), time.Now().UTC().Format(time.RFC3339Nano))
+	if err == nil {
+		o.epoch.Add(1)
+	}
 	return err
 }
 
@@ -133,6 +159,7 @@ func (o *Outbox) Notify() {
 	if o == nil {
 		return
 	}
+	o.epoch.Add(1)
 	select {
 	case o.wake <- struct{}{}:
 	default:
@@ -150,14 +177,48 @@ func (o *Outbox) Start(parent context.Context) {
 		return
 	}
 	ctx, cancel := context.WithCancel(parent)
+	stopped := make(chan struct{})
 	o.cancel = cancel
+	o.stopped = stopped
 	o.wg.Add(1)
 	o.lifecycleMu.Unlock()
-	go o.run(ctx)
+	go o.run(ctx, stopped)
 	o.Notify()
 }
 
-func (o *Outbox) run(ctx context.Context) {
+// Wait blocks until the dispatcher has drained every currently committed outbox
+// row, including hub publication, OnDelivered callbacks, and row deletion.
+func (o *Outbox) Wait(ctx context.Context) error {
+	if o == nil || o.db == nil || o.hub == nil {
+		return nil
+	}
+	o.lifecycleMu.Lock()
+	started := o.cancel != nil
+	stopped := o.stopped
+	o.lifecycleMu.Unlock()
+	if !started {
+		return o.drain(ctx)
+	}
+	reply := make(chan error, 1)
+	select {
+	case o.syncCh <- reply:
+	case <-stopped:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	select {
+	case err := <-reply:
+		return err
+	case <-stopped:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (o *Outbox) run(ctx context.Context, stopped chan struct{}) {
+	defer close(stopped)
 	defer o.wg.Done()
 	idle := o.idle
 	if idle <= 0 {
@@ -172,6 +233,8 @@ func (o *Outbox) run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
+		case reply := <-o.syncCh:
+			reply <- o.drain(ctx)
 		case <-o.wake:
 		case <-ticker.C:
 		}
@@ -180,11 +243,18 @@ func (o *Outbox) run(ctx context.Context) {
 
 // A crash after publish and before deletion can replay the same event ID.
 func (o *Outbox) drain(ctx context.Context) error {
+	o.drainMu.Lock()
+	o.draining.Store(true)
+	defer func() {
+		o.draining.Store(false)
+		o.drainMu.Unlock()
+	}()
 	for {
 		entry, ok, err := o.next(ctx)
 		if err != nil || !ok {
 			return err
 		}
+		o.epoch.Add(1)
 		key := events.PublishKey{Project: entry.projectID, Session: entry.sessionID, Facet: entry.facet, EventID: entry.eventID, EntityRevision: entry.revision}
 		if entry.topic == "" || !json.Valid(entry.data) || events.ValidatePublishScope(entry.topic, key) != nil {
 			if err := o.remove(ctx, entry.id); err != nil {

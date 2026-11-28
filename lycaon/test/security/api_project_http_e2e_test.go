@@ -49,8 +49,7 @@ func TestProjectRemovalCascadeAndSSE(t *testing.T) {
 	// Deletion runs in the server task group; the operation settles after it drains.
 	settleCtx, cancel := context.WithTimeout(t.Context(), BackgroundSettleBudget)
 	defer cancel()
-	srv.WaitForBackground(settleCtx)
-	testutil.FailErr(t, "settle project removal", settleCtx.Err())
+	testutil.FailErr(t, "settle project removal", srv.WaitForBackground(settleCtx))
 	resultW := httptest.NewRecorder()
 	srv.ServeHTTP(resultW, AuthedRequest(t, http.MethodGet, "/v1/projects/"+projectRow.ID+"/removals/"+operationID, nil))
 	if resultW.Code != http.StatusOK {

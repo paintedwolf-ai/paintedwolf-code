@@ -2,9 +2,11 @@ package promptloop
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"log/slog"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/prompts"
 
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -27,15 +29,15 @@ type SpendCeilingCheck struct {
 }
 
 // SpendRunwayNudge renders the first spend warning.
-type SpendRunwayNudge func(ctx context.Context, sess *api.Session, ceilingUSD float64) HostNudge
+type SpendRunwayNudge func(ctx context.Context, sess *api.Session, reader prompts.Reader, ceilingUSD float64) HostNudge
 
 // SpendSoftStopNudge renders instructions for the final tool round.
-type SpendSoftStopNudge func(ctx context.Context, sess *api.Session) HostNudge
+type SpendSoftStopNudge func(ctx context.Context, sess *api.Session, reader prompts.Reader) HostNudge
 
 // spendCeilingDecision selects a warning, final tool round, or completed closeout.
 type spendCeilingDecision struct {
 	Runway   SpendRunway
-	WindDown bool
+	WindDown HostNudge
 	Finished *PromptRunResult
 }
 
@@ -74,10 +76,15 @@ func (l *turnNudges) applySpendCeiling(
 	if strings.TrimSpace(st.lastAssistantID) == "" {
 		return out, err
 	}
-	if sess != nil && !st.spendSoftStopGranted && check.SoftStop {
-		st.spendSoftStopGranted = true
-		out.WindDown = true
-		return out, nil
+	if sess != nil && !st.spendSoftStopGranted && check.SoftStop && l.Deps.SpendSoftStopNudge != nil {
+		out.WindDown = l.Deps.SpendSoftStopNudge(ctx, sess, turnReader(st))
+		if err := ctx.Err(); err != nil {
+			return out, err
+		}
+		if !out.WindDown.Empty() {
+			st.spendSoftStopGranted = true
+			return out, nil
+		}
 	}
 	closedHistory, aid, content, cerr := l.Closeout.runEarlyTurnCloseout(
 		ctx, sess, sessionID, profileID, userPrompt, st.history, maxIter,
@@ -99,24 +106,6 @@ func (l *turnNudges) applySpendCeiling(
 		TasksDispatchedCount: st.tasksDispatchedCount,
 	}
 	return out, nil
-}
-
-func (l *turnNudges) maybeSpendSoftStopNudge(
-	ctx context.Context,
-	sess *api.Session,
-	sessionID string,
-	history []api.Message,
-	windDown bool,
-	st *promptLoopTurnState,
-) ([]api.Message, error) {
-	if l == nil || l.Deps.SpendSoftStopNudge == nil || sess == nil || !windDown {
-		return history, nil
-	}
-	nudge := l.Deps.SpendSoftStopNudge(ctx, sess)
-	if nudge.Empty() {
-		return history, nil
-	}
-	return l.appendHostNudge(ctx, sessionID, history, nudge, "", st)
 }
 
 // windDownWithholds names the tools the spend wind-down round withholds:
@@ -167,7 +156,7 @@ func (l *turnNudges) maybeSpendRunwayNudge(
 	if !runway.Low {
 		return history, nil
 	}
-	nudge := l.Deps.SpendRunwayNudge(ctx, sess, runway.CeilingUSD)
+	nudge := l.Deps.SpendRunwayNudge(ctx, sess, turnReader(st), runway.CeilingUSD)
 	if nudge.Empty() {
 		return history, nil
 	}

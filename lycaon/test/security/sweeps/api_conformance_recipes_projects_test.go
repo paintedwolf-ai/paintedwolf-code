@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 )
 
@@ -190,8 +191,9 @@ var projectRecipes = map[string]successRecipe{
 		},
 		after: func(s *conformanceSweep) {
 			if s.host != nil {
-				_ = s.host.Server.Admin.Models.Registry().CancelLocalModelTransfer(context.Background())
-				s.host.Server.WaitForBackground(context.Background())
+				ctx := s.fixture.t.Context()
+				_ = s.host.Server.Admin.Models.Registry().CancelLocalModelTransfer(ctx)
+				testutil.FailErr(s.fixture.t, "settle canceled model transfer", s.host.Server.WaitForBackground(ctx))
 			}
 		},
 	},

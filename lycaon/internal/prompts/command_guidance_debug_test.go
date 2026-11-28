@@ -6,21 +6,27 @@ import (
 
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 )
 
 // The debug snapshot carries every command guidance fact and follows whether
 // command is offered.
 func TestCommandGuidanceSnapshotFollowsOfferedCommand(t *testing.T) {
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load tool profiles", err)
 	snapshot := func(offered []string) ([]string, map[string]any) {
-		return prompts.BuildCommandGuidanceSnapshot(prompts.CommandGuidanceSnapshotInput{
-			ProfileID:     prompts.CoordinatorProfileID,
-			SurfaceID:     "implement_investigate",
-			IsCoordinator: true,
-			OfferedTools:  offered,
-			DeferredTools: []string{"edit", "jq"},
-			RootCount:     2,
-			ProjectDir:    "/workspace/app",
-			Posture:       gate.PostureStrict,
+		reader, err := prompts.NewReader(prompts.HostFacts{Profiles: profiles, RootCount: 2, WebSearch: true}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: "implement_investigate",
+			Plan:      toolsurface.Compile(offered, []string{"edit", "jq"}),
+			Offered:   offered,
+		})
+		testutil.FailErr(t, "new reader", err)
+		return prompts.BuildCommandGuidanceSnapshot(reader, prompts.CommandGuidanceSnapshotInput{
+			ProjectDir: "/workspace/app",
+			Posture:    gate.PostureStrict,
 		})
 	}
 	templates, facts := snapshot([]string{"command", "command_output", "wait", "request_tools"})
@@ -35,11 +41,11 @@ func TestCommandGuidanceSnapshotFollowsOfferedCommand(t *testing.T) {
 			t.Errorf("facts missing %q", key)
 		}
 	}
-	if facts["command_output_files"] != true {
-		t.Fatalf("command_output_files = %#v with command offered", facts["command_output_files"])
+	if facts["profile_has_command"] != true {
+		t.Fatalf("profile_has_command = %#v with command offered", facts["profile_has_command"])
 	}
 	_, without := snapshot([]string{"wait", "request_tools"})
-	if without["command_output_files"] != false {
-		t.Fatalf("command_output_files = %#v without command", without["command_output_files"])
+	if without["profile_has_command"] != false {
+		t.Fatalf("profile_has_command = %#v without command", without["profile_has_command"])
 	}
 }

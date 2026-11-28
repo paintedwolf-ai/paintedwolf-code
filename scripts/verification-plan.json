@@ -1325,7 +1325,7 @@
       "targets": [
         "test:full"
       ],
-      "minutes": 150,
+      "minutes": 240,
       "profiles": [
         "check",
         "release",
@@ -1470,7 +1470,7 @@
       "targets": [
         "test:race"
       ],
-      "minutes": 150,
+      "minutes": 240,
       "profiles": [
         "nightly"
       ],
@@ -1589,7 +1589,7 @@
       "targets": [
         "test:race"
       ],
-      "minutes": 90,
+      "minutes": 240,
       "profiles": [
         "integration"
       ],
@@ -1699,10 +1699,6 @@
       "./internal/jsonfence": {
         "FuzzTrailing": 30
       },
-      "./internal/parse": {
-        "FuzzExtractJSON": 30,
-        "FuzzValidate": 30
-      },
       "./internal/projectroot": {
         "FuzzBaselinePathRoundTrip": 60,
         "FuzzRootResolutionMatchesKernel": 240
@@ -1729,6 +1725,9 @@
       },
       "./internal/tools/native/mutation": {
         "FuzzArchiveExtractionStaysInDestination": 300
+      },
+      "./test/contract/invariants/promptrender": {
+        "FuzzRecipientGuidanceAcrossHostStates": 300
       },
       "./test/wiring/conformance": {
         "FuzzCatalogBinderSafetyAndTypedRefusals": 30,

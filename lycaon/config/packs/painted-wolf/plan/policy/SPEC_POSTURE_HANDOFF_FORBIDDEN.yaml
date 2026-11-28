@@ -15,11 +15,11 @@ what: Handoff tools blocked until plan workflow milestones are met
 cause: Handoff tools blocked until plan workflow milestones are met
 why: Finish stub, research, expand, and human approval
 fix: Finish stub, research, expand, and human approval
-instead: Use command redirects or scoped patches for blueprint files until approval/handoff
+instead: Advance through the remaining blueprint workflow phases before handoff
 x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args
       path: src/main.go
       profile: coordinator
-      tool: handoff_init
+      tool: handoff_reserve

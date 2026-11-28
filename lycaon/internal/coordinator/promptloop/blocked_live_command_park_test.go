@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -23,7 +24,7 @@ func TestBlockedLoopParksLiveCommandInsteadOfForcingCloseout(t *testing.T) {
 		},
 		Closeout: CloseoutDeps{
 			CloseoutTrackingDeps: CloseoutTrackingDeps{
-				TurnCloseoutNudge: func(context.Context, *api.Session, string, TurnCloseoutCause) HostNudge {
+				TurnCloseoutNudge: func(context.Context, *api.Session, prompts.Reader, TurnCloseoutCause) HostNudge {
 					closeoutCalls++
 					return HostNudge{Content: "must not run"}
 				},

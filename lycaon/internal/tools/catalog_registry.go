@@ -21,7 +21,7 @@ func RegisteredToolSet(reg *DefaultRegistry) map[string]bool {
 var bootToolClaimNames = []string{
 	"command", "task", "scan_pack", "scan_list", "scan_summary", "scan_query", "scan_compare",
 	"workflow_compose", "workflow_compose_from_template", "workflow_persist",
-	"workflow_catalog_summaries", "workflow_user_feedback", "ask_user", "workflow_advance", "fanout_plan", "submit_verdict",
+	"workflow_catalog_summaries", "ask_user", "workflow_advance", "fanout_plan", "submit_verdict",
 	"wait",
 	"pack_board", "read_findings", "read_review", "plan_from_blueprint",
 	"web_search", "fetch_url",

@@ -1,0 +1,14 @@
+id: coordinator
+description: Coordinator without summarize, survey_repo, scan tools or worker_cancel, keeping wait
+command_effects: [read_only]
+tools:
+  recall: sticky
+  fanout_plan: sticky
+  workflow_advance: sticky
+  wait: sticky
+  ask_user: sticky
+deny_tools:
+  - command
+read_scope: coordinator_product_read
+write_scope: coordinator_orchestration
+wait_conditions: [next_worker_done, all_workers_idle, overlay_promote_pending, scan_done, process_done, http_ready, port_ready]

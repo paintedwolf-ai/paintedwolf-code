@@ -16,6 +16,7 @@ type roundEndDrains struct {
 	mu        sync.Mutex
 	bySession map[string]*roundEndDrain
 	running   int
+	admitted  uint64
 	idle      []chan struct{}
 }
 
@@ -28,6 +29,7 @@ type roundEndDrain struct {
 func (d *roundEndDrains) start(parent context.Context, sessionID string) (context.Context, *roundEndDrain) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.admitted++
 	if work := d.bySession[sessionID]; work != nil {
 		work.rerun = true
 		return nil, nil
@@ -100,6 +102,18 @@ func (d *roundEndDrains) wait(ctx context.Context) {
 	}
 	d.cancelAll()
 	<-done
+}
+
+func (d *roundEndDrains) epoch() uint64 {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.admitted
+}
+
+func (d *roundEndDrains) busy() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.running > 0
 }
 
 // RoundEnd dispatches receipts the turn-end check left

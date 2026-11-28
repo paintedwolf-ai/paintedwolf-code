@@ -143,6 +143,7 @@ func runPromptsRender(ctx context.Context, args []string) error {
 	res, err := prompts.AuthorRender(ctx, prompts.AuthorRenderRequest{
 		ModuleRoot:  moduleRoot,
 		ProjectDir:  projectDir,
+		Reader:      prompts.PreviewReader(flags.agentID, flags.surfaceID),
 		TemplateRef: flags.ref,
 		AgentID:     flags.agentID,
 		SkillName:   flags.skillName,

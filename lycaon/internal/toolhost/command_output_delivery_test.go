@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/programtest"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -55,6 +56,12 @@ func newOutputDeliveryFixture(t *testing.T) *programtest.Fixture {
 	}).compose(f.Recorder)
 	testutil.FailErr(t, "compose program owners", err)
 	f.Runtime.Owners = owners
+	f.Configure = func(tc *tools.ToolContext) {
+		if tc.Turn.TurnOfferedToolNames == nil {
+			tc.Turn.TurnOfferedToolNames = []string{"command"}
+			tc.Turn.TurnOfferedToolSchemas = promptstest.ProjectedToolSchemas(t, "command")
+		}
+	}
 	return f
 }
 

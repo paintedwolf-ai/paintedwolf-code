@@ -2,5 +2,5 @@ steps:
   - tool: "source_history"
     args:
       path: "{{ paintedwolf.path }}"
-    say: "Query {{ call }} to inspect the current head version before retrying the restore."
+    say: "{% if load %}Call {{ load }}, then query{% else %}Query{% endif %} {{ call }} to inspect the current head version before retrying the restore."
     otherwise: "Re-read the file, then retry without base_version_id only if its current content should be replaced."
