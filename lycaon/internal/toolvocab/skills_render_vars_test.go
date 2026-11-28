@@ -1,6 +1,7 @@
 package toolvocab
 
 import (
+	"crypto/sha256"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -41,20 +42,23 @@ func TestRenderSkillTextInIsolatesValidationMemoFromGlobalCache(t *testing.T) {
 	t.Parallel()
 	local := map[string]skillRenderMemo{}
 	vars := map[string]any{"profile_has_edit": true}
-	varsKey := varsDigestKey(vars)
 	text := "{% if profile_has_edit %}edit-enabled{% endif %}"
 
-	first, err := renderSkillTextIn(local, varsKey, text, vars)
-	testutil.FailErr(t, "renderSkillTextIn miss", err)
+	first, err := renderSkillTextProjected(local, text, vars)
+	testutil.FailErr(t, "renderSkillTextProjected miss", err)
 	if first != "edit-enabled" {
-		t.Fatalf("renderSkillTextIn = %q, want %q", first, "edit-enabled")
+		t.Fatalf("renderSkillTextProjected = %q, want %q", first, "edit-enabled")
 	}
-	second, err := renderSkillTextIn(local, varsKey, text, vars)
-	testutil.FailErr(t, "renderSkillTextIn hit", err)
+	second, err := renderSkillTextProjected(local, text, vars)
+	testutil.FailErr(t, "renderSkillTextProjected hit", err)
 	if second != first {
-		t.Fatalf("renderSkillTextIn hit = %q, want %q", second, first)
+		t.Fatalf("renderSkillTextProjected hit = %q, want %q", second, first)
 	}
-	if _, leaked := skillRenderCache.Load(skillRenderCacheKey(varsKey, text)); leaked {
-		t.Fatal("renderSkillTextIn polluted package-global skillRenderCache")
+	sum := sha256.Sum256([]byte(text))
+	textHash := string(sum[:])
+	unit := compileSkillTemplate(textHash, text)
+	key := textHash + "\x00" + projectedVarsDigestKey(vars, unit.roots)
+	if _, leaked := skillRenderCache.Load(key); leaked {
+		t.Fatal("renderSkillTextProjected polluted package-global skillRenderCache")
 	}
 }
