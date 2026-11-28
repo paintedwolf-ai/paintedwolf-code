@@ -1,5 +1,5 @@
 tags: [edit, filesystem]
-description: "Update a JSON, YAML, or TOML document with a jq program and write the result in the same format, in place or to dest. The program returns the whole document (`.a.b = 1`, `del(.x)`, `.items |= map(...)`). Unchanged values keep their literals, key order, and YAML comments; syntax a rewrite would lose is refused (JQ_EDIT_LOSSY)."
+description: "Update a JSON, YAML, or TOML document with a jq program and write the result in the same format, in place or to dest. Read the whole target file in an earlier response before modifying an existing file (EDITOR_DOCUMENT_READ_REQUIRED). The program returns the whole document (`.a.b = 1`, `del(.x)`, `.items |= map(...)`). Unchanged values keep their literals, key order, and YAML comments; syntax a rewrite would lose is refused (JQ_EDIT_LOSSY)."
 schema:
   additionalProperties: false
   properties:

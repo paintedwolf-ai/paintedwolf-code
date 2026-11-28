@@ -114,8 +114,9 @@ func (t *WriteTool) Apply(ctx context.Context, input WriteInput, tctx tools.Tool
 	}
 	return retryEditorOperation(ctx, resolved.DisplayPath, func() (WriteResult, error) {
 		// A missing file is a create; otherwise the base is the served source text.
+		op := input.operation()
 		var before *string
-		st, err := loadAgentSourceText(ctx, "write", tctx, resolved)
+		st, err := loadAgentSourceText(ctx, op, tctx, resolved)
 		if err == nil {
 			beforeText := st.Content
 			before = &beforeText
@@ -130,7 +131,67 @@ func (t *WriteTool) Apply(ctx context.Context, input WriteInput, tctx tools.Tool
 			if input.Append && before != nil {
 				authored = *before + input.Content
 			}
-			return landEditedText(ctx, tctx, "write", resolved, st, editorTextProposal{Authored: authored, Reviewed: final})
+			return landEditedText(ctx, tctx, op, resolved, st, editorTextProposal{Authored: authored, Reviewed: final})
+		})
+	})
+}
+
+// StructuredEditInput configures a document-aware conversational edit whose
+// transform computes against the chat's delivered read basis and rebases via
+// editordoc.Service.ApplyAgentEdit.
+type StructuredEditInput struct {
+	Operation string
+	Path      string
+	Memory    *toolcontract.ProgramMemory
+}
+
+// ApplyStructuredEdit enforces the chat's conversational read basis before
+// running transform, avoids premature person-draft autosave on refusal, rebases
+// non-overlapping concurrent edits, and updates/withdraws the read basis via
+// AdvanceAgentRead.
+func (t *WriteTool) ApplyStructuredEdit(
+	ctx context.Context,
+	input StructuredEditInput,
+	tctx tools.ToolContext,
+	transform func(resolved projectpaths.Resolved, source string, editor *tools.EditorDocumentText) (string, bool, error),
+) (WriteResult, error) {
+	op := input.Operation
+	if op == "" {
+		op = "edit"
+	}
+	path := input.Path
+	if path == "" {
+		return WriteResult{}, toolkit.MissingArg("path")
+	}
+	if err := assertProfileWriteScope(ctx, t.Boundary, tctx, path, op); err != nil {
+		return WriteResult{}, writeScopeReject(ctx, t.Boundary, path, tctx.ProfileID(), op, err)
+	}
+	if err := beforeWorkerMutation(ctx, tctx, path); err != nil {
+		return WriteResult{}, err
+	}
+	resolved, err := projectpaths.ResolveWrite(ctx, t.Boundary, tctx, path)
+	if err != nil {
+		return WriteResult{}, err
+	}
+	return retryEditorOperation(ctx, resolved.DisplayPath, func() (WriteResult, error) {
+		st, err := loadAgentSourceText(ctx, op, tctx, resolved)
+		if err != nil {
+			return WriteResult{}, err
+		}
+		edited, changed, err := transform(resolved, st.Content, st.Editor)
+		if err != nil || !changed {
+			return WriteResult{Path: resolved.DisplayPath}, err
+		}
+		beforeText := st.Content
+		writeIn := WriteInput{
+			Operation: op,
+			Path:      resolved.Abs,
+			Content:   edited,
+			Memory:    input.Memory,
+			Admission: WriteConversational,
+		}
+		return t.writeText(ctx, tctx, resolved, st, &beforeText, writeIn, func(final string) (landing, error) {
+			return landEditedText(ctx, tctx, op, resolved, st, editorTextProposal{Authored: edited, Reviewed: final})
 		})
 	})
 }
