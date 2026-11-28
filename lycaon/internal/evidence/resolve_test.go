@@ -160,8 +160,8 @@ func TestResolve_handleHintIgnoredWhenInvalid(t *testing.T) {
 	got := evidence.Resolve(evidence.CitationRoots{}, evidence.Triple{
 		Path: "f.go", Line: 10, Excerpt: "paraphrased beta",
 	}, ev, "read#99")
-	if got.Verdict != evidence.VerdictTraced {
-		t.Fatalf("verdict = %q want traced", got.Verdict)
+	if got.Verdict != evidence.VerdictBound {
+		t.Fatalf("verdict = %q want bound", got.Verdict)
 	}
 	if got.Handle != "read#1" {
 		t.Fatalf("handle = %q want read#1 from newest live handle", got.Handle)

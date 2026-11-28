@@ -78,18 +78,29 @@ func Resolve(
 		return out
 	}
 
-	if matchedHandle := matchedHandleForPath(ev, path, line, excerpt, handleHint); matchedHandle != "" {
+	matchedHandle, ambiguous := matchedHandleForPath(ev, path, line, excerpt, handleHint)
+	if ambiguous {
+		out.Verdict = VerdictAmbiguous
+		return out
+	}
+	if matchedHandle != "" {
 		out.Handle = matchedHandle
 		out.Verdict = VerdictMatched
 		// Only a verified excerpt is exact: without one the line was seen, not checked.
 		if excerpt == "" {
 			out.Verdict = VerdictTraced
 		}
+		if hint := strings.TrimSpace(handleHint); hint != "" && hint != matchedHandle {
+			out.Verdict = VerdictBound
+		}
 		return out
 	}
 
 	if anchor, handle, ok := reanchorExcerpt(ev, path, excerpt); ok {
 		out.LineCorrectedFrom, out.Line, out.Handle, out.Verdict = line, anchor, handle, VerdictMatched
+		if hint := strings.TrimSpace(handleHint); hint != "" && hint != handle {
+			out.Verdict = VerdictBound
+		}
 		return out
 	}
 
@@ -100,6 +111,9 @@ func Resolve(
 
 	out.Handle = bestHandleForPath(ev, path, line, handleHint)
 	out.Verdict = VerdictTraced
+	if hint := strings.TrimSpace(handleHint); hint != "" && out.Handle != "" && hint != out.Handle {
+		out.Verdict = VerdictBound
+	}
 	return out
 }
 
@@ -115,16 +129,101 @@ func NormalizeResolvePath(projectDir, raw string) string {
 	return ""
 }
 
-func matchedHandleForPath(ev Ledger, path string, line int, excerpt string, handleHint string) string {
-	if handleHint != "" && ExcerptMatchesHandle(ev, handleHint, path, line, excerpt) {
-		return handleHint
+// recordCitedLineBytes extracts the delivered content at the cited line(s) for
+// ambiguity comparison across current records (never prose).
+func recordCitedLineBytes(rec Record, line int) (string, bool) {
+	if line <= 0 {
+		if len(rec.Body) == 0 {
+			return "", false
+		}
+		return strings.Join(rec.Body, "\n"), true
 	}
-	for _, handle := range ev.ByPath[path] {
-		if ExcerptMatchesHandle(ev, handle, path, line, excerpt) {
-			return handle
+	if rec.SourceDelivery != nil {
+		idx := line - rec.SourceDelivery.StartLine
+		if idx >= 0 && idx < len(rec.Body) {
+			return rec.Body[idx], true
+		}
+		return "", false
+	}
+	for _, raw := range rec.Body {
+		if n, text, ok := parseNumberedBodyLine(raw); ok && n == line {
+			return text, true
 		}
 	}
-	return ""
+	if len(rec.LineRanges) == 1 {
+		idx := line - rec.LineRanges[0].Start
+		if idx >= 0 && idx < len(rec.Body) {
+			return rec.Body[idx], true
+		}
+	}
+	return "", false
+}
+
+func parseNumberedBodyLine(raw string) (int, string, bool) {
+	trimmed := strings.TrimLeft(raw, " ")
+	i := 0
+	for i < len(trimmed) && trimmed[i] >= '0' && trimmed[i] <= '9' {
+		i++
+	}
+	if i == 0 || i >= len(trimmed) {
+		return 0, "", false
+	}
+	sep := trimmed[i]
+	if sep != '\t' && sep != '|' && sep != ':' {
+		return 0, "", false
+	}
+	n := 0
+	for _, ch := range trimmed[:i] {
+		n = n*10 + int(ch-'0')
+	}
+	return n, trimmed[i+1:], true
+}
+
+func matchedHandleForPath(ev Ledger, path string, line int, excerpt string, handleHint string) (string, bool) {
+	if handleHint != "" && ExcerptMatchesHandle(ev, handleHint, path, line, excerpt) {
+		return handleHint, false
+	}
+	var matches []string
+	for _, handle := range ev.ByPath[path] {
+		if ExcerptMatchesHandle(ev, handle, path, line, excerpt) {
+			matches = append(matches, handle)
+		}
+	}
+	if len(matches) == 0 {
+		return "", false
+	}
+	if len(matches) == 1 {
+		return matches[0], false
+	}
+	// Multiple current records match every supplied field. Compare their delivered
+	// bytes at the cited coordinate: differing bytes are VerdictAmbiguous;
+	// identical delivered bytes stay grounded on the newest matching record for
+	// determinism; when fewer than two candidates carry delivered bytes at the
+	// coordinate (e.g. mutations or surveys), preserve existing ByPath order.
+	var refBytes string
+	refCount := 0
+	var newestWithBytes string
+	for _, h := range matches {
+		rec, ok := ev.Handles[h]
+		if !ok {
+			continue
+		}
+		b, ok := recordCitedLineBytes(rec, line)
+		if !ok {
+			continue
+		}
+		if refCount == 0 {
+			refBytes = b
+		} else if b != refBytes {
+			return "", true
+		}
+		refCount++
+		newestWithBytes = h
+	}
+	if refCount >= 2 {
+		return newestWithBytes, false
+	}
+	return matches[0], false
 }
 
 func excerptMatchesOtherPath(ev Ledger, citedPath string, line int, excerpt string) bool {
