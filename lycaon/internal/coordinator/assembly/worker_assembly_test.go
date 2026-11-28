@@ -1,8 +1,9 @@
 package assembly
 
 import (
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
 )
 
 func TestBuildWorkerPromptContextDefaultTopology(t *testing.T) {

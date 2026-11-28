@@ -1,6 +1,7 @@
 package invariants_test
 
 import (
+	"github.com/lycaon/lycaon/test/contract/invariants/invariantstest"
 	"go/ast"
 	"os"
 	"path/filepath"
@@ -33,55 +34,55 @@ var probeTree = map[string]string{
 	"lycaon/internal/app/x_test.go": "package app\n\nimport \"os\"\n\nfunc helper() { os.Exit(1) }\n",
 }
 
-// Every way an invariant can be wrong fails it: a violation, a renamed anchor, an
+// Every way an invariant can be wrong invariantstest.Fails it: a violation, a renamed anchor, an
 // exemption that matches nothing, an empty or unreadable corpus, and a file
 // that does not parse.
 func TestEvaluateFailsClosed(t *testing.T) {
 	t.Parallel()
 	for name, tc := range map[string]struct {
 		files      map[string]string
-		want       outcome
+		want       invariantstest.Outcome
 		violations int
 	}{
-		"a clean tree passes": {files: probeTree, want: passes},
+		"a clean tree passes": {files: probeTree, want: invariantstest.Passes},
 		"a seeded violation fails": {
-			files: with(probeTree, map[string]string{"lycaon/internal/app/clean.go": "package app\n\nimport quit \"os\"\n\nfunc clean() { quit.Exit(2) }\n"}),
-			want:  violates, violations: 1,
+			files: invariantstest.With(probeTree, map[string]string{"lycaon/internal/app/clean.go": "package app\n\nimport quit \"os\"\n\nfunc clean() { quit.Exit(2) }\n"}),
+			want:  invariantstest.Violates, violations: 1,
 		},
 		"a renamed anchor fails": {
-			files: with(probeTree, map[string]string{"lycaon/internal/door/door.go": "package door\n\nimport \"os\"\n\nfunc Quit(code int) { os.Exit(code) }\n"}),
-			want:  missesAnchor,
+			files: invariantstest.With(probeTree, map[string]string{"lycaon/internal/door/door.go": "package door\n\nimport \"os\"\n\nfunc Quit(code int) { os.Exit(code) }\n"}),
+			want:  invariantstest.MissesAnchor,
 		},
 		"an exemption that matches nothing fails": {
-			files: with(probeTree, map[string]string{"lycaon/internal/app/main.go": "package app\n\nfunc main() {}\n"}),
-			want:  staleExemption,
+			files: invariantstest.With(probeTree, map[string]string{"lycaon/internal/app/main.go": "package app\n\nfunc main() {}\n"}),
+			want:  invariantstest.StaleExemption,
 		},
-		"an empty corpus fails": {files: nil, want: fails},
+		"an empty corpus fails": {files: nil, want: invariantstest.Fails},
 		"an unparsable file fails": {
-			files: with(probeTree, map[string]string{"lycaon/internal/app/broken.go": "package app\n\nfunc broken( {\n"}),
-			want:  fails,
+			files: invariantstest.With(probeTree, map[string]string{"lycaon/internal/app/broken.go": "package app\n\nfunc broken( {\n"}),
+			want:  invariantstest.Fails,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			expect(t, invariants.Evaluate(fixture(t, tc.files), probeRule), tc.want, tc.violations)
+			invariantstest.Expect(t, invariants.Evaluate(invariantstest.Fixture(t, tc.files), probeRule), tc.want, tc.violations)
 		})
 	}
 }
 
 func TestEvaluateFailsOnAnUnreadableFile(t *testing.T) {
 	t.Parallel()
-	corpus := fixture(t, probeTree)
+	corpus := invariantstest.Fixture(t, probeTree)
 	if err := os.Symlink(filepath.Join(corpus.Root(), "missing.go"), filepath.Join(corpus.Root(), "lycaon/internal/app/dangling.go")); err != nil {
 		contractcheck.FailErr(t, "os.Symlink failed", err)
 	}
-	expect(t, invariants.Evaluate(corpus, probeRule), fails, 0)
+	invariantstest.Expect(t, invariants.Evaluate(corpus, probeRule), invariantstest.Fails, 0)
 }
 
 // A rule table entry that cannot be checked is refused before it runs.
 func TestEvaluateRefusesMalformedRules(t *testing.T) {
 	t.Parallel()
-	corpus := fixture(t, probeTree)
+	corpus := invariantstest.Fixture(t, probeTree)
 	check := func(*invariants.Run) {}
 	anchor := []invariants.Anchor{invariants.Package("internal/door")}
 	for name, r := range map[string]invariants.Invariant{
@@ -94,7 +95,7 @@ func TestEvaluateRefusesMalformedRules(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			expect(t, invariants.Evaluate(corpus, r), fails, 0)
+			invariantstest.Expect(t, invariants.Evaluate(corpus, r), invariantstest.Fails, 0)
 		})
 	}
 }
@@ -103,7 +104,7 @@ func TestEvaluateRefusesMalformedRules(t *testing.T) {
 // empty tree or glob end the check.
 func TestTextSelectionsFailClosed(t *testing.T) {
 	t.Parallel()
-	corpus := fixture(t, map[string]string{
+	corpus := invariantstest.Fixture(t, map[string]string{
 		"docs/empty.md":          "  \n",
 		"docs/guide.md":          "# Guide\n",
 		"lycaon/internal/x/x.go": "package x\n",
@@ -121,7 +122,7 @@ func TestTextSelectionsFailClosed(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			res := invariants.Evaluate(corpus, invariants.Invariant{Name: name, Anchors: []invariants.Anchor{invariants.Package("internal/x")}, Check: read})
-			expect(t, res, fails, 0)
+			invariantstest.Expect(t, res, invariantstest.Fails, 0)
 		})
 	}
 	ok := invariants.Invariant{Name: "reads", Anchors: []invariants.Anchor{invariants.File("docs/guide.md")}, Check: func(r *invariants.Run) {
@@ -129,20 +130,20 @@ func TestTextSelectionsFailClosed(t *testing.T) {
 		r.Tree("lycaon-den/src", ".txt")
 		r.Glob("docs/*.md")
 	}}
-	expect(t, invariants.Evaluate(corpus, ok), passes, 0)
+	invariantstest.Expect(t, invariants.Evaluate(corpus, ok), invariantstest.Passes, 0)
 }
 
 // The Go source tree is parsed and type-checked once per corpus however
 // many rules read it.
 func TestCorpusLoadsGoOnce(t *testing.T) {
 	t.Parallel()
-	corpus := fixture(t, probeTree)
+	corpus := invariantstest.Fixture(t, probeTree)
 	typed := invariants.Invariant{Name: "typed", Anchors: []invariants.Anchor{invariants.Package("internal/door")}, Check: func(r *invariants.Run) {
 		r.TypedPackage("internal/door")
 	}}
 	for range 3 {
-		expect(t, invariants.Evaluate(corpus, probeRule), passes, 0)
-		expect(t, invariants.Evaluate(corpus, typed), passes, 0)
+		invariantstest.Expect(t, invariants.Evaluate(corpus, probeRule), invariantstest.Passes, 0)
+		invariantstest.Expect(t, invariants.Evaluate(corpus, typed), invariantstest.Passes, 0)
 	}
 	if stats := corpus.Stats(); stats.GoParses != 1 || stats.TypeChecks != 1 {
 		t.Fatalf("stats = %+v, want one parse and one type-check", stats)

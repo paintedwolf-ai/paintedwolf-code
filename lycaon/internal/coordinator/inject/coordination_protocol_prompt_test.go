@@ -21,7 +21,9 @@ func testPromptEngine(t *testing.T) *prompts.FileTemplateEngine {
 }
 
 func TestCoordinationProtocolInWorkerTaskAssignment(t *testing.T) {
+	workerReader := testWorkerReader(t)
 	out, err := RenderWorkerTaskAssignment(context.Background(), testInjectRenderer(t), WorkerTaskAssignmentInput{
+		Reader:      workerReader,
 		SessionID:   "sess-inject-test",
 		ProjectDir:  t.TempDir(),
 		Charter:     testWorkerCharter("Add auth middleware"),
@@ -43,6 +45,7 @@ func TestCoordinationProtocolInWorkerTaskAssignment(t *testing.T) {
 		t.Fatalf("worker assignment still teaches pack_board findings: %s", out)
 	}
 	mounted, err := RenderWorkerTaskAssignment(context.Background(), testInjectRenderer(t), WorkerTaskAssignmentInput{
+		Reader:            workerReader,
 		SessionID:         "sess-inject-test",
 		ProjectDir:        t.TempDir(),
 		Charter:           testWorkerCharter("Add auth middleware"),
@@ -65,8 +68,10 @@ func TestCoordinationProtocolInWorkerTaskAssignment(t *testing.T) {
 	for i := range packboard.MaxOrientationWorkers + 3 {
 		named = append(named, api.BoardWorker{Name: fmt.Sprintf("w-%02d", i), AgentType: "implementer", State: api.WorkerStateWorking})
 	}
-	boardData := BuildBoardInjectData(api.BoardSnapshot{Workers: &api.BoardWorkersSlice{"workers": named}}, packboard.InjectScopeFull, false, false, time.Now().UTC())
-	boardMap := BoardInjectToMap(boardData)
+	coordReader := testCoordReader(t)
+	boardData := BuildBoardInjectData(coordReader, api.BoardSnapshot{Workers: &api.BoardWorkersSlice{"workers": named}}, packboard.InjectScopeFull, false, false, time.Now().UTC())
+	boardMap, err := BoardInjectToMap(boardData)
+	testutil.FailErr(t, "BoardInjectToMap", err)
 	if boardData.WorkersOmitted != 3 || boardMap["workers_omitted"] != 3 {
 		t.Fatalf("workers_omitted = %d map=%v, want 3", boardData.WorkersOmitted, boardMap["workers_omitted"])
 	}

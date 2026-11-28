@@ -28,14 +28,14 @@ func testProcedureReader(t *testing.T, profileID string, offered []string) promp
 	if visible == nil {
 		visible = []string{}
 	}
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: profileID,
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Plan:      toolsurface.Compile(offered, nil),
-		Loaded:    loaded,
-		Visible:   visible,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: profileID,
+		Plan:      readerLoadedPlan(toolsurface.Compile(offered, nil), loaded),
+		Offered:   readerLoadedOffer(toolsurface.Compile(offered, nil), visible, loaded),
 	})
 	testutil.FailErr(t, "new reader", err)
 	return reader

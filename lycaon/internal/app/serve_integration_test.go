@@ -3,10 +3,11 @@
 package app
 
 import (
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/configlayout"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )

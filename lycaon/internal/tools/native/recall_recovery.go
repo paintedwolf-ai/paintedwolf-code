@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/recall"
+	"github.com/lycaon/lycaon/internal/toolreach"
 )
 
 func addRecallRecoveryAction(ctx context.Context, result *recall.Result) {
@@ -28,7 +29,11 @@ func addRecallRecoveryAction(ctx context.Context, result *recall.Result) {
 	if ref == "" {
 		return
 	}
-	if action, err := guidance.RenderGuidance(ctx, ref, nil); err == nil {
+	reach := toolreach.FromContext(ctx)
+	if !reach.Known() {
+		reach = toolreach.Offered(nil)
+	}
+	if action, err := guidance.RenderGuidanceWithReach(ctx, reach, ref, nil); err == nil {
 		result.NextAction = strings.TrimSpace(result.NextAction + "\n" + action)
 	}
 }

@@ -26,7 +26,6 @@ import (
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/parse"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/recall"
 	"github.com/lycaon/lycaon/internal/scan"
@@ -72,19 +71,12 @@ import (
 
 func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	t.Helper()
-	parseSvc := parse.NewDefaultService()
-	if err := parse.RegisterParseTools(reg, parseSvc); err != nil {
-		contractcheck.FailErr(t, "parse.RegisterParseTools failed", err)
-	}
 	sqlDB := testdbfixture.Open(t, "wf-contract.db")
 	workflowMgr := workflow.NewManager(workflowpersistence.New(sqlDB), storetest.New(t, testdbseed.DefaultProjectID), contractcheck.CatalogRegistry(t), nil)
-	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: workflowMgr.Store.Runs, Vars: workflowMgr.Phases.Vars, Journal: workflowMgr.Phases.Journal, Resolver: &workflowMgr.Resolver, Starts: workflowMgr.Starts, Controls: workflowMgr.Controls, Scaffold: workflowMgr.Blueprints.Scaffold, Sessions: storetest.New(t, testdbseed.DefaultProjectID).Sessions}); err != nil {
+	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Resolver: &workflowMgr.Resolver, Starts: workflowMgr.Starts, Scaffold: workflowMgr.Blueprints.Scaffold, Sessions: storetest.New(t, testdbseed.DefaultProjectID).Sessions}); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterStateTools failed", err)
 	}
 	blueprintMgr := blueprint.NewManager(blueprinttest.NewFileStore(t.TempDir()))
-	if err := blueprint.RegisterPlanTools(reg, blueprintMgr); err != nil {
-		contractcheck.FailErr(t, "blueprint.RegisterPlanTools failed", err)
-	}
 	planDeps := plantest.Deps(workerrecords.New(sqlDB))
 	planDeps.Plans, planDeps.Approvals = blueprintMgr, blueprintMgr
 	planSvc := plantest.New(t, planDeps)
@@ -146,9 +138,6 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	if err := workflow.RegisterCatalogSummariesTool(reg, resolver, sessionWF, templates); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterCatalogSummariesTool failed", err)
 	}
-	if err := workflowinputs.RegisterFeedbackTool(reg, workflowMgr.Feedback); err != nil {
-		contractcheck.FailErr(t, "workflow.RegisterFeedbackTool failed", err)
-	}
 	if err := workflowinputs.RegisterAskUserTool(reg, workflowMgr.Asks, nil); err != nil {
 		contractcheck.FailErr(t, "workflowinputs.RegisterAskUserTool failed", err)
 	}
@@ -186,8 +175,7 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 		return "/tmp/project", nil
 	}}
 	if err := call.RegisterHandoffTools(reg, call.HandoffToolDeps{
-		Calls:    call.NewSQLManager(handoffDB, callLookup),
-		Sessions: callLookup,
+		Calls: call.NewSQLManager(handoffDB, callLookup),
 	}); err != nil {
 		contractcheck.FailErr(t, "call.RegisterHandoffTools failed", err)
 	}

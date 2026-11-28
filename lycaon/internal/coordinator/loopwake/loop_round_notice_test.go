@@ -99,7 +99,7 @@ func TestRoundNoticeKickCarriesMeasurementsWhileBusy(t *testing.T) {
 	if id := kicks.TakePendingKickIDUnless("s1", nil); id != wantID {
 		t.Fatalf("pending kick id = %q want %q", id, wantID)
 	}
-	text, _, ok, _ := kicks.RenderPendingNudge(t.Context(), "s1", kick.CoordinatorKickRenderContext{})
+	text, _, ok, _ := kicks.RenderPendingNudge(t.Context(), "s1", kick.CoordinatorKickRenderContext{Reader: declaredRequestReader(t)})
 	if !ok {
 		t.Fatal("round notice rendered empty")
 	}

@@ -132,6 +132,25 @@ func ConjunctValues(source, fact string) []string {
 
 // EvaluateCondition uses the document's checked tree and capability types.
 func (r *Rule) EvaluateCondition(facts map[string]any, functions map[string]func(any) (any, error)) (bool, error) {
+	ctx, err := r.evalContext(facts, functions)
+	if err != nil {
+		return false, err
+	}
+	if r.When == nil {
+		return true, nil
+	}
+	got, err := evalNode(r.When, ctx)
+	if err != nil {
+		return false, err
+	}
+	result, ok := got.(bool)
+	if !ok {
+		return false, raise("[OAR-FACT-3] when must evaluate to bool")
+	}
+	return result, nil
+}
+
+func (r *Rule) evalContext(facts map[string]any, functions map[string]func(any) (any, error)) (*evalContext, error) {
 	ctx := &evalContext{facts: map[string]value{}, functions: map[string]func(value) (value, error){}}
 	for name := range r.Refs {
 		if decl, ok := r.environment.Facts[name]; ok {
@@ -140,7 +159,7 @@ func (r *Rule) EvaluateCondition(facts map[string]any, functions map[string]func
 				var err error
 				v, err = coerce(raw, decl.Type, name)
 				if err != nil {
-					return false, err
+					return nil, err
 				}
 			}
 			ctx.facts[name] = v
@@ -162,18 +181,7 @@ func (r *Rule) EvaluateCondition(facts map[string]any, functions map[string]func
 			}
 		}
 	}
-	if r.When == nil {
-		return true, nil
-	}
-	got, err := evalNode(r.When, ctx)
-	if err != nil {
-		return false, err
-	}
-	result, ok := got.(bool)
-	if !ok {
-		return false, raise("[OAR-FACT-3] when must evaluate to bool")
-	}
-	return result, nil
+	return ctx, nil
 }
 
 // Fact reads an observation with the declared type and absent-value semantics.

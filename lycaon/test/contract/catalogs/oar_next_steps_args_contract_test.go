@@ -45,7 +45,7 @@ func stepArgsPack(t *testing.T, argPath string) extpacks.PackContent {
 			"cause: c\nwhy: w\nfix: 'f {{ paintedwolf.next_steps }}'\ninstead: i\n" +
 			"x-paintedwolf-emit: rule:test\nmessage: m\n",
 		"host/next-steps/" + code + ".yaml": "steps:\n  - tool: recall\n    args:\n      " + argPath +
-			": x\n    say: 'Call {{ call }}.'\n",
+			": x\n    say: 'Call {% if load %}{{ load }}, then {% endif %}{{ call }}.'\n",
 	}
 	for rel, body := range files {
 		path := filepath.Join(root, filepath.FromSlash(rel))

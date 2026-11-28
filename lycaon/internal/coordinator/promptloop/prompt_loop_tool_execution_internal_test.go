@@ -3,15 +3,16 @@ package promptloop
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolfeedback"
-	"github.com/lycaon/lycaon/internal/toolreach"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"

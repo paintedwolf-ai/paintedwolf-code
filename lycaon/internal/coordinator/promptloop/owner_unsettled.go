@@ -2,8 +2,9 @@ package promptloop
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )

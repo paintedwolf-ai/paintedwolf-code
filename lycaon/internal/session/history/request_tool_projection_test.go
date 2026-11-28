@@ -31,7 +31,7 @@ func TestRecordedRecallPageKeepsEnvelopeAndCursor(t *testing.T) {
 	raw, err := json.Marshal(map[string]any{"history": page, "next_request": nextRequest})
 	testutil.FailErr(t, "encode recall page", err)
 	content := "[recall#4]\n" + string(raw) + "\nrecorded suffix"
-	rows := projectRecordedToolBodies(t.Context(), []api.Message{{ID: "recall-result", Ord: 3, Role: api.MessageRoleTool,
+	rows := projectRecordedToolBodies(t.Context(), true, []api.Message{{ID: "recall-result", Ord: 3, Role: api.MessageRoleTool,
 		Content: content, ToolResult: &api.ToolResult{Tool: "recall", Content: content}}})
 	prefix, body, suffix, ok := hostmarker.SplitToolJSONBody(rows[0].Content)
 	if !ok || prefix != "[recall#4]\n" || suffix != "\nrecorded suffix" || len(rows[0].Content) > 2048 {
@@ -57,7 +57,7 @@ func TestRecordedToolReferenceNamesRecoveryInvocation(t *testing.T) {
 	row := api.Message{ID: "original", Ord: 7, Seq: 12, Role: api.MessageRoleTool,
 		Content: body, EvidenceHandles: []string{"read#1"},
 		ToolResult: &api.ToolResult{Tool: "read", Content: body, Outcome: api.ToolResultOutcomeCompleted}}
-	projected := projectRecordedToolBodies(t.Context(), []api.Message{row})[0]
+	projected := projectRecordedToolBodies(recallReachCtx(t), true, []api.Message{row})[0]
 	_, invocation, found := strings.Cut(projected.Content, "recall(history=")
 	if !found || !strings.Contains(projected.Content, "read#1") {
 		t.Fatal("compacted observation omitted its recovery invocation or evidence handle")
@@ -74,6 +74,14 @@ func TestRecordedToolReferenceNamesRecoveryInvocation(t *testing.T) {
 	if len(projected.Content) > 2048 || row.Content != body || row.ToolResult.Content != body {
 		t.Fatal("recovery cue exceeded its projection budget or changed the original observation")
 	}
+
+	withoutRecall := projectRecordedToolBodies(t.Context(), false, []api.Message{row})[0]
+	if strings.Contains(withoutRecall.Content, "recall(history=") {
+		t.Fatalf("negative witness leaked recall(history=...) when recallAvailable=false: %s", withoutRecall.Content)
+	}
+	if !strings.Contains(withoutRecall.Content, "read#1") || !strings.Contains(withoutRecall.Content, "reacquire needed details") {
+		t.Fatalf("negative witness lost handle or specific non-recall notice: %s", withoutRecall.Content)
+	}
 }
 
 func TestStructuredToolProjectionKeepsItsRecoveryCue(t *testing.T) {
@@ -82,7 +90,7 @@ func TestStructuredToolProjectionKeepsItsRecoveryCue(t *testing.T) {
 	testutil.FailErr(t, "encode structured observation", err)
 	row := api.Message{ID: "original", Ord: 7, Role: api.MessageRoleTool, Content: string(raw),
 		ToolResult: &api.ToolResult{Tool: "inspect", Content: string(raw), Outcome: api.ToolResultOutcomeCompleted}}
-	content := projectRecordedToolBodies(t.Context(), []api.Message{row})[0].Content
+	content := projectRecordedToolBodies(recallReachCtx(t), true, []api.Message{row})[0].Content
 	if len(content) > 2048 || !strings.Contains(content, "recall(history=") || !strings.Contains(content, `"wire_compacted":true`) {
 		t.Fatalf("structured projection lost its cue, residue, or byte bound: %q", content)
 	}
@@ -110,7 +118,7 @@ func TestProjectedRecallKeepsOriginalRecoveryTarget(t *testing.T) {
 	if !row.ModelProjected || row.Content == content {
 		t.Fatal("fixture did not cross model projection")
 	}
-	result := projectRecordedToolBodies(t.Context(), []api.Message{row})[0]
+	result := projectRecordedToolBodies(t.Context(), true, []api.Message{row})[0]
 	_, body, _, ok := hostmarker.SplitToolJSONBody(result.Content)
 	if !ok || len(result.Content) > 2048 {
 		t.Fatal("fitting discarded the canonical recall page")
@@ -138,7 +146,7 @@ func TestRecallSearchFitKeepsRecoverableHits(t *testing.T) {
 	testutil.FailErr(t, "encode search observations", err)
 	content := "[recall#4]\n" + string(raw) + "\n>>> Tool feedback\n" + strings.Repeat("spill notice ", 60)
 	row := api.Message{ID: "query-result", Ord: 8, Role: api.MessageRoleTool, Content: content, ToolResult: &api.ToolResult{Tool: "recall", Content: content}}
-	result := projectRecordedToolBodies(t.Context(), []api.Message{row})[0]
+	result := projectRecordedToolBodies(t.Context(), true, []api.Message{row})[0]
 	_, body, _, ok := hostmarker.SplitToolJSONBody(result.Content)
 	if !ok || len(result.Content) > 2048 || strings.Contains(result.Content, "tool-output/spilled.txt") {
 		t.Fatal("search projection lost its bounded envelope")
@@ -184,7 +192,7 @@ func TestSmallObservationSurvivesModelFormattingOverhead(t *testing.T) {
 	if len(content) > 2048 || len(row.Content) <= 2048 {
 		t.Fatalf("fixture missed the representation boundary: canonical=%d projected=%d", len(content), len(row.Content))
 	}
-	result := projectRecordedToolBodies(t.Context(), []api.Message{row})[0]
+	result := projectRecordedToolBodies(t.Context(), true, []api.Message{row})[0]
 	if result.Content != content || !strings.Contains(result.Content, "checksum=original-cypress-7826") {
 		t.Fatal("formatting overhead displaced a fitting observation")
 	}

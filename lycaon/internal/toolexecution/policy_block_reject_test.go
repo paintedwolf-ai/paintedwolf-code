@@ -148,7 +148,7 @@ func TestExecutorPreservesStructuredFailurePartialOutput(t *testing.T) {
 func TestCoordinatorProfileDenialDoesNotInventDispatchState(t *testing.T) {
 	boundary := sandbox.NewBoundary(sandbox.Config{}, []sandbox.ToolProfile{{ID: "coordinator", Tools: map[string]bool{"read": true}}})
 	policy := toolprofiles.NewProfilePolicyEngine(boundary)
-	for _, name := range []string{"state_update", "write"} {
+	for _, name := range []string{"state_start", "write"} {
 		decision, err := policy.Evaluate(t.Context(), platform.PolicyContext{ToolName: name, ProfileID: "coordinator"})
 		if err != nil {
 			t.Fatalf("evaluate %s: %v", name, err)

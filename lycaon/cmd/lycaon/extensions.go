@@ -549,6 +549,7 @@ func validatePackPersonas(
 		res, err := prompts.AuthorRender(ctx, prompts.AuthorRenderRequest{
 			ModuleRoot: moduleRoot,
 			ProjectDir: projectDir,
+			Reader:     prompts.PreviewReader(id, ""),
 			AgentID:    id,
 			Check:      true,
 		})

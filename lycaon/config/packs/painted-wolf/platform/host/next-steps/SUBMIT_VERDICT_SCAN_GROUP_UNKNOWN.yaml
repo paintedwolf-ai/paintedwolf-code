@@ -2,4 +2,4 @@ steps:
   - tool: "scan_query"
     args:
       view: "groups"
-    say: "{{ call }} on the run's scan_ids returns the group ids."
+    say: "{% if load %}After {{ load }}, {% endif %}{{ call }} on the run's scan_ids returns the group ids."

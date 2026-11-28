@@ -236,14 +236,74 @@ func walkCopy(nodes []copyNode, visit func(copyNode)) {
 	}
 }
 
-// ParseCopy returns each fact referenced by a copy member.
-func ParseCopy(source string) ([]CopyBinding, error) {
+func parseCopySource(source string) ([]copyNode, error) {
 	nodes, next, err := copyParseNodes(source, 0, map[string]bool{})
 	if err != nil {
 		return nil, err
 	}
 	if next != len(source) && strings.Contains(source[next:], "{%") {
 		return nil, copyLoadErr("conditional")
+	}
+	return nodes, nil
+}
+
+// CopyBranches counts where a copy member shows a binding relative to a guard
+// value: inside a branch that renders only when the guard is set, only when it
+// is empty, or regardless of it.
+type CopyBranches struct {
+	WhenSet   int
+	WhenEmpty int
+	Either    int
+}
+
+// CountCopyBranches locates every binding a copy member shows relative to
+// {% if guard %} branches, keyed by binding name.
+func CountCopyBranches(source, guard string) (map[string]CopyBranches, error) {
+	nodes, err := parseCopySource(source)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]CopyBranches{}
+	countCopyBranches(nodes, guard, 0, out)
+	return out, nil
+}
+
+// state is 0 outside any guard branch, 1 under a set branch, -1 under an empty
+// one. The outermost guard branch decides; a nested contradiction is dead copy.
+func countCopyBranches(nodes []copyNode, guard string, state int, out map[string]CopyBranches) {
+	for _, n := range nodes {
+		switch n.kind {
+		case copyBind:
+			counts := out[n.name]
+			switch state {
+			case 1:
+				counts.WhenSet++
+			case -1:
+				counts.WhenEmpty++
+			default:
+				counts.Either++
+			}
+			out[n.name] = counts
+		case copyIf:
+			thenState, elseState := state, state
+			if state == 0 && n.name == guard {
+				thenState, elseState = 1, -1
+				if n.negate {
+					thenState, elseState = -1, 1
+				}
+			}
+			countCopyBranches(n.then, guard, thenState, out)
+			countCopyBranches(n.elseN, guard, elseState, out)
+		case copyText:
+		}
+	}
+}
+
+// ParseCopy returns each fact referenced by a copy member.
+func ParseCopy(source string) ([]CopyBinding, error) {
+	nodes, err := parseCopySource(source)
+	if err != nil {
+		return nil, err
 	}
 	out := make([]CopyBinding, 0)
 	seen := map[string]bool{}
