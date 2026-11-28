@@ -211,6 +211,22 @@ func (s *Service) Stop() {
 
 func (s *Service) Wait(ctx context.Context) { s.jobs.wait(ctx) }
 
+// Epoch increases each time a file briefing job is admitted.
+func (s *Service) Epoch() uint64 {
+	if s == nil || s.jobs.scheduler == nil {
+		return 0
+	}
+	return s.jobs.scheduler.Epoch()
+}
+
+// Busy reports whether any file briefing job is queued or running.
+func (s *Service) Busy() bool {
+	if s == nil || s.jobs.scheduler == nil {
+		return false
+	}
+	return s.jobs.scheduler.Busy()
+}
+
 // fileJobs is this kind's use of a scheduler it may share with others.
 type fileJobs struct {
 	scheduler *briefing.Scheduler
@@ -231,7 +247,7 @@ func (j fileJobs) stop() {
 }
 
 func (j fileJobs) wait(ctx context.Context) {
-	if j.dedicated {
+	if j.scheduler != nil {
 		j.scheduler.Wait(ctx)
 	}
 }

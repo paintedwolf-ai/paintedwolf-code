@@ -20,6 +20,7 @@ type HostTurns struct {
 	promptActive        sync.Map
 	asyncTurns          sync.WaitGroup
 	asyncTurnsMu        sync.Mutex
+	asyncEpoch          uint64
 	asyncTurnsBySession map[string]map[*asyncTurnWork]struct{}
 	Admission           *Admission
 	Policy              *HostWakePolicy
@@ -113,6 +114,7 @@ func (l *HostTurns) spawnAsyncTurn(ctx context.Context, sessionID string, fn fun
 func (l *HostTurns) registerAsyncTurn(sessionID string, cancel context.CancelFunc) *asyncTurnWork {
 	work := &asyncTurnWork{cancel: cancel, done: make(chan struct{})}
 	l.asyncTurnsMu.Lock()
+	l.asyncEpoch++
 	if l.asyncTurnsBySession == nil {
 		l.asyncTurnsBySession = make(map[string]map[*asyncTurnWork]struct{})
 	}
@@ -177,6 +179,26 @@ func (l *HostTurns) WaitForAsyncTurns(ctx context.Context) {
 	}
 	l.cancelAllAsyncTurns()
 	<-done
+}
+
+// Epoch increases each time an async coordinator turn is admitted.
+func (l *HostTurns) Epoch() uint64 {
+	if l == nil {
+		return 0
+	}
+	l.asyncTurnsMu.Lock()
+	defer l.asyncTurnsMu.Unlock()
+	return l.asyncEpoch
+}
+
+// Busy reports whether any async coordinator turn is currently running.
+func (l *HostTurns) Busy() bool {
+	if l == nil {
+		return false
+	}
+	l.asyncTurnsMu.Lock()
+	defer l.asyncTurnsMu.Unlock()
+	return len(l.asyncTurnsBySession) > 0
 }
 func (l *HostTurns) BeginUserTurnSettlement(ctx context.Context, sessionID string) (func(), bool) {
 	if l == nil || strings.TrimSpace(sessionID) == "" {

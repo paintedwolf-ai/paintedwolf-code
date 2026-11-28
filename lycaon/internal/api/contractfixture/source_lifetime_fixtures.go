@@ -14,8 +14,13 @@ import (
 
 func DrainBackground(t *testing.T, srv *hostapi.Server) {
 	t.Helper()
-	// A hang is reported by the test binary's deadline, not a local one.
-	srv.WaitForBackground(context.Background())
+	// Use t.Context() during test execution; during t.Cleanup t.Context() is
+	// already canceled, so detach cancellation to allow teardown to drain.
+	ctx := t.Context()
+	if ctx.Err() != nil {
+		ctx = context.WithoutCancel(ctx)
+	}
+	testutil.FailErr(t, "drain background work", srv.WaitForBackground(ctx))
 }
 
 // testUserNotices loads the bundled user-notice catalog.

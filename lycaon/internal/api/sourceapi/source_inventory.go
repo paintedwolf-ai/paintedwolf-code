@@ -59,7 +59,7 @@ func (s *Watch) AwaitAttachedRootStructure(ctx context.Context, projectID, rootP
 }
 
 func (s *Watch) scheduleWorkspaceInventory(parent context.Context, p *project.Project) {
-	if p == nil {
+	if p == nil || s.background == nil {
 		return
 	}
 	inventory := s.SourceInventory
