@@ -2,13 +2,22 @@ package workercompletion
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolcontract"
+	"errors"
 	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
+)
+
+var (
+	// ErrWorkspaceBaseRevisionMissing reports that no recorded base revision is
+	// available to rule out commits in a clean Git checkout.
+	ErrWorkspaceBaseRevisionMissing = errors.New("workspace base revision missing")
+	// ErrWorkspaceCheckerUnavailable reports that the Git probe is unconfigured.
+	ErrWorkspaceCheckerUnavailable = errors.New("git workspace checker unavailable")
 )
 
 // WorkspaceChangeObservation is the host inspection of a worker-owned baseline.
@@ -18,28 +27,39 @@ type WorkspaceChangeObservation struct {
 	Err   error
 }
 
-// WorkspaceChangeChecker reports whether the project tree changed during a worker run.
+// WorkspaceChangeChecker reports whether the worker's checkout differs from
+// baseRevision through uncommitted changes or commits since baseRevision.
 type WorkspaceChangeChecker interface {
-	HasChanges(ctx context.Context, projectDir string) (bool, error)
+	HasChanges(ctx context.Context, projectDir, baseRevision string) (bool, error)
 }
 
-// GitWorkspaceChangeChecker uses git status when the project is a repository.
+// GitWorkspaceChangeChecker compares a Git checkout against the leg's recorded
+// base revision (uncommitted changes or commits since the base).
 type GitWorkspaceChangeChecker struct {
 	Git git.GitManager
 }
 
-func (c *GitWorkspaceChangeChecker) HasChanges(ctx context.Context, projectDir string) (bool, error) {
-	if c == nil || c.Git == nil || strings.TrimSpace(projectDir) == "" {
-		return false, nil
+func (c *GitWorkspaceChangeChecker) HasChanges(ctx context.Context, projectDir, baseRevision string) (bool, error) {
+	projectDir = strings.TrimSpace(projectDir)
+	if c == nil || c.Git == nil || projectDir == "" {
+		return false, ErrWorkspaceCheckerUnavailable
 	}
 	st, err := c.Git.Status(ctx, projectDir)
 	if err != nil {
 		return false, err
 	}
-	if st == nil {
-		return false, nil
+	if st != nil && st.Dirty {
+		return true, nil
 	}
-	return st.Dirty, nil
+	baseRevision = strings.TrimSpace(baseRevision)
+	if baseRevision == "" {
+		return false, ErrWorkspaceBaseRevisionMissing
+	}
+	cmp, err := c.Git.Compare(ctx, projectDir, baseRevision, "HEAD")
+	if err != nil {
+		return false, err
+	}
+	return cmp.HeadOID != cmp.BaseOID, nil
 }
 
 // artifactProof is the implementer artifact verdict. "Ran and found nothing"
@@ -56,7 +76,7 @@ const (
 )
 
 // childHadImplementerArtifact checks for mutation ledger records or workspace modifications.
-func childHadImplementerArtifact(ctx context.Context, projectDir string, msgs []api.Message, wc WorkspaceChangeChecker, changes *WorkspaceChangeObservation) artifactProof {
+func childHadImplementerArtifact(ctx context.Context, projectDir, baseRevision string, msgs []api.Message, wc WorkspaceChangeChecker, changes *WorkspaceChangeObservation) artifactProof {
 	if childHadSuccessfulMutationTool(msgs) {
 		return artifactPresent
 	}
@@ -75,7 +95,7 @@ func childHadImplementerArtifact(ctx context.Context, projectDir string, msgs []
 	if !childHadAnySuccessfulTool(msgs) {
 		return artifactAbsent
 	}
-	changed, err := wc.HasChanges(ctx, projectDir)
+	changed, err := wc.HasChanges(ctx, projectDir, baseRevision)
 	if err != nil {
 		slog.WarnContext(ctx, "worker artifact workspace probe failed; artifact undetermined",
 			"component", "worker_completion", "project_dir", projectDir, "error", err)
@@ -143,20 +163,6 @@ func childHadAnySuccessfulTool(msgs []api.Message) bool {
 		}
 	}
 	return false
-}
-
-// CompositeWorkspaceChangeChecker combines git dirty checks with non-git directory files.
-type CompositeWorkspaceChangeChecker struct {
-	Git *GitWorkspaceChangeChecker
-}
-
-func (c *CompositeWorkspaceChangeChecker) HasChanges(ctx context.Context, projectDir string) (bool, error) {
-	if c != nil && c.Git != nil {
-		if ok, err := c.Git.HasChanges(ctx, projectDir); err == nil && ok {
-			return true, nil
-		}
-	}
-	return dirHasWorkspaceFiles(projectDir)
 }
 
 func isImplementerAgent(agent string) bool {

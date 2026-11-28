@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
@@ -71,8 +72,39 @@ func (r *Runtime) workerReportInput(ctx context.Context, task *wire.WorkerTask, 
 	return workercompletion.WorkerSummaryEvalInput{
 		AgentType: task.AgentType, MaxChars: bounds.MaxChars, Report: report,
 		ChildSessionID: child.ID, ChildMessages: messages, ProjectDir: projectDir,
+		BaseRevision: r.workerBaseRevision(ctx, task, child.ID),
 		ProjectRoots: manager.Workspace.ProjectRoots(ctx, task.ProjectID), ActiveRootID: child.WorkspaceRootID,
 		WorkspaceCheck: bounds.WorkspaceCheck, Ledger: workercloseout.LedgerForMessages(bounds.Ledger, messages),
 		Hints: bounds.WorkflowHints, Pipeline: bounds.Pipeline, Reach: toolreach.FromContext(ctx),
 	}, nil
+}
+
+func (r *Runtime) workerBaseRevision(ctx context.Context, task *wire.WorkerTask, childSessionID string) string {
+	if r == nil || r.Records == nil {
+		return ""
+	}
+	if w, err := r.Records.Self(ctx, workerrecords.Actor{
+		SessionID:   childSessionID,
+		Role:        workerrecords.RoleWorker,
+		PrincipalID: childSessionID,
+	}); err == nil && strings.TrimSpace(w.BaseSHA) != "" {
+		return strings.TrimSpace(w.BaseSHA)
+	}
+	if task == nil || strings.TrimSpace(task.ID) == "" || strings.TrimSpace(task.ParentSessionID) == "" {
+		return ""
+	}
+	round, ok, err := r.Records.RoundByJob(ctx, task.ID)
+	if err != nil || !ok {
+		return ""
+	}
+	parentID := strings.TrimSpace(task.ParentSessionID)
+	w, err := r.Records.Worker(ctx, workerrecords.Actor{
+		SessionID:   parentID,
+		Role:        workerrecords.RoleCoordinator,
+		PrincipalID: parentID,
+	}, round.WorkerID)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(w.BaseSHA)
 }

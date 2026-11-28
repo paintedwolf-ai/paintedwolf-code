@@ -41,6 +41,8 @@ type TaskToolDeps struct {
 	Reviews ReviewBinder
 	// Plan resolves a task to its planned worker and gates its admission.
 	Plan *workerplan.Service
+	// HeadSHA records the workspace's Git base revision when an ad-hoc worker starts.
+	HeadSHA workerplan.HeadSHAReader
 }
 
 // ReviewBinder names a review's subject and accounts for it once the
