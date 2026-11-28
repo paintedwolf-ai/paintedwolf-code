@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -142,4 +143,82 @@ func TestIndexRejectsCachedForegroundSymlinkObservationAndPreservesForegroundRea
 	if frontierCount != 0 || faultCount != 0 || !after.Status.Complete || after.Status.Refreshing {
 		t.Fatalf("frontier=%d faults=%d complete=%v refreshing=%v", frontierCount, faultCount, after.Status.Complete, after.Status.Refreshing)
 	}
+}
+
+func TestIndexStampMismatchRetryRecomputesBoundedCoverageOnRetainedObservation(t *testing.T) {
+	t.Run("unbounded_first_to_bounded_second", func(t *testing.T) {
+		c, root := indexFixture(t)
+		c.SetScopes(fixedScopes{budgets: sandbox.SurveyBudgets{
+			DirectoryEntries: 2,
+			SubtreeEntries:   1000,
+			WalkEntries:      100000,
+		}})
+		writeIndexFile(t, root.Path, "slot/only.go", "package slot\n")
+
+		store, err := c.Trees.indexStore(t.Context(), "p", root)
+		testutil.FailErr(t, "index store", err)
+		first, err := c.Trees.Directories.observeUntil(t.Context(), store, "slot", 0, 0)
+		testutil.FailErr(t, "seed small cached observation", err)
+		if !first.Complete || first.Entries != 1 {
+			t.Fatalf("unexpected first observation: complete=%v entries=%d", first.Complete, first.Entries)
+		}
+
+		// Replace slot with a new directory inode that exceeds DirectoryEntries (2).
+		testutil.FailErr(t, "remove small slot", os.RemoveAll(filepath.Join(root.Path, "slot")))
+		writeIndexFile(t, root.Path, "slot/f1.go", "package slot\n")
+		writeIndexFile(t, root.Path, "slot/f2.go", "package slot\n")
+		writeIndexFile(t, root.Path, "slot/f3.go", "package slot\n")
+		writeIndexFile(t, root.Path, "slot/f4.go", "package slot\n")
+
+		reader := waitIndex(t, c, root)
+		var refused string
+		testutil.FailErr(t, "query slot refused", reader.tx.QueryRowContext(t.Context(),
+			"SELECT refused FROM nodes WHERE path='slot'").Scan(&refused))
+		if refused != string(sandbox.BoundaryDirectoryCap) {
+			t.Fatalf("slot refused=%q want=%q (bounded must be recomputed on retained retry observation)", refused, sandbox.BoundaryDirectoryCap)
+		}
+		scope := FileScope{Audience: HumanAudience, IncludeHidden: true}
+		if got := indexedPaths(t, reader, scope); len(got) != 0 {
+			t.Fatalf("boundary directory must hold no cataloged children, got=%v", got)
+		}
+	})
+
+	t.Run("bounded_first_to_unbounded_second", func(t *testing.T) {
+		c, root := indexFixture(t)
+		c.SetScopes(fixedScopes{budgets: sandbox.SurveyBudgets{
+			DirectoryEntries: 2,
+			SubtreeEntries:   1000,
+			WalkEntries:      100000,
+		}})
+		writeIndexFile(t, root.Path, "slot/f1.go", "package slot\n")
+		writeIndexFile(t, root.Path, "slot/f2.go", "package slot\n")
+		writeIndexFile(t, root.Path, "slot/f3.go", "package slot\n")
+		writeIndexFile(t, root.Path, "slot/f4.go", "package slot\n")
+
+		store, err := c.Trees.indexStore(t.Context(), "p", root)
+		testutil.FailErr(t, "index store", err)
+		first, err := c.Trees.Directories.observeUntil(t.Context(), store, "slot", 3, 0)
+		testutil.FailErr(t, "seed bounded cached observation", err)
+		if first.Complete || first.Entries < 3 {
+			t.Fatalf("unexpected first observation: complete=%v entries=%d", first.Complete, first.Entries)
+		}
+
+		// Replace slot with a new small directory inode below DirectoryEntries (2).
+		testutil.FailErr(t, "remove large slot", os.RemoveAll(filepath.Join(root.Path, "slot")))
+		writeIndexFile(t, root.Path, "slot/fresh.go", "package slot\n")
+
+		reader := waitIndex(t, c, root)
+		scope := FileScope{Audience: HumanAudience, IncludeHidden: true}
+		got := indexedPaths(t, reader, scope)
+		want := []string{"slot/fresh.go"}
+		if !slices.Equal(got, want) {
+			t.Fatalf("indexed files=%v want=%v", got, want)
+		}
+		var refused string
+		testutil.FailErr(t, "query slot refused", reader.tx.QueryRowContext(t.Context(),
+			"SELECT refused FROM nodes WHERE path='slot'").Scan(&refused))
+		if refused != "" || !reader.Status.Complete || reader.Status.Refreshing {
+			t.Fatalf("slot refused=%q complete=%v refreshing=%v, want empty/true/false", refused, reader.Status.Complete, reader.Status.Refreshing)
+		}
+	})
 }

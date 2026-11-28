@@ -103,10 +103,6 @@ func (w *indexWalk) visitDir(ctx context.Context, dir string) error {
 		}
 		return w.faultDir(ctx, dir, err)
 	}
-	bounded := limit > 0 && observation.Entries >= limit
-	if !observation.Complete && !bounded {
-		return errors.New("directory discovery ended before its publication completed")
-	}
 	info, handled, err := w.checkAdmittedDir(ctx, dir)
 	if handled || err != nil {
 		return err
@@ -129,6 +125,10 @@ func (w *indexWalk) visitDir(ctx context.Context, dir string) error {
 		if observation.Stamp.known() && observation.Stamp != directoryStampOf(info) {
 			return w.faultDir(ctx, dir, os.ErrInvalid)
 		}
+	}
+	bounded := limit > 0 && observation.Entries >= limit
+	if !observation.Complete && !bounded {
+		return errors.New("directory discovery ended before its publication completed")
 	}
 	if err := w.begin(ctx); err != nil {
 		return err
