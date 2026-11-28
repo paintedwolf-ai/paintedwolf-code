@@ -1,6 +1,7 @@
 package mutation
 
 import (
+	"bytes"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -11,10 +12,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/datetext"
 )
@@ -390,9 +393,12 @@ func (inv *invocation) capture(abs string) (pinnedTarget, error) {
 
 // runTee captures every destination before reading stdin, copies stdin to
 // stdout, and publishes each destination only after stdin completes.
+// Standalone single-file text invocations with project documents route through
+// conversational WriteConversational admission before any pinned capture or
+// person-draft autosave.
 func runTee(inv *invocation) error {
 	appendMode := inv.flag("-a")
-	var targets []pinnedTarget
+	var boundFiles []string
 	var streamWriters []io.WriteCloser
 	defer func() {
 		for _, w := range streamWriters {
@@ -411,13 +417,24 @@ func runTee(inv *invocation) error {
 		if bound.Null {
 			continue
 		}
-		target, err := inv.capture(bound.Resolved.Abs)
-		if err != nil {
-			return err
-		}
-		target.append = appendMode
-		targets = append(targets, target)
+		boundFiles = append(boundFiles, bound.Resolved.Abs)
 	}
+	hasStreamWriters := len(streamWriters) > 0
+	_, hasDocs := tools.ProjectDocuments(inv.tc)
+	standaloneStructuredCandidate := hasDocs && !hasStreamWriters && len(boundFiles) == 1
+
+	var targets []pinnedTarget
+	if !standaloneStructuredCandidate {
+		for _, abs := range boundFiles {
+			target, err := inv.capture(abs)
+			if err != nil {
+				return err
+			}
+			target.append = appendMode
+			targets = append(targets, target)
+		}
+	}
+
 	maximum := inv.owners.limit("stream_throughput_bytes")
 	var data []byte
 	var total int64
@@ -433,11 +450,11 @@ func runTee(inv *invocation) error {
 				return &commandprogram.StreamLimitError{Limit: "stream_throughput_bytes", Maximum: maximum, Observed: total}
 			}
 			chunk := buf[:n]
-			if len(targets) > 0 || len(streamWriters) > 0 {
+			if len(boundFiles) > 0 || hasStreamWriters {
 				data = append(data, chunk...)
 			}
 			if _, werr := inv.stdout.Write(chunk); werr != nil {
-				if len(targets) > 0 || len(streamWriters) > 0 {
+				if len(boundFiles) > 0 || hasStreamWriters {
 					inv.uncertain = true
 				}
 				return werr
@@ -459,6 +476,39 @@ func runTee(inv *invocation) error {
 		}
 	}
 	streamWriters = nil
+
+	if standaloneStructuredCandidate {
+		isTextPayload := utf8.Valid(data) && !bytes.ContainsRune(data, 0)
+		if isTextPayload {
+			res, err := inv.owners.Operations.Write.Apply(inv.ctx, native.WriteInput{
+				Operation: inv.owners.ops[inv.name()],
+				Path:      boundFiles[0],
+				Content:   string(data),
+				Append:    appendMode,
+				Memory:    inv.owners.Revisions.Memory,
+				Admission: native.WriteConversational,
+			}, inv.tc)
+			if err != nil {
+				return err
+			}
+			if res.Accepted || res.Saved {
+				inv.effects++
+			}
+			return nil
+		}
+		// Binary / non-UTF-8 payload falls back to pinned byte publication.
+		target, err := inv.capture(boundFiles[0])
+		if err != nil {
+			return err
+		}
+		target.append = appendMode
+		if _, err := inv.owners.publish(inv.ctx, inv.tc, target, data); err != nil {
+			return err
+		}
+		inv.effects++
+		return nil
+	}
+
 	for _, target := range targets {
 		if _, err := inv.owners.publish(inv.ctx, inv.tc, target, data); err != nil {
 			return err

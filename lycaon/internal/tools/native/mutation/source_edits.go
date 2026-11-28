@@ -6,10 +6,20 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
+
+func editReadRequired(path, docID string) error {
+	return &toolrejection.ToolReject{
+		Code: "EDITOR_DOCUMENT_READ_REQUIRED",
+		Data: map[string]any{"path": path, "document_id": docID},
+	}
+}
 
 func runEdit(inv *invocation) error {
 	if operands := inv.operands(); len(operands) > 0 {
@@ -29,40 +39,38 @@ func runEdit(inv *invocation) error {
 	}
 	if oldString == newString {
 		return native.EditArgsConflict("old_string and new_string must differ")
-
 	}
-	bound, err := inv.bind(path, true)
+	bound, err := inv.bindStructured(path)
 	if err != nil {
 		return err
-	}
-	source, err := inv.owners.Revisions.CaptureSource(inv.ctx, inv.tc, bound.Resolved.Abs)
-	if err != nil {
-		return err
-	}
-	if err := inv.recordPin(source.Revision); err != nil {
-		return err
-	}
-	destination, err := inv.owners.Revisions.CaptureDestination(inv.ctx, inv.tc, bound.Resolved.Abs)
-	if err != nil {
-		return err
-	}
-	if err := inv.recordPin(destination); err != nil {
-		return err
-	}
-	occurrences := strings.Count(source.Content, oldString)
-	if occurrences == 0 {
-		return native.EditMiss(inv.ctx, inv.tc, bound.Resolved.DisplayPath, bound.Resolved.Abs, source.Content, oldString, newString)
 	}
 	replaceAll := inv.flag("--replace-all")
-	if occurrences > 1 && !replaceAll {
-		return &toolrejection.ToolReject{Code: "EDIT_OLD_STRING_AMBIGUOUS", Data: map[string]any{"path": bound.Resolved.DisplayPath, "occurrences": occurrences}}
-	}
-	edited := strings.Replace(source.Content, oldString, newString, 1)
-	if replaceAll {
-		edited = strings.ReplaceAll(source.Content, oldString, newString)
-	}
-	result, err := inv.owners.Operations.Write.Apply(inv.ctx, native.WriteInput{Operation: inv.owners.ops[inv.name()], Path: bound.Resolved.Abs, Content: edited, Memory: inv.owners.Revisions.Memory,
-		Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.Revision}}, inv.tc)
+	result, err := inv.owners.Operations.Write.ApplyStructuredEdit(
+		inv.ctx,
+		native.StructuredEditInput{
+			Operation: inv.owners.ops[inv.name()],
+			Path:      bound.Resolved.Abs,
+			Memory:    inv.owners.Revisions.Memory,
+		},
+		inv.tc,
+		func(resolved projectpaths.Resolved, source string, editor *tools.EditorDocumentText) (string, bool, error) {
+			occurrences := strings.Count(source, oldString)
+			if occurrences == 0 {
+				return "", false, native.EditMiss(inv.ctx, inv.tc, resolved.DisplayPath, resolved.Abs, source, oldString, newString)
+			}
+			if occurrences > 1 && !replaceAll {
+				return "", false, &toolrejection.ToolReject{Code: "EDIT_OLD_STRING_AMBIGUOUS", Data: map[string]any{"path": resolved.DisplayPath, "occurrences": occurrences}}
+			}
+			if editor != nil && !editor.ReadWhole {
+				return "", false, editReadRequired(resolved.DisplayPath, editor.ID)
+			}
+			edited := strings.Replace(source, oldString, newString, 1)
+			if replaceAll {
+				edited = strings.ReplaceAll(source, oldString, newString)
+			}
+			return edited, edited != source, nil
+		},
+	)
 	if err != nil {
 		return err
 	}
@@ -100,33 +108,29 @@ func runReplaceLines(inv *invocation) error {
 	if err != nil {
 		return inv.usage(endRaw, "1-based end line")
 	}
-	bound, err := inv.bind(path, true)
+	bound, err := inv.bindStructured(path)
 	if err != nil {
 		return err
 	}
-	source, err := inv.owners.Revisions.CaptureSource(inv.ctx, inv.tc, bound.Resolved.Abs)
-	if err != nil {
-		return err
-	}
-	if err := inv.recordPin(source.Revision); err != nil {
-		return err
-	}
-	destination, err := inv.owners.Revisions.CaptureDestination(inv.ctx, inv.tc, bound.Resolved.Abs)
-	if err != nil {
-		return err
-	}
-	if err := inv.recordPin(destination); err != nil {
-		return err
-	}
-	edited, err := native.ReplaceLineRange(bound.Resolved.DisplayPath, source.Content, startLine, endLine, content)
-	if err != nil {
-		return err
-	}
-	if edited == source.Content {
-		return nil
-	}
-	result, err := inv.owners.Operations.Write.Apply(inv.ctx, native.WriteInput{Operation: inv.owners.ops[inv.name()], Path: bound.Resolved.Abs, Content: edited, Memory: inv.owners.Revisions.Memory,
-		Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.Revision}}, inv.tc)
+	result, err := inv.owners.Operations.Write.ApplyStructuredEdit(
+		inv.ctx,
+		native.StructuredEditInput{
+			Operation: inv.owners.ops[inv.name()],
+			Path:      bound.Resolved.Abs,
+			Memory:    inv.owners.Revisions.Memory,
+		},
+		inv.tc,
+		func(resolved projectpaths.Resolved, source string, editor *tools.EditorDocumentText) (string, bool, error) {
+			if editor != nil && !editor.ReadWhole {
+				return "", false, editReadRequired(resolved.DisplayPath, editor.ID)
+			}
+			edited, err := native.ReplaceLineRange(resolved.DisplayPath, source, startLine, endLine, content)
+			if err != nil {
+				return "", false, err
+			}
+			return edited, edited != source, nil
+		},
+	)
 	if err != nil {
 		return err
 	}
@@ -165,7 +169,13 @@ func runCodeRewrite(inv *invocation) error {
 	ctx := inv.ctx
 	var targets []string
 	for _, path := range paths {
-		bound, err := inv.bind(path, !dryRun)
+		var bound projectpaths.BoundPath
+		var err error
+		if dryRun {
+			bound, err = inv.bind(path, false)
+		} else {
+			bound, err = inv.bindStructured(path)
+		}
 		if err != nil {
 			return err
 		}
@@ -186,35 +196,57 @@ func runCodeRewrite(inv *invocation) error {
 		}
 	}
 	for _, abs := range targets {
-		source, err := inv.owners.Revisions.CaptureSource(inv.ctx, inv.tc, abs)
-		if err != nil {
-			return err
-		}
-		if err := inv.recordPin(source.Revision); err != nil {
-			return err
-		}
-		rewritten, changed, err := native.RewriteSource(ctx, source.Path, lang, pattern, rewrite, source.Content)
-		if err != nil {
-			return err
-		}
-		if !changed {
-			continue
-		}
 		if dryRun {
+			source, err := inv.owners.Revisions.CaptureSource(inv.ctx, inv.tc, abs)
+			if err != nil {
+				return err
+			}
+			if err := inv.recordPin(source.Revision); err != nil {
+				return err
+			}
+			rewritten, changed, err := native.RewriteSource(ctx, source.Path, lang, pattern, rewrite, source.Content)
+			if err != nil {
+				return err
+			}
+			if !changed {
+				continue
+			}
 			if err := inv.previewRewrite(source.Path, source.Content, rewritten); err != nil {
 				return err
 			}
 			continue
 		}
-		destination, err := inv.owners.Revisions.CaptureDestination(inv.ctx, inv.tc, abs)
-		if err != nil {
-			return err
-		}
-		if err := inv.recordPin(destination); err != nil {
-			return err
-		}
-		result, err := inv.owners.Operations.Write.Apply(ctx, native.WriteInput{Operation: inv.owners.ops[inv.name()], Path: abs, Content: rewritten, Memory: inv.owners.Revisions.Memory,
-			Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.Revision}}, inv.tc)
+		var hasLastPin bool
+		var lastPin toolcontract.ExecutionRevision
+		result, err := inv.owners.Operations.Write.ApplyStructuredEdit(
+			ctx,
+			native.StructuredEditInput{
+				Operation: inv.owners.ops[inv.name()],
+				Path:      abs,
+				Memory:    inv.owners.Revisions.Memory,
+			},
+			inv.tc,
+			func(resolved projectpaths.Resolved, source string, editor *tools.EditorDocumentText) (string, bool, error) {
+				rewritten, changed, rewriteErr := native.RewriteSource(ctx, resolved.DisplayPath, lang, pattern, rewrite, source)
+				if rewriteErr != nil || !changed {
+					return rewritten, changed, rewriteErr
+				}
+				src, capErr := inv.owners.Revisions.CaptureSource(ctx, inv.tc, resolved.Abs)
+				if capErr != nil {
+					return "", false, capErr
+				}
+				pin := src.Revision
+				pin.ContentSHA256, pin.ContentBytes = textfile.StringSHA256(source), int64(len(source))
+				if !hasLastPin || pin != lastPin {
+					if pinErr := inv.recordPin(pin); pinErr != nil {
+						return "", false, pinErr
+					}
+					lastPin = pin
+					hasLastPin = true
+				}
+				return rewritten, changed, nil
+			},
+		)
 		if err != nil {
 			return err
 		}
