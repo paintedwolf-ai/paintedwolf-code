@@ -19,33 +19,6 @@ func editReadRequired(path, docID string) error {
 	}
 }
 
-func editCoversMatches(source, oldString string, replaceAll bool, editor *tools.EditorDocumentText) bool {
-	if editor == nil || editor.ReadWhole {
-		return true
-	}
-	offset := 0
-	for {
-		idx := strings.Index(source[offset:], oldString)
-		if idx < 0 {
-			return true
-		}
-		absStart := offset + idx
-		absEnd := absStart + len(oldString)
-		startLine := 1 + strings.Count(source[:absStart], "\n")
-		endLine := 1 + strings.Count(source[:absEnd], "\n")
-		if strings.HasSuffix(oldString, "\n") && endLine > startLine {
-			endLine--
-		}
-		if !editor.CoversLines(startLine, endLine) {
-			return false
-		}
-		if !replaceAll {
-			return true
-		}
-		offset = absEnd
-	}
-}
-
 func runEdit(inv *invocation) error {
 	if operands := inv.operands(); len(operands) > 0 {
 		return inv.usage(operands[0], "no operands")
@@ -86,7 +59,7 @@ func runEdit(inv *invocation) error {
 			if occurrences > 1 && !replaceAll {
 				return "", false, &toolrejection.ToolReject{Code: "EDIT_OLD_STRING_AMBIGUOUS", Data: map[string]any{"path": resolved.DisplayPath, "occurrences": occurrences}}
 			}
-			if !editCoversMatches(source, oldString, replaceAll, editor) {
+			if editor != nil && !editor.ReadWhole {
 				return "", false, editReadRequired(resolved.DisplayPath, editor.ID)
 			}
 			edited := strings.Replace(source, oldString, newString, 1)
@@ -146,7 +119,7 @@ func runReplaceLines(inv *invocation) error {
 		},
 		inv.tc,
 		func(resolved projectpaths.Resolved, source string, editor *tools.EditorDocumentText) (string, bool, error) {
-			if editor != nil && !editor.CoversLines(startLine, endLine) {
+			if editor != nil && !editor.ReadWhole {
 				return "", false, editReadRequired(resolved.DisplayPath, editor.ID)
 			}
 			edited, err := native.ReplaceLineRange(resolved.DisplayPath, source, startLine, endLine, content)

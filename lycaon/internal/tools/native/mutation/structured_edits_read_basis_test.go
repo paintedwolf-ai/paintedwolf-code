@@ -207,16 +207,22 @@ func TestStructuredEditsEnforceConversationalReadBasisAndRebaseWithoutAutosaveOn
 		t.Fatalf("refused edits mutated doc.txt: %q", h.read("doc.txt"))
 	}
 
-	// 2. Partial span read [1..1] does NOT authorize editing line 5 or whole-file tee/code-rewrite.
+	// 2. Partial span read [1..1] does NOT authorize edit/replace-lines/tee — even
+	// when the partial span covers the target line (full conversational read required).
 	doc, ok, err := svc.OpenText(t.Context(), h.project.ID, sourcebranch.Trunk, h.project.Roots[0].ID, "doc.txt")
 	testutil.FailErr(t, "open doc.txt", err)
 	if !ok {
 		t.Fatal("expected doc.txt")
 	}
 	svc.RememberAgentReadSpans(h.project.ID, h.tc.Identity.SessionID, doc.ID, doc.Revision, []documentcore.LineSpan{{StartLine: 1, EndLine: 1}})
+	requireRejectCode(t, h.run("", "edit", "--path", "doc.txt", "--old-string", "L1_alpha", "--new-string", "L1_NEW"), "EDITOR_DOCUMENT_READ_REQUIRED")
+	requireRejectCode(t, h.run("", "replace-lines", "--path", "doc.txt", "--start", "1", "--end", "1", "--content", "L1_NEW"), "EDITOR_DOCUMENT_READ_REQUIRED")
 	requireRejectCode(t, h.run("", "edit", "--path", "doc.txt", "--old-string", "L5_epsilon", "--new-string", "L5_NEW"), "EDITOR_DOCUMENT_READ_REQUIRED")
 	requireRejectCode(t, h.run("", "replace-lines", "--path", "doc.txt", "--start", "5", "--end", "5", "--content", "L5_NEW"), "EDITOR_DOCUMENT_READ_REQUIRED")
 	requireRejectCode(t, h.run("rewritten\n", "tee", "doc.txt"), "EDITOR_DOCUMENT_READ_REQUIRED")
+	if got := h.read("doc.txt"); got != initial {
+		t.Fatalf("refused partial-read edits mutated disk: got=%q want=%q", got, initial)
+	}
 
 	// 3. Full read + overlapping person unsaved draft on line 3:
 	// edit MUST refuse with EDITOR_DOCUMENT_CHANGING and MUST NOT autosave person's draft to disk!
@@ -258,6 +264,11 @@ func TestStructuredEditsEnforceConversationalReadBasisAndRebaseWithoutAutosaveOn
 	if len(origins) < 2 {
 		t.Fatalf("expected distinct person+agent contributor origins in source_text_contributions, got %v", origins)
 	}
-	// Merged result withdrew the read basis -> follow-up edit without reread MUST refuse!
+	// Merged result withdrew the read basis -> follow-up edit AND standalone tee without reread MUST refuse
+	// and MUST NOT autosave any unsaved person draft to disk!
 	requireRejectCode(t, h.run("", "edit", "--path", "doc.txt", "--old-string", "L4_delta", "--new-string", "L4_AGENT"), "EDITOR_DOCUMENT_READ_REQUIRED")
+	requireRejectCode(t, h.run("overwrite-without-read\n", "tee", "doc.txt"), "EDITOR_DOCUMENT_READ_REQUIRED")
+	if got := h.read("doc.txt"); got != wantCombined {
+		t.Fatalf("refused standalone tee mutated disk: got=%q want=%q", got, wantCombined)
+	}
 }
