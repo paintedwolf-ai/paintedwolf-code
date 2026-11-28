@@ -47,6 +47,9 @@ type Service struct {
 	workspaces Workspaces
 	records    *workerrecords.Store
 	locks      sync.Map
+	// afterBranchCreated is an optional test hook invoked after workspace
+	// branch creation returns and before durable preparation is recorded.
+	afterBranchCreated func(viewID, root string)
 }
 
 // New returns a lane service.
@@ -171,6 +174,11 @@ func (s *Service) switchLane(ctx context.Context, req Request, sel Selection) (B
 	}
 	generation := previous.Generation + 1
 	viewID := laneViewID(req.WorkerID, generation)
+	releasePrep, err := workspace.AcquireBranchPreparation(ctx, viewID)
+	if err != nil {
+		return Binding{}, fmt.Errorf("prepare lane generation %d: %w", generation, err)
+	}
+	defer releasePrep()
 	var binding *workspace.Binding
 	if sel.FromCheckpoint != "" {
 		binding, _, err = s.workspaces.CreateStackedWorkerBranch(ctx, req.Roots, req.ActiveRootID, viewID, sel.FromCheckpoint)
@@ -182,6 +190,9 @@ func (s *Service) switchLane(ctx context.Context, req Request, sel Selection) (B
 	}
 	if binding == nil || strings.TrimSpace(binding.Root) == "" {
 		return Binding{}, fmt.Errorf("prepare lane generation %d: no branch root", generation)
+	}
+	if s.afterBranchCreated != nil {
+		s.afterBranchCreated(viewID, binding.Root)
 	}
 	if closed, err := s.isClosed(ctx, req.Actor, req.WorkerID); err != nil {
 		_ = s.workspaces.EvictWorkerBranch(context.WithoutCancel(ctx), binding.Root)

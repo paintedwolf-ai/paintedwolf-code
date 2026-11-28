@@ -72,6 +72,11 @@ func (m *Manager) RebuildWorkerWorkspace(ctx context.Context, branchRoot string,
 	if err != nil {
 		return SandboxLayout{}, err
 	}
+	releasePrep, err := AcquireBranchPreparation(ctx, jobIDForBranch(branchRoot))
+	if err != nil {
+		return SandboxLayout{}, err
+	}
+	defer releasePrep()
 	release, err := acquireWorkspaceProvisionLock(ctx, branchRoot)
 	if err != nil {
 		return SandboxLayout{}, err
