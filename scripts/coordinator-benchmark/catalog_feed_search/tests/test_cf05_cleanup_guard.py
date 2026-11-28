@@ -86,6 +86,9 @@ def _start_stub_server(mode: str) -> tuple[ThreadingHTTPServer, _StubState, str]
                 )
                 return
             if self.path.startswith("/v1/projects/"):
+                if state.mode == "final_get_drop":
+                    self.connection.close()
+                    return
                 if state.mode == "lingering_200":
                     self._send_json(200, {"id": "proj-1", "state": "active"})
                     return
@@ -156,6 +159,24 @@ class TestCF05CleanupGuard(unittest.TestCase):
             self.assertIsNotNone(client.contaminated)
             with self.assertRaises(ProjectCleanupError):
                 client.ensure_clean()
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
+    def test_post_deleted_get_network_error_taints_and_blocks_reuse(self) -> None:
+        srv, state, url = _start_stub_server("final_get_drop")
+        try:
+            client = CF05SidecarClient(url, "tok")
+            with self.assertRaises(ProjectCleanupError) as ctx:
+                client.delete_project("proj-1", timeout_s=2.0)
+            self.assertIsNotNone(ctx.exception.__cause__)
+            self.assertIsNotNone(client.contaminated)
+            with self.assertRaises(ProjectCleanupError):
+                client.driver.attach_project([Path("/tmp")])
+            with tempfile.TemporaryDirectory() as tmp:
+                with self.assertRaises(ProjectCleanupError):
+                    run_family_suite("F06", client, Path(tmp), None, max_instances=1)
+            self.assertEqual(state.attach_calls, 0)
         finally:
             srv.shutdown()
             srv.server_close()

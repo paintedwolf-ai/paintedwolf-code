@@ -476,6 +476,12 @@ class CF05SidecarClient:
                 msg = f"project {project_id} post-removal GET returned HTTP {err.code} ({context})"
                 self.contaminated = msg
                 raise ProjectCleanupError(msg) from err
+        except ProjectCleanupError:
+            raise
+        except Exception as err:
+            msg = f"project {project_id} post-removal GET failed ({context}): {err}"
+            self.contaminated = msg
+            raise ProjectCleanupError(msg) from err
 
     def probe_sse_cursor(
         self,
