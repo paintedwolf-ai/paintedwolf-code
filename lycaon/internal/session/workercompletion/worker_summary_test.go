@@ -339,25 +339,18 @@ func TestEvaluateWorkerSummaryReadRangeLineOutOfRangeIsPartial(t *testing.T) {
 			LegStatus: "complete",
 			Brief:     "Survey noted an issue.",
 			Findings: []workercompletion.WorkerFinding{
-				{Path: "f.go", Evidence: "read#1", Line: 50, Excerpt: "alpha beta"},
+				{Path: "f.go", Evidence: "read#1", Line: 50, Excerpt: "gamma delta"},
 			},
 		},
 		ChildMessages: msgs,
 		ProjectDir:    root,
 	}))
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if eval.Status != "complete" {
-		t.Fatalf("eval = %+v want complete — wrong-line excerpt is traced, not blocking", eval)
+	if eval.Status != "partial" || eval.HintCode != "WORKER_EVIDENCE_HANDLE_UNKNOWN" {
+		t.Fatalf("eval = %+v want partial with WORKER_EVIDENCE_HANDLE_UNKNOWN — out-of-range line with unmatched excerpt is refused", eval)
 	}
-	var findingCheck *api.CitationGroundingCheck
-	for i := range eval.Grounding.Checks {
-		if eval.Grounding.Checks[i].ID == "finding_excerpts" {
-			findingCheck = &eval.Grounding.Checks[i]
-			break
-		}
-	}
-	if findingCheck == nil || findingCheck.Status != api.CitationGroundingCheckStatusAdvisory {
-		t.Fatalf("grounding checks = %+v want advisory finding_excerpts", eval.Grounding.Checks)
+	if !hasFailedCitationCheck(eval.Grounding.Checks) {
+		t.Fatalf("grounding checks = %+v want failed citation check", eval.Grounding.Checks)
 	}
 }
 
@@ -379,15 +372,15 @@ func TestEvaluateWorkerSummaryCheckTokensShowPathNotHandle(t *testing.T) {
 			LegStatus: "complete",
 			Brief:     "Survey noted an issue.",
 			Findings: []workercompletion.WorkerFinding{
-				{Path: "f.go", Evidence: "read#1", Line: 50, Excerpt: "alpha beta"},
+				{Path: "f.go", Evidence: "read#1", Line: 50, Excerpt: "gamma delta"},
 			},
 		},
 		ChildMessages: msgs,
 		ProjectDir:    root,
 	}))
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if eval.Status != "complete" {
-		t.Fatalf("eval = %+v want complete", eval)
+	if eval.Status != "partial" || eval.HintCode != "WORKER_EVIDENCE_HANDLE_UNKNOWN" {
+		t.Fatalf("eval = %+v want partial with WORKER_EVIDENCE_HANDLE_UNKNOWN", eval)
 	}
 	var failed []string
 	for _, c := range eval.Grounding.Checks {
@@ -520,11 +513,11 @@ func TestEvaluateWorkerSummaryWrongExcerptQuoteIsPartial(t *testing.T) {
 		ProjectDir:    root,
 	}))
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if eval.Status != "complete" {
-		t.Fatalf("eval = %+v want complete — excerpt mismatch is traced", eval)
+	if eval.Status != "partial" || eval.HintCode != "WORKER_EVIDENCE_HANDLE_UNKNOWN" {
+		t.Fatalf("eval = %+v want partial with WORKER_EVIDENCE_HANDLE_UNKNOWN — misquoted excerpt is refused", eval)
 	}
-	if !eval.Grounding.Traced {
-		t.Fatalf("grounding = %+v want traced (with traced-excerpt check)", eval.Grounding)
+	if !hasFailedCitationCheck(eval.Grounding.Checks) {
+		t.Fatalf("grounding = %+v want failed citation check for misquoted excerpt", eval.Grounding)
 	}
 }
 
@@ -631,7 +624,7 @@ func TestEvaluateWorkerSummaryImplementerExcerptGrounded(t *testing.T) {
 	}
 }
 
-func TestEvaluateWorkerSummaryImplementerExcerptMismatch(t *testing.T) {
+func TestEvaluateWorkerSummaryImplementerExcerptMismatchIsPartial(t *testing.T) {
 	eval, workerEvalErr := workercompletion.EvaluateWorkerSummary(context.Background(), workerSummaryEval(t, workercompletion.WorkerSummaryEvalInput{
 		AgentType: orchestration.ProfileImplementer,
 		Report: workercompletion.WorkerCompletionReport{
@@ -643,22 +636,21 @@ func TestEvaluateWorkerSummaryImplementerExcerptMismatch(t *testing.T) {
 		ProjectDir:    t.TempDir(),
 	}))
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if eval.Status != "complete" {
-		t.Fatalf("eval = %+v want complete — excerpt mismatch is traced", eval)
+	if eval.Status != "partial" || eval.HintCode != "WORKER_EVIDENCE_HANDLE_UNKNOWN" {
+		t.Fatalf("eval = %+v want partial with WORKER_EVIDENCE_HANDLE_UNKNOWN — implementer misquoted excerpt is refused", eval)
 	}
-	// The mismatch is detected, not silently accepted: the finding excerpt failed the
-	// word-for-word check (traced, not matched) even though its cited path was observed.
-	// The grounded sibling records no such failing citation check.
-	if !hasTracedExcerptMismatch(eval.Grounding.Checks) {
-		t.Fatalf("grounding = %+v want a traced excerpt-mismatch check", eval.Grounding)
+	// The mismatch is refused even when the implementer holds a write receipt;
+	// the grounded sibling records no failing citation check.
+	if !hasFailedCitationCheck(eval.Grounding.Checks) {
+		t.Fatalf("grounding = %+v want a failed citation check", eval.Grounding)
 	}
 }
 
-// hasTracedExcerptMismatch reports whether a citation check recorded a finding
-// excerpt that traced to observed evidence but failed the verbatim quote match.
-func hasTracedExcerptMismatch(checks []api.CitationGroundingCheck) bool {
+// hasFailedCitationCheck reports whether a citation check recorded a failed
+// citation (such as an unverified or misquoted finding excerpt).
+func hasFailedCitationCheck(checks []api.CitationGroundingCheck) bool {
 	for _, c := range checks {
-		if c.Kind == api.CitationGroundingCheckKindCitation && c.Status == api.CitationGroundingCheckStatusAdvisory && len(c.Failed) > 0 {
+		if c.Kind == api.CitationGroundingCheckKindCitation && c.Status == api.CitationGroundingCheckStatusFailed && len(c.Failed) > 0 {
 			return true
 		}
 	}
