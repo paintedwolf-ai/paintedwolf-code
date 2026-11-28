@@ -90,3 +90,14 @@ func (r *Output) NoteRefusalsShown(sessionID, handle string, shown int) {
 	proc.refusalsShown = max(proc.refusalsShown, shown)
 	r.jobs.mu.Unlock()
 }
+
+// UnshownRefusals counts the job's refusals no result or notice has shown.
+func (r *Output) UnshownRefusals(sessionID, handle string) int {
+	proc, err := r.jobs.lookup(sessionID, handle)
+	if err != nil || proc == nil {
+		return 0
+	}
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
+	return max(0, len(proc.confinementLocked().Refusals().Refusals)-proc.refusalsShown)
+}

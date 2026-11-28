@@ -21,23 +21,31 @@ type RunningProgramResult struct {
 func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluation, ending *programEnding, startedAt time.Time) (string, error) {
 	run := e.run
 	attached := make(chan error, 1)
-	handle, err := r.Supervisor.Background.StartProgram(ctx, bgprocess.ProgramJobSpec{
-		SessionID: run.tc.Identity.SessionID, RootSessionID: run.tc.ChatSessionID(),
-		ProjectID: run.tc.Identity.ProjectID, Cwd: e.paths.Cwd().DisplayPath,
-		CommandLine: run.source, OriginTool: run.tool, ToolCallID: run.tc.Identity.ToolCallID, StartedAt: startedAt,
-		Run: func(jobCtx context.Context, stdout, stderr io.Writer) (bgprocess.ProgramJobResult, error) {
-			stop := context.AfterFunc(jobCtx, func() { r.Supervisor.StopProgram(run.root.Identity.ProgramID) })
-			defer stop()
-			attachErr := errors.Join(e.stdout.follow(stdout), e.stderr.follow(stderr))
-			attached <- attachErr
-			if attachErr != nil {
-				r.Supervisor.Interrupt(run.root.Identity.ProgramID)
-			}
-			<-ending.done
-			r.recordParkedRun(context.WithoutCancel(ctx), run)
-			r.recordDetachedEffects(context.WithoutCancel(ctx), run)
-			return ending.jobResult(), errors.Join(ending.err, attachErr)
-		},
+	registry, session := r.Supervisor.Background, run.tc.Identity.SessionID
+	handle, err := e.stages.bind(func(history bgprocess.ProgramHistory) (string, error) {
+		return registry.StartProgram(ctx, bgprocess.ProgramJobSpec{
+			SessionID: session, RootSessionID: run.tc.ChatSessionID(),
+			ProjectID: run.tc.Identity.ProjectID, Cwd: e.paths.Cwd().DisplayPath,
+			CommandLine: run.source, OriginTool: run.tool, ToolCallID: run.tc.Identity.ToolCallID, StartedAt: startedAt,
+			History: history,
+			Run: func(jobCtx context.Context, stdout, stderr io.Writer) (bgprocess.ProgramJobResult, error) {
+				stop := context.AfterFunc(jobCtx, func() { r.Supervisor.StopProgram(run.root.Identity.ProgramID) })
+				defer stop()
+				attachErr := errors.Join(e.stdout.follow(stdout), e.stderr.follow(stderr))
+				attached <- attachErr
+				if attachErr != nil {
+					r.Supervisor.Interrupt(run.root.Identity.ProgramID)
+				}
+				<-ending.done
+				r.recordParkedRun(context.WithoutCancel(ctx), run)
+				r.recordDetachedEffects(context.WithoutCancel(ctx), run)
+				return ending.jobResult(), errors.Join(ending.err, attachErr)
+			},
+		})
+	}, func(handle string) func(bgprocess.ProgramStage) stageSettler {
+		return func(stage bgprocess.ProgramStage) stageSettler {
+			return registry.AttachProgramStage(context.WithoutCancel(ctx), session, handle, stage)
+		}
 	})
 	if err != nil {
 		r.interruptProgram(ctx, run, ending)
@@ -50,7 +58,6 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 	if err := <-attached; err != nil {
 		return "", err
 	}
-	session := run.tc.Identity.SessionID
 	e.waits.promoted(func() func() { return r.Supervisor.Background.BeginPersonWait(session, handle) })
 	e.call.detach()
 	if out := e.callTC.Effects.Out; out != nil {

@@ -363,6 +363,7 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 	completion.IndexWatch = owned.indexWatch
 	exitCode := proc.exitCode
 	confinement := proc.confinementLocked()
+	shown := proc.refusalsShown
 	originTool := proc.originTool
 	sessionID := proc.SessionID
 	publish := r.publish
@@ -383,6 +384,7 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 	completion.BoundaryRefusal = string(stamped.Attribution)
 	completion.GuidanceCodes = append([]string(nil), stamped.GuidanceCodes...)
 	completion.Observation = stamped.Observation
+	completion.UnshownRefusals = max(0, len(stamped.Observation.Refusals.Refusals)-shown)
 	if publish != nil {
 		publish(ctx, proc.ProjectID, proc.SessionID, api.BackgroundProcessEvent{
 			ProcessID:         proc.Handle,

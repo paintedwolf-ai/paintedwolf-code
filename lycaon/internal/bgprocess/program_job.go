@@ -27,7 +27,9 @@ type ProgramJobSpec struct {
 	OriginTool    string
 	ToolCallID    string
 	StartedAt     time.Time
-	Run           func(ctx context.Context, stdout, stderr io.Writer) (ProgramJobResult, error)
+	// History is the confinement a continued program gathered in the foreground.
+	History ProgramHistory
+	Run     func(ctx context.Context, stdout, stderr io.Writer) (ProgramJobResult, error)
 }
 
 // ProgramStop carries the evaluator's terminal decision and its rendered feedback.
@@ -71,6 +73,7 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 		processConfinementState: processConfinementState{cwd: spec.Cwd},
 		Stages:                  []hostcmd.StageResult{{Command: spec.CommandLine}},
 	}
+	proc.seed(spec.History)
 	if proc.RootSessionID == "" {
 		proc.RootSessionID = sessionID
 	}

@@ -15,7 +15,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostprocess"
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -92,8 +91,6 @@ type jobProcessTracker struct {
 	once     sync.Once
 	ready    chan struct{}
 	onRecord func(jobProcess)
-	// attachStage counts an external stage's confinement toward the job.
-	attachStage func(bgprocess.ProgramStage) func(confine.SandboxRefusals, []confine.EgressHost)
 }
 
 func noteJobProcess(ctx context.Context, pid int, args []string) {
@@ -118,16 +115,6 @@ func noteJobProcess(ctx context.Context, pid int, args []string) {
 
 func noteJobNative(ctx context.Context, args []string) {
 	noteJobProcess(ctx, 0, args)
-}
-
-// attachJobStage counts an external stage launched inside a & job toward that
-// job's confinement. The returned func records the stage's settled reports.
-func attachJobStage(ctx context.Context, stage bgprocess.ProgramStage) func(confine.SandboxRefusals, []confine.EgressHost) {
-	t, _ := ctx.Value(jobProcessKey{}).(*jobProcessTracker)
-	if t == nil || t.attachStage == nil {
-		return func(confine.SandboxRefusals, []confine.EgressHost) {}
-	}
-	return t.attachStage(stage)
 }
 
 // BeginProgram prunes finished jobs from prior programs before a new program
@@ -196,6 +183,7 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	ready := make(chan struct{})
 	done := make(chan struct{})
 	tracker := &jobProcessTracker{ready: make(chan struct{})}
+	var stages *stageTracker
 	handle, err = j.Registry.StartProgram(ctx, bgprocess.ProgramJobSpec{
 		SessionID: j.SessionID, RootSessionID: binding.origin.RootSessionID, ProjectID: j.ProjectID,
 		CommandLine: commandLine, OriginTool: binding.origin.Tool, ToolCallID: binding.origin.ToolCallID,
@@ -206,6 +194,7 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 			ctx, cancel := context.WithCancel(jobCtx)
 			defer cancel()
 			ctx = context.WithValue(ctx, jobProcessKey{}, tracker)
+			ctx = withStageTracker(ctx, stages)
 			stopAfter := context.AfterFunc(stopCtx, cancel)
 			defer stopAfter()
 			result, err := run(ctx, handle, commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr})
@@ -241,9 +230,9 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	tracker.onRecord = func(process jobProcess) {
 		j.recordProcess(handle, process)
 	}
-	tracker.attachStage = func(stage bgprocess.ProgramStage) func(confine.SandboxRefusals, []confine.EgressHost) {
+	stages = boundStageTracker(func(stage bgprocess.ProgramStage) stageSettler {
 		return j.Registry.AttachProgramStage(context.WithoutCancel(jobCtx), j.SessionID, handle, stage)
-	}
+	})
 	close(ready)
 	select {
 	case <-tracker.ready:
