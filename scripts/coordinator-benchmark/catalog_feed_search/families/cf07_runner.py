@@ -72,6 +72,8 @@ def run_cf07_sidecar_suite(
 
     cfg_root = Path(config_root).resolve() if config_root is not None else (Path(repo_root).resolve() / "lycaon")
     boundary_yaml = cfg_root / "config/runtime/source/directory-priority.yaml"
+    if not boundary_yaml.is_file():
+        boundary_yaml = cfg_root / "lycaon/config/runtime/source/directory-priority.yaml"
     boundary_cfg = BoundaryConfig.from_yaml_file(boundary_yaml) if boundary_yaml.is_file() else None
 
     family_reports: dict[str, dict[str, object]] = {}
