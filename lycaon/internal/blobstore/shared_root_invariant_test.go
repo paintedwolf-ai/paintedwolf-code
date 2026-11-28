@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bytebound"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/zstdcodec"
 )
 
 // TestSharedDataRootConcurrentStoresInvariant proves GB10 I7 (first case
@@ -47,6 +48,7 @@ func TestSharedDataRootConcurrentStoresInvariant(t *testing.T) {
 		committed []struct {
 			blob    Blob
 			payload []byte
+			atPath  bool
 		}
 		errs []error
 	)
@@ -82,7 +84,8 @@ func TestSharedDataRootConcurrentStoresInvariant(t *testing.T) {
 					committed = append(committed, struct {
 						blob    Blob
 						payload []byte
-					}{blob: b, payload: payload})
+						atPath  bool
+					}{blob: b, payload: payload, atPath: true})
 					mu.Unlock()
 				} else {
 					b, err := st.Put(fmt.Sprintf("f_%d_%d.txt", workerID, i), bytes.NewReader(payload), limit)
@@ -94,6 +97,7 @@ func TestSharedDataRootConcurrentStoresInvariant(t *testing.T) {
 					committed = append(committed, struct {
 						blob    Blob
 						payload []byte
+						atPath  bool
 					}{blob: b, payload: payload})
 					mu.Unlock()
 				}
@@ -110,20 +114,28 @@ func TestSharedDataRootConcurrentStoresInvariant(t *testing.T) {
 	}
 
 	// Verify seed and every committed blob is readable from the peer store with exact bytes.
-	checkReadable := func(st Store, b Blob, want []byte) {
+	checkReadable := func(st Store, b Blob, want []byte, atPath bool) {
 		t.Helper()
-		rc, err := st.Open(b)
-		testutil.FailErr(t, "Open "+b.Rel, err)
-		got, err := io.ReadAll(rc)
-		_ = rc.Close()
-		testutil.FailErr(t, "ReadAll "+b.Rel, err)
+		var got []byte
+		if atPath {
+			raw, err := os.ReadFile(filepath.Join(st.Root, filepath.FromSlash(b.Rel)))
+			testutil.FailErr(t, "ReadFile "+b.Rel, err)
+			got, err = zstdcodec.Decompress(raw)
+			testutil.FailErr(t, "Decompress "+b.Rel, err)
+		} else {
+			rc, err := st.Open(b)
+			testutil.FailErr(t, "Open "+b.Rel, err)
+			got, err = io.ReadAll(rc)
+			_ = rc.Close()
+			testutil.FailErr(t, "ReadAll "+b.Rel, err)
+		}
 		if !bytes.Equal(got, want) {
 			t.Fatalf("blob %s bytes mismatch: got %q, want %q", b.Rel, got, want)
 		}
 	}
-	checkReadable(storeB, seedBlob, seedPayload)
+	checkReadable(storeB, seedBlob, seedPayload, false)
 	for _, item := range committed {
-		checkReadable(storeA, item.blob, item.payload)
-		checkReadable(storeB, item.blob, item.payload)
+		checkReadable(storeA, item.blob, item.payload, item.atPath)
+		checkReadable(storeB, item.blob, item.payload, item.atPath)
 	}
 }

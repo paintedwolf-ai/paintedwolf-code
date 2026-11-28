@@ -38,7 +38,7 @@ func TestAdvisoryModesNeverRefuseAndFailedOutcomesCountedInvariant(t *testing.T)
 		{
 			name: "repair_exhausted_host_assembled_gb07_f2",
 			grounding: &api.CitationGrounding{
-				Traced:        true,
+				Traced:        false,
 				HostAssembled: true,
 				HintCode:      guidance.InvestCitationUnverifiableCode,
 				Checks: []api.CitationGroundingCheck{{
