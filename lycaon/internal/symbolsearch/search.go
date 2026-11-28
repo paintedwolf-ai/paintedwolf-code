@@ -136,12 +136,17 @@ func Run(
 	if progress == nil {
 		progress = &Progress{}
 	}
+	fileDigests := make(map[projectsource.DeclarationFileKey]string, len(progress.fileDigests))
+	for k, v := range progress.fileDigests {
+		fileDigests[k] = v
+	}
 	run := &symbolSearchRun{
 		p: p, search: search, matcher: newSymbolNameMatcher(query),
 		caseSensitive: req.CaseSensitive, exact: req.Exact, roots: roots,
 		admits:   req.Admits,
 		excludes: req.ExcludeDirs, filesLeft: OutlineFileCap,
-		matches: append([]Match(nil), progress.matches...),
+		matches:     append([]Match(nil), progress.matches...),
+		fileDigests: fileDigests,
 	}
 	outlineWall := req.OutlineWall
 	if outlineWall <= 0 {
@@ -202,9 +207,10 @@ type symbolSearchRun struct {
 	roots         []symbolSearchRoot
 	excludes      []string
 	admits        func(rootID, path, name string) bool
-	filesLeft     int
-	matches       []Match
-	incomplete    bool
+	filesLeft   int
+	matches     []Match
+	fileDigests map[projectsource.DeclarationFileKey]string
+	incomplete  bool
 	coverage      projectsource.DeclarationCoverage
 	passes        []Pass
 }
