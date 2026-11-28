@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -152,13 +153,28 @@ type fakeArtifactGit struct {
 	compareErr  error
 	compareBase string
 	compareHead string
+	requireAuth bool
 }
 
-func (f *fakeArtifactGit) Status(context.Context, string) (*git.GitStatus, error) {
+func (f *fakeArtifactGit) Status(ctx context.Context, _ string) (*git.GitStatus, error) {
+	if f.requireAuth {
+		dir, err := gitexec.MakeScratch(ctx, "artifact-probe-status-*")
+		if err != nil {
+			return nil, err
+		}
+		_ = os.RemoveAll(dir)
+	}
 	return f.status, f.statusErr
 }
 
-func (f *fakeArtifactGit) Compare(_ context.Context, _, base, head string) (git.GitComparison, error) {
+func (f *fakeArtifactGit) Compare(ctx context.Context, _, base, head string) (git.GitComparison, error) {
+	if f.requireAuth {
+		dir, err := gitexec.MakeScratch(ctx, "artifact-probe-compare-*")
+		if err != nil {
+			return git.GitComparison{}, err
+		}
+		_ = os.RemoveAll(dir)
+	}
 	f.compareBase = base
 	f.compareHead = head
 	return f.compare, f.compareErr
@@ -320,5 +336,39 @@ func TestImplementerArtifactProofInvariant(t *testing.T) {
 				t.Fatalf("Compare(%q, %q), want Compare(%q, \"HEAD\")", tc.gitStub.compareBase, tc.gitStub.compareHead, tc.wantCompareBase)
 			}
 		})
+	}
+}
+
+// TestGitWorkspaceChangeCheckerAuthorizesHostProbeUnderAgentEntry verifies that
+// evaluating complete_leg inside an agent tool-call context marks the host-side
+// Status and Compare calls with a named gitexec host purpose rather than
+// failing with ErrLaunchAuthorityRequired.
+func TestGitWorkspaceChangeCheckerAuthorizesHostProbeUnderAgentEntry(t *testing.T) {
+	const baseOID = "1111111111111111111111111111111111111111"
+	agentCtx := gitexec.AgentEntry(t.Context())
+	if _, err := gitexec.MakeScratch(agentCtx, "artifact-probe-raw-*"); !errors.Is(err, gitexec.ErrLaunchAuthorityRequired) {
+		t.Fatalf("raw AgentEntry MakeScratch err = %v, want ErrLaunchAuthorityRequired", err)
+	}
+
+	gitStub := &fakeArtifactGit{
+		status:      &git.GitStatus{Dirty: false},
+		compare:     git.GitComparison{BaseOID: baseOID, HeadOID: baseOID},
+		requireAuth: true,
+	}
+	checker := &workercompletion.GitWorkspaceChangeChecker{Git: gitStub}
+	eval, err := workercompletion.EvaluateWorkerSummary(agentCtx, workerSummaryEval(t, workercompletion.WorkerSummaryEvalInput{
+		AgentType:      orchestration.ProfileImplementer,
+		Report:         workercompletion.WorkerCompletionReport{LegStatus: "complete", Brief: "Completed without edits."},
+		ChildMessages:  commandRanMessages(),
+		ProjectDir:     t.TempDir(),
+		BaseRevision:   baseOID,
+		WorkspaceCheck: checker,
+	}))
+	testutil.FailErr(t, "evaluate implementer under AgentEntry", err)
+	if eval.Status != "partial" || eval.HintCode != workercompletion.WorkerSummaryNoArtifactCode {
+		t.Fatalf("status=%q hint=%q, want partial/%s", eval.Status, eval.HintCode, workercompletion.WorkerSummaryNoArtifactCode)
+	}
+	if check := artifactCheck(t, eval.Grounding); check.Status != api.CitationGroundingCheckStatusFailed {
+		t.Fatalf("implementer_artifact status=%q, want failed (check=%+v)", check.Status, check)
 	}
 }

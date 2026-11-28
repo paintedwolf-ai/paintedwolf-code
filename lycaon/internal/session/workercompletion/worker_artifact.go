@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -44,6 +45,10 @@ func (c *GitWorkspaceChangeChecker) HasChanges(ctx context.Context, projectDir, 
 	if c == nil || c.Git == nil || projectDir == "" {
 		return false, ErrWorkspaceCheckerUnavailable
 	}
+	// complete_leg evaluates inside the worker's tool-call agent context; mark
+	// this host-side workspace probe with a named host purpose so gitexec allows
+	// the read-only Status and Compare checks.
+	ctx = gitexec.WithHostPurpose(ctx, "worker_artifact_probe")
 	st, err := c.Git.Status(ctx, projectDir)
 	if err != nil {
 		return false, err
