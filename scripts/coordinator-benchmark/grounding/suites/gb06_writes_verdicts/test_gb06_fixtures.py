@@ -144,6 +144,7 @@ class TestGB06CatalogAndFixtures(unittest.TestCase):
         self.assertEqual(review_phase["surface_template"], "agents/gb06_review.md")
         self.assertEqual(review_phase["review_loop"]["verdict_schema"]["verdict"], "APPROVED|CHANGES_REQUESTED")
         self.assertTrue(manifest["phases"][1]["terminal"])
+        self.assertEqual(manifest["controls"]["phase_advance"], "host")
 
         with tempfile.TemporaryDirectory() as td:
             ws = pathlib.Path(td) / "ws"
@@ -151,12 +152,18 @@ class TestGB06CatalogAndFixtures(unittest.TestCase):
             self.assertTrue((ws / "core.go").is_file())
             self.assertTrue((ws / "long.go").is_file())
             self.assertTrue((ws / "fixture.png").is_file())
+            self.assertTrue((ws / ".git").is_dir())
             wf_path = ws / ".paintedwolf" / "workflows" / "gb06-review" / "workflow.yaml"
             tpl_path = ws / ".paintedwolf" / "prompt_files" / "agents" / "gb06_review.md"
             self.assertTrue(wf_path.is_file())
             self.assertTrue(tpl_path.is_file())
             parsed = json.loads(wf_path.read_text(encoding="utf-8"))
             self.assertEqual(parsed["id"], "gb06-review")
+
+            ws_nogit = pathlib.Path(td) / "ws_nogit"
+            _init_git_workspace(ws_nogit, init_git=False)
+            self.assertTrue((ws_nogit / "core.go").is_file())
+            self.assertFalse((ws_nogit / ".git").exists())
 
     def test_dispatch_worker_initializes_progress_and_resolves_child_from_worker_jobs(self) -> None:
         with tempfile.TemporaryDirectory() as td:

@@ -480,10 +480,11 @@ def _build_gb06_review_workflow_manifest() -> dict[str, Any]:
                 "complete_when": "orchestration_complete",
             },
         ],
+        "controls": {"phase_advance": "host"},
     }
 
 
-def _init_git_workspace(workspace: pathlib.Path) -> None:
+def _init_git_workspace(workspace: pathlib.Path, *, init_git: bool = True) -> None:
     workspace.mkdir(parents=True, exist_ok=True)
     (workspace / "core.go").write_text(
         "package core\n\nfunc Check() bool { return true }\n",
@@ -507,6 +508,9 @@ def _init_git_workspace(workspace: pathlib.Path) -> None:
         "Inspect core.go and record the review verdict with submit_verdict.\n",
         encoding="utf-8",
     )
+
+    if not init_git:
+        return
 
     for cmd in (
         ["git", "init", "-q"],
@@ -726,6 +730,23 @@ def _run_finding_slot(
     ignore_sessions = {root_sid}
 
     before_root = probe_store_db(sidecar.store_db_path, "", root_id=root_sid, trace_log_path=trace_log)
+    pre_emitted_artifact_id = ""
+    if selector == "W01-04-finding-from-artifact":
+        # Emit a perceived host-issued visual artifact on root_sid first so the
+        # code-reviewer worker can inspect it via view_image(handle=...) without
+        # triggering an interactive OCR secret-screening pause on headless hosts.
+        client.send_prompt(root_sid, f"Emit visual artifact and dispatch code-reviewer for {selector}.")
+        _, evf_cid = _answer_tool(
+            client,
+            root_sid,
+            "emit_visual_fixture",
+            {"caption": "GB06 artifact fixture", "perceive": True},
+        )
+        _wait_tool_result(sidecar.store_db_path, root_sid, "emit_visual_fixture", evf_cid, timeout=30.0)
+        root_artifacts = _query_visual_artifact_ids(sidecar.store_db_path, root_sid)
+        if root_artifacts:
+            pre_emitted_artifact_id = root_artifacts[0]
+
     child_sid, child_req = _dispatch_worker_and_get_child(
         client,
         db_path=sidecar.store_db_path,
@@ -735,6 +756,7 @@ def _run_finding_slot(
         scope_paths=("core.go",),
         goal=f"Record a grounded finding for {selector}",
         ignore_sessions=ignore_sessions,
+        send_initial_prompt=(selector != "W01-04-finding-from-artifact"),
     )
     before_child = probe_store_db(sidecar.store_db_path, child_sid, trace_log_path=trace_log)
 
@@ -762,10 +784,16 @@ def _run_finding_slot(
                 ],
             )
             used_visual = True
-        elif "view_image" in offered:
+        elif "view_image" in offered and pre_emitted_artifact_id:
             client.respond(
                 child_req["id"],
-                tool_calls=[{"id": str(uuid.uuid4()), "name": "view_image", "args": {"path": "fixture.png"}}],
+                tool_calls=[
+                    {
+                        "id": str(uuid.uuid4()),
+                        "name": "view_image",
+                        "args": {"handle": f"artifact:{pre_emitted_artifact_id}"},
+                    }
+                ],
             )
             used_visual = True
         else:
@@ -930,13 +958,6 @@ def _run_verdict_slot(
     prefix = WORDING_PREFIX[unit.wording]
     use_review_workflow = selector != "W02-03-verdict-refused-wrong-phase"
 
-    if use_review_workflow:
-        client.request(
-            f"/v1/projects/{project_id}/trust",
-            {"enabled": {"project_settings": True, "prompt_overrides": True}, "mark_seen": True},
-            method="PATCH",
-        )
-
     sid = client.create_session(project_id, posture="build")["id"]
     client.wait_session_ready(sid)
     before = probe_store_db(sidecar.store_db_path, sid, trace_log_path=trace_log)
@@ -958,14 +979,14 @@ def _run_verdict_slot(
         p = client.send_prompt(sid, f"{prefix} Exercise submit_verdict for {selector}.")
         submission_id = str(p.get("submission_id") or p.get("id") or "")
 
-    if use_review_workflow:
-        _answer_tool(client, sid, "command", {"command": "cat -n core.go"})
-
-    if selector == "W02-06-verdict-refused-stale-revision":
-        (workspace / "core.go").write_text(
-            "package core\n\nfunc Check() bool { return false }\n",
-            encoding="utf-8",
-        )
+    if use_review_workflow and selector != "W02-05-verdict-refused-missing-findings":
+        _, cmd_cid = _answer_tool(client, sid, "command", {"command": "cat -n core.go"})
+        if selector == "W02-06-verdict-refused-stale-revision":
+            _wait_tool_result(sidecar.store_db_path, sid, "command", cmd_cid, timeout=30.0)
+            (workspace / "core.go").write_text(
+                "package core\n\nfunc Check() bool { return false }\n",
+                encoding="utf-8",
+            )
 
     grounded_approved_args: dict[str, Any] = {
         "verdict": {"verdict": "APPROVED", "summary": f"{prefix} Approved with evidence."},
@@ -975,7 +996,7 @@ def _run_verdict_slot(
     if selector == "W02-04-verdict-refused-unobserved-citation":
         verdict_args: dict[str, Any] = {
             "verdict": {"verdict": "APPROVED", "summary": f"{prefix} Approved."},
-            "cited_evidence": [{"handle": "read#99", "path": "core.go", "line": 1}],
+            "cited_evidence": [{"handle": "read#99"}],
         }
     elif selector == "W02-05-verdict-refused-missing-findings":
         verdict_args = {
@@ -1010,20 +1031,39 @@ def _run_verdict_slot(
     _answer_tool(client, sid, "submit_verdict", verdict_args)
 
     if selector == "W02-07-verdict-refused-duplicate-submission":
-        # After terminal APPROVED auto-advances to `done`, attempt a second submit_verdict.
-        try:
-            dup_req = client.wait_pending(sid, timeout=10.0)
-        except TimeoutError:
-            client.send_prompt(sid, f"{prefix} Submit duplicate verdict.")
-            dup_req = client.wait_pending(sid, timeout=60.0)
+        # After terminal APPROVED auto-advances to `done`, drain the workflow
+        # closeout turn so the session returns to a normal prompt turn, then
+        # attempt a duplicate submit_verdict from the terminal/post-review state.
+        if workflow_run_id:
+            _drain_workflow_closeout(
+                client,
+                session_id=sid,
+                workflow_run_id=workflow_run_id,
+                close_content=f"{prefix} First verdict recorded [read#1:3].",
+                timeout=60.0,
+            )
+        dup_prompt = client.send_prompt(sid, f"{prefix} Submit duplicate verdict.")
+        submission_id = str(dup_prompt.get("submission_id") or dup_prompt.get("id") or "")
+        dup_req = client.wait_pending(sid, timeout=60.0)
+        dup_cid = str(uuid.uuid4())
         client.respond(
             dup_req["id"],
-            tool_calls=[{"id": str(uuid.uuid4()), "name": "submit_verdict", "args": verdict_args}],
+            tool_calls=[{"id": dup_cid, "name": "submit_verdict", "args": verdict_args}],
         )
+        _wait_tool_result(sidecar.store_db_path, sid, "submit_verdict", dup_cid, timeout=30.0)
+        close_req = client.wait_pending(sid, timeout=60.0)
+        client.respond(close_req["id"], content=f"{prefix} Duplicate verdict check finished [read#1:3].")
+        client.wait_settled(sid, submission_id=submission_id, timeout=60.0)
     elif use_review_workflow and selector != "W02-01-verdict-approved-with-evidence":
         # Complete the review_loop cleanly on the next turn so the workflow settles without repair stalls.
         try:
             repair_req = client.wait_pending(sid, timeout=30.0)
+            if selector == "W02-05-verdict-refused-missing-findings" and "command" in (repair_req.get("tools") or []):
+                client.respond(
+                    repair_req["id"],
+                    tool_calls=[{"id": str(uuid.uuid4()), "name": "command", "args": {"command": "cat -n core.go"}}],
+                )
+                repair_req = client.wait_pending(sid, timeout=30.0)
             if "submit_verdict" in (repair_req.get("tools") or []):
                 client.respond(
                     repair_req["id"],
@@ -1101,9 +1141,11 @@ def _dispatch_worker_and_get_child(
     scope_paths: tuple[str, ...],
     goal: str,
     ignore_sessions: set[str],
+    send_initial_prompt: bool = True,
     timeout: float = 180.0,
 ) -> tuple[str, dict[str, Any]]:
-    client.send_prompt(root_sid, f"Dispatch {agent_type} to {goal}.")
+    if send_initial_prompt:
+        client.send_prompt(root_sid, f"Dispatch {agent_type} to {goal}.")
     _, progress_cid = _answer_tool(
         client,
         root_sid,
@@ -1254,19 +1296,25 @@ def _run_worker_slot(
             ),
         )
     elif selector == "W03-03-implementer-complete-with-artifact":
+        # Turn 1: pure read to mint read#1; Turn 2: disk mutation to produce artifact.
         client.respond(
             child_req["id"],
-            tool_calls=[
-                {
-                    "id": str(uuid.uuid4()),
-                    "name": "command",
-                    "args": {"command": "cat -n core.go && printf '\\n// gb06 artifact\\n' >> core.go"},
-                }
-            ],
+            tool_calls=[{"id": str(uuid.uuid4()), "name": "command", "args": {"command": "cat -n core.go"}}],
         )
         child_req2 = client.wait_pending(child_sid, timeout=120.0)
         client.respond(
             child_req2["id"],
+            tool_calls=[
+                {
+                    "id": str(uuid.uuid4()),
+                    "name": "command",
+                    "args": {"command": "printf '\\n// gb06 artifact\\n' >> core.go"},
+                }
+            ],
+        )
+        child_req3 = client.wait_pending(child_sid, timeout=120.0)
+        client.respond(
+            child_req3["id"],
             tool_calls=_complete_leg_call(
                 f"{prefix} Updated core.go with artifact.",
                 [{"path": "core.go", "line": 3, "evidence": "read#1", "note": "Updated core.go."}],
@@ -1286,15 +1334,24 @@ def _run_worker_slot(
             ),
         )
         # After WORKER_SUMMARY_NO_ARTIFACT refusal, close with partial status so root resumes cleanly.
-        child_req3 = client.wait_pending(child_sid, timeout=120.0)
-        client.respond(
-            child_req3["id"],
-            tool_calls=_complete_leg_call(
-                f"{prefix} No disk change applied.",
-                [{"path": "core.go", "line": 3, "evidence": "read#1", "note": "Partial leg."}],
-                leg_status="partial",
-            ),
-        )
+        # Poll both child_sid and root_sid so if D1 falsely accepts, we never hang for 120s.
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
+            cp = client.get_pending(child_sid)
+            if cp is not None:
+                client.respond(
+                    cp["id"],
+                    tool_calls=_complete_leg_call(
+                        f"{prefix} No disk change applied.",
+                        [{"path": "core.go", "line": 3, "evidence": "read#1", "note": "Partial leg."}],
+                        leg_status="partial",
+                    ),
+                )
+                break
+            rp = client.get_pending(root_sid)
+            if rp is not None:
+                break
+            time.sleep(0.15)
     elif selector in {
         "W03-06-reviewer-refused-without-verdict",
         "W03-08-verifier-refused-without-receipt",
@@ -1639,12 +1696,21 @@ def run_gb06_full_sidecar(
     manifest_dict: dict[str, Any] | None = None
     plat = "unknown"
 
+    bundled_git_present = (
+        (pathlib.Path(product_root) / "lycaon-den" / "src-tauri" / "engine-root" / "gitengine" / "bin" / "git").is_file()
+        or (pathlib.Path(product_root) / "lycaon-den" / "src-tauri" / "engine-root" / "gitengine" / "cmd" / "git.exe").is_file()
+    )
+
     for run_unit in runs:
         run_tag = f"{run_unit.spec.selector}__{run_unit.wording}"
         case_dir = out_dir / "cases" / run_tag
         workspace = case_dir / "workspace"
         config_dir = case_dir / "config"
-        _init_git_workspace(workspace)
+        # Write-scoped workers trigger privategit seeded-index refresh when the
+        # workspace contains a .git repo; skip git init when bundled gitengine
+        # is not staged in product_root so overlay write-worker tests can run.
+        init_git = bundled_git_present or run_unit.exec_spec.worker_scope_mode != "write"
+        _init_git_workspace(workspace, init_git=init_git)
 
         sidecar = IsolatedSidecarProcess(
             engine_bin,
