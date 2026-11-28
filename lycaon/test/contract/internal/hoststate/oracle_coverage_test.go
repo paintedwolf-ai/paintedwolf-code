@@ -24,6 +24,7 @@ import (
 )
 
 func TestReaderHeldMatchesMetadataProgramReachAcrossHostStates(t *testing.T) {
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	overlays, err := hoststate.DiscoverPackOverlays(t.Context())
 	contractcheck.FailErr(t, "DiscoverPackOverlays", err)
 	stock := overlays[0]
@@ -121,6 +122,7 @@ func buildWidestTupleReader(
 }
 
 func TestCommandExternalSelectorVisibilityWitness(t *testing.T) {
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	overlays, err := hoststate.DiscoverPackOverlays(t.Context())
 	contractcheck.FailErr(t, "DiscoverPackOverlays", err)
 	stock := overlays[0]
@@ -353,6 +355,7 @@ func assertReaderRunnerSchemaParity(t *testing.T, label string, reader prompts.R
 }
 
 func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *testing.T) {
+	t.Cleanup(hoststate.HoldAuthorityMemos())
 	overlays, err := hoststate.DiscoverPackOverlays(t.Context())
 	contractcheck.FailErr(t, "DiscoverPackOverlays", err)
 	stock := overlays[0]

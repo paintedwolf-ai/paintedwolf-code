@@ -136,15 +136,79 @@ type writeFloorProgram struct {
 	valueCache map[*ssa.Function]map[*ssa.Function]bool
 }
 
-// loadWriteFloorProgram builds function bodies for lycaon packages only;
-// dependencies contribute types. A function value handed to a body-less
-// dependency is taken as called.
+// loadWriteFloorProgram builds function bodies for the lycaon packages
+// transitively imported by toolfixture (the serve-boot handler registry);
+// external dependencies contribute types. A function value handed to a
+// body-less dependency is taken as called.
 func loadWriteFloorProgram(t *testing.T) *writeFloorProgram {
 	t.Helper()
 	started := time.Now()
 	dir := filepath.Join(contractcheck.RepoRoot(t), "lycaon")
+	patterns := writeFloorPackagePatterns(t, dir)
+	prog := buildWriteFloorSSA(t, dir, patterns)
+	funcs := ssautil.AllFunctions(prog)
+	graph := buildWriteFloorCallGraph(prog, funcs)
+
+	p := &writeFloorProgram{dir: dir, graph: graph, byName: map[string]*ssa.Function{}, byLine: map[string][]*ssa.Function{}, valueCache: map[*ssa.Function]map[*ssa.Function]bool{}}
+	for fn := range funcs {
+		name := fn.String()
+		p.byName[name] = fn
+		if name == writeFloor {
+			p.floor = fn
+		}
+		if key := p.lineKey(prog.Fset.Position(fn.Pos()).Filename, prog.Fset.Position(fn.Pos()).Line); key != "" && fn.Synthetic == "" {
+			p.byLine[key] = append(p.byLine[key], fn)
+		}
+	}
+	if p.floor == nil {
+		t.Fatalf("%s is not in the analyzed program; update writeFloor to the write-scope resolver", writeFloor)
+	}
+	t.Logf("write floor call graph over %d functions (%d packages) built in %s", len(funcs), len(patterns), time.Since(started).Round(time.Millisecond))
+	return p
+}
+
+// writeFloorPackagePatterns resolves the module-local internal/ and pkg/
+// packages transitively imported by toolfixture so unreachable packages are
+// excluded from syntax loading, SSA construction, and VTA.
+func writeFloorPackagePatterns(t *testing.T, dir string) []string {
+	t.Helper()
+	metaCfg := &packages.Config{
+		Mode: packages.NeedName | packages.NeedImports | packages.NeedDeps,
+		Dir:  dir,
+	}
+	roots, err := packages.Load(metaCfg, "./test/contract/internal/toolfixture")
+	contractcheck.FailErr(t, "resolve toolfixture package closure", err)
+	seen := map[string]bool{}
+	var out []string
+	var visit func(*packages.Package)
+	visit = func(p *packages.Package) {
+		if p == nil || seen[p.PkgPath] {
+			return
+		}
+		seen[p.PkgPath] = true
+		if rel, ok := strings.CutPrefix(p.PkgPath, lycaonModule+"/"); ok {
+			if strings.HasPrefix(rel, "internal/") || strings.HasPrefix(rel, "pkg/") {
+				out = append(out, "./"+rel)
+			}
+		}
+		for _, imp := range p.Imports {
+			visit(imp)
+		}
+	}
+	for _, r := range roots {
+		visit(r)
+	}
+	sort.Strings(out)
+	if len(out) == 0 {
+		t.Fatal("toolfixture package closure resolved no internal/ or pkg/ packages")
+	}
+	return out
+}
+
+func buildWriteFloorSSA(t *testing.T, dir string, patterns []string) *ssa.Program {
+	t.Helper()
 	cfg := &packages.Config{Mode: packages.LoadSyntax, Dir: dir}
-	pkgs, err := packages.Load(cfg, "./internal/...", "./pkg/...")
+	pkgs, err := packages.Load(cfg, patterns...)
 	contractcheck.FailErr(t, "load lycaon packages", err)
 	var loadErrs []string
 	for _, p := range pkgs {
@@ -174,25 +238,11 @@ func loadWriteFloorProgram(t *testing.T) *writeFloorProgram {
 		createDeps(p.Types)
 	}
 	prog.Build()
-	funcs := ssautil.AllFunctions(prog)
-	graph := vta.CallGraph(funcs, cha.CallGraph(prog))
+	return prog
+}
 
-	p := &writeFloorProgram{dir: dir, graph: graph, byName: map[string]*ssa.Function{}, byLine: map[string][]*ssa.Function{}, valueCache: map[*ssa.Function]map[*ssa.Function]bool{}}
-	for fn := range funcs {
-		name := fn.String()
-		p.byName[name] = fn
-		if name == writeFloor {
-			p.floor = fn
-		}
-		if key := p.lineKey(prog.Fset.Position(fn.Pos()).Filename, prog.Fset.Position(fn.Pos()).Line); key != "" && fn.Synthetic == "" {
-			p.byLine[key] = append(p.byLine[key], fn)
-		}
-	}
-	if p.floor == nil {
-		t.Fatalf("%s is not in the analyzed program; update writeFloor to the write-scope resolver", writeFloor)
-	}
-	t.Logf("write floor call graph over %d functions built in %s", len(funcs), time.Since(started).Round(time.Millisecond))
-	return p
+func buildWriteFloorCallGraph(prog *ssa.Program, funcs map[*ssa.Function]bool) *callgraph.Graph {
+	return vta.CallGraph(funcs, cha.CallGraph(prog))
 }
 
 // lineKey names a source line relative to the lycaon module.

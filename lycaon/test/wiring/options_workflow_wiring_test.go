@@ -56,8 +56,7 @@ func TestOptionsWorkflowEndToEnd(t *testing.T) {
 	h.Server.Admin.Workflow.Topology.StartOrchestratedTopologyForRun(ctx, sess.ID, run)
 	testutil.FailErr(t, "recover pending topology", h.Server.Admin.Workflow.Topology.RecoverOrchestratedTopologies(ctx))
 	pendingCtx := t.Context()
-	h.Server.WaitForBackground(pendingCtx)
-	if err := pendingCtx.Err(); err != nil {
+	if err := h.Server.WaitForBackground(pendingCtx); err != nil {
 		t.Fatalf("pending topology background work did not settle: %v", err)
 	}
 
@@ -77,8 +76,7 @@ func TestOptionsWorkflowEndToEnd(t *testing.T) {
 	waitTopologyStageComplete(t, h.Workflows.Manager, run.ID, orchestration.TopologyBindStageFanOut)
 	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "judge")
 	settleCtx := t.Context()
-	h.Server.WaitForBackground(settleCtx)
-	if err := settleCtx.Err(); err != nil {
+	if err := h.Server.WaitForBackground(settleCtx); err != nil {
 		t.Fatalf("topology background work did not settle: %v", err)
 	}
 

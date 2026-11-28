@@ -21,6 +21,7 @@ type recipientReach struct {
 
 func sweptRecipients(t *testing.T) []recipientReach {
 	t.Helper()
+	defer hoststate.HoldAuthorityMemos()()
 	var out []recipientReach
 	coord, err := hoststate.CoordinatorStates(t.Context())
 	contractcheck.FailErr(t, "CoordinatorStates", err)

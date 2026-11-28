@@ -158,7 +158,7 @@ func typeCheck(g *GoCorpus, env []string) (*Program, error) {
 		errs []error
 		wg   sync.WaitGroup
 	)
-	slots := make(chan struct{}, runtime.GOMAXPROCS(0))
+	slots := make(chan struct{}, min(runtime.GOMAXPROCS(0), 4))
 	for _, pkg := range local {
 		wg.Go(func() {
 			defer close(done[pkg.ImportPath])
@@ -192,13 +192,12 @@ func checkPackage(g *GoCorpus, imp *programImporter, pkg listedPackage) (*TypedP
 		return nil, err
 	}
 	typed := &TypedPackage{Path: pkg.ImportPath, Info: &types.Info{
-		Types:        map[ast.Expr]types.TypeAndValue{},
-		Defs:         map[*ast.Ident]types.Object{},
-		Uses:         map[*ast.Ident]types.Object{},
-		Selections:   map[*ast.SelectorExpr]*types.Selection{},
-		Implicits:    map[ast.Node]types.Object{},
-		Instances:    map[*ast.Ident]types.Instance{},
-		FileVersions: map[*ast.File]string{},
+		Types:      map[ast.Expr]types.TypeAndValue{},
+		Defs:       map[*ast.Ident]types.Object{},
+		Uses:       map[*ast.Ident]types.Object{},
+		Selections: map[*ast.SelectorExpr]*types.Selection{},
+		Implicits:  map[ast.Node]types.Object{},
+		Instances:  map[*ast.Ident]types.Instance{},
 	}}
 	var files []*ast.File
 	for _, name := range append(append([]string(nil), pkg.GoFiles...), pkg.CgoFiles...) {

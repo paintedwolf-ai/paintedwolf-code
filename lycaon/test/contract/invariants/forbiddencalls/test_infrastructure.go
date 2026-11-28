@@ -143,7 +143,323 @@ var testInfrastructure = []invariants.Invariant{{
 			})
 		}
 	},
+}, {
+	// Every test or fuzz entry point reaching a hoststate authority accessor
+	// must open and release HoldAuthorityMemos with a verified cleanup pattern
+	// (t.Cleanup/defer in tests or helpers, or explicit release after m.Run in
+	// TestMain) covering the accessor statement, so an ambient hold from
+	// another parallel test cannot mask a missing hold at the call site.
+	Name: "hoststate-authority-tests-hold-memos",
+	Anchors: []invariants.Anchor{
+		invariants.Func("test/contract/internal/hoststate", "HoldAuthorityMemos"),
+		invariants.Func("test/contract/internal/hoststate", "FreezeTurnAuthority"),
+		invariants.Func("test/contract/internal/hoststate", "FreezeWorkerAuthority"),
+	},
+	Exempt: []invariants.Exemption{{
+		Key:    "test/contract/internal/hoststate/authority_hold_test.go",
+		Reason: "exercises unheld authority accessors to verify ErrAuthorityMemosNotHeld",
+	}},
+	Check: checkHostStateAuthorityHolds,
 }}
+
+const hoststateImportPath = "github.com/lycaon/lycaon/test/contract/internal/hoststate"
+
+var hoststateAuthorityAccessors = map[string]bool{
+	"BuildWorkerState":                 true,
+	"ExecutorForOverlay":               true,
+	"FreezeTurnAuthority":              true,
+	"FreezeTurnAuthorityWithResources": true,
+	"FreezeWorkerAuthority":            true,
+	"RegistryAndExecutorForOverlay":    true,
+	"ResolveWorkerSeed":                true,
+	"WorkerReaderForSession":           true,
+	"WorkerStates":                     true,
+}
+
+func checkHostStateAuthorityHolds(r *invariants.Run) {
+	byPkg := map[string][]*invariants.GoFile{}
+	for _, f := range r.GoFiles(invariants.Tests, "test/contract") {
+		key := f.Dir + "\x00" + f.PkgName
+		byPkg[key] = append(byPkg[key], f)
+	}
+	for _, files := range byPkg {
+		importsHostState := false
+		for _, f := range files {
+			if f.Imports(hoststateImportPath) {
+				importsHostState = true
+				break
+			}
+		}
+		if !importsHostState {
+			continue
+		}
+		checkHostStateAuthorityHoldPkg(r, files)
+	}
+}
+
+func checkHostStateAuthorityHoldPkg(r *invariants.Run, files []*invariants.GoFile) {
+	funcPos := map[string]token.Pos{}
+	funcRel := map[string]string{}
+	unheldDirectAuth := map[string]bool{}
+	unheldLocalCalls := map[string][]string{}
+	testMainCoversRun := false
+
+	for _, f := range files {
+		f.Funcs(func(fn *ast.FuncDecl) {
+			if fn.Recv != nil || fn.Body == nil {
+				return
+			}
+			name := fn.Name.Name
+			funcPos[name] = fn.Pos()
+			funcRel[name] = f.Rel
+
+			isTestMain := name == "TestMain"
+			start, end, hasHold := verifiedHoldSpan(f, fn, isTestMain)
+			if isTestMain && hasHold {
+				testMainCoversRun = true
+			}
+
+			inspectStmt := func(stmt ast.Stmt) {
+				f.Calls(stmt, func(_ *ast.CallExpr, pkg, callee string) {
+					if pkg == hoststateImportPath && hoststateAuthorityAccessors[callee] {
+						unheldDirectAuth[name] = true
+					}
+				})
+				ast.Inspect(stmt, func(n ast.Node) bool {
+					call, ok := n.(*ast.CallExpr)
+					if !ok {
+						return true
+					}
+					if id, ok := ast.Unparen(call.Fun).(*ast.Ident); ok && id.Name != "" {
+						unheldLocalCalls[name] = append(unheldLocalCalls[name], id.Name)
+					}
+					return true
+				})
+			}
+
+			for i, stmt := range fn.Body.List {
+				if hasHold && i >= start && i < end {
+					continue
+				}
+				inspectStmt(stmt)
+			}
+		})
+	}
+	if testMainCoversRun {
+		return
+	}
+	for name, pos := range funcPos {
+		if name == "TestMain" || (!strings.HasPrefix(name, "Test") && !strings.HasPrefix(name, "Fuzz") && !strings.HasPrefix(name, "Benchmark")) {
+			continue
+		}
+		if r.Exempt(funcRel[name]) {
+			continue
+		}
+		visited := map[string]bool{name: true}
+		queue := []string{name}
+		for len(queue) > 0 {
+			cur := queue[0]
+			queue = queue[1:]
+			if unheldDirectAuth[cur] {
+				if cur == name {
+					r.ReportAt(pos, "%s calls hoststate authority accessor outside a verified HoldAuthorityMemos span", name)
+				} else {
+					r.ReportAt(pos, "%s reaches hoststate authority accessor via %s outside a verified HoldAuthorityMemos span", name, cur)
+				}
+				break
+			}
+			for _, next := range unheldLocalCalls[cur] {
+				if visited[next] {
+					continue
+				}
+				if _, exists := funcPos[next]; exists {
+					visited[next] = true
+					queue = append(queue, next)
+				}
+			}
+		}
+	}
+}
+
+// verifiedHoldSpan returns the statement-index range [start, end) in fn.Body.List
+// covered by a verified HoldAuthorityMemos acquisition and cleanup pattern.
+// Cleanup calls must target the enclosing function's testing.T/F/B/TB parameter,
+// an explicit early release stops coverage even if a defer/Cleanup was also
+// registered, and in TestMain only an explicit release after the *testing.M
+// parameter's direct Run() call is accepted.
+func verifiedHoldSpan(f *invariants.GoFile, fn *ast.FuncDecl, isTestMain bool) (int, int, bool) {
+	stmts := fn.Body.List
+	testParams := testingParamNames(f, fn)
+	testMainM := ""
+	if isTestMain {
+		testMainM = testMainMParam(f, fn)
+	}
+	for i, stmt := range stmts {
+		switch s := stmt.(type) {
+		case *ast.ExprStmt:
+			if !isTestMain && isCleanupWithHoldCall(f, s.X, testParams) {
+				return i, len(stmts), true
+			}
+		case *ast.DeferStmt:
+			if !isTestMain && s.Call != nil && isHoldAuthorityCall(f, s.Call.Fun) {
+				return i, len(stmts), true
+			}
+		case *ast.AssignStmt:
+			if len(s.Lhs) != 1 || len(s.Rhs) != 1 {
+				continue
+			}
+			id, ok := ast.Unparen(s.Lhs[0]).(*ast.Ident)
+			if !ok || id.Name == "_" || !isHoldAuthorityCall(f, s.Rhs[0]) {
+				continue
+			}
+			if end, ok := findVerifiedRelease(stmts, i+1, id.Name, testParams, testMainM); ok {
+				return i, end, true
+			}
+		}
+	}
+	return 0, 0, false
+}
+
+func testingParamNames(f *invariants.GoFile, fn *ast.FuncDecl) map[string]bool {
+	out := map[string]bool{}
+	if fn.Type == nil || fn.Type.Params == nil {
+		return out
+	}
+	for _, field := range fn.Type.Params.List {
+		expr := ast.Unparen(field.Type)
+		isPtr := false
+		if star, ok := expr.(*ast.StarExpr); ok {
+			isPtr = true
+			expr = ast.Unparen(star.X)
+		}
+		pkg, name, ok := f.Qualified(expr)
+		if !ok || pkg != "testing" {
+			continue
+		}
+		valid := (!isPtr && name == "TB") || (isPtr && (name == "T" || name == "F" || name == "B"))
+		if !valid {
+			continue
+		}
+		for _, id := range field.Names {
+			out[id.Name] = true
+		}
+	}
+	return out
+}
+
+func testMainMParam(f *invariants.GoFile, fn *ast.FuncDecl) string {
+	if fn.Type == nil || fn.Type.Params == nil {
+		return ""
+	}
+	for _, field := range fn.Type.Params.List {
+		star, ok := ast.Unparen(field.Type).(*ast.StarExpr)
+		if !ok {
+			continue
+		}
+		pkg, name, ok := f.Qualified(star.X)
+		if ok && pkg == "testing" && name == "M" && len(field.Names) > 0 {
+			return field.Names[0].Name
+		}
+	}
+	return ""
+}
+
+func isHoldAuthorityCall(f *invariants.GoFile, expr ast.Expr) bool {
+	call, ok := ast.Unparen(expr).(*ast.CallExpr)
+	if !ok || len(call.Args) != 0 {
+		return false
+	}
+	pkg, name, ok := f.Qualified(call.Fun)
+	return ok && pkg == hoststateImportPath && name == "HoldAuthorityMemos"
+}
+
+func isCleanupCallOn(call *ast.CallExpr, testParams map[string]bool) bool {
+	if call == nil || len(call.Args) != 1 {
+		return false
+	}
+	sel, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "Cleanup" {
+		return false
+	}
+	recv, ok := ast.Unparen(sel.X).(*ast.Ident)
+	return ok && testParams[recv.Name]
+}
+
+func isCleanupWithHoldCall(f *invariants.GoFile, expr ast.Expr, testParams map[string]bool) bool {
+	call, ok := ast.Unparen(expr).(*ast.CallExpr)
+	return ok && isCleanupCallOn(call, testParams) && isHoldAuthorityCall(f, call.Args[0])
+}
+
+func findVerifiedRelease(stmts []ast.Stmt, from int, varName string, testParams map[string]bool, testMainM string) (int, bool) {
+	isTestMain := testMainM != ""
+	sawMRun := false
+	hasDeferredCleanup := false
+	for j := from; j < len(stmts); j++ {
+		if isTestMain && stmtCallsMRun(stmts[j], testMainM) {
+			sawMRun = true
+		}
+		switch s := stmts[j].(type) {
+		case *ast.DeferStmt:
+			if !isTestMain && isZeroArgIdentCall(s.Call, varName) {
+				hasDeferredCleanup = true
+			}
+		case *ast.ExprStmt:
+			call, ok := ast.Unparen(s.X).(*ast.CallExpr)
+			if !ok {
+				continue
+			}
+			if !isTestMain && isCleanupCallOn(call, testParams) {
+				if arg, ok := ast.Unparen(call.Args[0]).(*ast.Ident); ok && arg.Name == varName {
+					hasDeferredCleanup = true
+				}
+			}
+			if isZeroArgIdentCall(call, varName) {
+				if isTestMain && !sawMRun {
+					return 0, false
+				}
+				return j, true
+			}
+		}
+	}
+	if hasDeferredCleanup {
+		return len(stmts), true
+	}
+	return 0, false
+}
+
+func isZeroArgIdentCall(call *ast.CallExpr, name string) bool {
+	if call == nil || len(call.Args) != 0 {
+		return false
+	}
+	id, ok := ast.Unparen(call.Fun).(*ast.Ident)
+	return ok && id.Name == name
+}
+
+func stmtCallsMRun(stmt ast.Stmt, mParam string) bool {
+	if mParam == "" {
+		return false
+	}
+	found := false
+	ast.Inspect(stmt, func(n ast.Node) bool {
+		if _, isClosure := n.(*ast.FuncLit); isClosure {
+			return false
+		}
+		call, ok := n.(*ast.CallExpr)
+		if !ok || len(call.Args) != 0 {
+			return true
+		}
+		sel, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != "Run" {
+			return true
+		}
+		if recv, ok := ast.Unparen(sel.X).(*ast.Ident); ok && recv.Name == mParam {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
 
 func directDatabaseScenarios(files ...string) []invariants.Exemption {
 	out := make([]invariants.Exemption, 0, len(files))

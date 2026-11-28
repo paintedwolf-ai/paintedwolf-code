@@ -187,6 +187,7 @@ func (s *ModelSecretScreen) Screen(ctx context.Context, destination ScreenDestin
 		SessionID: sessionID, RootSessionID: rootSessionID,
 		ProjectID: projectID, ProjectDir: projectDir,
 	})
+	var initialValues []secretmatch.Remembered
 	if s.evidence != nil && projectID != "" {
 		values, err := s.evidence(ctx, projectID, rootSessionID)
 		if err != nil {
@@ -195,6 +196,7 @@ func (s *ModelSecretScreen) Screen(ctx context.Context, destination ScreenDestin
 				Err:   err,
 			}
 		}
+		initialValues = values
 		ctx = secretmatch.WithScreeningValues(ctx, values)
 	}
 	if s.matcher.Inert() {
@@ -271,7 +273,7 @@ func (s *ModelSecretScreen) Screen(ctx context.Context, destination ScreenDestin
 	case secretmatch.SendRedacted:
 		return redactModelRequest(ctx, s.matcher, req, nil), nil
 	case secretmatch.TrackAndReplace:
-		return s.trackAndReplace(ctx, req, projectID, rootSessionID, sessionID, hits)
+		return s.trackAndReplace(ctx, req, projectID, rootSessionID, sessionID, hits, initialValues)
 	case secretmatch.Withhold:
 		// A refusal sends neither the original nor a redacted copy.
 		return modelcall.CompletionRequest{}, &ModelRequestSecretWithheldError{Guidance: resolution.Guidance}
@@ -290,11 +292,13 @@ func (s *ModelSecretScreen) trackAndReplace(
 	req modelcall.CompletionRequest,
 	projectID, rootSessionID, sessionID string,
 	hits []locatedModelSecret,
+	existingValues []secretmatch.Remembered,
 ) (modelcall.CompletionRequest, error) {
 	if s.adopter == nil {
 		return modelcall.CompletionRequest{}, &ModelRequestSecretScreenFaultError{Stage: secretmatch.FaultStageManagedSecretStore}
 	}
 	seen := map[string]struct{}{}
+	adopted := make([]secretmatch.Remembered, 0, len(hits))
 	for _, hit := range hits {
 		if hit.value == "" {
 			continue
@@ -310,7 +314,7 @@ func (s *ModelSecretScreen) trackAndReplace(
 			}
 		}
 		name := firstNonEmpty(hit.match.VarName, hit.label, hit.match.Title, "Detected credential")
-		_, err := s.adopter(ctx, ManagedSecretAdoptRequest{
+		ref, err := s.adopter(ctx, ManagedSecretAdoptRequest{
 			ProjectID: projectID, RootSessionID: rootSessionID, SessionID: sessionID,
 			OperationID: "detected:" + string(hit.match.Fingerprint),
 			Name:        name, Purpose: "Detected in an outbound " + string(hit.sourceKind), Value: hit.value,
@@ -318,8 +322,72 @@ func (s *ModelSecretScreen) trackAndReplace(
 		if err != nil {
 			return modelcall.CompletionRequest{}, &ModelRequestSecretScreenFaultError{Stage: secretmatch.FaultStageManagedSecretStore, Err: err}
 		}
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			return modelcall.CompletionRequest{}, &ModelRequestSecretScreenFaultError{
+				Stage: secretmatch.FaultStageManagedSecretStore,
+				Err:   fmt.Errorf("adopted credential returned no managed reference"),
+			}
+		}
+		adopted = append(adopted, secretmatch.Remembered{
+			Secret:         hit.value,
+			Name:           name,
+			Origin:         "managed secret",
+			RuleID:         secretmatch.ManagedRuleID,
+			Title:          "A managed secret",
+			Source:         secretmatch.SourceRememberedMatch,
+			Reference:      ref,
+			NonDisclosable: true,
+		})
 	}
-	return redactModelRequest(ctx, s.matcher, req, keepOnlyReferences), nil
+	values := existingValues
+	if s.evidence != nil && projectID != "" {
+		refreshed, err := s.evidence(ctx, projectID, rootSessionID)
+		if err != nil {
+			return modelcall.CompletionRequest{}, &ModelRequestSecretScreenFaultError{
+				Stage: secretmatch.FaultStageManagedSecretStore,
+				Err:   err,
+			}
+		}
+		values = refreshed
+	}
+	values = mergeAdoptedScreeningValues(values, adopted)
+	ctx = secretmatch.WithScreeningValues(ctx, values)
+	out := redactModelRequest(ctx, s.matcher, req, keepOnlyReferences)
+	if len(adopted) > 0 {
+		for _, rem := range inspectModelRequest(ctx, s.matcher, out) {
+			if _, protected := seen[rem.value]; protected {
+				return modelcall.CompletionRequest{}, &ModelRequestSecretScreenFaultError{
+					Stage: secretmatch.FaultStageManagedSecretStore,
+					Err:   fmt.Errorf("protected credential remained unreplaced in outbound request"),
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+func mergeAdoptedScreeningValues(existing, adopted []secretmatch.Remembered) []secretmatch.Remembered {
+	if len(adopted) == 0 {
+		return existing
+	}
+	bySecret := make(map[string]int, len(existing)+len(adopted))
+	merged := make([]secretmatch.Remembered, 0, len(existing)+len(adopted))
+	for _, v := range existing {
+		bySecret[v.Secret] = len(merged)
+		merged = append(merged, v)
+	}
+	for _, v := range adopted {
+		if idx, ok := bySecret[v.Secret]; ok {
+			if strings.TrimSpace(merged[idx].Reference) == "" || !secretmatch.IsManagedRule(merged[idx].RuleID) {
+				merged[idx] = v
+			}
+			continue
+		}
+		bySecret[v.Secret] = len(merged)
+		merged = append(merged, v)
+	}
+	return merged
 }
 
 func containsNonDisclosable(hits []locatedModelSecret) bool {
