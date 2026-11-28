@@ -14,8 +14,9 @@ func TestFSEventsNoSentinelAndMultiPumpReportSettleUnproven(t *testing.T) {
 	ctx := t.Context()
 
 	t.Run("cross-volume no sentinel", func(t *testing.T) {
-		restore := UseSentinelDeviceCheck(func(string, string) bool { return false })
-		t.Cleanup(restore)
+		deny := func(string, string) bool { return false }
+		previous := SentinelDeviceCheckForTest.Swap(&deny)
+		t.Cleanup(func() { SentinelDeviceCheckForTest.Store(previous) })
 
 		root := t.TempDir()
 		r := newWatcherRegistry()
@@ -27,9 +28,6 @@ func TestFSEventsNoSentinelAndMultiPumpReportSettleUnproven(t *testing.T) {
 
 		if got := r.SettleStatus(ctx, root, 50*time.Millisecond, time.Second); got != SettleUnproven {
 			t.Fatalf("SettleStatus without sentinel = %v, want SettleUnproven", got)
-		}
-		if r.Settle(ctx, root, 50*time.Millisecond, time.Second) {
-			t.Fatal("Settle returned true without a sentinel barrier")
 		}
 	})
 
@@ -56,9 +54,6 @@ func TestFSEventsNoSentinelAndMultiPumpReportSettleUnproven(t *testing.T) {
 
 		if got := r.SettleStatus(ctx, root, 50*time.Millisecond, time.Second); got != SettleUnproven {
 			t.Fatalf("SettleStatus with secondary pump = %v, want SettleUnproven", got)
-		}
-		if r.Settle(ctx, root, 50*time.Millisecond, time.Second) {
-			t.Fatal("Settle returned true with an unproven secondary pump")
 		}
 	})
 }

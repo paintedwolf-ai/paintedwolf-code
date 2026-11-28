@@ -142,8 +142,7 @@ func TestGateStateWatcherLag(t *testing.T) {
 // held back.
 func TestGateStateNoSentinelFallbackVerifiesContentDirectly(t *testing.T) {
 	ctx := t.Context()
-	restoreDevice := repochange.UseSentinelDeviceCheck(func(string, string) bool { return false })
-	t.Cleanup(restoreDevice)
+	repochangetest.DisableSentinel(t)
 
 	root := t.TempDir()
 	repochangetest.Watch(t, root)

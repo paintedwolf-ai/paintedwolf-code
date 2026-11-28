@@ -14,7 +14,7 @@ import (
 
 // TestFlushOrdersBurstEditsIntoDebouncerBeforeBarrierAcknowledges is a
 // white-box ordering test (Decision 108): a burst of user-tree writes made
-// immediately before w.flush(ctx) must all be present in the debouncer the
+// immediately before w.flushStatus(ctx) must all be present in the debouncer the
 // instant the barrier acknowledges, with no sentinel path leaking through.
 func TestFlushOrdersBurstEditsIntoDebouncerBeforeBarrierAcknowledges(t *testing.T) {
 	ctx := t.Context()
@@ -41,7 +41,7 @@ func TestFlushOrdersBurstEditsIntoDebouncerBeforeBarrierAcknowledges(t *testing.
 	}
 
 	// Hold back debounce delivery so we can inspect debouncer.pending directly
-	// the instant w.flush(ctx) acknowledges.
+	// the instant w.flushStatus(ctx) acknowledges.
 	r.debounce.flush(ctx)
 	r.debounce.mu.Lock()
 	r.debounce.delay = 5 * time.Second
@@ -58,8 +58,8 @@ func TestFlushOrdersBurstEditsIntoDebouncerBeforeBarrierAcknowledges(t *testing.
 	// No sleep between the burst writes and the flush barrier.
 	flushCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	if !w.flush(flushCtx) {
-		t.Fatal("w.flush returned false before barrier acknowledged")
+	if got := w.flushStatus(flushCtx); got != SettleQuiet {
+		t.Fatalf("flushStatus = %v, want SettleQuiet", got)
 	}
 
 	// Immediately inspect debouncer.pending: every burst file must already be recorded.

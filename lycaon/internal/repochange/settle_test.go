@@ -19,8 +19,8 @@ func TestSettleRootFlushesAndFailsClosedWhenUnsettled(t *testing.T) {
 
 	target := filepath.Join(root, "file.go")
 	testutil.FailErr(t, "write initial", os.WriteFile(target, []byte("package p\n"), 0o600))
-	if !repochange.SettleRoot(ctx, root, 50*time.Millisecond, 2*time.Second) {
-		t.Fatal("SettleRoot returned false on a quiet tree")
+	if repochange.SettleRootStatus(ctx, root, 50*time.Millisecond, 2*time.Second) != repochange.SettleQuiet {
+		t.Fatal("SettleRootStatus did not report quiet on a quiet tree")
 	}
 
 	restoreDebounce := repochange.UseDebounce(ctx, 5*time.Second)
@@ -34,12 +34,12 @@ func TestSettleRootFlushesAndFailsClosedWhenUnsettled(t *testing.T) {
 	t.Cleanup(restore)
 
 	testutil.FailErr(t, "write under held debounce", os.WriteFile(target, []byte("package p // edited\n"), 0o600))
-	if repochange.SettleRoot(ctx, root, 50*time.Millisecond, 200*time.Millisecond) {
-		t.Fatal("SettleRoot reported settled while debounce was held back past maxWait")
+	if repochange.SettleRootStatus(ctx, root, 50*time.Millisecond, 200*time.Millisecond) == repochange.SettleQuiet {
+		t.Fatal("SettleRootStatus reported quiet while debounce was held back past maxWait")
 	}
 
 	restore()
-	if !repochange.SettleRoot(ctx, root, 50*time.Millisecond, 2*time.Second) {
-		t.Fatal("SettleRoot returned false after debounce was released")
+	if repochange.SettleRootStatus(ctx, root, 50*time.Millisecond, 2*time.Second) != repochange.SettleQuiet {
+		t.Fatal("SettleRootStatus did not report quiet after debounce was released")
 	}
 }

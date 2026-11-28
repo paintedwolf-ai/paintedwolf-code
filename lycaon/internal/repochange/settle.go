@@ -3,35 +3,16 @@ package repochange
 import (
 	"context"
 	"path/filepath"
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
-var (
-	sentinelDeviceMu    sync.RWMutex
-	sentinelDeviceCheck func(a, b string) bool
-)
-
-// UseSentinelDeviceCheck overrides the sentinel same-volume admission check
-// and returns a restore function. Passing nil restores the default OS check.
-func UseSentinelDeviceCheck(fn func(a, b string) bool) (restore func()) {
-	sentinelDeviceMu.Lock()
-	prev := sentinelDeviceCheck
-	sentinelDeviceCheck = fn
-	sentinelDeviceMu.Unlock()
-	return func() {
-		sentinelDeviceMu.Lock()
-		sentinelDeviceCheck = prev
-		sentinelDeviceMu.Unlock()
-	}
-}
+// SentinelDeviceCheckForTest overrides the sentinel same-volume admission check.
+var SentinelDeviceCheckForTest atomic.Pointer[func(a, b string) bool]
 
 func checkSentinelDevice(a, b string, fallback func(a, b string) bool) bool {
-	sentinelDeviceMu.RLock()
-	fn := sentinelDeviceCheck
-	sentinelDeviceMu.RUnlock()
-	if fn != nil {
-		return fn(a, b)
+	if fn := SentinelDeviceCheckForTest.Load(); fn != nil {
+		return (*fn)(a, b)
 	}
 	if fallback != nil {
 		return fallback(a, b)
@@ -39,24 +20,11 @@ func checkSentinelDevice(a, b string, fallback func(a, b string) bool) bool {
 	return true
 }
 
-// SettleRoot flushes the root's platform watcher barrier and waits until the
-// debouncer reaches quiet for grace, bounded by maxWait. It returns true only
-// when the barrier proved delivery and the debouncer reached quiet.
-func SettleRoot(ctx context.Context, root string, grace, maxWait time.Duration) bool {
-	return SettleRootStatus(ctx, root, grace, maxWait) == SettleQuiet
-}
-
 // SettleRootStatus flushes the root's platform watcher barrier and waits until
 // the debouncer reaches quiet, distinguishing SettleQuiet, SettleUnproven (no
 // sentinel barrier available), and SettleUnsettled (timed out or canceled).
 func SettleRootStatus(ctx context.Context, root string, grace, maxWait time.Duration) SettleStatus {
 	return processWatchers().SettleStatus(ctx, root, grace, maxWait)
-}
-
-// Settle flushes any live watcher for root into the debouncer, then waits for
-// the debouncer to reach quiet.
-func (r *watcherRegistry) Settle(ctx context.Context, root string, grace, maxWait time.Duration) bool {
-	return r.SettleStatus(ctx, root, grace, maxWait) == SettleQuiet
 }
 
 // SettleStatus flushes any live watcher for root into the debouncer, then waits
@@ -89,12 +57,8 @@ func (r *watcherRegistry) SettleStatus(ctx context.Context, root string, grace, 
 	return SettleQuiet
 }
 
-// flush drains events up to "now" from the platform watcher through the
+// flushStatus drains events up to "now" from the platform watcher through the
 // worktree loop into the debouncer.
-func (w *worktreeWatcher) flush(ctx context.Context) bool {
-	return w.flushStatus(ctx) == SettleQuiet
-}
-
 func (w *worktreeWatcher) flushStatus(ctx context.Context) SettleStatus {
 	if w == nil {
 		return SettleQuiet
