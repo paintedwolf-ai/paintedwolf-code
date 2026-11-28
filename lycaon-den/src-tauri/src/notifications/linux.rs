@@ -9,6 +9,7 @@ pub(crate) use activation::present_main_window;
 
 use std::{
     cell::RefCell,
+    collections::VecDeque,
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc, Arc, Mutex,
@@ -49,6 +50,7 @@ struct Worker {
 
 thread_local! {
     static WORKER: RefCell<Option<Worker>> = const { RefCell::new(None) };
+    static REQUESTS: RefCell<VecDeque<Request>> = const { RefCell::new(VecDeque::new()) };
 }
 
 pub(super) struct NativeNotifications {
@@ -157,14 +159,21 @@ pub(super) async fn cancel(app: &AppHandle, sessions: Vec<String>) -> Result<(),
 }
 
 fn handle(request: Request) {
-    let result = WORKER.with(|worker| {
-        let mut worker = worker.borrow_mut();
-        let Some(worker) = worker.as_mut() else {
-            return Err("Desktop notifications have stopped".into());
+    REQUESTS.with(|requests| requests.borrow_mut().push_back(request));
+    WORKER.with(|worker| {
+        // GLib can dispatch another request during a nested D-Bus wait.
+        // The active callback drains queued work after its current request.
+        let Ok(mut worker) = worker.try_borrow_mut() else {
+            return;
         };
-        worker.serve(&request.command, request.deadline)
+        while let Some(request) = REQUESTS.with(|requests| requests.borrow_mut().pop_front()) {
+            let result = match worker.as_mut() {
+                Some(worker) => worker.serve(&request.command, request.deadline),
+                None => Err("Desktop notifications have stopped".into()),
+            };
+            let _ = request.reply.send(result);
+        }
     });
-    let _ = request.reply.send(result);
 }
 
 impl Worker {
@@ -212,5 +221,36 @@ impl Worker {
             }
             _ => Err("The desktop notification service is unavailable".into()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn permission_request() -> (Request, mpsc::Receiver<Result<String, String>>) {
+        let (reply, receiver) = mpsc::sync_channel(1);
+        let request = Request {
+            command: Command::Permission,
+            deadline: Instant::now() + REQUEST_TIMEOUT,
+            reply,
+        };
+        (request, receiver)
+    }
+
+    #[test]
+    fn reentrant_notification_request_waits_for_the_active_callback() {
+        let (deferred, deferred_result) = permission_request();
+        WORKER.with(|worker| {
+            let _active = worker.borrow_mut();
+            handle(deferred);
+            assert_eq!(deferred_result.try_recv(), Err(mpsc::TryRecvError::Empty));
+        });
+
+        let (next, next_result) = permission_request();
+        handle(next);
+        let stopped = Err("Desktop notifications have stopped".to_string());
+        assert_eq!(deferred_result.try_recv(), Ok(stopped.clone()));
+        assert_eq!(next_result.try_recv(), Ok(stopped));
     }
 }
