@@ -194,6 +194,11 @@ func (w *indexWalk) prepare(ctx context.Context, full bool, changed []string) er
 		if skippedIndexPath(rel) {
 			continue
 		}
+		if !wholeTree {
+			if symPrefix, isSym := symlinkBoundaryPrefix(w.root, rel); isSym {
+				rel = symPrefix
+			}
+		}
 		if err := w.enqueueDir(ctx, rel); err != nil {
 			return err
 		}

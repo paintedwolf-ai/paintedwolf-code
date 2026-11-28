@@ -15,10 +15,11 @@ import (
 )
 
 // symlinkBoundaryPrefix returns the shallowest symlink prefix of rel (including rel itself)
-// when any path component along rel is a symlink.
-func symlinkBoundaryPrefix(root *os.Root, rel string) (string, os.FileInfo, bool, error) {
+// when any path component along rel is a symlink. Used only on watcher-delivered changed paths
+// in prepare so full 50k/500k walks incur zero per-ancestor Lstat overhead.
+func symlinkBoundaryPrefix(root *os.Root, rel string) (string, bool) {
 	if rel == "" || rel == "." {
-		return "", nil, false, nil
+		return "", false
 	}
 	parts := strings.Split(rel, "/")
 	prefix := ""
@@ -30,48 +31,29 @@ func symlinkBoundaryPrefix(root *os.Root, rel string) (string, os.FileInfo, bool
 		}
 		info, err := root.Lstat(filepath.FromSlash(prefix))
 		if err != nil {
-			return "", nil, false, err
+			return "", false
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			return prefix, info, true, nil
+			return prefix, true
 		}
 	}
-	return "", nil, false, nil
+	return "", false
 }
 
-// enforceDirectoryLinkBoundary ensures a symlink (or descendant of a symlink) is never
-// observed or published as a traversed directory, converging any stale alias rows.
-func (w *indexWalk) enforceDirectoryLinkBoundary(ctx context.Context, dir string) (os.FileInfo, bool, error) {
-	if dir == "." {
-		info, err := w.root.Lstat(".")
-		return info, false, err
-	}
-	symPrefix, symInfo, isSym, statErr := symlinkBoundaryPrefix(w.root, dir)
-	if statErr != nil {
-		if errors.Is(statErr, os.ErrNotExist) {
+// checkAdmittedDir validates in O(1) (single Lstat) that dir is a real directory
+// (not a symlink or leaf). If not, it converges the catalog row and returns handled=true.
+func (w *indexWalk) checkAdmittedDir(ctx context.Context, dir string) (os.FileInfo, bool, error) {
+	info, err := w.root.Lstat(filepath.FromSlash(dir))
+	if err != nil {
+		if dir != "." && errors.Is(err, os.ErrNotExist) {
 			if _, parentErr := w.store.stores.Directories.observeUntil(ctx, w.store, normalizeDir(path.Dir(dir)), 0, backgroundwork.PriorityProactive); parentErr != nil {
 				return nil, true, w.faultDir(ctx, dir, parentErr)
 			}
 			return nil, true, w.removeSubtree(ctx, dir, true)
 		}
-		return nil, true, w.faultDir(ctx, dir, statErr)
-	}
-	if isSym {
-		if dir != symPrefix {
-			if err := w.removeSubtree(ctx, dir, true); err != nil {
-				return nil, true, err
-			}
-		}
-		if _, parentErr := w.store.stores.Directories.observeUntil(ctx, w.store, normalizeDir(path.Dir(symPrefix)), 0, backgroundwork.PriorityProactive); parentErr != nil {
-			return nil, true, w.faultDir(ctx, symPrefix, parentErr)
-		}
-		return nil, true, w.writeLeaf(ctx, symPrefix, symInfo)
-	}
-	info, err := w.root.Lstat(filepath.FromSlash(dir))
-	if err != nil {
 		return nil, true, w.faultDir(ctx, dir, err)
 	}
-	if !info.IsDir() {
+	if dir != "." && (info.Mode()&os.ModeSymlink != 0 || !info.IsDir()) {
 		if _, parentErr := w.store.stores.Directories.observeUntil(ctx, w.store, normalizeDir(path.Dir(dir)), 0, backgroundwork.PriorityProactive); parentErr != nil {
 			return nil, true, w.faultDir(ctx, dir, parentErr)
 		}
@@ -88,9 +70,11 @@ func (w *indexWalk) visitDir(ctx context.Context, dir string) error {
 		}
 		return w.cut(ctx, indexCut{Dir: dir, Reason: sandbox.BoundaryLazy})
 	}
-	if _, handled, err := w.enforceDirectoryLinkBoundary(ctx, dir); handled || err != nil {
+	preInfo, handled, err := w.checkAdmittedDir(ctx, dir)
+	if handled || err != nil {
 		return err
 	}
+	preStamp := directoryStampOf(preInfo)
 	if err := w.begin(ctx); err != nil {
 		return err
 	}
@@ -123,9 +107,28 @@ func (w *indexWalk) visitDir(ctx context.Context, dir string) error {
 	if !observation.Complete && !bounded {
 		return errors.New("directory discovery ended before its publication completed")
 	}
-	info, handled, err := w.enforceDirectoryLinkBoundary(ctx, dir)
+	info, handled, err := w.checkAdmittedDir(ctx, dir)
 	if handled || err != nil {
 		return err
+	}
+	postStamp := directoryStampOf(info)
+	if dir != "." && observation.Stamp.known() && (observation.Stamp != postStamp || observation.Stamp != preStamp) {
+		// Cached or concurrently observed directory stamp does not match the admitted
+		// lexical directory on disk (e.g. concurrent alias/replacement); invalidate and re-observe once.
+		w.store.mu.Lock()
+		w.store.invalidateObservationsLocked([]string{dir})
+		w.store.mu.Unlock()
+		observation, err = w.directoryObservation(ctx, dir, limit)
+		if err != nil {
+			return w.faultDir(ctx, dir, err)
+		}
+		info, handled, err = w.checkAdmittedDir(ctx, dir)
+		if handled || err != nil {
+			return err
+		}
+		if observation.Stamp.known() && observation.Stamp != directoryStampOf(info) {
+			return w.faultDir(ctx, dir, os.ErrInvalid)
+		}
 	}
 	if err := w.begin(ctx); err != nil {
 		return err

@@ -103,3 +103,43 @@ func TestIndexDirectoryReplacedBySymlinkConvergesStaleAliasRows(t *testing.T) {
 		t.Fatalf("frontier=%d faults=%d complete=%v refreshing=%v", frontierCount, faultCount, after.Status.Complete, after.Status.Refreshing)
 	}
 }
+
+func TestIndexRejectsCachedForegroundSymlinkObservationAndPreservesForegroundReader(t *testing.T) {
+	c, root := indexFixture(t)
+	writeIndexFile(t, root.Path, "src/canon.go", "package src\n")
+	writeIndexFile(t, root.Path, "real_dir/ok.go", "package ok\n")
+	testutil.FailErr(t, "dir symlink", os.Symlink("src", filepath.Join(root.Path, "link_to_dir")))
+
+	reader := waitIndex(t, c, root)
+	scope := FileScope{Audience: HumanAudience, IncludeHidden: true}
+	if got := indexedPaths(t, reader, scope); !slices.Equal(got, []string{"real_dir/ok.go", "src/canon.go"}) {
+		t.Fatalf("initial files=%v", got)
+	}
+
+	// Simulate an unrelated foreground reader populating the shared directory observation
+	// cache through the in-root symlink; foreground listing must keep working while
+	// catalog reconciliation refuses to publish alias descendants.
+	store, err := c.Trees.indexStore(t.Context(), "p", root)
+	testutil.FailErr(t, "index store", err)
+	obs, err := c.Trees.Directories.observeUntil(t.Context(), store, "link_to_dir", 0, 0)
+	testutil.FailErr(t, "foreground symlink observation", err)
+	if !obs.Complete || obs.Entries != 1 {
+		t.Fatalf("foreground symlink observation unexpected: complete=%v entries=%d", obs.Complete, obs.Entries)
+	}
+
+	writeIndexFile(t, root.Path, "real_dir/added.go", "package ok\n")
+	c.InvalidateRoot(root.Path, "link_to_dir", "real_dir")
+
+	after := waitIndex(t, c, root)
+	got := indexedPaths(t, after, scope)
+	want := []string{"real_dir/added.go", "real_dir/ok.go", "src/canon.go"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("post-reconcile files=%v want=%v", got, want)
+	}
+	var frontierCount, faultCount int
+	testutil.FailErr(t, "frontier count", after.tx.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM frontier").Scan(&frontierCount))
+	testutil.FailErr(t, "fault count", after.tx.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM faults").Scan(&faultCount))
+	if frontierCount != 0 || faultCount != 0 || !after.Status.Complete || after.Status.Refreshing {
+		t.Fatalf("frontier=%d faults=%d complete=%v refreshing=%v", frontierCount, faultCount, after.Status.Complete, after.Status.Refreshing)
+	}
+}
