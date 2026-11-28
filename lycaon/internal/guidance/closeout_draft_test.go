@@ -309,7 +309,7 @@ func TestDraftValidatesEveryOccurrence(t *testing.T) {
 			t.Fatalf("occurrence %d (%s) = %s, want %s", i, draft.Occurrences[i].Token, occurrence.Outcome, want)
 		}
 	}
-	if rejected := got.Rejected(); len(rejected) != 1 || rejected[0].OccurrenceIndex != 30 || rejected[0].Offender != "a.go:99" {
+	if rejected := got.Rejected(); len(rejected) != 1 || rejected[0].OccurrenceIndex != 30 || rejected[0].Offender != "read#1 a.go:99" {
 		t.Fatalf("rejected = %+v", rejected)
 	}
 	if draft.Occurrences[32].RepairID != "c33" || draft.Occurrences[32].Owner != guidance.DraftFieldSynthesis {

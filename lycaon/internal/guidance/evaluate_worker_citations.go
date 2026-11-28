@@ -500,25 +500,39 @@ func excerptMatchesOtherHandle(ev evidence.Ledger, citedHandle string, line int,
 	return false
 }
 
+// offenderCitedHandle returns the handle supplied by the citation. A path-only
+// citation (finding.Path set without finding.Evidence) stays path-only even if
+// resolution tentatively matched a record before rejecting the coordinate.
+func offenderCitedHandle(res evidence.Resolution, finding WorkerFindingInput) string {
+	if handle := strings.TrimSpace(finding.Evidence); handle != "" {
+		return handle
+	}
+	if strings.TrimSpace(finding.Path) != "" {
+		return ""
+	}
+	return strings.TrimSpace(res.Handle)
+}
+
 // FormatResolutionOffender renders a resolved citation for reject/audit tokens.
 func FormatResolutionOffender(res evidence.Resolution, finding WorkerFindingInput) string {
+	handle := offenderCitedHandle(res, finding)
 	path := strings.TrimSpace(res.Path)
 	if res.EndLine > 0 {
-		return formatRangeOffender(path, res.Handle, res.Line, res.EndLine, res.Excerpt)
+		if path == "" {
+			path = strings.TrimSpace(finding.Path)
+		}
+		return formatRangeOffender(path, handle, res.Line, res.EndLine, res.Excerpt)
 	}
 	if path != "" {
-		if res.Line > 0 && strings.TrimSpace(res.Excerpt) != "" {
-			return fmt.Sprintf("%s:%d (%q)", path, res.Line, strings.TrimSpace(res.Excerpt))
-		}
-		if res.Line > 0 {
-			return fmt.Sprintf("%s:%d", path, res.Line)
-		}
-		if strings.TrimSpace(res.Excerpt) != "" {
-			return fmt.Sprintf("%s (%q)", path, strings.TrimSpace(res.Excerpt))
-		}
-		return path
+		return formatCitationOffender(handle, path, res.Line, 0, res.Excerpt)
 	}
-	return formatFindingOffender(finding)
+	if handle != "" && strings.TrimSpace(finding.Evidence) == "" {
+		finding.Evidence = handle
+	}
+	if formatted := formatFindingOffender(finding); formatted != "" {
+		return formatted
+	}
+	return formatCitationOffender(handle, "", res.Line, 0, res.Excerpt)
 }
 
 func formatFindingOffender(f WorkerFindingInput) string {
@@ -527,28 +541,25 @@ func formatFindingOffender(f WorkerFindingInput) string {
 	if f.EndLine > 0 {
 		return formatRangeOffender(path, handle, f.Line, f.EndLine, f.Excerpt)
 	}
-	if path != "" {
-		if f.Line > 0 && strings.TrimSpace(f.Excerpt) != "" {
-			return fmt.Sprintf("%s:%d (%q)", path, f.Line, strings.TrimSpace(f.Excerpt))
-		}
-		if f.Line > 0 {
-			return fmt.Sprintf("%s:%d", path, f.Line)
-		}
-		if strings.TrimSpace(f.Excerpt) != "" {
-			return fmt.Sprintf("%s (%q)", path, strings.TrimSpace(f.Excerpt))
-		}
-		return path
+	return formatCitationOffender(handle, path, f.Line, 0, f.Excerpt)
+}
+
+func formatCitationOffender(handle, path string, line, endLine int, excerpt string) string {
+	if endLine > 0 {
+		return formatRangeOffender(path, handle, line, endLine, excerpt)
 	}
-	if f.Line > 0 && strings.TrimSpace(f.Excerpt) != "" {
-		return fmt.Sprintf("%s:%d (%q)", handle, f.Line, strings.TrimSpace(f.Excerpt))
+	subject := formatOffenderSubject(handle, path)
+	excerpt = strings.TrimSpace(excerpt)
+	if line > 0 && excerpt != "" {
+		return fmt.Sprintf("%s:%d (%q)", subject, line, excerpt)
 	}
-	if f.Line > 0 {
-		return fmt.Sprintf("%s:%d", handle, f.Line)
+	if line > 0 {
+		return fmt.Sprintf("%s:%d", subject, line)
 	}
-	if strings.TrimSpace(f.Excerpt) != "" {
-		return fmt.Sprintf("%s (%q)", handle, strings.TrimSpace(f.Excerpt))
+	if excerpt != "" {
+		return fmt.Sprintf("%s (%q)", subject, excerpt)
 	}
-	return handle
+	return subject
 }
 
 func citedURLHandleOffenders(urls []string, ev evidence.Ledger) []string {
