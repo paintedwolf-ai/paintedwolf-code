@@ -19,7 +19,13 @@ type Service struct {
 // live code leg, whose hits rerank through the decision engine, and the symbol
 // leg, which finds declarations by name.
 func NewService(db queryDatabase, rerank decide.Reranker, symbols Executor) *Service {
-	return &Service{router: NewRouter(NewStoreExecutor(db), NewCodeExecutor(rerank), symbols)}
+	return NewServiceWithDrafts(db, rerank, symbols, nil)
+}
+
+// NewServiceWithDrafts constructs a search service whose code leg overlays
+// authorized caller editor drafts when drafts is non-nil.
+func NewServiceWithDrafts(db queryDatabase, rerank decide.Reranker, symbols Executor, drafts CodeDraftProvider) *Service {
+	return &Service{router: NewRouter(NewStoreExecutor(db), NewCodeExecutorWithDrafts(rerank, drafts), symbols)}
 }
 
 // ExportOutcome is the merged export query result before serialization.

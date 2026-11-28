@@ -106,7 +106,9 @@ export function GlobalSearchView(props: Props) {
     showPage, loadNextPage, searchRequestChanged, coldSearchPending, retainingResults,
     showRetainedWait, setResultsViewport, resultsViewport,
   } = createSearchResultsController({
-    originProjectId: () => props.originProjectId, residentLive, query, matchOptions, stopPreview: () => stopPreview(),
+    originProjectId: () => props.originProjectId,
+    originSessionId: () => props.appStore.state.currentSession?.id ?? null,
+    residentLive, query, matchOptions, stopPreview: () => stopPreview(),
     setPreviewLint, replaceMode, previewCurrent: () => previewCurrent(), runReplacePreview: () => runReplacePreview(),
     clearReplace: () => { setReplacePreview(null); setReplaceSelection(null); },
     updateRecent: () => setRecent(listRecentQueries()),
