@@ -1,11 +1,13 @@
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createSignal, onCleanup } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
 import type { ResolveProjectRoot } from "../../api/project-path.ts";
 import type { ActionFact, ActionRan } from "../../api/types.ts";
-import { ACTION_FACT_LABELS, formatActionRow, formatFact } from "../../chat/action/action-format.ts";
+import { ACTION_FACT_LABELS, formatFact } from "../../chat/action/action-format.ts";
 import type { CardAction } from "../../chat/action/action-merge.ts";
 import type { TranscriptLayout } from "../../chat/transcript/layout/transcript-layout.ts";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
+import { subscribeBackgroundProcessStore } from "../../chat/tool/background-process-store.ts";
+import { resolveLiveProcessCardPresentation } from "../../chat/session/wait-target-activity.ts";
 import { writeClipboardText } from "../../utils/clipboard.ts";
 import { ThemeIcon } from "../primitives/ThemeIcon.tsx";
 import { RedactedText } from "../transcript/RedactionMark.tsx";
@@ -26,6 +28,7 @@ const RAN_FIELD = "ran.text";
 type Props = {
   part: ToolPartView;
   action: CardAction;
+  liveOutcome?: string;
   layout: TranscriptLayout;
   sessionId?: string;
   projectId?: string;
@@ -37,8 +40,16 @@ type Props = {
 /** Every action's card: what ran, its summary, facts, preview, latest capture and records. */
 export function ActionCard(props: Props) {
   const action = useActionCoverage(() => props.action, props);
-  const status = () => (props.action.status === "done" ? "completed" : props.action.status);
+  const [processRevision, setProcessRevision] = createSignal(0);
   const members = () => [props.part, ...(props.part.foldMembers ?? [])];
+  const jobHandle = () =>
+    props.part.commandActivity?.fact.job_handle ??
+    members().map(liveToolProcess).find((live) => live !== null)?.handle;
+  onCleanup(
+    subscribeBackgroundProcessStore(() => {
+      setProcessRevision((n) => n + 1);
+    }, () => ({ sessionId: props.sessionId, processId: jobHandle(), statusOnly: true })),
+  );
   // Hosts the host let through, which the network fact offers to block.
   const allowedHosts = () => new Set(members().flatMap((member) =>
     (member.externalAccess?.endpoints ?? []).filter((endpoint) => endpoint.decision === "allow").map((endpoint) => endpoint.host)));
@@ -46,6 +57,15 @@ export function ActionCard(props: Props) {
     const sessionId = props.sessionId;
     const handle = sessionId ? members().map(liveToolProcess).find((live) => live !== null) : undefined;
     return sessionId && handle ? { sessionId, handle } : undefined;
+  };
+  const presentation = () => {
+    processRevision();
+    return resolveLiveProcessCardPresentation(
+      props.sessionId,
+      jobHandle(),
+      action(),
+      process()?.handle.termination_reason,
+    );
   };
   // A live process states its own state, so the card drops the recorded one.
   const facts = () => (process() ? action().facts.filter((fact) => fact.kind !== "process") : action().facts);
@@ -66,8 +86,8 @@ export function ActionCard(props: Props) {
       projectId={props.projectId}
       client={props.client}
       name={props.action.label}
-      outcome={formatActionRow(action())}
-      status={status()}
+      outcome={props.liveOutcome || presentation().outcome}
+      status={presentation().status}
       testId="action-card"
     >
       <div class="den-action-card" data-testid="action-card-body">

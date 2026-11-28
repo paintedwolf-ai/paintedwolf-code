@@ -406,6 +406,7 @@ export const LONG_RUNNING_COORDINATOR_TOOLS: readonly string[] = [
   "summarize",
   "survey_repo",
   "verify",
+  "wait",
 ] as const;
 
 /** Worker-dispatch tools. */

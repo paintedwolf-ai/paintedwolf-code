@@ -56,6 +56,7 @@ components:
       - starting_workflow
       - awaiting_wake
       - deciding
+      - indexing_credentials
     EventEnvelope:
       $ref: event-envelope.generated.yaml#/components/schemas/EventEnvelope
     EventEnvelopeBase:
@@ -441,6 +442,30 @@ components:
             What asked the local decision engine. Present only on deciding,
             which the host opens only while an available engine is answering;
             the answer arrives as a turn_load event.
+        indexing:
+          x-go-pointer: true
+          $ref: events.yaml#/components/schemas/CredentialIndexingProgress
+          description: Present only on indexing_credentials.
+    CredentialIndexingProgress:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [root_id, root_label, directories_visited, credential_files_read]
+      description: >-
+        One attached root's credential-file pass that a session waits on.
+        Counts cover the current pass and are observations, not a completion estimate.
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        root_label:
+          type: string
+        directories_visited:
+          type: integer
+          minimum: 0
+        credential_files_read:
+          type: integer
+          minimum: 0
     ToolProgress:
       x-go-generate: true
       type: object

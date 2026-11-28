@@ -15,7 +15,8 @@ type authoredRecorder struct {
 	authored []tools.AuthoredCredentialValues
 }
 
-func (*authoredRecorder) EnsureProject(context.Context, string) error { return nil }
+func (*authoredRecorder) Start(string)                                      {}
+func (*authoredRecorder) Await(context.Context, tools.CredentialWait) error { return nil }
 
 func (r *authoredRecorder) Delivered(context.Context, tools.CredentialFileRead) error { return nil }
 

@@ -10,8 +10,9 @@ import (
 
 type noAttributedInputDelivery struct{}
 
-func (noAttributedInputDelivery) EnsureProject(context.Context, string) error { return nil }
-func (noAttributedInputDelivery) ForgetProject(context.Context, string) error { return nil }
+func (noAttributedInputDelivery) Start(string)                                      {}
+func (noAttributedInputDelivery) Await(context.Context, tools.CredentialWait) error { return nil }
+func (noAttributedInputDelivery) ForgetProject(context.Context, string) error       { return nil }
 func (noAttributedInputDelivery) Authored(context.Context, tools.AuthoredCredentialValues) error {
 	return nil
 }
