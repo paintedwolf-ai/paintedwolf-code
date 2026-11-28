@@ -111,9 +111,6 @@ func Resolve(
 
 	out.Handle = bestHandleForPath(ev, path, line, handleHint)
 	out.Verdict = VerdictTraced
-	if hint := strings.TrimSpace(handleHint); hint != "" && out.Handle != "" && hint != out.Handle {
-		out.Verdict = VerdictBound
-	}
 	return out
 }
 
@@ -130,23 +127,17 @@ func NormalizeResolvePath(projectDir, raw string) string {
 }
 
 // recordCitedLineBytes extracts the delivered content at the cited line(s) for
-// ambiguity comparison across current records (never prose).
-func recordCitedLineBytes(rec Record, line int) (string, bool) {
+// ambiguity comparison across current records (never prose), reusing the host's
+// numbered-line grammar via lineContentIndex (hostmarker.ParseNumberedLine).
+func recordCitedLineBytes(rec Record, claimPath string, line int) (string, bool) {
 	if line <= 0 {
 		if len(rec.Body) == 0 {
 			return "", false
 		}
 		return strings.Join(rec.Body, "\n"), true
 	}
-	if rec.SourceDelivery != nil {
-		idx := line - rec.SourceDelivery.StartLine
-		if idx >= 0 && idx < len(rec.Body) {
-			return rec.Body[idx], true
-		}
-		return "", false
-	}
-	for _, raw := range rec.Body {
-		if n, text, ok := parseNumberedBodyLine(raw); ok && n == line {
+	if idx := lineContentIndex(rec, claimPath); idx != nil {
+		if text, ok := idx[line]; ok {
 			return text, true
 		}
 	}
@@ -157,26 +148,6 @@ func recordCitedLineBytes(rec Record, line int) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-func parseNumberedBodyLine(raw string) (int, string, bool) {
-	trimmed := strings.TrimLeft(raw, " ")
-	i := 0
-	for i < len(trimmed) && trimmed[i] >= '0' && trimmed[i] <= '9' {
-		i++
-	}
-	if i == 0 || i >= len(trimmed) {
-		return 0, "", false
-	}
-	sep := trimmed[i]
-	if sep != '\t' && sep != '|' && sep != ':' {
-		return 0, "", false
-	}
-	n := 0
-	for _, ch := range trimmed[:i] {
-		n = n*10 + int(ch-'0')
-	}
-	return n, trimmed[i+1:], true
 }
 
 func matchedHandleForPath(ev Ledger, path string, line int, excerpt string, handleHint string) (string, bool) {
@@ -208,7 +179,7 @@ func matchedHandleForPath(ev Ledger, path string, line int, excerpt string, hand
 		if !ok {
 			continue
 		}
-		b, ok := recordCitedLineBytes(rec, line)
+		b, ok := recordCitedLineBytes(rec, path, line)
 		if !ok {
 			continue
 		}
