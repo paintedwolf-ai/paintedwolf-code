@@ -22,6 +22,7 @@ import os
 import pathlib
 import queue
 import re
+import secrets
 import shutil
 import struct
 import subprocess
@@ -316,6 +317,130 @@ def _click_x11_window_point(xid: int, x: int, y: int) -> dict[str, Any]:
         "returncode": proc.returncode,
         "stderr": (proc.stderr or "").strip(),
     }
+
+
+def _collect_atspi_nodes(target_pid: int, *, max_nodes: int = 300) -> list[dict[str, Any]]:
+    """Collect visible named AT-SPI nodes (role, name, center) under `target_pid` for UI surface verification."""
+    try:
+        import gi
+
+        gi.require_version("Atspi", "2.0")
+        from gi.repository import Atspi
+
+        desktop = Atspi.get_desktop(0)
+        app_node = None
+        for idx in range(desktop.get_child_count()):
+            child = desktop.get_child_at_index(idx)
+            if child is not None and child.get_process_id() == target_pid:
+                app_node = child
+                break
+        if app_node is None:
+            return []
+
+        nodes: list[dict[str, Any]] = []
+        stack = [(app_node, 0)]
+        visited = 0
+        while stack and visited < 1500 and len(nodes) < max_nodes:
+            node, depth = stack.pop()
+            visited += 1
+            try:
+                name = (node.get_name() or "").strip()
+                role = (node.get_role_name() or "").strip()
+                if name:
+                    cx, cy = 0, 0
+                    try:
+                        comp = node.get_component_iface()
+                        if comp is not None:
+                            ext = comp.get_extents(Atspi.CoordType.WINDOW)
+                            if ext.width > 0 and ext.height > 0:
+                                cx = int(ext.x + ext.width / 2)
+                                cy = int(ext.y + ext.height / 2)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    nodes.append({
+                        "role": role,
+                        "name": name[:240],
+                        "center": [cx, cy] if cx > 0 and cy > 0 else None,
+                    })
+                if depth < 28:
+                    cnt = min(node.get_child_count(), 64)
+                    for i in range(cnt - 1, -1, -1):
+                        c = node.get_child_at_index(i)
+                        if c is not None:
+                            stack.append((c, depth + 1))
+            except Exception:  # noqa: BLE001
+                continue
+        return nodes
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _activate_atspi_match(target_pid: int, hints: list[str], *, invoke: bool = True) -> dict[str, Any]:
+    """Find the first AT-SPI node whose name contains any hint (case-insensitive) and activate/locate it."""
+    try:
+        import gi
+
+        gi.require_version("Atspi", "2.0")
+        from gi.repository import Atspi
+
+        desktop = Atspi.get_desktop(0)
+        app_node = None
+        for idx in range(desktop.get_child_count()):
+            child = desktop.get_child_at_index(idx)
+            if child is not None and child.get_process_id() == target_pid:
+                app_node = child
+                break
+        if app_node is None:
+            return {"found": False, "invoked": False, "reason": "pid_not_in_atspi_desktop"}
+
+        low_hints = [h.strip().lower() for h in hints if h and h.strip()]
+        stack = [(app_node, 0)]
+        visited = 0
+        while stack and visited < 1500:
+            node, depth = stack.pop()
+            visited += 1
+            try:
+                name = (node.get_name() or "").strip()
+                role = (node.get_role_name() or "").strip()
+                low_name = name.lower()
+                if low_name and any(h in low_name for h in low_hints):
+                    cx, cy = 0, 0
+                    try:
+                        comp = node.get_component_iface()
+                        if comp is not None:
+                            ext = comp.get_extents(Atspi.CoordType.WINDOW)
+                            if ext.width > 0 and ext.height > 0:
+                                cx = int(ext.x + ext.width / 2)
+                                cy = int(ext.y + ext.height / 2)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    invoked = False
+                    if invoke:
+                        try:
+                            act = node.get_action_iface()
+                            if act is not None and act.get_n_actions() > 0:
+                                invoked = bool(act.do_action(0))
+                        except Exception:  # noqa: BLE001
+                            invoked = False
+                    return {
+                        "found": True,
+                        "invoked": invoked,
+                        "method": "atspi_action" if invoked else "atspi_locate",
+                        "name": name[:240],
+                        "role": role,
+                        "center": [cx, cy] if cx > 0 and cy > 0 else None,
+                    }
+                if depth < 28:
+                    cnt = min(node.get_child_count(), 64)
+                    for i in range(cnt - 1, -1, -1):
+                        c = node.get_child_at_index(i)
+                        if c is not None:
+                            stack.append((c, depth + 1))
+            except Exception:  # noqa: BLE001
+                continue
+        return {"found": False, "invoked": False, "reason": f"match_not_found:{low_hints}"}
+    except Exception as exc:  # noqa: BLE001
+        return {"found": False, "invoked": False, "reason": str(exc)}
 
 
 def _activate_atspi_button(target_pid: int, label: str, *, invoke: bool = True) -> dict[str, Any]:
@@ -760,6 +885,9 @@ def run_linux_tauri_native(
     startup_timeout_s: float = 45.0,
     dismiss_onboarding: bool = False,
     seed_store_db: str | pathlib.Path | None = None,
+    open_project_hint: str | None = None,
+    open_session_hint: str | None = None,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     """Launch the actual Linux Tauri desktop binary under Xvfb+AT-SPI, drive xdotool Tab, and capture its owned window."""
     out = pathlib.Path(out_dir).resolve()
@@ -818,11 +946,11 @@ def run_linux_tauri_native(
     env["LYCAON_CONFIG_DIR"] = str(cfg_dir)
     env["XDG_CONFIG_HOME"] = str(profile / "xdg-config")
     env["XDG_DATA_HOME"] = str(profile / "xdg-data")
+    eff_token = token or secrets.token_hex(24)
     if api_url:
         env["LYCAON_E2E_API_URL"] = api_url
-    if token:
-        env["LYCAON_E2E_TOKEN"] = token
-        env["LYCAON_API_TOKEN"] = token
+    env["LYCAON_E2E_TOKEN"] = eff_token
+    env["LYCAON_API_TOKEN"] = eff_token
 
     log_path = out / "tauri-app.log"
     log_fh = log_path.open("w", encoding="utf-8")
@@ -926,6 +1054,34 @@ def run_linux_tauri_native(
                     and check_after_click.get("sha256") != onboarding_step2_sha256
                 )
 
+        # Optionally navigate from Home into the seeded project and seeded chat session.
+        navigation_events: list[dict[str, Any]] = []
+        atspi_home_nodes: list[dict[str, Any]] = []
+        atspi_chat_nodes: list[dict[str, Any]] = []
+        chat_opened = False
+        if open_project_hint or open_session_hint:
+            atspi_home_nodes = _collect_atspi_nodes(proc.pid)
+            if open_project_hint:
+                proj_match = _activate_atspi_match(proc.pid, [open_project_hint], invoke=True)
+                navigation_events.append({"step": "open_project", **proj_match})
+                if not proj_match.get("invoked") and isinstance(proj_match.get("center"), list):
+                    cx, cy = proj_match["center"]
+                    navigation_events.append({"step": "open_project_click", **_click_x11_window_point(xid, cx, cy)})
+                time.sleep(2.0)
+                _capture_x11_window_png(xid, out / "linux-native-den-tauri-project.png")
+            if open_session_hint:
+                sess_match = _activate_atspi_match(proc.pid, [open_session_hint, "TB10"], invoke=True)
+                navigation_events.append({"step": "open_session", **sess_match})
+                if not sess_match.get("invoked") and isinstance(sess_match.get("center"), list):
+                    cx, cy = sess_match["center"]
+                    navigation_events.append({"step": "open_session_click", **_click_x11_window_point(xid, cx, cy)})
+                time.sleep(2.0)
+                chat_opened = bool(sess_match.get("found"))
+            atspi_chat_nodes = _collect_atspi_nodes(proc.pid)
+            atspi_after_nav = _probe_atspi(proc.pid)
+            if atspi_after_nav.get("observed"):
+                atspi_after = atspi_after_nav
+
         atspi_focus_changed = bool(
             atspi_before.get("focused_key")
             and atspi_after.get("focused_key")
@@ -957,11 +1113,20 @@ def run_linux_tauri_native(
                     api_readback["health"] = _api_readback(eff_url, token, "/health")
                 except Exception as exc:  # noqa: BLE001
                     api_readback["health_error"] = str(exc)
-            if token:
+            if eff_token:
                 try:
-                    api_readback["projects"] = _api_readback(eff_url, token, "/v1/projects")
+                    api_readback["projects"] = _api_readback(eff_url, eff_token, "/v1/projects")
                 except Exception as exc:  # noqa: BLE001
                     api_readback["projects_error"] = str(exc)
+                if session_id:
+                    try:
+                        api_readback["session"] = _api_readback(eff_url, eff_token, f"/v1/sessions/{session_id}")
+                    except Exception as exc:  # noqa: BLE001
+                        api_readback["session_error"] = str(exc)
+                    try:
+                        api_readback["messages"] = _api_readback(eff_url, eff_token, f"/v1/sessions/{session_id}/messages")
+                    except Exception as exc:  # noqa: BLE001
+                        api_readback["messages_error"] = str(exc)
 
         atspi_ok = bool(atspi_after.get("observed")) if atspi_after.get("available") else True
         passed = bool(
@@ -990,6 +1155,10 @@ def run_linux_tauri_native(
             "onboarding_dismiss_confirmed": onboarding_dismiss_confirmed,
             "onboarding_step2_sha256": onboarding_step2_sha256,
             "onboarding_dismiss_events": onboarding_dismiss_events,
+            "navigation_events": navigation_events,
+            "chat_opened": chat_opened,
+            "atspi_home_nodes": atspi_home_nodes[:80],
+            "atspi_chat_nodes": atspi_chat_nodes[:120],
             "app_alive_after": app_alive_after,
             "keyboard_event": key_ev,
             "keyboard_events": keyboard_events,

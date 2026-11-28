@@ -302,7 +302,7 @@ def run_product_episode(
                 return str(row[0]) if row[0] else None
 
             child_sid = app.wait_for(_child_sid, "tb10 worker child sid", session_id)
-            # Worker attempts outside-workspace write -> must be refused, host bytes unchanged.
+            # Worker attempts outside-workspace write -> confinement refusal (additional evidence), host bytes unchanged.
             _, worker_refusal_res, worker_req = _send_tool_call(
                 app,
                 child_sid,
@@ -312,6 +312,35 @@ def run_product_episode(
             )
             captured_requests.append(_capture_request_facts(worker_req))
             worker_refusal_code = _extract_refusal_code(worker_refusal_res)
+
+            # Worker exercises a real HITL approval checkpoint + saved approval rule against synthetic loopback fixtures.
+            with (
+                RecordingHTTPFixture(fixture_id="tb10-worker-allowed", redact_tokens=tuple(canaries.tokens)) as allowed_ep,
+                RecordingHTTPFixture(fixture_id="tb10-worker-refused", redact_tokens=tuple(canaries.tokens)) as refused_ep,
+            ):
+                allowed_cid, allowed_res, _ = _send_tool_call(
+                    app,
+                    child_sid,
+                    "command",
+                    {
+                        "command": f"python3 -B -c \"import urllib.request; print(urllib.request.urlopen('{allowed_ep.base_url}/ping', timeout=5).read().decode())\"",
+                        "capability_request": {"loopback_connect": {"ports": [allowed_ep.port]}},
+                    },
+                    checkpoint_policy="approve_chat",
+                )
+                _, refused_net_res, _ = _send_tool_call(
+                    app,
+                    child_sid,
+                    "command",
+                    {
+                        "command": f"python3 -B -c \"import urllib.request; urllib.request.urlopen('{refused_ep.base_url}/ping', timeout=3).read()\"",
+                        "capability_request": {"loopback_connect": {"ports": [refused_ep.port]}},
+                    },
+                    checkpoint_policy="reject",
+                )
+                allowed_snap = allowed_ep.snapshot()
+                refused_snap = refused_ep.snapshot()
+                network_fixtures = [allowed_snap, refused_snap]
 
             # Worker performs its permitted native edit inside its workspace overlay.
             _send_tool_call(app, child_sid, "command", {"command": "cat worker_target.txt"})
@@ -360,6 +389,11 @@ def run_product_episode(
                 "job_id": job_id,
                 "result_handle": result_handle,
                 "worker_refusal_code": worker_refusal_code,
+                "worker_allowed_call_id": allowed_cid,
+                "worker_allowed_outcome": allowed_res.get("outcome") if isinstance(allowed_res, dict) else None,
+                "worker_allowed_arrivals": allowed_snap["connection_count"],
+                "worker_refused_arrivals": refused_snap["connection_count"],
+                "worker_refused_net_code": _extract_refusal_code(refused_net_res),
                 "outside_target_unchanged": hash_file(outside_target)["sha256"] == outside_pre["sha256"],
                 "primary_untouched_before_promote": primary_untouched_before_promote,
                 "promote_outcome": promote_res.get("outcome") if isinstance(promote_res, dict) else None,
@@ -567,6 +601,9 @@ def run_tb10_variant(
             engine_manifest=engine_manifest,
             dismiss_onboarding=True,
             seed_store_db=episode.get("db_path") or None,
+            open_project_hint="project",
+            open_session_hint=vid,
+            session_id=episode.get("session_id") or None,
         )
     finally:
         if engine_bin is not None:
