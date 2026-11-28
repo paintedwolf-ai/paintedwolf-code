@@ -21,6 +21,7 @@ from grounding.suites.gb07_freshness_gates.full_runner import (
     GB07_EXECUTION_SPECS_BY_SELECTOR,
     INPROCESS_OVERLAYS,
     INPROCESS_SLOTS,
+    _apply_g01_03_non_content_churn,
     _extract_source_checks_from_pending,
     _init_plain_workspace,
     _install_verify_gate_workflow_overlay,
@@ -280,6 +281,20 @@ class TestGB07CatalogAndFixtures(unittest.TestCase):
         )
         self.assertEqual(adv["error"], "phase_gate_unmet")
         self.assertEqual(adv["failed_leaves"], ["evidence_passed:verify"])
+
+        with tempfile.TemporaryDirectory(prefix="gb07-churn-") as td:
+            ws = pathlib.Path(td) / "ws"
+            _init_plain_workspace(ws)
+            (ws / ".git").mkdir()
+            gate_before = (ws / "gate.go").read_bytes()
+            unrel_before = (ws / "unrelated.go").read_bytes()
+            summary = _apply_g01_03_non_content_churn(ws)
+            self.assertEqual((ws / "gate.go").read_bytes(), gate_before)
+            self.assertEqual((ws / "unrelated.go").read_bytes(), unrel_before)
+            self.assertEqual(summary["watcher_burst_iterations"], 10)
+            self.assertFalse((ws / ".git" / "gb07-churn.tmp").exists())
+            self.assertFalse((ws / "tmp" / "gb07-excluded-build.out").exists())
+            self.assertFalse((ws / "node_modules" / "gb07-pkg" / "index.js").exists())
 
 
 if __name__ == "__main__":

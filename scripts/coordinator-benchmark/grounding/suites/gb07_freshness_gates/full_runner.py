@@ -18,6 +18,7 @@ import contextlib
 from dataclasses import dataclass
 import hashlib
 import json
+import os
 import pathlib
 import re
 import sqlite3
@@ -788,6 +789,62 @@ def _dispatch_worker_and_get_child(
     raise TimeoutError(f"Worker child session for {agent_type} never became pending")
 
 
+def _apply_g01_03_non_content_churn(workspace: pathlib.Path) -> dict[str, Any]:
+    """Decision 089 non-content / excluded-path / watcher-burst churn that changes NO admitted bytes.
+
+    Exercises all four churn classes:
+      1a) mtime-only touch on admitted files without changing bytes;
+      1b) rewriting admitted files with identical bytes;
+      1c) creating, modifying, and deleting files in snapshot-excluded paths (`.git/`, `tmp/`, `node_modules/`);
+      1d) a burst of watcher events with zero net admitted content change.
+    """
+    gate_path = workspace / "gate.go"
+    unrelated_path = workspace / "unrelated.go"
+    gate_bytes = gate_path.read_bytes()
+    unrelated_bytes = unrelated_path.read_bytes()
+
+    # 1a) Touch admitted files (mtime bump only, no byte change)
+    now = time.time()
+    os.utime(gate_path, (now + 2.0, now + 2.0))
+    os.utime(unrelated_path, (now + 2.0, now + 2.0))
+
+    # 1b) Rewrite admitted files with identical bytes
+    gate_path.write_bytes(gate_bytes)
+    unrelated_path.write_bytes(unrelated_bytes)
+
+    # 1c) Create, modify, and delete files in paths excluded from snapshot admission
+    excluded_targets = (
+        workspace / ".git" / "gb07-churn.tmp",
+        workspace / "tmp" / "gb07-excluded-build.out",
+        workspace / "node_modules" / "gb07-pkg" / "index.js",
+    )
+    for target in excluded_targets:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("churn-v1\n", encoding="utf-8")
+        target.write_text("churn-v2-modified\n", encoding="utf-8")
+        target.unlink()
+
+    # 1d) Burst of watcher events with no admitted content change
+    burst_dir = workspace / "tmp" / "gb07-watcher-burst"
+    burst_dir.mkdir(parents=True, exist_ok=True)
+    for i in range(10):
+        tick = now + 3.0 + i * 0.1
+        os.utime(gate_path, (tick, tick))
+        os.utime(unrelated_path, (tick, tick))
+        ephemeral = burst_dir / f"ev-{i}.tmp"
+        ephemeral.write_text(f"burst-{i}\n", encoding="utf-8")
+        ephemeral.unlink()
+    unrelated_path.write_bytes(unrelated_bytes)
+    time.sleep(0.05)
+
+    return {
+        "mtime_touched": ["gate.go", "unrelated.go"],
+        "identical_byte_rewrites": ["gate.go", "unrelated.go"],
+        "excluded_paths_churned": [".git/gb07-churn.tmp", "tmp/gb07-excluded-build.out", "node_modules/gb07-pkg/index.js"],
+        "watcher_burst_iterations": 10,
+    }
+
+
 def _apply_g01_mutation_after_verify(
     selector: str,
     *,
@@ -811,7 +868,7 @@ def _apply_g01_mutation_after_verify(
         gate_path.write_text("package gate\n\nfunc Verify() bool { return false }\n", encoding="utf-8")
         return pending_after_verify, f'{prefix} gate.go verified [read#1:3 "return true"].\n[verify: targeted - Verify passes] [command#1]'
     if selector == "G01-03-fresh-after-unrelated-file-edit":
-        (workspace / "unrelated.go").write_text("package gate\n\nfunc Helper() int { return 99 }\n", encoding="utf-8")
+        _apply_g01_03_non_content_churn(workspace)
         return pending_after_verify, f"{prefix} gate.go verified [read#1:3].\n[verify: targeted - Verify passes] [command#1]"
     if selector == "G01-04-fresh-after-noop-touch":
         gate_path.write_bytes(original_bytes)
@@ -945,7 +1002,7 @@ def _run_freshness_slot(
         if not gate_advanced:
             if selector == "G01-03-fresh-after-unrelated-file-edit":
                 divergences.append(
-                    f"false_reject_unrelated_churn_under_verify_gate:error={adv_error!r},"
+                    f"gb07_f3_non_content_churn_false_reject:error={adv_error!r},"
                     f"failed_leaves={failed_leaves},phase={run_after.get('current_phase')!r}"
                 )
             else:
@@ -1015,7 +1072,7 @@ def _run_freshness_slot(
         if observed_match != "current":
             if selector == "G01-03-fresh-after-unrelated-file-edit":
                 divergences.append(
-                    f"false_stale_display_unrelated_churn:source_match={observed_match!r}"
+                    f"gb07_f3_non_content_churn_false_stale:source_match={observed_match!r}"
                 )
             else:
                 divergences.append(
@@ -1025,6 +1082,100 @@ def _run_freshness_slot(
             divergences.append(f"fresh_receipt_incurred_friction:friction_units={fu}")
         if last_grounding.get("traced") is not True:
             divergences.append(f"fresh_receipt_not_traced:grounding={last_grounding}")
+
+    # ── Decision 089 extra conservative assertion for G01-03: editing admitted `unrelated.go`
+    #    bytes MUST invalidate the whole-root receipt (phase_gate_unmet + different_source). ──
+    conservative_unrelated: dict[str, Any] | None = None
+    if selector == "G01-03-fresh-after-unrelated-file-edit":
+        _init_plain_workspace(workspace)
+        # Conservative required-gate check
+        sid_cg = client.create_session(project_id, posture="build")["id"]
+        client.wait_session_ready(sid_cg)
+        cg_start: dict[str, Any] = {
+            "operation_id": str(uuid.uuid4()),
+            "workflow_id": _VERIFY_GATE_WORKFLOW_ID,
+            "workflow_version": _VERIFY_GATE_WORKFLOW_VERSION,
+        }
+        cg_active = client.request(f"/v1/sessions/{sid_cg}/workflow-runs/active", missing=True)
+        cg_active_run = cg_active.get("run") if isinstance(cg_active, Mapping) else None
+        if isinstance(cg_active_run, Mapping) and cg_active_run.get("id") and cg_active_run.get("revision"):
+            cg_start["replace_run_id"] = str(cg_active_run["id"])
+            cg_start["expected_revision"] = int(cg_active_run["revision"])
+        cg_wf = client.request(f"/v1/sessions/{sid_cg}/workflow-runs", cg_start)
+        cg_wf_id = str(cg_wf.get("id") or "")
+        client.send_prompt(sid_cg, f"{prefix} Conservative whole-root check for {selector}.")
+        _answer_tool(client, sid_cg, "command", {"command": "cat -n gate.go"})
+        _answer_tool(client, sid_cg, "command", {"command": "echo VERIFY_OK gate.go", "verification": True})
+        req_cg_after = client.wait_pending(sid_cg, timeout=120.0)
+        (workspace / "unrelated.go").write_text("package gate\n\nfunc Helper() int { return 99 }\n", encoding="utf-8")
+        if "workflow_advance" not in (req_cg_after.get("tools") or []):
+            client.respond(
+                req_cg_after["id"],
+                tool_calls=[{"id": str(uuid.uuid4()), "name": "request_tools", "args": {"need": "workflow_advance"}}],
+            )
+            req_cg_after = client.wait_pending(sid_cg, timeout=120.0)
+        client.respond(
+            req_cg_after["id"],
+            tool_calls=[{"id": str(uuid.uuid4()), "name": "workflow_advance", "args": {}}],
+        )
+        req_cg_close = client.wait_pending(sid_cg, timeout=120.0)
+        cg_adv_res = _parse_workflow_advance_result(
+            _query_tool_results(sidecar.store_db_path, sid_cg, "workflow_advance")
+        )
+        cg_run_after = client.request(f"/v1/workflow-runs/{cg_wf_id}") if cg_wf_id else {}
+        if cg_wf_id and str(cg_run_after.get("status") or "") not in {"completed", "canceled", "exited"}:
+            with contextlib.suppress(Exception):
+                client.request(
+                    f"/v1/workflow-runs/{cg_wf_id}/cancel",
+                    {"expected_revision": int(cg_run_after.get("revision") or 1), "reason": "gb07 conservative check"},
+                )
+        with contextlib.suppress(Exception):
+            client.respond(req_cg_close["id"], content=default_close_text)
+
+        cg_error = str(cg_adv_res.get("error") or "")
+        cg_leaves = list(cg_adv_res.get("failed_leaves") or ())
+        cg_refused = (
+            cg_error == "phase_gate_unmet"
+            and "evidence_passed:verify" in cg_leaves
+            and str(cg_run_after.get("current_phase") or "") == "check"
+        )
+        if not cg_refused:
+            divergences.append(
+                f"conservative_unrelated_edit_did_not_refuse_gate:error={cg_error!r},"
+                f"failed_leaves={cg_leaves},phase={cg_run_after.get('current_phase')!r}"
+            )
+
+        # Conservative default-session display check
+        _init_plain_workspace(workspace)
+        sid_cd = client.create_session(project_id, posture="build")["id"]
+        client.wait_session_ready(sid_cd)
+        p_cd = client.send_prompt(sid_cd, f"{prefix} Conservative whole-root display check for {selector}.")
+        sub_cd = str(p_cd.get("submission_id") or p_cd.get("id") or "")
+        _answer_tool(client, sid_cd, "command", {"command": "cat -n gate.go"})
+        _answer_tool(client, sid_cd, "command", {"command": "echo VERIFY_OK gate.go", "verification": True})
+        req_cd_after = client.wait_pending(sid_cd, timeout=120.0)
+        (workspace / "unrelated.go").write_text("package gate\n\nfunc Helper() int { return 99 }\n", encoding="utf-8")
+        client.respond(
+            req_cd_after["id"],
+            tool_calls=[{"id": str(uuid.uuid4()), "name": "command", "args": {"command": "true"}}],
+        )
+        req_cd_close = client.wait_pending(sid_cd, timeout=120.0)
+        cd_sc = _extract_source_checks_from_pending(req_cd_close)
+        cd_checks = list(cd_sc.get("checks") or ()) if isinstance(cd_sc, Mapping) else []
+        cd_match = str(cd_checks[0].get("source_match") or "") if cd_checks and isinstance(cd_checks[0], Mapping) else ""
+        client.respond(req_cd_close["id"], content=default_close_text)
+        client.wait_settled(sid_cd, submission_id=sub_cd, timeout=90.0)
+        if cd_match != "different_source":
+            divergences.append(f"conservative_unrelated_edit_display_not_stale:source_match={cd_match!r}")
+
+        conservative_unrelated = {
+            "gate_session_id": sid_cg,
+            "gate_refused": cg_refused,
+            "gate_error": cg_error,
+            "gate_failed_leaves": cg_leaves,
+            "display_session_id": sid_cd,
+            "display_source_match": cd_match,
+        }
 
     return {
         "session_id": sid_default,
@@ -1051,6 +1202,7 @@ def _run_freshness_slot(
             "source_checks": source_checks,
             "latest_source_match": observed_match,
         },
+        "conservative_admitted_unrelated_edit": conservative_unrelated,
     }
 
 
