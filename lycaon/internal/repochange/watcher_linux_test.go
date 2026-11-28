@@ -377,4 +377,43 @@ func TestInotifyRealBackendLossFaultsRecoversAndPreservesSurvivor(t *testing.T) 
 
 	testutil.FailErr(t, "write surviving file", os.WriteFile(filepath.Join(surviving.root, "still-live.txt"), []byte("ok"), 0o644))
 	surviving.waitFor("still-live.txt", WorktreeChangeUnknown)
+func TestInotifyNestedNewDirDeliversSurvivingChildAndResyncsUnderBudgetCap(t *testing.T) {
+	t.Run("ample budget delivers surviving child and subsequent writes", func(t *testing.T) {
+		fixture := newInotifyRoot(t, 64)
+		testutil.WaitFor(t, "initial root coverage complete", func() bool {
+			return fixture.registry.Coverage(fixture.root).Complete
+		})
+		fixture.mu.Lock()
+		fixture.changes = nil
+		fixture.mu.Unlock()
+
+		nested := filepath.Join(fixture.root, "nested", "a", "b", "c")
+		testutil.FailErr(t, "mkdir -p nested/a/b/c", os.MkdirAll(nested, 0o755))
+		testutil.FailErr(t, "write surviving child", os.WriteFile(filepath.Join(nested, "surviving.txt"), []byte("v1"), 0o644))
+
+		fixture.waitFor("nested/a/b/c/surviving.txt", WorktreeChangeUnknown)
+		if !fixture.registry.DirWatched(fixture.root, "nested/a/b/c") {
+			t.Fatal("deepest newly created directory is not watched after adoption")
+		}
+
+		// Subsequent writes inside the adopted deepest directory must also arrive.
+		testutil.FailErr(t, "write followup child", os.WriteFile(filepath.Join(nested, "followup.txt"), []byte("v2"), 0o644))
+		fixture.waitFor("nested/a/b/c/followup.txt", WorktreeChangeUnknown)
+	})
+
+	t.Run("tight watch budget emits resync instead of silent omission", func(t *testing.T) {
+		fixture := newInotifyRoot(t, 2)
+		testutil.WaitFor(t, "initial root coverage complete", func() bool {
+			return fixture.registry.Coverage(fixture.root).Complete
+		})
+		fixture.mu.Lock()
+		fixture.changes = nil
+		fixture.mu.Unlock()
+
+		nested := filepath.Join(fixture.root, "nested", "a", "b", "c")
+		testutil.FailErr(t, "mkdir -p nested/a/b/c", os.MkdirAll(nested, 0o755))
+		testutil.FailErr(t, "write surviving child", os.WriteFile(filepath.Join(nested, "surviving.txt"), []byte("v1"), 0o644))
+
+		fixture.waitFor(".", WorktreeChangeResync)
+	})
 }
