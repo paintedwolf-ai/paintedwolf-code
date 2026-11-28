@@ -138,8 +138,8 @@ func recoverPromoteTransaction(ctx context.Context, dataDir, jobID string, promo
 		return shipped, err
 	}
 	found, err := checkpoint.RecoverTransaction(ctx, checkpoint.TransactionConfig{
-		Dir:               promoteTransactionDir(dataDir, jobID),
-		AuthorizedGitDirs: authorizedPromoteGitDirs(task, promote.Roots),
+		Dir:                   promoteTransactionDir(dataDir, jobID),
+		AuthorizedRootGitDirs: authorizedPromoteGitDirs(task, promote.Roots),
 	})
 	return shipped || found, err
 }

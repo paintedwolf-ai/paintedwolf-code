@@ -40,13 +40,21 @@ const (
 // ErrTransactionUnfinished refuses to start over a promotion recovery has not settled.
 var ErrTransactionUnfinished = errors.New("checkpoint: unfinished promotion transaction requires recovery")
 
+// AuthorizedGitDir binds one root's exact verified Git metadata directories
+// (gitdir and common dir), preventing cross-root authorization and prefix widening.
+type AuthorizedGitDir struct {
+	GitDir    string
+	CommonDir string
+}
+
 // TransactionConfig places one promotion's durable record. Dir belongs to this transaction alone.
 type TransactionConfig struct {
-	Dir               string
-	ID                string
-	AuthorizedGitDirs []string
-	Reached           func(step TransactionStep, path string) error
-	RetainLink        func(fseffect.HardLinkRequest) error
+	Dir                   string
+	ID                    string
+	AuthorizedGitDirs     []string
+	AuthorizedRootGitDirs map[string]AuthorizedGitDir
+	Reached               func(step TransactionStep, path string) error
+	RetainLink            func(fseffect.HardLinkRequest) error
 }
 
 // Transaction is the one promotion transaction. Every target effect has a durable undo before it
@@ -67,16 +75,17 @@ type Transaction struct {
 
 // transactionJournal is the durable fact a restart acts on, including the absolute roots it needs.
 type transactionJournal struct {
-	Version      int                     `json:"version"`
-	ID           string                  `json:"id"`
-	Phase        string                  `json:"phase"`
-	RollingBack  bool                    `json:"rolling_back,omitempty"`
-	Roots        map[string]rootIdentity `json:"roots,omitempty"`
-	Checkpoint   *journalCheckpoint      `json:"checkpoint,omitempty"`
-	Records      []string                `json:"records,omitempty"`
-	PendingSlots []string                `json:"pending_slots,omitempty"`
-	Targets      []targetUndo            `json:"targets,omitempty"`
-	Refs         []refUndo               `json:"refs,omitempty"`
+	Version      int                       `json:"version"`
+	ID           string                    `json:"id"`
+	Phase        string                    `json:"phase"`
+	RollingBack  bool                      `json:"rolling_back,omitempty"`
+	Roots        map[string]rootIdentity   `json:"roots,omitempty"`
+	GitDirs      map[string]gitDirIdentity `json:"git_dirs,omitempty"`
+	Checkpoint   *journalCheckpoint        `json:"checkpoint,omitempty"`
+	Records      []string                  `json:"records,omitempty"`
+	PendingSlots []string                  `json:"pending_slots,omitempty"`
+	Targets      []targetUndo              `json:"targets,omitempty"`
+	Refs         []refUndo                 `json:"refs,omitempty"`
 }
 
 type journalCheckpoint struct {

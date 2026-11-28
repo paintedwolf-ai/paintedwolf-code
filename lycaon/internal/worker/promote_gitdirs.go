@@ -4,9 +4,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -14,13 +14,17 @@ import (
 
 const maxGitlinkFileBytes = 4096
 
-// authorizedPromoteGitDirs returns verified linked-worktree Git metadata directories
-// (worktree gitdir and shared commondir) for registered promotion roots.
+// authorizedPromoteGitDirs maps each registered promotion root ID to its exact verified
+// linked-worktree Git metadata directories (worktree gitdir and shared commondir).
 // Only roots whose .git gitlink is structurally proven by privategit.ProveLinkedWorktree
-// are authorized; unknown, detached, symlinked, or tampered metadata is excluded so
-// checkpoint ref import and rollback still refuse it.
-func authorizedPromoteGitDirs(task *api.WorkerTask, roots []projectroot.RootRef) []string {
-	var rootDirs []string
+// are authorized, and each authorization is scoped strictly to its own root ID so one root
+// cannot authorize another root's metadata or widen prefix matches.
+func authorizedPromoteGitDirs(task *api.WorkerTask, roots []projectroot.RootRef) map[string]checkpoint.AuthorizedGitDir {
+	type rootTarget struct {
+		id   string
+		path string
+	}
+	var targets []rootTarget
 	hasPrimary := false
 	for _, r := range roots {
 		if r.Outside {
@@ -29,26 +33,29 @@ func authorizedPromoteGitDirs(task *api.WorkerTask, roots []projectroot.RootRef)
 		if r.IsPrimary {
 			hasPrimary = true
 		}
-		if p := strings.TrimSpace(r.Path); p != "" {
-			rootDirs = append(rootDirs, p)
+		id := strings.TrimSpace(r.ID)
+		p := strings.TrimSpace(r.Path)
+		if id != "" && p != "" {
+			targets = append(targets, rootTarget{id: id, path: p})
 		}
 	}
 	if !hasPrimary && task != nil {
-		if p := strings.TrimSpace(task.WorkspacePath); p != "" {
-			rootDirs = append(rootDirs, p)
+		id := strings.TrimSpace(task.WorkspaceRootID)
+		p := strings.TrimSpace(task.WorkspacePath)
+		if id != "" && p != "" {
+			targets = append(targets, rootTarget{id: id, path: p})
 		}
 	}
-	var allowed []string
-	add := func(dir string) {
-		dir = filepath.Clean(strings.TrimSpace(dir))
-		if dir != "" && dir != "." && !slices.Contains(allowed, dir) {
-			allowed = append(allowed, dir)
-		}
-	}
-	for _, rootDir := range rootDirs {
-		if gitDir, commonDir, ok := verifiedLinkedWorktreeGitDirs(rootDir); ok {
-			add(gitDir)
-			add(commonDir)
+	var allowed map[string]checkpoint.AuthorizedGitDir
+	for _, t := range targets {
+		if gitDir, commonDir, ok := verifiedLinkedWorktreeGitDirs(t.path); ok {
+			if allowed == nil {
+				allowed = make(map[string]checkpoint.AuthorizedGitDir, len(targets))
+			}
+			allowed[t.id] = checkpoint.AuthorizedGitDir{
+				GitDir:    gitDir,
+				CommonDir: commonDir,
+			}
 		}
 	}
 	return allowed

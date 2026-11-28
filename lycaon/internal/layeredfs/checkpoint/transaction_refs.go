@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/gitexec"
 )
 
@@ -50,8 +52,11 @@ func (txn *Transaction) prepareRefs(m Manifest, targetRoots map[string]string, p
 }
 
 func (txn *Transaction) rootRefUndo(m Manifest, rootID, dir string, named map[string]string) ([]refUndo, error) {
-	gitDir, common, err := ResolveGitDirs(dir, txn.cfg.AuthorizedGitDirs...)
+	gitDir, common, err := txn.resolveRootGitDirs(rootID, dir)
 	if err != nil {
+		return nil, err
+	}
+	if err := txn.recordRootGitDirIdentity(rootID, gitDir, common); err != nil {
 		return nil, err
 	}
 	packed := loadPackedRefsMap(common, gitDir)
@@ -93,7 +98,7 @@ func (txn *Transaction) rollbackRefs(ctx context.Context, refs []refUndo) error 
 
 func (txn *Transaction) rollbackRootRefs(ctx context.Context, rootID string, refs []refUndo) error {
 	primary := txn.targets.roots[rootID]
-	gitDir, common, err := ResolveGitDirs(primary, txn.cfg.AuthorizedGitDirs...)
+	gitDir, common, err := txn.verifyRecordedRootGitDirs(rootID, primary)
 	if err != nil {
 		return err
 	}
@@ -127,4 +132,113 @@ func (txn *Transaction) rollbackRootRefs(ctx context.Context, rootID string, ref
 		return errors.Join(err, fmt.Errorf("%w: rollback refs failed (exit %d): %s", ErrCheckpointRefConflict, code, strings.TrimSpace(string(output))))
 	}
 	return nil
+}
+
+func (txn *Transaction) resolveRootGitDirs(rootID, dir string) (string, string, error) {
+	if auth, ok := txn.cfg.AuthorizedRootGitDirs[rootID]; ok {
+		gitDir, common, err := ResolveGitDirs(dir, auth.GitDir, auth.CommonDir)
+		if err != nil {
+			return "", "", err
+		}
+		if !sameCanonicalPath(gitDir, auth.GitDir) || !sameCanonicalPath(common, auth.CommonDir) {
+			return "", "", fmt.Errorf("%w: gitdir=%s commondir=%s", ErrUnauthorizedGitDir, gitDir, common)
+		}
+		return gitDir, common, nil
+	}
+	return ResolveGitDirs(dir, txn.cfg.AuthorizedGitDirs...)
+}
+
+func (txn *Transaction) recordRootGitDirIdentity(rootID, gitDir, common string) error {
+	ident, err := captureGitDirIdentity(gitDir, common)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrUnauthorizedGitDir, err)
+	}
+	if txn.journal.GitDirs == nil {
+		txn.journal.GitDirs = map[string]gitDirIdentity{}
+	}
+	if existing, ok := txn.journal.GitDirs[rootID]; ok && !sameGitDirIdentity(ident, existing) {
+		return fmt.Errorf("%w: git metadata changed for root %q", ErrUnauthorizedGitDir, rootID)
+	}
+	txn.journal.GitDirs[rootID] = ident
+	return nil
+}
+
+func (txn *Transaction) verifyRecordedRootGitDirs(rootID, dir string) (string, string, error) {
+	gitDir, common, err := txn.resolveRootGitDirs(rootID, dir)
+	if err != nil {
+		return "", "", err
+	}
+	if recorded, ok := txn.journal.GitDirs[rootID]; ok {
+		live, err := captureGitDirIdentity(gitDir, common)
+		if err != nil {
+			return "", "", fmt.Errorf("%w: %w", ErrUnauthorizedGitDir, err)
+		}
+		if !sameGitDirIdentity(live, recorded) {
+			return "", "", fmt.Errorf("%w: git metadata changed for root %q", ErrUnauthorizedGitDir, rootID)
+		}
+	}
+	return gitDir, common, nil
+}
+
+func (txn *Transaction) importCheckpointGitRefs(
+	ctx context.Context, sources GitObjectSources, m Manifest, targetRoots map[string]string, primaryRoot string,
+) (map[string]string, error) {
+	return importCheckpointGitRefsWith(
+		ctx, sources, m.CheckpointID, m.WorkerID, m.PrivateGit, targetRoots, primaryRoot,
+		txn.cfg.AuthorizedGitDirs, txn.verifyRecordedRootGitDirs,
+	)
+}
+
+func captureGitDirIdentity(gitDir, common string) (gitDirIdentity, error) {
+	canonGit, err := canonicalDirPath(gitDir)
+	if err != nil {
+		return gitDirIdentity{}, err
+	}
+	canonCommon, err := canonicalDirPath(common)
+	if err != nil {
+		return gitDirIdentity{}, err
+	}
+	gitIdent, err := fspath.EntryIdentity(canonGit)
+	if err != nil {
+		return gitDirIdentity{}, err
+	}
+	commonIdent, err := fspath.EntryIdentity(canonCommon)
+	if err != nil {
+		return gitDirIdentity{}, err
+	}
+	return gitDirIdentity{
+		GitDir:         canonGit,
+		GitIdentity:    gitIdent,
+		CommonDir:      canonCommon,
+		CommonIdentity: commonIdent,
+	}, nil
+}
+
+func sameGitDirIdentity(live, recorded gitDirIdentity) bool {
+	return sameCanonicalPath(live.GitDir, recorded.GitDir) &&
+		fspath.SameEntryAcrossRestart(recorded.GitIdentity, live.GitIdentity) &&
+		sameCanonicalPath(live.CommonDir, recorded.CommonDir) &&
+		fspath.SameEntryAcrossRestart(recorded.CommonIdentity, live.CommonIdentity)
+}
+
+func sameCanonicalPath(a, b string) bool {
+	ca, errA := canonicalDirPath(a)
+	cb, errB := canonicalDirPath(b)
+	return errA == nil && errB == nil && ca == cb
+}
+
+func canonicalDirPath(p string) (string, error) {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return "", ErrUnauthorizedGitDir
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", err
+	}
+	realPath, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(realPath), nil
 }

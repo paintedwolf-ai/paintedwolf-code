@@ -284,3 +284,122 @@ func TestPromoteOverlayRefusesInvalidOrTamperedGitMetadata(t *testing.T) {
 		})
 	}
 }
+
+func TestRecoverPromoteTransactionOnRegisteredLinkedWorktree(t *testing.T) {
+	ctx := t.Context()
+	f := setupLinkedWorktreePromoteFixture(t, true)
+
+	// Simulate an interrupted promotion using the actual journal path: apply checkpoint
+	// (files + Git refs) and leave the transaction uncommitted on disk.
+	promote := PromoteRootsForTask(f.task, f.roots)
+	dataDir := f.service.hostDataDirFor(f.task)
+	tx, err := beginPromoteTransactionWith(dataDir, f.jobID, nil, checkpoint.TransactionConfig{
+		AuthorizedRootGitDirs: authorizedPromoteGitDirs(f.task, f.roots),
+	})
+	testutil.FailErr(t, "beginPromoteTransactionWith", err)
+	testutil.FailErr(t, "applyTaskCheckpoint", applyTaskCheckpoint(ctx, f.service, tx, f.task, "", nil))
+
+	// Confirm the uncommitted apply landed files and imported refs before recovery.
+	gotApp, err := os.ReadFile(filepath.Join(f.worktreeDir, "app.txt"))
+	testutil.FailErr(t, "read applied app.txt", err)
+	if string(gotApp) != "worker-edit\n" {
+		t.Fatalf("applied app.txt = %q, want %q", string(gotApp), "worker-edit\n")
+	}
+	if refs := strings.TrimSpace(gittest.Run(t, f.worktreeDir, "for-each-ref", "refs/lycaon/workers/")); refs == "" {
+		t.Fatalf("expected imported refs before recovery")
+	}
+
+	// Recover via the actual journal path with the same registered root identity.
+	found, err := recoverPromoteTransaction(ctx, dataDir, f.jobID, promote, f.task)
+	testutil.FailErr(t, "recoverPromoteTransaction", err)
+	if !found {
+		t.Fatalf("recoverPromoteTransaction found = false, want true")
+	}
+
+	// Linked worktree files and imported Git refs must be rolled back; primary repo stays untouched.
+	restoredApp, err := os.ReadFile(filepath.Join(f.worktreeDir, "app.txt"))
+	testutil.FailErr(t, "read restored app.txt", err)
+	if string(restoredApp) != "primary-base\n" {
+		t.Fatalf("restored app.txt = %q, want %q", string(restoredApp), "primary-base\n")
+	}
+	if _, err := os.Stat(filepath.Join(f.worktreeDir, "worker_added.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("worker_added.txt still exists after recovery: err=%v", err)
+	}
+	if refs := strings.TrimSpace(gittest.Run(t, f.worktreeDir, "for-each-ref", "refs/lycaon/")); refs != "" {
+		t.Fatalf("expected refs/lycaon/ rolled back after recovery, got:\n%s", refs)
+	}
+	primaryApp, err := os.ReadFile(filepath.Join(f.primaryDir, "app.txt"))
+	testutil.FailErr(t, "read primary app.txt", err)
+	if string(primaryApp) != "primary-base\n" {
+		t.Fatalf("primary app.txt = %q, want %q", string(primaryApp), "primary-base\n")
+	}
+}
+
+func TestRecoverPromoteTransactionRefusesChangedGitMetadataAcrossRestart(t *testing.T) {
+	ctx := t.Context()
+	f := setupLinkedWorktreePromoteFixture(t, true)
+
+	// Apply checkpoint into the actual journal and leave it uncommitted (simulating crash before commit).
+	promote := PromoteRootsForTask(f.task, f.roots)
+	dataDir := f.service.hostDataDirFor(f.task)
+	tx, err := beginPromoteTransactionWith(dataDir, f.jobID, nil, checkpoint.TransactionConfig{
+		AuthorizedRootGitDirs: authorizedPromoteGitDirs(f.task, f.roots),
+	})
+	testutil.FailErr(t, "beginPromoteTransactionWith", err)
+	testutil.FailErr(t, "applyTaskCheckpoint", applyTaskCheckpoint(ctx, f.service, tx, f.task, "", nil))
+
+	// Before restart/recovery, swap worktreeDir/.git to a DIFFERENT structurally valid
+	// linked worktree admin dir pointing back to worktreeDir/.git.
+	otherBase := t.TempDir()
+	otherRepo := filepath.Join(otherBase, "other-repo")
+	testutil.FailErr(t, "mkdir other-repo", os.MkdirAll(otherRepo, 0o755))
+	testutil.FailErr(t, "seed other-repo", os.WriteFile(filepath.Join(otherRepo, "other.txt"), []byte("other\n"), 0o644))
+	gittest.InitCommit(t, otherRepo, "other init")
+	otherAdmin := filepath.Join(otherRepo, ".git", "worktrees", "wt-branch")
+	testutil.FailErr(t, "mkdir other admin", os.MkdirAll(otherAdmin, 0o755))
+	dotGit := filepath.Join(f.worktreeDir, ".git")
+	testutil.FailErr(t, "write other back-ref", os.WriteFile(filepath.Join(otherAdmin, "gitdir"), []byte(dotGit+"\n"), 0o644))
+	testutil.FailErr(t, "write other commondir", os.WriteFile(filepath.Join(otherAdmin, "commondir"), []byte("../..\n"), 0o644))
+	testutil.FailErr(t, "swap worktree .git to otherRepo", os.WriteFile(dotGit, []byte("gitdir: "+otherAdmin+"\n"), 0o644))
+
+	// Recovery must refuse with typed ErrUnauthorizedGitDir because the durable journal
+	// recorded the original gitdir/commondir identity, not otherRepo.
+	found, err := recoverPromoteTransaction(ctx, dataDir, f.jobID, promote, f.task)
+	if !found {
+		t.Fatalf("recoverPromoteTransaction found = false, want true")
+	}
+	if !errors.Is(err, checkpoint.ErrUnauthorizedGitDir) {
+		t.Fatalf("recoverPromoteTransaction err = %v, want ErrUnauthorizedGitDir", err)
+	}
+	if refs := strings.TrimSpace(gittest.Run(t, otherRepo, "for-each-ref", "refs/lycaon/")); refs != "" {
+		t.Fatalf("foreign repo unexpectedly mutated during refused recovery: %s", refs)
+	}
+}
+
+func TestAuthorizedPromoteGitDirsIsRootScoped(t *testing.T) {
+	base := t.TempDir()
+	primaryDir := filepath.Join(base, "primary-repo")
+	wtA := filepath.Join(base, "wt-a")
+	rootB := filepath.Join(base, "root-b")
+	testutil.FailErr(t, "mkdir primary", os.MkdirAll(primaryDir, 0o755))
+	testutil.FailErr(t, "seed primary", os.WriteFile(filepath.Join(primaryDir, "a.txt"), []byte("a\n"), 0o644))
+	gittest.InitCommit(t, primaryDir, "init")
+	gittest.Run(t, primaryDir, "worktree", "add", "-b", "branch-a", wtA)
+	adminA := filepath.Join(primaryDir, ".git", "worktrees", "wt-a")
+
+	// Root B borrows Root A's administrative directory (cross-root impostor).
+	testutil.FailErr(t, "mkdir rootB", os.MkdirAll(rootB, 0o755))
+	testutil.FailErr(t, "write impostor .git", os.WriteFile(filepath.Join(rootB, ".git"), []byte("gitdir: "+adminA+"\n"), 0o644))
+
+	roots := []projectroot.RootRef{
+		{ID: "root-a", Path: wtA, IsPrimary: true},
+		{ID: "root-b", Path: rootB},
+	}
+	auth := authorizedPromoteGitDirs(nil, roots)
+	if _, ok := auth["root-a"]; !ok {
+		t.Fatalf("expected root-a to be authorized, got %+v", auth)
+	}
+	if _, ok := auth["root-b"]; ok {
+		t.Fatalf("expected cross-root impostor root-b to be excluded, got %+v", auth)
+	}
+}

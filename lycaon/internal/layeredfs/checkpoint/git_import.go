@@ -173,6 +173,14 @@ func ImportAndValidateCheckpointGitRefs(
 	ctx context.Context, sources GitObjectSources, checkpointID, workerID string, git PrivateGitSnapshot,
 	targetRoots map[string]string, primaryRoot string, authorizedGitDirs ...string,
 ) (map[string]string, error) {
+	return importCheckpointGitRefsWith(ctx, sources, checkpointID, workerID, git, targetRoots, primaryRoot, authorizedGitDirs, nil)
+}
+
+func importCheckpointGitRefsWith(
+	ctx context.Context, sources GitObjectSources, checkpointID, workerID string, git PrivateGitSnapshot,
+	targetRoots map[string]string, primaryRoot string, authorizedGitDirs []string,
+	resolveGitDirs func(rootID, repoRoot string) (string, string, error),
+) (map[string]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -190,13 +198,13 @@ func ImportAndValidateCheckpointGitRefs(
 	}
 	request := rootRefImport{
 		storeDir: sources.StoreDir, retained: sources.Retained, checkpointID: cleanCheckpoint, workerID: cleanWorker,
-		objectCheckpoints: git.ObjectCheckpoints, authorizedGitDirs: authorizedGitDirs,
+		objectCheckpoints: git.ObjectCheckpoints, authorizedGitDirs: authorizedGitDirs, resolveGitDirs: resolveGitDirs,
 	}
 	imported := map[string]string{}
 	if len(git.Refs) > 0 {
 		primaryDir := strings.TrimSpace(targetRoots[primaryRoot])
 		if repositoryPresent(primaryDir) {
-			request.repoRoot, request.refs = primaryDir, git.Refs
+			request.repoRoot, request.targetRootID, request.rootID, request.refs = primaryDir, primaryRoot, "", git.Refs
 			planned, err := importRootRefs(ctx, request)
 			if err != nil {
 				return nil, err
@@ -215,7 +223,7 @@ func ImportAndValidateCheckpointGitRefs(
 		if len(git.Roots[rootID].Refs) == 0 || !repositoryPresent(dir) {
 			continue
 		}
-		request.repoRoot, request.rootID, request.refs = dir, rootID, git.Roots[rootID].Refs
+		request.repoRoot, request.targetRootID, request.rootID, request.refs = dir, rootID, rootID, git.Roots[rootID].Refs
 		planned, err := importRootRefs(ctx, request)
 		if err != nil {
 			return nil, err
@@ -281,17 +289,24 @@ type GitObjectSources struct {
 type rootRefImport struct {
 	storeDir, checkpointID, workerID string
 	retained                         []string
-	repoRoot, rootID                 string
+	repoRoot, targetRootID, rootID   string
 	refs                             map[string]string
 	objectCheckpoints                []string
 	authorizedGitDirs                []string
+	resolveGitDirs                   func(rootID, repoRoot string) (string, string, error)
 }
 
 func importRootRefs(ctx context.Context, req rootRefImport) (map[string]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	gitDir, commonGitDir, err := ResolveGitDirs(req.repoRoot, req.authorizedGitDirs...)
+	resolve := req.resolveGitDirs
+	if resolve == nil {
+		resolve = func(_, repoRoot string) (string, string, error) {
+			return ResolveGitDirs(repoRoot, req.authorizedGitDirs...)
+		}
+	}
+	gitDir, commonGitDir, err := resolve(req.targetRootID, req.repoRoot)
 	if err != nil {
 		return nil, err
 	}
