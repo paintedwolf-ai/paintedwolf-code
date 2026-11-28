@@ -440,15 +440,6 @@ func (f *GoFile) hasFuncName(name string) bool {
 	return false
 }
 
-func (f *GoFile) hasFuncBody(name string) bool {
-	for _, fn := range f.funcs {
-		if fn.name == name && fn.hasBody {
-			return true
-		}
-	}
-	return false
-}
-
 func (f *GoFile) hasAnyFuncBody() bool {
 	for _, fn := range f.funcs {
 		if fn.hasBody {

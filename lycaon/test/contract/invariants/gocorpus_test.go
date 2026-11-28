@@ -195,7 +195,7 @@ func TestGoCorpusOnDemandErrorsFailClosed(t *testing.T) {
 	}{
 		{
 			name:   "deleted after index",
-			mutate: func(path string) error { return os.Remove(path) },
+			mutate: os.Remove,
 		},
 		{
 			name: "corrupted syntax after index",
