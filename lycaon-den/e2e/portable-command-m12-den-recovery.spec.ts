@@ -9,6 +9,7 @@ import {
   apiJson,
   apiPostPrompt,
   bootstrapChatSession,
+  E2E_FIXTURE_PROJECT,
   expectShellReady,
   liveChatStage,
   openSessionRow,
@@ -37,13 +38,7 @@ webE2e("M12 Den recovery: rendered approval-no denies outside write_root, allowe
   webE2e.setTimeout(180_000);
 
   const project = await bootstrapChatSession(page, request);
-  const projectDetail = await apiJson<{ directory?: string; root_path?: string; path?: string }>(
-    request,
-    "GET",
-    `/v1/projects/${project.id}`,
-  );
-  const projectDir = projectDetail.directory ?? projectDetail.root_path ?? projectDetail.path;
-  expect(projectDir).toBeTruthy();
+  const projectDir = E2E_FIXTURE_PROJECT;
   const sessionId = await settledChatSessionId(page);
   const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "pw-m12-den-outside-"));
   const outsideTarget = path.join(outsideDir, "denied.txt");
