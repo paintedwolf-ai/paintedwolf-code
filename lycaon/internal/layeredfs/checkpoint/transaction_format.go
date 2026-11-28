@@ -19,6 +19,13 @@ type rootIdentity struct {
 	Identity string `json:"identity"`
 }
 
+type gitDirIdentity struct {
+	GitDir         string `json:"git_dir"`
+	GitIdentity    string `json:"git_identity"`
+	CommonDir      string `json:"common_dir"`
+	CommonIdentity string `json:"common_identity"`
+}
+
 func (txn *Transaction) rootIdentities() (map[string]rootIdentity, error) {
 	return identifyRoots(txn.targets)
 }
@@ -90,6 +97,14 @@ func (txn *Transaction) validateJournal(tx transactionJournal) error {
 	}
 	if !maps.EqualFunc(roots, tx.Roots, sameRoot) {
 		return fmt.Errorf("checkpoint: recovery target roots changed")
+	}
+	for id, gd := range tx.GitDirs {
+		if _, known := tx.Roots[id]; !known {
+			return ErrInvalidManifest
+		}
+		if !filepath.IsAbs(gd.GitDir) || !filepath.IsAbs(gd.CommonDir) || strings.TrimSpace(gd.GitIdentity) == "" || strings.TrimSpace(gd.CommonIdentity) == "" {
+			return ErrInvalidManifest
+		}
 	}
 	for _, record := range tx.Records {
 		if !filepath.IsAbs(record) {
