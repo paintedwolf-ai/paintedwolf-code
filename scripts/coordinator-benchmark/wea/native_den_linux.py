@@ -1055,15 +1055,23 @@ def run_linux_tauri_native(
                     and check_after_click.get("sha256") != onboarding_step2_sha256
                 )
 
-        # Optionally navigate from Home into the seeded project and seeded chat session.
+        # Optionally navigate from Home -> All projects -> seeded project -> seeded chat session.
         navigation_events: list[dict[str, Any]] = []
         atspi_home_nodes: list[dict[str, Any]] = []
         atspi_chat_nodes: list[dict[str, Any]] = []
         chat_opened = False
         if open_project_hint or open_session_hint:
             atspi_home_nodes = _collect_atspi_nodes(proc.pid)
+            all_proj = _activate_atspi_button(proc.pid, "All projects", invoke=True)
+            if all_proj.get("found"):
+                navigation_events.append({"step": "all_projects", **all_proj})
+                if not all_proj.get("invoked") and isinstance(all_proj.get("center"), list):
+                    cx, cy = all_proj["center"]
+                    navigation_events.append({"step": "all_projects_click", **_click_x11_window_point(xid, cx, cy)})
+                time.sleep(1.5)
             if open_project_hint:
-                proj_match = _activate_atspi_match(proc.pid, [open_project_hint], invoke=True)
+                proj_hints = [f"/{open_session_hint}/project", open_project_hint] if open_session_hint else [open_project_hint]
+                proj_match = _activate_atspi_match(proc.pid, proj_hints, invoke=True)
                 navigation_events.append({"step": "open_project", **proj_match})
                 if not proj_match.get("invoked") and isinstance(proj_match.get("center"), list):
                     cx, cy = proj_match["center"]
@@ -1071,14 +1079,16 @@ def run_linux_tauri_native(
                 time.sleep(2.0)
                 _capture_x11_window_png(xid, out / "linux-native-den-tauri-project.png")
             if open_session_hint:
-                sess_match = _activate_atspi_match(proc.pid, [open_session_hint, "TB10"], invoke=True)
+                sess_hints = [f"TB10 {open_session_hint}", open_session_hint]
+                sess_match = _activate_atspi_match(proc.pid, sess_hints, invoke=True)
                 navigation_events.append({"step": "open_session", **sess_match})
                 if not sess_match.get("invoked") and isinstance(sess_match.get("center"), list):
                     cx, cy = sess_match["center"]
                     navigation_events.append({"step": "open_session_click", **_click_x11_window_point(xid, cx, cy)})
-                time.sleep(2.0)
+                time.sleep(2.5)
                 chat_opened = bool(sess_match.get("found"))
-            atspi_chat_nodes = _collect_atspi_nodes(proc.pid)
+                _capture_x11_window_png(xid, out / "linux-native-den-tauri-chat.png")
+            atspi_chat_nodes = _collect_atspi_nodes(proc.pid, max_nodes=400)
             atspi_after_nav = _probe_atspi(proc.pid)
             if atspi_after_nav.get("observed"):
                 atspi_after = atspi_after_nav
