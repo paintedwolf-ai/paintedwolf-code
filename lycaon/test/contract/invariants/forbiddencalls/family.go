@@ -53,6 +53,7 @@ var Family = invariants.Family{Name: "forbidden-calls", Invariants: slices.Conca
 	writeDoor,
 	platform,
 	portablePython,
+	pythonConstruction,
 	processLaunch,
 	processLifetime,
 	retention,
