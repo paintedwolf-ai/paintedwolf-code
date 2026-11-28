@@ -13,7 +13,6 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/agentdef"
-	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scopedstore"
@@ -174,49 +173,17 @@ type skillRenderMemo struct {
 }
 
 var (
-	skillRenderCache           = scopedstore.New[skillRenderMemo](256)
-	readerSkillVarsCache       = scopedstore.New[map[string]any](256)
-	skillOfferedForReaderCache = scopedstore.New[bool](4096)
+	skillRenderCache           = scopedstore.New[skillRenderMemo](2048)
+	readerSkillVarsCache       = scopedstore.New[map[string]any](1024)
+	skillOfferedForReaderCache = scopedstore.New[bool](8192)
 )
 
-func varsDigestKey(vars map[string]any) string {
-	h := sha256.New()
-	_, _ = fmt.Fprintf(h, "%v", vars)
-	return string(h.Sum(nil))
+func renderSkillTextIn(cache map[string]skillRenderMemo, _ string, text string, vars map[string]any) (string, error) {
+	return renderSkillTextProjected(cache, text, vars)
 }
 
-func skillRenderCacheKey(varsKey, text string) string {
-	sum := sha256.Sum256([]byte(text))
-	return varsKey + "\x00" + string(sum[:])
-}
-
-func renderSkillTextIn(cache map[string]skillRenderMemo, varsKey, text string, vars map[string]any) (string, error) {
-	key := skillRenderCacheKey(varsKey, text)
-	if hit, ok := cache[key]; ok {
-		return hit.out, hit.err
-	}
-	out, err := renderSkillText(text, vars)
-	cache[key] = skillRenderMemo{out: out, err: err}
-	return out, err
-}
-
-func renderSkillTextCached(varsKey, text string, vars map[string]any) (string, error) {
-	key := skillRenderCacheKey(varsKey, text)
-	if hit, ok := skillRenderCache.Load(key); ok {
-		return hit.out, hit.err
-	}
-	out, err := renderSkillText(text, vars)
-	skillRenderCache.Store(key, skillRenderMemo{out: out, err: err})
-	return out, err
-}
-
-// renderSkillText renders one skill text through its template.
-func renderSkillText(text string, vars map[string]any) (string, error) {
-	tpl, err := pongoplain.Compile(text)
-	if err != nil {
-		return "", err
-	}
-	return pongoplain.ExecuteDetachedUnobserved(tpl, vars)
+func renderSkillTextCached(_ string, text string, vars map[string]any) (string, error) {
+	return renderSkillTextProjected(nil, text, vars)
 }
 
 // guardSuggestion names the profile_has_ fact that gates name for readers: the
@@ -377,15 +344,12 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 			problems = append(problems, err.Error())
 			continue
 		}
-		defaultKey := varsDigestKey(vars)
+		defaultKey := ""
 		variants := skillRenderVarVariants(vars)
 		variantKeys := make([]string, len(variants))
-		for i, v := range variants {
-			variantKeys[i] = varsDigestKey(v.vars)
-		}
-		memoRender := func(varsKey string) func(string, map[string]any) (string, error) {
+		memoRender := func(_ string) func(string, map[string]any) (string, error) {
 			return func(body string, renderVars map[string]any) (string, error) {
-				return renderSkillTextIn(validationRenderCache, varsKey, body, renderVars)
+				return renderSkillTextProjected(validationRenderCache, body, renderVars)
 			}
 		}
 		seen := map[string]bool{}
@@ -604,17 +568,7 @@ func skillToolsOfferedForReaderWith(sk skills.Skill, reader prompts.Reader, loca
 	}
 	offered := reader.Held()
 	anyOf := sk.AnyOfTools()
-	cacheKey := "reader:" + fp
-	if fp == "" {
-		cacheKey = "reader-nofp:" + varsDigestKey(vars)
-	}
-	var rendered string
-	var renderErr error
-	if localCache != nil {
-		rendered, renderErr = renderSkillTextIn(localCache, cacheKey, sk.Body, vars)
-	} else {
-		rendered, renderErr = renderSkillTextCached(cacheKey, sk.Body, vars)
-	}
+	rendered, renderErr := renderSkillTextProjected(localCache, sk.Body, vars)
 	if renderErr != nil {
 		rendered = sk.Body
 	}
@@ -637,28 +591,60 @@ func evalSkillRenderedReach(
 	if desc := strings.TrimSpace(sk.Description); desc != "" {
 		checkText = desc + "\n" + rendered
 	}
+	analysis := analyzeSkillText(c, checkText)
 	reachable := offered
 	if offered[toolreach.LoaderTool] && len(requestable) > 0 {
 		reachable = maps.Clone(offered)
+		loadable := make(map[string]bool, len(requestable))
 		for _, name := range requestable {
 			reachable[name] = true
+			if !offered[name] {
+				loadable[name] = true
+			}
 		}
-		for _, call := range UnheldCalls(c, checkText, offered, requestable) {
-			if !slices.Contains(anyOf, call.Tool) {
-				return false
+		for _, calls := range analysis.blockCalls {
+			for _, call := range calls {
+				if loadable[call.Tool] && !LoadedBefore(c, calls, call.Tool, call.Start) && !slices.Contains(anyOf, call.Tool) {
+					return false
+				}
 			}
 		}
 		if !offered[toolreach.ProgramTool] && slices.Contains(requestable, toolreach.ProgramTool) &&
 			!slices.Contains(anyOf, toolreach.ProgramTool) &&
 			strings.TrimSpace(sk.Metadata["authoring_reference"]) != "true" {
-			if len(UnloadedCommandSpans(c, checkText)) > 0 {
+			if analysis.hasUnloadedCmdSpans {
 				return false
 			}
 		}
 	}
-	for _, name := range UnreachableNames(c, checkText, reachable) {
+	for _, name := range analysis.toolsIn {
+		if reachable[name] || toolcontract.CommandLanguageReachable(name, reachable) {
+			continue
+		}
 		if !slices.Contains(anyOf, name) {
 			return false
+		}
+	}
+	for _, name := range analysis.hyphenForms {
+		if reachable[name] || toolcontract.CommandLanguageReachable(name, reachable) {
+			continue
+		}
+		if !slices.Contains(anyOf, name) {
+			return false
+		}
+	}
+	if analysis.hasEmptyHandle && !slices.Contains(anyOf, "#") {
+		return false
+	}
+	if len(analysis.handleTokens) > 0 {
+		minted := c.mintFacts(reachable)
+		for _, name := range analysis.handleTokens {
+			ok, kind := minted[name]
+			if (kind && !ok) || (!kind && (c.registered[name] || c.operations[name])) {
+				if !slices.Contains(anyOf, name+"#") {
+					return false
+				}
+			}
 		}
 	}
 	if len(anyOf) == 0 {
