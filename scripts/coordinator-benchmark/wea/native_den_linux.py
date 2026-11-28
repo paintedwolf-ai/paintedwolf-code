@@ -699,6 +699,10 @@ def run_linux_tauri_native(
         # Allow main workspace UI to finish rendering past the splash screen.
         time.sleep(2.0)
 
+        # Capture pre-input owned-window screenshot BEFORE sending keyboard events.
+        screenshot_before_path = out / "linux-native-den-tauri-before.png"
+        shot_before = _capture_x11_window_png(xid, screenshot_before_path)
+
         atspi_before = _probe_atspi(proc.pid)
         keyboard_events: list[dict[str, Any]] = []
         key_ev: dict[str, Any] = {"sent": False}
@@ -715,6 +719,14 @@ def run_linux_tauri_native(
             ):
                 break
 
+        # Activate the focused control via Return to produce an observable UI state transition.
+        activate_ev = _send_x11_key(xid, "Return")
+        keyboard_events.append(activate_ev)
+        time.sleep(0.6)
+        atspi_after_activate = _probe_atspi(proc.pid)
+        if atspi_after_activate.get("observed"):
+            atspi_after = atspi_after_activate
+
         atspi_focus_changed = bool(
             atspi_before.get("focused_key")
             and atspi_after.get("focused_key")
@@ -722,6 +734,13 @@ def run_linux_tauri_native(
         )
         screenshot_path = out / "linux-native-den-tauri.png"
         shot = _capture_x11_window_png(xid, screenshot_path)
+        screenshot_changed = bool(
+            shot_before.get("valid_png")
+            and shot.get("valid_png")
+            and shot_before.get("sha256")
+            and shot.get("sha256")
+            and shot_before.get("sha256") != shot.get("sha256")
+        )
         app_alive_after = proc.poll() is None
 
         engine_pid = int(engine_boot.get("engine_pid") or 0)
@@ -773,9 +792,13 @@ def run_linux_tauri_native(
             "atspi_after": atspi_after,
             "atspi_observed": atspi_after,
             "atspi_focus_changed": atspi_focus_changed,
+            "screenshot_before_path": str(screenshot_before_path),
+            "screenshot_before_sha256": shot_before.get("sha256", ""),
+            "screenshot_before_bytes": int(shot_before.get("bytes") or 0),
             "screenshot_path": str(screenshot_path),
             "screenshot_sha256": shot.get("sha256", ""),
             "screenshot_bytes": int(shot.get("bytes") or 0),
+            "screenshot_changed": screenshot_changed,
             "screenshot_dimensions": [shot.get("width", 0), shot.get("height", 0)],
             "screenshot_tool": shot.get("tool", ""),
             "api_readback": api_readback,

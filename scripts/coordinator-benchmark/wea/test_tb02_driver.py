@@ -126,12 +126,17 @@ class TestTB02DesktopDrivers(unittest.TestCase):
             fake_app.chmod(0o755)
             out_dir = root / "tauri-out"
 
+            shot_idx = [0]
+
             def fake_capture(xid, dest):
-                dest.write_bytes(_minimal_png_bytes(1280, 800))
+                shot_idx[0] += 1
+                w = 1280 if shot_idx[0] == 1 else 1281
+                dest.write_bytes(_minimal_png_bytes(w, 800))
                 return {"tool": "import", **native_den_linux.parse_png_info(dest)}
 
             atspi_seq = [
                 {"available": True, "observed": True, "app_name": "painted-wolf-code", "focused_key": "entry|Composer"},
+                {"available": True, "observed": True, "app_name": "painted-wolf-code", "focused_key": "push button|Send"},
                 {"available": True, "observed": True, "app_name": "painted-wolf-code", "focused_key": "push button|Send"},
             ]
             with (
@@ -158,7 +163,8 @@ class TestTB02DesktopDrivers(unittest.TestCase):
             self.assertEqual(rec["engine_pid"], 88888)
             self.assertEqual(rec["api_readback"]["health"], {"status": "ok"})
             self.assertTrue(rec["atspi_focus_changed"])
-            self.assertEqual(rec["screenshot_dimensions"], [1280, 800])
+            self.assertTrue(rec["screenshot_changed"])
+            self.assertEqual(rec["screenshot_dimensions"], [1281, 800])
             self.assertTrue((out_dir / "native-den-linux-tauri-receipt.json").is_file())
 
             # Missing binary fails closed with status=blocked.
