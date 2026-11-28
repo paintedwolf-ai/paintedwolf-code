@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/projectroot"
 
+	"github.com/lycaon/lycaon/internal/commandmode"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
@@ -104,19 +105,7 @@ func (o *Owners) SelectMode(argv commandprogram.Fields) (string, bool) {
 
 // A response can update a managed jar even when the body goes to stdout.
 func transferMode(opts options) string {
-	updatesJar := opts.managedCookies != "" || len(opts.captures) > 0
-	for _, destination := range []string{opts.output, opts.dumpHeader, opts.cookieJar} {
-		if destination != "" && destination != "-" && destination != "/dev/null" {
-			if updatesJar {
-				return "managed-jar-update-to-file"
-			}
-			return "-o--D--c-to-file"
-		}
-	}
-	if updatesJar {
-		return "managed-jar-update"
-	}
-	return "request"
+	return commandmode.CurlTransferMode(opts.managedCookies != "", len(opts.captures) > 0, opts.output, opts.dumpHeader, opts.cookieJar)
 }
 
 // Prepare binds argv through the catalog grammar and validates every form

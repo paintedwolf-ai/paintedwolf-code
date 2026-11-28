@@ -3,17 +3,23 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -21,7 +27,7 @@ func TestToolProceduresCloseStandingPrefixBeforeSourceBrief(t *testing.T) {
 	l := NewPromptLoopForTest(PromptLoopDeps{
 		Context: ContextDeps{
 			ContextSurfaceDeps: ContextSurfaceDeps{
-				ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) { return "tool procedures", nil },
+				ToolProcedures: func(context.Context, *api.Session, prompts.Reader) (string, error) { return "tool procedures", nil },
 			},
 		},
 	})
@@ -30,7 +36,7 @@ func TestToolProceduresCloseStandingPrefixBeforeSourceBrief(t *testing.T) {
 		{Role: api.MessageRoleSystem, Content: "source brief"},
 		{Role: api.MessageRoleUser, Content: "request", PromptCacheBreakpoint: api.PromptCacheTierHistory},
 	}
-	out, err := l.Tools.appendToolProcedures(t.Context(), &api.Session{ID: "s"}, "coordinator", messages, []tools.ToolMeta{{Name: "read"}})
+	out, err := l.Tools.appendToolProcedures(t.Context(), &api.Session{ID: "s"}, testCoordinatorReader(t, "read"), messages)
 	testutil.FailErr(t, "append tool procedures", err)
 	if len(out) != 4 || out[1].Content != "tool procedures" || out[1].PromptCacheBreakpoint != api.PromptCacheTierStanding || out[0].PromptCacheBreakpoint != api.PromptCacheTierNone || out[2].Content != "source brief" || out[3].PromptCacheBreakpoint != api.PromptCacheTierHistory {
 		t.Fatalf("incorrect prefix boundary: %+v", out)
@@ -51,7 +57,8 @@ func TestProviderRequestProceduresUseActualToolSet(t *testing.T) {
 				return history, nil
 			},
 			ContextSurfaceDeps: ContextSurfaceDeps{
-				ToolProcedures: func(_ context.Context, _ *api.Session, _ string, offered []string) (string, error) {
+				ToolProcedures: func(_ context.Context, _ *api.Session, reader prompts.Reader) (string, error) {
+					offered := reader.Offered()
 					delivered = slices.Clone(offered)
 					if slices.Contains(offered, "verify") {
 						return "runner procedure", nil
@@ -161,7 +168,7 @@ func TestProseFinishTurnForbidsCoordinatorToolUse(t *testing.T) {
 				return history, nil
 			},
 			ContextSurfaceDeps: ContextSurfaceDeps{
-				ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) {
+				ToolProcedures: func(context.Context, *api.Session, prompts.Reader) (string, error) {
 					procedures++
 					return "procedure", nil
 				},
@@ -188,7 +195,7 @@ func TestToolProceduresSurviveContextFit(t *testing.T) {
 	loop := NewPromptLoop(PromptLoopDeps{
 		Context: ContextDeps{
 			ContextSurfaceDeps: ContextSurfaceDeps{
-				ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) { return "runner procedure", nil },
+				ToolProcedures: func(context.Context, *api.Session, prompts.Reader) (string, error) { return "runner procedure", nil },
 			},
 		},
 	})
@@ -197,7 +204,7 @@ func TestToolProceduresSurviveContextFit(t *testing.T) {
 		history = append(history, api.Message{Role: api.MessageRoleAssistant, Content: strings.Repeat("old context ", 100)})
 	}
 	history = append(history, api.Message{Role: api.MessageRoleUser, Content: "current request"})
-	got, err := loop.Tools.appendToolProcedures(t.Context(), &api.Session{}, "coordinator", history, []tools.ToolMeta{{Name: "command"}})
+	got, err := loop.Tools.appendToolProcedures(t.Context(), &api.Session{}, testCoordinatorReader(t, "command"), history)
 	testutil.FailErr(t, "append procedures", err)
 	fitted := compaction.DeterministicFitWithReserve(compaction.CompactionConfig{KeepRecentMessages: 2}, compaction.ContextMessagesFromAPI(got), 100, 0)
 	found := false
@@ -216,12 +223,153 @@ func TestToolProcedureRenderFailureStopsRequest(t *testing.T) {
 	loop := NewPromptLoop(PromptLoopDeps{
 		Context: ContextDeps{
 			ContextSurfaceDeps: ContextSurfaceDeps{
-				ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) { return "", want },
+				ToolProcedures: func(context.Context, *api.Session, prompts.Reader) (string, error) { return "", want },
 			},
 		},
 	})
-	_, err := loop.Tools.appendToolProcedures(t.Context(), &api.Session{}, "coordinator", nil, []tools.ToolMeta{{Name: "command"}})
+	_, err := loop.Tools.appendToolProcedures(t.Context(), &api.Session{}, testCoordinatorReader(t, "command"), nil)
 	if !errors.Is(err, want) {
 		t.Fatalf("render failure = %v", err)
 	}
+}
+
+func TestDeferredToolPreLoadSchemaMatchesPostLoadRequestUnderNarrowing(t *testing.T) {
+	rawCommandSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"command": map[string]any{"type": "string"},
+			"capability_request": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"process_control": map[string]any{"type": "object"},
+					"host_execution":  map[string]any{"type": "object"},
+				},
+			},
+		},
+	}
+	rawTaskSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"agent_type": map[string]any{"type": "string", "enum": []string{"code-reviewer", "implementer"}},
+		},
+	}
+	active := map[string]bool{}
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Context: ContextDeps{
+			Policy: registryTestPolicy{metas: []tools.ToolMeta{
+				{Name: "request_tools", ArgsSchema: map[string]any{"type": "object", "properties": map[string]any{"need": map[string]any{"type": "string"}}}},
+				{Name: "command", Deferred: true, ArgsSchema: toolschema.PruneCommandReadOnlySchema(rawCommandSchema)},
+				{Name: "task", Deferred: true, ArgsSchema: rawTaskSchema},
+			}},
+			LoadedTools:      func(string) map[string]bool { return active },
+			ProjectRootCount: func(context.Context, *api.Session) int { return 1 },
+			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return history, nil
+			},
+		},
+	})
+	history := []api.Message{{Role: api.MessageRoleUser, Content: "inspect"}}
+
+	workerSess := &api.Session{ID: "worker-narrow", AgentType: "explore_readonly", ParentSessionID: "parent", WorkspacePath: "/tmp/repo"}
+	st1 := &promptLoopTurnState{}
+	turn1, err := loop.Model.buildTurnRequest(t.Context(), workerSess, workerSess.ID, history, "explore_readonly", 0, 20, false, st1)
+	testutil.FailErr(t, "pre-load worker request", err)
+	st1.turnToolPlan = turn1.ToolPlan
+	preReach := st1.requestReach()
+	if preReach.Status("command") != toolreach.Loadable || !preReach.AcceptsField("command", "command") || preReach.AcceptsField("command", "capability_request.process_control") {
+		t.Fatalf("unexpected pre-load command reach/fields: status=%d", preReach.Status("command"))
+	}
+	preCmdSchema, _ := preReach.ToolSchema("command")
+
+	active["command"] = true
+	st2 := &promptLoopTurnState{}
+	turn2, err := loop.Model.buildTurnRequest(t.Context(), workerSess, workerSess.ID, history, "explore_readonly", 1, 20, false, st2)
+	testutil.FailErr(t, "post-load worker request", err)
+	st2.turnToolPlan = turn2.ToolPlan
+	postReach := st2.requestReach()
+	postCmdSchema, ok := postReach.ToolSchema("command")
+	if !ok || postReach.Status("command") != toolreach.Callable || !reflect.DeepEqual(preCmdSchema, postCmdSchema) {
+		t.Fatalf("pre-load command schema %#v != post-load schema %#v", preCmdSchema, postCmdSchema)
+	}
+
+	active = map[string]bool{}
+	coordAsk := &api.Session{ID: "coord-ask-narrow", AgentType: prompts.CoordinatorProfileID, Mode: api.SessionModeAsk, Posture: api.SessionPostureBuild, WorkspacePath: "/tmp/repo"}
+	frame := inject.CoordinatorTurnFrame{Roster: &inject.AgentRoster{Effective: []string{"code-reviewer", "implementer"}}}
+	stAsk1 := &promptLoopTurnState{}
+	stAsk1.coordinatorFrame, stAsk1.coordinatorFrameReady = frame, true
+	turnAsk1, err := loop.Model.buildTurnRequest(t.Context(), coordAsk, coordAsk.ID, history, prompts.CoordinatorProfileID, 0, 20, false, stAsk1)
+	testutil.FailErr(t, "pre-load ask coordinator request", err)
+	stAsk1.turnToolPlan = turnAsk1.ToolPlan
+	preAskReach := stAsk1.requestReach()
+	if preAskReach.Status("task") != toolreach.Loadable || !preAskReach.AcceptsEnumValue("task", "agent_type", "code-reviewer") || preAskReach.AcceptsEnumValue("task", "agent_type", "implementer") {
+		t.Fatalf("pre-load ask task enum did not apply read-only spawn narrowing: status=%d", preAskReach.Status("task"))
+	}
+	preTaskSchema, _ := preAskReach.ToolSchema("task")
+
+	active["task"] = true
+	stAsk2 := &promptLoopTurnState{}
+	stAsk2.coordinatorFrame, stAsk2.coordinatorFrameReady = frame, true
+	turnAsk2, err := loop.Model.buildTurnRequest(t.Context(), coordAsk, coordAsk.ID, history, prompts.CoordinatorProfileID, 1, 20, false, stAsk2)
+	testutil.FailErr(t, "post-load ask coordinator request", err)
+	stAsk2.turnToolPlan = turnAsk2.ToolPlan
+	postTaskSchema, ok := stAsk2.requestReach().ToolSchema("task")
+	if !ok || !reflect.DeepEqual(preTaskSchema, postTaskSchema) {
+		t.Fatalf("pre-load ask task schema %#v != post-load schema %#v", preTaskSchema, postTaskSchema)
+	}
+}
+
+// The request's projected schemas reach the procedures through its Reader:
+// a partial map certifies fields only for the tools it names.
+func TestAppendToolProceduresRenderTheReaderProjectedSchemas(t *testing.T) {
+	reg, err := anchor.LoadRegistryFromConfigRoot()
+	testutil.FailErr(t, "load anchor registry", err)
+	t.Cleanup(anchor.SetAnchorsFor(func(context.Context, string) *anchor.Registry { return reg }))
+	renderer := prompts.NewInjectRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{
+		ModuleRoot: configlayout.FindModuleRoot(),
+	}))
+	narrowedVerify := map[string]any{
+		"type":       "object",
+		"properties": map[string]any{"socks_proxy": map[string]any{"type": "boolean"}},
+	}
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Context: ContextDeps{
+			ContextSurfaceDeps: ContextSurfaceDeps{
+				ToolProcedures: func(ctx context.Context, sess *api.Session, reader prompts.Reader) (string, error) {
+					return inject.RenderToolProceduresBlock(ctx, renderer, sess.ID, reader)
+				},
+			},
+		},
+	})
+	turn := TurnTools{ProfileID: "implement", Plan: toolsurface.Compile([]string{"verify", "command"}, nil)}
+	callable := []tools.ToolMeta{{Name: "verify", ArgsSchema: narrowedVerify}, {Name: "command"}}
+	reader, err := loop.Context.requestReader(t.Context(), &api.Session{ID: "s", ParentSessionID: "p"}, turn, callable)
+	testutil.FailErr(t, "request reader", err)
+	out, err := loop.Tools.appendToolProcedures(t.Context(), &api.Session{ID: "s"}, reader, []api.Message{{Role: api.MessageRoleUser, Content: "hi"}})
+	testutil.FailErr(t, "append partial schemas", err)
+	facts := reader.Facts()
+	if got, _ := facts["runner_socks_proxy_tools"].([]string); !slices.Equal(got, []string{"verify"}) {
+		t.Fatalf("runner_socks_proxy_tools = %v, want [verify]", got)
+	}
+	if got, _ := facts["runner_capability_request_tools"].([]string); len(got) != 0 {
+		t.Fatalf("runner_capability_request_tools = %v, want empty", got)
+	}
+	if facts["can_command_verify"] != true {
+		t.Fatalf("can_command_verify = %v, want true", facts["can_command_verify"])
+	}
+	if len(out) != 2 || out[0].Kind == "" && out[0].ID != "host-tool-procedures" {
+		t.Fatalf("procedures not delivered: %+v", out)
+	}
+}
+
+func testCoordinatorReader(t *testing.T, offered ...string) prompts.Reader {
+	t.Helper()
+	host, err := testHostFacts(t.Context(), &api.Session{})
+	testutil.FailErr(t, "host facts", err)
+	reader, err := prompts.NewReader(host, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Plan:      toolsurface.Compile(offered, nil),
+		Offered:   offered,
+	})
+	testutil.FailErr(t, "reader", err)
+	return reader
 }

@@ -1,0 +1,145 @@
+{
+  "schema": "wea-tb05-inproc-manifest-v1",
+  "card": "TB05",
+  "title": "Agent edits and the read basis — in-process selector-to-variant manifest",
+  "lane": "in-process",
+  "pinned_product_owner_source": {
+    "git_head": "bbeb46e72ce3d1cfc052259cadcce29185bb40bd",
+    "git_tree": "1830e4d60ed640d4ecf386653377498788fa9320",
+    "go_owner_packages": [
+      "lycaon/internal/editordoc",
+      "lycaon/internal/sourceledger",
+      "lycaon/internal/projectsource",
+      "lycaon/internal/textfile",
+      "lycaon/internal/documentcore",
+      "lycaon/internal/tools",
+      "lycaon/internal/tools/native",
+      "lycaon/internal/tools/readcaps"
+    ]
+  },
+  "test_only_overlay_files": [
+    {
+      "path": "lycaon/test/wea/tb05_edits_test.go",
+      "sha256": "f496c48ff2f050aab6743cdf09596b96eefb299bd90d5a071eea188f57b86573",
+      "test_only": true
+    }
+  ],
+  "run_command": "cd lycaon && LYCAON_DOCUMENT_CORE_BINARY=<pw-document-core> go test -v -race -count=1 -run TestWEATB05 ./test/wea/...",
+  "scheduled_slot_counts": {
+    "E02": 6,
+    "E10": 4,
+    "total": 10
+  },
+  "scheduled_slots": [
+    {
+      "slot_id": "E02-inproc-1",
+      "family": "E02",
+      "lane": "in-process",
+      "variant": "non_overlapping_person_edit_rebases_cleanly",
+      "go_package": "./test/wea",
+      "go_test_selector": "TestWEATB05_E02_RebaseOverlapRetryAndEviction/E02_inproc_1_non_overlapping_person_edit_rebases_cleanly",
+      "owner_packages": ["lycaon/internal/editordoc", "lycaon/internal/sourceledger", "lycaon/internal/documentcore"]
+    },
+    {
+      "slot_id": "E02-inproc-2",
+      "family": "E02",
+      "lane": "in-process",
+      "variant": "overlapping_edit_refuses_and_preserves_disk",
+      "go_package": "./test/wea",
+      "go_test_selector": "TestWEATB05_E02_RebaseOverlapRetryAndEviction/E02_inproc_2_overlapping_edit_refuses_and_preserves_disk",
+      "owner_packages": ["lycaon/internal/editordoc", "lycaon/internal/documentcore"]
+    },
+    {
+      "slot_id": "E02-inproc-3",
+      "family": "E02",
+      "lane": "in-process",
+      "variant": "second_window_and_agent_rebase",
+      "go_package": "./test/wea",
+      "go_test_selector": "TestWEATB05_E02_RebaseOverlapRetryAndEviction/E02_inproc_3_second_window_and_agent_rebase",
+      "owner_packages": ["lycaon/internal/editordoc", "lycaon/internal/sourceledger", "lycaon/internal/documentcore"]
+    },
+    {
+      "slot_id": "E02-inproc-4",
+      "family": "E02",
+      "lane": "in-process",
+      "variant": "merged_result_withdraws_read_basis",
+      "go_package": "./test/wea",
+      "go_test_selector": "TestWEATB05_E02_RebaseOverlapRetryAndEviction/E02_inproc_4_merged_result_withdraws_read_basis",
+      "owner_packages": ["lycaon/internal/editordoc"]
+    },
+    {
+      "slot_id": "E02-inproc-5",
+      "family": "E02",
+      "lane": "in-process",
+      "variant": "read_cache_eviction_requires_reread",
+      "go_package": "./test/wea",
+      "go_test_selector": "TestWEATB05_E02_RebaseOverlapRetryAndEviction/E02_inproc_5_read_cache_eviction_requires_reread",
+      "owner_packages": ["lycaon/internal/editordoc"]
+    },
+    {
+      "slot_id": "E02-inproc-6",
+      "family": "E02",
+      "lane": "in-process",
+      "variant": "external_change_between_read_and_write",
+      "go_package": "./test/wea",
+      "go_test_selector": "TestWEATB05_E02_RebaseOverlapRetryAndEviction/E02_inproc_6_external_change_between_read_and_write",
+      "owner_packages": ["lycaon/internal/editordoc", "lycaon/internal/sourceledger", "lycaon/internal/projectsource"]
+    },
+    {
+      "slot_id": "E10-inproc-1",
+      "family": "E10",
+      "lane": "in-process",
+      "variant": "restart_between_disk_apply_and_ledger_commit",
+      "go_package": "./test/wea",
+      "go_test_selector": "TestWEATB05_E10_RestartDurabilityAcrossCommitPoints/E10_inproc_1_restart_between_disk_apply_and_ledger_commit",
+      "owner_packages": ["lycaon/internal/editordoc", "lycaon/internal/sourceledger"]
+    },
+    {
+      "slot_id": "E10-inproc-2",
+      "family": "E10",
+      "lane": "in-process",
+      "variant": "restart_before_disk_write_no_partial_write",
+      "go_package": "./test/wea",
+      "go_test_selector": "TestWEATB05_E10_RestartDurabilityAcrossCommitPoints/E10_inproc_2_restart_before_disk_write_no_partial_write",
+      "owner_packages": ["lycaon/internal/editordoc"]
+    },
+    {
+      "slot_id": "E10-inproc-3",
+      "family": "E10",
+      "lane": "in-process",
+      "variant": "idempotent_operation_replay_across_restart",
+      "go_package": "./test/wea",
+      "go_test_selector": "TestWEATB05_E10_RestartDurabilityAcrossCommitPoints/E10_inproc_3_idempotent_operation_replay_across_restart",
+      "owner_packages": ["lycaon/internal/editordoc", "lycaon/internal/sourceledger"]
+    },
+    {
+      "slot_id": "E10-inproc-4",
+      "family": "E10",
+      "lane": "in-process",
+      "variant": "post_restart_reconcile_and_change_event_publication",
+      "go_package": "./test/wea",
+      "go_test_selector": "TestWEATB05_E10_RestartDurabilityAcrossCommitPoints/E10_inproc_4_post_restart_reconcile_and_change_event_publication",
+      "owner_packages": ["lycaon/internal/editordoc", "lycaon/internal/sourceledger"]
+    }
+  ],
+  "additional_component_coverage": [
+    {
+      "family": "E01",
+      "go_test_selector": "TestWEATB05_E01_ReadBasisMatrix",
+      "subtests": 5,
+      "note": "In-process component reinforcement; ledger counts 62 E01 slots in the sidecar lane."
+    },
+    {
+      "family": "E03",
+      "go_test_selector": "TestWEATB05_E03_OpenDocumentAndOutsideChanges",
+      "subtests": 3,
+      "note": "In-process component reinforcement; ledger counts 7 E03 slots in the sidecar lane."
+    },
+    {
+      "family": "E08",
+      "go_test_selector": "TestWEATB05_E08_EncodingsSizesAndSecretSpans",
+      "subtests": 6,
+      "note": "In-process component reinforcement; ledger counts 9 E08 slots in the sidecar lane."
+    }
+  ]
+}

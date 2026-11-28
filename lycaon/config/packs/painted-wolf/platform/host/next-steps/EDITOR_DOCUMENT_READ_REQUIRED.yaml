@@ -1,5 +1,5 @@
 steps:
   - program: ["cat", "{{ paintedwolf.path }}"]
     complete: true
-    say: "Inspect the file with {{ call }}."
+    say: "Inspect the file with {% if load %}{{ load }}, then {% endif %}{{ call }}."
     otherwise: "This request cannot read the file; report what the edit needs."

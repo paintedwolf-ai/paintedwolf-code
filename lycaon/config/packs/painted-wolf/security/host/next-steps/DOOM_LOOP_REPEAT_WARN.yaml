@@ -6,7 +6,7 @@ steps:
       reason: "waiting for command completion"
       until_complete: true
     complete: true
-    say: "Call {{ call }}."
+    say: "Call {% if load %}{{ load }}, then {% endif %}{{ call }}."
   - when: "paintedwolf.handle == '' && paintedwolf.deferred_unactivated > 0"
     tool: "request_tools"
-    say: "If the next action needs a tool listed as deferred in the tool catalog, activate it with {{ call }}. Tools withheld from the current role or mode cannot be activated this way."
+    say: "If the next action needs a tool listed as deferred in the tool catalog, activate it with {% if load %}{{ load }}, then {% endif %}{{ call }}. Tools withheld from the current role or mode cannot be activated this way."

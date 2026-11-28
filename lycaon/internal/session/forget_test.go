@@ -39,7 +39,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -265,7 +264,7 @@ func TestHTTPRequestWebPageCardPointsAtFetchURL(t *testing.T) {
 			"content_type": "text/html; charset=utf-8",
 		}, &api.FeedbackSubject{Kind: "host", ID: "docs.example.test"})
 	}
-	reachable := tools.WithCallReach(context.Background(), toolreach.Offered([]string{"fetch_url"}))
+	reachable := toolreach.WithRequest(context.Background(), toolreach.Offered([]string{"fetch_url"}))
 
 	out, facts := mgr.ToolPolicy.AfterTool(reachable, sess, "http_request", args, `{"status":200}`, 1, raised())
 	for _, want := range []string{
@@ -282,7 +281,7 @@ func TestHTTPRequestWebPageCardPointsAtFetchURL(t *testing.T) {
 		t.Fatalf("facts = %#v, want the web page code", facts)
 	}
 
-	loadable := tools.WithCallReach(context.Background(), toolreach.Freeze([]string{"request_tools"}, toolsurface.Compile([]string{"request_tools"}, []string{"fetch_url"})))
+	loadable := toolreach.WithRequest(context.Background(), toolreach.Freeze([]string{"request_tools"}, toolsurface.Compile([]string{"request_tools"}, []string{"fetch_url"})))
 	deferred, _ := mgr.ToolPolicy.AfterTool(loadable, sess, "http_request", args, `{"status":200}`, 1, raised())
 	if !strings.Contains(deferred, "`request_tools(") {
 		t.Fatalf("deferred fetch_url card omits request_tools:\n%s", deferred)

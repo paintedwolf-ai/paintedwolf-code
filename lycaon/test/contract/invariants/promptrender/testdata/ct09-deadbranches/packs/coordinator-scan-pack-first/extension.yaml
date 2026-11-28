@@ -1,0 +1,9 @@
+manifest_version: 1
+id: fixture/coordinator-scan-pack-first
+name: Coordinator scan pack first
+version: 1.0.0
+compatibility:
+  extension_api: "^1.2.0"
+dependencies:
+  painted-wolf/platform:
+    version: "^1.2.0"

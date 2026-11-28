@@ -10,6 +10,32 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// Every enumerated posture parses back to itself, and the enumeration is the
+// caller's to keep.
+func TestAllPosturesRoundTripThroughParsePosture(t *testing.T) {
+	t.Parallel()
+	got := AllPostures()
+	if len(got) == 0 {
+		t.Fatal("AllPostures() is empty")
+	}
+	for _, p := range got {
+		parsed, err := ParsePosture(string(p))
+		if err != nil || parsed != p {
+			t.Errorf("ParsePosture(%q) = %q, %v", p, parsed, err)
+		}
+	}
+	for i := 1; i < len(got); i++ {
+		if Stricter(got[i-1], got[i]) != got[i] || got[i-1] == got[i] {
+			t.Errorf("AllPostures() = %v, want least strict first", got)
+		}
+	}
+	first := got[0]
+	got[0] = "mutated"
+	if again := AllPostures(); again[0] != first {
+		t.Fatalf("AllPostures() aliased caller slice: %v", again)
+	}
+}
+
 // Raising posture preserves every gate already enabled.
 func TestPostureLadderIsMonotone(t *testing.T) {
 	t.Parallel()

@@ -29,8 +29,5 @@ DELETE FROM call_reservations WHERE session_id = ? AND agent = ? AND path = ?;
 -- name: DeleteAgentCallReservations :exec
 DELETE FROM call_reservations WHERE session_id = ? AND agent = ?;
 
--- name: CountCallReservations :one
-SELECT COUNT(*) FROM call_reservations WHERE session_id = ?;
-
 -- name: ListActiveCallReservations :many
 SELECT path, agent FROM call_reservations WHERE session_id = ? ORDER BY path;

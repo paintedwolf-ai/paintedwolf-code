@@ -3,7 +3,6 @@ package toolexecution
 import (
 	"context"
 
-	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
@@ -82,7 +81,10 @@ func (e *Metadata) enrichToolMeta(ctx context.Context, meta tools.ToolMeta, filt
 	switch meta.Name {
 	case "wait":
 		if source, ok := e.policy.(interface{ WaitConditions(string) []string }); ok {
-			meta.ArgsSchema = pruneWaitConditionSchema(meta.ArgsSchema, source.WaitConditions(profileID))
+			meta.ArgsSchema = toolschema.NarrowToolSchema("wait", meta.ArgsSchema, toolschema.ProjectOptions{
+				PruneWaitConditions: true,
+				WaitConditions:      source.WaitConditions(profileID),
+			})
 		}
 	case "command":
 		if len(meta.DescriptionEffects) == 0 {
@@ -117,26 +119,6 @@ func (e *Metadata) toolVisibleForFilter(ctx context.Context, filter platform.Too
 	})
 	return err == nil && decision != nil && decision.Allowed
 }
-
-func pruneWaitConditionSchema(schema map[string]any, allowed []string) map[string]any {
-	cloned := jsonvalue.CloneMap(schema)
-	properties, _ := cloned["properties"].(map[string]any)
-	if len(allowed) == 0 {
-		delete(properties, "conditions")
-		return cloned
-	}
-	conditions, _ := properties["conditions"].(map[string]any)
-	items, _ := conditions["items"].(map[string]any)
-	itemProperties, _ := items["properties"].(map[string]any)
-	kind, _ := itemProperties["kind"].(map[string]any)
-	values := make([]any, 0, len(allowed))
-	for _, value := range allowed {
-		values = append(values, value)
-	}
-	kind["enum"] = values
-	return cloned
-}
-
 // SetCommandExternalHidden withdraws the explicit external selector from the
 // command schema.
 func (e *Metadata) SetCommandExternalHidden(hidden bool) {

@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/prompts"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -105,11 +106,11 @@ func changeSection(ctx context.Context, ev evidence) (briefing.SectionPlan, erro
 	if result := ev.cause.Call.Result; result != nil {
 		add("call_result", briefing.RoleObservation, "tool_result", result.Ref, result.Outcome+": "+result.Content, len(result.Content) >= briefing.ResultReadChars)
 	}
-	system, err := guidance.RenderCatalog(ctx, guidance.UtilityActivityChangeSystemRef, nil)
+	system, err := prompts.RenderUtilityPrompt(ctx, guidance.UtilityActivityChangeSystemRef, nil)
 	if err != nil {
 		return briefing.SectionPlan{}, err
 	}
-	user, err := guidance.RenderCatalog(ctx, guidance.UtilityActivityChangeUserRef, vars)
+	user, err := prompts.RenderUtilityPrompt(ctx, guidance.UtilityActivityChangeUserRef, vars)
 	if err != nil {
 		return briefing.SectionPlan{}, err
 	}

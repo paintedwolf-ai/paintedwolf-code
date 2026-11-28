@@ -2,4 +2,4 @@ steps:
   - tool: "scan_query"
     args:
       view: "groups"
-    say: "Use {{ call }} only to read a group's findings."
+    say: "Use {% if load %}{{ load }}, then {% endif %}{{ call }} only to read a group's findings."

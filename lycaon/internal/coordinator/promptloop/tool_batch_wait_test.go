@@ -3,13 +3,14 @@ package promptloop
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/testutil/oartest"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -18,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/limits"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/closeouts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -206,7 +208,7 @@ func newMidTurnHarness(t *testing.T, surfaceID string) *midTurnHarness {
 				return guidance.GroundingFriction{Remaining: 3}
 			},
 
-				RenderHostKick: func(_ context.Context, id string, data map[string]any) (string, error) {
+				RenderHostKick: func(_ context.Context, _ prompts.Reader, id string, data map[string]any) (string, error) {
 					h.kick = id
 					workers, _ := data["workers"].([]guidance.MidTurnWorkerFact)
 					parts := []string{"Worker status from the host:"}
@@ -258,11 +260,18 @@ func midTurnState(t *testing.T, surfaceID string) *promptLoopTurnState {
 	t.Helper()
 	st := &promptLoopTurnState{}
 	if surfaceID == "" {
+		st.reader = testCoordinatorReader(t)
 		return st
 	}
 	plans, err := surface.CompileToolPlans(1)
 	testutil.FailErr(t, "compile tool plans", err)
 	st.turnToolPlan = plans[surfaceID]
+	host, err := testHostFacts(t.Context(), &api.Session{})
+	testutil.FailErr(t, "host facts", err)
+	st.reader, err = prompts.NewReader(host, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID, SurfaceID: surfaceID, Plan: st.turnToolPlan, Offered: st.turnToolPlan.ImmediateNames(),
+	})
+	testutil.FailErr(t, "turn reader", err)
 	return st
 }
 

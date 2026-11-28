@@ -527,7 +527,7 @@ describe("weighted activity headlines", () => {
     const span = spanOf([
       tool(part("r1", "read", "a.go")),
       tool(part("u1", "update_progress", "step one")),
-      tool(part("u2", "state_update", "state")),
+      tool(part("u2", "handoff_release", "paths")),
     ]);
     expect(span.label).toBe("reading files");
   });
@@ -535,7 +535,7 @@ describe("weighted activity headlines", () => {
   it("uses the first authored headline when every vote is incidental", () => {
     const span = spanOf([
       tool(part("u1", "update_progress", "step one")),
-      tool(part("s1", "state_update", "state")),
+      tool(part("s1", "handoff_release", "paths")),
     ]);
     expect(span.label).toBe("coordinating");
   });

@@ -215,3 +215,35 @@ func TestCommandFormToolsAndProgramEntriesHonorProfileAndSurfaceAdmission(t *tes
 		}
 	}
 }
+
+func TestProgramModeReachSeparatesReadOnlyTarListingFromExtractionAndGitConfig(t *testing.T) {
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load stock profiles", err)
+	profiles = append(profiles, sandbox.ToolProfile{
+		ID:             "git_without_config",
+		DenyTools:      []string{"git config"},
+		CommandEffects: profiles[0].CommandEffects | 1,
+	})
+	readOnly, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+	profiles[len(profiles)-1].CommandEffects = readOnly
+	boundary := sandbox.NewBoundary(sandbox.Config{}, profiles)
+	executor := NewExecutor(NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), nil), tools.NewDefaultRegistry(), "implement")
+
+	modeReach := func(profile, surface string) func(string, string) bool {
+		table, err := executor.Metadata.ProgramTable(t.Context(), platform.ToolFilter{ProfileID: profile, SurfaceID: surface})
+		testutil.FailErr(t, "ProgramTable", err)
+		return table.Mode
+	}
+	roModes := modeReach("explore_readonly", "")
+	if !roModes("tar", "listing-or-stream-decode") || roModes("tar", "create-extract-compress-decompress-to-path") {
+		t.Fatal("read-only profile must allow tar listing and deny tar extraction")
+	}
+	implModes := modeReach("implement", "")
+	if !implModes("tar", "listing-or-stream-decode") || !implModes("tar", "create-extract-compress-decompress-to-path") {
+		t.Fatal("implement profile must allow both tar listing and tar extraction")
+	}
+	gitNoCfg := modeReach("git_without_config", "")
+	if !gitNoCfg("git", "selected-subcommand") || !gitNoCfg("git status", "query") || gitNoCfg("git config", "query") {
+		t.Fatal("git_without_config must allow generic git/git status while denying git config")
+	}
+}

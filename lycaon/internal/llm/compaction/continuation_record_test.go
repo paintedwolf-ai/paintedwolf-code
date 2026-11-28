@@ -14,8 +14,14 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/llmtest"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+func recallTestCtx(t *testing.T) context.Context {
+	t.Helper()
+	return toolreach.WithRequest(t.Context(), promptstest.StockToolReach(t, "recall"))
+}
 
 func TestContinuationRecordNamesRecallByHandle(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
@@ -31,7 +37,7 @@ func TestContinuationRecordNamesRecallByHandle(t *testing.T) {
 		{Tool: "command", MessageID: "t2"},
 	}
 
-	withRecall, err := renderContinuation(context.Background(), summary, sources, true, nil, 0, false)
+	withRecall, err := renderContinuation(recallTestCtx(t), summary, sources, true, nil, 0, false)
 	testutil.FailErr(t, "render continuation record with recall", err)
 	for _, want := range []string{"- registry listens on 127.0.0.1:8200", "### Completed", "### Pending", "- config.toml (read#4) before editing the registry block", "- `read#4` (read)", "- command, message `t2`", `recall(query="handle:read#4")`, "### Constraints", "- no pushes"} {
 		if !strings.Contains(withRecall, want) {
@@ -39,7 +45,16 @@ func TestContinuationRecordNamesRecallByHandle(t *testing.T) {
 		}
 	}
 
-	withoutRecall, err := renderContinuation(context.Background(), summary, sources, false, nil, 0, false)
+	unestablished, err := renderContinuation(context.Background(), summary, sources, true, nil, 0, false)
+	testutil.FailErr(t, "render continuation record without established reach", err)
+	if strings.Contains(unestablished, "recall(") {
+		t.Fatalf("continuation record without established recipient reach leaked recall call:\n%s", unestablished)
+	}
+	if !strings.Contains(unestablished, "- `read#4` (read)") || !strings.Contains(unestablished, "- command, message `t2`") {
+		t.Fatalf("continuation record without established reach lost occurrence sources:\n%s", unestablished)
+	}
+
+	withoutRecall, err := renderContinuation(recallTestCtx(t), summary, sources, false, nil, 0, false)
 	testutil.FailErr(t, "render continuation record without recall", err)
 	if strings.Contains(withoutRecall, "recall") {
 		t.Fatalf("a profile without recall must not be told to call it:\n%s", withoutRecall)
@@ -53,7 +68,7 @@ func TestContinuationExplicitQuotaKeepsCanonicalRecovery(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	record := &messageview.Continuation{Format: messageview.ContinuationFormat, Window: 1_000_000, ThroughOrd: 700,
 		Summary: messageview.ContinuationSummary{Facts: []string{strings.Repeat("Recorded fact. ", 40)}}}
-	text, err := RenderContinuation(t.Context(), record, true, 96)
+	text, err := RenderContinuation(recallTestCtx(t), record, true, 96)
 	testutil.FailErr(t, "render bounded continuation", err)
 	if record.Level != "references" || !strings.Contains(text, `"through_ord":700`) {
 		t.Fatalf("quota lost recovery coordinates: %s", text)
@@ -66,7 +81,7 @@ func TestContinuationExplicitQuotaKeepsCanonicalRecovery(t *testing.T) {
 		{MessageID: "original-result", Tool: "read", Handles: []string{"read#1"}},
 		{MessageID: "later-acknowledgment"},
 	}
-	text, err = RenderContinuation(t.Context(), record, true, 192)
+	text, err = RenderContinuation(recallTestCtx(t), record, true, 192)
 	testutil.FailErr(t, "render useful recovery addresses", err)
 	for _, want := range []string{"original-call", `recall(query="handle:read#1")`, `format="record"`} {
 		if !strings.Contains(text, want) {
@@ -95,7 +110,7 @@ func TestSessionCompactionRecordCarriesRemovedHandles(t *testing.T) {
 		msgs[i].Ord = int64(i + 1)
 	}
 	c := NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "compacted context"})
-	out, report, err := c.Compact(context.Background(), SessionInfo{ID: "s1", RecallAvailable: true}, msgs, 100)
+	out, report, err := c.Compact(recallTestCtx(t), SessionInfo{ID: "s1", RecallAvailable: true}, msgs, 100)
 	testutil.FailErr(t, "Compact", err)
 	if !report.SessionCompacted {
 		t.Fatalf("expected a session summary, got %+v", report)
@@ -172,7 +187,7 @@ func TestContinuationWithoutSummarizerKeepsInstructionsAndRecovery(t *testing.T)
 		messages = append(messages, ContextMessage{ID: fmt.Sprintf("source-%d", i), Ord: int64(i), Role: "assistant", Content: strings.Repeat("observation ", 400)})
 	}
 	messages = append(messages, ContextMessage{ID: "continue", Ord: 24, Role: "user", Content: "Continue", ContextPinned: true})
-	out, report, err := NewSimpleCompactor(cfg, nil).Compact(t.Context(), SessionInfo{ID: "session", RecallAvailable: true}, messages, 100)
+	out, report, err := NewSimpleCompactor(cfg, nil).Compact(recallTestCtx(t), SessionInfo{ID: "session", RecallAvailable: true}, messages, 100)
 	testutil.FailErr(t, "compact without synthesis", err)
 	if !report.SessionCompacted || report.Continuation == nil || report.Continuation.Reason != "references_only" {
 		t.Fatalf("missing recoverable fallback: %+v", report)
@@ -296,7 +311,7 @@ func TestContinuationRepresentationScalesWithReceiver(t *testing.T) {
 		for range 5 {
 			record.Summary.Pending = append(record.Summary.Pending, strings.Repeat("pending ", 18))
 		}
-		text, err := RenderContinuation(t.Context(), record, true, 0)
+		text, err := RenderContinuation(recallTestCtx(t), record, true, 0)
 		testutil.FailErr(t, "render receiver representation", err)
 		if record.Level != tc.level {
 			t.Fatalf("window %d selected %s, want %s", tc.window, record.Level, tc.level)
@@ -357,7 +372,7 @@ func TestContinuationSourcesProvideExecutableRecovery(t *testing.T) {
 		{MessageID: "first-result", Ord: 4, Tool: "read", Handles: []string{"read#1"}},
 	}}
 	for _, quota := range []int{0, 192} {
-		text, err := RenderContinuation(t.Context(), record, true, quota)
+		text, err := RenderContinuation(recallTestCtx(t), record, true, quota)
 		testutil.FailErr(t, "render direct recovery", err)
 		for _, want := range []string{`recall(query="handle:read#1")`, `recall(history={"through_ord":42,"message_id":"first-call","format":"record"})`} {
 			if !strings.Contains(text, want) {

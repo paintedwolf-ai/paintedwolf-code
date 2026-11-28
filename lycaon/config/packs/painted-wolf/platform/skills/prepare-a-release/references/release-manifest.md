@@ -2,7 +2,7 @@
 
 ## Release identity
 
-Resolve this record before building; every embedded version and generated manifest derives from it.{% if not has_git or on_worker_branch %} On a write worker, this record is a draft over the overlay's prepared files: record the intended identity, the checks run in the overlay, and known limitations; the coordinator completes artifact and clean-install rows after promotion.{% endif %}
+Resolve this record before building; every embedded version and generated manifest derives from it.{% if on_worker_branch %} On a worker branch, this record is a draft over the overlay's prepared files: record the intended identity, the checks run in the overlay, and known limitations; the coordinator completes artifact and clean-install rows after promotion.{% elif not can_git_read and not can_request_git_read %} Without main-tree Git access, record the intended identity from repository files and the brief.{% endif %}
 
 ```text
 commit:   9f2c1ab   version: 2.4.0   tag (unpushed): v2.4.0
@@ -18,7 +18,7 @@ One row per artifact. State what each proves; leave a column empty rather than c
 |---|---|---|---|---|---|---|
 | darwin/arm64 | app-2.4.0-darwin-arm64.tar.gz | 41.2 MB | `3f1c…` | yes | signed, notarized | attestation `…` |
 
-Compute digests over the exact files you hand off (`sha256sum <file>` in `command`). Rebuilding an artifact gives it a new identity and new rows.
+{% if profile_has_command %}Compute digests over the exact files you hand off (`sha256sum <file>` in `command`).{% elif profile_can_request.command %}Call `request_tools(need="command")` to compute SHA-256 digests over the exact files you hand off.{% else %}Record SHA-256 digests only when already captured in build evidence; otherwise leave the column empty.{% endif %} Rebuilding an artifact gives it a new identity and new rows.
 
 ## Handoff
 

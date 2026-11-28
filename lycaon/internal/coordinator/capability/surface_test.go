@@ -26,9 +26,6 @@ func TestResolveCapabilitySurfaceImplementRouting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if !surf.Flags.HasFileTools {
-		t.Fatal("1-root routing should have file tools")
-	}
 	if len(surf.ResolvedTools) == 0 {
 		t.Fatal("expected resolved tools")
 	}
@@ -53,9 +50,6 @@ func TestResolveCapabilitySurfaceNoFolder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if surf.Flags.HasFileTools {
-		t.Fatal("0-root surface should not grant file tools")
-	}
 	if len(surf.SpawnAllowlist) != 1 || surf.SpawnAllowlist[0] != "web-researcher" {
 		t.Fatalf("spawn allowlist = %v", surf.SpawnAllowlist)
 	}
@@ -76,9 +70,6 @@ func TestResolveCapabilitySurfaceSearchDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if surf.Flags.CanSpawnWebResearch {
-		t.Fatal("expected CanSpawnWebResearch false when search disabled")
-	}
 	if len(surf.SpawnAllowlist) != 0 {
 		t.Fatalf("spawn allowlist = %v want []", surf.SpawnAllowlist)
 	}
@@ -96,13 +87,15 @@ func TestMergeForTurnInvestigateAsksForPageCapture(t *testing.T) {
 	testutil.FailErr(t, "load profiles", err)
 	plan, err := prompts.CompileSurfacePlan(profile.SurfaceID, 1)
 	testutil.FailErr(t, "compile plan", err)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: profile.SurfaceID,
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Plan:      plan,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: profile.SurfaceID,
+		Plan:      plan,
+		Offered:   (plan).ImmediateNames(),
 	})
 	testutil.FailErr(t, "new reader", err)
 	if err := capability.MergeForTurn(vars, reader, spawn.AmbientAllowedAgents()); err != nil {

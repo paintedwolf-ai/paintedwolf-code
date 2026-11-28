@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -16,7 +17,7 @@ import (
 func invocationContext(ctx context.Context, tc tools.ToolContext) context.Context {
 	ctx = people.WithoutCaller(ctx)
 	ctx = gitexec.AgentEntry(ctx)
-	ctx = tools.WithCallReach(ctx, tools.TurnReach(tc))
+	ctx = toolreach.WithRequest(ctx, tools.TurnReach(tc))
 	if tc.Invocation.ToolName != "" && tc.Invocation.Contract.Owner != "" {
 		ctx = tools.WithRecoveryContract(ctx, tc.Invocation.ToolName, tc.Invocation.Contract)
 	}

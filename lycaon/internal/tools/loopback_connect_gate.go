@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/isolation"
 )
 
 // LoopbackConnectAsk is the input for a chat-scoped approval to connect to a
@@ -29,8 +30,11 @@ type LoopbackConnectResult struct {
 	// RequiresOwnedListener permits only mediated, live exact-listener checks; it is not a raw port grant.
 	RequiresOwnedListener bool
 	Denied                bool
-	Ports                 []uint16
-	UserGuidance          string
+	// DenialCause and ApprovalResolvedBy classify a denial; see isolation.PathDenialCause.
+	DenialCause        isolation.PathDenialCause
+	ApprovalResolvedBy string
+	Ports              []uint16
+	UserGuidance       string
 }
 
 // LoopbackConnectGate raises a local-service checkpoint and exposes its chat lease.

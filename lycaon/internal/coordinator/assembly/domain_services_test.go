@@ -26,16 +26,16 @@ func TestCompletionKeepsOneWiringSnapshot(t *testing.T) {
 		newReads++
 		return api.Message{Content: "replacement wiring"}, true
 	}}
-	engine.SetDeps(AssemblyDeps{Prompts: pe,
+	engine.SetDeps(withTestTurnReader(AssemblyDeps{Prompts: pe,
 		WorkspaceRoots: func(context.Context, *api.Session) ([]map[string]any, int, string, int) {
-			engine.SetDeps(replacement)
+			engine.SetDeps(withTestTurnReader(replacement))
 			return nil, 0, "", 0
 		},
 		AgentsMDIndex: func(context.Context, *api.Session) (api.Message, bool) {
 			oldReads++
 			return api.Message{Content: "captured wiring"}, true
 		},
-	})
+	}))
 	session := &api.Session{ID: "snapshot", ParentSessionID: "parent", AgentType: "repo-researcher", WorkspacePath: t.TempDir()}
 	engine.BeginPromptTurn(session.ID)
 	if _, err := engine.BuildCompletionMessages(t.Context(), session, nil, nil); err != nil {

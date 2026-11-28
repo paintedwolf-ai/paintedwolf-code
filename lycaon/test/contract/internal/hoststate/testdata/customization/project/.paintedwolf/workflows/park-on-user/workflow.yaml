@@ -1,0 +1,12 @@
+id: fixture-park-on-user
+version: 1.0.0
+name: Fixture park on user
+trigger: /fixture-park-on-user
+request:
+  question: What should this phase work on?
+phases:
+  - id: bound
+    activity_label: Working
+    coordinator_surface: await_user
+    surface_template: agents/coordinator-surface-build.md
+    mode_refs: [implement-park]

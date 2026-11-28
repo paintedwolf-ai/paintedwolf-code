@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestCommandRecoveryFollowsInvocationMode(t *testing.T) {
@@ -60,7 +59,7 @@ func TestCommandRecoveryFollowsInvocationMode(t *testing.T) {
 				if rejected == nil {
 					t.Fatal("missing typed argv refusal")
 				}
-				ctx := tools.WithCallReach(t.Context(), toolreach.Offered(offered))
+				ctx := toolreach.WithRequest(t.Context(), toolreach.Offered(offered))
 				err := bp.RejectObservation(ctx, tc.tool, "implement", args, rejected)
 				refusal, ok := guidance.RefusalFromError(err)
 				if !ok {

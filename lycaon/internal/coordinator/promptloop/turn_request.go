@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -57,12 +58,13 @@ func (l *modelTurn) buildTurnRequest(
 	if st != nil && st.proseTurn(sess, iterIndex, maxIter) {
 		st.proseFinish = true
 	}
-	turnTools, toolPlan, surfaceID, err := l.Context.coordinatorToolsForTurn(
+	projection, err := l.Context.coordinatorToolsForTurn(
 		ctx, sess, profileID, history, iterIndex, maxIter, frameValue, st,
 	)
 	if err != nil {
 		return coordinatorTurnRequest{}, err
 	}
+	turnTools, toolPlan, surfaceID := projection.Metas, projection.Plan, projection.SurfaceID
 	if st != nil && st.spendSoftStopGranted {
 		turnTools = filterSpendSoftStopToolMetas(turnTools)
 	}
@@ -77,13 +79,17 @@ func (l *modelTurn) buildTurnRequest(
 		toolUse = modelcall.ToolUseForbidden
 		callable = []tools.ToolMeta{}
 	}
-	procedureProfile := profileID
-	if surfaceID != "" {
-		procedureProfile = surfaceID
+	reader, readerErr := l.Context.requestReader(ctx, sess, projection, callable)
+	if readerErr != nil {
+		slog.WarnContext(ctx, "request reader unavailable; reader-gated copy omitted", "session_id", sessionID, "error", readerErr)
+	} else {
+		messages, err = l.Tools.appendToolProcedures(ctx, sess, reader, messages)
+		if err != nil {
+			return coordinatorTurnRequest{}, err
+		}
 	}
-	messages, err = l.Tools.appendToolProcedures(ctx, sess, procedureProfile, messages, callable)
-	if err != nil {
-		return coordinatorTurnRequest{}, err
+	if st != nil {
+		st.reader = reader
 	}
 	if reject, blocked := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentInput, oar.ContentObservation{Segments: oarContentSegments(messages)}, "", nil); blocked {
 		return coordinatorTurnRequest{}, reject
@@ -103,19 +109,20 @@ func (l *modelTurn) buildTurnRequest(
 	req := modelcall.CompletionRequest{
 		Messages: messages,
 		Debug: modelcall.RequestDebug{
-			SessionID:        sessionID,
-			ProjectID:        sess.ProjectID,
-			ProjectDir:       l.Context.primaryProjectRoot(ctx, sess),
-			RootSessionID:    rootModelRequestSessionID(sess, sessionID),
-			AgentType:        sess.AgentType,
-			ParentSessionID:  sess.ParentSessionID,
-			ProfileID:        profileID,
-			HostTurn:         hostTurn,
-			Surface:          surfaceID,
-			Iteration:        currentModelIteration(st, iterIndex),
-			MaxIterations:    maxIter,
-			WorkflowRevision: frameValue.WorkflowRevision,
-			CommandGuidance:  l.buildCommandGuidanceDebug(ctx, sess, profileID, surfaceID, frameValue, turnTools),
+			SessionID:         sessionID,
+			ProjectID:         sess.ProjectID,
+			ProjectDir:        l.Context.primaryProjectRoot(ctx, sess),
+			RootSessionID:     rootModelRequestSessionID(sess, sessionID),
+			AgentType:         sess.AgentType,
+			ParentSessionID:   sess.ParentSessionID,
+			ProfileID:         profileID,
+			HostTurn:          hostTurn,
+			Surface:           surfaceID,
+			Iteration:         currentModelIteration(st, iterIndex),
+			MaxIterations:     maxIter,
+			WorkflowRevision:  frameValue.WorkflowRevision,
+			CommandGuidance:   l.buildCommandGuidanceDebug(ctx, sess, reader, frameValue),
+			ReaderFingerprint: reader.Fingerprint(),
 		},
 	}
 	if err := validateTurnToolFunctionRoots(turnTools); err != nil {
@@ -145,13 +152,25 @@ func (l *modelTurn) buildTurnRequest(
 	} else if policyBinding != nil {
 		return coordinatorTurnRequest{}, fmt.Errorf("model request policy requires turn state")
 	}
-	st.stampOfferedToolNames(callable)
+	st.stampTurnToolSchemas(callable, projection.DeferredSchemas)
 	return coordinatorTurnRequest{
 		Req:                req,
 		SurfaceID:          surfaceID,
 		TranscriptEstimate: compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(req.Messages)),
 		ToolPlan:           toolPlan,
 	}, nil
+}
+
+func (st *promptLoopTurnState) stampTurnToolSchemas(callable []tools.ToolMeta, deferred map[string]map[string]any) {
+	st.stampOfferedToolNames(callable)
+	if st == nil {
+		return
+	}
+	for name, schema := range deferred {
+		if _, already := st.offeredToolSchemas[name]; !already {
+			st.offeredToolSchemas[name] = schema
+		}
+	}
 }
 
 func validateTurnToolFunctionRoots(metas []tools.ToolMeta) error {
@@ -181,41 +200,18 @@ func (l *promptContext) primaryProjectRoot(ctx context.Context, sess *api.Sessio
 func (l *modelTurn) buildCommandGuidanceDebug(
 	ctx context.Context,
 	sess *api.Session,
-	profileID, surfaceID string,
+	reader prompts.Reader,
 	frame inject.CoordinatorTurnFrame,
-	turnTools []tools.ToolMeta,
 ) *modelcall.CommandGuidanceDebug {
-	if sess == nil {
+	if sess == nil || !reader.Valid() {
 		return nil
-	}
-	var offered, deferred []string
-	for _, meta := range turnTools {
-		name := strings.TrimSpace(meta.Name)
-		if name == "" {
-			continue
-		}
-		if meta.Deferred {
-			deferred = append(deferred, name)
-		} else {
-			offered = append(offered, name)
-		}
-	}
-	rootCount := 0
-	if l != nil && l.Context != nil && l.Context.Deps.ProjectRootCount != nil {
-		rootCount = l.Context.Deps.ProjectRootCount(ctx, sess)
 	}
 	projectDir := ""
 	if l != nil && l.Context != nil {
 		projectDir = l.Context.primaryProjectRoot(ctx, sess)
 	}
-	templates, facts := prompts.BuildCommandGuidanceSnapshot(prompts.CommandGuidanceSnapshotInput{
-		ProfileID:             profileID,
-		SurfaceID:             surfaceID,
+	templates, facts := prompts.BuildCommandGuidanceSnapshot(reader, prompts.CommandGuidanceSnapshotInput{
 		AgentType:             sess.AgentType,
-		IsCoordinator:         profileID == prompts.CoordinatorProfileID || strings.TrimSpace(surfaceID) != "",
-		OfferedTools:          offered,
-		DeferredTools:         deferred,
-		RootCount:             rootCount,
 		ProjectDir:            projectDir,
 		SessionScratchDir:     frame.Machine.Surface.SessionScratchDir,
 		Posture:               frame.Machine.Surface.Posture,

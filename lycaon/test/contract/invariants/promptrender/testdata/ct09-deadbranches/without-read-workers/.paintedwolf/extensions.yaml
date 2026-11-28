@@ -1,0 +1,11 @@
+format: 1
+disabled:
+  - agents/path-explorer
+  - agents/repo-researcher
+  - agents/code-reviewer
+  - agents/skeptic
+  - agents/security-reviewer
+  - agents/web-researcher
+  - agents/plan-reviewer
+  - agents/plan-reviewer-alt
+  - agents/plan-writer

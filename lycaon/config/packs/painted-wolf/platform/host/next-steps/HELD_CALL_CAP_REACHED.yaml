@@ -1,6 +1,6 @@
 steps:
   - tool: "held_result"
-    say: "Wait on a held call or read it with {{ call }}."
+    say: "Wait on a held call or read it with {% if load %}{{ load }}, then {% endif %}{{ call }}."
     otherwise: "Wait for an active held call to settle."
   - tool: "held_stop"
-    say: "Cancel one with {{ call }}."
+    say: "Cancel one with {% if load %}{{ load }}, then {% endif %}{{ call }}."

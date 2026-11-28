@@ -4,6 +4,7 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -164,18 +165,59 @@ func RunReaper(in io.Reader) int {
 // without close-on-exec; the runtime marks every descriptor it opens, so only
 // those strays lack it. Standard streams stay.
 func closeInheritedDescriptors() {
-	entries, err := os.ReadDir("/dev/fd")
-	if err != nil {
-		return
+	var limit unix.Rlimit
+	if unix.Getrlimit(unix.RLIMIT_NOFILE, &limit) != nil {
+		limit.Cur = 0
 	}
-	for _, entry := range entries {
-		fd, err := strconv.Atoi(entry.Name())
-		if err != nil || fd <= 2 {
+	for _, fd := range inheritedDescriptorCandidates(listDescriptorDir, limit.Cur) {
+		closeInheritedDescriptor(fd)
+	}
+}
+
+// descriptorDirs list open descriptors; Linux may expose only the second.
+var descriptorDirs = []string{"/dev/fd", "/proc/self/fd"}
+
+// maxDescriptorProbe bounds the blind scan when no descriptor directory is
+// readable, so a huge RLIMIT_NOFILE cannot delay reaping.
+const maxDescriptorProbe = 1 << 16
+
+func listDescriptorDir(path string) ([]string, error) {
+	dir, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	names, readErr := dir.Readdirnames(-1)
+	return names, errors.Join(readErr, dir.Close())
+}
+
+// inheritedDescriptorCandidates lists descriptors above the standard streams
+// from the first readable descriptor directory, or probes up to the smaller of
+// the soft limit and maxDescriptorProbe.
+func inheritedDescriptorCandidates(list func(string) ([]string, error), softLimit uint64) []int {
+	for _, path := range descriptorDirs {
+		names, err := list(path)
+		if err != nil {
 			continue
 		}
-		if flags, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); err == nil && flags&unix.FD_CLOEXEC == 0 {
-			_ = unix.Close(fd)
+		var fds []int
+		for _, name := range names {
+			if fd, err := strconv.Atoi(name); err == nil && fd > 2 {
+				fds = append(fds, fd)
+			}
 		}
+		return fds
+	}
+	bound := min(softLimit, maxDescriptorProbe)
+	var fds []int
+	for fd := uint64(3); fd < bound; fd++ {
+		fds = append(fds, int(fd))
+	}
+	return fds
+}
+
+func closeInheritedDescriptor(fd int) {
+	if flags, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); err == nil && flags&unix.FD_CLOEXEC == 0 {
+		_ = unix.Close(fd)
 	}
 }
 

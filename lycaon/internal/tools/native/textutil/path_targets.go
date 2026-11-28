@@ -63,10 +63,10 @@ func (o *Owners) pathTargets(argv commandprogram.BoundArgv, plan *preparedSed) [
 				add(path, true)
 			}
 		}
-		for _, file := range plan.source.files {
-			add(file.Value, plan.source.inPlace)
-			if plan.source.inPlace && plan.source.suffix != "" {
-				add(backupName(file.Value, plan.source.suffix), true)
+		for _, file := range plan.source.Files {
+			add(file.Value, plan.source.InPlace)
+			if plan.source.InPlace && plan.source.Suffix != "" {
+				add(backupName(file.Value, plan.source.Suffix), true)
 			}
 		}
 	}

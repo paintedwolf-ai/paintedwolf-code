@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -24,13 +25,18 @@ func coordinatorTestReader(t *testing.T, surfaceID string, rootCount int) prompt
 	contractcheck.FailErr(t, "load tool profiles", err)
 	plan, err := prompts.CompileSurfacePlan(surfaceID, rootCount)
 	contractcheck.FailErr(t, "compile surface plan", err)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
+	reader, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:       profiles,
+		RootCount:      rootCount,
+		HasGit:         rootCount > 0,
+		HasAnyGitRoot:  rootCount > 0,
+		WebSearch:      true,
+		SpawnAllowlist: spawn.AmbientAllowedAgents(),
+	}, prompts.TurnProjection{
 		ProfileID: prompts.CoordinatorProfileID,
 		SurfaceID: surfaceID,
 		Plan:      plan,
-		Profiles:  profiles,
-		RootCount: rootCount,
-		WebSearch: true,
+		Offered:   (plan).ImmediateNames(),
 	})
 	contractcheck.FailErr(t, "new reader", err)
 	return reader
@@ -38,13 +44,7 @@ func coordinatorTestReader(t *testing.T, surfaceID string, rootCount int) prompt
 
 func mergeCoordinatorSurfaceVars(t *testing.T, _ string) map[string]any {
 	t.Helper()
-	vars := spawn.PolicyTemplateVars()
-	vars["has_file_tools"] = true
-	vars["can_orient"] = true
-	vars["can_spawn_implementer"] = true
-	vars["can_spawn_web_research"] = true
-	vars["can_spawn_workers"] = true
-	return vars
+	return spawn.PolicyTemplateVars()
 }
 
 func mergeCoordinatorTemplateVars(t *testing.T) map[string]any {
@@ -177,8 +177,8 @@ func mergeWidestUnitBlocks(t *testing.T, engine prompts.PromptTemplateEngine, su
 	row, err := surfaces.Surface(surfaceID)
 	contractcheck.FailErr(t, "surface row", err)
 	floor := row.FloorTools()
-	loadable, err := prompts.LoadCoordinatorSurfaceLoadable(surfaceID)
-	contractcheck.FailErr(t, "surface loadable", err)
+	loadable := row.LoadableTools()
+	slices.Sort(loadable)
 	if rootCount, ok := vars["root_count"].(int); ok {
 		floor, err = surface.FilterSurfaceToolsForRootCount(floor, rootCount)
 		contractcheck.FailErr(t, "filter floor for root count", err)

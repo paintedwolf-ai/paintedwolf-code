@@ -5,18 +5,13 @@
 # Go are not listed — native-tools.yaml holds those.
 
 tools:
-  # state_* work tracking
-  - state_update
-  - state_close
+  # state_start workflow run proposal
   - state_start
-  - state_query
 
   # handoff_* sibling worker coordination (parent session plane)
-  - handoff_init
   - handoff_reserve
   - handoff_release
   - handoff_release_all
-  - handoff_health
 
   # scan_* host security scans and drill-down
   - scan_pack
@@ -30,14 +25,12 @@ tools:
   - workflow_compose_from_template
   - workflow_catalog_summaries
   - workflow_persist
-  - workflow_user_feedback
   - workflow_advance
   - ask_user
   - fanout_plan
   - submit_verdict
 
-  # plan_* markdown and blueprint seeding helpers
-  - plan_append_review_evidence
+  # plan_from_blueprint blueprint seeding
   - plan_from_blueprint
 
   # pack_board, read_findings, and read_review orientation and review readers
@@ -58,9 +51,3 @@ tools:
   - instruct_worker
   - shelve_overlay
   - worker_history
-
-
-  # parse_* structured JSON extraction and validation
-  - parse_extract_json
-  - parse_validate
-  - parse_evaluation
