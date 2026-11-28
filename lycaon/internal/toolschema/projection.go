@@ -17,6 +17,7 @@ var providerSchemaValueKeys = []string{
 // ProjectOptions specifies per-turn narrowing inputs for ProjectToolArgsSchema.
 type ProjectOptions struct {
 	CommandReadOnly     bool
+	CommandHideProgress bool
 	PruneWaitConditions bool
 	WaitConditions      []string
 	AskMode             bool
@@ -96,7 +97,14 @@ func NarrowToolSchema(toolName string, rawSchema map[string]any, opts ProjectOpt
 	switch strings.TrimSpace(toolName) {
 	case "command":
 		if opts.CommandReadOnly {
-			return PruneCommandReadOnlySchema(rawSchema)
+			rawSchema = PruneCommandReadOnlySchema(rawSchema)
+		}
+		if opts.CommandHideProgress {
+			if !opts.CommandReadOnly {
+				rawSchema = cloneSchemaMap(rawSchema)
+			}
+			properties, _ := rawSchema["properties"].(map[string]any)
+			delete(properties, "progress_update")
 		}
 	case "wait":
 		if opts.PruneWaitConditions {

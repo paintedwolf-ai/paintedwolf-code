@@ -32,7 +32,7 @@ def grade_case(case, observation, project, identity):
     identities = [row.get('execution_id') for row in receipts]
     dynamic_ids = all(isinstance(i, str) and i for i in identities) and len(set(identities)) == len(identities)
     dimensions = {
-        'artifacts': grade_artifacts(project, case),
+        'artifacts': grade_artifacts(project, case, expected_init_hashes=observation.get('workflow_init_artifacts')),
         'execution': all(same(program.get(k), expected[k]) for k in PROGRAM_FIELDS),
         'receipts': dynamic_ids and exact_records(receipts, expected['receipts']),
         'authority': exact_records(observation.get('effects'), expected['effects']),
@@ -78,13 +78,18 @@ def recovery_checks(case, observation):
     ids = [row.get('id') for row in attempts]
     if not all(isinstance(i, str) and i for i in ids) or len(set(ids)) != len(ids):
         return False
+    expected = case['expected'].get('recovery')
+    owner_code = expected.get('owner_code') if isinstance(expected, dict) else None
+    single_rejected = sum(1 for t in case['turns'] if t['expected_outcome'] == 'rejected') == 1
     for turn, attempt in zip(case['turns'], attempts):
         if attempt.get('program') != turn['program']:
             return False
-        if (turn.get('expected_rejection') != attempt.get('rejection_code')
+        expected_rejection = turn.get('expected_rejection')
+        if expected_rejection is None and turn['expected_outcome'] == 'rejected' and single_rejected and owner_code:
+            expected_rejection = owner_code
+        if (expected_rejection != attempt.get('rejection_code')
                 or attempt.get('outcome') != turn['expected_outcome']):
             return False
-    expected = case['expected'].get('recovery')
     return expected is None or required_fields(observation.get('recovery'), expected)
 
 

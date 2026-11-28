@@ -28,9 +28,9 @@ import (
 // directory frame and returns the reviewed form; it runs nothing.
 type NativeOperation struct {
 	Tool string
-	// ClosedForms keeps unsupported owner forms as typed refusals instead of
-	// launching an installed program with different authority.
+	// ClosedForms keeps unsupported owner forms as typed refusals instead of launching externally.
 	ClosedForms bool
+	DisallowGap func(commandprogram.Fields) bool
 	// SecretSlots are the review argument slots where this command form
 	// carries managed-secret references to its owner; elsewhere they refuse.
 	SecretSlots []string
@@ -84,10 +84,9 @@ type ProgramOwners struct {
 	Input           commandprogram.InputRedirection
 	Sources         commandprogram.SourceCapture
 	// Redirections binds redirect owners to a directory frame after cd.
-	Redirections func(*projectpaths.ProgramPaths, tools.CommandOutputAdmission) (commandprogram.InputRedirection, commandprogram.OutputPublication)
-	// Builtins are in-process utility owners bound to this program's ports;
-	// release runs once the program and its jobs have settled.
-	Builtins func(BuiltinPorts) (builtins map[string]commandprogram.OperationDispatcher, release func(), err error)
+	Redirections  func(*projectpaths.ProgramPaths, tools.CommandOutputAdmission) (commandprogram.InputRedirection, commandprogram.OutputPublication)
+	Builtins      func(BuiltinPorts) (builtins map[string]commandprogram.OperationDispatcher, release func(), err error)
+	DeclareLaunch func(ctx context.Context, tc tools.ToolContext, executionID, cwd string, argv []string) error
 }
 
 // BuiltinPorts are one program's resources for in-process utility owners.
@@ -112,8 +111,9 @@ type ProgramDispatcher struct {
 	// redirections binds redirect owners to this frame's directory.
 	redirections func(*projectpaths.ProgramPaths, tools.CommandOutputAdmission) (commandprogram.InputRedirection, commandprogram.OutputPublication)
 	// paths is this directory frame; cd moves it and Fork copies it.
-	paths  *projectpaths.ProgramPaths
-	shared *dispatchShared
+	paths         *projectpaths.ProgramPaths
+	shared        *dispatchShared
+	declareLaunch func(ctx context.Context, tc tools.ToolContext, executionID, cwd string, argv []string) error
 }
 
 // dispatchShared is per-program state every forked frame shares.
@@ -348,7 +348,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 						d.recordExternalStage(stage, stamped, hosts, directIPApplied)
 						opTrackerFromContext(ctx).addNetworkRead(reachedNetworkURLs(hosts))
 					}
-					return ExternalStages{ToolContext: admitted, Cwd: cwd, BaseEnvironment: d.run.baseEnv, ObserveStage: observe, window: d.run.window}.Launch(ctx, execution, streams)
+					return ExternalStages{ToolContext: admitted, Cwd: cwd, BaseEnvironment: d.run.baseEnv, ObserveStage: observe, DeclareLaunch: d.declareLaunch, window: d.run.window}.Launch(ctx, execution, streams)
 				})
 			}}, nil
 		},

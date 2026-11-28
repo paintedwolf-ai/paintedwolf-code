@@ -89,12 +89,8 @@ func parseCommand(spec toolcontract.CommandSpecification, argv commandprogram.Fi
 	if i > len(argv) {
 		return nil, operandInvalid(spec, spec.Name, "the "+spec.Name+" subcommand")
 	}
-	for _, kv := range c.config {
-		key, value, _ := strings.Cut(kv, "=")
-		if allowed := allowedConfig[strings.ToLower(key)]; allowed == nil || !allowed(value) {
-			return nil, &toolrejection.ToolReject{Code: "COMMAND_OPTION_UNSUPPORTED", Data: map[string]any{
-				"command": spec.Name, "word": kv, "expected": "an allowlisted -c override (user.name, user.email, init.defaultBranch, core.fsmonitor=false, core.pager=cat, color.ui=false, core.quotepath=false)", "expected_form": spec.Argv}}
-		}
+	if err := validateConfigOverrides(spec.Name, spec.Argv, c.config); err != nil {
+		return nil, err
 	}
 	c.args = normalizeAttachedGitOptions(spec.Name, append(append([]string{}, names[1:]...), argv[i:].Values()...))
 	c.beforeDash, c.afterDash = splitDashOperands(spec, c.args, bound)

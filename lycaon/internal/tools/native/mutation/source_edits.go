@@ -206,15 +206,23 @@ func runCodeRewrite(inv *invocation) error {
 			}
 			continue
 		}
-		destination, err := inv.owners.Revisions.CaptureDestination(inv.ctx, inv.tc, abs)
-		if err != nil {
-			return err
+		writeInput := native.WriteInput{Operation: inv.owners.ops[inv.name()], Path: abs, Content: rewritten}
+		if inv.tc.Source.StructuredFormTool {
+			writeInput.Admission = native.WriteConversational
+		} else {
+			destination, err := inv.owners.Revisions.CaptureDestination(inv.ctx, inv.tc, abs)
+			if err != nil {
+				return err
+			}
+			if err := inv.recordPin(destination); err != nil {
+				return err
+			}
+			writeInput.Memory = inv.owners.Revisions.Memory
+			writeInput.Admission = native.WriteExecutionPinned
+			writeInput.Destination = destination
+			writeInput.Sources = []toolcontract.ExecutionRevision{source.Revision}
 		}
-		if err := inv.recordPin(destination); err != nil {
-			return err
-		}
-		result, err := inv.owners.Operations.Write.Apply(ctx, native.WriteInput{Operation: inv.owners.ops[inv.name()], Path: abs, Content: rewritten, Memory: inv.owners.Revisions.Memory,
-			Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.Revision}}, inv.tc)
+		result, err := inv.owners.Operations.Write.Apply(ctx, writeInput, inv.tc)
 		if err != nil {
 			return err
 		}

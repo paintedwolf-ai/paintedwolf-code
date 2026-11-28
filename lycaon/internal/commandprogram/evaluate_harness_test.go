@@ -315,6 +315,9 @@ func (s *fakeStaged) Write(b []byte) (int, error) {
 	return s.buf.Write(b)
 }
 func (s *fakeStaged) Publish(context.Context) (OutputPublished, error) {
+	if s.target == "publish-failed" {
+		return OutputPublished{}, errors.New("fixture publication failed")
+	}
 	s.owner.mu.Lock()
 	defer s.owner.mu.Unlock()
 	if s.owner.published == nil {
