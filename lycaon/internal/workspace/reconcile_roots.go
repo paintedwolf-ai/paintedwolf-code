@@ -130,7 +130,7 @@ func reconcileBranchRoots(ctx context.Context, branchRoot, stateRoot string, liv
 	}
 	removed := 0
 	for _, bucket := range candidates {
-		changed, err := reconcileDetachedBranchBucket(ctx, stateRoot, bucket, settle, retainedJobs)
+		changed, err := reconcileDetachedBranchBucket(ctx, stateRoot, bucket, settle, retainedJobs, loadRetainedJobs)
 		if err != nil {
 			return removed, err
 		}
@@ -141,7 +141,14 @@ func reconcileBranchRoots(ctx context.Context, branchRoot, stateRoot string, liv
 	return removed, nil
 }
 
-func reconcileDetachedBranchBucket(ctx context.Context, stateRoot string, bucket detachedBranchBucket, settle SandboxSettler, retainedJobs map[string]struct{}) (bool, error) {
+func reconcileDetachedBranchBucket(
+	ctx context.Context,
+	stateRoot string,
+	bucket detachedBranchBucket,
+	settle SandboxSettler,
+	retainedJobs map[string]struct{},
+	loadRetainedJobs func(context.Context) (map[string]struct{}, error),
+) (bool, error) {
 	changed := false
 	var blocked []error
 	for jobID := range bucket.jobs {
@@ -155,18 +162,13 @@ func reconcileDetachedBranchBucket(ctx context.Context, stateRoot string, bucket
 		if placedBranchAbsent(stateRoot, root) {
 			continue
 		}
-		if err := settleBeforeRemoval(ctx, settle, jobID, root); err != nil {
-			blocked = append(blocked, err)
-			continue
-		}
-		removed, err := removeUnownedBranch(ctx, root)
+		removed, blockedErr, err := removeUnownedBranch(ctx, stateRoot, jobID, root, settle, loadRetainedJobs)
 		if err != nil {
 			return changed, errors.Join(append(blocked, err)...)
 		}
-		if removed {
-			if err := forgetPlacedBranch(ctx, stateRoot, root); err != nil {
-				return changed, err
-			}
+		if blockedErr != nil {
+			blocked = append(blocked, blockedErr)
+			continue
 		}
 		changed = changed || removed
 	}
@@ -180,25 +182,62 @@ func reconcileDetachedBranchBucket(ctx context.Context, stateRoot string, bucket
 	return changed, errors.Join(blocked...)
 }
 
-func removeUnownedBranch(ctx context.Context, root string) (bool, error) {
+func removeUnownedBranch(
+	ctx context.Context,
+	stateRoot, jobID, root string,
+	settle SandboxSettler,
+	loadRetainedJobs func(context.Context) (map[string]struct{}, error),
+) (removed bool, blockedErr error, fatalErr error) {
+	releaseLifecycle, err := acquireBranchReconcile(ctx, jobID)
+	if err != nil {
+		return false, nil, err
+	}
+	defer releaseLifecycle()
 	releaseUse, err := tryExclusiveBranchUse(root)
 	if errors.Is(err, ErrBranchInUse) {
-		return false, nil
+		return false, nil, nil
 	}
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
-	defer releaseUse()
 	releaseProvision, err := tryWorkspaceProvisionLock(root)
 	if errors.Is(err, ErrBranchInUse) {
-		return false, nil
+		releaseUse()
+		return false, nil, nil
 	}
 	if err != nil {
-		return false, err
+		releaseUse()
+		return false, nil, err
 	}
-	defer releaseProvision()
+	releaseFileLocks := func() {
+		releaseProvision()
+		releaseUse()
+	}
 	if err := ctx.Err(); err != nil {
-		return false, err
+		releaseFileLocks()
+		return false, nil, err
 	}
-	return true, removeJobSandbox(root)
+	latestRetained, err := loadRetainedJobs(ctx)
+	if err != nil {
+		releaseFileLocks()
+		return false, nil, err
+	}
+	if _, keep := latestRetained[jobID]; keep {
+		releaseFileLocks()
+		return false, nil, nil
+	}
+	if err := settleBeforeRemoval(ctx, settle, jobID, root); err != nil {
+		releaseFileLocks()
+		return false, err, nil
+	}
+	if err := removeJobSandboxTreeAndMeta(root); err != nil {
+		releaseFileLocks()
+		return false, nil, err
+	}
+	releaseFileLocks()
+	removeBranchLocks(root)
+	if err := forgetPlacedBranch(ctx, stateRoot, root); err != nil {
+		return false, nil, err
+	}
+	return true, nil, nil
 }

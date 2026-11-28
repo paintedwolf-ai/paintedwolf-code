@@ -55,28 +55,90 @@ func ReconcileStaleSandboxes(
 		if _, keep := retainJobIDs[dir.jobID]; keep && !placedTreeSuperseded(stateRoot, dir.root) {
 			continue
 		}
-		if err := settleBeforeRemoval(ctx, settle, dir.jobID, dir.root); err != nil {
-			blocked = append(blocked, err)
+		didRemove, blockedErr, fatalErr := reconcileStaleSandboxCandidate(ctx, stateRoot, primaryDir, dir, settle, loadRetainedBranches)
+		if fatalErr != nil {
+			return removed, errors.Join(append(blocked, fatalErr)...)
+		}
+		if blockedErr != nil {
+			blocked = append(blocked, blockedErr)
 			continue
 		}
-		if err := removeJobSandbox(dir.root); err != nil {
-			return removed, errors.Join(append(blocked, err)...)
+		if didRemove {
+			removed++
 		}
-		if err := forgetPlacedBranch(ctx, stateRoot, dir.root); err != nil {
-			return removed, err
-		}
-		removed++
-		slog.InfoContext(ctx, "removed stale worker sandbox",
-			"project_dir", strings.TrimSpace(primaryDir),
-			"job_id", dir.jobID,
-			"path", dir.root,
-		)
 	}
-	orphans, err := removeUnretainedOrphanMeta(ctx, stateRoot, primaryDir, listing.metas, retainJobIDs)
+	orphans, err := removeUnretainedOrphanMeta(ctx, stateRoot, primaryDir, listing.metas, retainJobIDs, loadRetainedBranches)
 	if err != nil {
 		return removed, errors.Join(append(blocked, err)...)
 	}
 	return removed + orphans, errors.Join(blocked...)
+}
+
+func reconcileStaleSandboxCandidate(
+	ctx context.Context,
+	stateRoot, primaryDir string,
+	dir sandboxDir,
+	settle SandboxSettler,
+	loadRetainedBranches func(context.Context) (map[string]struct{}, error),
+) (removed bool, blockedErr error, fatalErr error) {
+	releaseLifecycle, err := acquireBranchReconcile(ctx, dir.jobID)
+	if err != nil {
+		return false, nil, err
+	}
+	defer releaseLifecycle()
+	if _, err := adapter.BoundedLstat(dir.root); errors.Is(err, os.ErrNotExist) {
+		return false, nil, nil
+	}
+	releaseUse, err := tryExclusiveBranchUse(dir.root)
+	if errors.Is(err, ErrBranchInUse) {
+		return false, nil, nil
+	}
+	if err != nil {
+		return false, nil, err
+	}
+	releaseProvision, err := tryWorkspaceProvisionLock(dir.root)
+	if errors.Is(err, ErrBranchInUse) {
+		releaseUse()
+		return false, nil, nil
+	}
+	if err != nil {
+		releaseUse()
+		return false, nil, err
+	}
+	releaseFileLocks := func() {
+		releaseProvision()
+		releaseUse()
+	}
+	// Revalidate eligibility under the lifecycle owner so a retention snapshot
+	// taken before preparation committed cannot authorize settlement or removal.
+	latestRetained, err := loadRetainedBranches(ctx)
+	if err != nil {
+		releaseFileLocks()
+		return false, nil, err
+	}
+	if _, keep := latestRetained[dir.jobID]; keep && !placedTreeSuperseded(stateRoot, dir.root) {
+		releaseFileLocks()
+		return false, nil, nil
+	}
+	if err := settleBeforeRemoval(ctx, settle, dir.jobID, dir.root); err != nil {
+		releaseFileLocks()
+		return false, err, nil
+	}
+	if err := removeJobSandboxTreeAndMeta(dir.root); err != nil {
+		releaseFileLocks()
+		return false, nil, err
+	}
+	releaseFileLocks()
+	removeBranchLocks(dir.root)
+	if err := forgetPlacedBranch(ctx, stateRoot, dir.root); err != nil {
+		return false, nil, err
+	}
+	slog.InfoContext(ctx, "removed stale worker sandbox",
+		"project_dir", strings.TrimSpace(primaryDir),
+		"job_id", dir.jobID,
+		"path", dir.root,
+	)
+	return true, nil, nil
 }
 
 func settleBeforeRemoval(ctx context.Context, settle SandboxSettler, jobID, root string) error {
@@ -187,7 +249,13 @@ func listSandboxEntries(branchRoot, primaryDir string) (sandboxListing, error) {
 	return listing, nil
 }
 
-func removeUnretainedOrphanMeta(ctx context.Context, stateRoot, primaryDir string, metas []sandboxDir, retainJobIDs map[string]struct{}) (int, error) {
+func removeUnretainedOrphanMeta(
+	ctx context.Context,
+	stateRoot, primaryDir string,
+	metas []sandboxDir,
+	retainJobIDs map[string]struct{},
+	loadRetainedBranches func(context.Context) (map[string]struct{}, error),
+) (int, error) {
 	removed := 0
 	for _, meta := range metas {
 		if err := ctx.Err(); err != nil {
@@ -196,27 +264,76 @@ func removeUnretainedOrphanMeta(ctx context.Context, stateRoot, primaryDir strin
 		if _, keep := retainJobIDs[meta.jobID]; keep {
 			continue
 		}
-		jobRoot := filepath.Join(filepath.Dir(meta.root), meta.jobID)
-		if info, err := os.Stat(jobRoot); err == nil && info.IsDir() {
-			continue
-		}
-		if err := os.RemoveAll(meta.root); err != nil {
-			return removed, fmt.Errorf("remove orphan sandbox meta %s: %w", meta.root, err)
-		}
-		if err := forgetPlacedBranch(ctx, stateRoot, jobRoot); err != nil {
+		didRemove, err := reconcileOrphanMetaCandidate(ctx, stateRoot, primaryDir, meta, loadRetainedBranches)
+		if err != nil {
 			return removed, err
 		}
-		removed++
-		slog.InfoContext(ctx, "removed orphan worker sandbox meta",
-			"project_dir", strings.TrimSpace(primaryDir),
-			"job_id", meta.jobID,
-			"path", meta.root,
-		)
+		if didRemove {
+			removed++
+		}
 	}
 	return removed, nil
 }
 
-func removeJobSandbox(root string) error {
+func reconcileOrphanMetaCandidate(
+	ctx context.Context,
+	stateRoot, primaryDir string,
+	meta sandboxDir,
+	loadRetainedBranches func(context.Context) (map[string]struct{}, error),
+) (bool, error) {
+	releaseLifecycle, err := acquireBranchReconcile(ctx, meta.jobID)
+	if err != nil {
+		return false, err
+	}
+	defer releaseLifecycle()
+	if _, err := os.Lstat(meta.root); errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	jobRoot := filepath.Join(filepath.Dir(meta.root), meta.jobID)
+	if info, err := os.Stat(jobRoot); err == nil && info.IsDir() {
+		return false, nil
+	}
+	if enginepaths.WorkerPlacementFolderOf(jobRoot) == "" && branchIsPlaced(stateRoot, jobRoot) {
+		return false, nil
+	}
+	releaseProvision, err := tryWorkspaceProvisionLock(jobRoot)
+	if errors.Is(err, ErrBranchInUse) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	latestRetained, err := loadRetainedBranches(ctx)
+	if err != nil {
+		releaseProvision()
+		return false, err
+	}
+	if _, keep := latestRetained[meta.jobID]; keep {
+		releaseProvision()
+		return false, nil
+	}
+	if info, err := os.Stat(jobRoot); err == nil && info.IsDir() {
+		releaseProvision()
+		return false, nil
+	}
+	if err := os.RemoveAll(meta.root); err != nil {
+		releaseProvision()
+		return false, fmt.Errorf("remove orphan sandbox meta %s: %w", meta.root, err)
+	}
+	releaseProvision()
+	removeBranchLocks(jobRoot)
+	if err := forgetPlacedBranch(ctx, stateRoot, jobRoot); err != nil {
+		return false, err
+	}
+	slog.InfoContext(ctx, "removed orphan worker sandbox meta",
+		"project_dir", strings.TrimSpace(primaryDir),
+		"job_id", meta.jobID,
+		"path", meta.root,
+	)
+	return true, nil
+}
+
+func removeJobSandboxTreeAndMeta(root string) error {
 	root = strings.TrimSpace(root)
 	if root == "" {
 		return fmt.Errorf("sandbox root required")
@@ -231,7 +348,6 @@ func removeJobSandbox(root string) error {
 	if err := os.RemoveAll(meta); err != nil {
 		return fmt.Errorf("remove stale sandbox meta %s: %w", meta, err)
 	}
-	removeBranchLocks(root)
 	return nil
 }
 

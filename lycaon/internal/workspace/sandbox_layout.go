@@ -169,6 +169,11 @@ func createWorkerWorkspaceFromSources(
 	if err != nil {
 		return nil, SandboxLayout{}, err
 	}
+	releasePrep, err := AcquireBranchPreparation(ctx, jobID)
+	if err != nil {
+		return nil, SandboxLayout{}, err
+	}
+	defer releasePrep()
 	logicalRoot := m.jobRoot(keyPath, jobID)
 	release, err := acquireWorkspaceProvisionLock(ctx, logicalRoot)
 	if err != nil {
