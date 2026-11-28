@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/providers"
 	"github.com/lycaon/lycaon/internal/app/server"
 	"github.com/lycaon/lycaon/internal/app/sessions"
+	"github.com/lycaon/lycaon/internal/app/workflows"
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/cost"
@@ -36,6 +37,9 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/watch"
+	"github.com/lycaon/lycaon/internal/workflow"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -187,19 +191,20 @@ func TestStandingWatchHostEventsAndDispatch(t *testing.T) {
 
 	cpPending, err := json.Marshal(api.CheckpointEvent{SessionID: sess.ID, Status: api.CheckpointStatusPending})
 	testutil.FailErr(t, "marshal pending checkpoint", err)
-	observeStandingWatchEvent(t.Context(), b, engine, api.EventEnvelope{Topic: api.EventTopicCheckpoint, Data: cpPending})
+	observeStandingWatchEvent(t.Context(), b, engine, nil, api.EventEnvelope{Topic: api.EventTopicCheckpoint, Data: cpPending})
 	cpResolved, err := json.Marshal(api.CheckpointEvent{SessionID: sess.ID, Status: api.CheckpointStatusApproved})
 	testutil.FailErr(t, "marshal resolved checkpoint", err)
-	observeStandingWatchEvent(t.Context(), b, engine, api.EventEnvelope{Topic: api.EventTopicCheckpoint, Data: cpResolved})
+	observeStandingWatchEvent(t.Context(), b, engine, nil, api.EventEnvelope{Topic: api.EventTopicCheckpoint, Data: cpResolved})
 	sessIdle, err := json.Marshal(api.SessionEvent{ID: sess.ID, Status: api.SessionStatusIdle})
 	testutil.FailErr(t, "marshal idle session", err)
-	observeStandingWatchEvent(t.Context(), b, engine, api.EventEnvelope{Topic: api.EventTopicSession, Data: sessIdle})
+	observeStandingWatchEvent(t.Context(), b, engine, nil, api.EventEnvelope{Topic: api.EventTopicSession, Data: sessIdle})
 	sessDeleted, err := json.Marshal(api.SessionEvent{ID: "deleted-id", Action: api.SessionEventActionDeleted})
 	testutil.FailErr(t, "marshal deleted session", err)
-	observeStandingWatchEvent(t.Context(), b, engine, api.EventEnvelope{Topic: api.EventTopicSession, Data: sessDeleted})
+	observeStandingWatchEvent(t.Context(), b, engine, nil, api.EventEnvelope{Topic: api.EventTopicSession, Data: sessDeleted})
 	_ = sessionHasOpenCheckpoint(b, t.Context(), sess.ID)
 
 	var wg sync.WaitGroup
+	tracker := &standingDispatchTracker{}
 	swExisting := watch.StandingWatch{
 		WatchID:       uuid.NewString(),
 		ProjectID:     testdbseed.DefaultProjectID,
@@ -210,7 +215,7 @@ func TestStandingWatchHostEventsAndDispatch(t *testing.T) {
 	}
 	for _, tc := range []error{nil, spendguard.ErrCeiling, lifecycle.ErrStopping, errors.New("provider error")} {
 		runOutcome = tc
-		out, dErr := dispatchStandingWatchRun(b, t.Context(), &wg, engine, swExisting, watch.WatchRun{RunID: uuid.NewString()}, "check status")
+		out, dErr := dispatchStandingWatchRun(b, t.Context(), &wg, engine, tracker, swExisting, watch.WatchRun{RunID: uuid.NewString()}, "check status")
 		testutil.FailErr(t, "dispatch existing chat run", dErr)
 		if out.SessionID != sess.ID {
 			t.Fatalf("dispatch SessionID = %q, want %q", out.SessionID, sess.ID)
@@ -221,7 +226,7 @@ func TestStandingWatchHostEventsAndDispatch(t *testing.T) {
 	runOutcome = nil
 	swNew := swExisting
 	swNew.Target = watch.StandingTarget{Kind: "new_chat"}
-	outNew, err := dispatchStandingWatchRun(b, t.Context(), &wg, engine, swNew, watch.WatchRun{RunID: uuid.NewString()}, "start new run")
+	outNew, err := dispatchStandingWatchRun(b, t.Context(), &wg, engine, tracker, swNew, watch.WatchRun{RunID: uuid.NewString()}, "start new run")
 	testutil.FailErr(t, "dispatch new chat run", err)
 	if outNew.SessionID == "" {
 		t.Fatal("expected created SessionID for new_chat run")
@@ -337,13 +342,14 @@ func TestStandingWatchRunSettlementBarrier(t *testing.T) {
 
 			var (
 				wg                       sync.WaitGroup
+				tracker                  = &standingDispatchTracker{}
 				sessionIDAtBarrier       string
 				persistedLinkBeforeRet   string
 				statusAtBarrierBeforeRet string
 			)
 			engine.SetCallbacks(watch.StandingCallbacks{
 				RunDispatcher: func(dCtx context.Context, sw watch.StandingWatch, run watch.WatchRun, promptText string) (watch.StandingRunDispatchOutcome, error) {
-					out, dErr := dispatchStandingWatchRun(b, dCtx, &wg, engine, sw, run, promptText)
+					out, dErr := dispatchStandingWatchRun(b, dCtx, &wg, engine, tracker, sw, run, promptText)
 					// Barrier: deliberately hold returning out.SessionID to invokeStandingDispatcher
 					// until the async HostTurnWithAdmission goroutine and its settlement have finished.
 					wg.Wait()
@@ -415,9 +421,9 @@ func TestStandingWatchRunSettlementBarrier(t *testing.T) {
 			// Non-resurrection check: once terminal, subsequent session/checkpoint events or settlement calls must not mutate the row.
 			if tc.wantEnded {
 				cpPending, _ := json.Marshal(api.CheckpointEvent{SessionID: run.SessionID, Status: api.CheckpointStatusPending})
-				observeStandingWatchEvent(ctx, b, engine, api.EventEnvelope{Topic: api.EventTopicCheckpoint, Data: cpPending})
+				observeStandingWatchEvent(ctx, b, engine, tracker, api.EventEnvelope{Topic: api.EventTopicCheckpoint, Data: cpPending})
 				sessIdle, _ := json.Marshal(api.SessionEvent{ID: run.SessionID, Status: api.SessionStatusIdle})
-				observeStandingWatchEvent(ctx, b, engine, api.EventEnvelope{Topic: api.EventTopicSession, Data: sessIdle})
+				observeStandingWatchEvent(ctx, b, engine, tracker, api.EventEnvelope{Topic: api.EventTopicSession, Data: sessIdle})
 				_ = engine.MarkWaitingForOwner(ctx, run.SessionID)
 				_ = engine.SettleRun(ctx, run.SessionID, watch.RunCompleted)
 
@@ -472,11 +478,164 @@ func TestObserveStandingWatchEventIgnoresSessionCreatedIdle(t *testing.T) {
 		Status: api.SessionStatusIdle,
 	})
 	testutil.FailErr(t, "marshal created event", err)
-	observeStandingWatchEvent(ctx, b, engine, api.EventEnvelope{Topic: api.EventTopicSession, Data: createdEv})
+	observeStandingWatchEvent(ctx, b, engine, nil, api.EventEnvelope{Topic: api.EventTopicSession, Data: createdEv})
 
 	var status string
 	testutil.FailErr(t, "query run status", database.QueryRowContext(ctx, `SELECT status FROM watch_runs WHERE run_id = ?`, run.RunID).Scan(&status))
 	if watch.WatchRunStatus(status) != watch.RunRunning {
 		t.Fatalf("session.created idle prematurely settled run to %q, want running", status)
+	}
+}
+
+func TestStandingWatchNewChatAttachesAmbientWorkflowAndPassesAssertRunnable(t *testing.T) {
+	ctx := t.Context()
+	database := testdbfixture.Open(t, "watch_standing_ambient_workflow.db")
+	rootDir := t.TempDir()
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, rootDir)
+	repos := sessionstore.NewSQL(database)
+	ownerPerson, err := repos.People.HostOwner(ctx)
+	testutil.FailErr(t, "host owner", err)
+
+	manifests, err := workflowdef.RegistryFromDirs("")
+	testutil.FailErr(t, "load workflow manifests", err)
+	wfMgr := workflow.NewManager(workflowpersistence.New(database), repos, manifests, nil)
+
+	clock := testutil.NewFakeClock(time.Date(2026, 5, 1, 16, 0, 0, 0, time.UTC))
+	ws := watch.NewStore(database, clock)
+	engine := ws.Standing()
+
+	var (
+		mu          sync.Mutex
+		assertedErr error
+		executed    bool
+	)
+	subs := submissions.New(
+		repos.Sessions, repos.Submissions, repos.People, queue.New(),
+		lifecycle.New(repos.Sessions), nil, nil, nil,
+		&submissionstate.Service{}, &promptstate.MutexRegistry{},
+		func(runCtx context.Context, sid string, _ promptinput.Input, lock *promptstate.Lock) (*promptresult.Result, error) {
+			defer lock.Unlock()
+			err := wfMgr.Policy.AssertSessionRunnable(runCtx, sid)
+			mu.Lock()
+			executed = true
+			assertedErr = err
+			mu.Unlock()
+			return &promptresult.Result{}, err
+		},
+		nil, nil, func(context.Context, string) bool { return false },
+	)
+	b := &serveBuilder{
+		startup:   startupBootstrap{ctx: ctx},
+		storage:   persistence.Runtime{Database: database, Sessions: repos},
+		workflows: &workflows.Runtime{Manager: wfMgr},
+		sessions: &sessions.Runtime{
+			Manager: &session.Host{Submissions: subs},
+		},
+	}
+
+	var wg sync.WaitGroup
+	tracker := &standingDispatchTracker{}
+	engine.SetCallbacks(watch.StandingCallbacks{
+		RunDispatcher: func(dCtx context.Context, sw watch.StandingWatch, run watch.WatchRun, promptText string) (watch.StandingRunDispatchOutcome, error) {
+			out, dErr := dispatchStandingWatchRun(b, dCtx, &wg, engine, tracker, sw, run, promptText)
+			wg.Wait()
+			return out, dErr
+		},
+	})
+
+	sw, err := engine.Create(ctx, ownerPerson.ID, watch.StandingWatchInput{
+		ProjectID:  testdbseed.DefaultProjectID,
+		Name:       "ambient-workflow-check",
+		Prompt:     "run on new chat with ambient workflow",
+		Conditions: []awaitstore.Condition{{Kind: "timer", EveryMinutes: 60}},
+		Target:     &watch.StandingTarget{Kind: "new_chat"},
+	})
+	testutil.FailErr(t, "create standing watch", err)
+
+	run, err := engine.RunNow(ctx, ownerPerson.ID, testdbseed.DefaultProjectID, sw.WatchID)
+	testutil.FailErr(t, "run standing watch now", err)
+
+	mu.Lock()
+	gotExecuted := executed
+	gotAssertErr := assertedErr
+	mu.Unlock()
+	if !gotExecuted {
+		t.Fatal("standing watch turn did not execute")
+	}
+	if gotAssertErr != nil {
+		t.Fatalf("AssertSessionRunnable on new_chat standing run returned error: %v", gotAssertErr)
+	}
+	if run.Status != watch.RunCompleted {
+		t.Fatalf("run.Status = %q, want completed", run.Status)
+	}
+}
+
+func TestStandingWatchIdleEventDuringFailingTurnDoesNotMisSettleCompleted(t *testing.T) {
+	ctx := t.Context()
+	database := testdbfixture.Open(t, "watch_standing_idle_race.db")
+	rootDir := t.TempDir()
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, rootDir)
+	repos := sessionstore.NewSQL(database)
+	ownerPerson, err := repos.People.HostOwner(ctx)
+	testutil.FailErr(t, "host owner", err)
+
+	clock := testutil.NewFakeClock(time.Date(2026, 5, 1, 17, 0, 0, 0, time.UTC))
+	ws := watch.NewStore(database, clock)
+	engine := ws.Standing()
+
+	var b *serveBuilder
+	tracker := &standingDispatchTracker{}
+	subs := submissions.New(
+		repos.Sessions, repos.Submissions, repos.People, queue.New(),
+		lifecycle.New(repos.Sessions), nil, nil, nil,
+		&submissionstate.Service{}, &promptstate.MutexRegistry{},
+		func(runCtx context.Context, sid string, _ promptinput.Input, lock *promptstate.Lock) (*promptresult.Result, error) {
+			defer lock.Unlock()
+			// Simulate a SessionEvent{Status: idle} (with empty IdleDisposition) arriving
+			// while HostTurnWithAdmission is still in-flight before returning its failure.
+			idleEv, mErr := json.Marshal(api.SessionEvent{
+				ID:     sid,
+				Action: api.SessionEventActionUpdated,
+				Status: api.SessionStatusIdle,
+			})
+			testutil.FailErr(t, "marshal idle event", mErr)
+			observeStandingWatchEvent(runCtx, b, engine, tracker, api.EventEnvelope{
+				Topic: api.EventTopicSession,
+				Data:  idleEv,
+			})
+			return nil, errors.New("coordinator turn failed")
+		},
+		nil, nil, func(context.Context, string) bool { return false },
+	)
+	b = &serveBuilder{
+		startup: startupBootstrap{ctx: ctx},
+		storage: persistence.Runtime{Database: database, Sessions: repos},
+		sessions: &sessions.Runtime{
+			Manager: &session.Host{Submissions: subs},
+		},
+	}
+
+	var wg sync.WaitGroup
+	engine.SetCallbacks(watch.StandingCallbacks{
+		RunDispatcher: func(dCtx context.Context, sw watch.StandingWatch, run watch.WatchRun, promptText string) (watch.StandingRunDispatchOutcome, error) {
+			out, dErr := dispatchStandingWatchRun(b, dCtx, &wg, engine, tracker, sw, run, promptText)
+			wg.Wait()
+			return out, dErr
+		},
+	})
+
+	sw, err := engine.Create(ctx, ownerPerson.ID, watch.StandingWatchInput{
+		ProjectID:  testdbseed.DefaultProjectID,
+		Name:       "idle-race-during-failure",
+		Prompt:     "fail turn after idle event",
+		Conditions: []awaitstore.Condition{{Kind: "timer", EveryMinutes: 60}},
+		Target:     &watch.StandingTarget{Kind: "new_chat"},
+	})
+	testutil.FailErr(t, "create standing watch", err)
+
+	run, err := engine.RunNow(ctx, ownerPerson.ID, testdbseed.DefaultProjectID, sw.WatchID)
+	testutil.FailErr(t, "run standing watch now", err)
+	if run.Status != watch.RunFailed {
+		t.Fatalf("run.Status = %q, want failed (idle event during in-flight failing turn must not mis-settle as completed)", run.Status)
 	}
 }

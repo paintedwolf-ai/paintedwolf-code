@@ -22,6 +22,47 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+type standingDispatchTracker struct {
+	mu     sync.Mutex
+	active map[string]int
+}
+
+func (t *standingDispatchTracker) enter(sessionID string) {
+	if t == nil || strings.TrimSpace(sessionID) == "" {
+		return
+	}
+	sid := strings.TrimSpace(sessionID)
+	t.mu.Lock()
+	if t.active == nil {
+		t.active = make(map[string]int)
+	}
+	t.active[sid]++
+	t.mu.Unlock()
+}
+
+func (t *standingDispatchTracker) leave(sessionID string) {
+	if t == nil || strings.TrimSpace(sessionID) == "" {
+		return
+	}
+	sid := strings.TrimSpace(sessionID)
+	t.mu.Lock()
+	if n := t.active[sid]; n <= 1 {
+		delete(t.active, sid)
+	} else {
+		t.active[sid] = n - 1
+	}
+	t.mu.Unlock()
+}
+
+func (t *standingDispatchTracker) isActive(sessionID string) bool {
+	if t == nil || strings.TrimSpace(sessionID) == "" {
+		return false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.active[strings.TrimSpace(sessionID)] > 0
+}
+
 func (b *serveBuilder) watchStore() *watch.Store {
 	if b == nil || b.server.Coordinator == nil {
 		return nil
@@ -47,6 +88,7 @@ func wireStandingWatchHost(b *serveBuilder, watchStore *watch.Store) {
 	}
 
 	var wg sync.WaitGroup
+	tracker := &standingDispatchTracker{}
 	engine.SetCallbacks(watch.StandingCallbacks{
 		ModelPriceCheck: func(ctx context.Context, projectID, modelID string) (bool, error) {
 			return standingModelPriceCheck(b, ctx, projectID, modelID)
@@ -61,7 +103,7 @@ func wireStandingWatchHost(b *serveBuilder, watchStore *watch.Store) {
 			return standingProjectDefaults(b, ctx, projectID)
 		},
 		RunDispatcher: func(ctx context.Context, sw watch.StandingWatch, run watch.WatchRun, promptText string) (watch.StandingRunDispatchOutcome, error) {
-			return dispatchStandingWatchRun(b, ctx, &wg, engine, sw, run, promptText)
+			return dispatchStandingWatchRun(b, ctx, &wg, engine, tracker, sw, run, promptText)
 		},
 	})
 	if b.events != nil {
@@ -88,7 +130,7 @@ func wireStandingWatchHost(b *serveBuilder, watchStore *watch.Store) {
 						if !ok {
 							return
 						}
-						observeStandingWatchEvent(b.startup.ctx, b, engine, env)
+						observeStandingWatchEvent(b.startup.ctx, b, engine, tracker, env)
 					}
 				}
 			}()
@@ -108,7 +150,7 @@ func wireStandingWatchHost(b *serveBuilder, watchStore *watch.Store) {
 	}
 }
 
-func observeStandingWatchEvent(ctx context.Context, b *serveBuilder, engine *watch.StandingEngine, env api.EventEnvelope) {
+func observeStandingWatchEvent(ctx context.Context, b *serveBuilder, engine *watch.StandingEngine, tracker *standingDispatchTracker, env api.EventEnvelope) {
 	if env.Topic == api.EventTopicCheckpoint {
 		var ev api.CheckpointEvent
 		if json.Unmarshal(env.Data, &ev) != nil || strings.TrimSpace(ev.SessionID) == "" {
@@ -133,7 +175,7 @@ func observeStandingWatchEvent(ctx context.Context, b *serveBuilder, engine *wat
 		if ev.Action == api.SessionEventActionCreated {
 			return
 		}
-		if ev.Status == api.SessionStatusIdle && !sessionHasOpenCheckpoint(b, ctx, ev.ID) {
+		if ev.Status == api.SessionStatusIdle && !tracker.isActive(ev.ID) && !sessionHasOpenCheckpoint(b, ctx, ev.ID) {
 			status := watch.RunCompleted
 			switch ev.IdleDisposition {
 			case api.SessionIdleDispositionTurnError:
@@ -263,6 +305,7 @@ func dispatchStandingWatchRun(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	engine *watch.StandingEngine,
+	tracker *standingDispatchTracker,
 	sw watch.StandingWatch,
 	run watch.WatchRun,
 	promptText string,
@@ -272,9 +315,9 @@ func dispatchStandingWatchRun(
 	}
 	providerID, model := splitProviderModelID(sw.ModelID)
 	sessionID := strings.TrimSpace(run.SessionID)
+	ownerCtx := people.WithCaller(ctx, people.Person{ID: sw.OwnerPersonID, Role: api.PersonRoleOwner})
 	if sw.Target.Kind == "new_chat" {
 		if sessionID == "" {
-			ownerCtx := people.WithCaller(ctx, people.Person{ID: sw.OwnerPersonID, Role: api.PersonRoleOwner})
 			sess, err := b.storage.Sessions.Sessions.Create(ownerCtx, api.CreateSessionRequest{
 				ProjectID:  sw.ProjectID,
 				Posture:    api.SessionPostureBuild,
@@ -306,6 +349,11 @@ func dispatchStandingWatchRun(
 			return watch.StandingRunDispatchOutcome{SessionID: sessionID}, errors.New("target chat is not eligible for automatic admission")
 		}
 	}
+	if b.workflows != nil && b.workflows.Manager != nil && b.workflows.Manager.Ambient != nil {
+		if _, wfErr := b.workflows.Manager.Ambient.EnsureSessionWorkflow(ownerCtx, sessionID); wfErr != nil {
+			return watch.StandingRunDispatchOutcome{SessionID: sessionID}, wfErr
+		}
+	}
 
 	in := promptinput.Input{
 		SubmissionID:   run.RunID,
@@ -320,9 +368,11 @@ func dispatchStandingWatchRun(
 		},
 	}
 	runCtx := people.WithoutCaller(context.WithoutCancel(ctx))
+	tracker.enter(sessionID)
 	wg.Add(1)
 	go func(runID, sid string) {
 		defer wg.Done()
+		defer tracker.leave(sid)
 		admitted := false
 		resp, runErr := b.sessions.Manager.Submissions.HostTurnWithAdmission(runCtx, sid, sessionstore.PromptSubmissionOriginLoopWake, in, func() error {
 			admitted = true
