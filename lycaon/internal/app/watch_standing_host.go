@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +21,47 @@ import (
 	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+type standingDispatchTracker struct {
+	mu     sync.Mutex
+	active map[string]int
+}
+
+func (t *standingDispatchTracker) enter(sessionID string) {
+	if t == nil || strings.TrimSpace(sessionID) == "" {
+		return
+	}
+	sid := strings.TrimSpace(sessionID)
+	t.mu.Lock()
+	if t.active == nil {
+		t.active = make(map[string]int)
+	}
+	t.active[sid]++
+	t.mu.Unlock()
+}
+
+func (t *standingDispatchTracker) leave(sessionID string) {
+	if t == nil || strings.TrimSpace(sessionID) == "" {
+		return
+	}
+	sid := strings.TrimSpace(sessionID)
+	t.mu.Lock()
+	if n := t.active[sid]; n <= 1 {
+		delete(t.active, sid)
+	} else {
+		t.active[sid] = n - 1
+	}
+	t.mu.Unlock()
+}
+
+func (t *standingDispatchTracker) isActive(sessionID string) bool {
+	if t == nil || strings.TrimSpace(sessionID) == "" {
+		return false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.active[strings.TrimSpace(sessionID)] > 0
+}
 
 func (b *serveBuilder) watchStore() *watch.Store {
 	if b == nil || b.server.Coordinator == nil {
@@ -46,6 +88,7 @@ func wireStandingWatchHost(b *serveBuilder, watchStore *watch.Store) {
 	}
 
 	var wg sync.WaitGroup
+	tracker := &standingDispatchTracker{}
 	engine.SetCallbacks(watch.StandingCallbacks{
 		ModelPriceCheck: func(ctx context.Context, projectID, modelID string) (bool, error) {
 			return standingModelPriceCheck(b, ctx, projectID, modelID)
@@ -60,7 +103,7 @@ func wireStandingWatchHost(b *serveBuilder, watchStore *watch.Store) {
 			return standingProjectDefaults(b, ctx, projectID)
 		},
 		RunDispatcher: func(ctx context.Context, sw watch.StandingWatch, run watch.WatchRun, promptText string) (watch.StandingRunDispatchOutcome, error) {
-			return dispatchStandingWatchRun(b, ctx, &wg, engine, sw, run, promptText)
+			return dispatchStandingWatchRun(b, ctx, &wg, engine, tracker, sw, run, promptText)
 		},
 	})
 	if b.events != nil {
@@ -87,7 +130,7 @@ func wireStandingWatchHost(b *serveBuilder, watchStore *watch.Store) {
 						if !ok {
 							return
 						}
-						observeStandingWatchEvent(b.startup.ctx, b, engine, env)
+						observeStandingWatchEvent(b.startup.ctx, b, engine, tracker, env)
 					}
 				}
 			}()
@@ -107,7 +150,7 @@ func wireStandingWatchHost(b *serveBuilder, watchStore *watch.Store) {
 	}
 }
 
-func observeStandingWatchEvent(ctx context.Context, b *serveBuilder, engine *watch.StandingEngine, env api.EventEnvelope) {
+func observeStandingWatchEvent(ctx context.Context, b *serveBuilder, engine *watch.StandingEngine, tracker *standingDispatchTracker, env api.EventEnvelope) {
 	if env.Topic == api.EventTopicCheckpoint {
 		var ev api.CheckpointEvent
 		if json.Unmarshal(env.Data, &ev) != nil || strings.TrimSpace(ev.SessionID) == "" {
@@ -129,8 +172,18 @@ func observeStandingWatchEvent(ctx context.Context, b *serveBuilder, engine *wat
 			_ = engine.NotifySessionClosedOrDeleted(ctx, ev.ID)
 			return
 		}
-		if ev.Status == api.SessionStatusIdle && !sessionHasOpenCheckpoint(b, ctx, ev.ID) {
-			_ = engine.SettleRun(ctx, ev.ID, watch.RunCompleted)
+		if ev.Action == api.SessionEventActionCreated {
+			return
+		}
+		if ev.Status == api.SessionStatusIdle && !tracker.isActive(ev.ID) && !sessionHasOpenCheckpoint(b, ctx, ev.ID) {
+			status := watch.RunCompleted
+			switch ev.IdleDisposition {
+			case api.SessionIdleDispositionTurnError:
+				status = watch.RunFailed
+			case api.SessionIdleDispositionUserStopped, api.SessionIdleDispositionInterrupted:
+				status = watch.RunCanceled
+			}
+			_ = engine.SettleRun(ctx, ev.ID, status)
 		}
 	}
 }
@@ -252,6 +305,7 @@ func dispatchStandingWatchRun(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	engine *watch.StandingEngine,
+	tracker *standingDispatchTracker,
 	sw watch.StandingWatch,
 	run watch.WatchRun,
 	promptText string,
@@ -261,9 +315,9 @@ func dispatchStandingWatchRun(
 	}
 	providerID, model := splitProviderModelID(sw.ModelID)
 	sessionID := strings.TrimSpace(run.SessionID)
+	ownerCtx := people.WithCaller(ctx, people.Person{ID: sw.OwnerPersonID, Role: api.PersonRoleOwner})
 	if sw.Target.Kind == "new_chat" {
 		if sessionID == "" {
-			ownerCtx := people.WithCaller(ctx, people.Person{ID: sw.OwnerPersonID, Role: api.PersonRoleOwner})
 			sess, err := b.storage.Sessions.Sessions.Create(ownerCtx, api.CreateSessionRequest{
 				ProjectID:  sw.ProjectID,
 				Posture:    api.SessionPostureBuild,
@@ -281,6 +335,10 @@ func dispatchStandingWatchRun(
 				WatchName: sw.Name,
 				RunID:     run.RunID,
 			})
+			if linkErr := engine.LinkRunSession(ctx, run.RunID, sessionID); linkErr != nil {
+				slog.WarnContext(ctx, "link standing watch run session before dispatch", "run_id", run.RunID, "session_id", sessionID, "err", linkErr)
+				return watch.StandingRunDispatchOutcome{SessionID: sessionID}, linkErr
+			}
 		}
 	} else {
 		sessionID = strings.TrimSpace(sw.Target.SessionID)
@@ -290,6 +348,11 @@ func dispatchStandingWatchRun(
 				return watch.StandingRunDispatchOutcome{SessionID: sessionID, BusyRetry: true}, nil
 			}
 			return watch.StandingRunDispatchOutcome{SessionID: sessionID}, errors.New("target chat is not eligible for automatic admission")
+		}
+	}
+	if b.workflows != nil && b.workflows.Manager != nil && b.workflows.Manager.Ambient != nil {
+		if _, wfErr := b.workflows.Manager.Ambient.EnsureSessionWorkflow(ownerCtx, sessionID); wfErr != nil {
+			return watch.StandingRunDispatchOutcome{SessionID: sessionID}, wfErr
 		}
 	}
 
@@ -302,25 +365,54 @@ func dispatchStandingWatchRun(
 			Kind:              api.MessageKindHostNudge,
 			ID:                "standing_watch_run:" + run.RunID,
 			TranscriptVisible: true,
+			AuthorPersonID:    sw.OwnerPersonID,
 		},
 	}
 	runCtx := people.WithoutCaller(context.WithoutCancel(ctx))
+	existingChat := sw.Target.Kind == "existing_chat"
+	tracker.enter(sessionID)
 	wg.Add(1)
-	go func(sid string) {
+	go func(runID, sid string) {
 		defer wg.Done()
-		resp, runErr := b.sessions.Manager.Submissions.HostTurnWithAdmission(runCtx, sid, sessionstore.PromptSubmissionOriginLoopWake, in, nil)
+		defer tracker.leave(sid)
+		turnCtx := runCtx
+		if existingChat {
+			var unlockDispatch func()
+			turnCtx, unlockDispatch = b.sessions.Manager.Submissions.LockDispatch(runCtx, sid)
+			eligible, retryable := b.sessions.Manager.Submissions.AmbientWakeEligible(turnCtx, sid)
+			if !eligible {
+				unlockDispatch()
+				if retryable {
+					_ = engine.RequeueBusyRunByID(runCtx, runID)
+					return
+				}
+				slog.WarnContext(runCtx, "standing watch existing_chat target ineligible at admission", "run_id", runID, "session_id", sid)
+				_ = engine.SettleRunByID(runCtx, runID, sid, watch.RunFailed)
+				return
+			}
+			defer unlockDispatch()
+		}
+		admitted := false
+		resp, runErr := b.sessions.Manager.Submissions.HostTurnWithAdmission(turnCtx, sid, sessionstore.PromptSubmissionOriginLoopWake, in, func() error {
+			admitted = true
+			return nil
+		})
 		switch {
 		case errors.Is(runErr, spendguard.ErrCeiling) || (resp != nil && resp.Outcome == promptresult.OutcomeSpendLimit):
-			_ = engine.SettleRun(runCtx, sid, watch.RunFenced)
+			_ = engine.SettleRunByID(runCtx, runID, sid, watch.RunFenced)
 		case errors.Is(runErr, lifecycle.ErrStopping):
-			_ = engine.SettleRun(runCtx, sid, watch.RunCanceled)
+			_ = engine.SettleRunByID(runCtx, runID, sid, watch.RunCanceled)
 		case runErr != nil:
-			_ = engine.SettleRun(runCtx, sid, watch.RunFailed)
+			slog.WarnContext(runCtx, "standing watch run turn failed", "run_id", runID, "session_id", sid, "err", runErr)
+			_ = engine.SettleRunByID(runCtx, runID, sid, watch.RunFailed)
+		case !admitted:
+			slog.WarnContext(runCtx, "standing watch run turn blocked before admission", "run_id", runID, "session_id", sid)
+			_ = engine.SettleRunByID(runCtx, runID, sid, watch.RunFailed)
 		case sessionHasOpenCheckpoint(b, runCtx, sid):
-			_ = engine.MarkWaitingForOwner(runCtx, sid)
+			_ = engine.MarkWaitingForOwnerByID(runCtx, runID, sid)
 		default:
-			_ = engine.SettleRun(runCtx, sid, watch.RunCompleted)
+			_ = engine.SettleRunByID(runCtx, runID, sid, watch.RunCompleted)
 		}
-	}(sessionID)
+	}(run.RunID, sessionID)
 	return watch.StandingRunDispatchOutcome{SessionID: sessionID}, nil
 }

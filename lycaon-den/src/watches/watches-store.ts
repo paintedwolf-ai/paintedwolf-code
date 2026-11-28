@@ -12,7 +12,11 @@ import type {
   WatchRunEvent,
 } from "../api/types.ts";
 import { persistAppStateInBackground } from "../store/app-state-background-write.ts";
-import { getAppStateSnapshot } from "../store/app-state-snapshot.ts";
+import {
+  appStateUnwritten,
+  flushAppState,
+  getAppStateSnapshot,
+} from "../store/app-state-snapshot.ts";
 
 type ProjectWatchesView = {
   readonly projectId: string;
@@ -567,6 +571,13 @@ export function isProposalOverflowHidden(
   return stored === overflowWatermark(proposals);
 }
 
+export function syncHiddenProposalOverflowsFromSnapshot(): void {
+  if (appStateUnwritten("hiddenProposalOverflows")) return;
+  setHiddenOverflows({
+    ...(getAppStateSnapshot().hiddenProposalOverflows ?? {}),
+  });
+}
+
 export function hideProposalOverflow(
   sessionId: string,
   proposals: readonly AgentWatch[],
@@ -574,9 +585,14 @@ export function hideProposalOverflow(
   const sid = sessionId.trim();
   const mark = overflowWatermark(proposals);
   if (!sid || !mark) return;
-  const next = { ...hiddenOverflows(), [sid]: mark };
+  const next = {
+    ...(getAppStateSnapshot().hiddenProposalOverflows ?? {}),
+    ...hiddenOverflows(),
+    [sid]: mark,
+  };
   setHiddenOverflows(next);
   void persistAppStateInBackground({ hiddenProposalOverflows: next });
+  void flushAppState().catch(() => undefined);
 }
 
 export function retainProjectWatchesProject(projectId: string | null): void {
@@ -586,7 +602,7 @@ export function retainProjectWatchesProject(projectId: string | null): void {
     sessionStates.clear();
     setPublishedProjects(new Map());
     setPublishedSessions(new Map());
-    setHiddenOverflows(getAppStateSnapshot().hiddenProposalOverflows ?? {});
+    syncHiddenProposalOverflowsFromSnapshot();
     return;
   }
   let changed = false;

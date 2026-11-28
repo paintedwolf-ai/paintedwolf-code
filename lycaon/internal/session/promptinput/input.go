@@ -14,6 +14,7 @@ type HostSignal struct {
 	Kind              api.MessageKind `json:"kind"`
 	ID                string          `json:"id"`
 	TranscriptVisible bool            `json:"transcript_visible,omitempty"`
+	AuthorPersonID    string          `json:"author_person_id,omitempty"`
 }
 
 // Input is one user-facing or host-authored turn.
