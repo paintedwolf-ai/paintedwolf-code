@@ -61,7 +61,7 @@ from .diagnostic import (
 from .pilot import _extract_repair_feedback_offers
 
 
-_RAW_HTML_ANCHOR_RE = re.compile(r"<a\s+[^>]*href\s*=", re.IGNORECASE)
+_RAW_HTML_ANCHOR_RE = re.compile(r"(?<!\\)<a\s+[^>]*href\s*=", re.IGNORECASE)
 _MD_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+", re.MULTILINE)
 _MD_LIST_RE = re.compile(r"^\s{0,3}[-*+]\s+", re.MULTILINE)
 _RAW_COMMAND_HANDLE_RE = re.compile(r"\[command#\d+\]")
@@ -541,12 +541,15 @@ def _run_wire_slot(
             if (not p_str or p_str.rstrip("/") == "subdir") and item.get("openable") is True:
                 divergences.append(f"nonfile_target_marked_openable_true:{item}")
     else:  # P01-06-withheld-midturn-note-absent-from-feed
+        # Check user-facing transcript messages excluding tool-call carriers
+        # (which carry tool_calls_json and are not published as agent_note feed items).
         msgs = _query_session_messages(sidecar.store_db_path, sid)
         visible_notes = [
             m
             for m in msgs
             if m.get("role") == "assistant"
             and str(m.get("visibility") or "transcript") != "hidden"
+            and not str(m.get("tool_calls_json") or "").strip().startswith("[{")
             and "read#99" in str(m.get("content") or "")
         ]
         if visible_notes:
@@ -921,14 +924,24 @@ def _run_diagnostic_slot(
         art_a.delivery_log,
         (c_ok,),
         scope_a,
-        SurfaceOutcome("coordinator_closeout", (ProductVerdict("c1", verdict_a, "read#1"),), art_a.product_records),
+        SurfaceOutcome(
+            surface="coordinator_closeout",
+            wording="confident",
+            verdicts=(ProductVerdict("c1", verdict_a, "read#1"),),
+            minted_records=art_a.product_records,
+        ),
         enabled=True,
     )
     diag_b = run_dev_diagnostic(
         art_b.delivery_log,
         (c_ok,),
         scope_b,
-        SurfaceOutcome("coordinator_closeout", (ProductVerdict("c1", verdict_b, "read#1"),), art_b.product_records),
+        SurfaceOutcome(
+            surface="coordinator_closeout",
+            wording="confident",
+            verdicts=(ProductVerdict("c1", verdict_b, "read#1"),),
+            minted_records=art_b.product_records,
+        ),
         enabled=False,
     )
     if not a_a.is_complete() or not a_b.is_complete():
