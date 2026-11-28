@@ -73,8 +73,9 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 	if m.nudgeProcessWait(ctx, completion.SessionID, completion.Handle, anchor.ProcessFinished, env) {
 		return
 	}
-	if completion.TerminationReason == bgprocess.TerminationStoppedByAgent ||
-		completion.ExitObservation.Observed() {
+	// A stop reports the exit, not refusals the job met before it.
+	stoppedQuietly := completion.TerminationReason == bgprocess.TerminationStoppedByAgent && completion.UnshownRefusals == 0
+	if stoppedQuietly || completion.ExitObservation.Observed() {
 		return
 	}
 	if sess == nil || !sess.IsWorkerChild() {

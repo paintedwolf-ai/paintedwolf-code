@@ -77,7 +77,11 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	defer bound.close(context.WithoutCancel(ctx))
 	boundary := confine.BoundaryOf(bound.confinement)
 	report := CommandConfinementReport(boundary, "", tools.LocalNetworkGrantOf(tctx), tctx.Files.PackageExecution)
-	settleJob := attachJobStage(ctx, bgprocess.ProgramStage{Boundary: boundary, Report: report, Lease: bound.lease})
+	stage := bgprocess.ProgramStage{Boundary: boundary, Report: report}
+	if bound.lease != nil {
+		stage.Lease = bound.lease
+	}
+	settleJob := attachProgramStage(ctx, stage)
 	// A launch that never starts its process still detaches the stage.
 	defer settleJob(confine.SandboxRefusals{}, nil)
 	launch := agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine).WithTrustedEnvironment(l.BaseEnvironment)
@@ -323,7 +327,7 @@ type launchClosure struct{ lycexec.StageRun }
 
 func (launchClosure) Error() string { return "external producer stopped after its consumer closed" }
 
-func (l ExternalStages) settleStageConfine(ctx context.Context, tctx tools.ToolContext, bound commandForegroundConfine, boundary confine.Boundary, report confine.Report, settleJob func(confine.SandboxRefusals, []confine.EgressHost), commandLine string, run *lycexec.PipelineResult) {
+func (l ExternalStages) settleStageConfine(ctx context.Context, tctx tools.ToolContext, bound commandForegroundConfine, boundary confine.Boundary, report confine.Report, settleJob stageSettler, commandLine string, run *lycexec.PipelineResult) {
 	settleCtx := context.WithoutCancel(ctx)
 	refusals := bound.lease.SettledRefusals(settleCtx)
 	network := bound.close(settleCtx)
