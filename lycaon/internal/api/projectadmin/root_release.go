@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/repochange"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
@@ -45,6 +46,7 @@ func (s *Roots) releaseUnattachedSourceRoots(ctx context.Context, candidates []s
 		return
 	}
 	for _, root := range roots {
+		repochange.CloseRoot(root.Path)
 		if err := sourcecatalog.Process().Trees.ReleaseTreeRoot(ctx, root.Path); err != nil {
 			slog.WarnContext(ctx, "release source catalog for unattached root", "path", root.Path, "err", err)
 		}

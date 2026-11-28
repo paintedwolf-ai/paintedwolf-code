@@ -151,6 +151,12 @@ func resolveSourceReadTarget(p ProjectSource, pathQuery, rootID string) (sourceR
 
 // ObserveProjectSource reads one source fact under the citation jail.
 func ObserveProjectSource(p ProjectSource, req SourceReadRequest) (*SourceReadObservation, error) {
+	return ObserveProjectSourceBounded(p, req, SourceReadMaxBytes)
+}
+
+// ObserveProjectSourceBounded reads one source fact under the citation jail,
+// enforcing maxBytes against the opened file's size before reading file bytes.
+func ObserveProjectSourceBounded(p ProjectSource, req SourceReadRequest, maxBytes int64) (*SourceReadObservation, error) {
 	if p == nil {
 		return nil, ErrSourceNoRoot
 	}
@@ -164,6 +170,9 @@ func ObserveProjectSource(p ProjectSource, req SourceReadRequest) (*SourceReadOb
 	if req.DecodeAs != "" && req.DecodeAs != textfile.UTF16LE && req.DecodeAs != textfile.UTF16BE {
 		return nil, ErrSourceDecodeAsInvalid
 	}
+	if maxBytes <= 0 || maxBytes > SourceReadMaxBytes {
+		maxBytes = SourceReadMaxBytes
+	}
 
 	target, f, err := openSourceRead(p, req.Path, req.RootID)
 	if err != nil {
@@ -172,7 +181,18 @@ func ObserveProjectSource(p ProjectSource, req SourceReadRequest) (*SourceReadOb
 	defer func() { _ = f.Close() }()
 
 	size := target.info.Size()
-	overLimit := size > SourceReadMaxBytes
+	overLimit := size > maxBytes
+	if maxBytes < SourceReadMaxBytes && overLimit {
+		return &SourceReadObservation{
+			OutsideParentIdentity: target.outsideParentIdentity,
+			Path:                  target.path,
+			OverLimit:             true,
+			SizeBytes:             size,
+			MTime:                 target.info.ModTime().UTC(),
+			RootID:                target.rootID,
+			Writable:              SourceFileWritable(uint32(target.info.Mode().Perm())),
+		}, nil
+	}
 
 	sniffLen := int64(sourceSniffPrefixBytes)
 	if size < sniffLen {

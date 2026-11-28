@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -19,6 +20,12 @@ import (
 const symbolProgressLimit = 16
 const symbolProgressTTL = 2 * time.Minute
 
+// symbolRevalidateByteLimit bounds total bytes re-read during one resumed
+// slice's freshness check under the normal outline allocation. Retained files
+// that cannot be verified within this budget (or within the outline deadline)
+// are surgically dropped and re-queued rather than resetting all progress.
+const symbolRevalidateByteLimit int64 = 2 << 20
+
 type symbolProgressCache struct {
 	mu      sync.Mutex
 	entries map[[32]byte]*symbolProgressEntry
@@ -32,6 +39,87 @@ type symbolProgressEntry struct {
 	stamp     string
 	state     symbolsearch.Progress
 	discovery projectsource.DeclarationSearch
+}
+
+func (e *symbolProgressEntry) reset(stamp string, discovery projectsource.DeclarationSearch) {
+	e.state = symbolsearch.Progress{}
+	e.discovery = discovery
+	e.stamp = stamp
+}
+
+// revalidateRetainedMatches re-observes retained match files through the
+// root-confined projectsource reader under ctx and byteLimit, enforcing the
+// byte budget BEFORE reading at the source owner. Changed files are surgically
+// dropped and re-queued; over-budget or timed-out files are classified as
+// deferred (dropped without prepending to pending so later candidates are never
+// starved) and reported via deferredCount for explicit scoped gap reporting.
+func (e *symbolProgressEntry) revalidateRetainedMatches(ctx context.Context, p *project.Project, byteLimit int64) (revalidatedFiles int, rereadBytes int64, deferredCount int) {
+	digests := e.state.RetainedFileDigests()
+	if len(digests) == 0 {
+		return 0, 0, 0
+	}
+	keys := make([]projectsource.DeclarationFileKey, 0, len(digests))
+	for key := range digests {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].RootID != keys[j].RootID {
+			return keys[i].RootID < keys[j].RootID
+		}
+		return keys[i].Path < keys[j].Path
+	})
+	var changed map[projectsource.DeclarationFileKey]bool
+	var deferred map[projectsource.DeclarationFileKey]bool
+	markChanged := func(key projectsource.DeclarationFileKey) {
+		if changed == nil {
+			changed = map[projectsource.DeclarationFileKey]bool{}
+		}
+		changed[key] = true
+	}
+	markDeferred := func(key projectsource.DeclarationFileKey) {
+		if deferred == nil {
+			deferred = map[projectsource.DeclarationFileKey]bool{}
+		}
+		deferred[key] = true
+	}
+	for _, key := range keys {
+		wantSHA := digests[key]
+		if wantSHA == "" {
+			markChanged(key)
+			continue
+		}
+		remaining := byteLimit - rereadBytes
+		if ctx.Err() != nil || (byteLimit > 0 && remaining <= 0) {
+			markDeferred(key)
+			continue
+		}
+		obs, err := projectsource.ObserveProjectSourceBounded(p, projectsource.SourceReadRequest{
+			RootID: key.RootID,
+			Path:   key.Path,
+		}, remaining)
+		if err != nil {
+			markChanged(key)
+			continue
+		}
+		if obs.OverLimit {
+			// File exceeds remaining pre-read validation budget (or max read cap):
+			// defer without reading bytes and without starving later candidates.
+			markDeferred(key)
+			continue
+		}
+		revalidatedFiles++
+		rereadBytes += obs.SizeBytes
+		if obs.Revision.SHA256 != wantSHA {
+			markChanged(key)
+		}
+	}
+	if len(changed) > 0 {
+		e.state.DropAndRequeueFiles(changed)
+	}
+	if len(deferred) > 0 {
+		e.state.DropDeferredFiles(deferred)
+	}
+	return revalidatedFiles, rereadBytes, len(deferred)
 }
 
 type symbolSourceStamp struct {
@@ -135,9 +223,7 @@ func (c *symbolProgressCache) acquire(ctx context.Context, p *project.Project, l
 		return nil, nil, err
 	}
 	if entry.discovery == nil || entry.stamp != stamp || !symbolEpochsCurrent(entry.stamp) {
-		entry.state = symbolsearch.Progress{}
-		entry.discovery = declarationSearchIn(leg.DiscoveryScope(), leg.Flags.Include, leg.Flags.Exclude, leg.IncludeDependencies)
-		entry.stamp = stamp
+		entry.reset(stamp, declarationSearchIn(leg.DiscoveryScope(), leg.Flags.Include, leg.Flags.Exclude, leg.IncludeDependencies))
 	}
 	return entry, release, nil
 }

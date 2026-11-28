@@ -168,7 +168,7 @@ func (o *Owner) execute(ctx context.Context, projectID string, req wire.ProjectR
 
 func (o *Owner) deletionFailure(ctx context.Context, result wire.ProjectRemovalResult, cause error) wire.ProjectRemovalResult {
 	result.CleanupState, result.FailureCode = "retained", "project_removal_failed"
-	_, err := o.Projects.Get(ctx, result.ProjectID)
+	_, err := project.GetForRemoval(ctx, o.Projects, result.ProjectID)
 	switch {
 	case errors.Is(err, project.ErrNotFound):
 		result.ProjectState = "deleted"
@@ -195,7 +195,7 @@ func (o *Owner) reviewSelection(ctx context.Context, projectID string, req wire.
 	if len(req.RemoveExtensions) > 256 {
 		return wire.ProjectRemovalAssessment{}, ErrInvalidSelection
 	}
-	if _, err := o.Projects.Get(ctx, projectID); err != nil {
+	if _, err := project.GetForRemoval(ctx, o.Projects, projectID); err != nil {
 		return wire.ProjectRemovalAssessment{}, err
 	}
 	if len(req.RemoveExtensions) == 0 {

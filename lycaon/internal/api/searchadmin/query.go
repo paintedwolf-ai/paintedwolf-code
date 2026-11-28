@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/pagecursor"
+	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/search"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -32,7 +33,7 @@ func (s *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "limit must be between 1 and 500")
 		return
 	}
-	scope, err := searchRequestScope(req)
+	scope, err := searchRequestScopeForCaller(r, req)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -59,7 +60,7 @@ func (s *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		httpio.WriteJSON(w, http.StatusOK, page)
 		return
 	}
-	svc := s.searchService()
+	svc := s.searchService(r)
 	origin := strings.TrimSpace(req.OriginProjectID)
 	if !s.searchOriginExists(w, r, origin) {
 		return
@@ -144,6 +145,19 @@ func searchRequestScope(req wire.SearchRequest) (string, error) {
 		return "", fmt.Errorf("encode search scope: %w", err)
 	}
 	return string(raw), nil
+}
+
+func searchRequestScopeForCaller(r *http.Request, req wire.SearchRequest) (string, error) {
+	base, err := searchRequestScope(req)
+	if err != nil {
+		return "", err
+	}
+	sessionID := strings.TrimSpace(r.URL.Query().Get("session_id"))
+	caller, ok := people.Caller(r.Context())
+	if !ok && sessionID == "" {
+		return base, nil
+	}
+	return base + "|caller:" + caller.ID + ":" + string(caller.Role) + "|session:" + sessionID, nil
 }
 
 func searchResponsePage(response wire.SearchResponse, generation uint64, offset, limit int, scope string) (wire.SearchResponse, error) {

@@ -21,6 +21,8 @@ export type SearchMatchOptions = {
   exclude?: string[];
   cursor?: string;
   limit?: number;
+  /** Active workspace session so the server scopes dirty editor draft visibility. */
+  sessionId?: string;
   /** Crossbar uses `interactive`; depth/export omit (complete). */
   budget?: SearchBudget;
 };
@@ -49,8 +51,10 @@ export interface SearchClient {
 
 export function createSearchClient(j: JsonRequester, connection: BackendConnection): SearchClient {
   return {
-    search: (query, originProjectId, match, signal) =>
-      j("/v1/search", { ...jsonRequest("POST", {
+    search: (query, originProjectId, match, signal) => {
+      const sid = match?.sessionId?.trim();
+      const endpoint = sid ? `/v1/search?session_id=${encodeURIComponent(sid)}` : "/v1/search";
+      return j(endpoint, { ...jsonRequest("POST", {
         query,
         ...(originProjectId ? { origin_project_id: originProjectId } : {}),
         ...(match?.includeDependencies ? { include_dependencies: true } : {}),
@@ -62,7 +66,8 @@ export function createSearchClient(j: JsonRequester, connection: BackendConnecti
         ...(match?.cursor ? { cursor: match.cursor } : {}),
         ...(match?.limit ? { limit: match.limit } : {}),
         ...(match?.budget ? { budget: match.budget } : {}),
-      }), signal }),
+      }), signal });
+    },
 
     previewSearchReplacement: (req, signal) =>
       j("/v1/search/replace/preview", { ...jsonRequest("POST", req), signal }),

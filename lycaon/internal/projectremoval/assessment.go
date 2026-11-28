@@ -152,7 +152,7 @@ func manifestAbsent(path string) bool {
 }
 
 func (o *Owner) Assess(ctx context.Context, projectID string) (wire.ProjectRemovalAssessment, error) {
-	if _, err := o.Projects.Get(ctx, projectID); err != nil {
+	if _, err := project.GetForRemoval(ctx, o.Projects, projectID); err != nil {
 		return wire.ProjectRemovalAssessment{}, err
 	}
 	return o.assess(ctx, projectID)
