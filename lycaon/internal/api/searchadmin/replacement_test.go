@@ -183,3 +183,54 @@ func TestReplaceStoreMapsSourceErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestApplySearchReplacementBusyPathRoutesToSourceErrorAndRecovers(t *testing.T) {
+	f := newReplaceFixture(t)
+	preview := f.preview(t, wire.SearchReplacePreviewRequest{Query: "old", Replacement: "new", OriginProjectID: f.origin.ID})
+	a, b := previewFile(t, preview, "a.go"), previewFile(t, preview, "b.go")
+	aPath := filepath.Join(f.origin.Roots[0].Path, "a.go")
+	bPath := filepath.Join(f.origin.Roots[0].Path, "b.go")
+	beforeA, err := os.ReadFile(aPath)
+	testutil.FailErr(t, "read a.go before", err)
+	beforeB, err := os.ReadFile(bPath)
+	testutil.FailErr(t, "read b.go before", err)
+
+	release, err := f.handler.sourceMutations.Paths.ReserveSourcePath(f.origin.Roots[0].Path, "a.go")
+	testutil.FailErr(t, "reserve overlapping source path", err)
+
+	req := wire.SearchReplaceApplyRequest{
+		OperationID: uuid.NewString(), Query: "old", Replacement: "new", OriginProjectID: f.origin.ID,
+		Files: []wire.SearchReplaceApplyFile{
+			{RootID: a.RootID, Path: a.Path, SHA256: a.SHA256, Hunks: []int{0}},
+			{RootID: b.RootID, Path: b.Path, SHA256: b.SHA256, Hunks: []int{0}},
+		},
+	}
+	rec := f.post(t, "/v1/search/replace/apply", jsonBody(t, req))
+	if rec.Code == 500 {
+		t.Fatalf("busy apply returned HTTP 500: %s", rec.Body.String())
+	}
+	if len(f.sourceErrors) != 1 || !errors.Is(f.sourceErrors[0], projectsource.ErrSourceBusy) {
+		t.Fatalf("source errors = %v, want [ErrSourceBusy]", f.sourceErrors)
+	}
+	afterBusyA, err := os.ReadFile(aPath)
+	testutil.FailErr(t, "read a.go after busy", err)
+	afterBusyB, err := os.ReadFile(bPath)
+	testutil.FailErr(t, "read b.go after busy", err)
+	if string(afterBusyA) != string(beforeA) || string(afterBusyB) != string(beforeB) {
+		t.Fatalf("busy apply mutated files: a=%q b=%q", afterBusyA, afterBusyB)
+	}
+
+	release()
+
+	resp := decodeOK[wire.SearchReplaceApplyResponse](t, f.post(t, "/v1/search/replace/apply", jsonBody(t, req)))
+	if resp.BatchID != req.OperationID || len(resp.Files) != 2 || !resp.Files[0].Applied || !resp.Files[1].Applied {
+		t.Fatalf("recovered apply = %+v", resp)
+	}
+	afterA, err := os.ReadFile(aPath)
+	testutil.FailErr(t, "read a.go after recovery", err)
+	afterB, err := os.ReadFile(bPath)
+	testutil.FailErr(t, "read b.go after recovery", err)
+	if !strings.Contains(string(afterA), `"new"`) || !strings.Contains(string(afterB), `"new"`) {
+		t.Fatalf("recovered files not replaced: a=%q b=%q", afterA, afterB)
+	}
+}

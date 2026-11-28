@@ -160,9 +160,9 @@ func (s *Handler) HandleApplySearchReplacement(w http.ResponseWriter, r *http.Re
 		if s.writeSearchQueryError(w, err) {
 			return
 		}
-		if errors.Is(err, projectsource.ErrSourceMutationConflict) || errors.Is(err, projectsource.ErrSourceMutationDiverged) ||
-			errors.Is(err, projectsource.ErrSourceWriteConflict) || errors.Is(err, projectsource.ErrSourceNotFound) ||
-			errors.Is(err, projectsource.ErrSourcePathDenied) {
+		if errors.Is(err, projectsource.ErrSourceBusy) || errors.Is(err, projectsource.ErrSourceMutationConflict) ||
+			errors.Is(err, projectsource.ErrSourceMutationDiverged) || errors.Is(err, projectsource.ErrSourceWriteConflict) ||
+			errors.Is(err, projectsource.ErrSourceNotFound) || errors.Is(err, projectsource.ErrSourcePathDenied) {
 			s.writeSourceError(w, r, err)
 			return
 		}
