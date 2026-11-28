@@ -1,0 +1,6 @@
+# The host rejected a citation because the stored evidence body could not be verified.
+scope: session
+title: Stored evidence body unavailable
+message: >-
+  Stored evidence body is unavailable — re-observe the source before citing it.
+suggested_action: Re-observe the source before citing it.

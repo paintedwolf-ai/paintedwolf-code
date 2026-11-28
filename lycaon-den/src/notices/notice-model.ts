@@ -48,6 +48,7 @@ export type NoticeInput = {
   suggestedAction?: string;
   actions?: readonly string[];
   interaction?: NoticeInteraction;
+  source?: "host_error";
 };
 
 const UNKNOWN_NOTICE = CLIENT_NOTICES.unexpected_client_error;
@@ -251,6 +252,7 @@ export function noticeFromInput(input: NoticeInput, callSite: NoticeScope): AppN
     ...notice,
     interaction: input.interaction,
     severity: input.severity ?? "error",
+    source: input.source,
   };
 }
 

@@ -29,6 +29,7 @@ export type ClientNoticeKind =
   | "engine_not_started"
   | "engine_restarting"
   | "engine_stopped"
+  | "evidence_body_unavailable"
   | "fetch_failure"
   | "host_incompatible"
   | "installation_unverified"
@@ -134,6 +135,12 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     message: "The app's local engine stopped unexpectedly and could not be kept running. Try again to start it.",
     suggestedAction: "That did not work. Reopening the app is the next thing to try.",
     scope: "app",
+  },
+  evidence_body_unavailable: {
+    title: "Stored evidence body unavailable",
+    message: "Stored evidence body is unavailable — re-observe the source before citing it.",
+    suggestedAction: "Re-observe the source before citing it.",
+    scope: "session",
   },
   fetch_failure: {
     title: "Could not connect",

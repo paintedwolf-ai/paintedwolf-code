@@ -910,6 +910,26 @@ describe("subscribeEvents topic dispatch", () => {
     expect(got[0]).toEqual(["session"]);
   });
 
+  it("grounding EVIDENCE_BODY_UNAVAILABLE event publishes actionable session notice", async () => {
+    const store = createNoticeStore();
+    registerNoticePublisher(store);
+    try {
+      await driveTopic("grounding", {
+        session_id: "s1",
+        code: "EVIDENCE_BODY_UNAVAILABLE",
+      });
+      const rows = [...store.index().values()].flat();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.code).toBe("EVIDENCE_BODY_UNAVAILABLE");
+      expect(rows[0]?.severity).toBe("warning");
+      expect(rows[0]?.message).toContain(
+        "Stored evidence body is unavailable — re-observe the source before citing it.",
+      );
+    } finally {
+      registerNoticePublisher(null);
+    }
+  });
+
   it("cost event fires only cost invalidation", async () => {
     const got = await driveTopic("cost", { task_id: "t1" });
     expect(got[0]).toEqual(["cost"]);
