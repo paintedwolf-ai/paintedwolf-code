@@ -139,21 +139,29 @@ func parseDeclarations[T any](
 
 // ReadSourceDeclarations reads and analyzes one root-relative source file.
 func ReadSourceDeclarations(ctx context.Context, p ProjectSource, rootID, rel string) ([]SourceSymbol, string, bool) {
+	syms, content, _, ok := ReadSourceDeclarationsVersioned(ctx, p, rootID, rel)
+	return syms, content, ok
+}
+
+// ReadSourceDeclarationsVersioned reads and analyzes one root-relative source
+// file through the root-confined reader, returning the raw content SHA-256
+// observed at that exact read alongside the extracted declarations and text.
+func ReadSourceDeclarationsVersioned(ctx context.Context, p ProjectSource, rootID, rel string) ([]SourceSymbol, string, string, bool) {
 	if err := ctx.Err(); err != nil {
-		return nil, "", false
+		return nil, "", "", false
 	}
 	read, err := ReadProjectSource(p, SourceReadRequest{Path: rel, RootID: rootID})
 	if err != nil {
-		return nil, "", false
+		return nil, "", "", false
 	}
 	syms, err := SourceSymbolsForContent(ctx, rel, []byte(read.Content))
 	if err != nil || ctx.Err() != nil {
-		return nil, "", false
+		return nil, "", "", false
 	}
 	if len(syms) > SourceSymbolsMaxEntries {
 		syms = syms[:SourceSymbolsMaxEntries]
 	}
-	return syms, read.Content, true
+	return syms, read.Content, read.SHA256, true
 }
 
 type DeclarationGapReason string
