@@ -96,10 +96,10 @@ func unmarshalEvidenceLineRanges(raw string, rec *evidence.Record) error {
 
 // unmarshalEvidenceBody restores rec.Body from its content blob. Missing blob files
 // are tolerated so lost files do not break later turns.
-func (s *sqlCore) unmarshalEvidenceBody(projectID, sha string, rec *evidence.Record) (unavailable bool, err error) {
+func (s *sqlCore) unmarshalEvidenceBody(projectID, sha string, rec *evidence.Record) bool {
 	sha = strings.TrimSpace(sha)
 	if sha == "" {
-		return false, nil
+		return false
 	}
 	blobStore := contentblob.StoreFor(s.dataDir, projectID)
 	raw, err := contentblob.Read(blobStore, sha)
@@ -108,7 +108,7 @@ func (s *sqlCore) unmarshalEvidenceBody(projectID, sha string, rec *evidence.Rec
 			slog.Error("evidence body file is missing; the record loads without its body",
 				"project_id", projectID, "handle", rec.Handle, "sha256", sha)
 		}
-		return false, nil
+		return false
 	}
 	if err != nil {
 		rec.Body = nil
@@ -116,7 +116,7 @@ func (s *sqlCore) unmarshalEvidenceBody(projectID, sha string, rec *evidence.Rec
 			slog.Error("evidence body blob is damaged; record loaded with unavailable body",
 				"project_id", projectID, "handle", rec.Handle, "sha256", sha, "error", err)
 		}
-		return true, nil
+		return true
 	}
 	if err := json.Unmarshal(raw, &rec.Body); err != nil {
 		rec.Body = nil
@@ -124,9 +124,9 @@ func (s *sqlCore) unmarshalEvidenceBody(projectID, sha string, rec *evidence.Rec
 			slog.Error("evidence body payload is damaged; record loaded with unavailable body",
 				"project_id", projectID, "handle", rec.Handle, "sha256", sha, "error", err)
 		}
-		return true, nil
+		return true
 	}
-	return false, nil
+	return false
 }
 
 func evidenceOrdinalFromHandle(handle string) int {
@@ -173,11 +173,7 @@ func loadLedger(ctx context.Context, s *sqlCore, q *db.Queries, sessionID string
 		if err := unmarshalEvidenceLineRanges(r.LineRanges, &rec); err != nil {
 			return evidence.Ledger{}, fmt.Errorf("decode line_ranges for %s: %w", rec.Handle, err)
 		}
-		bodyUnavailable, err := s.unmarshalEvidenceBody(r.ProjectID, r.ContentBlobSha256, &rec)
-		if err != nil {
-			return evidence.Ledger{}, fmt.Errorf("decode body for %s: %w", rec.Handle, err)
-		}
-		if bodyUnavailable {
+		if s.unmarshalEvidenceBody(r.ProjectID, r.ContentBlobSha256, &rec) {
 			if unavailable == nil {
 				unavailable = make(map[string]struct{})
 			}
