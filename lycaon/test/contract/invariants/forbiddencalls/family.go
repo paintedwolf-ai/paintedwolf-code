@@ -74,4 +74,7 @@ var Family = invariants.Family{Name: "forbidden-calls", Invariants: slices.Conca
 	wireQueries,
 	workflowVersion,
 	citationSurfaces,
+	groundingEscalation,
+	persistenceSharedDirs,
+	typedProofNotFSShape,
 )}
