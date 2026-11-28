@@ -255,6 +255,136 @@ def _probe_atspi(target_pid: int) -> dict[str, Any]:
         return {"available": False, "observed": False, "reason": str(exc)}
 
 
+def _get_x11_window_size(wid: int) -> tuple[int, int]:
+    """Return `(width, height)` for `wid` via `xwininfo`, defaulting to `(1280, 800)`."""
+    if not shutil.which("xwininfo"):
+        return (1280, 800)
+    res = subprocess.run(
+        ["xwininfo", "-id", hex(int(wid))],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=5,
+    )
+    if res.returncode != 0:
+        return (1280, 800)
+    width = 0
+    height = 0
+    for line in res.stdout.splitlines():
+        s = line.strip()
+        if s.startswith("Width:"):
+            tok = s.split(":", 1)[1].strip()
+            if tok.isdigit():
+                width = int(tok)
+        elif s.startswith("Height:"):
+            tok = s.split(":", 1)[1].strip()
+            if tok.isdigit():
+                height = int(tok)
+    return (width if width >= 100 else 1280, height if height >= 100 else 800)
+
+
+def _click_x11_window_point(xid: int, x: int, y: int) -> dict[str, Any]:
+    """Send a window-relative pointer click to the owned X11 window via `xdotool`."""
+    if not shutil.which("xdotool"):
+        return {"sent": False, "reason": "xdotool_not_found", "x": x, "y": y}
+    proc = subprocess.run(
+        [
+            "xdotool",
+            "windowfocus",
+            "--sync",
+            str(xid),
+            "mousemove",
+            "--window",
+            str(xid),
+            str(int(x)),
+            str(int(y)),
+            "click",
+            "1",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+    return {
+        "sent": proc.returncode == 0,
+        "tool": "xdotool",
+        "action": "click",
+        "x": int(x),
+        "y": int(y),
+        "xid": xid,
+        "returncode": proc.returncode,
+        "stderr": (proc.stderr or "").strip(),
+    }
+
+
+def _activate_atspi_button(target_pid: int, label: str, *, invoke: bool = True) -> dict[str, Any]:
+    """Locate an AT-SPI node named `label` under `target_pid` and optionally invoke its default Action."""
+    try:
+        import gi
+
+        gi.require_version("Atspi", "2.0")
+        from gi.repository import Atspi
+
+        desktop = Atspi.get_desktop(0)
+        app_node = None
+        for idx in range(desktop.get_child_count()):
+            child = desktop.get_child_at_index(idx)
+            if child is not None and child.get_process_id() == target_pid:
+                app_node = child
+                break
+        if app_node is None:
+            return {"found": False, "invoked": False, "reason": "pid_not_in_atspi_desktop"}
+
+        want = label.strip().lower()
+        stack = [(app_node, 0)]
+        visited = 0
+        while stack and visited < 1024:
+            node, depth = stack.pop()
+            visited += 1
+            try:
+                name = (node.get_name() or "").strip()
+                role = (node.get_role_name() or "").strip()
+                if name.lower() == want:
+                    cx, cy = 0, 0
+                    try:
+                        comp = node.get_component_iface()
+                        if comp is not None:
+                            ext = comp.get_extents(Atspi.CoordType.WINDOW)
+                            if ext.width > 0 and ext.height > 0:
+                                cx = int(ext.x + ext.width / 2)
+                                cy = int(ext.y + ext.height / 2)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    invoked = False
+                    if invoke:
+                        try:
+                            act = node.get_action_iface()
+                            if act is not None and act.get_n_actions() > 0:
+                                invoked = bool(act.do_action(0))
+                        except Exception:  # noqa: BLE001
+                            invoked = False
+                    return {
+                        "found": True,
+                        "invoked": invoked,
+                        "method": "atspi_action" if invoked else "atspi_locate",
+                        "name": name,
+                        "role": role,
+                        "center": [cx, cy] if cx > 0 and cy > 0 else None,
+                    }
+                if depth < 28:
+                    cnt = min(node.get_child_count(), 64)
+                    for i in range(cnt):
+                        c = node.get_child_at_index(i)
+                        if c is not None:
+                            stack.append((c, depth + 1))
+            except Exception:  # noqa: BLE001
+                continue
+        return {"found": False, "invoked": False, "reason": f"label_not_found:{label}"}
+    except Exception as exc:  # noqa: BLE001
+        return {"found": False, "invoked": False, "reason": str(exc)}
+
+
 def _is_viewable_x11_window(wid: int) -> bool:
     """Return True iff `xwininfo` confirms `wid` is mapped (`IsViewable`) with non-trivial geometry."""
     if not shutil.which("xwininfo"):
@@ -750,27 +880,51 @@ def run_linux_tauri_native(
             atspi_after = atspi_after_step1
 
         # When requested (e.g. TB10), advance past onboarding Step 2/2 ("Get started")
-        # via native keyboard events so the post-input screenshot renders the live Den workspace.
+        # via AT-SPI action or window-relative xdotool click so the post-input screenshot
+        # visibly renders the live Den workspace UI.
+        onboarding_dismiss_events: list[dict[str, Any]] = []
+        onboarding_step2_sha256 = ""
+        onboarding_dismiss_confirmed = False
         if dismiss_onboarding:
-            focused_l = (atspi_after.get("focused_name") or "").strip().lower()
-            if focused_l == "back":
-                keyboard_events.append(_send_x11_key(xid, "Tab"))
-                time.sleep(0.3)
-            keyboard_events.append(_send_x11_key(xid, "Return"))
-            time.sleep(2.0)
+            step2_path = out / "linux-native-den-tauri-step2.png"
+            shot_step2 = _capture_x11_window_png(xid, step2_path)
+            onboarding_step2_sha256 = str(shot_step2.get("sha256") or "")
+
+            atspi_btn = _activate_atspi_button(proc.pid, "Get started", invoke=True)
+            onboarding_dismiss_events.append({"step": "atspi_get_started", **atspi_btn})
+            clicked_fallback = False
+            if atspi_btn.get("invoked"):
+                time.sleep(2.0)
+                check_after_atspi = _capture_x11_window_png(xid, out / "linux-native-den-tauri.png")
+                if (
+                    onboarding_step2_sha256
+                    and check_after_atspi.get("sha256")
+                    and check_after_atspi.get("sha256") != onboarding_step2_sha256
+                ):
+                    onboarding_dismiss_confirmed = True
+            if not onboarding_dismiss_confirmed:
+                center = atspi_btn.get("center")
+                if isinstance(center, list) and len(center) == 2 and center[0] > 0 and center[1] > 0:
+                    cx, cy = int(center[0]), int(center[1])
+                    method = "xdotool_atspi_center"
+                else:
+                    win_w, win_h = _get_x11_window_size(xid)
+                    cx, cy = int(win_w * 0.65), int(win_h * 0.83)
+                    method = "xdotool_window_fallback"
+                click_ev = _click_x11_window_point(xid, cx, cy)
+                onboarding_dismiss_events.append({"step": method, **click_ev})
+                clicked_fallback = True
+                time.sleep(2.0)
             atspi_after_dismiss = _probe_atspi(proc.pid)
             if atspi_after_dismiss.get("observed"):
                 atspi_after = atspi_after_dismiss
-            focused_l2 = (atspi_after.get("focused_name") or "").strip().lower()
-            if focused_l2 in {"get started", "continue", "back"}:
-                if focused_l2 == "back":
-                    keyboard_events.append(_send_x11_key(xid, "Tab"))
-                    time.sleep(0.3)
-                keyboard_events.append(_send_x11_key(xid, "Return"))
-                time.sleep(2.0)
-                atspi_after_retry = _probe_atspi(proc.pid)
-                if atspi_after_retry.get("observed"):
-                    atspi_after = atspi_after_retry
+            if clicked_fallback:
+                check_after_click = _capture_x11_window_png(xid, out / "linux-native-den-tauri.png")
+                onboarding_dismiss_confirmed = bool(
+                    onboarding_step2_sha256
+                    and check_after_click.get("sha256")
+                    and check_after_click.get("sha256") != onboarding_step2_sha256
+                )
 
         atspi_focus_changed = bool(
             atspi_before.get("focused_key")
@@ -833,6 +987,9 @@ def run_linux_tauri_native(
             "seeded_store_db": seeded_store_db,
             "seeded_store_db_sha256": seeded_store_db_sha256,
             "onboarding_dismiss_attempted": bool(dismiss_onboarding),
+            "onboarding_dismiss_confirmed": onboarding_dismiss_confirmed,
+            "onboarding_step2_sha256": onboarding_step2_sha256,
+            "onboarding_dismiss_events": onboarding_dismiss_events,
             "app_alive_after": app_alive_after,
             "keyboard_event": key_ev,
             "keyboard_events": keyboard_events,
