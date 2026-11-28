@@ -214,6 +214,7 @@ func runCodeRewrite(inv *invocation) error {
 			}
 			continue
 		}
+		var pinned bool
 		result, err := inv.owners.Operations.Write.ApplyStructuredEdit(
 			ctx,
 			native.StructuredEditInput{
@@ -223,6 +224,14 @@ func runCodeRewrite(inv *invocation) error {
 			},
 			inv.tc,
 			func(resolved projectpaths.Resolved, source string, _ *tools.EditorDocumentText) (string, bool, error) {
+				if !pinned {
+					if src, capErr := inv.owners.Revisions.CaptureSource(ctx, inv.tc, resolved.Abs); capErr == nil {
+						if pinErr := inv.recordPin(src.Revision); pinErr != nil {
+							return "", false, pinErr
+						}
+						pinned = true
+					}
+				}
 				return native.RewriteSource(ctx, resolved.DisplayPath, lang, pattern, rewrite, source)
 			},
 		)
