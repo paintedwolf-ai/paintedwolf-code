@@ -365,7 +365,7 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
     // Decision 092: preserve frame immediately before request loading clears, then
     // wait for request loading to clear AND target result row ("target.txt") to render
     // while staying strictly bound to quickRes (never substituting a later response).
-    const searchingLoc = page.getByTestId("crossbar-searching").first();
+    const searchingLoc = page.locator('[data-testid="crossbar-searching"]:not([aria-hidden="true"])').first();
     const loadingGlyph = page
       .locator('.den-crossbar__spinner, [data-testid="crossbar-searching"], [data-testid="crossbar"] [aria-busy="true"], [data-testid="crossbar"] [role="progressbar"]')
       .first();
@@ -480,6 +480,15 @@ test("CF09 native Den coverage presentation across 4 surfaces x 4 states", async
       await rootNode.click({ timeout: 3_000 }).catch(() => {});
       await page.waitForTimeout(400);
     } else if (state === "refreshing") {
+      // Explicitly select the refreshing root in the Files tree so its root-summary card is active & correlated (Decision 166).
+      const refreshLabel = path.basename(selectedRootDir || proj.root_dir || "");
+      if (refreshLabel) {
+        const rootNode = page.getByTestId("files-tree-pane").getByText(refreshLabel, { exact: false }).first();
+        await rootNode.waitFor({ state: "attached", timeout: 5_000 }).catch(() => {});
+        await rootNode.scrollIntoViewIfNeeded({ timeout: 2_000 }).catch(() => {});
+        await rootNode.click({ timeout: 2_000 }).catch(() => {});
+        await page.waitForTimeout(200);
+      }
       mutateRefreshingTree(proj.root_dir, 4);
       await page.waitForTimeout(300);
     }

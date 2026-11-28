@@ -494,6 +494,15 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
       await rootNode.click({ timeout: 3_000 }).catch(() => {});
       await page.waitForTimeout(400);
     } else if (state === "refreshing") {
+      // Explicitly select the refreshing root in the Files tree so its root-summary card is active & correlated (Decision 166).
+      const refreshLabel = path.basename(selectedRootDir || proj.root_dir || "");
+      if (refreshLabel) {
+        const rootNode = page.getByTestId("files-tree-pane").getByText(refreshLabel, { exact: false }).first();
+        await rootNode.waitFor({ state: "attached", timeout: 5_000 }).catch(() => {});
+        await rootNode.scrollIntoViewIfNeeded({ timeout: 2_000 }).catch(() => {});
+        await rootNode.click({ timeout: 2_000 }).catch(() => {});
+        await page.waitForTimeout(200);
+      }
       mutateRefreshingTree(proj.root_dir, 4);
       await page.waitForTimeout(300);
     }
