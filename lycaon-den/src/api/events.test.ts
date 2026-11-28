@@ -922,8 +922,9 @@ describe("subscribeEvents topic dispatch", () => {
       expect(rows).toHaveLength(1);
       expect(rows[0]?.code).toBe("EVIDENCE_BODY_UNAVAILABLE");
       expect(rows[0]?.severity).toBe("warning");
+      expect(rows[0]?.title).toBe("Saved file copy was damaged");
       expect(rows[0]?.message).toContain(
-        "Stored evidence body is unavailable — re-observe the source before citing it.",
+        "A saved copy of something the agent read was damaged, so the agent is being asked to read it again before citing it.",
       );
     } finally {
       registerNoticePublisher(null);

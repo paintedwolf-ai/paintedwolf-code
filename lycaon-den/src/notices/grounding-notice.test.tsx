@@ -17,7 +17,7 @@ describe("publishGroundingEventNotice", () => {
     registerNoticePublisher(null);
   });
 
-  it("publishes an actionable session warning for EVIDENCE_BODY_UNAVAILABLE and renders it in NoticeRail", () => {
+  it("publishes a human-facing session warning for EVIDENCE_BODY_UNAVAILABLE and renders it in NoticeRail", () => {
     const store = createNoticeStore();
     registerNoticePublisher(store);
 
@@ -38,19 +38,23 @@ describe("publishGroundingEventNotice", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.severity).toBe("warning");
     expect(rows[0]?.code).toBe(EVIDENCE_BODY_UNAVAILABLE_CODE);
+    expect(rows[0]?.title).toBe("Saved file copy was damaged");
     expect(rows[0]?.message).toContain(
-      "Stored evidence body is unavailable — re-observe the source before citing it.",
+      "A saved copy of something the agent read was damaged, so the agent is being asked to read it again before citing it.",
+    );
+    expect(rows[0]?.suggestedAction).toBe(
+      "No action is needed now. If this keeps happening, ask the agent to read the file again.",
     );
 
     const { container } = render(() => (
       <NoticeRail notices={rows} onDismiss={(id) => store.dismiss(id)} />
     ));
-    expect(container.textContent).toContain("Stored evidence body unavailable");
+    expect(container.textContent).toContain("Saved file copy was damaged");
     expect(container.textContent).toContain(
-      "Stored evidence body is unavailable — re-observe the source before citing it.",
+      "A saved copy of something the agent read was damaged, so the agent is being asked to read it again before citing it.",
     );
     expect(container.textContent).toContain(
-      "Re-observe the source before citing it.",
+      "No action is needed now. If this keeps happening, ask the agent to read the file again.",
     );
   });
 

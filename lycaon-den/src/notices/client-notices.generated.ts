@@ -137,9 +137,9 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     scope: "app",
   },
   evidence_body_unavailable: {
-    title: "Stored evidence body unavailable",
-    message: "Stored evidence body is unavailable — re-observe the source before citing it.",
-    suggestedAction: "Re-observe the source before citing it.",
+    title: "Saved file copy was damaged",
+    message: "A saved copy of something the agent read was damaged, so the agent is being asked to read it again before citing it.",
+    suggestedAction: "No action is needed now. If this keeps happening, ask the agent to read the file again.",
     scope: "session",
   },
   fetch_failure: {
