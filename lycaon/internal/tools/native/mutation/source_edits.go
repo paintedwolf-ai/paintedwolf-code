@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/textfile"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -216,6 +217,7 @@ func runCodeRewrite(inv *invocation) error {
 			continue
 		}
 		var pinned bool
+		var appliedPin toolcontract.ExecutionRevision
 		result, err := inv.owners.Operations.Write.ApplyStructuredEdit(
 			ctx,
 			native.StructuredEditInput{
@@ -230,20 +232,22 @@ func runCodeRewrite(inv *invocation) error {
 					if capErr != nil {
 						return "", false, capErr
 					}
-					rev := src.Revision
-					if editor != nil && source != src.Content {
-						rev.ContentSHA256, rev.ContentBytes = textfile.StringSHA256(source), int64(len(source))
-					}
-					if pinErr := inv.recordPin(rev); pinErr != nil {
-						return "", false, pinErr
-					}
+					appliedPin = src.Revision
 					pinned = true
+				}
+				if editor != nil || source != "" {
+					appliedPin.ContentSHA256, appliedPin.ContentBytes = textfile.StringSHA256(source), int64(len(source))
 				}
 				return native.RewriteSource(ctx, resolved.DisplayPath, lang, pattern, rewrite, source)
 			},
 		)
 		if err != nil {
 			return err
+		}
+		if pinned {
+			if err := inv.recordPin(appliedPin); err != nil {
+				return err
+			}
 		}
 		if result.Accepted || result.Saved {
 			inv.effects++
