@@ -71,11 +71,20 @@ func checkPythonRuntimeConstruction(r *invariants.Run) {
 func checkPythonVerificationScope(r *invariants.Run) {
 	pkg := r.Types().Packages[r.Go().Module+"/internal/pythonruntime"]
 	scope := pkg.Types.Scope()
-	proof := scope.Lookup("verifiedImage")
-	verify := scope.Lookup("verifyImageInternal")
-	if proof == nil {
-		r.Fatalf("private verifiedImage type is missing")
+	verify := scope.Lookup("verifyImageInternal").(*types.Func)
+	results := verify.Signature().Results()
+	if results.Len() == 0 {
+		r.Fatalf("image verifier has no result")
 	}
+	ptr, ok := types.Unalias(results.At(0).Type()).(*types.Pointer)
+	if !ok {
+		r.Fatalf("image verifier must return a private result pointer")
+	}
+	named, ok := types.Unalias(ptr.Elem()).(*types.Named)
+	if !ok || named.Obj().Pkg() != pkg.Types || named.Obj().Exported() {
+		r.Fatalf("image verifier result must be a private package type")
+	}
+	proof := named.Obj()
 	for _, file := range pkg.Files {
 		for _, decl := range file.AST.Decls {
 			fn, isFunc := decl.(*ast.FuncDecl)
