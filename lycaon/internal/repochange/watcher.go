@@ -338,10 +338,10 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 				// its ref surfaces.
 				w.refs.arm(w.addMeasuredDir)
 			}
-			if ev.Op&fsnotify.Create != 0 && isDir && !w.recursive && w.scope.BoundaryDir(relSlash) == "" {
-				if w.addMeasuredDir(ev.Name) != addRegistered {
-					w.noteUnwatchedDir()
-				}
+			if ev.Op&fsnotify.Create != 0 && isDir && !w.recursive && w.scope.BoundaryDir(relSlash) == "" && !w.isWatched(ev.Name) {
+				changes := w.adoptCreatedTree(ev.Name, relSlash)
+				w.debounce.NotifyWorktreeChanges(ctx, w.root, changes, SourceWatcher)
+				continue
 			}
 			w.debounce.NotifyWorktreeChanges(ctx, w.root, []WorktreeChange{{Path: relSlash, Kind: classifyWatcherChange(ev.Op, isDir, statErr)}}, SourceWatcher)
 		case err, ok := <-w.watcher.ErrorChannel():
