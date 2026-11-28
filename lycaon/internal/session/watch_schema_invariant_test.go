@@ -1,18 +1,24 @@
 package session_test
 
 import (
+	"context"
+	"os"
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/project/projecttest"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -60,6 +66,10 @@ func TestWatchConditionSchemaMatchesRootAuthorityAcrossPreparationAndTurn(t *tes
 	fixture := setupContextualToolsFixtureWithLLM(t, api.SessionPostureBuild, recorder)
 	manager := fixture.Mgr
 	manager.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
+	board := &watchSchemaBoard{}
+	manager.Coordinator.Runtime.SetBoardInject(board, board, nil)
+	manager.Coordinator.Runtime.Board().SetInjectRenderer(nil)
+	manager.Coordinator.Assembly.Workflow.Orientation = board
 
 	// Register real watch tools + bundled tool schemas on a toolhost runtime
 	// so watch condition pruning runs through the production metadata path.
@@ -70,6 +80,11 @@ func TestWatchConditionSchemaMatchesRootAuthorityAcrossPreparationAndTurn(t *tes
 	testutil.FailErr(t, "register watch tools", watch.RegisterWatchTools(rt.Registry, watch.ToolDeps{}))
 	rt.Executor.Metadata.SetToolSchemas(schemas)
 	manager.Coordinator.Guards.SetToolMetadata(rt.Executor.Metadata)
+
+	profileKinds := rt.Boundary.WatchConditions(orchestration.ProfileCoordinator)
+	if len(profileKinds) == 0 {
+		t.Fatal("coordinator profile has no watch conditions")
+	}
 
 	// Configure a local preparation-capable provider so BuildPreparation / ProjectPreparationRequest run.
 	dir := t.TempDir()
@@ -120,6 +135,9 @@ func TestWatchConditionSchemaMatchesRootAuthorityAcrossPreparationAndTurn(t *tes
 			testutil.FailErr(t, "select local model", fixture.Store.Sessions.UpdateSession(ctx, tc.sessionID, func(sess *api.Session) {
 				sess.Status = api.SessionStatusIdle
 				sess.ProviderID, sess.Model = "preparation-test", nativegen.DefaultModelID
+				if tc.wantRootedKinds {
+					sess.WorkspacePath = fixture.ProjectDir
+				}
 			}))
 
 			// Entry point 1: Context preparation (BuildPreparation / ProjectPreparationRequest).
@@ -139,33 +157,148 @@ func TestWatchConditionSchemaMatchesRootAuthorityAcrossPreparationAndTurn(t *tes
 			// Entry point 2: Normal coordinator turn / next provider input.
 			manager.Coordinator.Model.LLMService = nil
 			beforeCalls := len(recorder.AllRequests())
+			boardReadyBefore := board.oriented
+			manager.Coordinator.Runtime.Board().InvalidateOrientation(tc.sessionID)
 			_, err = manager.Submissions.Prompt(ctx, tc.sessionID, "check watch surface")
 			testutil.FailErr(t, "Submissions.Prompt", err)
 			if len(recorder.AllRequests()) <= beforeCalls {
 				t.Fatalf("normal coordinator turn did not issue a provider request for %s", tc.name)
 			}
+			if tc.wantRootedKinds && board.oriented == boardReadyBefore {
+				t.Fatal("rooted provider request did not exercise board orientation refresh")
+			}
 			turnReq := recorder.LastRequest()
 			turnKinds, turnStanding := extractWatchSchemaFacts(t, turnReq.Tools)
 
-			for label, kinds := range map[string][]string{"preparation": prepKinds, "turn": turnKinds} {
-				hasFileChange := slices.Contains(kinds, "file_change")
-				hasGitRef := slices.Contains(kinds, "git_ref")
-				if hasFileChange != tc.wantRootedKinds {
-					t.Fatalf("%s (%s): file_change present=%v, want %v (kinds=%v)", tc.name, label, hasFileChange, tc.wantRootedKinds, kinds)
-				}
-				if hasGitRef != tc.wantRootedKinds {
-					t.Fatalf("%s (%s): git_ref present=%v, want %v (kinds=%v)", tc.name, label, hasGitRef, tc.wantRootedKinds, kinds)
-				}
-				if !slices.Contains(kinds, "timer") {
-					t.Fatalf("%s (%s): timer missing from watch conditions: %v", tc.name, label, kinds)
-				}
+			wantKinds := slices.Clone(profileKinds)
+			if !tc.wantRootedKinds {
+				wantKinds = slices.DeleteFunc(wantKinds, func(kind string) bool {
+					return kind == "file_change" || kind == "git_ref"
+				})
 			}
-			if !slices.Equal(prepKinds, turnKinds) {
-				t.Fatalf("%s: preparation watch kinds %v != turn watch kinds %v", tc.name, prepKinds, turnKinds)
+			slices.Sort(wantKinds)
+			for label, kinds := range map[string][]string{"preparation": prepKinds, "turn": turnKinds} {
+				slices.Sort(kinds)
+				if !slices.Equal(kinds, wantKinds) {
+					t.Errorf("%s watch conditions = %v, want %v", label, kinds, wantKinds)
+				}
 			}
 			if prepStanding != turnStanding {
 				t.Fatalf("%s: standing offered prep=%v != turn=%v", tc.name, prepStanding, turnStanding)
 			}
 		})
 	}
+}
+
+type watchSchemaBoard struct {
+	oriented int
+}
+
+func (*watchSchemaBoard) BuildBoardSnapshot(context.Context, string, string, string, api.BoardDetailLevel, []projectroot.RootRef) (*api.BoardSnapshot, error) {
+	return &api.BoardSnapshot{PackContentHash: "watch-authority"}, nil
+}
+
+func (*watchSchemaBoard) FormatBoardInject(api.BoardSnapshot, bool, time.Time) (string, bool) {
+	return "Watch authority test board", true
+}
+
+func (b *watchSchemaBoard) RecordBoardOrientReady(context.Context, string, string) error {
+	b.oriented++
+	return nil
+}
+
+// The runtime profile catalog and the unpruned schema discover the subjects. The
+// handler exercises registration-time authority independently of schema pruning.
+func TestWatchConditionOfferMatchesRegistrationAcrossProfiles(t *testing.T) {
+	ctx := t.Context()
+	rt := newContextualToolsRuntime(t, configlayout.FindModuleRoot())
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load runtime profiles", err)
+	if len(profiles) == 0 {
+		t.Fatal("runtime has no tool profiles")
+	}
+
+	allowed := make(map[string]map[string]bool, len(profiles))
+	for _, profile := range profiles {
+		allowed[profile.ID] = make(map[string]bool, len(profile.WatchConditions))
+		for _, kind := range profile.WatchConditions {
+			allowed[profile.ID][kind] = true
+		}
+	}
+	testutil.FailErr(t, "register watch", watch.RegisterWatchTools(rt.Registry, watch.ToolDeps{ProfileConditions: allowed}))
+	registration, ok := rt.Registry.Definition("watch")
+	if !ok {
+		t.Fatal("watch registration missing")
+	}
+	vocabulary, _ := extractWatchSchemaFacts(t, rt.Registry.List())
+	if len(vocabulary) == 0 {
+		t.Fatal("watch schema declares no conditions")
+	}
+	for _, profile := range profiles {
+		for _, kind := range profile.WatchConditions {
+			if !slices.Contains(vocabulary, kind) {
+				t.Errorf("profile %s allows %s, missing from unpruned schema", profile.ID, kind)
+			}
+		}
+	}
+
+	rootDir := t.TempDir()
+	testutil.FailErr(t, "create Git marker", os.Mkdir(filepath.Join(rootDir, ".git"), 0o700))
+	for _, profile := range profiles {
+		for _, access := range []struct {
+			name  string
+			roots []projectroot.RootRef
+			count int
+		}{
+			{"rooted", []projectroot.RootRef{{ID: "repo", Label: "repo", Path: rootDir, IsPrimary: true}}, 1},
+			{"rootless", []projectroot.RootRef{{ID: "outside", Outside: true}}, 0},
+		} {
+			t.Run(profile.ID+"/"+access.name, func(t *testing.T) {
+				filter := platform.ToolFilter{ProfileID: profile.ID, Rootless: access.count == 0, ProjectRootCount: access.count}
+				offered, err := rt.Executor.Metadata.List(ctx, filter)
+				testutil.FailErr(t, "list offered tools", err)
+				if !profile.Tools["watch"] {
+					if slices.Contains(toolNames(offered), "watch") {
+						t.Error("watch offered to profile without watch permission")
+					}
+					return
+				}
+				kinds, _ := extractWatchSchemaFacts(t, offered)
+				invocation := tools.ToolContext{
+					Identity: tools.InvocationIdentity{Agent: profile.ID, ProjectID: "project", SessionID: "session"},
+					Source:   tools.InvocationSource{Roots: access.roots},
+					Local:    tools.InvocationLocal{LoopbackConnectGranted: true, LoopbackConnectPorts: []uint16{8080}},
+				}
+				allKinds := slices.Concat(vocabulary, kinds)
+				slices.Sort(allKinds)
+				for _, kind := range slices.Compact(allKinds) {
+					args := map[string]any{"conditions": []any{watchConditionExample(kind)}}
+					_, err := registration.Handler(ctx, args, invocation)
+					if got, admitted := slices.Contains(kinds, kind), err == nil; got != admitted {
+						t.Errorf("%s offered=%v, registration accepted=%v (error=%v)", kind, got, admitted, err)
+					}
+				}
+			})
+		}
+	}
+}
+
+// Only kinds needing more than their discriminator require fixture values.
+func watchConditionExample(kind string) map[string]any {
+	fields := map[string]any{"kind": kind}
+	switch kind {
+	case "process_output":
+		fields["handle"] = "cmd-example"
+	case "http_ready":
+		fields["url"] = "http://127.0.0.1:8080/ready"
+	case "port_ready":
+		fields["port"] = 8080
+	case "file_change":
+		fields["root"], fields["path"] = "repo", "status.txt"
+	case "git_ref":
+		fields["root"], fields["ref"] = "repo", "refs/heads/main"
+	case "timer":
+		fields["delay_ms"] = 1000
+	}
+	return fields
 }
