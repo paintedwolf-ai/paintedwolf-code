@@ -2,9 +2,12 @@ package invocation_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -119,5 +122,102 @@ func TestActivityPageCoversFoldedRoots(t *testing.T) {
 	testutil.FailErr(t, "read folded activity page", err)
 	if len(page.Executions) != 2 || page.Executions[0].ID != id || page.Executions[1].ID != "folded-root" {
 		t.Fatalf("folded paging: %+v", page.Executions)
+	}
+	foldedPage, err := f.recorder.ReadProgramActivityPage(t.Context(), f.session, f.program, "folded-root", "", 10)
+	testutil.FailErr(t, "read folded member activity page", err)
+	if len(foldedPage.Executions) != 2 || foldedPage.Executions[0].ID != id || foldedPage.Executions[1].ID != "folded-root" {
+		t.Fatalf("folded member paging: %+v", foldedPage.Executions)
+	}
+	if _, err := f.recorder.ReadProgramActivityPage(t.Context(), f.session, f.program, "unknown-activity", "", 10); !errors.Is(err, invocation.ErrProgramNotFound) {
+		t.Fatalf("unknown activity err = %v, want ErrProgramNotFound", err)
+	}
+}
+
+func TestFoldedActivityAliasStaysScopedToOwningActivity(t *testing.T) {
+	f := newProgramReceiptFixture(t)
+	child := f.child(t)
+	f.start(t, child)
+	id := child.Invocation().Identity.ExecutionID
+	_, err := f.database.ExecContext(t.Context(), `UPDATE invocation_program_executions SET state='completed',status_code=0,effect_certainty='none' WHERE id=?`, id)
+	testutil.FailErr(t, "settle representative", err)
+	foldedID := uuid.NewString()
+	_, err = f.database.ExecContext(t.Context(), `INSERT INTO invocation_program_executions (id,program_id,node_id,ordinal,parent_execution_id,actor_id,scope_json,operation_id,definition_digest,arguments_representation,arguments_digest,arguments_ref,reviewed_arguments_ref,canonical,state,owner,lifecycle,native_command,effect_mode,effect_classes_json,started_at,status_code,effect_certainty)
+ SELECT ?,program_id,'untaken-node',2,parent_execution_id,actor_id,scope_json,'grep',definition_digest,arguments_representation,arguments_digest,arguments_ref,reviewed_arguments_ref,canonical,'completed',owner,lifecycle,'grep',effect_mode,effect_classes_json,started_at,0,'none'
+ FROM invocation_program_executions WHERE id=?`, foldedID, id)
+	testutil.FailErr(t, "record folded support execution", err)
+
+	sibling := f.childFor(t, "write")
+	f.start(t, sibling)
+	siblingID := sibling.Invocation().Identity.ExecutionID
+	writeOutcome := toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted}
+	testutil.FailErr(t, "settle sibling write", f.recorder.SettleChild(t.Context(), siblingID, toolcontract.ProgramChildSettlement{Result: writeOutcome, OwnerInvoked: true, DetailReference: "output:write"}))
+
+	summary, err := f.recorder.ActivitySummary(t.Context(), f.session, f.program)
+	testutil.FailErr(t, "read activity summary", err)
+	if len(summary.Activities) != 2 || summary.Activities[0].ID != id || len(summary.Activities[0].ExecutionIDs) != 2 || summary.Activities[1].ID != siblingID {
+		t.Fatalf("unexpected activities: %+v", summary.Activities)
+	}
+
+	otherProgram := programReceiptFixtureOn(t, f.database, f.session, "other-program-call", map[string]any{"command": "${op} arg"})
+	otherChild := otherProgram.child(t)
+	otherProgram.start(t, otherChild)
+	otherID := otherChild.Invocation().Identity.ExecutionID
+
+	otherSession := "session-2"
+	testdbseed.InsertSession(t, f.database, otherSession, testdbseed.DefaultProjectID)
+	foreignProgram := programReceiptFixtureOn(t, f.database, otherSession, "foreign-session-call", map[string]any{"command": "${op} arg"})
+	foreignChild := foreignProgram.child(t)
+	foreignProgram.start(t, foreignChild)
+	foreignID := foreignChild.Invocation().Identity.ExecutionID
+
+	exactPage, err := f.recorder.ReadProgramActivityPage(t.Context(), f.session, f.program, id, "", 10)
+	testutil.FailErr(t, "read exact activity page", err)
+	if len(exactPage.Executions) != 2 || exactPage.Executions[0].ID != id || exactPage.Executions[1].ID != foldedID {
+		t.Fatalf("exact page selected wrong executions: %+v", exactPage.Executions)
+	}
+
+	// Folded support ID converges on the owning projected activity without selecting siblings.
+	page1, err := f.recorder.ReadProgramActivityPage(t.Context(), f.session, f.program, foldedID, "", 1)
+	testutil.FailErr(t, "read first page via folded alias", err)
+	if len(page1.Executions) != 1 || page1.Executions[0].ID != id || page1.ExecutionsOmitted != 1 || page1.NextCursor == "" {
+		t.Fatalf("folded page 1 = %+v", page1)
+	}
+	page2, err := f.recorder.ReadProgramActivityPage(t.Context(), f.session, f.program, foldedID, page1.NextCursor, 1)
+	testutil.FailErr(t, "read second page via folded alias", err)
+	if len(page2.Executions) != 1 || page2.Executions[0].ID != foldedID || page2.ExecutionsOmitted != 0 {
+		t.Fatalf("folded page 2 = %+v", page2)
+	}
+	if _, err := f.recorder.ReadProgramActivityPage(t.Context(), f.session, f.program, siblingID, page1.NextCursor, 1); err == nil {
+		t.Fatal("folded alias cursor crossed into sibling activity")
+	}
+
+	// Document scope using folded support ID resolves the owning projected activity and excludes siblings.
+	scopes, err := invocation.ParseReceiptScopes([]string{f.program + ":" + foldedID})
+	testutil.FailErr(t, "parse folded document scope", err)
+	doc := readReceipt(t, f, scopes, 0, 64)
+	records := decodeReceiptRows(t, doc.Rows)
+	if len(records) != 1+2+2 || records[0].Type != "program" || records[0].Activity == nil || records[0].Activity.ID != id || records[0].ExecutionCount != 2 {
+		t.Fatalf("folded document header = %+v (rows=%d)", records[0], len(records))
+	}
+	if records[1].Execution.ID != id || records[2].Execution.ID != foldedID || records[3].Type != "node" {
+		t.Fatalf("folded document rows included unexpected executions: %+v", records[1:4])
+	}
+
+	// Unknown, cross-program, and cross-session IDs fail with ErrProgramNotFound.
+	unknownID := uuid.NewString()
+	for _, tc := range []struct {
+		name, session, activityID string
+	}{
+		{"unknown", f.session, unknownID},
+		{"cross-program same session", f.session, otherID},
+		{"cross-session foreign execution", f.session, foreignID},
+		{"cross-session folded alias", otherSession, foldedID},
+	} {
+		if _, err := f.recorder.ReadProgramActivityPage(t.Context(), tc.session, f.program, tc.activityID, "", 10); !errors.Is(err, invocation.ErrProgramNotFound) {
+			t.Fatalf("page(%s) err = %v, want ErrProgramNotFound", tc.name, err)
+		}
+		if _, err := f.recorder.ReadReceiptDocument(t.Context(), tc.session, []invocation.ReceiptScope{{ProgramID: f.program, ActivityID: tc.activityID}}, "", 0, 64); !errors.Is(err, invocation.ErrProgramNotFound) {
+			t.Fatalf("document(%s) err = %v, want ErrProgramNotFound", tc.name, err)
+		}
 	}
 }

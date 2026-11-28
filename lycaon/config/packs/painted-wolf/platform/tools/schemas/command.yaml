@@ -20,6 +20,16 @@ schema:
     secret_use: {type: object, additionalProperties: false, required: [services], description: "Origins for `{{paintedwolf-secret:…}}`.", properties: {services: {type: array, minItems: 1, maxItems: 8, description: Origin URLs., items: {type: string, maxLength: 1024}}}}
     verification: {type: boolean, default: false, description: Whole-program verdict.}
     command: {type: string, description: Bash source.}
+    progress_update:
+      type: object
+      additionalProperties: false
+      required: [content]
+      description: Optional progress checklist update settled once before gated effects.
+      properties:
+        reconciliation_token: {type: string, minLength: 64, maxLength: 64, description: Host reconciliation token.}
+        expected_revision: {type: string, minLength: 64, maxLength: 64, description: Current snapshot revision.}
+        item_ids: {type: array, maxItems: 48, items: {type: [string, 'null'], maxLength: 64}, description: Row identities aligned with content.}
+        content: {type: string, maxLength: 8000, description: Full checklist markdown.}
     cwd: {type: string, description: "Folder for the statement. Empty = the session folder; `@label` or `@label/sub` = any attached folder; `@scratch`/`@output` = session scratch/output; absolute paths are accepted."}
     terminal_capture: {type: object, additionalProperties: false, description: Non-interactive one-shot PTY screen., properties: {winsize: {type: object, additionalProperties: false, description: Dimensions., required: [cols, rows], properties: {cols: {type: integer, minimum: 1, maximum: 240, description: Columns.}, rows: {type: integer, minimum: 1, maximum: 120, description: Rows.}}}, caption: {type: string, maxLength: 240, description: Label.}}}
     snapshot_capture: {type: object, additionalProperties: false, description: "Attach APP_SNAPSHOT on zero exit.", properties: {env_var: {type: string, default: APP_SNAPSHOT, description: Variable.}, view: {type: string, description: View.}, scale: {type: number, default: 2.0, description: Scale.}, caption: {type: string, maxLength: 240, description: Label.}}}

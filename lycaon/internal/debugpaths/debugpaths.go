@@ -28,17 +28,18 @@ import (
 type Kind string
 
 const (
-	KindLLM         Kind = "llm"
-	KindSessions    Kind = "sessions"
-	KindHTTP        Kind = "http"
-	KindSSE         Kind = "sse"
-	KindTool        Kind = "tool"
-	KindDenPerf     Kind = "den_perf"
-	KindWebSearch   Kind = "web_search"
-	KindSummarize   Kind = "summarize"
-	KindPromptCache Kind = "prompt_cache"
-	KindPerformance Kind = "performance"
-	KindSidecarLog  Kind = "sidecar_log"
+	KindLLM                Kind = "llm"
+	KindSessions           Kind = "sessions"
+	KindHTTP               Kind = "http"
+	KindSSE                Kind = "sse"
+	KindTool               Kind = "tool"
+	KindDenPerf            Kind = "den_perf"
+	KindWebSearch          Kind = "web_search"
+	KindSummarize          Kind = "summarize"
+	KindPromptCache        Kind = "prompt_cache"
+	KindPerformance        Kind = "performance"
+	KindCommandDiagnostics Kind = "command_diagnostics"
+	KindSidecarLog         Kind = "sidecar_log"
 )
 
 // Switches shared by the engine, the desktop shell, and the dev scripts.
@@ -96,6 +97,7 @@ var catalog = []File{
 	{Kind: KindSummarize, Name: "summarize-debug.jsonl", EnableEnv: "LYCAON_SUMMARIZE_DEBUG", FileEnv: "LYCAON_SUMMARIZE_DEBUG_FILE"},
 	{Kind: KindPromptCache, Name: "prompt-cache-observability.jsonl", SiblingOf: KindLLM},
 	{Kind: KindPerformance, Name: "performance.jsonl", EnableEnv: "LYCAON_PERF_DEBUG", FileEnv: "LYCAON_PERF_DEBUG_FILE"},
+	{Kind: KindCommandDiagnostics, Name: "command-diagnostics.jsonl", EnableEnv: "LYCAON_DEV_COMMAND_DIAGNOSTICS", FileEnv: "LYCAON_DEV_COMMAND_DIAGNOSTICS_FILE"},
 	// The sidecar slog has no switch of its own: it reaches a file under full
 	// debug logging, or wherever LYCAON_LOG_FILE points.
 	{Kind: KindSidecarLog, Name: "sidecar.log", FileEnv: "LYCAON_LOG_FILE"},

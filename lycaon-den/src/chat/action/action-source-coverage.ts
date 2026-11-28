@@ -44,7 +44,7 @@ export function useActionCoverage(
             if (!state.settling) pending.delete(id);
           } catch (error) {
             // Settled windows with no history or gaps are pruned.
-            if (isApiErrorCode(error, ["not_found", "session_not_found"])) pending.delete(id);
+            if (isApiErrorCode(error, ["not_found", "session_not_found", "source_history_not_found"])) pending.delete(id);
           }
         }));
         if (controller.signal.aborted) return;
