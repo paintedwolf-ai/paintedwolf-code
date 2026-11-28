@@ -249,12 +249,15 @@ func (r *ProgramRuntime) commitProgramWindows(ctx context.Context, run *programR
 
 // rememberDeliveredProgramWindow credits the conversational read basis only
 // when the exact whole shared-document window reached the model under its
-// authenticated source identity and matching revision.
+// authenticated source identity and matching document ID and revision.
 func rememberDeliveredProgramWindow(ctx context.Context, tc tools.ToolContext, window tools.ProgramWindow) {
 	if window.StartLine != 1 || window.Body == "" || window.Path == "inline" {
 		return
 	}
 	if window.RootID == "" || window.ScopeRel == "" || window.ScopeRel == "." {
+		return
+	}
+	if window.DocumentID == "" || window.DocumentRevision <= 0 {
 		return
 	}
 	var resolved projectpaths.Resolved
@@ -284,6 +287,9 @@ func rememberDeliveredProgramWindow(ctx context.Context, tc tools.ToolContext, w
 	}
 	doc, open, err := documents.OpenDocument(ctx, tc.Identity.ProjectID, branch, address.RootID, address.Path)
 	if err != nil || !open {
+		return
+	}
+	if doc.ID != window.DocumentID || doc.Revision != window.DocumentRevision {
 		return
 	}
 	lines := toolkit.SplitLines(doc.Text)

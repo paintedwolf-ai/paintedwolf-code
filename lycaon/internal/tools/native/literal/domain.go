@@ -3,9 +3,11 @@ package literal
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"slices"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -15,7 +17,9 @@ import (
 	"github.com/lycaon/lycaon/internal/fileoutline"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
 	"github.com/lycaon/lycaon/internal/textfile"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/native/survey"
+	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
@@ -132,17 +136,62 @@ func runSummarize(inv *invocation) error {
 	}
 	for _, window := range windows {
 		if window.Path != "inline" {
+			docID, docRev := captureWindowDocumentIdentity(inv.ctx, inv.tc, window.RootID, window.ScopeRel, window.Path, window.StartLine, window.EndLine, window.Body)
 			tools.RecordProgramWindow(inv.ctx, tools.ProgramWindow{
-				Path:      window.Path,
-				RootID:    window.RootID,
-				ScopeRel:  window.ScopeRel,
-				StartLine: window.StartLine,
-				EndLine:   window.EndLine,
-				Body:      window.Body,
+				Path:             window.Path,
+				RootID:           window.RootID,
+				ScopeRel:         window.ScopeRel,
+				DocumentID:       docID,
+				DocumentRevision: docRev,
+				StartLine:        window.StartLine,
+				EndLine:          window.EndLine,
+				Body:             window.Body,
 			})
 		}
 	}
 	return inv.structured(resp)
+}
+
+// captureWindowDocumentIdentity pins the shared document ID and revision at
+// summarize time when the window matches the exact whole open document.
+func captureWindowDocumentIdentity(ctx context.Context, tc tools.ToolContext, rootID, scopeRel, displayPath string, startLine, endLine int, body string) (string, int64) {
+	if startLine != 1 || body == "" || rootID == "" || scopeRel == "" || scopeRel == "." {
+		return "", 0
+	}
+	var resolved projectpaths.Resolved
+	found := false
+	for _, root := range tc.Source.Roots {
+		if root.ID == rootID {
+			resolved = projectpaths.Resolved{
+				Root:        root,
+				ScopeRel:    scopeRel,
+				Abs:         filepath.Join(root.Path, filepath.FromSlash(scopeRel)),
+				DisplayPath: displayPath,
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		return "", 0
+	}
+	documents, address, ok := sourceview.DocumentsFor(tc, resolved)
+	if !ok {
+		return "", 0
+	}
+	branch, err := tc.SourceBranch(address.RootID)
+	if err != nil {
+		return "", 0
+	}
+	doc, open, err := documents.OpenDocument(ctx, tc.Identity.ProjectID, branch, address.RootID, address.Path)
+	if err != nil || !open || doc.ID == "" || doc.Revision <= 0 {
+		return "", 0
+	}
+	lines := toolkit.SplitLines(doc.Text)
+	if endLine != len(lines) || body != hostmarker.FormatNumberedLines(lines, 1) {
+		return "", 0
+	}
+	return doc.ID, doc.Revision
 }
 
 func validateRepoMapPath(ctx context.Context, paths *projectpaths.ProgramPaths, argv commandprogram.BoundArgv, span toolcontract.SourceSpan) error {

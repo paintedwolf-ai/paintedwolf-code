@@ -100,12 +100,14 @@ func TestCommitProgramWindowsReadBasis(t *testing.T) {
 
 	// 1. Positive: exact whole shared-document window delivered to model -> credits read basis.
 	docs, obs := makeCase(tools.ProgramWindow{
-		Path:      "target.txt",
-		RootID:    "root-1",
-		ScopeRel:  "target.txt",
-		StartLine: 1,
-		EndLine:   len(lines),
-		Body:      fullBody,
+		Path:             "target.txt",
+		RootID:           "root-1",
+		ScopeRel:         "target.txt",
+		DocumentID:       "doc-1",
+		DocumentRevision: 3,
+		StartLine:        1,
+		EndLine:          len(lines),
+		Body:             fullBody,
 	}, `{"body":`+string(encodedFull)+`}`)
 	if obs.commits != 1 {
 		t.Fatalf("expected 1 delivered source commit, got %d", obs.commits)
@@ -116,12 +118,14 @@ func TestCommitProgramWindowsReadBasis(t *testing.T) {
 
 	// 2. Negative: partial window (StartLine=2) -> must NOT credit read basis.
 	docs, _ = makeCase(tools.ProgramWindow{
-		Path:      "target.txt",
-		RootID:    "root-1",
-		ScopeRel:  "target.txt",
-		StartLine: 2,
-		EndLine:   len(lines),
-		Body:      partialBody,
+		Path:             "target.txt",
+		RootID:           "root-1",
+		ScopeRel:         "target.txt",
+		DocumentID:       "doc-1",
+		DocumentRevision: 3,
+		StartLine:        2,
+		EndLine:          len(lines),
+		Body:             partialBody,
 	}, `{"body":`+string(encodedPartial)+`}`)
 	if len(docs.remembered) != 0 {
 		t.Fatalf("partial window must not credit read basis, got %+v", docs.remembered)
@@ -129,40 +133,76 @@ func TestCommitProgramWindowsReadBasis(t *testing.T) {
 
 	// 3. Negative: clipped/screened output (encoded body absent from delivered parts) -> must NOT credit.
 	docs, obs = makeCase(tools.ProgramWindow{
-		Path:      "target.txt",
-		RootID:    "root-1",
-		ScopeRel:  "target.txt",
-		StartLine: 1,
-		EndLine:   len(lines),
-		Body:      fullBody,
+		Path:             "target.txt",
+		RootID:           "root-1",
+		ScopeRel:         "target.txt",
+		DocumentID:       "doc-1",
+		DocumentRevision: 3,
+		StartLine:        1,
+		EndLine:          len(lines),
+		Body:             fullBody,
 	}, `{"body":"clipped..."}`)
 	if obs.commits != 0 || len(docs.remembered) != 0 {
 		t.Fatalf("clipped output must not commit or credit read basis, commits=%d remembered=%+v", obs.commits, docs.remembered)
 	}
 
-	// 4. Negative: inline / unauthenticated window (empty RootID or Path=="inline") -> must NOT credit.
+	// 4. Negative: inline / unauthenticated window (empty RootID) -> must NOT credit.
 	docs, _ = makeCase(tools.ProgramWindow{
-		Path:      filepath.Base("target.txt"),
-		RootID:    "",
-		ScopeRel:  "target.txt",
-		StartLine: 1,
-		EndLine:   len(lines),
-		Body:      fullBody,
+		Path:             filepath.Base("target.txt"),
+		RootID:           "",
+		ScopeRel:         "target.txt",
+		DocumentID:       "doc-1",
+		DocumentRevision: 3,
+		StartLine:        1,
+		EndLine:          len(lines),
+		Body:             fullBody,
 	}, `{"body":`+string(encodedFull)+`}`)
 	if len(docs.remembered) != 0 {
 		t.Fatalf("unauthenticated window without RootID must not credit read basis, got %+v", docs.remembered)
 	}
 
-	// 5. Negative: stale revision (delivered body differs from current open document text) -> must NOT credit.
+	// 5. Negative: stale content (delivered body differs from current open document text) -> must NOT credit.
 	docs, _ = makeCase(tools.ProgramWindow{
-		Path:      "target.txt",
-		RootID:    "root-1",
-		ScopeRel:  "target.txt",
-		StartLine: 1,
-		EndLine:   len(lines),
-		Body:      staleBody,
+		Path:             "target.txt",
+		RootID:           "root-1",
+		ScopeRel:         "target.txt",
+		DocumentID:       "doc-1",
+		DocumentRevision: 3,
+		StartLine:        1,
+		EndLine:          len(lines),
+		Body:             staleBody,
 	}, `{"body":`+string(encodedStale)+`}`)
 	if len(docs.remembered) != 0 {
-		t.Fatalf("stale revision window must not credit read basis, got %+v", docs.remembered)
+		t.Fatalf("stale content window must not credit read basis, got %+v", docs.remembered)
+	}
+
+	// 6. Negative: document replaced/reopened (different DocumentID with identical bytes) -> must NOT credit.
+	docs, _ = makeCase(tools.ProgramWindow{
+		Path:             "target.txt",
+		RootID:           "root-1",
+		ScopeRel:         "target.txt",
+		DocumentID:       "doc-old",
+		DocumentRevision: 3,
+		StartLine:        1,
+		EndLine:          len(lines),
+		Body:             fullBody,
+	}, `{"body":`+string(encodedFull)+`}`)
+	if len(docs.remembered) != 0 {
+		t.Fatalf("replaced/reopened document with different ID must not credit read basis, got %+v", docs.remembered)
+	}
+
+	// 7. Negative: revision bumped with otherwise equal bytes -> must NOT credit.
+	docs, _ = makeCase(tools.ProgramWindow{
+		Path:             "target.txt",
+		RootID:           "root-1",
+		ScopeRel:         "target.txt",
+		DocumentID:       "doc-1",
+		DocumentRevision: 2,
+		StartLine:        1,
+		EndLine:          len(lines),
+		Body:             fullBody,
+	}, `{"body":`+string(encodedFull)+`}`)
+	if len(docs.remembered) != 0 {
+		t.Fatalf("stale revision with identical bytes must not credit read basis, got %+v", docs.remembered)
 	}
 }
