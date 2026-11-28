@@ -554,7 +554,7 @@ def _snapshot_evidence_digests(db_path: pathlib.Path, session_id: str) -> list[d
         if "evidence_records" not in tables:
             return []
         rows = conn.execute(
-            "SELECT * FROM evidence_records WHERE session_id = ? ORDER BY rowid",
+            "SELECT * FROM evidence_records WHERE session_id = ? ORDER BY handle",
             (session_id,),
         ).fetchall()
         digests: list[dict[str, str]] = []
@@ -699,10 +699,8 @@ def _run_freshness_slot(
     req = client.wait_pending(sid, timeout=120.0)
     client.respond(req["id"], content=close_text)
     for _ in range(max_repairs):
-        if client.is_settled(sid, submission_id=submission_id):
-            break
         try:
-            rep = client.wait_pending(sid, timeout=15.0)
+            rep = client.wait_pending(sid, timeout=8.0)
         except TimeoutError:
             break
         client.respond(rep["id"], content=close_text)
@@ -711,7 +709,12 @@ def _run_freshness_slot(
     after = probe_store_db(sidecar.store_db_path, sid, trace_log_path=trace_log)
     delta = after.delta_observed(before)
     _, closeouts = extract_product_observations(sidecar.store_db_path, sid)
-    last_grounding = closeouts[-1] if closeouts else {}
+    last_closeout = closeouts[-1] if closeouts else {}
+    last_grounding = (
+        last_closeout.get("grounding")
+        if isinstance(last_closeout.get("grounding"), dict)
+        else last_closeout
+    ) or {}
     fu = delta.get("friction_units")
 
     divergences: list[str] = []
