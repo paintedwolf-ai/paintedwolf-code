@@ -76,12 +76,17 @@ export function FilesEditorStatus(props: FilesEditorStatusProps) {
     {props.details}
     <Show when={props.simplified}><span class="den-files-editor__status-detail" data-testid="files-editor-simplified-chip">Simplified</span></Show>
     <span class="den-files-editor__status-spacer" />
-    <BrowseSegmented class="den-files-editor__layout" testId="files-editor-line-layout" ariaLabel="Line layout"
-      options={LINE_LAYOUTS} value={editorLineLayoutPref()}
-      onChange={(id) => {
-        if (id === "off" || id === "wrap" || id === "pretty") void saveEditorLineLayout(id);
-      }} />
+    <LineLayoutControl />
   </div>;
+}
+
+/** Off, Wrap or Pretty for every Files reader; the choice is one saved setting. */
+export function LineLayoutControl() {
+  return <BrowseSegmented class="den-files-editor__layout" testId="files-editor-line-layout" ariaLabel="Line layout"
+    options={LINE_LAYOUTS} value={editorLineLayoutPref()}
+    onChange={(id) => {
+      if (id === "off" || id === "wrap" || id === "pretty") void saveEditorLineLayout(id);
+    }} />;
 }
 
 /** The toolbar's find, go-to and copy menus, their buttons' command bar disclosures, and path copy. */

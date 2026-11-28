@@ -1,26 +1,40 @@
 import type { BriefingEvidenceRef } from "../api/types.ts";
+import type { ChatContentDocument } from "../chat/transcript/content/chat-content-document.ts";
 import { openFilesSurface } from "../platform/navigation/open-files-surface.ts";
 
 /** Where focus returns after reading evidence: a label and the element to focus. */
-export type BriefingReturnAnchor = { label: string; focus: () => void };
+type BriefingReturnAnchor = { label: string; focus: () => void };
 
-const returnAnchors = new Map<string, BriefingReturnAnchor>();
-const MAX_RETURN_ANCHORS = 64;
+/** A document the summarized activity already offers, such as its input or receipt. */
+export type BriefingRecordLink = { label: string; document: ChatContentDocument };
+
+type Opened = { returnAnchor?: BriefingReturnAnchor; records: readonly BriefingRecordLink[] };
+
+const opened = new Map<string, Opened>();
+const MAX_OPENED = 64;
 
 /** Opens an evidence record in Files; each record has its own tab. */
-export function openBriefingEvidence(reference: BriefingEvidenceRef, returnAnchor?: BriefingReturnAnchor): void {
-  if (returnAnchor) {
-    returnAnchors.delete(reference.record_id);
-    returnAnchors.set(reference.record_id, returnAnchor);
-    while (returnAnchors.size > MAX_RETURN_ANCHORS) {
-      const oldest = returnAnchors.keys().next().value;
+export function openBriefingEvidence(
+  reference: BriefingEvidenceRef,
+  returnAnchor?: BriefingReturnAnchor,
+  records: readonly BriefingRecordLink[] = [],
+): void {
+  if (returnAnchor || records.length > 0) {
+    opened.delete(reference.record_id);
+    opened.set(reference.record_id, { returnAnchor, records });
+    while (opened.size > MAX_OPENED) {
+      const oldest = opened.keys().next().value;
       if (oldest === undefined) break;
-      returnAnchors.delete(oldest);
+      opened.delete(oldest);
     }
   }
   openFilesSurface({ kind: "briefing-evidence", projectId: reference.project_id, recordId: reference.record_id });
 }
 
 export function briefingReturnAnchor(recordId: string): BriefingReturnAnchor | undefined {
-  return returnAnchors.get(recordId);
+  return opened.get(recordId)?.returnAnchor;
+}
+
+export function briefingRecordLinks(recordId: string): readonly BriefingRecordLink[] {
+  return opened.get(recordId)?.records ?? [];
 }

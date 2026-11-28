@@ -12,6 +12,7 @@ import type { CardAction } from "../../chat/action/action-merge.ts";
 import { NetworkActionContext } from "../../chat/network-action-context.ts";
 import { invalidateSourceQueries } from "../../files/source/source-invalidation.ts";
 import { stubClient } from "../../test/client-fixture.ts";
+import { briefingRecordLinks } from "../../briefing/briefing-evidence.ts";
 import { ActionCard } from "./ActionCard.tsx";
 
 function part(): ToolPartView {
@@ -107,7 +108,7 @@ describe("ActionCard", () => {
 
   it("opens to what ran, the summary, facts, preview and records, in that order and nothing else", () => {
     const summary = <div data-testid="supplied-summary">supplied summary</div>;
-    const evidence = <button type="button" data-testid="supplied-evidence">supplied evidence</button>;
+    const evidence = { project_id: "project", record_id: "record" };
     const { container } = render(() => <ActionCard part={part()} action={descriptor} layout="chat" slots={{ summary, evidence }} />);
     open(container);
     const body = container.querySelector('[data-testid="action-card-body"]')!;
@@ -118,7 +119,21 @@ describe("ActionCard", () => {
     expect(facts.map((row) => row.querySelector("dd")?.textContent)).toEqual(descriptor.facts.map(formatFact));
     expect(facts.at(-1)?.getAttribute("data-tone")).toBe("danger");
     const links = [...body.querySelectorAll('[data-testid="action-links"] > *')].map((node) => node.getAttribute("data-testid") ?? node.querySelector("[data-testid]")?.getAttribute("data-testid"));
-    expect(links).toEqual(["action-link-input", "action-link-output", "supplied-evidence", "action-opener"]);
+    expect(links).toEqual(["action-link-input", "action-link-output", "briefing-evidence-link", "action-opener"]);
+  });
+
+  it("hands the evidence page the documents its own links open, and only those that exist", () => {
+    const withOutput = render(() => <ActionCard part={part()} action={descriptor} layout="chat" projectId="project" slots={{ evidence: { project_id: "project", record_id: "with-output" } }} />);
+    open(withOutput.container);
+    fireEvent.click(withOutput.getByTestId("briefing-evidence-link"));
+    expect(briefingRecordLinks("with-output").map((link) => [link.label, link.document.pane])).toEqual([["Input", "action:row:input"], ["Output", "action:row:output"]]);
+    withOutput.unmount();
+
+    const silent = { ...part(), output: undefined };
+    const withoutOutput = render(() => <ActionCard part={silent} action={descriptor} layout="chat" projectId="project" slots={{ evidence: { project_id: "project", record_id: "without-output" } }} />);
+    open(withoutOutput.container);
+    fireEvent.click(withoutOutput.getByTestId("briefing-evidence-link"));
+    expect(briefingRecordLinks("without-output").map((link) => link.label)).toEqual(["Input"]);
   });
 
   it("shows nothing in its body that the descriptor and slots did not supply", () => {

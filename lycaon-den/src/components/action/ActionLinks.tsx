@@ -1,4 +1,4 @@
-import { Index, Match, Show, Switch, createMemo, type JSX } from "solid-js";
+import { Index, Match, Show, Switch, createMemo } from "solid-js";
 import type { ActionLink, ActionOpener } from "../../api/types.ts";
 import type { CardAction } from "../../chat/action/action-merge.ts";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
@@ -7,7 +7,10 @@ import { openRunningStage } from "../../platform/navigation/open-running.ts";
 import { openInSearch } from "../../search/search-nav.ts";
 import { turnLoadRowSummary } from "../../chat/turnload/turn-load-rows.ts";
 import { useToolContent } from "../../chat/tool/tool-content.tsx";
-import { ToolContentLink } from "../tool/ToolContentLink.tsx";
+import { ToolContentLink, toolContentDocument } from "../tool/ToolContentLink.tsx";
+import type { BriefingEvidenceRef } from "../../api/types.ts";
+import { BriefingEvidenceLink } from "../../briefing/BriefingSummary.tsx";
+import type { BriefingRecordLink } from "../../briefing/briefing-evidence.ts";
 import type { ResolveProjectRoot } from "../../api/project-path.ts";
 import { SourcePathLink } from "../source/SourcePathLink.tsx";
 import { TOOL_PATH_ENTRY_KINDS } from "../../chat/tool/tool-presentation.generated.ts";
@@ -26,8 +29,21 @@ type Props = {
   projectId?: string;
   sessionId?: string;
   rootRefs?: readonly ResolveProjectRoot[];
-  evidence?: JSX.Element;
+  evidence?: BriefingEvidenceRef;
 };
+
+type RecordLink = { kind: ActionLink["kind"]; pane: string; content: ChatContentDocument["content"]; language?: string; messageId?: string };
+
+/** What one record link opens; the evidence page offers the same documents. */
+function recordLink(link: ActionLink, part: ToolPartView): RecordLink | undefined {
+  const content = linkContent(link, part);
+  if (!content) return undefined;
+  return {
+    kind: link.kind, pane: `action:${part.id}:${link.kind}`, content,
+    language: link.kind === "receipt" ? "jsonl" : undefined,
+    messageId: link.kind === "input" ? part.argsMessageId ?? part.assistantMessageId : part.messageId,
+  };
+}
 
 /** Dragging the records attaches the call's output to chat. */
 export function ActionLinks(props: Props) {
@@ -43,6 +59,17 @@ export function ActionLinks(props: Props) {
       ? [...links, { kind: "receipt" }]
       : links;
   };
+  // The evidence page offers this call's documents as the card does, in the same tabs.
+  const evidenceRecords = (): BriefingRecordLink[] => {
+    const identity = content?.identity();
+    if (!identity) return [];
+    return links().flatMap((link) => {
+      const record = recordLink(link, props.part);
+      if (!record) return [];
+      const label = LINK_LABELS[record.kind];
+      return [{ label, document: toolContentDocument(identity, { ...record, label, toolCallId: props.part.toolCallId }) }];
+    });
+  };
   const opener = createMemo(() => props.action.opener, undefined, { equals: sameShape });
   // The call's output as a chat attachment, citing its session and call.
   const outputRef = createMemo(() => chatRefForToolRaw({
@@ -55,19 +82,14 @@ export function ActionLinks(props: Props) {
       <Index each={links()}>
         {(link) => {
           // Descriptors arrive as new objects on every update; a link stays mounted while it opens the same record.
-          const document = createMemo(() => linkContent(link(), props.part), undefined, { equals: sameShape });
+          const record = createMemo(() => recordLink(link(), props.part), undefined, { equals: sameShape });
           return (
-            <Show when={document()} keyed>
-              {(shown) => {
-                const kind = link().kind;
-                const messageId = kind === "input" ? props.part.argsMessageId ?? props.part.assistantMessageId : props.part.messageId;
-                const language = kind === "receipt" ? "jsonl" : undefined;
-                return (
-                  <ToolContentLink short label={LINK_LABELS[kind]} testId={`action-link-${kind}`} projectId={props.projectId}
-                    pane={`action:${props.part.id}:${kind}`} content={shown} language={language}
-                    messageId={messageId} toolCallId={props.part.toolCallId} revealOffset={revealOffset(kind)} />
-                );
-              }}
+            <Show when={record()} keyed>
+              {(shown) => (
+                <ToolContentLink short label={LINK_LABELS[shown.kind]} testId={`action-link-${shown.kind}`} projectId={props.projectId}
+                  pane={shown.pane} content={shown.content} language={shown.language}
+                  messageId={shown.messageId} toolCallId={props.part.toolCallId} revealOffset={revealOffset(shown.kind)} />
+              )}
             </Show>
           );
         }}
@@ -79,7 +101,7 @@ export function ActionLinks(props: Props) {
             content={{ kind: "inline", text }} />
         )}
       </Show>
-      {props.evidence}
+      <Show when={props.evidence} keyed>{(reference) => <BriefingEvidenceLink reference={reference} records={evidenceRecords} />}</Show>
       <Show when={opener()} keyed>
         {(opener) => <Opener opener={opener} part={props.part} projectId={props.projectId} rootRefs={props.rootRefs} />}
       </Show>

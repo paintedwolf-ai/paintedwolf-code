@@ -6,6 +6,27 @@ import { useSourceContext } from "../source/annotations/source-context.ts";
 import { createEffect, createMemo, untrack } from "solid-js";
 import { findController } from "../../find/find-controller.ts";
 
+type ToolIdentity = { sessionId: string; messageId: string; toolCallId: string; title?: string };
+
+/** The Files document a tool's link opens; one pane per call and kind. */
+export function toolContentDocument(identity: ToolIdentity, link: {
+  pane: string; label: string; content: ChatContentDocument["content"];
+  messageId?: string; toolCallId?: string; revealOffset?: number; path?: string; language?: string;
+}): ChatContentDocument {
+  return {
+    kind: "tool",
+    sessionId: identity.sessionId,
+    toolCallId: link.toolCallId ?? identity.toolCallId,
+    messageId: link.messageId ?? identity.messageId,
+    pane: link.pane,
+    title: `${link.label} · ${identity.title ?? "Tool"}`,
+    content: link.content,
+    revealOffset: link.revealOffset,
+    ...(link.path ? { path: link.path } : {}),
+    ...(link.language ? { language: link.language } : {}),
+  };
+}
+
 export function ToolContentLink(props: {
   pane: string;
   label: string;
@@ -25,19 +46,7 @@ export function ToolContentLink(props: {
   const searchable = createMemo(() => props.content.kind === "inline" && !!projectId());
   const document = (): ChatContentDocument | undefined => {
     const identity = tool?.identity();
-    if (!identity) return;
-    return {
-      kind: "tool",
-      sessionId: identity.sessionId,
-      toolCallId: props.toolCallId ?? identity.toolCallId,
-      messageId: props.messageId ?? identity.messageId,
-      pane: props.pane,
-      title: `${props.label} · ${identity.title ?? "Tool"}`,
-      content: props.content,
-      revealOffset: props.revealOffset,
-      ...(props.path ? { path: props.path } : {}),
-      ...(props.language ? { language: props.language } : {}),
-    };
+    return identity ? toolContentDocument(identity, props) : undefined;
   };
   const open = () => {
     const value = document(), project = projectId();
