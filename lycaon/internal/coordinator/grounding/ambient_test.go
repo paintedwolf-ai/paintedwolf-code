@@ -122,3 +122,120 @@ func TestCloseoutBreakerEscalatesInBlockModeAndResetsOnInstruct(t *testing.T) {
 		t.Fatal("instruct_worker must clear escalated state")
 	}
 }
+
+func TestIsRepairExhaustedAuditDistinguishesS0102FromExhaustion(t *testing.T) {
+	cases := []struct {
+		name  string
+		audit *api.CitationGrounding
+		want  bool
+	}{
+		{"nil audit", nil, false},
+		{"clean grounded", &api.CitationGrounding{Traced: true}, false},
+		{"s01_02 immediate host attach without repair", &api.CitationGrounding{HostAssembled: true, Traced: false, RetryCount: 0, HintCode: "INVEST_CITATIONS_REQUIRED"}, false},
+		{"repaired grounded closeout", &api.CitationGrounding{HostAssembled: false, Traced: true, RetryCount: 1}, false},
+		{"repair exhausted host assembled", &api.CitationGrounding{HostAssembled: true, Traced: false, RetryCount: 2, HintCode: "INVEST_HANDLE_NOT_OBSERVED"}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isRepairExhaustedAudit(tc.audit); got != tc.want {
+				t.Fatalf("isRepairExhaustedAudit(%+v) = %v, want %v", tc.audit, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCloseoutBreakerCountsRepairExhaustedCloseoutsInFlagAndBlockModes(t *testing.T) {
+	exhaustedIn := AmbientGroundingInput{
+		LastAuditUngrounded:      true,
+		LastAuditHostAssembled:   true,
+		LastAuditRepairExhausted: true,
+		LastAuditCode:            "INVEST_HANDLE_NOT_OBSERVED",
+	}
+	cleanIn := AmbientGroundingInput{LastAuditTraced: true}
+	s0102In := AmbientGroundingInput{
+		LastAuditUngrounded:    true,
+		LastAuditHostAssembled: true,
+		LastAuditCode:          "INVEST_CITATIONS_REQUIRED",
+	}
+
+	t.Run("flag mode trips at 3 non-consecutive total (G04-03)", func(t *testing.T) {
+		cfg := grounding.DefaultGroundingConfig()
+		cfg.CircuitBreaker.EscalateMode = "flag"
+		coord := NewAmbientGroundingCoordinator(nil, nil, cfg, nil, nil)
+		coord.Pipeline = groundingTestPipeline(t)
+		var notices []*oar.Decision
+		coord.Pipeline.SetAdvisorySink(func(_ context.Context, _ string, _ string, d *oar.Decision) error {
+			notices = append(notices, d)
+			return nil
+		})
+		const sid = "g04-03-flag"
+		testutil.FailErr(t, "turn 1 exhausted", coord.checkCloseoutEscalation(t.Context(), sid, exhaustedIn))
+		testutil.FailErr(t, "turn 2 clean", coord.checkCloseoutEscalation(t.Context(), sid, cleanIn))
+		testutil.FailErr(t, "turn 3 exhausted", coord.checkCloseoutEscalation(t.Context(), sid, exhaustedIn))
+		testutil.FailErr(t, "turn 4 clean", coord.checkCloseoutEscalation(t.Context(), sid, cleanIn))
+		if coord.IsEscalated(sid) || len(notices) != 0 {
+			t.Fatalf("tripped too early: escalated=%v notices=%d", coord.IsEscalated(sid), len(notices))
+		}
+		testutil.FailErr(t, "turn 5 exhausted trips", coord.checkCloseoutEscalation(t.Context(), sid, exhaustedIn))
+		if !coord.IsEscalated(sid) || len(notices) != 1 || notices[0].Code != grounding.CoordinatorEscalatedCode {
+			t.Fatalf("expected flag escalation at 3 total: escalated=%v notices=%+v", coord.IsEscalated(sid), notices)
+		}
+	})
+
+	t.Run("flag mode trips at 2 consecutive and stays tripped after clean turn (G04-04/G04-05)", func(t *testing.T) {
+		cfg := grounding.DefaultGroundingConfig()
+		cfg.CircuitBreaker.EscalateMode = "flag"
+		coord := NewAmbientGroundingCoordinator(nil, nil, cfg, nil, nil)
+		coord.Pipeline = groundingTestPipeline(t)
+		var notices []*oar.Decision
+		coord.Pipeline.SetAdvisorySink(func(_ context.Context, _ string, _ string, d *oar.Decision) error {
+			notices = append(notices, d)
+			return nil
+		})
+		const sid = "g04-04-05-flag"
+		testutil.FailErr(t, "turn 1 exhausted", coord.checkCloseoutEscalation(t.Context(), sid, exhaustedIn))
+		if coord.IsEscalated(sid) || len(notices) != 0 {
+			t.Fatalf("tripped after 1 turn: escalated=%v notices=%d", coord.IsEscalated(sid), len(notices))
+		}
+		testutil.FailErr(t, "turn 2 exhausted trips", coord.checkCloseoutEscalation(t.Context(), sid, exhaustedIn))
+		if !coord.IsEscalated(sid) || len(notices) != 1 || notices[0].Code != grounding.CoordinatorEscalatedCode {
+			t.Fatalf("expected flag escalation at 2 consecutive: escalated=%v notices=%+v", coord.IsEscalated(sid), notices)
+		}
+		testutil.FailErr(t, "turn 3 clean stays tripped", coord.checkCloseoutEscalation(t.Context(), sid, cleanIn))
+		if !coord.IsEscalated(sid) {
+			t.Fatal("breaker cleared on clean turn without explicit reset")
+		}
+	})
+
+	t.Run("block mode returns ErrGroundingEscalated at 2 consecutive", func(t *testing.T) {
+		cfg := grounding.DefaultGroundingConfig()
+		cfg.CircuitBreaker.EscalateMode = "block"
+		coord := NewAmbientGroundingCoordinator(nil, nil, cfg, nil, nil)
+		coord.Pipeline = groundingTestPipeline(t)
+		const sid = "g04-block"
+		testutil.FailErr(t, "turn 1 exhausted", coord.checkCloseoutEscalation(t.Context(), sid, exhaustedIn))
+		err := coord.checkCloseoutEscalation(t.Context(), sid, exhaustedIn)
+		if !errors.Is(err, guidance.ErrGroundingEscalated) || !coord.IsEscalated(sid) {
+			t.Fatalf("expected ErrGroundingEscalated in block mode: err=%v escalated=%v", err, coord.IsEscalated(sid))
+		}
+	})
+
+	t.Run("S01-02 immediate host attach without repair never trips breaker", func(t *testing.T) {
+		cfg := grounding.DefaultGroundingConfig()
+		cfg.CircuitBreaker.EscalateMode = "flag"
+		coord := NewAmbientGroundingCoordinator(nil, nil, cfg, nil, nil)
+		coord.Pipeline = groundingTestPipeline(t)
+		var notices []*oar.Decision
+		coord.Pipeline.SetAdvisorySink(func(_ context.Context, _ string, _ string, d *oar.Decision) error {
+			notices = append(notices, d)
+			return nil
+		})
+		const sid = "s01-02-zero-charge"
+		for range 5 {
+			testutil.FailErr(t, "s01-02 turn", coord.checkCloseoutEscalation(t.Context(), sid, s0102In))
+		}
+		if coord.IsEscalated(sid) || len(notices) != 0 {
+			t.Fatalf("S01-02 immediate host attach should not trip breaker: escalated=%v notices=%d", coord.IsEscalated(sid), len(notices))
+		}
+	})
+}

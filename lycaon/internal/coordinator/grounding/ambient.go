@@ -28,9 +28,11 @@ type AmbientGroundingInput struct {
 	Jobs                   []api.WorkerTask
 	SummaryTags            []grounding.WorkerSummaryTag
 	LastTurnTools          []string
-	LastAuditUngrounded    bool
-	LastAuditHostAssembled bool
-	LastAuditCode          string
+	LastAuditUngrounded      bool
+	LastAuditHostAssembled   bool
+	LastAuditTraced          bool
+	LastAuditRepairExhausted bool
+	LastAuditCode            string
 	UngroundedState        grounding.UngroundedCounter
 }
 
@@ -193,7 +195,7 @@ func (g *AmbientGroundingCoordinator) AfterPrompt(ctx context.Context, sessionID
 	if err != nil {
 		return err
 	}
-	if err := g.checkCloseoutEscalation(ctx, sessionID, in.ProjectID); err != nil {
+	if err := g.checkCloseoutEscalation(ctx, sessionID, in); err != nil {
 		return err
 	}
 	verdict := g.Gate.CheckTurn(ctx, in)
@@ -203,25 +205,36 @@ func (g *AmbientGroundingCoordinator) AfterPrompt(ctx context.Context, sessionID
 	return g.applyOARAmbientGrounding(ctx, sessionID, ambientStateKey(sessionID), in, verdict)
 }
 
-func (g *AmbientGroundingCoordinator) checkCloseoutEscalation(ctx context.Context, sessionID, projectID string) error {
-	if g.Config.PostTurn.Mode == "off" || g.Config.CircuitBreaker.EscalateMode != "block" || g.State == nil {
+func (g *AmbientGroundingCoordinator) checkCloseoutEscalation(ctx context.Context, sessionID string, in AmbientGroundingInput) error {
+	if g.Config.PostTurn.Mode == "off" || g.State == nil {
 		return nil
 	}
 	state := g.State.Get(sessionID)
+	if in.LastAuditRepairExhausted {
+		grounding.ApplyUngroundedWarning(
+			&state,
+			g.Config.CircuitBreaker.MaxUngroundedWarnings,
+			g.Config.CircuitBreaker.MaxConsecutiveUngrounded,
+			false,
+		)
+	} else if in.LastAuditTraced {
+		grounding.ResetUngroundedStreak(&state)
+	}
 	if g.Pipeline != nil && g.Pipeline.Counters() != nil {
 		if n := int(g.Pipeline.Counters().Get(sessionID, grounding.CoordinatorUngroundedClaimCode, oar.CounterBreaker)); n > state.ConsecutiveWarnings {
 			state.ConsecutiveWarnings = n
 			state.TotalWarnings = n
 		}
-		if grounding.Flagged(state, g.Config) {
-			state.Escalated = true
-		}
-		g.State.Set(sessionID, state)
 	}
+	if grounding.Flagged(state, g.Config) {
+		state.Escalated = true
+	}
+	g.State.Set(sessionID, state)
 	if !state.Escalated {
 		return nil
 	}
-	if g.Sessions != nil {
+	blockMode := g.Config.CircuitBreaker.EscalateMode == "block"
+	if blockMode && g.Sessions != nil {
 		g.Sessions.Runner.Closeouts.RecordGroundingFriction(ctx, sessionID)
 	}
 	verdict := grounding.GroundingVerdict{
@@ -235,14 +248,18 @@ func (g *AmbientGroundingCoordinator) checkCloseoutEscalation(ctx context.Contex
 		gc.Session.Role = "coordinator"
 		tools.RegisterRecoveryFacts(ctx, gc)
 		grounding.ObserveVerdict(gc, verdict)
+		gc.Grounding.GroundingEscalated = true
 		if _, err := g.Pipeline.EvaluateBlock(ctx, oar.AnchorCoordinatorPostTurn, gc); err != nil {
 			return err
 		}
 	}
-	if g.Events != nil && strings.TrimSpace(projectID) != "" {
-		g.Events.PublishGrounding(ctx, projectID, sessionID, verdict.Code, "", "", true)
+	if g.Events != nil && strings.TrimSpace(in.ProjectID) != "" {
+		g.Events.PublishGrounding(ctx, in.ProjectID, sessionID, verdict.Code, "", "", true)
 	}
-	return guidance.ErrGroundingEscalated
+	if blockMode {
+		return guidance.ErrGroundingEscalated
+	}
+	return nil
 }
 
 func (g *AmbientGroundingCoordinator) applyOARAmbientGrounding(ctx context.Context, sessionID, key string, in AmbientGroundingInput, verdict grounding.GroundingVerdict) error {
@@ -295,6 +312,10 @@ func lastAssistantAudit(msgs []api.Message) *api.CitationGrounding {
 	return nil
 }
 
+func isRepairExhaustedAudit(audit *api.CitationGrounding) bool {
+	return audit != nil && audit.HostAssembled && !audit.Traced && audit.RetryCount > 0
+}
+
 func (g *AmbientGroundingCoordinator) buildInput(ctx context.Context, sessionID string, lastTools []string) (AmbientGroundingInput, error) {
 	in := AmbientGroundingInput{
 		SessionID:     sessionID,
@@ -319,9 +340,13 @@ func (g *AmbientGroundingCoordinator) buildInput(ctx context.Context, sessionID 
 	in.SummaryTags = summaryTagsFromMessages(msgs)
 	if audit := lastAssistantAudit(msgs); audit != nil {
 		in.LastAuditHostAssembled = audit.HostAssembled
+		in.LastAuditTraced = audit.Traced
 		if !audit.Traced {
 			in.LastAuditUngrounded = true
 			in.LastAuditCode = strings.TrimSpace(audit.HintCode)
+			if isRepairExhaustedAudit(audit) {
+				in.LastAuditRepairExhausted = true
+			}
 		}
 	}
 	in.UngroundedState = g.State.Get(ambientStateKey(sessionID))
