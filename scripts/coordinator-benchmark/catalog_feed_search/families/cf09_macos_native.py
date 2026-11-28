@@ -362,12 +362,23 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
     ).catch(() => null);
     await page.getByTestId("crossbar-input").fill("target.txt");
     const quickRes = await quickRespPromise;
+    const searchingLoc = page.getByTestId("crossbar-searching").first();
     const loadingGlyph = page
-      .locator('.den-crossbar__spinner, [data-testid="crossbar"] [aria-busy="true"], [data-testid="crossbar"] [role="progressbar"], [data-testid="crossbar-loading"]')
+      .locator('.den-crossbar__spinner, [data-testid="crossbar-searching"], [data-testid="crossbar"] [aria-busy="true"], [data-testid="crossbar"] [role="progressbar"]')
       .first();
     const loadingBefore = await loadingGlyph.isVisible({ timeout: 250 }).catch(() => false);
-    await page.waitForTimeout(300);
-    const loadingAfter = await loadingGlyph.isVisible({ timeout: 250 }).catch(() => false);
+    const beforeClearShot = path.join(outDir, `macos_quick_open_${state}_before_clear.png`);
+    await page.screenshot({ path: beforeClearShot });
+
+    await searchingLoc.waitFor({ state: "hidden", timeout: 3_000 }).catch(() => {});
+    const targetRowLoc = page
+      .locator('[role="option"], [data-testid^="crossbar-row"], .den-crossbar__row, li')
+      .filter({ hasText: "target.txt" })
+      .first();
+    const targetRowVisible = await targetRowLoc.isVisible({ timeout: 3_000 }).catch(() => false);
+    await page.waitForTimeout(200);
+    const searchingAfter = await searchingLoc.isVisible({ timeout: 200 }).catch(() => false);
+    const loadingAfter = await loadingGlyph.isVisible({ timeout: 200 }).catch(() => false);
     const loadingAria = loadingAfter
       ? {
           className: await loadingGlyph.getAttribute("class").catch(() => null),
@@ -383,20 +394,16 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
     const hitStatusLoc = page.getByTestId("crossbar-hit-status").first();
     const covVisible = await covLoc.isVisible({ timeout: 500 }).catch(() => false);
     const hitStatusVisible = !covVisible && (await hitStatusLoc.isVisible({ timeout: 300 }).catch(() => false));
-    const spinnerAsRefresh = !covVisible && !hitStatusVisible && state === "refreshing" && loadingAfter;
-    const crossbarCovVisible = covVisible || hitStatusVisible || spinnerAsRefresh;
-    const crossbarCovTestId = covVisible
-      ? "crossbar-coverage"
-      : hitStatusVisible
-        ? "crossbar-hit-status"
-        : spinnerAsRefresh
-          ? "den-crossbar__spinner"
-          : "";
     const crossbarCovText = covVisible
       ? ((await covLoc.textContent({ timeout: 500 }).catch(() => "")) ?? "").trim()
       : hitStatusVisible
         ? ((await hitStatusLoc.textContent({ timeout: 500 }).catch(() => "")) ?? "").trim()
         : "";
+    const isTransientSearchingText = crossbarCovText.toLowerCase().startsWith("searching");
+    const crossbarCovVisible = (covVisible || hitStatusVisible) && crossbarCovText.length > 0 && !isTransientSearchingText;
+    const crossbarCovTestId = crossbarCovVisible
+      ? (covVisible ? "crossbar-coverage" : "crossbar-hit-status")
+      : "";
     const crossbarEmptyVisible = await page.getByTestId("crossbar-empty").isVisible().catch(() => false);
     const renderedRows = await page.locator('[role="option"], [data-testid^="crossbar-row"], .den-crossbar__row').count().catch(() => 0);
     const quickShot = path.join(outDir, `macos_quick_open_${state}.png`);
@@ -411,19 +418,22 @@ test("CF09 macOS native Den coverage presentation across 4 surfaces x 4 states",
       scope: "project:current",
       request_url: quickRes?.url() ?? "",
       request_correlated: quickRes !== null,
-      workspace_ready: true,
+      workspace_ready: targetRowVisible && !searchingAfter,
       api_response: quickApi,
       coverage_note_visible: crossbarCovVisible,
       coverage_note_testid: crossbarCovTestId,
-      results_visible_count: Array.isArray(quickApi?.matches) ? quickApi.matches.length : 0,
+      results_visible_count: targetRowVisible ? Math.max(1, Array.isArray(quickApi?.matches) ? quickApi.matches.length : 0) : 0,
       empty_final_shown: crossbarEmptyVisible,
       screenshot_path: path.basename(quickShot),
       notes: JSON.stringify({
         coverage_text: crossbarCovText,
+        target_row_visible: targetRowVisible,
         rendered_rows: renderedRows,
+        searching_after: searchingAfter,
         loading_before: loadingBefore,
         loading_after: loadingAfter,
         loading_aria: loadingAria,
+        before_clear_screenshot: path.basename(beforeClearShot),
       }),
     });
     await page.keyboard.press("Escape");
