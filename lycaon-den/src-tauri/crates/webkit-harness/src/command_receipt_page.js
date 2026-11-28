@@ -70,11 +70,10 @@ window.__wkReceiptSmoke = {
     return "";
   },
 
-  checkCardOutputSurface(card, uniqueMarker) {
-    const preview = card.querySelector('[data-testid="action-preview"][data-kind="output"]');
-    if (!preview) return { found: false, text: "" };
-    const text = preview.textContent || "";
-    return { found: text.includes(uniqueMarker), text };
+  checkOutputElement(el, uniqueMarker, surfaceName) {
+    if (!el) return { found: false, surface: surfaceName, node: null };
+    const text = el.textContent || "";
+    return { found: text.includes(uniqueMarker), surface: surfaceName, node: el };
   },
 
   async inspectRendered(token, sessionId, expectedCallId, expectedProgramId, uniqueMarker, commandSource, maxAttempts = 80) {
@@ -89,8 +88,23 @@ window.__wkReceiptSmoke = {
           this.expandIfCollapsed(card);
           const renderedCallId = card.getAttribute("data-tool-call-id") || "";
           const renderedStatus = card.getAttribute("data-status") || "";
-          const outCheck = this.checkCardOutputSurface(card, uniqueMarker);
-          if (renderedCallId === expectedCallId && outCheck.found) {
+          let outCheck = this.checkOutputElement(
+            card.querySelector('[data-testid="action-preview"][data-kind="output"]'),
+            uniqueMarker,
+            'action-preview[data-kind="output"]'
+          );
+          if (!outCheck.found) {
+            const outLink = card.querySelector('[data-testid="action-link-output"]') || card.querySelector('[data-testid="action-link-receipt"]');
+            if (outLink && !document.querySelector('[data-testid="chat-content-page"]')) {
+              outLink.click();
+            }
+            const contentPage = document.querySelector('[data-testid="chat-content-page"]');
+            if (contentPage) {
+              const linkKind = card.querySelector('[data-testid="action-link-output"]') ? "action-link-output" : "action-link-receipt";
+              outCheck = this.checkOutputElement(contentPage, uniqueMarker, `${linkKind} -> chat-content-page`);
+            }
+          }
+          if (renderedCallId === expectedCallId && outCheck.found && outCheck.node) {
             const body = await this.api(token, "GET", `/v1/sessions/${encodeURIComponent(sessionId)}/messages`);
             const tr = (body?.messages || []).find((m) => m.tool_result?.tool_call_id === expectedCallId)?.tool_result;
             const pid = tr?.command_program?.id || "";
@@ -107,16 +121,19 @@ window.__wkReceiptSmoke = {
               && sidecarStdoutHasMarker
               && markerAbsentFromSource
             );
-            // Negative control: remove the output preview node while leaving the command card present;
+            // Negative control: remove the output surface node while leaving the command card present;
             // output-specific check MUST fail, then restore.
-            const preview = card.querySelector('[data-testid="action-preview"][data-kind="output"]');
-            const parent = preview.parentNode;
-            const nextSib = preview.nextSibling;
-            parent.removeChild(preview);
-            const cardStillPresent = Boolean(stream.querySelector(`[data-testid="action-card"][data-tool-call-id="${CSS.escape(expectedCallId)}"]`));
-            const afterRemoveCheck = this.checkCardOutputSurface(card, uniqueMarker);
-            parent.insertBefore(preview, nextSib);
-            const outputRemovedControlRejected = Boolean(cardStillPresent && !afterRemoveCheck.found);
+            const outNode = outCheck.node;
+            const parent = outNode.parentNode;
+            const nextSib = outNode.nextSibling;
+            parent.removeChild(outNode);
+            const cardStillPresent = Boolean(document.querySelector(`[data-testid="action-card"][data-tool-call-id="${CSS.escape(expectedCallId)}"]`));
+            const stillHasOutput = Boolean(
+              card.querySelector('[data-testid="action-preview"][data-kind="output"]')?.textContent?.includes(uniqueMarker)
+              || document.querySelector('[data-testid="chat-content-page"]')?.textContent?.includes(uniqueMarker)
+            );
+            parent.insertBefore(outNode, nextSib);
+            const outputRemovedControlRejected = Boolean(cardStillPresent && !stillHasOutput);
 
             return {
               sessionId,
@@ -126,6 +143,7 @@ window.__wkReceiptSmoke = {
               programId: pid,
               commandState: state,
               uniqueMarker,
+              outputSurface: outCheck.surface,
               markerAbsentFromSource,
               outputPreviewHasUniqueOutput: outCheck.found,
               sidecarStdoutHasUniqueOutput: sidecarStdoutHasMarker,
@@ -139,7 +157,9 @@ window.__wkReceiptSmoke = {
       }
       await new Promise((r) => setTimeout(r, 250));
     }
-    throw new Error(`exact action-card [data-tool-call-id="${expectedCallId}"] output preview [data-testid="action-preview"][data-kind="output"] with "${uniqueMarker}" not rendered`);
+    const cardNow = document.querySelector(`[data-testid="action-card"][data-tool-call-id="${CSS.escape(expectedCallId)}"]`);
+    const cardHtml = cardNow ? cardNow.innerHTML.slice(0, 500) : "card-missing";
+    throw new Error(`exact action-card [data-tool-call-id="${expectedCallId}"] output surface with "${uniqueMarker}" not rendered; card=${cardHtml}`);
   },
 
   async verifyWrongCallRejected(token, sessionId, expectedProgramId, uniqueMarker, commandSource) {

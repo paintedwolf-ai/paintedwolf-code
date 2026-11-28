@@ -33,6 +33,7 @@ struct ReceiptSnapshot {
     command_state: String,
     command_source: String,
     unique_marker: String,
+    output_surface: String,
     marker_absent_from_source: bool,
     output_preview_has_unique_output: bool,
     sidecar_stdout_has_unique_output: bool,
